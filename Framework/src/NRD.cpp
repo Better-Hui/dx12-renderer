@@ -1,20 +1,19 @@
-#include <Passes/NrdPass.h>
-
-#include <Passes/RaytracingDemoPassResources.h>
-#include <RaytracingDemo.h>
+//Modify Begin:2026-07-27 by BestHui
+#include <Framework/NRD.h>
 
 #include <DX12Library/Application.h>
 #include <DX12Library/CommandList.h>
 #include <DX12Library/CommandQueue.h>
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Texture.h>
-#include <Framework/CommonRootSignature.h>
 #include <Framework/ComputeShader.h>
+#include <Framework/NRDInputAdapter_CS.h>
+#include <Framework/NRDOutputComposite_CS.h>
 #include <Framework/ShaderBlob.h>
 #include <Framework/ShaderResourceView.h>
 #include <Framework/UnorderedAccessView.h>
 
-#include <NRD.h>
+#include "../../External/NRD/Include/NRD.h"
 #include <NRDDescs.h>
 #include <NRDSettings.h>
 #include <NRI.h>
@@ -41,10 +40,18 @@
 
 using namespace DirectX;
 
-class NrdPassImpl
+namespace FrameworkNRD
+{
+    constexpr DXGI_FORMAT RadianceFormat = DXGI_FORMAT_R32G32B32A32_FLOAT;
+    constexpr DXGI_FORMAT NormalRoughnessFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+    constexpr DXGI_FORMAT ViewZFormat = DXGI_FORMAT_R32_FLOAT;
+    constexpr DXGI_FORMAT MotionFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
+}
+
+class NRDImpl
 {
 public:
-    ~NrdPassImpl()
+    ~NRDImpl()
     {
         Integration.Destroy();
         DestroyWrappedTextures();
@@ -177,14 +184,14 @@ namespace
         return resourceStates;
     }
 
-    void StoreColumnMajor(float* destination, const DirectX::XMMATRIX& matrix)
+    void StoreNRDColumnMajorMatrix(float* destination, const DirectX::XMMATRIX& matrix)
     {
         DirectX::XMFLOAT4X4 stored{};
-        DirectX::XMStoreFloat4x4(&stored, DirectX::XMMatrixTranspose(matrix));
+        DirectX::XMStoreFloat4x4(&stored, matrix);
         std::memcpy(destination, &stored, sizeof(stored));
     }
 
-    nrd::Resource MakeNrdResource(nri::Texture* texture, const bool isStorage, void* userArg)
+    nrd::Resource MakeNRDResource(nri::Texture* texture, const bool isStorage, void* userArg)
     {
         nrd::Resource resource = {};
         resource.nri.texture = texture;
@@ -210,13 +217,20 @@ namespace
         commandList.GetGraphicsCommandList()->ResourceBarrier(1, &barrier);
     }
 
+    std::unique_ptr<ComputeShader> CreateReflectedComputeShader(const void* shaderBytecode, const size_t shaderBytecodeSize)
+    {
+        ShaderBlob shader(shaderBytecode, shaderBytecodeSize);
+        return std::make_unique<ComputeShader>(
+            shader,
+            ComputePipelineDescBuilder::ReflectedDefault(shader).Build());
+    }
+
 }
 
-NrdPass::NrdPass(const std::shared_ptr<CommonRootSignature>& rootSignature)
-    : m_RootSignature(rootSignature)
-    , m_PrepareShader(std::make_unique<ComputeShader>(rootSignature, ShaderBlob(L"NrdPrepare.cs.cso")))
-    , m_CompositeShader(std::make_unique<ComputeShader>(rootSignature, ShaderBlob(L"NrdComposite.cs.cso")))
-    , m_Impl(std::make_unique<NrdPassImpl>())
+NRD::NRD()
+    : m_PrepareShader(CreateReflectedComputeShader(ShaderBytecode_NRDInputAdapter_CS, sizeof ShaderBytecode_NRDInputAdapter_CS))
+    , m_CompositeShader(CreateReflectedComputeShader(ShaderBytecode_NRDOutputComposite_CS, sizeof ShaderBytecode_NRDOutputComposite_CS))
+    , m_Impl(std::make_unique<NRDImpl>())
 {
     char* bypass = nullptr;
     size_t bypassLength = 0;
@@ -227,15 +241,15 @@ NrdPass::NrdPass(const std::shared_ptr<CommonRootSignature>& rootSignature)
     m_Available = true;
 }
 
-NrdPass::~NrdPass() = default;
+NRD::~NRD() = default;
 
-void NrdPass::ResetHistory()
+void NRD::ResetHistory()
 {
     m_FrameIndex = 0;
     m_HasPreviousFrame = false;
 }
 
-bool NrdPass::EnsureCreated(const uint32_t width, const uint32_t height)
+bool NRD::EnsureCreated(const uint32_t width, const uint32_t height)
 {
     if (!m_Available)
     {
@@ -265,7 +279,7 @@ bool NrdPass::EnsureCreated(const uint32_t width, const uint32_t height)
     m_Impl->DestroyWrappedTextures();
 
     nrd::IntegrationCreationDesc integrationDesc = {};
-    strcpy_s(integrationDesc.name, "RaytracingDemo");
+    strcpy_s(integrationDesc.name, "FrameworkNRD");
     integrationDesc.resourceWidth = static_cast<uint16_t>(width);
     integrationDesc.resourceHeight = static_cast<uint16_t>(height);
     integrationDesc.queuedFrameNum = 128;
@@ -275,7 +289,7 @@ bool NrdPass::EnsureCreated(const uint32_t width, const uint32_t height)
 
     nrd::DenoiserDesc denoiserDesc = {};
     denoiserDesc.identifier = DIFFUSE_DENOISER_ID;
-    denoiserDesc.denoiser = m_Settings.Mode == NrdPass::DenoiserMode::ReblurDiffuse ? nrd::Denoiser::REBLUR_DIFFUSE : nrd::Denoiser::RELAX_DIFFUSE;
+    denoiserDesc.denoiser = m_Settings.Mode == NRD::DenoiserMode::ReblurDiffuse ? nrd::Denoiser::REBLUR_DIFFUSE : nrd::Denoiser::RELAX_DIFFUSE;
 
     nrd::InstanceCreationDesc instanceDesc = {};
     instanceDesc.denoisers = &denoiserDesc;
@@ -297,9 +311,9 @@ bool NrdPass::EnsureCreated(const uint32_t width, const uint32_t height)
     return true;
 }
 
-void NrdPass::PrepareInputs(
-    RaytracingDemo& demo,
+void NRD::PrepareInputs(
     CommandList& commandList,
+    const FrameMatrices& frameMatrices,
     const std::shared_ptr<Texture>& gBufferSpecularSmoothness,
     const std::shared_ptr<Texture>& gBufferNormal,
     const std::shared_ptr<Texture>& gBufferPosition,
@@ -312,28 +326,29 @@ void NrdPass::PrepareInputs(
     const uint32_t height)
 {
     PrepareConstants constants = {};
-    const XMMATRIX currentView = demo.m_Camera.GetViewMatrix();
+    const XMMATRIX currentView = frameMatrices.WorldToView;
     constants.WorldToView = currentView;
+    constants.PreviousWorldToView = m_HasPreviousFrame ? m_PreviousView : currentView;
     constants.Width = width;
     constants.Height = height;
 
-    m_RootSignature->Bind(commandList);
-    m_PrepareShader->SetConstantBuffer(commandList, "NrdPrepareConstants", constants);
+    m_PrepareShader->Bind(commandList);
+    m_PrepareShader->SetConstantBuffer(commandList, "NRDInputAdapterConstants", constants);
     commandList.SetTexture(*m_PrepareShader, "GBufferSpecularSmoothness", ShaderResourceView(gBufferSpecularSmoothness));
     commandList.SetTexture(*m_PrepareShader, "GBufferNormal", ShaderResourceView(gBufferNormal));
     commandList.SetTexture(*m_PrepareShader, "GBufferPosition", ShaderResourceView(gBufferPosition));
     commandList.SetTexture(*m_PrepareShader, "DepthTexture", ShaderResourceView::DepthAsFloat(depthTexture));
     commandList.SetTexture(*m_PrepareShader, "MotionVector", ShaderResourceView(motionVector));
-    m_PrepareShader->SetUnorderedAccessView(commandList, "NrdNormalRoughness", UnorderedAccessView(nrdNormalRoughness));
-    m_PrepareShader->SetUnorderedAccessView(commandList, "NrdViewZ", UnorderedAccessView(nrdViewZ));
-    m_PrepareShader->SetUnorderedAccessView(commandList, "NrdMotion", UnorderedAccessView(nrdMotion));
-    m_PrepareShader->Bind(commandList);
+    m_PrepareShader->SetUnorderedAccessView(commandList, "NRDNormalRoughness", UnorderedAccessView(nrdNormalRoughness));
+    m_PrepareShader->SetUnorderedAccessView(commandList, "NRDViewZ", UnorderedAccessView(nrdViewZ));
+    m_PrepareShader->SetUnorderedAccessView(commandList, "NRDMotion", UnorderedAccessView(nrdMotion));
+    m_PrepareShader->ApplyBindings(commandList);
     commandList.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
 }
 
-void NrdPass::PrepareDenoiserInputs(
-    RaytracingDemo& demo,
+void NRD::PrepareDenoiserInputs(
     CommandList& commandList,
+    const FrameMatrices& frameMatrices,
     const std::shared_ptr<Texture>& gBufferSpecularSmoothness,
     const std::shared_ptr<Texture>& gBufferNormal,
     const std::shared_ptr<Texture>& gBufferPosition,
@@ -350,12 +365,12 @@ void NrdPass::PrepareDenoiserInputs(
         return;
     }
 
-    PrepareInputs(demo, commandList, gBufferSpecularSmoothness, gBufferNormal, gBufferPosition, depthTexture, motionVector, nrdNormalRoughness, nrdViewZ, nrdMotion, width, height);
+    PrepareInputs(commandList, frameMatrices, gBufferSpecularSmoothness, gBufferNormal, gBufferPosition, depthTexture, motionVector, nrdNormalRoughness, nrdViewZ, nrdMotion, width, height);
 }
 
-void NrdPass::Denoise(
-    RaytracingDemo& demo,
+void NRD::Denoise(
     CommandList& commandList,
+    const FrameMatrices& frameMatrices,
     const std::shared_ptr<Texture>& noisyRadiance,
     const std::shared_ptr<Texture>& nrdNormalRoughness,
     const std::shared_ptr<Texture>& nrdViewZ,
@@ -365,17 +380,17 @@ void NrdPass::Denoise(
     const uint32_t height)
 {
     nrd::CommonSettings commonSettings = {};
-    const XMMATRIX currentView = demo.m_Camera.GetViewMatrix();
-    const XMMATRIX currentProjection = demo.m_Camera.GetProjectionMatrix();
+    const XMMATRIX currentView = frameMatrices.WorldToView;
+    const XMMATRIX currentProjection = frameMatrices.ViewToClip;
     const XMMATRIX previousView = m_HasPreviousFrame ? m_PreviousView : currentView;
     const XMMATRIX previousProjection = m_HasPreviousFrame ? m_PreviousProjection : currentProjection;
-    StoreColumnMajor(commonSettings.viewToClipMatrix, currentProjection);
-    StoreColumnMajor(commonSettings.viewToClipMatrixPrev, previousProjection);
-    StoreColumnMajor(commonSettings.worldToViewMatrix, currentView);
-    StoreColumnMajor(commonSettings.worldToViewMatrixPrev, previousView);
+    StoreNRDColumnMajorMatrix(commonSettings.viewToClipMatrix, currentProjection);
+    StoreNRDColumnMajorMatrix(commonSettings.viewToClipMatrixPrev, previousProjection);
+    StoreNRDColumnMajorMatrix(commonSettings.worldToViewMatrix, currentView);
+    StoreNRDColumnMajorMatrix(commonSettings.worldToViewMatrixPrev, previousView);
     commonSettings.motionVectorScale[0] = 1.0f;
     commonSettings.motionVectorScale[1] = 1.0f;
-    commonSettings.motionVectorScale[2] = 0.0f;
+    commonSettings.motionVectorScale[2] = 1.0f;
     commonSettings.resourceSize[0] = static_cast<uint16_t>(width);
     commonSettings.resourceSize[1] = static_cast<uint16_t>(height);
     commonSettings.resourceSizePrev[0] = static_cast<uint16_t>(width);
@@ -388,16 +403,20 @@ void NrdPass::Denoise(
     commonSettings.denoisingRange = m_Settings.DenoisingRange;
     const bool resetHistory = m_FrameIndex == 0;
     commonSettings.frameIndex = m_FrameIndex++;
-    commonSettings.accumulationMode = resetHistory ? nrd::AccumulationMode::RESTART : nrd::AccumulationMode::CONTINUE;
+    commonSettings.accumulationMode = resetHistory ? nrd::AccumulationMode::CLEAR_AND_RESTART : nrd::AccumulationMode::CONTINUE;
     commonSettings.isMotionVectorInWorldSpace = false;
+    m_Impl->Integration.NewFrame();
     m_Impl->Integration.SetCommonSettings(commonSettings);
     m_PreviousView = currentView;
     m_PreviousProjection = currentProjection;
     m_HasPreviousFrame = true;
 
-    if (m_Settings.Mode == NrdPass::DenoiserMode::ReblurDiffuse)
+    if (m_Settings.Mode == NRD::DenoiserMode::ReblurDiffuse)
     {
         nrd::ReblurSettings reblurSettings = {};
+        reblurSettings.hitDistanceParameters.A = m_Settings.ReblurHitDistanceA;
+        reblurSettings.hitDistanceParameters.B = m_Settings.ReblurHitDistanceB;
+        reblurSettings.hitDistanceParameters.C = m_Settings.ReblurHitDistanceC;
         reblurSettings.maxAccumulatedFrameNum = m_Settings.ReblurMaxAccumulatedFrameNum;
         reblurSettings.maxFastAccumulatedFrameNum = m_Settings.ReblurMaxFastAccumulatedFrameNum;
         reblurSettings.historyFixFrameNum = m_Settings.ReblurHistoryFixFrameNum;
@@ -412,6 +431,7 @@ void NrdPass::Denoise(
         reblurSettings.roughnessFraction = m_Settings.ReblurRoughnessFraction;
         reblurSettings.planeDistanceSensitivity = m_Settings.ReblurPlaneDistanceSensitivity;
         reblurSettings.fireflySuppressorMinRelativeScale = m_Settings.ReblurFireflySuppressorMinRelativeScale;
+        reblurSettings.hitDistanceReconstructionMode = nrd::HitDistanceReconstructionMode::AREA_3X3;
         reblurSettings.enableAntiFirefly = m_Settings.ReblurEnableAntiFirefly;
         m_Impl->Integration.SetDenoiserSettings(DIFFUSE_DENOISER_ID, &reblurSettings);
     }
@@ -435,20 +455,20 @@ void NrdPass::Denoise(
         relaxSettings.luminanceEdgeStoppingRelaxation = m_Settings.RelaxLuminanceEdgeStoppingRelaxation;
         relaxSettings.normalEdgeStoppingRelaxation = m_Settings.RelaxNormalEdgeStoppingRelaxation;
         relaxSettings.roughnessEdgeStoppingRelaxation = m_Settings.RelaxRoughnessEdgeStoppingRelaxation;
+        relaxSettings.hitDistanceReconstructionMode = nrd::HitDistanceReconstructionMode::AREA_3X3;
         relaxSettings.enableAntiFirefly = m_Settings.RelaxEnableAntiFirefly;
         relaxSettings.enableRoughnessEdgeStopping = m_Settings.RelaxEnableRoughnessEdgeStopping;
         m_Impl->Integration.SetDenoiserSettings(DIFFUSE_DENOISER_ID, &relaxSettings);
     }
-    m_Impl->Integration.NewFrame();
 
     nrd::ResourceSnapshot snapshot = {};
     snapshot.restoreInitialState = false;
 
-    nri::Texture* noisyTexture = m_Impl->GetWrappedTexture(noisyRadiance, RaytracingDemoRenderGraph::NRD_RADIANCE_FORMAT);
-    nri::Texture* normalRoughnessTexture = m_Impl->GetWrappedTexture(nrdNormalRoughness, RaytracingDemoRenderGraph::NRD_NORMAL_ROUGHNESS_FORMAT);
-    nri::Texture* viewZTexture = m_Impl->GetWrappedTexture(nrdViewZ, RaytracingDemoRenderGraph::NRD_VIEWZ_FORMAT);
-    nri::Texture* motionTexture = m_Impl->GetWrappedTexture(nrdMotion, RaytracingDemoRenderGraph::NRD_MOTION_FORMAT);
-    nri::Texture* denoisedTexture = m_Impl->GetWrappedTexture(denoisedRadiance, RaytracingDemoRenderGraph::NRD_RADIANCE_FORMAT);
+    nri::Texture* noisyTexture = m_Impl->GetWrappedTexture(noisyRadiance, FrameworkNRD::RadianceFormat);
+    nri::Texture* normalRoughnessTexture = m_Impl->GetWrappedTexture(nrdNormalRoughness, FrameworkNRD::NormalRoughnessFormat);
+    nri::Texture* viewZTexture = m_Impl->GetWrappedTexture(nrdViewZ, FrameworkNRD::ViewZFormat);
+    nri::Texture* motionTexture = m_Impl->GetWrappedTexture(nrdMotion, FrameworkNRD::MotionFormat);
+    nri::Texture* denoisedTexture = m_Impl->GetWrappedTexture(denoisedRadiance, FrameworkNRD::RadianceFormat);
     if (noisyTexture == nullptr || normalRoughnessTexture == nullptr || viewZTexture == nullptr || motionTexture == nullptr || denoisedTexture == nullptr)
     {
         m_Available = false;
@@ -463,11 +483,11 @@ void NrdPass::Denoise(
     commandList.TransitionBarrier(*denoisedRadiance, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     commandList.FlushResourceBarriers();
 
-    snapshot.SetResource(nrd::ResourceType::IN_DIFF_RADIANCE_HITDIST, MakeNrdResource(noisyTexture, false, noisyRadiance.get()));
-    snapshot.SetResource(nrd::ResourceType::IN_NORMAL_ROUGHNESS, MakeNrdResource(normalRoughnessTexture, false, nrdNormalRoughness.get()));
-    snapshot.SetResource(nrd::ResourceType::IN_VIEWZ, MakeNrdResource(viewZTexture, false, nrdViewZ.get()));
-    snapshot.SetResource(nrd::ResourceType::IN_MV, MakeNrdResource(motionTexture, false, nrdMotion.get()));
-    snapshot.SetResource(nrd::ResourceType::OUT_DIFF_RADIANCE_HITDIST, MakeNrdResource(denoisedTexture, true, denoisedRadiance.get()));
+    snapshot.SetResource(nrd::ResourceType::IN_DIFF_RADIANCE_HITDIST, MakeNRDResource(noisyTexture, false, noisyRadiance.get()));
+    snapshot.SetResource(nrd::ResourceType::IN_NORMAL_ROUGHNESS, MakeNRDResource(normalRoughnessTexture, false, nrdNormalRoughness.get()));
+    snapshot.SetResource(nrd::ResourceType::IN_VIEWZ, MakeNRDResource(viewZTexture, false, nrdViewZ.get()));
+    snapshot.SetResource(nrd::ResourceType::IN_MV, MakeNRDResource(motionTexture, false, nrdMotion.get()));
+    snapshot.SetResource(nrd::ResourceType::OUT_DIFF_RADIANCE_HITDIST, MakeNRDResource(denoisedTexture, true, denoisedRadiance.get()));
 
     nri::CommandBufferD3D12Desc commandBufferDesc = {};
     commandBufferDesc.d3d12CommandList = commandList.GetGraphicsCommandList().Get();
@@ -522,14 +542,10 @@ void NrdPass::Denoise(
     TransitionRaw(commandList, nrdMotion, motionState, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     TransitionRaw(commandList, denoisedRadiance, denoisedState, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-    ID3D12RootSignature* commonRootSignature = m_RootSignature->GetRootSignature().Get();
-    commandList.GetGraphicsCommandList()->SetGraphicsRootSignature(commonRootSignature);
-    commandList.GetGraphicsCommandList()->SetComputeRootSignature(commonRootSignature);
-    commandList.SetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, nullptr);
-    commandList.SetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, nullptr);
+    commandList.InvalidateCachedNativeState();
 }
 
-void NrdPass::Composite(
+void NRD::Composite(
     CommandList& commandList,
     const std::shared_ptr<Texture>& denoisedRadiance,
     const std::shared_ptr<Texture>& depthTexture,
@@ -544,20 +560,20 @@ void NrdPass::Composite(
     constants.Height = height;
     constants.DenoiserMode = static_cast<uint32_t>(m_Settings.Mode);
 
-    m_RootSignature->Bind(commandList);
-    m_CompositeShader->SetConstantBuffer(commandList, "NrdCompositeConstants", constants);
+    m_CompositeShader->Bind(commandList);
+    m_CompositeShader->SetConstantBuffer(commandList, "NRDOutputCompositeConstants", constants);
     commandList.SetTexture(*m_CompositeShader, "DenoisedRadiance", ShaderResourceView(denoisedRadiance));
     commandList.SetTexture(*m_CompositeShader, "DepthTexture", ShaderResourceView::DepthAsFloat(depthTexture));
     commandList.SetTexture(*m_CompositeShader, "GBufferAlbedoOcclusion", ShaderResourceView(gBufferAlbedoOcclusion));
     commandList.SetTexture(*m_CompositeShader, "GBufferEmissionMetallic", ShaderResourceView(gBufferEmissionMetallic));
     m_CompositeShader->SetUnorderedAccessView(commandList, "Output", UnorderedAccessView(output));
-    m_CompositeShader->Bind(commandList);
+    m_CompositeShader->ApplyBindings(commandList);
     commandList.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
 }
 
-void NrdPass::Execute(
-    RaytracingDemo& demo,
+void NRD::Execute(
     CommandList& commandList,
+    const FrameMatrices& frameMatrices,
     const std::shared_ptr<Texture>& noisyRadiance,
     const std::shared_ptr<Texture>& gBufferAlbedoOcclusion,
     const std::shared_ptr<Texture>& gBufferEmissionMetallic,
@@ -580,6 +596,7 @@ void NrdPass::Execute(
         return;
     }
 
-    Denoise(demo, commandList, noisyRadiance, nrdNormalRoughness, nrdViewZ, nrdMotion, denoisedRadiance, width, height);
+    Denoise(commandList, frameMatrices, noisyRadiance, nrdNormalRoughness, nrdViewZ, nrdMotion, denoisedRadiance, width, height);
     Composite(commandList, denoisedRadiance, depthTexture, gBufferAlbedoOcclusion, gBufferEmissionMetallic, output, width, height);
 }
+//Modify End

@@ -1,7 +1,8 @@
+//Modify Begin:2026-07-27 by BestHui
 #include <ShaderLibrary/Common/RootSignature.hlsli>
-#include "SvgfCommon.hlsli"
+#include "SVGFCommon.hlsli"
 
-cbuffer SvgfAtrousConstants : register(b0)
+cbuffer SVGFAtrousConstants : register(b0)
 {
     uint Width;
     uint Height;
@@ -40,13 +41,13 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
 
     const float centerDepth = DepthTexture.Load(int3(pixel, 0));
     const float4 centerColor = InputColor.Load(int3(pixel, 0));
-    if (!SvgfIsValidDepth(centerDepth))
+    if (!SVGFIsValidDepth(centerDepth))
     {
         OutputColor[pixel] = centerColor;
         return;
     }
 
-    const float3 centerNormal = DecodeSvgfNormal(GBufferNormal.Load(int3(pixel, 0)).xyz);
+    const float3 centerNormal = DecodeSVGFNormal(GBufferNormal.Load(int3(pixel, 0)).xyz);
     const float3 centerPosition = GBufferPosition.Load(int3(pixel, 0)).xyz;
     const float centerVariance = Variance.Load(int3(pixel, 0));
 
@@ -66,19 +67,19 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
             }
 
             const float sampleDepth = DepthTexture.Load(int3(samplePixel, 0));
-            if (!SvgfIsValidDepth(sampleDepth))
+            if (!SVGFIsValidDepth(sampleDepth))
             {
                 continue;
             }
 
             const float4 sampleColor = InputColor.Load(int3(samplePixel, 0));
-            const float3 sampleNormal = DecodeSvgfNormal(GBufferNormal.Load(int3(samplePixel, 0)).xyz);
+            const float3 sampleNormal = DecodeSVGFNormal(GBufferNormal.Load(int3(samplePixel, 0)).xyz);
             const float3 samplePosition = GBufferPosition.Load(int3(samplePixel, 0)).xyz;
 
             const float kernelWeight = Kernel[x + 2] * Kernel[y + 2];
-            const float normalWeight = SvgfNormalWeight(centerNormal, sampleNormal, PhiNormal);
-            const float depthWeight = SvgfDepthWeight(centerDepth, sampleDepth, centerPosition, samplePosition, PhiDepth);
-            const float colorWeight = SvgfColorWeight(centerColor.rgb, sampleColor.rgb, centerVariance, PhiColor);
+            const float normalWeight = SVGFNormalWeight(centerNormal, sampleNormal, PhiNormal);
+            const float depthWeight = SVGFDepthWeight(centerDepth, sampleDepth, centerPosition, samplePosition, PhiDepth);
+            const float colorWeight = SVGFColorWeight(centerColor.rgb, sampleColor.rgb, centerVariance, PhiColor);
             const float weight = kernelWeight * normalWeight * depthWeight * colorWeight;
 
             colorSum += sampleColor.rgb * weight;
@@ -89,3 +90,4 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     const float3 filteredColor = weightSum > 0.0f ? colorSum / weightSum : centerColor.rgb;
     OutputColor[pixel] = float4(filteredColor, centerColor.a);
 }
+//Modify End

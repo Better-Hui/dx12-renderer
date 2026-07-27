@@ -1,3 +1,4 @@
+//Modify Begin:2026-07-27 by BestHui
 #pragma once
 
 #include <cstdint>
@@ -7,14 +8,18 @@
 #include <d3d12.h>
 
 class CommandList;
-class CommonRootSignature;
 class ComputeShader;
-class RaytracingDemo;
 class Texture;
 
-class NrdPass
+class NRD
 {
 public:
+    struct FrameMatrices
+    {
+        DirectX::XMMATRIX WorldToView = DirectX::XMMatrixIdentity();
+        DirectX::XMMATRIX ViewToClip = DirectX::XMMatrixIdentity();
+    };
+
     enum class DenoiserMode : uint32_t
     {
         RelaxDiffuse = 0,
@@ -23,9 +28,11 @@ public:
 
     struct Settings
     {
-        DenoiserMode Mode = DenoiserMode::RelaxDiffuse;
+        DenoiserMode Mode = DenoiserMode::ReblurDiffuse;
         float DenoisingRange = 100000.0f;
-        float ReblurHitDistanceScale = 100.0f;
+        float ReblurHitDistanceA = 3.0f;
+        float ReblurHitDistanceB = 0.1f;
+        float ReblurHitDistanceC = 20.0f;
 
         uint32_t RelaxDiffuseMaxAccumulatedFrameNum = 32;
         uint32_t RelaxDiffuseMaxFastAccumulatedFrameNum = 6;
@@ -62,8 +69,8 @@ public:
         bool ReblurEnableAntiFirefly = true;
     };
 
-    explicit NrdPass(const std::shared_ptr<CommonRootSignature>& rootSignature);
-    ~NrdPass();
+    NRD();
+    ~NRD();
 
     bool IsAvailable() const { return m_Available; }
     void SetEnabled(bool enabled) { m_Enabled = enabled; }
@@ -73,8 +80,8 @@ public:
     void ResetHistory();
 
     void PrepareDenoiserInputs(
-        RaytracingDemo& demo,
         CommandList& commandList,
+        const FrameMatrices& frameMatrices,
         const std::shared_ptr<Texture>& gBufferSpecularSmoothness,
         const std::shared_ptr<Texture>& gBufferNormal,
         const std::shared_ptr<Texture>& gBufferPosition,
@@ -87,8 +94,8 @@ public:
         uint32_t height);
 
     void Execute(
-        RaytracingDemo& demo,
         CommandList& commandList,
+        const FrameMatrices& frameMatrices,
         const std::shared_ptr<Texture>& noisyRadiance,
         const std::shared_ptr<Texture>& gBufferAlbedoOcclusion,
         const std::shared_ptr<Texture>& gBufferEmissionMetallic,
@@ -105,6 +112,7 @@ private:
     struct PrepareConstants
     {
         DirectX::XMMATRIX WorldToView = DirectX::XMMatrixIdentity();
+        DirectX::XMMATRIX PreviousWorldToView = DirectX::XMMatrixIdentity();
         uint32_t Width = 1;
         uint32_t Height = 1;
         uint32_t Padding0 = 0;
@@ -121,8 +129,8 @@ private:
 
     bool EnsureCreated(uint32_t width, uint32_t height);
     void PrepareInputs(
-        RaytracingDemo& demo,
         CommandList& commandList,
+        const FrameMatrices& frameMatrices,
         const std::shared_ptr<Texture>& gBufferSpecularSmoothness,
         const std::shared_ptr<Texture>& gBufferNormal,
         const std::shared_ptr<Texture>& gBufferPosition,
@@ -134,8 +142,8 @@ private:
         uint32_t width,
         uint32_t height);
     void Denoise(
-        RaytracingDemo& demo,
         CommandList& commandList,
+        const FrameMatrices& frameMatrices,
         const std::shared_ptr<Texture>& noisyRadiance,
         const std::shared_ptr<Texture>& nrdNormalRoughness,
         const std::shared_ptr<Texture>& nrdViewZ,
@@ -153,19 +161,19 @@ private:
         uint32_t width,
         uint32_t height);
 
-    std::shared_ptr<CommonRootSignature> m_RootSignature;
     std::unique_ptr<ComputeShader> m_PrepareShader;
     std::unique_ptr<ComputeShader> m_CompositeShader;
-    std::unique_ptr<class NrdPassImpl> m_Impl;
+    std::unique_ptr<class NRDImpl> m_Impl;
     uint32_t m_Width = 0;
     uint32_t m_Height = 0;
     uint32_t m_FrameIndex = 0;
     DirectX::XMMATRIX m_PreviousView = DirectX::XMMatrixIdentity();
     DirectX::XMMATRIX m_PreviousProjection = DirectX::XMMatrixIdentity();
-    DenoiserMode m_CreatedMode = DenoiserMode::RelaxDiffuse;
+    DenoiserMode m_CreatedMode = DenoiserMode::ReblurDiffuse;
     Settings m_Settings = {};
     bool m_Available = false;
     bool m_Enabled = false;
     bool m_BypassDenoise = false;
     bool m_HasPreviousFrame = false;
 };
+//Modify End

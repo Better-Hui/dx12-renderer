@@ -1,3 +1,4 @@
+//Modify Begin:2026-07-27 by BestHui
 #pragma once
 
 #include <cstdint>
@@ -7,11 +8,10 @@
 #include <d3d12.h>
 
 class CommandList;
-class CommonRootSignature;
 class ComputeShader;
 class Texture;
 
-class SvgfPass
+class SVGF
 {
 public:
     struct Settings
@@ -24,8 +24,8 @@ public:
         float PhiDepth = 1.0f;
     };
 
-    explicit SvgfPass(const std::shared_ptr<CommonRootSignature>& rootSignature);
-    ~SvgfPass();
+    SVGF();
+    ~SVGF();
 
     Settings& GetSettings() { return m_Settings; }
     const Settings& GetSettings() const { return m_Settings; }
@@ -39,8 +39,6 @@ public:
         const std::shared_ptr<Texture>& gBufferNormal,
         const std::shared_ptr<Texture>& gBufferPosition,
         const std::shared_ptr<Texture>& motionVector,
-        const std::shared_ptr<Texture>& gBufferAlbedoOcclusion,
-        const std::shared_ptr<Texture>& gBufferEmissionMetallic,
         const std::shared_ptr<Texture>& depthTexture,
         const std::shared_ptr<Texture>& output,
         uint32_t width,
@@ -99,14 +97,11 @@ private:
     void Composite(
         CommandList& commandList,
         const std::shared_ptr<Texture>& input,
-        const std::shared_ptr<Texture>& gBufferAlbedoOcclusion,
-        const std::shared_ptr<Texture>& gBufferEmissionMetallic,
         const std::shared_ptr<Texture>& depthTexture,
         const std::shared_ptr<Texture>& output,
         uint32_t width,
         uint32_t height);
 
-    std::shared_ptr<CommonRootSignature> m_RootSignature;
     std::unique_ptr<ComputeShader> m_TemporalShader;
     std::unique_ptr<ComputeShader> m_AtrousShader;
     std::unique_ptr<ComputeShader> m_CompositeShader;
@@ -126,3 +121,4 @@ private:
     std::shared_ptr<Texture> m_AtrousPing;
     std::shared_ptr<Texture> m_AtrousPong;
 };
+//Modify End

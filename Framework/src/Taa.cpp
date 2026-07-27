@@ -7,6 +7,10 @@
 #include <Framework/Blit_VS.h>
 #include <Framework/TAA_Resolve_PS.h>
 
+//Modify Begin:2026-07-27 by BestHui
+FRAMEWORK_SUPPRESS_DEPRECATED_WARNINGS_BEGIN
+//Modify End
+
 namespace
 {
     struct RootConstants
@@ -111,3 +115,7 @@ void TAA::OnRenderedFrame(const DirectX::XMMATRIX& viewProjectionMatrix)
     m_PreviousViewProjectionMatrix = viewProjectionMatrix;
     m_FrameIndex = (m_FrameIndex + 1) % JITTER_OFFSETS_COUNT;
 }
+
+//Modify Begin:2026-07-27 by BestHui
+FRAMEWORK_SUPPRESS_DEPRECATED_WARNINGS_END
+//Modify End

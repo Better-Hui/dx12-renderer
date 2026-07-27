@@ -1307,6 +1307,17 @@ void CommandList::SetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE heapType, ID3D12D
     }
 }
 
+//Modify Begin:2026-07-27 by BestHui
+void CommandList::InvalidateCachedNativeState()
+{
+    m_RootSignature = nullptr;
+    for (ID3D12DescriptorHeap*& descriptorHeap : m_DescriptorHeaps)
+    {
+        descriptorHeap = nullptr;
+    }
+}
+//Modify End
+
 void CommandList::SetComputeRootUnorderedAccessView(UINT rootParameterIndex, const Resource& resource)
 {
     auto d3d12Resource = resource.GetD3D12Resource();

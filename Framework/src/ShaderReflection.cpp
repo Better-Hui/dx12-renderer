@@ -68,3 +68,4 @@ ShaderReflectionMetadata ShaderReflection::CollectLibrary(const Microsoft::WRL::
 }
 
 //Modify End
+

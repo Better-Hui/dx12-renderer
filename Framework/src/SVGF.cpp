@@ -1,14 +1,15 @@
-#include <Passes/SvgfPass.h>
-
-#include <Passes/RaytracingDemoPassResources.h>
+//Modify Begin:2026-07-27 by BestHui
+#include <Framework/SVGF.h>
 
 #include <DX12Library/CommandList.h>
 #include <DX12Library/Texture.h>
-#include <Framework/CommonRootSignature.h>
 #include <Framework/ComputeShader.h>
 #include <Framework/RenderTexture.h>
 #include <Framework/ShaderBlob.h>
 #include <Framework/ShaderResourceView.h>
+#include <Framework/SVGFAtrous_CS.h>
+#include <Framework/SVGFComposite_CS.h>
+#include <Framework/SVGFTemporal_CS.h>
 #include <Framework/UnorderedAccessView.h>
 
 #include <algorithm>
@@ -16,31 +17,30 @@
 
 namespace
 {
-    std::unique_ptr<ComputeShader> CreateReflectedComputeShader(const wchar_t* shaderName)
+    std::unique_ptr<ComputeShader> CreateReflectedComputeShader(const void* shaderBytecode, const size_t shaderBytecodeSize)
     {
-        const ShaderBlob shader(shaderName);
+        const ShaderBlob shader(shaderBytecode, shaderBytecodeSize);
         return std::make_unique<ComputeShader>(
             shader,
             ComputePipelineDescBuilder::ReflectedDefault(shader).Build());
     }
 }
 
-SvgfPass::SvgfPass(const std::shared_ptr<CommonRootSignature>& rootSignature)
-    : m_RootSignature(rootSignature)
-    , m_TemporalShader(CreateReflectedComputeShader(L"SvgfTemporal.cs.cso"))
-    , m_AtrousShader(CreateReflectedComputeShader(L"SvgfAtrous.cs.cso"))
-    , m_CompositeShader(CreateReflectedComputeShader(L"SvgfComposite.cs.cso"))
+SVGF::SVGF()
+    : m_TemporalShader(CreateReflectedComputeShader(ShaderBytecode_SVGFTemporal_CS, sizeof ShaderBytecode_SVGFTemporal_CS))
+    , m_AtrousShader(CreateReflectedComputeShader(ShaderBytecode_SVGFAtrous_CS, sizeof ShaderBytecode_SVGFAtrous_CS))
+    , m_CompositeShader(CreateReflectedComputeShader(ShaderBytecode_SVGFComposite_CS, sizeof ShaderBytecode_SVGFComposite_CS))
 {
 }
 
-SvgfPass::~SvgfPass() = default;
+SVGF::~SVGF() = default;
 
-void SvgfPass::ResetHistory()
+void SVGF::ResetHistory()
 {
     m_HistoryValid = false;
 }
 
-bool SvgfPass::EnsureCreated(const uint32_t width, const uint32_t height)
+bool SVGF::EnsureCreated(const uint32_t width, const uint32_t height)
 {
     if (m_Width == width && m_Height == height && m_TemporalColor != nullptr)
     {
@@ -64,7 +64,7 @@ bool SvgfPass::EnsureCreated(const uint32_t width, const uint32_t height)
     return true;
 }
 
-void SvgfPass::Temporal(
+void SVGF::Temporal(
     CommandList& commandList,
     const std::shared_ptr<Texture>& noisyRadiance,
     const std::shared_ptr<Texture>& gBufferNormal,
@@ -87,7 +87,7 @@ void SvgfPass::Temporal(
     constants.PhiDepth = m_Settings.PhiDepth;
 
     m_TemporalShader->Bind(commandList);
-    m_TemporalShader->SetConstantBuffer(commandList, "SvgfTemporalConstants", constants);
+    m_TemporalShader->SetConstantBuffer(commandList, "SVGFTemporalConstants", constants);
     commandList.SetTexture(*m_TemporalShader, "NoisyRadiance", ShaderResourceView(noisyRadiance));
     commandList.SetTexture(*m_TemporalShader, "GBufferNormal", ShaderResourceView(gBufferNormal));
     commandList.SetTexture(*m_TemporalShader, "GBufferPosition", ShaderResourceView(gBufferPosition));
@@ -100,13 +100,14 @@ void SvgfPass::Temporal(
     m_TemporalShader->SetUnorderedAccessView(commandList, "Variance", UnorderedAccessView(m_Variance));
     m_TemporalShader->SetUnorderedAccessView(commandList, "OutHistoryColor", UnorderedAccessView(m_HistoryColor[nextIndex]));
     m_TemporalShader->SetUnorderedAccessView(commandList, "OutHistoryMoments", UnorderedAccessView(m_HistoryMoments[nextIndex]));
+    m_TemporalShader->ApplyBindings(commandList);
     commandList.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
 
     m_HistoryIndex = nextIndex;
     m_HistoryValid = true;
 }
 
-std::shared_ptr<Texture> SvgfPass::Atrous(
+std::shared_ptr<Texture> SVGF::Atrous(
     CommandList& commandList,
     const std::shared_ptr<Texture>& gBufferNormal,
     const std::shared_ptr<Texture>& gBufferPosition,
@@ -131,13 +132,14 @@ std::shared_ptr<Texture> SvgfPass::Atrous(
         output = (iteration % 2u) == 0u ? m_AtrousPing : m_AtrousPong;
 
         m_AtrousShader->Bind(commandList);
-        m_AtrousShader->SetConstantBuffer(commandList, "SvgfAtrousConstants", constants);
+        m_AtrousShader->SetConstantBuffer(commandList, "SVGFAtrousConstants", constants);
         commandList.SetTexture(*m_AtrousShader, "InputColor", ShaderResourceView(input));
         commandList.SetTexture(*m_AtrousShader, "Variance", ShaderResourceView(m_Variance));
         commandList.SetTexture(*m_AtrousShader, "GBufferNormal", ShaderResourceView(gBufferNormal));
         commandList.SetTexture(*m_AtrousShader, "GBufferPosition", ShaderResourceView(gBufferPosition));
         commandList.SetTexture(*m_AtrousShader, "DepthTexture", ShaderResourceView::DepthAsFloat(depthTexture));
         m_AtrousShader->SetUnorderedAccessView(commandList, "OutputColor", UnorderedAccessView(output));
+        m_AtrousShader->ApplyBindings(commandList);
         commandList.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
 
         input = output;
@@ -146,11 +148,9 @@ std::shared_ptr<Texture> SvgfPass::Atrous(
     return output;
 }
 
-void SvgfPass::Composite(
+void SVGF::Composite(
     CommandList& commandList,
     const std::shared_ptr<Texture>& input,
-    const std::shared_ptr<Texture>& gBufferAlbedoOcclusion,
-    const std::shared_ptr<Texture>& gBufferEmissionMetallic,
     const std::shared_ptr<Texture>& depthTexture,
     const std::shared_ptr<Texture>& output,
     const uint32_t width,
@@ -161,23 +161,20 @@ void SvgfPass::Composite(
     constants.Height = height;
 
     m_CompositeShader->Bind(commandList);
-    m_CompositeShader->SetConstantBuffer(commandList, "SvgfCompositeConstants", constants);
+    m_CompositeShader->SetConstantBuffer(commandList, "SVGFCompositeConstants", constants);
     commandList.SetTexture(*m_CompositeShader, "FilteredColor", ShaderResourceView(input));
     commandList.SetTexture(*m_CompositeShader, "DepthTexture", ShaderResourceView::DepthAsFloat(depthTexture));
-    commandList.SetTexture(*m_CompositeShader, "GBufferAlbedoOcclusion", ShaderResourceView(gBufferAlbedoOcclusion));
-    commandList.SetTexture(*m_CompositeShader, "GBufferEmissionMetallic", ShaderResourceView(gBufferEmissionMetallic));
     m_CompositeShader->SetUnorderedAccessView(commandList, "Output", UnorderedAccessView(output));
+    m_CompositeShader->ApplyBindings(commandList);
     commandList.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
 }
 
-void SvgfPass::Execute(
+void SVGF::Execute(
     CommandList& commandList,
     const std::shared_ptr<Texture>& noisyRadiance,
     const std::shared_ptr<Texture>& gBufferNormal,
     const std::shared_ptr<Texture>& gBufferPosition,
     const std::shared_ptr<Texture>& motionVector,
-    const std::shared_ptr<Texture>& gBufferAlbedoOcclusion,
-    const std::shared_ptr<Texture>& gBufferEmissionMetallic,
     const std::shared_ptr<Texture>& depthTexture,
     const std::shared_ptr<Texture>& output,
     const uint32_t width,
@@ -190,5 +187,6 @@ void SvgfPass::Execute(
 
     Temporal(commandList, noisyRadiance, gBufferNormal, gBufferPosition, motionVector, depthTexture, width, height);
     const std::shared_ptr<Texture> filtered = Atrous(commandList, gBufferNormal, gBufferPosition, depthTexture, width, height);
-    Composite(commandList, filtered, gBufferAlbedoOcclusion, gBufferEmissionMetallic, depthTexture, output, width, height);
+    Composite(commandList, filtered, depthTexture, output, width, height);
 }
+//Modify End

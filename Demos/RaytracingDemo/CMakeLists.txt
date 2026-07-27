@@ -3,30 +3,32 @@ cmake_minimum_required(VERSION 3.8.0)
 project("RaytracingDemo")
 
 set(HEADER_FILES
+        include/Denoising/DenoiserController.h
         include/RaytracingDemo.h
-        include/RenderGraph.User.h
+        include/RenderGraph/RaytracingDemoRenderGraphBuilder.h
+        include/PathTracing/PathTracingSceneBindings.h
         include/Passes/RaytracingDemoPassResources.h
         include/Passes/RaytracingDemoPasses.h
-        include/Passes/NrdPass.h
-        include/Passes/SvgfPass.h
+        include/Scene/SceneLightManager.h
         include/Scene/SceneLighting.h
         )
 
 set(SOURCE_FILES
         src/main.cpp
+        src/Denoising/DenoiserController.cpp
+        src/RaytracingDemoCamera.cpp
         src/RaytracingDemo.cpp
-        src/RenderGraph.User.cpp
+        src/RaytracingDemoUI.cpp
+        src/RenderGraph/RaytracingDemoRenderGraphBuilder.cpp
         src/Passes/BaseResourcesPass.cpp
+        src/Passes/DenoisePass.cpp
         src/Passes/ImGuiPass.cpp
         src/Passes/LightBillboardPass.cpp
-        src/Passes/NrdPass.cpp
-        src/Passes/NrdRenderPass.cpp
+        src/PathTracing/PathTracingSceneBindings.cpp
         src/Passes/PathTracingPass.cpp
         src/Passes/RaytracingDemoPassResources.cpp
-        src/Passes/SetupPass.cpp
         src/Passes/SkyboxPass.cpp
-        src/Passes/SvgfPass.cpp
-        src/Passes/SvgfRenderPass.cpp
+        src/Scene/SceneLightManager.cpp
         )
 
 set(SHADER_FILES_RAYTRACING
@@ -50,7 +52,6 @@ set(SHADERS_HEADER_FILES
         shaders/Scene/SceneGeometry.hlsli
         shaders/Scene/SceneResources.hlsli
         shaders/Scene/SceneLighting.hlsli
-        shaders/SVGF/SvgfCommon.hlsli
         )
 list(APPEND SHADERS_HEADER_FILES ${SHADER_FILES_RAYTRACING})
 
@@ -67,19 +68,26 @@ set(SHADER_FILES_PIXEL
         )
 
 set(SHADER_FILES_COMPUTE
-        shaders/NRD/NrdComposite.cs.hlsl
-        shaders/NRD/NrdPrepare.cs.hlsl
         shaders/PathTracing/DirectLighting.cs.hlsl
         shaders/PathTracing/IndirectLighting.cs.hlsl
         shaders/PathTracing/LightingComposite.cs.hlsl
-        shaders/SVGF/SvgfAtrous.cs.hlsl
-        shaders/SVGF/SvgfComposite.cs.hlsl
-        shaders/SVGF/SvgfTemporal.cs.hlsl
         )
 
 set(TARGET_NAME RaytracingDemo)
 include(${CMAKE_SOURCE_DIR}/CMakeIncludes/ProjectBase.cmake)
 include(${CMAKE_SOURCE_DIR}/CMakeIncludes/DemoBase.cmake)
+
+# Modify Begin:2026-07-27 by BestHui
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/include" PREFIX "include" FILES ${HEADER_FILES})
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "src" FILES ${SOURCE_FILES})
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/shaders" PREFIX "shaders" FILES
+        ${SHADER_FILES_RAYTRACING}
+        ${SHADERS_HEADER_FILES}
+        ${SHADER_FILES_VERTEX}
+        ${SHADER_FILES_PIXEL}
+        ${SHADER_FILES_COMPUTE}
+        )
+# Modify End
 
 set_source_files_properties(${SHADER_FILES_RAYTRACING} PROPERTIES HEADER_FILE_ONLY TRUE)
 

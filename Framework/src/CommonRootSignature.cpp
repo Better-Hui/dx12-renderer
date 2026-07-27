@@ -5,6 +5,10 @@
 #include <Framework/RayTracingAccelerationStructure.h>
 //Modify End
 
+//Modify Begin:2026-07-27 by BestHui
+FRAMEWORK_SUPPRESS_DEPRECATED_WARNINGS_BEGIN
+//Modify End
+
 namespace
 {
 //Modify Begin:2026-07-23 by BestHui
@@ -357,3 +361,7 @@ bool CommonRootSignature::CheckRootParametersVisiblity(const std::vector<RootPar
     return false;
 
 }
+
+//Modify Begin:2026-07-27 by BestHui
+FRAMEWORK_SUPPRESS_DEPRECATED_WARNINGS_END
+//Modify End

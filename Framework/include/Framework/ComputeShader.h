@@ -13,7 +13,15 @@
 
 #include "CommonRootSignature.h"
 #include "ComputePipelineStateBuilder.h"
-#include "DescriptorLayout.h"
+//Modify Begin:2026-07-27 by BestHui
+#include "FrameworkDeprecated.h"
+//Modify End
+//Modify Begin:2026-07-24 by BestHui
+#include "PipelineBindingSet.h"
+#include "PipelineDescriptorSet.h"
+#include "PipelineLayout.h"
+#include "PipelineStateCache.h"
+//Modify End
 #include "ShaderBlob.h"
 #include "ShaderReflection.h"
 //Modify Begin:2026-07-23 by BestHui
@@ -24,6 +32,8 @@
 #include <string>
 #include <vector>
 //Modify End
+
+class CommandContext;
 
 //Modify Begin:2026-07-23 by BestHui
 struct ComputePipelineDesc
@@ -59,6 +69,9 @@ class ComputeShader
 {
 public:
     //Modify Begin:2026-07-23 by BestHui
+    //Modify Begin:2026-07-27 by BestHui
+    FRAMEWORK_DEPRECATED("Use ComputeShader(const ShaderBlob&, ComputePipelineDesc) and reflected named bindings.")
+    //Modify End
     explicit ComputeShader(
         const std::shared_ptr<CommonRootSignature>& rootSignature,
         const ShaderBlob& shader,
@@ -69,6 +82,9 @@ public:
     void Bind(CommandList& commandList) const;
     //Modify Begin:2026-07-23 by BestHui
     void Unbind(CommandList& commandList) const;
+    //Modify Begin:2026-07-27 by BestHui
+    void ApplyBindings(CommandList& commandList) const;
+    //Modify End
 
     template<typename T>
     void SetPipelineConstantBuffer(CommandList& commandList, const T& data) const
@@ -108,10 +124,16 @@ public:
     void SetTexture(CommandList& commandList, const std::string& variableName, const ShaderResourceView& shaderResourceView) const;
     void SetTexture(CommandList& commandList, const std::string& variableName, const std::shared_ptr<Resource>& texture) const;
 
+    //Modify Begin:2026-07-27 by BestHui
+    FRAMEWORK_DEPRECATED("Use SetShaderResourceView(CommandList&, const std::string&, ...) instead.")
     void SetPipelineShaderResourceView(CommandList& commandList, UINT index, const ShaderResourceView& shaderResourceView) const;
+    FRAMEWORK_DEPRECATED("Use SetShaderResourceView(CommandList&, const std::string&, ...) instead.")
     void SetPipelineShaderResourceView(CommandList& commandList, UINT index, const Resource& resource, D3D12_RESOURCE_STATES stateAfter = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE) const;
+    FRAMEWORK_DEPRECATED("Use SetShaderResourceView(CommandList&, const std::string&, ...) instead.")
     void SetComputeShaderResourceView(CommandList& commandList, UINT index, const ShaderResourceView& shaderResourceView) const;
+    FRAMEWORK_DEPRECATED("Use SetUnorderedAccessView(CommandList&, const std::string&, ...) instead.")
     void SetUnorderedAccessView(CommandList& commandList, UINT index, const UnorderedAccessView& unorderedAccessView) const;
+    //Modify End
     void SetUnorderedAccessView(CommandList& commandList, const std::string& variableName, const UnorderedAccessView& unorderedAccessView) const;
     void SetAccelerationStructure(CommandList& commandList, const RayTracingAccelerationStructure& accelerationStructure) const;
 
@@ -123,6 +145,9 @@ public:
 
 private:
     //Modify Begin:2026-07-23 by BestHui
+    //Modify Begin:2026-07-27 by BestHui
+    friend class CommandContext;
+    //Modify End
     Microsoft::WRL::ComPtr<ID3D12PipelineState> GetPipelineState(const Microsoft::WRL::ComPtr<ID3D12Device2>& device) const;
 
     void CollectShaderMetadata(const Microsoft::WRL::ComPtr<ID3DBlob>& shader, ShaderMetadata* outMetadata);
@@ -134,8 +159,10 @@ private:
     ComputePipelineStateBuilder m_PipelineStateBuilder;
     Microsoft::WRL::ComPtr<ID3DBlob> m_Shader;
     ShaderMetadata m_ShaderMetadata;
-    std::unique_ptr<DescriptorLayout> m_DescriptorLayout;
+    std::unique_ptr<PipelineLayout> m_PipelineLayout;
+    std::unique_ptr<PipelineBindingSet> m_BindingSet;
+    std::unique_ptr<PipelineDescriptorSet> m_DescriptorSet;
     bool m_UseReflectedRootSignature = false;
-    mutable Microsoft::WRL::ComPtr<ID3D12PipelineState> m_PipelineState;
+    mutable PipelineStateCache<uint32_t, Microsoft::WRL::ComPtr<ID3D12PipelineState>> m_PipelineStateCache;
     //Modify End
 };

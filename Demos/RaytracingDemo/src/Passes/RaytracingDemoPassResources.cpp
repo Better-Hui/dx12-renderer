@@ -18,11 +18,12 @@ namespace RaytracingDemoRenderGraph
             { ResourceIds::DirectLighting, renderWidthExpression, renderHeightExpression, LIGHTING_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Discard },
             { ResourceIds::IndirectLighting, renderWidthExpression, renderHeightExpression, LIGHTING_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Discard },
             { ResourceIds::Accumulation, renderWidthExpression, renderHeightExpression, ACCUMULATION_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Discard },
-            { ResourceIds::NrdNoisyRadiance, renderWidthExpression, renderHeightExpression, NRD_RADIANCE_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Discard },
-            { ResourceIds::NrdDenoisedRadiance, renderWidthExpression, renderHeightExpression, NRD_RADIANCE_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Discard },
-            { ResourceIds::NrdNormalRoughness, renderWidthExpression, renderHeightExpression, NRD_NORMAL_ROUGHNESS_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Discard },
-            { ResourceIds::NrdViewZ, renderWidthExpression, renderHeightExpression, NRD_VIEWZ_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Discard },
-            { ResourceIds::NrdMotion, renderWidthExpression, renderHeightExpression, NRD_MOTION_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Discard },
+            { ResourceIds::NoisyRadiance, renderWidthExpression, renderHeightExpression, LIGHTING_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Discard },
+            { ResourceIds::NRDNoisyRadiance, renderWidthExpression, renderHeightExpression, NRD_RADIANCE_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Discard },
+            { ResourceIds::NRDDenoisedRadiance, renderWidthExpression, renderHeightExpression, NRD_RADIANCE_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Discard },
+            { ResourceIds::NRDNormalRoughness, renderWidthExpression, renderHeightExpression, NRD_NORMAL_ROUGHNESS_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Discard },
+            { ResourceIds::NRDViewZ, renderWidthExpression, renderHeightExpression, NRD_VIEWZ_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Discard },
+            { ResourceIds::NRDMotion, renderWidthExpression, renderHeightExpression, NRD_MOTION_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Discard },
             { ResourceIds::DepthBuffer, renderWidthExpression, renderHeightExpression, DEPTH_FORMAT, { 1.0f, 0u }, RenderGraph::ResourceInitAction::Clear },
         };
     }
@@ -35,16 +36,48 @@ namespace RaytracingDemoRenderGraph
     std::vector<RenderGraph::TokenDescription> CreateTokenDescriptions()
     {
         return {
-            { ResourceIds::SetupFinishedToken },
             { ResourceIds::BaseResourcesFinishedToken },
             { ResourceIds::SkyboxFinishedToken },
             { ResourceIds::DirectLightingFinishedToken },
             { ResourceIds::IndirectLightingFinishedToken },
             { ResourceIds::RayTracingFinishedToken },
-            { ResourceIds::DenoiserPrepareFinishedToken },
-            { ResourceIds::NrdFinishedToken },
             { ResourceIds::DenoiseFinishedToken },
             { ResourceIds::LightBillboardFinishedToken },
+        };
+    }
+
+    FrameGBufferResources GetFrameGBufferResources(const RenderGraph::RenderContext& context)
+    {
+        return {
+            context.m_ResourcePool->GetTexture(ResourceIds::GBufferAlbedoOcclusion),
+            context.m_ResourcePool->GetTexture(ResourceIds::GBufferSpecularSmoothness),
+            context.m_ResourcePool->GetTexture(ResourceIds::GBufferNormal),
+            context.m_ResourcePool->GetTexture(ResourceIds::GBufferEmissionMetallic),
+            context.m_ResourcePool->GetTexture(ResourceIds::GBufferPosition),
+            context.m_ResourcePool->GetTexture(ResourceIds::MotionVector),
+            context.m_ResourcePool->GetTexture(ResourceIds::DepthBuffer),
+        };
+    }
+
+    LightingResources GetLightingResources(const RenderGraph::RenderContext& context)
+    {
+        return {
+            context.m_ResourcePool->GetTexture(ResourceIds::DirectLighting),
+            context.m_ResourcePool->GetTexture(ResourceIds::IndirectLighting),
+            context.m_ResourcePool->GetTexture(ResourceIds::Accumulation),
+            context.m_ResourcePool->GetTexture(ResourceIds::NoisyRadiance),
+            context.m_ResourcePool->GetTexture(ResourceIds::NRDNoisyRadiance),
+            context.m_ResourcePool->GetTexture(RenderGraph::ResourceIds::GRAPH_OUTPUT),
+        };
+    }
+
+    NRDResources GetNRDResources(const RenderGraph::RenderContext& context)
+    {
+        return {
+            context.m_ResourcePool->GetTexture(ResourceIds::NRDNormalRoughness),
+            context.m_ResourcePool->GetTexture(ResourceIds::NRDViewZ),
+            context.m_ResourcePool->GetTexture(ResourceIds::NRDMotion),
+            context.m_ResourcePool->GetTexture(ResourceIds::NRDDenoisedRadiance),
         };
     }
 }

@@ -17,11 +17,19 @@
 
 #include "ShaderResourceView.h"
 #include "RasterPipelineStateBuilder.h"
+//Modify Begin:2026-07-24 by BestHui
+#include "PipelineBindingSet.h"
+#include "PipelineDescriptorSet.h"
+#include "PipelineLayout.h"
+#include "PipelineStateCache.h"
+//Modify End
 #include "ShaderBlob.h"
 #include "ShaderReflection.h"
 //Modify Begin:2026-07-23 by BestHui
 #include "UnorderedAccessView.h"
 //Modify End
+
+class CommandContext;
 
 class Shader
 {
@@ -34,6 +42,12 @@ public:
 		bool collectMetadata = true
 //Modify End
 	);
+//Modify Begin:2026-07-27 by BestHui
+	explicit Shader(
+		const ShaderBlob& vertexShaderPath,
+		const ShaderBlob& pixelShaderPath,
+		const std::function<void(RasterPipelineStateBuilder&)> buildPipelineState = [](RasterPipelineStateBuilder&) {});
+//Modify End
 
 	Shader(const Shader& other) = delete;
 	Shader& operator=(const Shader& other) = delete;
@@ -42,17 +56,20 @@ public:
 
 	void Bind(CommandList& commandList);
 	void Unbind(CommandList& commandList);
+//Modify Begin:2026-07-27 by BestHui
+	void ApplyBindings(CommandList& commandList) const;
+//Modify End
 
 	template<typename T>
 	void SetPipelineConstantBuffer(CommandList& commandList, const T& data)
 	{
-		m_RootSignature->SetPipelineConstantBuffer(commandList, data);
+		m_CommonRootSignature->SetPipelineConstantBuffer(commandList, data);
 	}
 
 	template<typename T>
 	void SetModelConstantBuffer(CommandList& commandList, const T& data)
 	{
-		m_RootSignature->SetMaterialConstantBuffer(commandList, data);
+		m_CommonRootSignature->SetMaterialConstantBuffer(commandList, data);
 	}
 
 	void SetMaterialConstantBuffer(CommandList& commandList, size_t size, const void* data);
@@ -83,16 +100,31 @@ public:
 
 private:
 
+//Modify Begin:2026-07-27 by BestHui
+	friend class CommandContext;
+//Modify End
 
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> GetPipelineState(const Microsoft::WRL::ComPtr<ID3D12Device2>& device, const RenderTargetState& renderTargetState);
 
 	void CollectShaderMetadata(const Microsoft::WRL::ComPtr<ID3DBlob>& shader, ShaderMetadata* outMetadata);
+//Modify Begin:2026-07-24 by BestHui
+	void BuildPipelineLayout();
+	void BuildReflectedRootSignature();
+	const PipelineDescriptorRangeDesc* FindPipelineBinding(const std::string& variableName, DescriptorBindingKind expectedKind) const;
+//Modify End
 
-	std::shared_ptr<CommonRootSignature> m_RootSignature;
+	std::shared_ptr<CommonRootSignature> m_CommonRootSignature;
+	std::shared_ptr<RootSignature> m_RootSignature;
 
 	ShaderMetadata m_VertexShaderMetadata;
 	ShaderMetadata m_PixelShaderMetadata;
+//Modify Begin:2026-07-24 by BestHui
+	std::unique_ptr<PipelineLayout> m_PipelineLayout;
+	std::unique_ptr<PipelineBindingSet> m_BindingSet;
+	std::unique_ptr<PipelineDescriptorSet> m_DescriptorSet;
+	bool m_UseReflectedRootSignature = false;
+//Modify End
 
 	RasterPipelineStateBuilder m_PipelineStateBuilder;
-	std::unordered_map<RenderTargetState, Microsoft::WRL::ComPtr<ID3D12PipelineState>> m_PipelineStateObjects;
+	PipelineStateCache<RenderTargetState, Microsoft::WRL::ComPtr<ID3D12PipelineState>> m_PipelineStateObjects;
 };

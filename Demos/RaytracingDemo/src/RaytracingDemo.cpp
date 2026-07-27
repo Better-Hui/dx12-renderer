@@ -1,8 +1,5 @@
 #include <RaytracingDemo.h>
 
-#include <Passes/NrdPass.h>
-#include <Passes/SvgfPass.h>
-
 #include <DX12Library/Application.h>
 #include <DX12Library/CommandList.h>
 #include <DX12Library/CommandQueue.h>
@@ -29,7 +26,7 @@
 #include <random>
 #include <vector>
 
-#include "RenderGraph.User.h"
+#include <RenderGraph/RaytracingDemoRenderGraphBuilder.h>
 
 #if defined(min)
 #undef min
@@ -43,12 +40,6 @@ using namespace DirectX;
 
 namespace
 {
-    template<typename T>
-    constexpr const T& Clamp(const T& val, const T& min, const T& max)
-    {
-        return val < min ? min : val > max ? max : val;
-    }
-
     uint32_t ComputeDescriptorArrayCapacity(const size_t resourceCount, const size_t resourceCapacity)
     {
         return static_cast<uint32_t>(std::max<size_t>(
@@ -62,9 +53,6 @@ RaytracingDemo::RaytracingDemo(const std::wstring& name, const int width, const 
     : Base(name, width, height, false)
     , m_MaterialBuffer(L"Ray Tracing Materials")
     , m_GeometryBuffer(L"Ray Tracing Geometry Data")
-    , m_DirectionalLightBuffer(L"Ray Tracing Directional Lights")
-    , m_PointLightBuffer(L"Ray Tracing Point Lights")
-    , m_AreaLightBuffer(L"Ray Tracing Area Lights")
     , m_Width(width)
     , m_Height(height)
 {
@@ -90,7 +78,7 @@ RaytracingDemo::RaytracingDemo(const std::wstring& name, const int width, const 
     _dupenv_s(&nrdMode, &nrdModeLength, "RAYTRACING_DEMO_NRD");
     if (nrdMode != nullptr)
     {
-        m_DenoiserAlgorithm = std::strcmp(nrdMode, "0") != 0 ? DenoiserAlgorithm::Nrd : DenoiserAlgorithm::Off;
+        m_Denoisers.SetAlgorithm(std::strcmp(nrdMode, "0") != 0 ? DenoiserController::Algorithm::NRD : DenoiserController::Algorithm::Off);
     }
     std::free(nrdMode);
 
@@ -99,18 +87,7 @@ RaytracingDemo::RaytracingDemo(const std::wstring& name, const int width, const 
     _dupenv_s(&denoiserMode, &denoiserModeLength, "RAYTRACING_DEMO_DENOISER");
     if (denoiserMode != nullptr)
     {
-        if (std::strcmp(denoiserMode, "nrd") == 0)
-        {
-            m_DenoiserAlgorithm = DenoiserAlgorithm::Nrd;
-        }
-        else if (std::strcmp(denoiserMode, "svgf") == 0)
-        {
-            m_DenoiserAlgorithm = DenoiserAlgorithm::Svgf;
-        }
-        else
-        {
-            m_DenoiserAlgorithm = DenoiserAlgorithm::Off;
-        }
+        m_Denoisers.SetAlgorithmFromName(denoiserMode);
     }
     std::free(denoiserMode);
 
@@ -128,21 +105,17 @@ bool RaytracingDemo::LoadContent()
     m_SkyboxTexture = std::make_shared<Texture>();
     commandList->LoadTextureFromFile(*m_SkyboxTexture, L"Assets/Textures/skybox/skybox.dds", TextureUsageType::Albedo);
 
-    Assert(!m_Textures.empty(), "RaytracingDemo needs at least one texture before creating the common root signature.");
-    m_RootSignature = std::make_shared<CommonRootSignature>(m_Textures.front());
-    m_ImGui = std::make_unique<ImGuiImpl>(*commandList, *PWindow, m_RootSignature);
+    m_ImGui = std::make_unique<ImGuiImpl>(*commandList, *PWindow);
 
     m_SkyboxMesh = Mesh::CreateCube(*commandList);
     m_LightBillboardMesh = Mesh::CreateVerticalQuad(*commandList);
 
     m_GBufferShader = std::make_shared<Shader>(
-        m_RootSignature,
         ShaderBlob(L"GBuffer.vs.cso"),
         ShaderBlob(L"GBuffer.ps.cso"),
         [](RasterPipelineStateBuilder&) {});
 
     m_SkyboxShader = std::make_shared<Shader>(
-        m_RootSignature,
         ShaderBlob(L"Skybox.vs.cso"),
         ShaderBlob(L"Skybox.ps.cso"),
         [](RasterPipelineStateBuilder& builder)
@@ -151,7 +124,6 @@ bool RaytracingDemo::LoadContent()
         });
 
     m_LightBillboardShader = std::make_shared<Shader>(
-        m_RootSignature,
         ShaderBlob(L"LightBillboard.vs.cso"),
         ShaderBlob(L"LightBillboard.ps.cso"),
         [](RasterPipelineStateBuilder& builder)
@@ -159,9 +131,7 @@ bool RaytracingDemo::LoadContent()
             builder.WithAlphaBlend().WithDepthTestNoWrite().WithNoCull();
         });
 
-    m_NrdPass = std::make_unique<NrdPass>(m_RootSignature);
-    m_SvgfPass = std::make_unique<SvgfPass>(m_RootSignature);
-    ApplyDenoiserSelection();
+    m_Denoisers.Initialize();
     if (IsDenoiserEnabled())
     {
         m_AccumulationEnabled = false;
@@ -176,13 +146,13 @@ bool RaytracingDemo::LoadContent()
     m_RayTracingAccelerationStructure.Build(*commandList, accelerationStructureSettings);
     commandList->CopyStructuredBuffer(m_MaterialBuffer, m_Materials);
     commandList->CopyStructuredBuffer(m_GeometryBuffer, m_RayTracingAccelerationStructure.GetGeometryData());
-    InitializeSceneLightBuffers(*commandList);
+    m_Lights.InitializeGpuBuffers(*commandList);
     if (m_DirectRayTracingBindingSet != nullptr || m_IndirectRayTracingBindingSet != nullptr)
     {
         BindRayTracingShaderResources();
     }
 
-    m_RenderGraph = RenderGraph::User::Create(*this, *commandList);
+    m_RenderGraph = RaytracingDemoRenderGraphBuilder::Create(*this, *commandList);
 
     const uint64_t fenceValue = commandQueue->ExecuteCommandList(commandList);
     commandQueue->WaitForFenceValue(fenceValue);
@@ -198,8 +168,7 @@ void RaytracingDemo::UnloadContent()
     m_LightBillboardMesh.reset();
     m_SkyboxMesh.reset();
     m_ImGui.reset();
-    m_NrdPass.reset();
-    m_RootSignature.reset();
+    m_Denoisers.Shutdown();
     m_SkyboxTexture.reset();
     m_LightingCompositeShader.reset();
     m_InlineIndirectLightingShader.reset();
@@ -210,7 +179,6 @@ void RaytracingDemo::UnloadContent()
     m_SceneObjects.clear();
     m_Materials.clear();
     m_Textures.clear();
-    m_LightUploadBuffer.reset();
 }
 
 RaytracingDemo::RayTracingSceneResourceLayout RaytracingDemo::BuildRayTracingSceneResourceLayout() const
@@ -309,9 +277,7 @@ void RaytracingDemo::BindRayTracingShaderResources(RayTracingBindingSet& shader)
     shader.SetAccelerationStructure("Scene", m_RayTracingAccelerationStructure);
     shader.SetBuffer("Materials", m_MaterialBuffer);
     shader.SetBuffer("Geometries", m_GeometryBuffer);
-    shader.SetBuffer("DirectionalLights", m_DirectionalLightBuffer);
-    shader.SetBuffer("PointLights", m_PointLightBuffer);
-    shader.SetBuffer("AreaLights", m_AreaLightBuffer);
+    m_Lights.BindRayTracingResources(shader);
     for (uint32_t textureIndex = 0; textureIndex < m_Textures.size(); ++textureIndex)
     {
         shader.SetTexture("Textures", textureIndex, ShaderResourceView(m_Textures[textureIndex]));
@@ -327,24 +293,16 @@ RaytracingDemo::CameraConstants RaytracingDemo::BuildCameraConstants() const
     XMStoreFloat4(&camera.CameraPosition, m_Camera.GetTranslation());
     camera.Width = static_cast<uint32_t>(m_Width);
     camera.Height = static_cast<uint32_t>(m_Height);
-    camera.MaxBounces = static_cast<uint32_t>(Clamp(m_MaxBounces, 0, 5));
+    camera.MaxBounces = static_cast<uint32_t>(std::clamp(m_MaxBounces, 0, 5));
     camera.SamplesPerPixel = 1;
-    camera.DirectionalLightCount = static_cast<uint32_t>(m_DirectionalLightGpuData.size());
-    camera.PointLightCount = static_cast<uint32_t>(m_PointLightGpuData.size());
-    camera.AreaLightCount = static_cast<uint32_t>(m_AreaLightGpuData.size());
+    m_Lights.FillCameraConstants(camera.DirectionalLightCount, camera.PointLightCount, camera.AreaLightCount, camera.SkyLight);
     camera.FrameIndex = m_FrameIndex;
     const bool pathAccumulationEnabled = m_AccumulationEnabled && !IsDenoiserEnabled();
     camera.AccumulationFrameIndex = pathAccumulationEnabled ? m_AccumulationFrameIndex : 0u;
     camera.AccumulationEnabled = pathAccumulationEnabled ? 1u : 0u;
-    if (m_NrdPass != nullptr)
-    {
-        const NrdPass::Settings& nrdSettings = m_NrdPass->GetSettings();
-        camera.NrdDenoiserMode = static_cast<uint32_t>(nrdSettings.Mode);
-        camera.NrdReblurHitDistanceScale = nrdSettings.ReblurHitDistanceScale;
-    }
+    m_Denoisers.FillCameraConstants(camera.NRDDenoiserMode, camera.NRDReblurHitDistanceParameters);
     camera.DirectLightingEnabled = m_DirectLightingEnabled ? 1u : 0u;
     camera.IndirectLightingEnabled = m_IndirectLightingEnabled ? 1u : 0u;
-    camera.SkyLight = m_SkyLight;
     return camera;
 }
 
@@ -365,210 +323,10 @@ RaytracingDemo::PipelineConstants RaytracingDemo::BuildPipelineConstants() const
 void RaytracingDemo::ResetAccumulation(bool resetDenoiserHistory)
 {
     m_AccumulationFrameIndex = 0;
-    if (resetDenoiserHistory && m_NrdPass != nullptr)
+    if (resetDenoiserHistory)
     {
-        m_NrdPass->ResetHistory();
+        m_Denoisers.ResetHistory();
     }
-    if (resetDenoiserHistory && m_SvgfPass != nullptr)
-    {
-        m_SvgfPass->ResetHistory();
-    }
-}
-
-void RaytracingDemo::ApplyDenoiserSelection()
-{
-    if (m_NrdPass != nullptr)
-    {
-        m_NrdPass->SetEnabled(IsNrdDenoiserEnabled());
-    }
-    if (m_SvgfPass != nullptr)
-    {
-        m_SvgfPass->SetEnabled(IsSvgfDenoiserEnabled());
-    }
-}
-
-void RaytracingDemo::OnImGui()
-{
-    ImGui::SetNextWindowSize(ImVec2(520.0f, 680.0f), ImGuiCond_FirstUseEver);
-    ImGui::Begin("Raytracing");
-    ImGui::Text("GBuffer Path Tracing");
-    ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-    ImGui::Text("Resolution: %d x %d", m_Width, m_Height);
-    ImGui::Text("Frame: %u", m_FrameIndex);
-    ImGui::Text("Accumulation: %u", m_AccumulationFrameIndex);
-
-    if (ImGui::Checkbox("Enable Accumulation", &m_AccumulationEnabled))
-    {
-        ResetAccumulation();
-    }
-    if (ImGui::Checkbox("Enable Direct Lighting", &m_DirectLightingEnabled))
-    {
-        ResetAccumulation();
-    }
-    if (ImGui::Checkbox("Enable Indirect Lighting", &m_IndirectLightingEnabled))
-    {
-        ResetAccumulation();
-    }
-    const char* denoiserNames[] = { "Off", "NRD", "SVGF" };
-    int selectedDenoiser = static_cast<int>(m_DenoiserAlgorithm);
-    if (ImGui::Combo("Denoiser##DenoiserAlgorithm", &selectedDenoiser, denoiserNames, 3))
-    {
-        m_DenoiserAlgorithm = static_cast<DenoiserAlgorithm>(selectedDenoiser);
-        ApplyDenoiserSelection();
-        if (IsDenoiserEnabled())
-        {
-            m_AccumulationEnabled = false;
-        }
-        ResetAccumulation();
-    }
-    if (m_NrdPass != nullptr && !m_NrdPass->IsAvailable())
-    {
-        ImGui::Text("NRD unavailable");
-    }
-    if (IsNrdDenoiserEnabled() && m_NrdPass != nullptr && ImGui::CollapsingHeader("NRD Settings", ImGuiTreeNodeFlags_DefaultOpen))
-    {
-        NrdPass::Settings& nrdSettings = m_NrdPass->GetSettings();
-        bool nrdChanged = false;
-
-        const char* nrdDenoiserNames[] = { "RELAX Diffuse", "ReBLUR Diffuse" };
-        int denoiserMode = static_cast<int>(nrdSettings.Mode);
-        if (ImGui::Combo("Denoiser##NrdMode", &denoiserMode, nrdDenoiserNames, 2))
-        {
-            nrdSettings.Mode = static_cast<NrdPass::DenoiserMode>(denoiserMode);
-            nrdChanged = true;
-        }
-
-        nrdChanged |= ImGui::SliderFloat("Denoising Range", &nrdSettings.DenoisingRange, 1.0f, 500000.0f, "%.0f");
-
-        auto sliderUint = [&nrdChanged](const char* label, uint32_t& value, int minValue, int maxValue)
-        {
-            int temporaryValue = static_cast<int>(value);
-            if (ImGui::SliderInt(label, &temporaryValue, minValue, maxValue))
-            {
-                value = static_cast<uint32_t>(temporaryValue);
-                nrdChanged = true;
-            }
-        };
-
-        if (nrdSettings.Mode == NrdPass::DenoiserMode::RelaxDiffuse)
-        {
-            sliderUint("Relax History", nrdSettings.RelaxDiffuseMaxAccumulatedFrameNum, 0, 255);
-            sliderUint("Relax Fast History", nrdSettings.RelaxDiffuseMaxFastAccumulatedFrameNum, 0, 255);
-            sliderUint("Relax History Fix", nrdSettings.RelaxHistoryFixFrameNum, 0, 3);
-            sliderUint("Relax History Stride", nrdSettings.RelaxHistoryFixBasePixelStride, 1, 32);
-            nrdChanged |= ImGui::SliderFloat("Relax History Sigma", &nrdSettings.RelaxFastHistoryClampingSigmaScale, 1.0f, 3.0f, "%.2f");
-            nrdChanged |= ImGui::SliderFloat("Relax Prepass Radius", &nrdSettings.RelaxDiffusePrepassBlurRadius, 0.0f, 80.0f, "%.1f");
-            nrdChanged |= ImGui::SliderFloat("Relax Min Hit Weight", &nrdSettings.RelaxMinHitDistanceWeight, 0.001f, 0.2f, "%.3f");
-            sliderUint("Relax Variance History", nrdSettings.RelaxSpatialVarianceEstimationHistoryThreshold, 0, 16);
-            nrdChanged |= ImGui::SliderFloat("Relax Phi Luminance", &nrdSettings.RelaxDiffusePhiLuminance, 0.1f, 16.0f, "%.2f");
-            nrdChanged |= ImGui::SliderFloat("Relax Lobe Fraction", &nrdSettings.RelaxLobeAngleFraction, 0.01f, 1.0f, "%.2f");
-            nrdChanged |= ImGui::SliderFloat("Relax Roughness Fraction", &nrdSettings.RelaxRoughnessFraction, 0.01f, 1.0f, "%.2f");
-            sliderUint("Relax A-Trous Iterations", nrdSettings.RelaxAtrousIterationNum, 2, 8);
-            nrdChanged |= ImGui::SliderFloat("Relax Depth Threshold", &nrdSettings.RelaxDepthThreshold, 0.0001f, 0.05f, "%.4f");
-            nrdChanged |= ImGui::SliderFloat("Relax Luma Relax", &nrdSettings.RelaxLuminanceEdgeStoppingRelaxation, 0.0f, 2.0f, "%.2f");
-            nrdChanged |= ImGui::SliderFloat("Relax Normal Relax", &nrdSettings.RelaxNormalEdgeStoppingRelaxation, 0.0f, 2.0f, "%.2f");
-            nrdChanged |= ImGui::SliderFloat("Relax Roughness Relax", &nrdSettings.RelaxRoughnessEdgeStoppingRelaxation, 0.0f, 2.0f, "%.2f");
-            nrdChanged |= ImGui::Checkbox("Relax Anti-Firefly", &nrdSettings.RelaxEnableAntiFirefly);
-            nrdChanged |= ImGui::Checkbox("Relax Roughness Stop", &nrdSettings.RelaxEnableRoughnessEdgeStopping);
-        }
-        else
-        {
-            nrdChanged |= ImGui::SliderFloat("ReBLUR Hit Scale", &nrdSettings.ReblurHitDistanceScale, 1.0f, 1000.0f, "%.1f");
-            sliderUint("ReBLUR History", nrdSettings.ReblurMaxAccumulatedFrameNum, 0, 63);
-            sliderUint("ReBLUR Fast History", nrdSettings.ReblurMaxFastAccumulatedFrameNum, 0, 63);
-            sliderUint("ReBLUR History Fix", nrdSettings.ReblurHistoryFixFrameNum, 0, 16);
-            sliderUint("ReBLUR History Stride", nrdSettings.ReblurHistoryFixBasePixelStride, 1, 32);
-            nrdChanged |= ImGui::SliderFloat("ReBLUR History Sigma", &nrdSettings.ReblurFastHistoryClampingSigmaScale, 1.0f, 3.0f, "%.2f");
-            nrdChanged |= ImGui::SliderFloat("ReBLUR Prepass Radius", &nrdSettings.ReblurDiffusePrepassBlurRadius, 0.0f, 80.0f, "%.1f");
-            nrdChanged |= ImGui::SliderFloat("ReBLUR Min Hit Weight", &nrdSettings.ReblurMinHitDistanceWeight, 0.001f, 0.2f, "%.3f");
-            nrdChanged |= ImGui::SliderFloat("ReBLUR Min Radius", &nrdSettings.ReblurMinBlurRadius, 0.0f, 16.0f, "%.1f");
-            nrdChanged |= ImGui::SliderFloat("ReBLUR Max Radius", &nrdSettings.ReblurMaxBlurRadius, 0.0f, 80.0f, "%.1f");
-            nrdChanged |= ImGui::SliderFloat("ReBLUR Lobe Fraction", &nrdSettings.ReblurLobeAngleFraction, 0.01f, 1.0f, "%.2f");
-            nrdChanged |= ImGui::SliderFloat("ReBLUR Roughness Fraction", &nrdSettings.ReblurRoughnessFraction, 0.01f, 1.0f, "%.2f");
-            nrdChanged |= ImGui::SliderFloat("ReBLUR Plane Sensitivity", &nrdSettings.ReblurPlaneDistanceSensitivity, 0.001f, 0.2f, "%.3f");
-            nrdChanged |= ImGui::SliderFloat("ReBLUR Firefly Scale", &nrdSettings.ReblurFireflySuppressorMinRelativeScale, 1.0f, 3.0f, "%.2f");
-            nrdChanged |= ImGui::Checkbox("ReBLUR Anti-Firefly", &nrdSettings.ReblurEnableAntiFirefly);
-        }
-
-        if (nrdChanged)
-        {
-            m_NrdPass->ResetHistory();
-            ResetAccumulation();
-        }
-    }
-    if (IsSvgfDenoiserEnabled() && m_SvgfPass != nullptr && ImGui::CollapsingHeader("SVGF Settings", ImGuiTreeNodeFlags_DefaultOpen))
-    {
-        SvgfPass::Settings& svgfSettings = m_SvgfPass->GetSettings();
-        bool svgfChanged = false;
-        int atrousIterations = static_cast<int>(svgfSettings.AtrousIterations);
-        if (ImGui::SliderInt("SVGF A-Trous Iterations", &atrousIterations, 1, 8))
-        {
-            svgfSettings.AtrousIterations = static_cast<uint32_t>(atrousIterations);
-            svgfChanged = true;
-        }
-        svgfChanged |= ImGui::SliderFloat("SVGF Temporal Alpha", &svgfSettings.TemporalAlpha, 0.001f, 1.0f, "%.3f");
-        svgfChanged |= ImGui::SliderFloat("SVGF Moments Alpha", &svgfSettings.MomentsAlpha, 0.001f, 1.0f, "%.3f");
-        svgfChanged |= ImGui::SliderFloat("SVGF Phi Color", &svgfSettings.PhiColor, 0.1f, 32.0f, "%.2f");
-        svgfChanged |= ImGui::SliderFloat("SVGF Phi Normal", &svgfSettings.PhiNormal, 1.0f, 256.0f, "%.1f");
-        svgfChanged |= ImGui::SliderFloat("SVGF Phi Depth", &svgfSettings.PhiDepth, 0.001f, 10.0f, "%.3f");
-        if (svgfChanged)
-        {
-            m_SvgfPass->ResetHistory();
-            ResetAccumulation();
-        }
-    }
-    if (ImGui::Checkbox("Animate Point Lights", &m_AnimatePointLights))
-    {
-        ResetAccumulation();
-    }
-    ImGui::Text("Point Lights: %zu", m_PointLights.size());
-    if (!m_PointLights.empty())
-    {
-        ImGui::Text("PointLight[0].Y: %.2f", m_PointLights.front().PositionWs.y);
-    }
-    ImGui::ColorEdit3("New Point Light Color", &m_NewPointLightColor.x);
-    ImGui::SliderFloat("New Point Light Intensity", &m_NewPointLightIntensity, 0.0f, 100.0f, "%.1f");
-    ImGui::SliderFloat("New Point Light Range", &m_NewPointLightRange, 0.1f, 100.0f, "%.1f");
-    ImGui::SliderFloat("Random Light Spawn Radius", &m_RandomPointLightSpawnRadius, 1.0f, 80.0f, "%.1f");
-    if (ImGui::Button("Add Point Light At Origin"))
-    {
-        AddPointLightAtOrigin();
-    }
-    if (ImGui::Button("Add Random Point Light"))
-    {
-        AddRandomPointLightInUpperHemisphere();
-    }
-
-    const char* modeNames[] = { "Inline Ray Query", "Shader Table DXR" };
-    int selectedMode = static_cast<int>(m_PathTracingBackend);
-    if (ImGui::Combo("Mode", &selectedMode, modeNames, 2))
-    {
-        m_PathTracingBackend = static_cast<PathTracingBackend>(selectedMode);
-        ResetAccumulation();
-    }
-
-    const bool bouncesChanged = ImGui::SliderInt("Bounces", &m_MaxBounces, 0, 5);
-    const bool fovChanged = ImGui::SliderFloat("FOV", &m_CameraFov, 12.0f, 90.0f, "%.1f");
-    const bool rotateSpeedChanged = ImGui::SliderFloat("Mouse Rotate", &m_MouseRotateSpeed, 0.01f, 0.5f, "%.3f");
-    const bool panSpeedChanged = ImGui::SliderFloat("Mouse Pan", &m_MousePanSpeed, 0.005f, 0.25f, "%.3f");
-    const bool dollySpeedChanged = ImGui::SliderFloat("Mouse Dolly", &m_MouseDollySpeed, 0.005f, 0.25f, "%.3f");
-    const bool wheelSpeedChanged = ImGui::SliderFloat("Wheel Dolly", &m_MouseWheelDollySpeed, 0.05f, 5.0f, "%.2f");
-
-    if (bouncesChanged)
-    {
-        ResetAccumulation();
-    }
-    if (fovChanged)
-    {
-        const float aspectRatio = static_cast<float>(m_Width) / static_cast<float>(m_Height);
-        m_Camera.SetProjection(m_CameraFov, aspectRatio, 0.1f, 1000.0f);
-        ResetAccumulation();
-    }
-    if (rotateSpeedChanged || panSpeedChanged || dollySpeedChanged || wheelSpeedChanged)
-    {
-        ResetAccumulation();
-    }
-    ImGui::End();
 }
 
 uint32_t RaytracingDemo::AddTexture(CommandList& commandList, const std::wstring& path, TextureUsageType usage)
@@ -643,15 +401,6 @@ uint32_t RaytracingDemo::AddDiffuseMaterial(
 void RaytracingDemo::LoadDeferredLightingScene(CommandList& commandList)
 {
     ModelLoader modelLoader;
-    m_DirectionalLights.clear();
-    m_PointLights.clear();
-    m_AreaLights.clear();
-    m_PointLightBaseY.clear();
-    m_PointLightPhase.clear();
-    m_PointLightOrbitRadius.clear();
-    m_PointLightOrbitSpeed.clear();
-    m_PointLightOrbitCenter.clear();
-    m_PointLightAnimated.clear();
 
     const uint32_t whiteTexture = AddTexture(commandList, L"Assets/Textures/white.png");
     const uint32_t groundTexture = AddTexture(commandList, L"Assets/Textures/Ground047/Ground047_1K_Color.jpg");
@@ -752,361 +501,7 @@ void RaytracingDemo::LoadDeferredLightingScene(CommandList& commandList)
         }
     }
 
-    CreateDemoLights();
-}
-
-void RaytracingDemo::CreateDemoLights()
-{
-    m_SkyLight.ColorAndIntensity = { 0.85f, 0.9f, 1.0f, 0.35f };
-
-    DirectionalLight sunLight{};
-    sunLight.m_DirectionWs = { -0.35f, 0.8f, -0.48f, 0.0f };
-    sunLight.m_Color = { 1.0f, 0.95f, 0.82f, 0.8f };
-    m_DirectionalLights.push_back(sunLight);
-
-    constexpr uint32_t DemoPointLightCount = 1;
-    const XMFLOAT3 orbitCenter = { -12.0f, 6.0f, 18.0f };
-    const XMFLOAT4 lightColors[DemoPointLightCount] = {
-        { 1.0f, 0.35f, 0.28f, 20.0f },
-    };
-
-    m_PointLights.reserve(DemoPointLightCount);
-    m_PointLightBaseY.reserve(DemoPointLightCount);
-    m_PointLightPhase.reserve(DemoPointLightCount);
-    m_PointLightOrbitRadius.reserve(DemoPointLightCount);
-    m_PointLightOrbitSpeed.reserve(DemoPointLightCount);
-    m_PointLightOrbitCenter.reserve(DemoPointLightCount);
-    m_PointLightAnimated.reserve(DemoPointLightCount);
-
-    for (uint32_t i = 0; i < DemoPointLightCount; ++i)
-    {
-        const float baseY = orbitCenter.y + static_cast<float>(i % 2) * 1.25f;
-        const float phase = XM_2PI * static_cast<float>(i) / static_cast<float>(DemoPointLightCount);
-        const float radius = 13.0f + static_cast<float>(i) * 2.0f;
-        const float speed = 0.35f + static_cast<float>(i) * 0.07f;
-
-        PointLight light(
-            {
-                orbitCenter.x + std::cos(phase) * radius,
-                baseY,
-                orbitCenter.z + std::sin(phase) * radius,
-                1.0f
-            },
-            26.0f);
-        light.Color = lightColors[i];
-        light.RecalculateAttenuationCoefficients();
-
-        m_PointLights.push_back(light);
-        m_PointLightBaseY.push_back(baseY);
-        m_PointLightPhase.push_back(phase);
-        m_PointLightOrbitRadius.push_back(radius);
-        m_PointLightOrbitSpeed.push_back(speed);
-        m_PointLightOrbitCenter.push_back(orbitCenter);
-        m_PointLightAnimated.push_back(1);
-    }
-
-    AreaLightData areaLight{};
-    areaLight.PositionAndRange = { -18.0f, 10.0f, 18.0f, 35.0f };
-    areaLight.NormalAndType = { 0.0f, -1.0f, 0.0f, 0.0f };
-    areaLight.AxisUAndExtent = { 1.0f, 0.0f, 0.0f, 4.0f };
-    areaLight.AxisVAndExtent = { 0.0f, 0.0f, 1.0f, 3.0f };
-    areaLight.ColorAndIntensity = { 1.0f, 0.82f, 0.55f, 6.0f };
-    m_AreaLights.push_back(areaLight);
-
-    BuildSceneLightGpuData();
-    MarkDirectionalLightsDirty();
-    MarkPointLightsDirty(0, m_PointLightGpuData.size());
-    MarkAreaLightsDirty();
-}
-
-void RaytracingDemo::AddPointLightAtOrigin()
-{
-    PointLight light({ 0.0f, 0.0f, 0.0f, 1.0f }, std::max(0.1f, m_NewPointLightRange));
-    light.Color = {
-        std::max(0.0f, m_NewPointLightColor.x),
-        std::max(0.0f, m_NewPointLightColor.y),
-        std::max(0.0f, m_NewPointLightColor.z),
-        std::max(0.0f, m_NewPointLightIntensity)
-    };
-    light.RecalculateAttenuationCoefficients();
-
-    const size_t lightIndex = m_PointLights.size();
-    m_PointLights.push_back(light);
-    m_PointLightBaseY.push_back(0.0f);
-    m_PointLightPhase.push_back(0.0f);
-    m_PointLightOrbitRadius.push_back(0.0f);
-    m_PointLightOrbitSpeed.push_back(0.0f);
-    m_PointLightOrbitCenter.push_back({ 0.0f, 0.0f, 0.0f });
-    m_PointLightAnimated.push_back(0);
-
-    UpdatePointLightGpuData(lightIndex);
-    MarkPointLightsDirty(lightIndex, lightIndex + 1);
-    ResetAccumulation();
-}
-
-void RaytracingDemo::AddRandomPointLightInUpperHemisphere()
-{
-    static std::mt19937 rng{ std::random_device{}() };
-    std::uniform_real_distribution<float> unitDistribution(0.0f, 1.0f);
-    std::uniform_real_distribution<float> colorDistribution(0.25f, 1.0f);
-    std::uniform_real_distribution<float> intensityDistribution(8.0f, 36.0f);
-    std::uniform_real_distribution<float> rangeScaleDistribution(0.45f, 1.15f);
-
-    const float spawnRadius = std::max(1.0f, m_RandomPointLightSpawnRadius);
-    const float radius = spawnRadius * std::cbrt(unitDistribution(rng));
-    const float cosTheta = unitDistribution(rng);
-    const float sinTheta = std::sqrt(std::max(0.0f, 1.0f - cosTheta * cosTheta));
-    const float phi = XM_2PI * unitDistribution(rng);
-    const XMFLOAT3 position = {
-        radius * sinTheta * std::cos(phi),
-        radius * cosTheta,
-        radius * sinTheta * std::sin(phi)
-    };
-
-    PointLight light({ position.x, position.y, position.z, 1.0f }, std::max(3.0f, m_NewPointLightRange * rangeScaleDistribution(rng)));
-    light.Color = {
-        colorDistribution(rng),
-        colorDistribution(rng),
-        colorDistribution(rng),
-        intensityDistribution(rng)
-    };
-    light.RecalculateAttenuationCoefficients();
-
-    const float orbitRadius = std::max(1.0f, std::sqrt(position.x * position.x + position.z * position.z));
-    const size_t lightIndex = m_PointLights.size();
-    m_PointLights.push_back(light);
-    m_PointLightBaseY.push_back(position.y);
-    m_PointLightPhase.push_back(phi);
-    m_PointLightOrbitRadius.push_back(orbitRadius);
-    m_PointLightOrbitSpeed.push_back(0.18f + unitDistribution(rng) * 0.55f);
-    m_PointLightOrbitCenter.push_back({ 0.0f, 0.0f, 0.0f });
-    m_PointLightAnimated.push_back(1);
-
-    UpdatePointLightGpuData(lightIndex);
-    MarkPointLightsDirty(lightIndex, lightIndex + 1);
-    ResetAccumulation();
-}
-
-void RaytracingDemo::UpdateDynamicLights(float timeSeconds)
-{
-    const size_t pointLightCount = std::min(m_PointLights.size(), m_PointLightBaseY.size());
-    for (size_t i = 0; i < pointLightCount; ++i)
-    {
-        if (i < m_PointLightAnimated.size() && m_PointLightAnimated[i] == 0)
-        {
-            continue;
-        }
-
-        const float radius = i < m_PointLightOrbitRadius.size() ? m_PointLightOrbitRadius[i] : 16.0f;
-        const float speed = i < m_PointLightOrbitSpeed.size() ? m_PointLightOrbitSpeed[i] : 0.4f;
-        const float phase = i < m_PointLightPhase.size() ? m_PointLightPhase[i] : 0.0f;
-        const XMFLOAT3 orbitCenter = i < m_PointLightOrbitCenter.size() ? m_PointLightOrbitCenter[i] : XMFLOAT3{ -12.0f, 0.0f, 18.0f };
-        const float angle = timeSeconds * speed + phase;
-        m_PointLights[i].PositionWs.x = orbitCenter.x + std::cos(angle) * radius;
-        m_PointLights[i].PositionWs.y = m_PointLightBaseY[i] + std::sin(angle * 1.7f) * 0.75f;
-        m_PointLights[i].PositionWs.z = orbitCenter.z + std::sin(angle) * radius;
-        UpdatePointLightGpuData(i);
-    }
-
-    MarkPointLightsDirty(0, std::min(pointLightCount, m_PointLightGpuData.size()));
-}
-
-namespace
-{
-    size_t GrowLightBufferCapacity(const size_t currentCapacity, const size_t requiredCapacity)
-    {
-        size_t newCapacity = std::max<size_t>(1, currentCapacity);
-        while (newCapacity < requiredCapacity)
-        {
-            newCapacity *= 2;
-        }
-        return newCapacity;
-    }
-
-    void MarkDirtyRange(
-        const size_t beginIndex,
-        const size_t endIndex,
-        size_t& dirtyBegin,
-        size_t& dirtyEnd)
-    {
-        if (beginIndex >= endIndex)
-        {
-            return;
-        }
-
-        if (dirtyBegin == dirtyEnd)
-        {
-            dirtyBegin = beginIndex;
-            dirtyEnd = endIndex;
-            return;
-        }
-
-        dirtyBegin = std::min(dirtyBegin, beginIndex);
-        dirtyEnd = std::max(dirtyEnd, endIndex);
-    }
-
-    template<typename T>
-    std::vector<T> CreateBufferCapacityData(const size_t count)
-    {
-        return std::vector<T>(std::max<size_t>(1, count));
-    }
-
-    template<typename T>
-    void EnsureStructuredBufferCapacity(
-        CommandList& commandList,
-        StructuredBuffer& buffer,
-        size_t& currentCapacity,
-        const std::vector<T>& values)
-    {
-        if (values.size() <= currentCapacity)
-        {
-            return;
-        }
-
-        currentCapacity = GrowLightBufferCapacity(currentCapacity, values.size());
-        std::vector<T> capacityData(currentCapacity);
-        std::copy(values.begin(), values.end(), capacityData.begin());
-        commandList.CopyStructuredBuffer(buffer, capacityData);
-    }
-
-    template<typename T>
-    void UploadGpuLightRange(
-        CommandList& commandList,
-        SharedUploadBuffer& uploadBuffer,
-        StructuredBuffer& destination,
-        const std::vector<T>& values,
-        const size_t beginIndex,
-        const size_t endIndex)
-    {
-        const size_t clampedBegin = std::min(beginIndex, values.size());
-        const size_t clampedEnd = std::min(endIndex, values.size());
-        if (clampedBegin >= clampedEnd)
-        {
-            return;
-        }
-
-        const size_t elementCount = clampedEnd - clampedBegin;
-        const uint64_t destinationOffset = static_cast<uint64_t>(clampedBegin * sizeof(T));
-        uploadBuffer.Upload(commandList, destination, values.data() + clampedBegin, elementCount * sizeof(T), sizeof(T), destinationOffset);
-    }
-}
-
-void RaytracingDemo::InitializeSceneLightBuffers(CommandList& commandList)
-{
-    m_LightUploadBuffer = std::make_unique<SharedUploadBuffer>();
-    m_DirectionalLightBufferCapacity = std::max<size_t>(1, m_DirectionalLightGpuData.size());
-    m_PointLightBufferCapacity = std::max<size_t>(1, m_PointLightGpuData.size());
-    m_AreaLightBufferCapacity = std::max<size_t>(1, m_AreaLightGpuData.size());
-    commandList.CopyStructuredBuffer(m_DirectionalLightBuffer, CreateBufferCapacityData<DirectionalLightData>(m_DirectionalLightBufferCapacity));
-    commandList.CopyStructuredBuffer(m_PointLightBuffer, CreateBufferCapacityData<PointLightData>(m_PointLightBufferCapacity));
-    commandList.CopyStructuredBuffer(m_AreaLightBuffer, CreateBufferCapacityData<AreaLightData>(m_AreaLightBufferCapacity));
-}
-
-void RaytracingDemo::BuildSceneLightGpuData()
-{
-    m_DirectionalLightGpuData.clear();
-    m_PointLightGpuData.clear();
-    m_AreaLightGpuData.clear();
-
-    m_DirectionalLightGpuData.reserve(m_DirectionalLights.size());
-    for (const DirectionalLight& light : m_DirectionalLights)
-    {
-        DirectionalLightData gpuLight{};
-        gpuLight.DirectionAndAngularRadius = light.m_DirectionWs;
-        gpuLight.ColorAndIntensity = light.m_Color;
-        m_DirectionalLightGpuData.push_back(gpuLight);
-    }
-
-    m_PointLightGpuData.reserve(m_PointLights.size());
-    for (const PointLight& light : m_PointLights)
-    {
-        PointLightData gpuLight{};
-        gpuLight.PositionAndRange = { light.PositionWs.x, light.PositionWs.y, light.PositionWs.z, light.Range };
-        gpuLight.ColorAndIntensity = light.Color;
-        gpuLight.Attenuation = { light.ConstantAttenuation, light.LinearAttenuation, light.QuadraticAttenuation, 0.0f };
-        m_PointLightGpuData.push_back(gpuLight);
-    }
-
-    m_AreaLightGpuData.reserve(m_AreaLights.size());
-    for (const AreaLightData& light : m_AreaLights)
-    {
-        m_AreaLightGpuData.push_back(light);
-    }
-}
-
-void RaytracingDemo::UpdatePointLightGpuData(const size_t lightIndex)
-{
-    if (lightIndex >= m_PointLights.size())
-    {
-        return;
-    }
-
-    if (m_PointLightGpuData.size() <= lightIndex)
-    {
-        m_PointLightGpuData.resize(lightIndex + 1);
-    }
-
-    const PointLight& light = m_PointLights[lightIndex];
-    PointLightData& gpuLight = m_PointLightGpuData[lightIndex];
-    gpuLight.PositionAndRange = { light.PositionWs.x, light.PositionWs.y, light.PositionWs.z, light.Range };
-    gpuLight.ColorAndIntensity = light.Color;
-    gpuLight.Attenuation = { light.ConstantAttenuation, light.LinearAttenuation, light.QuadraticAttenuation, 0.0f };
-}
-
-void RaytracingDemo::MarkDirectionalLightsDirty()
-{
-    MarkDirectionalLightsDirty(0, m_DirectionalLightGpuData.size());
-}
-
-void RaytracingDemo::MarkDirectionalLightsDirty(const size_t beginIndex, const size_t endIndex)
-{
-    MarkDirtyRange(beginIndex, endIndex, m_DirectionalLightDirtyBegin, m_DirectionalLightDirtyEnd);
-}
-
-void RaytracingDemo::MarkPointLightsDirty(const size_t beginIndex, const size_t endIndex)
-{
-    MarkDirtyRange(beginIndex, endIndex, m_PointLightDirtyBegin, m_PointLightDirtyEnd);
-}
-
-void RaytracingDemo::MarkAreaLightsDirty()
-{
-    MarkAreaLightsDirty(0, m_AreaLightGpuData.size());
-}
-
-void RaytracingDemo::MarkAreaLightsDirty(const size_t beginIndex, const size_t endIndex)
-{
-    MarkDirtyRange(beginIndex, endIndex, m_AreaLightDirtyBegin, m_AreaLightDirtyEnd);
-}
-
-void RaytracingDemo::UploadSceneLightBuffers(CommandList& commandList)
-{
-    Assert(m_LightUploadBuffer != nullptr, "Light upload buffer is not initialized.");
-
-    EnsureStructuredBufferCapacity(commandList, m_DirectionalLightBuffer, m_DirectionalLightBufferCapacity, m_DirectionalLightGpuData);
-    EnsureStructuredBufferCapacity(commandList, m_PointLightBuffer, m_PointLightBufferCapacity, m_PointLightGpuData);
-    EnsureStructuredBufferCapacity(commandList, m_AreaLightBuffer, m_AreaLightBufferCapacity, m_AreaLightGpuData);
-
-    m_LightUploadBuffer->BeginFrame();
-    if (m_DirectionalLightDirtyBegin < m_DirectionalLightDirtyEnd)
-    {
-        UploadGpuLightRange(commandList, *m_LightUploadBuffer, m_DirectionalLightBuffer, m_DirectionalLightGpuData, m_DirectionalLightDirtyBegin, m_DirectionalLightDirtyEnd);
-        m_DirectionalLightDirtyBegin = 0;
-        m_DirectionalLightDirtyEnd = 0;
-    }
-
-    if (m_PointLightDirtyBegin < m_PointLightDirtyEnd)
-    {
-        UploadGpuLightRange(commandList, *m_LightUploadBuffer, m_PointLightBuffer, m_PointLightGpuData, m_PointLightDirtyBegin, m_PointLightDirtyEnd);
-        m_PointLightDirtyBegin = 0;
-        m_PointLightDirtyEnd = 0;
-    }
-
-    if (m_AreaLightDirtyBegin < m_AreaLightDirtyEnd)
-    {
-        UploadGpuLightRange(commandList, *m_LightUploadBuffer, m_AreaLightBuffer, m_AreaLightGpuData, m_AreaLightDirtyBegin, m_AreaLightDirtyEnd);
-        m_AreaLightDirtyBegin = 0;
-        m_AreaLightDirtyEnd = 0;
-    }
+    m_Lights.CreateDemoLights();
 }
 
 void RaytracingDemo::AddRaytracingInstances()
@@ -1126,51 +521,6 @@ void RaytracingDemo::AddRaytracingInstances()
     }
 }
 
-void RaytracingDemo::OnUpdate(UpdateEventArgs& e)
-{
-    Base::OnUpdate(e);
-    m_DeltaTime = static_cast<float>(e.ElapsedTime);
-    if (m_AnimatePointLights)
-    {
-        UpdateDynamicLights(static_cast<float>(e.TotalTime));
-        ResetAccumulation(false);
-    }
-
-    const float speedMultiplier = m_CameraController.Shift ? 16.0f : 4.0f;
-    const float speed = speedMultiplier * m_DeltaTime;
-    const bool movedByKeyboard =
-        m_CameraController.Right != 0.0f ||
-        m_CameraController.Left != 0.0f ||
-        m_CameraController.Forward != 0.0f ||
-        m_CameraController.Backward != 0.0f ||
-        m_CameraController.Up != 0.0f ||
-        m_CameraController.Down != 0.0f;
-    if (movedByKeyboard)
-    {
-        ResetAccumulation(false);
-    }
-
-    const XMVECTOR cameraTranslate = XMVectorSet(
-        m_CameraController.Right - m_CameraController.Left,
-        0.0f,
-        m_CameraController.Forward - m_CameraController.Backward,
-        1.0f) * speed;
-    const XMVECTOR cameraPan = XMVectorSet(
-        0.0f,
-        m_CameraController.Up - m_CameraController.Down,
-        0.0f,
-        1.0f) * speed;
-
-    m_Camera.Translate(cameraTranslate, Space::Local);
-    m_Camera.Translate(cameraPan, Space::Local);
-
-    const XMVECTOR cameraRotation = XMQuaternionRotationRollPitchYaw(
-        XMConvertToRadians(m_CameraController.Pitch),
-        XMConvertToRadians(m_CameraController.Yaw),
-        0.0f);
-    m_Camera.SetRotation(cameraRotation);
-}
-
 void RaytracingDemo::OnRender(RenderEventArgs& e)
 {
     Base::OnRender(e);
@@ -1188,6 +538,11 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     metadata.m_FrameIndex = m_FrameIndex;
     metadata.m_Time = e.TotalTime;
 
+    const auto commandQueue = Application::Get().GetCommandQueue();
+    const auto commandList = commandQueue->GetCommandList();
+    m_Lights.Upload(*commandList);
+    commandQueue->ExecuteCommandList(commandList);
+
     m_RenderGraph->Execute(metadata);
     m_RenderGraph->Present(PWindow);
 
@@ -1203,179 +558,4 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
 
     m_PreviousViewProjection = m_Camera.GetViewMatrix() * m_Camera.GetProjectionMatrix();
     m_HasPreviousViewProjection = true;
-}
-
-void RaytracingDemo::OnKeyPressed(KeyEventArgs& e)
-{
-    if (m_ImGui != nullptr && m_ImGui->WantsToCaptureKeyboard())
-    {
-        return;
-    }
-
-    Base::OnKeyPressed(e);
-
-    switch (e.Key)
-    {
-    case KeyCode::Escape:
-        Application::Get().Quit(0);
-        break;
-    case KeyCode::Up:
-    case KeyCode::W:
-        m_CameraController.Forward = 1.0f;
-        break;
-    case KeyCode::Left:
-    case KeyCode::A:
-        m_CameraController.Left = 1.0f;
-        break;
-    case KeyCode::Down:
-    case KeyCode::S:
-        m_CameraController.Backward = 1.0f;
-        break;
-    case KeyCode::Right:
-    case KeyCode::D:
-        m_CameraController.Right = 1.0f;
-        break;
-    case KeyCode::Q:
-        m_CameraController.Down = 1.0f;
-        break;
-    case KeyCode::E:
-        m_CameraController.Up = 1.0f;
-        break;
-    case KeyCode::ShiftKey:
-        m_CameraController.Shift = true;
-        break;
-    }
-}
-
-void RaytracingDemo::OnKeyReleased(KeyEventArgs& e)
-{
-    if (m_ImGui != nullptr && m_ImGui->WantsToCaptureKeyboard())
-    {
-        return;
-    }
-
-    Base::OnKeyReleased(e);
-
-    switch (e.Key)
-    {
-    case KeyCode::Up:
-    case KeyCode::W:
-        m_CameraController.Forward = 0.0f;
-        break;
-    case KeyCode::Left:
-    case KeyCode::A:
-        m_CameraController.Left = 0.0f;
-        break;
-    case KeyCode::Down:
-    case KeyCode::S:
-        m_CameraController.Backward = 0.0f;
-        break;
-    case KeyCode::Right:
-    case KeyCode::D:
-        m_CameraController.Right = 0.0f;
-        break;
-    case KeyCode::Q:
-        m_CameraController.Down = 0.0f;
-        break;
-    case KeyCode::E:
-        m_CameraController.Up = 0.0f;
-        break;
-    case KeyCode::ShiftKey:
-        m_CameraController.Shift = false;
-        break;
-    }
-}
-
-void RaytracingDemo::OnMouseMoved(MouseMotionEventArgs& e)
-{
-    if (m_ImGui != nullptr && m_ImGui->WantsToCaptureMouse())
-    {
-        return;
-    }
-
-    Base::OnMouseMoved(e);
-
-    if (e.LeftButton)
-    {
-        if (e.RelX != 0 || e.RelY != 0)
-        {
-            m_CameraController.Pitch = Clamp(m_CameraController.Pitch + e.RelY * m_MouseRotateSpeed, -90.0f, 90.0f);
-            m_CameraController.Yaw += e.RelX * m_MouseRotateSpeed;
-            ResetAccumulation(false);
-        }
-        return;
-    }
-
-    if (e.MiddleButton)
-    {
-        if (e.RelX != 0 || e.RelY != 0)
-        {
-            const XMVECTOR cameraPan = XMVectorSet(
-                static_cast<float>(-e.RelX) * m_MousePanSpeed,
-                static_cast<float>(e.RelY) * m_MousePanSpeed,
-                0.0f,
-                0.0f);
-            m_Camera.Translate(cameraPan, Space::Local);
-            ResetAccumulation(false);
-        }
-        return;
-    }
-
-    if (e.RightButton)
-    {
-        if (e.RelX != 0)
-        {
-            const XMVECTOR cameraForward = XMVectorSet(
-                0.0f,
-                0.0f,
-                static_cast<float>(e.RelX) * m_MouseDollySpeed,
-                0.0f);
-            m_Camera.Translate(cameraForward, Space::Local);
-            ResetAccumulation(false);
-        }
-    }
-}
-
-void RaytracingDemo::OnMouseWheel(MouseWheelEventArgs& e)
-{
-    if (m_ImGui != nullptr && m_ImGui->WantsToCaptureMouse())
-    {
-        return;
-    }
-
-    Base::OnMouseWheel(e);
-    if (e.WheelDelta != 0.0f)
-    {
-        const XMVECTOR cameraForward = XMVectorSet(
-            0.0f,
-            0.0f,
-            e.WheelDelta * m_MouseWheelDollySpeed,
-            0.0f);
-        m_Camera.Translate(cameraForward, Space::Local);
-        ResetAccumulation(false);
-    }
-}
-
-void RaytracingDemo::OnResize(ResizeEventArgs& e)
-{
-    Base::OnResize(e);
-
-    if (m_Width == e.Width && m_Height == e.Height)
-    {
-        return;
-    }
-
-    m_Width = std::max(1, e.Width);
-    m_Height = std::max(1, e.Height);
-    m_FrameIndex = 0;
-    ResetAccumulation();
-    m_HasPreviousViewProjection = false;
-
-    const float aspectRatio = static_cast<float>(m_Width) / static_cast<float>(m_Height);
-    m_Camera.SetProjection(m_CameraFov, aspectRatio, 0.1f, 1000.0f);
-
-    if (m_RenderGraph != nullptr)
-    {
-        m_RenderGraph->MarkDirty();
-    }
 }

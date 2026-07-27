@@ -3,9 +3,11 @@
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Texture.h>
 #include <RenderGraph/ResourceDescription.h>
+#include <RenderGraph/RenderPass.h>
 
 #include <d3d12.h>
 
+#include <memory>
 #include <vector>
 
 namespace RaytracingDemoRenderGraph
@@ -21,7 +23,7 @@ namespace RaytracingDemoRenderGraph
     constexpr DXGI_FORMAT NRD_RADIANCE_FORMAT = DXGI_FORMAT_R32G32B32A32_FLOAT;
     constexpr DXGI_FORMAT NRD_NORMAL_ROUGHNESS_FORMAT = DXGI_FORMAT_R8G8B8A8_UNORM;
     constexpr DXGI_FORMAT NRD_VIEWZ_FORMAT = DXGI_FORMAT_R32_FLOAT;
-    constexpr DXGI_FORMAT NRD_MOTION_FORMAT = DXGI_FORMAT_R16G16_FLOAT;
+    constexpr DXGI_FORMAT NRD_MOTION_FORMAT = DXGI_FORMAT_R16G16B16A16_FLOAT;
     constexpr DXGI_FORMAT DEPTH_FORMAT = DXGI_FORMAT_D32_FLOAT;
     constexpr DXGI_FORMAT OUTPUT_FORMAT = DXGI_FORMAT_R8G8B8A8_UNORM;
 
@@ -37,24 +39,55 @@ namespace RaytracingDemoRenderGraph
         static inline const RenderGraph::ResourceId DirectLighting = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DirectLighting");
         static inline const RenderGraph::ResourceId IndirectLighting = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.IndirectLighting");
         static inline const RenderGraph::ResourceId Accumulation = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.Accumulation");
-        static inline const RenderGraph::ResourceId NrdNoisyRadiance = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.NrdNoisyRadiance");
-        static inline const RenderGraph::ResourceId NrdDenoisedRadiance = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.NrdDenoisedRadiance");
-        static inline const RenderGraph::ResourceId NrdNormalRoughness = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.NrdNormalRoughness");
-        static inline const RenderGraph::ResourceId NrdViewZ = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.NrdViewZ");
-        static inline const RenderGraph::ResourceId NrdMotion = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.NrdMotion");
+        static inline const RenderGraph::ResourceId NoisyRadiance = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.NoisyRadiance");
+        static inline const RenderGraph::ResourceId NRDNoisyRadiance = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.NRDNoisyRadiance");
+        static inline const RenderGraph::ResourceId NRDDenoisedRadiance = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.NRDDenoisedRadiance");
+        static inline const RenderGraph::ResourceId NRDNormalRoughness = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.NRDNormalRoughness");
+        static inline const RenderGraph::ResourceId NRDViewZ = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.NRDViewZ");
+        static inline const RenderGraph::ResourceId NRDMotion = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.NRDMotion");
         static inline const RenderGraph::ResourceId DepthBuffer = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DepthBuffer");
 
-        static inline const RenderGraph::ResourceId SetupFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.SetupFinished");
         static inline const RenderGraph::ResourceId BaseResourcesFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.BaseResourcesFinished");
         static inline const RenderGraph::ResourceId SkyboxFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.SkyboxFinished");
         static inline const RenderGraph::ResourceId DirectLightingFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DirectLightingFinished");
         static inline const RenderGraph::ResourceId IndirectLightingFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.IndirectLightingFinished");
         static inline const RenderGraph::ResourceId RayTracingFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.RayTracingFinished");
-        static inline const RenderGraph::ResourceId DenoiserPrepareFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DenoiserPrepareFinished");
-        static inline const RenderGraph::ResourceId NrdFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.NrdFinished");
         static inline const RenderGraph::ResourceId DenoiseFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DenoiseFinished");
         static inline const RenderGraph::ResourceId LightBillboardFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.LightBillboardFinished");
     };
+
+    struct FrameGBufferResources
+    {
+        std::shared_ptr<Texture> AlbedoOcclusion;
+        std::shared_ptr<Texture> SpecularSmoothness;
+        std::shared_ptr<Texture> Normal;
+        std::shared_ptr<Texture> EmissionMetallic;
+        std::shared_ptr<Texture> Position;
+        std::shared_ptr<Texture> MotionVector;
+        std::shared_ptr<Texture> Depth;
+    };
+
+    struct LightingResources
+    {
+        std::shared_ptr<Texture> Direct;
+        std::shared_ptr<Texture> Indirect;
+        std::shared_ptr<Texture> Accumulation;
+        std::shared_ptr<Texture> NoisyRadiance;
+        std::shared_ptr<Texture> NRDNoisyRadiance;
+        std::shared_ptr<Texture> Output;
+    };
+
+    struct NRDResources
+    {
+        std::shared_ptr<Texture> NormalRoughness;
+        std::shared_ptr<Texture> ViewZ;
+        std::shared_ptr<Texture> Motion;
+        std::shared_ptr<Texture> DenoisedRadiance;
+    };
+
+    FrameGBufferResources GetFrameGBufferResources(const RenderGraph::RenderContext& context);
+    LightingResources GetLightingResources(const RenderGraph::RenderContext& context);
+    NRDResources GetNRDResources(const RenderGraph::RenderContext& context);
 
     std::vector<RenderGraph::TextureDescription> CreateTextureDescriptions();
     std::vector<RenderGraph::BufferDescription> CreateBufferDescriptions();

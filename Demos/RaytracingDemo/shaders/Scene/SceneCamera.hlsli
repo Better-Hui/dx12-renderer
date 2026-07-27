@@ -17,14 +17,15 @@ cbuffer CameraConstants : register(b0, space0)
     uint Camera_AreaLightCount;
     uint Camera_FrameIndex;
     uint Camera_AccumulationFrameIndex;
-uint Camera_AccumulationEnabled;
-uint Camera_NrdDenoiserMode;
-float Camera_NrdReblurHitDistanceScale;
-uint Camera_DirectLightingEnabled;
-uint Camera_IndirectLightingEnabled;
-uint Camera_Padding1;
-uint Camera_Padding2;
-SkyLightData Camera_SkyLight;
+    uint Camera_AccumulationEnabled;
+    uint Camera_NRDDenoiserMode;
+    uint Camera_Padding0;
+    float4 Camera_NRDReblurHitDistanceParameters;
+    uint Camera_DirectLightingEnabled;
+    uint Camera_IndirectLightingEnabled;
+    uint Camera_Padding1;
+    uint Camera_Padding2;
+    SkyLightData Camera_SkyLight;
 };
 
 #endif

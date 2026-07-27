@@ -2,6 +2,9 @@
 //Modify Begin:2026-07-21 by BestHui
 
 #include <Framework/RayTracingAccelerationStructure.h>
+//Modify Begin:2026-07-27 by BestHui
+#include <Framework\FrameworkDeprecated.h>
+//Modify End
 #include <Framework/ShaderResourceView.h>
 #include <Framework/UnorderedAccessView.h>
 
@@ -15,6 +18,7 @@
 #include <vector>
 
 class CommandList;
+class CommandContext;
 class ShaderBlob;
 class StructuredBuffer;
 class Texture;
@@ -159,11 +163,14 @@ public:
         const std::vector<std::shared_ptr<Texture>>& textures,
         const std::vector<D3D12_SHADER_RESOURCE_VIEW_DESC>& srvDescs);
     void SetTextureArray(std::string_view name, const std::vector<ShaderResourceView>& shaderResourceViews);
-
+    FRAMEWORK_DEPRECATED("Use CommandContext::DispatchRays(RayTracingBindingSet&, ...) so the binding set only stores resources.")
     void Dispatch(CommandList& commandList, std::string_view passName, uint32_t width, uint32_t height, uint32_t depth = 1);
 
 private:
     struct Impl;
+    Impl& GetImpl();
+    const Impl& GetImpl() const;
+    friend class CommandContext;
     std::unique_ptr<Impl> m_Impl;
 };
 //Modify End
@@ -189,30 +196,48 @@ public:
     //Modify End
 
     bool HasBinding(std::string_view name) const;
+    //Modify Begin:2026-07-27 by BestHui
+    FRAMEWORK_DEPRECATED("Use CreateBindingSet() and bind resources on RayTracingBindingSet explicitly.")
     void SetTexture(std::string_view name, const ShaderResourceView& shaderResourceView);
+    FRAMEWORK_DEPRECATED("Use CreateBindingSet() and bind resources on RayTracingBindingSet explicitly.")
     void SetTexture(std::string_view name, uint32_t arrayIndex, const ShaderResourceView& shaderResourceView);
+    FRAMEWORK_DEPRECATED("Use CreateBindingSet() and bind resources on RayTracingBindingSet explicitly.")
     void SetTexture(std::string_view name, const std::shared_ptr<Resource>& texture);
+    FRAMEWORK_DEPRECATED("Use CreateBindingSet() and bind resources on RayTracingBindingSet explicitly.")
     void SetShaderResourceView(std::string_view name, const ShaderResourceView& shaderResourceView);
+    FRAMEWORK_DEPRECATED("Use CreateBindingSet() and bind resources on RayTracingBindingSet explicitly.")
     void SetShaderResourceView(std::string_view name, uint32_t arrayIndex, const ShaderResourceView& shaderResourceView);
+    FRAMEWORK_DEPRECATED("Use CreateBindingSet() and bind resources on RayTracingBindingSet explicitly.")
     void SetUnorderedAccessView(std::string_view name, const UnorderedAccessView& unorderedAccessView);
+    FRAMEWORK_DEPRECATED("Use CreateBindingSet() and bind resources on RayTracingBindingSet explicitly.")
     void SetBuffer(std::string_view name, const StructuredBuffer& buffer);
+    FRAMEWORK_DEPRECATED("Use CreateBindingSet() and bind resources on RayTracingBindingSet explicitly.")
     void SetOutputTexture(std::string_view name, const std::shared_ptr<Texture>& texture);
+    FRAMEWORK_DEPRECATED("Use CreateBindingSet() and bind resources on RayTracingBindingSet explicitly.")
     void SetAccelerationStructure(std::string_view name, const RayTracingAccelerationStructure& accelerationStructure);
+    FRAMEWORK_DEPRECATED("Use CreateBindingSet() and bind resources on RayTracingBindingSet explicitly.")
     void SetConstantBufferData(std::string_view name, const void* data, size_t size);
+    FRAMEWORK_DEPRECATED("Use CreateBindingSet() and bind resources on RayTracingBindingSet explicitly.")
     void SetStructuredBuffer(std::string_view name, const StructuredBuffer& buffer);
+    FRAMEWORK_DEPRECATED("Use CreateBindingSet() and bind resources on RayTracingBindingSet explicitly.")
     void SetTextureArray(std::string_view name, const std::vector<std::shared_ptr<Texture>>& textures);
+    FRAMEWORK_DEPRECATED("Use CreateBindingSet() and bind resources on RayTracingBindingSet explicitly.")
     void SetTextureArray(
         std::string_view name,
         const std::vector<std::shared_ptr<Texture>>& textures,
         const std::vector<D3D12_SHADER_RESOURCE_VIEW_DESC>& srvDescs);
+    FRAMEWORK_DEPRECATED("Use CreateBindingSet() and bind resources on RayTracingBindingSet explicitly.")
     void SetTextureArray(std::string_view name, const std::vector<ShaderResourceView>& shaderResourceViews);
 
+    FRAMEWORK_DEPRECATED("Use CreateBindingSet() and dispatch through RayTracingBindingSet explicitly.")
     void Dispatch(CommandList& commandList, std::string_view passName, uint32_t width, uint32_t height, uint32_t depth = 1);
+    //Modify End
 
 private:
     //Modify Begin:2026-07-24 by BestHui
     RayTracingBindingSet& GetDefaultBindingSet() const;
     friend class RayTracingBindingSet;
+    friend class CommandContext;
     //Modify End
     struct Impl;
     std::unique_ptr<Impl> m_Impl;

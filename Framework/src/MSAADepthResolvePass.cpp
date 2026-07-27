@@ -9,9 +9,12 @@ namespace
 }
 
 MSAADepthResolvePass::MSAADepthResolvePass(const std::shared_ptr<CommonRootSignature>& rootSignature)
-    : m_RootSignature(rootSignature)
-    , m_ComputeShader(rootSignature, ShaderBlob(ShaderBytecode_MSAADepthResolve_CS, sizeof(ShaderBytecode_MSAADepthResolve_CS)))
-{}
+    : m_ComputeShader(
+        ShaderBlob(ShaderBytecode_MSAADepthResolve_CS, sizeof(ShaderBytecode_MSAADepthResolve_CS)),
+        ComputePipelineDescBuilder::ReflectedDefault(ShaderBlob(ShaderBytecode_MSAADepthResolve_CS, sizeof(ShaderBytecode_MSAADepthResolve_CS))).Build())
+{
+    (void)rootSignature;
+}
 
 void MSAADepthResolvePass::Resolve(CommandList& commandList, const std::shared_ptr<Texture>& source, const std::shared_ptr<Texture>& destination) const
 {
@@ -29,8 +32,8 @@ void MSAADepthResolvePass::Resolve(CommandList& commandList, const std::shared_p
     sourceSrvDesc.Format = DXGI_FORMAT_R32_FLOAT;
     sourceSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 
-    m_RootSignature->SetMaterialShaderResourceView(commandList, 0, ShaderResourceView(source, sourceSrvDesc));
-    m_RootSignature->SetUnorderedAccessView(commandList, 0, UnorderedAccessView(destination));
+    m_ComputeShader.SetShaderResourceView(commandList, "input", ShaderResourceView(source, sourceSrvDesc));
+    m_ComputeShader.SetUnorderedAccessView(commandList, "output", UnorderedAccessView(destination));
 
     commandList.Dispatch(
         Math::DivideByMultiple(static_cast<uint32_t>(sourceDesc.Width), THREAD_GROUP_SIZE),

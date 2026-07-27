@@ -550,6 +550,9 @@ public:
      * Should only be called by the DynamicDescriptorHeap class.
      */
     void SetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE heapType, ID3D12DescriptorHeap* heap);
+    //Modify Begin:2026-07-27 by BestHui
+    void InvalidateCachedNativeState();
+    //Modify End
 
     std::shared_ptr<CommandList> GetGenerateMipsCommandList() const
     {

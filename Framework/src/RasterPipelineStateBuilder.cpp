@@ -2,7 +2,15 @@
 #include <DX12Library/Helpers.h>
 #include <Framework/Mesh.h>
 
+#include <utility>
+
 static constexpr UINT MAX_RENDER_TARGETS = _countof(D3D12_RT_FORMAT_ARRAY::RTFormats);
+
+RasterPipelineStateBuilder::RasterPipelineStateBuilder()
+    : m_InputLayout(VertexAttributes::INPUT_ELEMENT_COUNT)
+{
+    memcpy(m_InputLayout.data(), VertexAttributes::INPUT_ELEMENTS, sizeof(VertexAttributes::INPUT_ELEMENTS));
+}
 
 RasterPipelineStateBuilder::RasterPipelineStateBuilder(const std::shared_ptr<RootSignature> rootSignature)
     : m_RootSignature(rootSignature)
@@ -15,6 +23,7 @@ Microsoft::WRL::ComPtr<ID3D12PipelineState> RasterPipelineStateBuilder::Build(Mi
 {
     Assert(m_VertexShader != nullptr, "Vertex Shader cannot be null.");
     Assert(m_PixelShader != nullptr, "Pixel Shader cannot be null.");
+    Assert(m_RootSignature != nullptr, "Root signature cannot be null.");
 
     // Setup the pipeline state.
     struct PipelineStateStream
@@ -69,6 +78,14 @@ RasterPipelineStateBuilder& RasterPipelineStateBuilder::WithRenderTargetFormats(
 
     m_RenderTargetFormats = renderTargetFormats;
     m_DepthStencilFormat = depthStencilFormat;
+    return *this;
+}
+
+RasterPipelineStateBuilder& RasterPipelineStateBuilder::WithRootSignature(std::shared_ptr<RootSignature> rootSignature)
+{
+    Assert(rootSignature != nullptr, "Root signature cannot be null.");
+
+    m_RootSignature = std::move(rootSignature);
     return *this;
 }
 

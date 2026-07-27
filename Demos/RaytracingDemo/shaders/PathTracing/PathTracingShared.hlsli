@@ -17,29 +17,29 @@ float3 ToneMap(float3 color)
     return pow(saturate(color), 1.0f / 2.2f);
 }
 
-float3 SanitizeNrdRadiance(float3 color)
+float3 SanitizeNRDRadiance(float3 color)
 {
     if (!all(isfinite(color)))
     {
         return 0.0f;
     }
 
-    return min(max(color, 0.0f), 10000.0f);
+    return min(max(color, 0.0f), 250.0f);
 }
 
-float3 GetNrdDiffuseDemodulation(SurfaceData surface)
+float3 GetNRDDiffuseDemodulation(SurfaceData surface)
 {
     float metallic = saturate(surface.Metallic);
     float3 diffuseFactor = max(surface.Diffuse * (1.0f - metallic), 0.05f);
     return lerp(diffuseFactor, float3(1.0f, 1.0f, 1.0f), metallic);
 }
 
-float4 PackNrdDiffuseRadianceHitDistance(float3 radiance, float hitDistance, float viewZ, float roughness)
+float4 PackNRDDiffuseRadianceHitDistance(float3 radiance, float hitDistance, float viewZ, float roughness)
 {
-    radiance = SanitizeNrdRadiance(radiance);
-    if (Camera_NrdDenoiserMode == 1u)
+    radiance = SanitizeNRDRadiance(radiance);
+    if (Camera_NRDDenoiserMode == 1u)
     {
-        float3 hitDistanceParams = float3(3.0f, 0.1f, 20.0f);
+        float3 hitDistanceParams = Camera_NRDReblurHitDistanceParameters.xyz;
         float normHitDistance = REBLUR_FrontEnd_GetNormHitDist(
             max(0.0f, hitDistance),
             viewZ,
@@ -216,8 +216,9 @@ bool SamplePbrDirection(SurfaceData surface, float3 viewDirectionWs, inout uint 
     return MaxComponent(sampleWeight) > 0.0f;
 }
 
-float3 EvaluateDirectionalLight(DirectionalLightData light, SurfaceData surface)
+float3 EvaluateDirectionalLight(DirectionalLightData light, SurfaceData surface, out float hitDistance)
 {
+    hitDistance = 0.0f;
     float3 lightDirection = normalize(light.DirectionAndAngularRadius.xyz);
     float nDotL = saturate(dot(surface.NormalWs, lightDirection));
     if (nDotL <= 0.0f)
@@ -231,12 +232,14 @@ float3 EvaluateDirectionalLight(DirectionalLightData light, SurfaceData surface)
         return 0.0f;
     }
 
+    hitDistance = 10000.0f;
     float3 radiance = light.ColorAndIntensity.rgb * light.ColorAndIntensity.w;
     return EvaluatePbrLighting(surface, lightDirection, radiance);
 }
 
-float3 EvaluatePointLight(PointLightData light, SurfaceData surface)
+float3 EvaluatePointLight(PointLightData light, SurfaceData surface, out float hitDistance)
 {
+    hitDistance = 0.0f;
     float3 toLight = light.PositionAndRange.xyz - surface.PositionWs;
     float distanceToLight = length(toLight);
     if (distanceToLight <= 0.001f || distanceToLight > light.PositionAndRange.w)
@@ -257,6 +260,7 @@ float3 EvaluatePointLight(PointLightData light, SurfaceData surface)
         return 0.0f;
     }
 
+    hitDistance = distanceToLight;
     float3 attenuationTerms = light.Attenuation.xyz;
     float attenuation = rcp(max(
         0.001f,
@@ -265,8 +269,9 @@ float3 EvaluatePointLight(PointLightData light, SurfaceData surface)
     return EvaluatePbrLighting(surface, lightDirection, radiance);
 }
 
-float3 EvaluateAreaLight(AreaLightData light, SurfaceData surface, inout uint rngState)
+float3 EvaluateAreaLight(AreaLightData light, SurfaceData surface, inout uint rngState, out float hitDistance)
 {
+    hitDistance = 0.0f;
     float2 sampleUv = float2(Random01(rngState), Random01(rngState)) * 2.0f - 1.0f;
     float3 samplePosition =
         light.PositionAndRange.xyz +
@@ -294,13 +299,15 @@ float3 EvaluateAreaLight(AreaLightData light, SurfaceData surface, inout uint rn
         return 0.0f;
     }
 
+    hitDistance = distanceToLight;
     float area = max(0.0001f, 4.0f * light.AxisUAndExtent.w * light.AxisVAndExtent.w);
     float3 radiance = light.ColorAndIntensity.rgb * light.ColorAndIntensity.w * area * lightFacing / max(0.001f, distanceToLight * distanceToLight);
     return EvaluatePbrLighting(surface, lightDirection, radiance);
 }
 
-float3 EvaluateDirectLighting(SurfaceData surface, inout uint rngState)
+float3 EvaluateDirectLighting(SurfaceData surface, inout uint rngState, out float nrdDirectHitDistance)
 {
+    nrdDirectHitDistance = 0.0f;
     uint directionalLightCount = Camera_DirectionalLightCount;
     uint pointLightCount = Camera_PointLightCount;
     uint areaLightCount = Camera_AreaLightCount;
@@ -313,17 +320,17 @@ float3 EvaluateDirectLighting(SurfaceData surface, inout uint rngState)
     uint lightIndex = min(uint(Random01(rngState) * float(totalLightCount)), totalLightCount - 1u);
     if (lightIndex < directionalLightCount)
     {
-        return EvaluateDirectionalLight(DirectionalLights[lightIndex], surface) * float(totalLightCount);
+        return EvaluateDirectionalLight(DirectionalLights[lightIndex], surface, nrdDirectHitDistance) * float(totalLightCount);
     }
 
     lightIndex -= directionalLightCount;
     if (lightIndex < pointLightCount)
     {
-        return EvaluatePointLight(PointLights[lightIndex], surface) * float(totalLightCount);
+        return EvaluatePointLight(PointLights[lightIndex], surface, nrdDirectHitDistance) * float(totalLightCount);
     }
 
     lightIndex -= pointLightCount;
-    return EvaluateAreaLight(AreaLights[lightIndex], surface, rngState) * float(totalLightCount);
+    return EvaluateAreaLight(AreaLights[lightIndex], surface, rngState, nrdDirectHitDistance) * float(totalLightCount);
 }
 
 float3 TraceIndirectLighting(SurfaceData surface, inout uint rngState, out float nrdDiffuseHitDistance)
@@ -348,6 +355,10 @@ float3 TraceIndirectLighting(SurfaceData surface, inout uint rngState, out float
         RayPayload payload = TraceScene(origin, direction, 10000.0f, RAY_FLAG_NONE);
         if (payload.Hit == 0u)
         {
+            if (bounce == 0u)
+            {
+                nrdDiffuseHitDistance = 10000.0f;
+            }
             radiance += throughput * payload.BaseColor;
             break;
         }
@@ -369,7 +380,8 @@ float3 TraceIndirectLighting(SurfaceData surface, inout uint rngState, out float
         hitSurface.AmbientOcclusion = payload.AmbientOcclusion;
         hitSurface.Valid = true;
 
-        radiance += throughput * EvaluateDirectLighting(hitSurface, rngState);
+        float directHitDistance = 0.0f;
+        radiance += throughput * EvaluateDirectLighting(hitSurface, rngState, directHitDistance);
 
         if (max(throughput.r, max(throughput.g, throughput.b)) < 0.005f)
         {
@@ -398,7 +410,8 @@ void WriteDirectLightingOutput(uint2 pixel, uint width, uint frameIndex)
     }
 
     uint rngState = InitializeRandomState(pixel, width, frameIndex, 0x1234abcdu);
-    DirectLighting[pixel] = float4(EvaluateDirectLighting(surface, rngState), 1.0f);
+    float nrdDirectHitDistance = 0.0f;
+    DirectLighting[pixel] = float4(EvaluateDirectLighting(surface, rngState, nrdDirectHitDistance), nrdDirectHitDistance);
 }
 
 void WriteIndirectLightingOutput(uint2 pixel, uint width, uint frameIndex)

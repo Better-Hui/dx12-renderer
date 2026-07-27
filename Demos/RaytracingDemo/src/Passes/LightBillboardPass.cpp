@@ -39,11 +39,10 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateLi
             XMStoreFloat4(&cameraRightFloat, XMVectorSetW(cameraRight, 0.0f));
             XMStoreFloat4(&cameraUpFloat, XMVectorSetW(cameraUp, 0.0f));
 
-            demo.m_RootSignature->Bind(cmd);
             demo.m_LightBillboardShader->Bind(cmd);
             demo.m_LightBillboardShader->SetConstantBuffer(cmd, "PipelineCBuffer", demo.BuildPipelineConstants());
 
-            for (const PointLight& light : demo.m_PointLights)
+            for (const PointLight& light : demo.m_Lights.GetPointLights())
             {
                 RaytracingDemo::LightBillboardConstants constants{};
                 constants.PositionAndSize = {
@@ -62,10 +61,11 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateLi
                 constants.CameraUp = cameraUpFloat;
 
                 demo.m_LightBillboardShader->SetConstantBuffer(cmd, "MaterialCBuffer", constants);
+                demo.m_LightBillboardShader->ApplyBindings(cmd);
                 demo.m_LightBillboardMesh->Draw(cmd);
             }
 
-            for (const AreaLightData& light : demo.m_AreaLights)
+            for (const AreaLightData& light : demo.m_Lights.GetAreaLights())
             {
                 RaytracingDemo::LightBillboardConstants constants{};
                 constants.PositionAndSize = {
@@ -84,6 +84,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateLi
                 constants.CameraUp = cameraUpFloat;
 
                 demo.m_LightBillboardShader->SetConstantBuffer(cmd, "MaterialCBuffer", constants);
+                demo.m_LightBillboardShader->ApplyBindings(cmd);
                 demo.m_LightBillboardMesh->Draw(cmd);
             }
 

@@ -1,7 +1,8 @@
+//Modify Begin:2026-07-27 by BestHui
 #include <ShaderLibrary/Common/RootSignature.hlsli>
-#include "SvgfCommon.hlsli"
+#include "SVGFCommon.hlsli"
 
-cbuffer SvgfTemporalConstants : register(b0)
+cbuffer SVGFTemporalConstants : register(b0)
 {
     uint Width;
     uint Height;
@@ -38,11 +39,11 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
 
     const float4 noisy = NoisyRadiance.Load(int3(pixel, 0));
     const float3 noisyColor = max(noisy.rgb, 0.0f);
-    const float luminance = SvgfLuminance(noisyColor);
+    const float luminance = SVGFLuminance(noisyColor);
     const float2 currentMoments = float2(luminance, luminance * luminance);
 
     const float depth = DepthTexture.Load(int3(pixel, 0));
-    if (!SvgfIsValidDepth(depth))
+    if (!SVGFIsValidDepth(depth))
     {
         TemporalColor[pixel] = float4(noisyColor, 1.0f);
         TemporalMoments[pixel] = currentMoments;
@@ -64,12 +65,12 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         {
             previousColor = HistoryColor.Load(int3(previousPixel, 0));
             previousMoments = HistoryMoments.Load(int3(previousPixel, 0));
-            const float3 normal = DecodeSvgfNormal(GBufferNormal.Load(int3(pixel, 0)).xyz);
-            const float3 previousNormal = DecodeSvgfNormal(GBufferNormal.Load(int3(previousPixel, 0)).xyz);
+            const float3 normal = DecodeSVGFNormal(GBufferNormal.Load(int3(pixel, 0)).xyz);
+            const float3 previousNormal = DecodeSVGFNormal(GBufferNormal.Load(int3(previousPixel, 0)).xyz);
             const float3 position = GBufferPosition.Load(int3(pixel, 0)).xyz;
             const float3 previousPosition = GBufferPosition.Load(int3(previousPixel, 0)).xyz;
-            const float normalWeight = SvgfNormalWeight(normal, previousNormal, PhiNormal);
-            const float depthWeight = SvgfDepthWeight(depth, depth, position, previousPosition, PhiDepth);
+            const float normalWeight = SVGFNormalWeight(normal, previousNormal, PhiNormal);
+            const float depthWeight = SVGFDepthWeight(depth, depth, position, previousPosition, PhiDepth);
             historyWeight = saturate(previousColor.a > 0.0f ? normalWeight * depthWeight : 0.0f);
         }
     }
@@ -97,3 +98,4 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     OutHistoryColor[pixel] = float4(noisyColor, 1.0f);
     OutHistoryMoments[pixel] = currentMoments;
 }
+//Modify End

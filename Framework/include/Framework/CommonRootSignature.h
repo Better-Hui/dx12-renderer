@@ -11,6 +11,9 @@
 
 #include "ShaderResourceView.h"
 #include "UnorderedAccessView.h"
+//Modify Begin:2026-07-27 by BestHui
+#include "FrameworkDeprecated.h"
+//Modify End
 
 //Modify Begin:2026-07-21 by BestHui
 class RayTracingAccelerationStructure;
@@ -21,9 +24,13 @@ class CommonRootSignature final : public RootSignature
 public:
     explicit CommonRootSignature(const std::shared_ptr<Resource>& emptyResource);
 
+//Modify Begin:2026-07-27 by BestHui
+    FRAMEWORK_DEPRECATED("Use reflected Shader/ComputeShader bindings or PipelineDescriptorSet instead of direct CommonRootSignature binding.")
     void Bind(CommandList& commandList) const;
 
+    FRAMEWORK_DEPRECATED("Use reflected Shader/ComputeShader named constant buffer binding or PipelineDescriptorSet instead.")
     void SetPipelineConstantBuffer(CommandList& commandList, size_t size, const void* data) const;
+//Modify End
 
     template <typename T>
     void SetPipelineConstantBuffer(CommandList& commandList, const T& data) const
@@ -31,9 +38,13 @@ public:
         SetPipelineConstantBuffer(commandList, sizeof(T), &data);
     }
 
+//Modify Begin:2026-07-27 by BestHui
+    FRAMEWORK_DEPRECATED("Use reflected Shader named constant buffer binding or PipelineDescriptorSet instead.")
     void SetMaterialConstantBuffer(CommandList& commandList, size_t size, const void* data) const;
 
+    FRAMEWORK_DEPRECATED("Use reflected Shader named constant buffer binding or PipelineDescriptorSet instead.")
     void SetModelConstantBuffer(CommandList& commandList, size_t size, const void* data) const;
+//Modify End
 
     template <typename T>
     void SetModelConstantBuffer(CommandList& commandList, const T& data) const
@@ -41,9 +52,15 @@ public:
         SetModelConstantBuffer(commandList, sizeof(T), &data);
     }
 
+//Modify Begin:2026-07-27 by BestHui
+    FRAMEWORK_DEPRECATED("Use reflected ComputeShader named constant buffer binding or PipelineDescriptorSet instead.")
     void SetComputeConstantBuffer(CommandList& commandList, size_t size, const void* data) const;
+//Modify End
 
 //Modify Begin:2026-07-23 by BestHui
+//Modify Begin:2026-07-27 by BestHui
+    FRAMEWORK_DEPRECATED("Use reflected ComputeShader named constant buffer binding or PipelineDescriptorSet instead.")
+//Modify End
     void SetComputePipelineConstantBuffer(CommandList& commandList, size_t size, const void* data) const;
 
     template <typename T>
@@ -52,6 +69,9 @@ public:
         SetComputePipelineConstantBuffer(commandList, sizeof(T), &data);
     }
 
+//Modify Begin:2026-07-27 by BestHui
+    FRAMEWORK_DEPRECATED("Use reflected ComputeShader named constant buffer binding or PipelineDescriptorSet instead.")
+//Modify End
     void SetComputeMaterialConstantBuffer(CommandList& commandList, size_t size, const void* data) const;
 
     template <typename T>
@@ -60,6 +80,9 @@ public:
         SetComputeMaterialConstantBuffer(commandList, sizeof(T), &data);
     }
 
+//Modify Begin:2026-07-27 by BestHui
+    FRAMEWORK_DEPRECATED("Use reflected ComputeShader named constant buffer binding or PipelineDescriptorSet instead.")
+//Modify End
     void SetComputeModelConstantBuffer(CommandList& commandList, size_t size, const void* data) const;
 
     template <typename T>
@@ -75,7 +98,10 @@ public:
         SetGraphicsRootConstants(commandList, sizeof(T), &data);
     }
 
+//Modify Begin:2026-07-27 by BestHui
+    FRAMEWORK_DEPRECATED("Use reflected Shader named resource binding or PipelineDescriptorSet instead of CommonRootSignature root constants.")
     void SetGraphicsRootConstants(CommandList& commandList, size_t size, const void* data) const;
+//Modify End
 
     template <typename T>
     void SetComputeRootConstants(CommandList& commandList, const T& data) const
@@ -83,7 +109,10 @@ public:
         SetComputeRootConstants(commandList, sizeof(T), &data);
     }
 
+//Modify Begin:2026-07-27 by BestHui
+    FRAMEWORK_DEPRECATED("Use reflected ComputeShader named resource binding or PipelineDescriptorSet instead of CommonRootSignature root constants.")
     void SetComputeRootConstants(CommandList& commandList, size_t size, const void* data) const;
+//Modify End
 
     template <typename T>
     void SetComputeConstantBuffer(CommandList& commandList, const T& data) const
@@ -91,21 +120,36 @@ public:
         SetComputeConstantBuffer(commandList, sizeof(T), &data);
     }
 
+//Modify Begin:2026-07-27 by BestHui
+    FRAMEWORK_DEPRECATED("Use SetShaderResourceView/SetTexture by resource name or PipelineDescriptorSet instead.")
     void SetPipelineShaderResourceView(CommandList& commandList, UINT index, const ShaderResourceView& srv) const;
 
+    FRAMEWORK_DEPRECATED("Use SetShaderResourceView/SetTexture by resource name or PipelineDescriptorSet instead.")
     void SetMaterialShaderResourceView(CommandList& commandList, UINT index, const ShaderResourceView& srv) const;
 
+    FRAMEWORK_DEPRECATED("Use SetShaderResourceView/SetTexture by resource name or PipelineDescriptorSet instead.")
     void SetComputeShaderResourceView(CommandList& commandList, UINT index, const ShaderResourceView& srv) const;
+//Modify End
 
 //Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-27 by BestHui
+    FRAMEWORK_DEPRECATED("Use reflected ComputeShader named acceleration structure binding or PipelineDescriptorSet instead.")
+//Modify End
     void SetComputeAccelerationStructure(CommandList& commandList, const RayTracingAccelerationStructure& accelerationStructure) const;
 //Modify End
 
+//Modify Begin:2026-07-27 by BestHui
+    FRAMEWORK_DEPRECATED("Use SetUnorderedAccessView by resource name or PipelineDescriptorSet instead.")
     void SetUnorderedAccessView(CommandList& commandList, UINT index, const UnorderedAccessView& uav) const;
 
+    FRAMEWORK_DEPRECATED("Use PipelineLayout default descriptor staging or named descriptor rebinding instead.")
     void UnbindMaterialShaderResourceViews(CommandList& commandList);
+//Modify End
 
 //Modify Begin:2026-07-23 by BestHui
+//Modify Begin:2026-07-27 by BestHui
+    FRAMEWORK_DEPRECATED("Use PipelineLayout default descriptor staging or named descriptor rebinding instead.")
+//Modify End
     void UnbindComputeShaderResourceViews(CommandList& commandList);
 //Modify End
 

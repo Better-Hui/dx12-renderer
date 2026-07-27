@@ -66,22 +66,22 @@ void ImGuiImpl::FreeSrvDescriptor(
 }
 //Modify End
 
-ImGuiImpl::ImGuiImpl(CommandList& commandList, const Window& window, const std::shared_ptr<CommonRootSignature>& pRootSignature)
-    : m_RootSignature(pRootSignature)
+ImGuiImpl::ImGuiImpl(CommandList& commandList, const Window& window)
     //Modify Begin:2026-07-21 by BestHui
-    , m_FreeSrvDescriptors(ImGuiSrvDescriptorCount, true)
+    : m_FreeSrvDescriptors(ImGuiSrvDescriptorCount, true)
     //Modify End
 {
 //Modify Begin:2026-07-21 by BestHui
-    m_CombineShader = std::make_shared<Shader>(pRootSignature,
+//Modify Begin:2026-07-27 by BestHui
+    m_CombineShader = std::make_shared<Shader>(
         ShaderBlob(ShaderBytecode_Blit_VS, sizeof ShaderBytecode_Blit_VS),
         ShaderBlob(ShaderBytecode_ImGuiCombine_PS, sizeof ShaderBytecode_ImGuiCombine_PS),
         [](RasterPipelineStateBuilder& psb)
         {
             psb.WithAlphaBlend();
-        },
-        false
+        }
     );
+//Modify End
 
     m_BlitMesh = Mesh::CreateBlitTriangle(commandList);
 //Modify End
@@ -188,6 +188,7 @@ void ImGuiImpl::DrawToRenderTarget(CommandList& commandList)
 void ImGuiImpl::BlitCombine(CommandList& commandList, const std::shared_ptr<Texture>& pSourceTexture) const
 {
     m_CombineShader->Bind(commandList);
-    m_RootSignature->SetMaterialShaderResourceView(commandList, 0, ShaderResourceView(pSourceTexture));
+    m_CombineShader->SetTexture(commandList, "source", ShaderResourceView(pSourceTexture));
+    m_CombineShader->ApplyBindings(commandList);
     m_BlitMesh->Draw(commandList);
 }

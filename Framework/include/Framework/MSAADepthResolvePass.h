@@ -12,6 +12,5 @@ public:
     void Resolve(CommandList& commandList, const std::shared_ptr<Texture>& source, const std::shared_ptr<Texture>& destination) const;
 
 private:
-    std::shared_ptr<CommonRootSignature> m_RootSignature;
     ComputeShader m_ComputeShader;
 };

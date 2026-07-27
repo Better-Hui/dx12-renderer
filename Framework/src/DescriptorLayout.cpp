@@ -34,7 +34,7 @@ bool DescriptorLayout::IsRayTracingAccelerationStructureSrv(const ShaderUtils::S
     constexpr int RayTracingAccelerationStructureSrvDimension = 11;
     return srv.InputType == D3D_SIT_RTACCELERATIONSTRUCTURE ||
         static_cast<int>(srv.Dimension) == RayTracingAccelerationStructureSrvDimension ||
-        srv.Name == fallbackName;
+        (fallbackName != nullptr && srv.Name == fallbackName);
 }
 
 D3D12_SHADER_RESOURCE_VIEW_DESC DescriptorLayout::CreateNullShaderResourceViewDesc(const ShaderUtils::ShaderResourceViewMetadata& srv)

@@ -12,11 +12,13 @@
 class RasterPipelineStateBuilder final
 {
 public:
+    RasterPipelineStateBuilder();
     explicit RasterPipelineStateBuilder(std::shared_ptr<RootSignature> rootSignature);
 
     Microsoft::WRL::ComPtr<ID3D12PipelineState> Build(Microsoft::WRL::ComPtr<ID3D12Device2> device) const;
 
     RasterPipelineStateBuilder& WithRenderTargetFormats(const std::vector<DXGI_FORMAT>& renderTargetFormats, DXGI_FORMAT depthStencilFormat);
+    RasterPipelineStateBuilder& WithRootSignature(std::shared_ptr<RootSignature> rootSignature);
     RasterPipelineStateBuilder& WithSampleDesc(const DXGI_SAMPLE_DESC& sampleDesc);
     RasterPipelineStateBuilder& WithShaders(const Microsoft::WRL::ComPtr<ID3DBlob>& vertexShader, const Microsoft::WRL::ComPtr<ID3DBlob>& pixelShader);
 

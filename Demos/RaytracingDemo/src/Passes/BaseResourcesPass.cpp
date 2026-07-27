@@ -17,9 +17,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
 
     return RenderPass::Create(
         L"Base Resources",
-        {
-            { DemoResourceIds::SetupFinishedToken, InputType::Token }
-        },
+        {},
         {
             { DemoResourceIds::GBufferAlbedoOcclusion, OutputType::RenderTarget },
             { DemoResourceIds::GBufferSpecularSmoothness, OutputType::RenderTarget },
@@ -32,7 +30,6 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
         },
         [&demo](const RenderContext&, CommandList& cmd)
         {
-            demo.m_RootSignature->Bind(cmd);
             demo.m_GBufferShader->Bind(cmd);
 
             const XMMATRIX viewProjection = demo.m_Camera.GetViewMatrix() * demo.m_Camera.GetProjectionMatrix();
@@ -66,6 +63,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
                 demo.m_GBufferShader->SetTexture(cmd, "RoughnessTexture", ShaderResourceView(demo.m_Textures[material.RoughnessTextureIndex]));
                 demo.m_GBufferShader->SetTexture(cmd, "AmbientOcclusionTexture", ShaderResourceView(demo.m_Textures[material.AmbientOcclusionTextureIndex]));
 
+                demo.m_GBufferShader->ApplyBindings(cmd);
                 object.Model->Draw(cmd);
             }
 

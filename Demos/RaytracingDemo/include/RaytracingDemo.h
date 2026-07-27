@@ -4,18 +4,16 @@
 #include <DX12Library/Game.h>
 #include <DX12Library/StructuredBuffer.h>
 
+#include <Denoising/DenoiserController.h>
 #include <Framework/ImGuiImpl.h>
-#include <Framework/Light.h>
 #include <Framework/Model.h>
 #include <Framework/ComputeShader.h>
 #include <Framework/RayTracingAccelerationStructure.h>
 #include <Framework/RayTracingShader.h>
 #include <Framework/Shader.h>
-#include <Framework/SharedUploadBuffer.h>
 
-#include <Passes/NrdPass.h>
-#include <Passes/SvgfPass.h>
 #include <RenderGraph/RenderGraphRoot.h>
+#include <Scene/SceneLightManager.h>
 #include <Scene/SceneLighting.h>
 
 #include <memory>
@@ -25,10 +23,6 @@
 struct GraphicsSettings;
 class CommandList;
 struct RaytracingDemoPassAccess;
-namespace RenderGraph
-{
-    class User;
-}
 
 namespace RaytracingDemoPasses
 {
@@ -93,8 +87,9 @@ private:
         uint32_t FrameIndex = 0;
         uint32_t AccumulationFrameIndex = 0;
         uint32_t AccumulationEnabled = 1;
-        uint32_t NrdDenoiserMode = 0;
-        float NrdReblurHitDistanceScale = 100.0f;
+        uint32_t NRDDenoiserMode = 0;
+        uint32_t Padding0 = 0;
+        DirectX::XMFLOAT4 NRDReblurHitDistanceParameters = { 3.0f, 0.1f, 20.0f, 0.0f };
         uint32_t DirectLightingEnabled = 1;
         uint32_t IndirectLightingEnabled = 1;
         uint32_t Padding1 = 0;
@@ -160,13 +155,6 @@ private:
         ShaderTableDxr = 1,
     };
 
-    enum class DenoiserAlgorithm
-    {
-        Off = 0,
-        Nrd = 1,
-        Svgf = 2,
-    };
-
     struct RayTracingSceneResourceLayout
     {
         uint32_t TextureDescriptorCapacity = MinRayTracingDescriptorArrayCapacity;
@@ -203,19 +191,6 @@ private:
         float metallic = 0.0f,
         float roughness = 0.5f);
     void LoadDeferredLightingScene(CommandList& commandList);
-    void CreateDemoLights();
-    void AddPointLightAtOrigin();
-    void AddRandomPointLightInUpperHemisphere();
-    void UpdateDynamicLights(float timeSeconds);
-    void InitializeSceneLightBuffers(CommandList& commandList);
-    void BuildSceneLightGpuData();
-    void UpdatePointLightGpuData(size_t lightIndex);
-    void MarkDirectionalLightsDirty();
-    void MarkDirectionalLightsDirty(size_t beginIndex, size_t endIndex);
-    void MarkPointLightsDirty(size_t beginIndex, size_t endIndex);
-    void MarkAreaLightsDirty();
-    void MarkAreaLightsDirty(size_t beginIndex, size_t endIndex);
-    void UploadSceneLightBuffers(CommandList& commandList);
     void AddRaytracingInstances();
     RayTracingSceneResourceLayout BuildRayTracingSceneResourceLayout() const;
     void EnsureRayTracingPipelines();
@@ -224,18 +199,14 @@ private:
     CameraConstants BuildCameraConstants() const;
     PipelineConstants BuildPipelineConstants() const;
     void ResetAccumulation(bool resetDenoiserHistory = true);
-    bool IsDenoiserEnabled() const { return m_DenoiserAlgorithm != DenoiserAlgorithm::Off; }
-    bool IsNrdDenoiserEnabled() const { return m_DenoiserAlgorithm == DenoiserAlgorithm::Nrd; }
-    bool IsSvgfDenoiserEnabled() const { return m_DenoiserAlgorithm == DenoiserAlgorithm::Svgf; }
-    void ApplyDenoiserSelection();
+    bool IsDenoiserEnabled() const { return m_Denoisers.IsEnabled(); }
+    DenoiserController& GetDenoisers() { return m_Denoisers; }
+    const DenoiserController& GetDenoisers() const { return m_Denoisers; }
     void OnImGui();
 
     Camera m_Camera;
     friend struct RaytracingDemoPassAccess;
-    friend class RenderGraph::User;
     friend class RaytracingDemoPasses::Builder;
-    friend class NrdPass;
-    friend class SvgfPass;
     std::unique_ptr<RenderGraph::RenderGraphRoot> m_RenderGraph;
     std::unique_ptr<RayTracingShader> m_RayTracingShader;
     std::unique_ptr<RayTracingBindingSet> m_DirectRayTracingBindingSet;
@@ -243,16 +214,11 @@ private:
     std::unique_ptr<ComputeShader> m_InlineDirectLightingShader;
     std::unique_ptr<ComputeShader> m_InlineIndirectLightingShader;
     std::unique_ptr<ComputeShader> m_LightingCompositeShader;
-    std::unique_ptr<NrdPass> m_NrdPass;
-    std::unique_ptr<SvgfPass> m_SvgfPass;
+    DenoiserController m_Denoisers;
     RayTracingAccelerationStructure m_RayTracingAccelerationStructure;
     StructuredBuffer m_MaterialBuffer;
     StructuredBuffer m_GeometryBuffer;
-    StructuredBuffer m_DirectionalLightBuffer;
-    StructuredBuffer m_PointLightBuffer;
-    StructuredBuffer m_AreaLightBuffer;
-    std::unique_ptr<SharedUploadBuffer> m_LightUploadBuffer;
-    std::shared_ptr<CommonRootSignature> m_RootSignature;
+    SceneLightManager m_Lights;
     std::unique_ptr<ImGuiImpl> m_ImGui;
     std::shared_ptr<Mesh> m_SkyboxMesh;
     std::shared_ptr<Mesh> m_LightBillboardMesh;
@@ -266,33 +232,6 @@ private:
     std::vector<std::shared_ptr<Texture>> m_Textures;
     RayTracingSceneResourceLayout m_RayTracingSceneResourceLayout;
 
-    SkyLightData m_SkyLight;
-    std::vector<DirectionalLight> m_DirectionalLights;
-    std::vector<PointLight> m_PointLights;
-    std::vector<AreaLightData> m_AreaLights;
-    std::vector<DirectionalLightData> m_DirectionalLightGpuData;
-    std::vector<PointLightData> m_PointLightGpuData;
-    std::vector<AreaLightData> m_AreaLightGpuData;
-    size_t m_DirectionalLightBufferCapacity = 0;
-    size_t m_PointLightBufferCapacity = 0;
-    size_t m_AreaLightBufferCapacity = 0;
-    std::vector<float> m_PointLightBaseY;
-    std::vector<float> m_PointLightPhase;
-    std::vector<float> m_PointLightOrbitRadius;
-    std::vector<float> m_PointLightOrbitSpeed;
-    std::vector<DirectX::XMFLOAT3> m_PointLightOrbitCenter;
-    std::vector<uint8_t> m_PointLightAnimated;
-    size_t m_DirectionalLightDirtyBegin = 0;
-    size_t m_DirectionalLightDirtyEnd = 0;
-    size_t m_PointLightDirtyBegin = 0;
-    size_t m_PointLightDirtyEnd = 0;
-    size_t m_AreaLightDirtyBegin = 0;
-    size_t m_AreaLightDirtyEnd = 0;
-    DirectX::XMFLOAT3 m_NewPointLightColor = { 1.0f, 0.85f, 0.55f };
-    float m_NewPointLightIntensity = 18.0f;
-    float m_NewPointLightRange = 24.0f;
-    float m_RandomPointLightSpawnRadius = 28.0f;
-
     float m_DeltaTime = 0.0f;
     DirectX::XMMATRIX m_PreviousViewProjection = DirectX::XMMatrixIdentity();
     uint32_t m_FrameIndex = 0;
@@ -301,8 +240,6 @@ private:
     bool m_AccumulationEnabled = true;
     bool m_DirectLightingEnabled = true;
     bool m_IndirectLightingEnabled = true;
-    DenoiserAlgorithm m_DenoiserAlgorithm = DenoiserAlgorithm::Off;
-    bool m_AnimatePointLights = false;
     bool m_HasPreviousViewProjection = false;
     float m_CameraFov = 45.0f;
     float m_MouseRotateSpeed = 0.1f;

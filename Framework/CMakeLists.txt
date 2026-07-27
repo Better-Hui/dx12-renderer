@@ -24,8 +24,16 @@ set(HEADER_FILES
         "include/Framework/BloomDownsample.h"
         "include/Framework/BloomUpsample.h" 
         "include/Framework/CommonRootSignature.h" 
+        "include/Framework/CommandContext.h"
         "include/Framework/ComputePipelineStateBuilder.h"
         "include/Framework/DescriptorLayout.h"
+# Modify Begin:2026-07-24 by BestHui
+        "include/Framework/PipelineBindingSet.h"
+        "include/Framework/PipelineDescriptorSet.h"
+        "include/Framework/PipelineLayout.h"
+        "include/Framework/PipelineStateCache.h"
+# Modify End
+        "include/Framework/FrameworkDeprecated.h"
         "include/Framework/RasterPipelineStateBuilder.h" 
         "include/Framework/Shader.h" 
         "include/Framework/Material.h" 
@@ -42,8 +50,13 @@ set(HEADER_FILES
         "include/Framework/RayTracingAccelerationStructure.h"
         "include/Framework/RayTracingPipelineStateBuilder.h"
         "include/Framework/RayTracingShader.h"
+        "include/Framework/RayTracingShaderTable.h"
 # Modify End
         "include/Framework/MSAADepthResolvePass.h"
+# Modify Begin:2026-07-27 by BestHui
+        "include/Framework/NRD.h"
+        "include/Framework/SVGF.h"
+# Modify End
         "include/Framework/SSAOUtils.h"
         "include/Framework/TAA.h"
         
@@ -70,8 +83,14 @@ set(SOURCE_FILES
         "src/BloomDownsample.cpp"
         "src/BloomUpsample.cpp" 
         "src/CommonRootSignature.cpp" 
+        "src/CommandContext.cpp"
         "src/ComputePipelineStateBuilder.cpp"
         "src/DescriptorLayout.cpp"
+# Modify Begin:2026-07-24 by BestHui
+        "src/PipelineBindingSet.cpp"
+        "src/PipelineDescriptorSet.cpp"
+        "src/PipelineLayout.cpp"
+# Modify End
         "src/RasterPipelineStateBuilder.cpp" 
         "src/Shader.cpp" 
         "src/SharedUploadBuffer.cpp" 
@@ -84,10 +103,22 @@ set(SOURCE_FILES
 # Modify End
 # Modify Begin:2026-07-21 by BestHui
         "src/RayTracingAccelerationStructure.cpp"
+        "src/RayTracingBindingSet.cpp"
+        "src/RayTracingDescriptorTable.cpp"
+        "src/RayTracingDescriptorTable.h"
+        "src/RayTracingDispatchTables.cpp"
+        "src/RayTracingDispatchTables.h"
         "src/RayTracingPipelineStateBuilder.cpp"
+        "src/RayTracingPipelineDescBuilder.cpp"
         "src/RayTracingShader.cpp"
+        "src/RayTracingShaderInternal.h"
+        "src/RayTracingShaderTable.cpp"
 # Modify End
         "src/MSAADepthResolvePass.cpp"
+# Modify Begin:2026-07-27 by BestHui
+        "src/NRD.cpp"
+        "src/SVGF.cpp"
+# Modify End
         "src/SSAOUtils.cpp"
         "src/TAA.cpp"
         
@@ -108,7 +139,20 @@ set(SHADER_FILES_PIXEL
 
 set(SHADER_FILES_COMPUTE
         "shaders/MSAADepthResolve_CS.hlsl"
+# Modify Begin:2026-07-27 by BestHui
+        "shaders/NRD/NRDInputAdapter_CS.hlsl"
+        "shaders/NRD/NRDOutputComposite_CS.hlsl"
+        "shaders/SVGF/SVGFAtrous_CS.hlsl"
+        "shaders/SVGF/SVGFComposite_CS.hlsl"
+        "shaders/SVGF/SVGFTemporal_CS.hlsl"
+# Modify End
         )
+
+# Modify Begin:2026-07-27 by BestHui
+set(SHADERS_HEADER_FILES
+        "shaders/SVGF/SVGFCommon.hlsli"
+        )
+# Modify End
 
 set(TARGET_NAME Framework)
 set(SHADERS_OUTPUT_HEADERS TRUE)
@@ -123,8 +167,25 @@ target_include_directories(${TARGET_NAME}
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/Framework
         )
 
+# Modify Begin:2026-07-27 by BestHui
+set(NRD_ROOT "${CMAKE_SOURCE_DIR}/External/NRD")
+set(NRI_ROOT "${CMAKE_SOURCE_DIR}/External/NRI")
+set(NRD_BIN_DIR "${NRD_ROOT}/_Bin")
+set(NRI_BIN_DIR "${NRD_ROOT}/_Bin")
+
+target_include_directories(${TARGET_NAME}
+        PUBLIC "${NRD_ROOT}/Include"
+        PUBLIC "${NRD_ROOT}/Integration"
+        PUBLIC "${NRI_ROOT}/Include"
+        )
+# Modify End
+
 target_link_libraries(${TARGET_NAME}
         PUBLIC DX12Library
+# Modify Begin:2026-07-27 by BestHui
+        PUBLIC "${NRD_BIN_DIR}/NRD.lib"
+        PUBLIC "${NRI_BIN_DIR}/NRI.lib"
+# Modify End
         )
         
 # imgui

@@ -2,26 +2,13 @@
 #include <DX12Library/Helpers.h>
 #include <DX12Library/ShaderUtils.h>
 #include <DX12Library/Application.h>
+#include <Framework/CommandContext.h>
 #include <Framework/RayTracingAccelerationStructure.h>
 
 #include <algorithm>
 
-//Modify Begin:2026-07-23 by BestHui
-namespace
-{
-    UINT GetDescriptorCountOverride(const ComputePipelineDesc& desc, const std::string& name, UINT reflectedCount)
-    {
-        for (const ComputePipelineDesc::BindingOverride& bindingOverride : desc.BindingOverrides)
-        {
-            if (bindingOverride.Name == name)
-            {
-                return bindingOverride.DescriptorCount;
-            }
-        }
-
-        return DescriptorLayout::NormalizeDescriptorCount(reflectedCount, desc.MaxDescriptorCount);
-    }
-}
+//Modify Begin:2026-07-27 by BestHui
+FRAMEWORK_SUPPRESS_DEPRECATED_WARNINGS_BEGIN
 //Modify End
 
 //Modify Begin:2026-07-23 by BestHui
@@ -84,7 +71,7 @@ ComputeShader::ComputeShader(
 
 ComputeShader::ComputeShader(const ShaderBlob& shader, ComputePipelineDesc desc)
     : m_Shader(shader.GetBlob())
-    , m_DescriptorLayout(std::make_unique<DescriptorLayout>())
+    , m_PipelineLayout(std::make_unique<PipelineLayout>())
     , m_UseReflectedRootSignature(true)
 {
     CollectShaderMetadata(m_Shader, &m_ShaderMetadata);
@@ -96,15 +83,7 @@ ComputeShader::ComputeShader(const ShaderBlob& shader, ComputePipelineDesc desc)
 void ComputeShader::Bind(CommandList& commandList) const
 {
     //Modify Begin:2026-07-23 by BestHui
-    const auto device = Application::Get().GetDevice();
-    const auto pipelineState = GetPipelineState(device);
-
-    commandList.SetComputeRootSignature(*m_RootSignature);
-    if (m_UseReflectedRootSignature)
-    {
-        m_DescriptorLayout->StageDefaultDescriptorTables(commandList);
-    }
-    commandList.SetPipelineState(pipelineState);
+    CommandContext(commandList).BindPipeline(*this);
     //Modify End
 }
 
@@ -116,6 +95,16 @@ void ComputeShader::Unbind(CommandList& commandList) const
         m_CommonRootSignature->UnbindComputeShaderResourceViews(commandList);
     }
 }
+
+//Modify Begin:2026-07-27 by BestHui
+void ComputeShader::ApplyBindings(CommandList& commandList) const
+{
+    if (m_UseReflectedRootSignature)
+    {
+        CommandContext(commandList).BindDescriptorSet(*m_DescriptorSet, PipelineBindPoint::Compute);
+    }
+}
+//Modify End
 
 void ComputeShader::SetMaterialConstantBuffer(CommandList& commandList, size_t size, const void* data) const
 {
@@ -132,7 +121,7 @@ void ComputeShader::SetComputeConstantBuffer(CommandList& commandList, size_t si
 {
     if (m_UseReflectedRootSignature)
     {
-        const DescriptorBindingInfo& constantBufferBinding = m_DescriptorLayout->GetFirstBinding(DescriptorBindingKind::ConstantBuffer);
+        const DescriptorBindingInfo& constantBufferBinding = m_BindingSet->GetFirstBinding(DescriptorBindingKind::ConstantBuffer);
         commandList.SetComputeDynamicConstantBuffer(constantBufferBinding.RootParameterIndex, size, data);
         return;
     }
@@ -144,9 +133,7 @@ bool ComputeShader::HasConstantBuffer(const std::string& variableName) const
 {
     if (m_UseReflectedRootSignature)
     {
-        const auto& bindings = m_DescriptorLayout->GetBindings();
-        const auto findResult = bindings.find(variableName);
-        return findResult != bindings.end() && findResult->second.Kind == DescriptorBindingKind::ConstantBuffer;
+        return m_BindingSet->HasBinding(variableName, DescriptorBindingKind::ConstantBuffer);
     }
 
     return m_ShaderMetadata.m_ConstantBuffersNameCache.find(variableName) != m_ShaderMetadata.m_ConstantBuffersNameCache.end();
@@ -156,11 +143,8 @@ bool ComputeShader::HasShaderResourceView(const std::string& variableName) const
 {
     if (m_UseReflectedRootSignature)
     {
-        const auto& bindings = m_DescriptorLayout->GetBindings();
-        const auto findResult = bindings.find(variableName);
-        return findResult != bindings.end() &&
-            (findResult->second.Kind == DescriptorBindingKind::ShaderResourceView ||
-                findResult->second.Kind == DescriptorBindingKind::AccelerationStructure);
+        return m_BindingSet->HasBinding(variableName, DescriptorBindingKind::ShaderResourceView) ||
+            m_BindingSet->HasBinding(variableName, DescriptorBindingKind::AccelerationStructure);
     }
 
     return m_ShaderMetadata.m_ShaderResourceViewsNameCache.find(variableName) != m_ShaderMetadata.m_ShaderResourceViewsNameCache.end();
@@ -170,9 +154,7 @@ bool ComputeShader::HasUnorderedAccessView(const std::string& variableName) cons
 {
     if (m_UseReflectedRootSignature)
     {
-        const auto& bindings = m_DescriptorLayout->GetBindings();
-        const auto findResult = bindings.find(variableName);
-        return findResult != bindings.end() && findResult->second.Kind == DescriptorBindingKind::UnorderedAccessView;
+        return m_BindingSet->HasBinding(variableName, DescriptorBindingKind::UnorderedAccessView);
     }
 
     return m_ShaderMetadata.m_UnorderedAccessViewsNameCache.find(variableName) != m_ShaderMetadata.m_UnorderedAccessViewsNameCache.end();
@@ -182,8 +164,8 @@ void ComputeShader::SetConstantBuffer(CommandList& commandList, const std::strin
 {
     if (m_UseReflectedRootSignature)
     {
-        const DescriptorBindingInfo& binding = GetReflectedBinding(variableName, DescriptorBindingKind::ConstantBuffer);
-        commandList.SetComputeDynamicConstantBuffer(binding.RootParameterIndex, size, data);
+        (void)commandList;
+        m_DescriptorSet->SetConstantBufferData(variableName, data, size);
         return;
     }
 
@@ -229,33 +211,8 @@ void ComputeShader::SetShaderResourceView(CommandList& commandList, const std::s
 {
     if (m_UseReflectedRootSignature)
     {
-        const DescriptorBindingInfo& binding = GetReflectedBinding(variableName, DescriptorBindingKind::ShaderResourceView);
-        if (!DescriptorLayout::IsArrayIndexInBounds(binding.DescriptorCount, arrayIndex))
-        {
-            throw std::exception("SRV array index is out of bounds.");
-        }
-
-        if (shaderResourceView.m_Resource->AreAutoBarriersEnabled())
-        {
-            commandList.SetShaderResourceView(
-                binding.RootParameterIndex,
-                arrayIndex,
-                *shaderResourceView.m_Resource,
-                D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE,
-                shaderResourceView.m_FirstSubresource,
-                shaderResourceView.m_NumSubresources,
-                shaderResourceView.GetDescOrNullptr());
-        }
-        else
-        {
-            commandList.SetShaderResourceView(
-                binding.RootParameterIndex,
-                arrayIndex,
-                *shaderResourceView.m_Resource,
-                shaderResourceView.m_FirstSubresource,
-                shaderResourceView.m_NumSubresources,
-                shaderResourceView.GetDescOrNullptr());
-        }
+        (void)commandList;
+        m_DescriptorSet->SetShaderResourceView(variableName, arrayIndex, shaderResourceView);
         return;
     }
 
@@ -290,13 +247,8 @@ void ComputeShader::SetShaderResourceView(CommandList& commandList, const std::s
 {
     if (m_UseReflectedRootSignature)
     {
-        const DescriptorBindingInfo& binding = GetReflectedBinding(variableName, DescriptorBindingKind::ShaderResourceView);
-        if (!DescriptorLayout::IsArrayIndexInBounds(binding.DescriptorCount, arrayIndex))
-        {
-            throw std::exception("SRV array index is out of bounds.");
-        }
-
-        commandList.SetShaderResourceView(binding.RootParameterIndex, arrayIndex, resource, stateAfter);
+        (void)commandList;
+        m_DescriptorSet->SetShaderResource(variableName, arrayIndex, resource, stateAfter);
         return;
     }
 
@@ -355,30 +307,8 @@ void ComputeShader::SetUnorderedAccessView(CommandList& commandList, const std::
 {
     if (m_UseReflectedRootSignature)
     {
-        const DescriptorBindingInfo& binding = GetReflectedBinding(variableName, DescriptorBindingKind::UnorderedAccessView);
-        Assert(binding.DescriptorCount == 1u, "Named compute UAV binding currently expects a single descriptor.");
-
-        if (unorderedAccessView.m_Resource->AreAutoBarriersEnabled())
-        {
-            commandList.SetUnorderedAccessView(
-                binding.RootParameterIndex,
-                0u,
-                *unorderedAccessView.m_Resource,
-                D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                unorderedAccessView.m_FirstSubresource,
-                unorderedAccessView.m_NumSubresources,
-                unorderedAccessView.GetDescOrNullptr());
-        }
-        else
-        {
-            commandList.SetUnorderedAccessView(
-                binding.RootParameterIndex,
-                0u,
-                *unorderedAccessView.m_Resource,
-                unorderedAccessView.m_FirstSubresource,
-                unorderedAccessView.m_NumSubresources,
-                unorderedAccessView.GetDescOrNullptr());
-        }
+        (void)commandList;
+        m_DescriptorSet->SetUnorderedAccessView(variableName, unorderedAccessView);
         return;
     }
 
@@ -402,11 +332,9 @@ void ComputeShader::SetAccelerationStructure(CommandList& commandList, const Ray
 {
     if (m_UseReflectedRootSignature)
     {
-        const DescriptorBindingInfo& accelerationStructureBinding = m_DescriptorLayout->GetFirstBinding(DescriptorBindingKind::AccelerationStructure);
-        Assert(accelerationStructure.IsBuilt(), "Ray tracing acceleration structure is not built.");
-        commandList.SetComputeRootShaderResourceView(
-            accelerationStructureBinding.RootParameterIndex,
-            accelerationStructure.GetGpuVirtualAddress());
+        const PipelineDescriptorRangeDesc& accelerationStructureBinding = m_BindingSet->GetFirstRange(DescriptorBindingKind::AccelerationStructure);
+        (void)commandList;
+        m_DescriptorSet->SetAccelerationStructure(accelerationStructureBinding.Name, accelerationStructure);
         return;
     }
 
@@ -415,14 +343,12 @@ void ComputeShader::SetAccelerationStructure(CommandList& commandList, const Ray
 
 Microsoft::WRL::ComPtr<ID3D12PipelineState> ComputeShader::GetPipelineState(const Microsoft::WRL::ComPtr<ID3D12Device2>& device) const
 {
-    if (m_PipelineState)
-    {
-        return m_PipelineState;
-    }
-
-    m_PipelineState = m_PipelineStateBuilder.Build(device);
-
-    return m_PipelineState;
+    return m_PipelineStateCache.GetOrCreate(
+        0u,
+        [this, &device]()
+        {
+            return m_PipelineStateBuilder.Build(device);
+        });
 }
 
 void ComputeShader::CollectShaderMetadata(const Microsoft::WRL::ComPtr<ID3DBlob>& shader, ShaderMetadata* outMetadata)
@@ -436,78 +362,75 @@ void ComputeShader::BuildReflectedRootSignature(const ComputePipelineDesc& desc)
     using DescriptorRange = CD3DX12_DESCRIPTOR_RANGE1;
     using StaticSampler = CD3DX12_STATIC_SAMPLER_DESC;
 
-    std::vector<DescriptorRange> descriptorRanges;
-    descriptorRanges.reserve(m_ShaderMetadata.m_ShaderResourceViews.size() + m_ShaderMetadata.m_UnorderedAccessViews.size());
-
-    std::vector<RootParameter> rootParameters;
-    rootParameters.reserve(
-        m_ShaderMetadata.m_ConstantBuffers.size() +
-        m_ShaderMetadata.m_ShaderResourceViews.size() +
-        m_ShaderMetadata.m_UnorderedAccessViews.size());
-
-    const auto addBindingInfo = [this](const std::string& name, DescriptorBindingInfo binding)
+    //Modify Begin:2026-07-24 by BestHui
+    PipelineLayoutReflectionOptions layoutOptions;
+    layoutOptions.MaxDescriptorCount = desc.MaxDescriptorCount;
+    layoutOptions.AccelerationStructureFallbackName = "g_InlineRayTracingScene";
+    layoutOptions.BindingOverrides.reserve(desc.BindingOverrides.size());
+    for (const ComputePipelineDesc::BindingOverride& bindingOverride : desc.BindingOverrides)
     {
-        m_DescriptorLayout->AddBinding(name, binding);
-    };
-
-    for (const auto& cbuffer : m_ShaderMetadata.m_ConstantBuffers)
-    {
-        RootParameter rootParameter;
-        rootParameter.InitAsConstantBufferView(cbuffer.RegisterIndex, cbuffer.Space);
-        const UINT rootParameterIndex = static_cast<UINT>(rootParameters.size());
-        rootParameters.push_back(rootParameter);
-        addBindingInfo(cbuffer.Name, { DescriptorBindingKind::ConstantBuffer, rootParameterIndex, 1u });
+        layoutOptions.BindingOverrides.push_back({ bindingOverride.Name, bindingOverride.DescriptorCount });
     }
 
-    for (const auto& srv : m_ShaderMetadata.m_ShaderResourceViews)
+    m_PipelineLayout->Reset(PipelineLayout::CreateDescFromReflection(m_ShaderMetadata, layoutOptions));
+    m_BindingSet = std::make_unique<PipelineBindingSet>(*m_PipelineLayout);
+    m_DescriptorSet = std::make_unique<PipelineDescriptorSet>(*m_PipelineLayout);
+
+    std::vector<DescriptorRange> descriptorRanges;
+    descriptorRanges.reserve(m_PipelineLayout->GetDesc().DescriptorRanges.size());
+
+    std::vector<RootParameter> rootParameters;
+    rootParameters.reserve(m_PipelineLayout->GetDesc().DescriptorRanges.size());
+
+    for (const PipelineDescriptorRangeDesc& range : m_PipelineLayout->GetDesc().DescriptorRanges)
     {
         RootParameter rootParameter;
-        DescriptorBindingKind bindingKind = DescriptorBindingKind::ShaderResourceView;
-        UINT descriptorCount = 1u;
+        Assert(range.RootParameterIndex == rootParameters.size(), "Pipeline layout root parameter indices must be sequential.");
 
-        if (DescriptorLayout::IsRayTracingAccelerationStructureSrv(srv, "g_InlineRayTracingScene"))
+        if (range.Kind == DescriptorBindingKind::ConstantBuffer)
         {
-            rootParameter.InitAsShaderResourceView(srv.RegisterIndex, srv.Space);
-            bindingKind = DescriptorBindingKind::AccelerationStructure;
+            rootParameter.InitAsConstantBufferView(range.ShaderRegister, range.RegisterSpace);
+        }
+        else if (range.Kind == DescriptorBindingKind::AccelerationStructure)
+        {
+            rootParameter.InitAsShaderResourceView(range.ShaderRegister, range.RegisterSpace);
         }
         else
         {
-            descriptorCount = GetDescriptorCountOverride(desc, srv.Name, srv.BindCount);
+            const D3D12_DESCRIPTOR_RANGE_TYPE rangeType = range.Kind == DescriptorBindingKind::UnorderedAccessView ?
+                D3D12_DESCRIPTOR_RANGE_TYPE_UAV :
+                D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
             descriptorRanges.emplace_back(
-                D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-                descriptorCount,
-                srv.RegisterIndex,
-                srv.Space,
+                rangeType,
+                range.DescriptorCount,
+                range.ShaderRegister,
+                range.RegisterSpace,
                 D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE);
             rootParameter.InitAsDescriptorTable(1, &descriptorRanges.back(), D3D12_SHADER_VISIBILITY_ALL);
         }
 
-        const UINT rootParameterIndex = static_cast<UINT>(rootParameters.size());
         rootParameters.push_back(rootParameter);
-        addBindingInfo(srv.Name, { bindingKind, rootParameterIndex, descriptorCount });
-        if (bindingKind == DescriptorBindingKind::ShaderResourceView)
+
+        if (range.Kind == DescriptorBindingKind::ShaderResourceView)
         {
-            m_DescriptorLayout->AddDefaultShaderResourceViewTable(rootParameterIndex, descriptorCount, srv);
+            const auto srvFindResult = m_ShaderMetadata.m_ShaderResourceViewsNameCache.find(range.Name);
+            Assert(srvFindResult != m_ShaderMetadata.m_ShaderResourceViewsNameCache.end(), "SRV reflection metadata was not found.");
+            m_PipelineLayout->AddDefaultShaderResourceViewTable(
+                range.RootParameterIndex,
+                range.DescriptorCount,
+                m_ShaderMetadata.m_ShaderResourceViews[srvFindResult->second]);
+        }
+        else if (range.Kind == DescriptorBindingKind::UnorderedAccessView)
+        {
+            const auto uavFindResult = m_ShaderMetadata.m_UnorderedAccessViewsNameCache.find(range.Name);
+            Assert(uavFindResult != m_ShaderMetadata.m_UnorderedAccessViewsNameCache.end(), "UAV reflection metadata was not found.");
+            m_PipelineLayout->AddDefaultUnorderedAccessViewTable(
+                range.RootParameterIndex,
+                range.DescriptorCount,
+                m_ShaderMetadata.m_UnorderedAccessViews[uavFindResult->second]);
         }
     }
-
-    for (const auto& uav : m_ShaderMetadata.m_UnorderedAccessViews)
-    {
-        const UINT descriptorCount = GetDescriptorCountOverride(desc, uav.Name, uav.BindCount);
-        descriptorRanges.emplace_back(
-            D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
-            descriptorCount,
-            uav.RegisterIndex,
-            uav.Space,
-            D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE);
-
-        RootParameter rootParameter;
-        rootParameter.InitAsDescriptorTable(1, &descriptorRanges.back(), D3D12_SHADER_VISIBILITY_ALL);
-        const UINT rootParameterIndex = static_cast<UINT>(rootParameters.size());
-        rootParameters.push_back(rootParameter);
-        addBindingInfo(uav.Name, { DescriptorBindingKind::UnorderedAccessView, rootParameterIndex, descriptorCount });
-        m_DescriptorLayout->AddDefaultUnorderedAccessViewTable(rootParameterIndex, descriptorCount, uav);
-    }
+    //Modify End
 
     const StaticSampler staticSamplers[] =
     {
@@ -532,6 +455,10 @@ void ComputeShader::BuildReflectedRootSignature(const ComputePipelineDesc& desc)
 
 const DescriptorBindingInfo& ComputeShader::GetReflectedBinding(const std::string& variableName, DescriptorBindingKind expectedKind) const
 {
-    return m_DescriptorLayout->GetBinding(variableName, expectedKind);
+    return m_BindingSet->GetBinding(variableName, expectedKind);
 }
+//Modify End
+
+//Modify Begin:2026-07-27 by BestHui
+FRAMEWORK_SUPPRESS_DEPRECATED_WARNINGS_END
 //Modify End

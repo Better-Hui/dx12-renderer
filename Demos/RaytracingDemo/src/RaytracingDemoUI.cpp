@@ -1,0 +1,72 @@
+//Modify Begin:2026-07-27 by BestHui
+#include <RaytracingDemo.h>
+
+#include <imgui.h>
+
+void RaytracingDemo::OnImGui()
+{
+    ImGui::SetNextWindowSize(ImVec2(520.0f, 680.0f), ImGuiCond_FirstUseEver);
+    ImGui::Begin("Raytracing");
+    ImGui::Text("GBuffer Path Tracing");
+    ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+    ImGui::Text("Resolution: %d x %d", m_Width, m_Height);
+    ImGui::Text("Frame: %u", m_FrameIndex);
+    ImGui::Text("Accumulation: %u", m_AccumulationFrameIndex);
+
+    if (ImGui::Checkbox("Enable Accumulation", &m_AccumulationEnabled))
+    {
+        ResetAccumulation();
+    }
+    if (ImGui::Checkbox("Enable Direct Lighting", &m_DirectLightingEnabled))
+    {
+        ResetAccumulation();
+    }
+    if (ImGui::Checkbox("Enable Indirect Lighting", &m_IndirectLightingEnabled))
+    {
+        ResetAccumulation();
+    }
+    if (m_Denoisers.DrawImGui())
+    {
+        if (IsDenoiserEnabled())
+        {
+            m_AccumulationEnabled = false;
+        }
+        ResetAccumulation();
+    }
+    if (m_Lights.DrawImGui())
+    {
+        ResetAccumulation();
+    }
+
+    const char* modeNames[] = { "Inline Ray Query", "Shader Table DXR" };
+    int selectedMode = static_cast<int>(m_PathTracingBackend);
+    if (ImGui::Combo("Mode", &selectedMode, modeNames, 2))
+    {
+        m_PathTracingBackend = static_cast<PathTracingBackend>(selectedMode);
+        ResetAccumulation();
+    }
+
+    const bool bouncesChanged = ImGui::SliderInt("Bounces", &m_MaxBounces, 0, 5);
+    const bool fovChanged = ImGui::SliderFloat("FOV", &m_CameraFov, 12.0f, 90.0f, "%.1f");
+    const bool rotateSpeedChanged = ImGui::SliderFloat("Mouse Rotate", &m_MouseRotateSpeed, 0.01f, 0.5f, "%.3f");
+    const bool panSpeedChanged = ImGui::SliderFloat("Mouse Pan", &m_MousePanSpeed, 0.005f, 0.25f, "%.3f");
+    const bool dollySpeedChanged = ImGui::SliderFloat("Mouse Dolly", &m_MouseDollySpeed, 0.005f, 0.25f, "%.3f");
+    const bool wheelSpeedChanged = ImGui::SliderFloat("Wheel Dolly", &m_MouseWheelDollySpeed, 0.05f, 5.0f, "%.2f");
+
+    if (bouncesChanged)
+    {
+        ResetAccumulation();
+    }
+    if (fovChanged)
+    {
+        const float aspectRatio = static_cast<float>(m_Width) / static_cast<float>(m_Height);
+        m_Camera.SetProjection(m_CameraFov, aspectRatio, 0.1f, 1000.0f);
+        ResetAccumulation();
+    }
+    if (rotateSpeedChanged || panSpeedChanged || dollySpeedChanged || wheelSpeedChanged)
+    {
+        ResetAccumulation();
+    }
+    ImGui::End();
+}
+//Modify End
