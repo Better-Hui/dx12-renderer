@@ -4,6 +4,7 @@
 #include <DX12Library/Application.h>
 #include <DX12Library/Helpers.h>
 //Modify Begin:2026-07-27 by BestHui
+#include <Framework/PipelineLayout.h>
 #include <Framework/PipelineStateCache.h>
 //Modify End
 #include <Framework/ShaderBlob.h>
@@ -11,6 +12,14 @@
 #include <d3dx12.h>
 
 using Microsoft::WRL::ComPtr;
+
+#if defined(min)
+#undef min
+#endif
+
+#if defined(max)
+#undef max
+#endif
 
 namespace
 {
@@ -28,11 +37,19 @@ namespace
         }
     }
 
-    D3D12_DESCRIPTOR_RANGE_TYPE GetDescriptorRangeType(const RayTracingShaderBindingType type)
+    DescriptorBindingKind GetDescriptorBindingKind(const RayTracingShaderBindingType type)
     {
-        return type == RayTracingShaderBindingType::OutputTexture ?
-            D3D12_DESCRIPTOR_RANGE_TYPE_UAV :
-            D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+        switch (type)
+        {
+        case RayTracingShaderBindingType::OutputTexture:
+            return DescriptorBindingKind::UnorderedAccessView;
+        case RayTracingShaderBindingType::AccelerationStructure:
+            return DescriptorBindingKind::AccelerationStructure;
+        case RayTracingShaderBindingType::ConstantBuffer:
+            return DescriptorBindingKind::ConstantBuffer;
+        default:
+            return DescriptorBindingKind::ShaderResourceView;
+        }
     }
 
     ComPtr<ID3D12Device5> GetDxrDevice()
@@ -51,6 +68,13 @@ RootSignature& RayTracingPipelineState::GetGlobalRootSignature() const
 {
     return *m_GlobalRootSignature;
 }
+
+//Modify Begin:2026-07-27 by BestHui
+const std::shared_ptr<RootSignature>& RayTracingPipelineState::GetGlobalRootSignaturePtr() const
+{
+    return m_GlobalRootSignature;
+}
+//Modify End
 
 const ComPtr<ID3D12StateObject>& RayTracingPipelineState::GetStateObject() const
 {
@@ -129,54 +153,38 @@ RayTracingPipelineStateKey RayTracingPipelineStateBuilder::CreateKey() const
 
 std::shared_ptr<RootSignature> RayTracingPipelineStateBuilder::BuildGlobalRootSignature() const
 {
-    using RootParameter = CD3DX12_ROOT_PARAMETER1;
-    using DescriptorRange = CD3DX12_DESCRIPTOR_RANGE1;
     using StaticSampler = CD3DX12_STATIC_SAMPLER_DESC;
 
-    std::vector<DescriptorRange> descriptorRanges;
-    descriptorRanges.reserve(m_Desc.Bindings.size());
-
-    std::vector<RootParameter> rootParameters;
-    rootParameters.reserve(m_Desc.Bindings.size());
-
-    for (const RayTracingShaderBindingDesc& binding : m_Desc.Bindings)
+    PipelineLayoutDesc layoutDesc;
+    layoutDesc.ShaderStages = PipelineShaderStageFlags::RayTracing;
+    layoutDesc.DescriptorRanges.reserve(m_Desc.Bindings.size());
+    for (uint32_t bindingIndex = 0; bindingIndex < m_Desc.Bindings.size(); ++bindingIndex)
     {
-        RootParameter rootParameter;
-        if (IsDescriptorTableBinding(binding.Type))
-        {
-            descriptorRanges.emplace_back();
-            descriptorRanges.back().Init(
-                GetDescriptorRangeType(binding.Type),
-                binding.DescriptorCount,
-                binding.ShaderRegister,
-                binding.RegisterSpace);
-            rootParameter.InitAsDescriptorTable(1, &descriptorRanges.back());
-        }
-        else if (binding.Type == RayTracingShaderBindingType::ConstantBuffer)
-        {
-            rootParameter.InitAsConstantBufferView(binding.ShaderRegister, binding.RegisterSpace);
-        }
-        else
-        {
-            rootParameter.InitAsShaderResourceView(binding.ShaderRegister, binding.RegisterSpace);
-        }
-
-        rootParameters.push_back(rootParameter);
+        const RayTracingShaderBindingDesc& binding = m_Desc.Bindings[bindingIndex];
+        PipelineDescriptorRangeDesc range;
+        range.Name = binding.Name;
+        range.Kind = GetDescriptorBindingKind(binding.Type);
+        range.ShaderRegister = binding.ShaderRegister;
+        range.RegisterSpace = binding.RegisterSpace;
+        range.DescriptorCount = std::max(1u, binding.DescriptorCount);
+        range.RootParameterIndex = bindingIndex;
+        range.BindingMode = IsDescriptorTableBinding(binding.Type) ?
+            PipelineDescriptorBindingMode::DescriptorTable :
+            PipelineDescriptorBindingMode::RootDescriptor;
+        range.ShaderStages = PipelineShaderStageFlags::RayTracing;
+        layoutDesc.DescriptorRanges.push_back(std::move(range));
     }
+
+    PipelineLayout layout(std::move(layoutDesc));
 
     StaticSampler staticSampler(0, D3D12_FILTER_MIN_MAG_MIP_LINEAR);
     staticSampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
     staticSampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
     staticSampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
 
-    D3D12_ROOT_SIGNATURE_DESC1 desc1 = {};
-    desc1.NumParameters = static_cast<UINT>(rootParameters.size());
-    desc1.pParameters = rootParameters.data();
-    desc1.NumStaticSamplers = 1;
-    desc1.pStaticSamplers = &staticSampler;
-    desc1.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
-
-    return std::make_shared<RootSignature>(desc1, D3D_ROOT_SIGNATURE_VERSION_1_1);
+    PipelineRootSignatureBuildDesc rootSignatureBuildDesc;
+    rootSignatureBuildDesc.StaticSamplers.push_back(staticSampler);
+    return layout.CreateRootSignature(rootSignatureBuildDesc);
 }
 
 ComPtr<ID3D12StateObject> RayTracingPipelineStateBuilder::BuildStateObject(const std::shared_ptr<RootSignature>& globalRootSignature) const

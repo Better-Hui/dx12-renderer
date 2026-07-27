@@ -1,5 +1,10 @@
 #include "Material.h"
 #include "CommonRootSignature.h"
+//Modify Begin:2026-07-27 by BestHui
+#include "FrameworkDeprecated.h"
+
+FRAMEWORK_SUPPRESS_DEPRECATED_WARNINGS_BEGIN
+//Modify End
 
 static const ShaderUtils::ConstantBufferMetadata* FindMaterialConstantBuffer(const Shader::ShaderMetadata& metadata)
 {
@@ -194,3 +199,7 @@ void Material::UploadShaderResourceViews(CommandList& commandList)
         m_Shader->SetShaderResourceView(commandList, name, shaderResourceView);
     }
 }
+
+//Modify Begin:2026-07-27 by BestHui
+FRAMEWORK_SUPPRESS_DEPRECATED_WARNINGS_END
+//Modify End

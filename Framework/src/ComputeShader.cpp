@@ -83,7 +83,7 @@ ComputeShader::ComputeShader(const ShaderBlob& shader, ComputePipelineDesc desc)
 void ComputeShader::Bind(CommandList& commandList) const
 {
     //Modify Begin:2026-07-23 by BestHui
-    CommandContext(commandList).BindPipeline(*this);
+    CommandContext(commandList).SetPipeline(*this);
     //Modify End
 }
 
@@ -101,7 +101,15 @@ void ComputeShader::ApplyBindings(CommandList& commandList) const
 {
     if (m_UseReflectedRootSignature)
     {
-        CommandContext(commandList).BindDescriptorSet(*m_DescriptorSet, PipelineBindPoint::Compute);
+        CommandContext(commandList).SetDescriptorSet(PipelineBindPoint::Compute, *m_DescriptorSet);
+    }
+}
+
+void ComputeShader::StageDefaultDescriptorTables(CommandList& commandList) const
+{
+    if (m_PipelineLayout != nullptr)
+    {
+        m_PipelineLayout->StageDefaultDescriptorTables(commandList);
     }
 }
 //Modify End
@@ -361,14 +369,13 @@ void ComputeShader::CollectShaderMetadata(const Microsoft::WRL::ComPtr<ID3DBlob>
 
 void ComputeShader::BuildReflectedRootSignature(const ComputePipelineDesc& desc)
 {
-    using RootParameter = CD3DX12_ROOT_PARAMETER1;
-    using DescriptorRange = CD3DX12_DESCRIPTOR_RANGE1;
     using StaticSampler = CD3DX12_STATIC_SAMPLER_DESC;
 
     //Modify Begin:2026-07-24 by BestHui
     PipelineLayoutReflectionOptions layoutOptions;
     layoutOptions.MaxDescriptorCount = desc.MaxDescriptorCount;
     layoutOptions.AccelerationStructureFallbackName = "g_InlineRayTracingScene";
+    layoutOptions.ShaderStages = PipelineShaderStageFlags::Compute;
     layoutOptions.BindingOverrides.reserve(desc.BindingOverrides.size());
     for (const ComputePipelineDesc::BindingOverride& bindingOverride : desc.BindingOverrides)
     {
@@ -377,43 +384,10 @@ void ComputeShader::BuildReflectedRootSignature(const ComputePipelineDesc& desc)
 
     m_PipelineLayout->Reset(PipelineLayout::CreateDescFromReflection(m_ShaderMetadata, layoutOptions));
     m_BindingSet = std::make_unique<PipelineBindingSet>(*m_PipelineLayout);
-    m_DescriptorSet = std::make_unique<PipelineDescriptorSet>(*m_PipelineLayout);
-
-    std::vector<DescriptorRange> descriptorRanges;
-    descriptorRanges.reserve(m_PipelineLayout->GetDesc().DescriptorRanges.size());
-
-    std::vector<RootParameter> rootParameters;
-    rootParameters.reserve(m_PipelineLayout->GetDesc().DescriptorRanges.size());
+    m_DescriptorSet = m_DescriptorPool.AllocateDescriptorSet(*m_PipelineLayout);
 
     for (const PipelineDescriptorRangeDesc& range : m_PipelineLayout->GetDesc().DescriptorRanges)
     {
-        RootParameter rootParameter;
-        Assert(range.RootParameterIndex == rootParameters.size(), "Pipeline layout root parameter indices must be sequential.");
-
-        if (range.Kind == DescriptorBindingKind::ConstantBuffer)
-        {
-            rootParameter.InitAsConstantBufferView(range.ShaderRegister, range.RegisterSpace);
-        }
-        else if (range.Kind == DescriptorBindingKind::AccelerationStructure)
-        {
-            rootParameter.InitAsShaderResourceView(range.ShaderRegister, range.RegisterSpace);
-        }
-        else
-        {
-            const D3D12_DESCRIPTOR_RANGE_TYPE rangeType = range.Kind == DescriptorBindingKind::UnorderedAccessView ?
-                D3D12_DESCRIPTOR_RANGE_TYPE_UAV :
-                D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-            descriptorRanges.emplace_back(
-                rangeType,
-                range.DescriptorCount,
-                range.ShaderRegister,
-                range.RegisterSpace,
-                D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE);
-            rootParameter.InitAsDescriptorTable(1, &descriptorRanges.back(), D3D12_SHADER_VISIBILITY_ALL);
-        }
-
-        rootParameters.push_back(rootParameter);
-
         if (range.Kind == DescriptorBindingKind::ShaderResourceView)
         {
             const auto srvFindResult = m_ShaderMetadata.m_ShaderResourceViewsNameCache.find(range.Name);
@@ -446,14 +420,10 @@ void ComputeShader::BuildReflectedRootSignature(const ComputePipelineDesc& desc)
             D3D12_COMPARISON_FUNC_LESS_EQUAL)
     };
 
-    D3D12_ROOT_SIGNATURE_DESC1 rootSignatureDesc{};
-    rootSignatureDesc.NumParameters = static_cast<UINT>(rootParameters.size());
-    rootSignatureDesc.pParameters = rootParameters.data();
-    rootSignatureDesc.NumStaticSamplers = _countof(staticSamplers);
-    rootSignatureDesc.pStaticSamplers = staticSamplers;
-    rootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
-
-    m_RootSignature = std::make_shared<RootSignature>(rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1_1);
+    PipelineRootSignatureBuildDesc rootSignatureBuildDesc;
+    rootSignatureBuildDesc.StaticSamplers.assign(staticSamplers, staticSamplers + _countof(staticSamplers));
+    m_RootSignature = m_PipelineLayout->CreateRootSignature(rootSignatureBuildDesc);
+    m_PipelineLayout->SetRootSignature(m_RootSignature);
 }
 
 const DescriptorBindingInfo& ComputeShader::GetReflectedBinding(const std::string& variableName, DescriptorBindingKind expectedKind) const

@@ -18,6 +18,7 @@
 //Modify End
 //Modify Begin:2026-07-24 by BestHui
 #include "PipelineBindingSet.h"
+#include "PipelineDescriptorPool.h"
 #include "PipelineDescriptorSet.h"
 #include "PipelineLayout.h"
 #include "PipelineStateCache.h"
@@ -88,25 +89,40 @@ public:
     //Modify End
 
     template<typename T>
+    //Modify Begin:2026-07-27 by BestHui
+    FRAMEWORK_DEPRECATED("Use SetConstantBuffer(CommandList&, const std::string&, ...) with reflected named bindings.")
+    //Modify End
     void SetPipelineConstantBuffer(CommandList& commandList, const T& data) const
     {
         m_CommonRootSignature->SetComputePipelineConstantBuffer(commandList, data);
     }
 
     template<typename T>
+    //Modify Begin:2026-07-27 by BestHui
+    FRAMEWORK_DEPRECATED("Use SetConstantBuffer(CommandList&, const std::string&, ...) with reflected named bindings.")
+    //Modify End
     void SetModelConstantBuffer(CommandList& commandList, const T& data) const
     {
         m_CommonRootSignature->SetComputeModelConstantBuffer(commandList, data);
     }
 
+    //Modify Begin:2026-07-27 by BestHui
+    FRAMEWORK_DEPRECATED("Use SetConstantBuffer(CommandList&, const std::string&, ...) with reflected named bindings.")
+    //Modify End
     void SetMaterialConstantBuffer(CommandList& commandList, size_t size, const void* data) const;
 
     template<typename T>
+    //Modify Begin:2026-07-27 by BestHui
+    FRAMEWORK_DEPRECATED("Use SetConstantBuffer(CommandList&, const std::string&, ...) with reflected named bindings.")
+    //Modify End
     void SetComputeConstantBuffer(CommandList& commandList, const T& data) const
     {
         SetComputeConstantBuffer(commandList, sizeof(T), &data);
     }
 
+    //Modify Begin:2026-07-27 by BestHui
+    FRAMEWORK_DEPRECATED("Use SetConstantBuffer(CommandList&, const std::string&, ...) with reflected named bindings.")
+    //Modify End
     void SetComputeConstantBuffer(CommandList& commandList, size_t size, const void* data) const;
     bool HasConstantBuffer(const std::string& variableName) const;
     bool HasShaderResourceView(const std::string& variableName) const;
@@ -141,16 +157,16 @@ public:
     using ShaderMetadata = ShaderReflectionMetadata;
 
     const ShaderMetadata& GetShaderMetadata() const { return m_ShaderMetadata; }
+    Microsoft::WRL::ComPtr<ID3D12PipelineState> GetPipelineState(const Microsoft::WRL::ComPtr<ID3D12Device2>& device) const;
+    const RootSignature& GetRootSignature() const { return *m_RootSignature; }
+    const PipelineLayout* GetPipelineLayout() const { return m_PipelineLayout.get(); }
+    bool UsesReflectedRootSignature() const { return m_UseReflectedRootSignature; }
+    void StageDefaultDescriptorTables(CommandList& commandList) const;
     //Modify End
 
 
 private:
     //Modify Begin:2026-07-23 by BestHui
-    //Modify Begin:2026-07-27 by BestHui
-    friend class CommandContext;
-    //Modify End
-    Microsoft::WRL::ComPtr<ID3D12PipelineState> GetPipelineState(const Microsoft::WRL::ComPtr<ID3D12Device2>& device) const;
-
     void CollectShaderMetadata(const Microsoft::WRL::ComPtr<ID3DBlob>& shader, ShaderMetadata* outMetadata);
     void BuildReflectedRootSignature(const ComputePipelineDesc& desc);
     const DescriptorBindingInfo& GetReflectedBinding(const std::string& variableName, DescriptorBindingKind expectedKind) const;
@@ -163,6 +179,9 @@ private:
     std::unique_ptr<PipelineLayout> m_PipelineLayout;
     std::unique_ptr<PipelineBindingSet> m_BindingSet;
     std::unique_ptr<PipelineDescriptorSet> m_DescriptorSet;
+//Modify Begin:2026-07-27 by BestHui
+    PipelineDescriptorPool m_DescriptorPool;
+//Modify End
     bool m_UseReflectedRootSignature = false;
 //Modify Begin:2026-07-27 by BestHui
     mutable PipelineStateCache<ComputePipelineStateKey, Microsoft::WRL::ComPtr<ID3D12PipelineState>> m_PipelineStateCache;

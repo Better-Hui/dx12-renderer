@@ -11,6 +11,7 @@
 class CommandList;
 class ComputeShader;
 class PipelineDescriptorSet;
+class PipelineLayout;
 class RayTracingBindingSet;
 class RayTracingShader;
 class Resource;
@@ -29,6 +30,12 @@ public:
     explicit CommandContext(CommandList& commandList);
 
     CommandList& GetCommandList() const { return m_CommandList; }
+
+    void SetPipelineLayout(PipelineBindPoint bindPoint, const PipelineLayout& pipelineLayout) const;
+    void SetDescriptorSet(PipelineBindPoint bindPoint, const PipelineDescriptorSet& descriptorSet) const;
+    void SetPipeline(Shader& shader) const;
+    void SetPipeline(const ComputeShader& shader) const;
+    void SetPipeline(const RayTracingShader& shader) const;
 
     void BindPipeline(Shader& shader) const;
     void BindPipeline(const ComputeShader& shader) const;

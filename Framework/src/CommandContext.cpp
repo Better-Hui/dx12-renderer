@@ -11,11 +11,10 @@
 #include <Framework/PipelineDescriptorSet.h>
 #include <Framework/PipelineLayout.h>
 #include <Framework/RayTracingAccelerationStructure.h>
+#include <Framework/RayTracingPipelineStateBuilder.h>
 #include <Framework/RayTracingShader.h>
 #include <Framework/Shader.h>
 #include <Framework/UnorderedAccessView.h>
-
-#include "RayTracingShaderInternal.h"
 
 #include <cstring>
 
@@ -24,40 +23,23 @@ CommandContext::CommandContext(CommandList& commandList)
 {
 }
 
-void CommandContext::BindPipeline(Shader& shader) const
+void CommandContext::SetPipelineLayout(const PipelineBindPoint bindPoint, const PipelineLayout& pipelineLayout) const
 {
-    const auto device = Application::Get().GetDevice();
-    const auto& renderTargetState = m_CommandList.GetLastRenderTargetState();
-    const auto pipelineState = shader.GetPipelineState(device, renderTargetState);
+    const RootSignature* rootSignature = pipelineLayout.GetRootSignature();
+    Assert(rootSignature != nullptr, "Pipeline layout does not have a root signature.");
 
-    if (shader.m_UseReflectedRootSignature)
+    if (bindPoint == PipelineBindPoint::Graphics)
     {
-        SetGraphicsRootSignature(*shader.m_RootSignature);
-        shader.m_PipelineLayout->StageDefaultDescriptorTables(m_CommandList);
+        SetGraphicsRootSignature(*rootSignature);
     }
-
-    SetGraphicsPipelineState(pipelineState);
-}
-
-void CommandContext::BindPipeline(const ComputeShader& shader) const
-{
-    const auto device = Application::Get().GetDevice();
-    const auto pipelineState = shader.GetPipelineState(device);
-
-    SetComputeRootSignature(*shader.m_RootSignature);
-    if (shader.m_UseReflectedRootSignature)
+    else
     {
-        shader.m_PipelineLayout->StageDefaultDescriptorTables(m_CommandList);
+        SetComputeRootSignature(*rootSignature);
     }
-    SetComputePipelineState(pipelineState);
+    pipelineLayout.StageDefaultDescriptorTables(m_CommandList);
 }
 
-void CommandContext::BindPipeline(const RayTracingShader& shader) const
-{
-    SetRayTracingPipelineState(shader.m_Impl->PipelineState->GetStateObject(), shader.m_Impl->PipelineState->GetGlobalRootSignature());
-}
-
-void CommandContext::BindDescriptorSet(const PipelineDescriptorSet& descriptorSet, const PipelineBindPoint bindPoint) const
+void CommandContext::SetDescriptorSet(const PipelineBindPoint bindPoint, const PipelineDescriptorSet& descriptorSet) const
 {
     for (const auto& [rootParameterIndex, boundResource] : descriptorSet.GetBoundResources())
     {
@@ -75,6 +57,69 @@ void CommandContext::BindDescriptorSet(const PipelineDescriptorSet& descriptorSe
             break;
         }
     }
+}
+
+void CommandContext::SetPipeline(Shader& shader) const
+{
+    const auto device = Application::Get().GetDevice();
+    const auto& renderTargetState = m_CommandList.GetLastRenderTargetState();
+    const auto pipelineState = shader.GetPipelineState(device, renderTargetState);
+
+    if (shader.UsesReflectedRootSignature())
+    {
+        SetPipelineLayout(PipelineBindPoint::Graphics, *shader.GetPipelineLayout());
+    }
+    else
+    {
+        SetGraphicsRootSignature(shader.GetRootSignature());
+        shader.StageDefaultDescriptorTables(m_CommandList);
+    }
+
+    SetGraphicsPipelineState(pipelineState);
+}
+
+void CommandContext::SetPipeline(const ComputeShader& shader) const
+{
+    const auto device = Application::Get().GetDevice();
+    const auto pipelineState = shader.GetPipelineState(device);
+
+    if (shader.UsesReflectedRootSignature())
+    {
+        SetPipelineLayout(PipelineBindPoint::Compute, *shader.GetPipelineLayout());
+    }
+    else
+    {
+        SetComputeRootSignature(shader.GetRootSignature());
+        shader.StageDefaultDescriptorTables(m_CommandList);
+    }
+    SetComputePipelineState(pipelineState);
+}
+
+void CommandContext::SetPipeline(const RayTracingShader& shader) const
+{
+    const RayTracingPipelineState& pipelineState = shader.GetPipelineState();
+    SetRayTracingPipelineState(pipelineState.GetStateObject(), pipelineState.GetGlobalRootSignature());
+    SetPipelineLayout(PipelineBindPoint::Compute, shader.GetPipelineLayout());
+}
+
+void CommandContext::BindPipeline(Shader& shader) const
+{
+    SetPipeline(shader);
+}
+
+void CommandContext::BindPipeline(const ComputeShader& shader) const
+{
+    SetPipeline(shader);
+}
+
+void CommandContext::BindPipeline(const RayTracingShader& shader) const
+{
+    SetPipeline(shader);
+}
+
+void CommandContext::BindDescriptorSet(const PipelineDescriptorSet& descriptorSet, const PipelineBindPoint bindPoint) const
+{
+    SetDescriptorSet(bindPoint, descriptorSet);
 }
 
 void CommandContext::SetGraphicsRootSignature(const RootSignature& rootSignature) const
@@ -361,33 +406,13 @@ void CommandContext::DispatchRays(
     const uint32_t height,
     const uint32_t depth) const
 {
-    RayTracingBindingSet::Impl& bindingImpl = bindingSet.GetImpl();
-    const RayTracingShader::Impl& shaderImpl = bindingImpl.GetShaderImpl();
-    const RayTracingPipelineDesc& desc = shaderImpl.Desc;
-    const RayTracingShaderPassDesc& pass = bindingImpl.DispatchTables.ResolvePass(desc, passName);
-    Assert(!pass.RayGenerationShader.empty(), "Ray tracing pass requires a ray generation shader.");
-    Assert(bindingImpl.DescriptorSet.GetAccelerationStructure() != nullptr, "Ray tracing acceleration structure is not bound.");
-
-    bindingImpl.DispatchTables.EnsureBuilt(*shaderImpl.PipelineState, pass);
-    bindingImpl.DescriptorTable.EnsureBuilt(desc, bindingImpl.DescriptorSet);
-
-    bindingImpl.DescriptorTable.TransitionResources(*this, desc, bindingImpl.DescriptorSet);
-    BindPipeline(bindingImpl.Shader);
-    bindingImpl.DescriptorTable.Stage(*this, desc);
-
-    for (uint32_t bindingIndex = 0; bindingIndex < desc.Bindings.size(); ++bindingIndex)
-    {
-        const RayTracingShaderBindingDesc& binding = desc.Bindings[bindingIndex];
-        if (RayTracingShaderInternal::IsDescriptorTableBinding(binding.Type))
-        {
-            continue;
-        }
-
-        ApplyComputeBinding(bindingImpl.DescriptorSet, bindingIndex);
-    }
-
-    DispatchRays(bindingImpl.DispatchTables.BuildDispatchDesc(width, height, depth));
-    bindingImpl.DescriptorTable.InsertOutputBarriers(*this, desc, bindingImpl.DescriptorSet);
+    bindingSet.PrepareDispatch(passName);
+    bindingSet.TransitionDispatchResources(*this);
+    SetPipeline(bindingSet.GetShader());
+    bindingSet.StageDescriptorTable(*this);
+    bindingSet.ApplyRootBindings(*this);
+    DispatchRays(bindingSet.BuildDispatchDesc(width, height, depth));
+    bindingSet.InsertOutputBarriers(*this);
 }
 
 void CommandContext::DispatchRays(const D3D12_DISPATCH_RAYS_DESC& dispatchRaysDesc) const

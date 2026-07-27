@@ -2,8 +2,13 @@
 #include <Framework/Blit_VS.h>
 #include <Framework/Bloom_Prefilter_PS.h>
 #include <Framework/Mesh.h>
+#include <Framework/FrameworkDeprecated.h>
 #include <DirectXMath.h>
 #include <DX12Library/Helpers.h>
+
+//Modify Begin:2026-07-27 by BestHui
+FRAMEWORK_SUPPRESS_DEPRECATED_WARNINGS_BEGIN
+//Modify End
 
 using namespace DirectX;
 
@@ -54,3 +59,7 @@ void BloomPrefilter::Execute(CommandList& commandList, const BloomParameters& pa
 	m_BlitMesh->Draw(commandList);
 	m_Material->Unbind(commandList);
 }
+
+//Modify Begin:2026-07-27 by BestHui
+FRAMEWORK_SUPPRESS_DEPRECATED_WARNINGS_END
+//Modify End

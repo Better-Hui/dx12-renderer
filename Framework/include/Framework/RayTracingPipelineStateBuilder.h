@@ -20,6 +20,9 @@ class RayTracingPipelineState
 {
 public:
     RootSignature& GetGlobalRootSignature() const;
+//Modify Begin:2026-07-27 by BestHui
+    const std::shared_ptr<RootSignature>& GetGlobalRootSignaturePtr() const;
+//Modify End
     const Microsoft::WRL::ComPtr<ID3D12StateObject>& GetStateObject() const;
     const void* GetShaderIdentifier(const std::wstring& shaderName) const;
 

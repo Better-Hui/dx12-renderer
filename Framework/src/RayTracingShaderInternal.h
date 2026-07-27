@@ -3,6 +3,9 @@
 //Modify Begin:2026-07-27 by BestHui
 
 #include <Framework/DescriptorLayout.h>
+//Modify Begin:2026-07-27 by BestHui
+#include <Framework/PipelineDescriptorPool.h>
+//Modify End
 #include <Framework/PipelineDescriptorSet.h>
 #include <Framework/PipelineLayout.h>
 #include <Framework/RayTracingPipelineStateBuilder.h>
@@ -89,7 +92,6 @@ struct RayTracingBindingSet::Impl
 {
     explicit Impl(const RayTracingShader& shader);
 
-    const RayTracingShader::Impl& GetShaderImpl() const;
     const RayTracingShaderBindingDesc& GetBinding(std::string_view name, RayTracingShaderBindingType expectedType) const;
     bool HasBinding(std::string_view name) const;
     const RayTracingShaderBindingDesc& GetShaderResourceBinding(std::string_view name) const;
@@ -97,6 +99,9 @@ struct RayTracingBindingSet::Impl
     void MarkDescriptorsDirty(const RayTracingShaderBindingDesc& binding);
 
     const RayTracingShader& Shader;
+//Modify Begin:2026-07-27 by BestHui
+    PipelineDescriptorPool DescriptorPool;
+//Modify End
     PipelineDescriptorSet DescriptorSet;
     RayTracingDescriptorTable DescriptorTable;
     RayTracingDispatchTables DispatchTables;

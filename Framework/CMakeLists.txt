@@ -29,6 +29,7 @@ set(HEADER_FILES
         "include/Framework/DescriptorLayout.h"
 # Modify Begin:2026-07-24 by BestHui
         "include/Framework/PipelineBindingSet.h"
+        "include/Framework/PipelineDescriptorPool.h"
         "include/Framework/PipelineDescriptorSet.h"
         "include/Framework/PipelineLayout.h"
         "include/Framework/PipelineStateCache.h"
@@ -89,6 +90,7 @@ set(SOURCE_FILES
         "src/DescriptorLayout.cpp"
 # Modify Begin:2026-07-24 by BestHui
         "src/PipelineBindingSet.cpp"
+        "src/PipelineDescriptorPool.cpp"
         "src/PipelineDescriptorSet.cpp"
         "src/PipelineLayout.cpp"
 # Modify End

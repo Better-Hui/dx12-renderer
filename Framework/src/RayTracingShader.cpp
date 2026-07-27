@@ -42,10 +42,12 @@ RayTracingShader::Impl::Impl(const ShaderBlob& shaderLibrary, RayTracingPipeline
         range.BindingMode = IsDescriptorTableBinding(binding.Type) ?
             PipelineDescriptorBindingMode::DescriptorTable :
             PipelineDescriptorBindingMode::RootDescriptor;
+        range.ShaderStages = PipelineShaderStageFlags::RayTracing;
         layoutDesc.DescriptorRanges.push_back(std::move(range));
     }
 
     Layout.Reset(std::move(layoutDesc));
+    Layout.SetRootSignature(PipelineState->GetGlobalRootSignaturePtr());
 }
 //Modify End
 
@@ -114,6 +116,18 @@ const RayTracingPipelineDesc& RayTracingShader::GetDesc() const
 {
     return m_Impl->Desc;
 }
+
+//Modify Begin:2026-07-27 by BestHui
+const RayTracingPipelineState& RayTracingShader::GetPipelineState() const
+{
+    return *m_Impl->PipelineState;
+}
+
+const PipelineLayout& RayTracingShader::GetPipelineLayout() const
+{
+    return m_Impl->Layout;
+}
+//Modify End
 
 //Modify Begin:2026-07-24 by BestHui
 RayTracingBindingSet RayTracingShader::CreateBindingSet() const

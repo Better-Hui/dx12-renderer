@@ -13,32 +13,44 @@
 #include <Framework/ShaderResourceView.h>
 #include <Framework/UnorderedAccessView.h>
 
+#include <algorithm>
+
 namespace
 {
     using namespace RayTracingShaderInternal;
+
+//Modify Begin:2026-07-27 by BestHui
+    const RayTracingShaderBindingDesc* FindBinding(
+        const RayTracingPipelineDesc& desc,
+        const std::string_view name)
+    {
+        const std::string bindingName(name);
+        const auto findResult = std::find_if(
+            desc.Bindings.begin(),
+            desc.Bindings.end(),
+            [&bindingName](const RayTracingShaderBindingDesc& binding)
+            {
+                return binding.Name == bindingName;
+            });
+
+        return findResult != desc.Bindings.end() ? &*findResult : nullptr;
+    }
+//Modify End
 }
 
 RayTracingBindingSet::Impl::Impl(const RayTracingShader& shader)
     : Shader(shader)
-    , DescriptorSet(shader.m_Impl->Layout)
+    , DescriptorSet(DescriptorPool.AllocateDescriptorSetValue(shader.GetPipelineLayout()))
 {
-}
-
-const RayTracingShader::Impl& RayTracingBindingSet::Impl::GetShaderImpl() const
-{
-    return *Shader.m_Impl;
 }
 
 const RayTracingShaderBindingDesc& RayTracingBindingSet::Impl::GetBinding(std::string_view name, RayTracingShaderBindingType expectedType) const
 {
-    const RayTracingShader::Impl& shaderImpl = GetShaderImpl();
-    const std::string bindingName(name);
-    DescriptorSet.GetBinding(bindingName, GetDescriptorBindingKind(expectedType));
-    const auto findResult = shaderImpl.BindingIndicesByName.find(bindingName);
-    Assert(findResult != shaderImpl.BindingIndicesByName.end(), "Ray tracing shader binding was not found.");
+    DescriptorSet.GetBinding(name, GetDescriptorBindingKind(expectedType));
+    const RayTracingShaderBindingDesc* binding = FindBinding(Shader.GetDesc(), name);
+    Assert(binding != nullptr, "Ray tracing shader binding was not found.");
 
-    const RayTracingShaderBindingDesc& binding = shaderImpl.Desc.Bindings[findResult->second];
-    if (binding.Type != expectedType)
+    if (binding->Type != expectedType)
     {
         const std::string message =
             "Ray tracing shader binding type does not match the setter. Name=" +
@@ -46,10 +58,10 @@ const RayTracingShaderBindingDesc& RayTracingBindingSet::Impl::GetBinding(std::s
             " Expected=" +
             GetRayTracingBindingTypeName(expectedType) +
             " Actual=" +
-            GetRayTracingBindingTypeName(binding.Type);
+            GetRayTracingBindingTypeName(binding->Type);
         throw std::exception(message.c_str());
     }
-    return binding;
+    return *binding;
 }
 
 bool RayTracingBindingSet::Impl::HasBinding(std::string_view name) const
@@ -59,25 +71,22 @@ bool RayTracingBindingSet::Impl::HasBinding(std::string_view name) const
 
 const RayTracingShaderBindingDesc& RayTracingBindingSet::Impl::GetShaderResourceBinding(std::string_view name) const
 {
-    const RayTracingShader::Impl& shaderImpl = GetShaderImpl();
-    const std::string bindingName(name);
-    DescriptorSet.GetBinding(bindingName, DescriptorBindingKind::ShaderResourceView);
-    const auto findResult = shaderImpl.BindingIndicesByName.find(bindingName);
-    Assert(findResult != shaderImpl.BindingIndicesByName.end(), "Ray tracing shader binding was not found.");
+    DescriptorSet.GetBinding(name, DescriptorBindingKind::ShaderResourceView);
+    const RayTracingShaderBindingDesc* binding = FindBinding(Shader.GetDesc(), name);
+    Assert(binding != nullptr, "Ray tracing shader binding was not found.");
 
-    const RayTracingShaderBindingDesc& binding = shaderImpl.Desc.Bindings[findResult->second];
-    if (binding.Type != RayTracingShaderBindingType::TextureArray &&
-        binding.Type != RayTracingShaderBindingType::VertexBufferArray &&
-        binding.Type != RayTracingShaderBindingType::IndexBufferArray)
+    if (binding->Type != RayTracingShaderBindingType::TextureArray &&
+        binding->Type != RayTracingShaderBindingType::VertexBufferArray &&
+        binding->Type != RayTracingShaderBindingType::IndexBufferArray)
     {
         const std::string message =
             "Ray tracing shader binding type does not match the SRV setter. Name=" +
             std::string(name) +
             " Actual=" +
-            GetRayTracingBindingTypeName(binding.Type);
+            GetRayTracingBindingTypeName(binding->Type);
         throw std::exception(message.c_str());
     }
-    return binding;
+    return *binding;
 }
 
 uint32_t RayTracingBindingSet::Impl::GetBindingIndex(const RayTracingShaderBindingDesc& binding) const
@@ -223,5 +232,66 @@ void RayTracingBindingSet::SetTextureArray(std::string_view name, const std::vec
 
     m_Impl->MarkDescriptorsDirty(binding);
 }
+
+//Modify Begin:2026-07-27 by BestHui
+const RayTracingShader& RayTracingBindingSet::GetShader() const
+{
+    return m_Impl->Shader;
+}
+
+const PipelineDescriptorSet& RayTracingBindingSet::GetDescriptorSet() const
+{
+    return m_Impl->DescriptorSet;
+}
+
+void RayTracingBindingSet::PrepareDispatch(const std::string_view passName)
+{
+    const RayTracingPipelineDesc& desc = m_Impl->Shader.GetDesc();
+    const RayTracingShaderPassDesc& pass = m_Impl->DispatchTables.ResolvePass(desc, passName);
+    Assert(!pass.RayGenerationShader.empty(), "Ray tracing pass requires a ray generation shader.");
+    Assert(m_Impl->DescriptorSet.GetAccelerationStructure() != nullptr, "Ray tracing acceleration structure is not bound.");
+
+    m_Impl->DispatchTables.EnsureBuilt(m_Impl->Shader.GetPipelineState(), pass);
+    m_Impl->DescriptorTable.EnsureBuilt(desc, m_Impl->DescriptorSet);
+}
+
+void RayTracingBindingSet::TransitionDispatchResources(const CommandContext& context) const
+{
+    m_Impl->DescriptorTable.TransitionResources(context, m_Impl->Shader.GetDesc(), m_Impl->DescriptorSet);
+}
+
+void RayTracingBindingSet::StageDescriptorTable(const CommandContext& context) const
+{
+    m_Impl->DescriptorTable.Stage(context, m_Impl->Shader.GetDesc());
+}
+
+void RayTracingBindingSet::ApplyRootBindings(const CommandContext& context) const
+{
+    const RayTracingPipelineDesc& desc = m_Impl->Shader.GetDesc();
+    for (uint32_t bindingIndex = 0; bindingIndex < desc.Bindings.size(); ++bindingIndex)
+    {
+        const RayTracingShaderBindingDesc& binding = desc.Bindings[bindingIndex];
+        if (RayTracingShaderInternal::IsDescriptorTableBinding(binding.Type))
+        {
+            continue;
+        }
+
+        context.ApplyComputeBinding(m_Impl->DescriptorSet, bindingIndex);
+    }
+}
+
+D3D12_DISPATCH_RAYS_DESC RayTracingBindingSet::BuildDispatchDesc(
+    const uint32_t width,
+    const uint32_t height,
+    const uint32_t depth) const
+{
+    return m_Impl->DispatchTables.BuildDispatchDesc(width, height, depth);
+}
+
+void RayTracingBindingSet::InsertOutputBarriers(const CommandContext& context) const
+{
+    m_Impl->DescriptorTable.InsertOutputBarriers(context, m_Impl->Shader.GetDesc(), m_Impl->DescriptorSet);
+}
+//Modify End
 
 //Modify End
