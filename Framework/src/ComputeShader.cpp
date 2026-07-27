@@ -343,12 +343,15 @@ void ComputeShader::SetAccelerationStructure(CommandList& commandList, const Ray
 
 Microsoft::WRL::ComPtr<ID3D12PipelineState> ComputeShader::GetPipelineState(const Microsoft::WRL::ComPtr<ID3D12Device2>& device) const
 {
+//Modify Begin:2026-07-27 by BestHui
+    const ComputePipelineStateKey pipelineStateKey = m_PipelineStateBuilder.CreateKey();
     return m_PipelineStateCache.GetOrCreate(
-        0u,
+        pipelineStateKey,
         [this, &device]()
         {
             return m_PipelineStateBuilder.Build(device);
         });
+//Modify End
 }
 
 void ComputeShader::CollectShaderMetadata(const Microsoft::WRL::ComPtr<ID3DBlob>& shader, ShaderMetadata* outMetadata)

@@ -32,6 +32,7 @@ set(HEADER_FILES
         "include/Framework/PipelineDescriptorSet.h"
         "include/Framework/PipelineLayout.h"
         "include/Framework/PipelineStateCache.h"
+        "include/Framework/PipelineStateKey.h"
 # Modify End
         "include/Framework/FrameworkDeprecated.h"
         "include/Framework/RasterPipelineStateBuilder.h" 

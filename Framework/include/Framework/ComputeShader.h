@@ -21,6 +21,7 @@
 #include "PipelineDescriptorSet.h"
 #include "PipelineLayout.h"
 #include "PipelineStateCache.h"
+#include "PipelineStateKey.h"
 //Modify End
 #include "ShaderBlob.h"
 #include "ShaderReflection.h"
@@ -163,6 +164,8 @@ private:
     std::unique_ptr<PipelineBindingSet> m_BindingSet;
     std::unique_ptr<PipelineDescriptorSet> m_DescriptorSet;
     bool m_UseReflectedRootSignature = false;
-    mutable PipelineStateCache<uint32_t, Microsoft::WRL::ComPtr<ID3D12PipelineState>> m_PipelineStateCache;
+//Modify Begin:2026-07-27 by BestHui
+    mutable PipelineStateCache<ComputePipelineStateKey, Microsoft::WRL::ComPtr<ID3D12PipelineState>> m_PipelineStateCache;
+//Modify End
     //Modify End
 };

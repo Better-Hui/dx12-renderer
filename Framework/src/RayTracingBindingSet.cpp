@@ -224,14 +224,4 @@ void RayTracingBindingSet::SetTextureArray(std::string_view name, const std::vec
     m_Impl->MarkDescriptorsDirty(binding);
 }
 
-void RayTracingBindingSet::Dispatch(
-    CommandList& commandList,
-    std::string_view passName,
-    const uint32_t width,
-    const uint32_t height,
-    const uint32_t depth)
-{
-    CommandContext(commandList).DispatchRays(*this, passName, width, height, depth);
-}
-
 //Modify End

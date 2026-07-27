@@ -34,9 +34,12 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
 
             const XMMATRIX viewProjection = demo.m_Camera.GetViewMatrix() * demo.m_Camera.GetProjectionMatrix();
             const XMMATRIX previousViewProjection = demo.m_HasPreviousViewProjection ? demo.m_PreviousViewProjection : viewProjection;
-            for (const RaytracingDemo::SceneObject& object : demo.m_SceneObjects)
+            const auto& sceneObjects = demo.m_SceneResources.GetSceneObjects();
+            const auto& materials = demo.m_SceneResources.GetMaterials();
+            const auto& textures = demo.m_SceneResources.GetTextures();
+            for (const RaytracingDemo::SceneObject& object : sceneObjects)
             {
-                const RaytracingDemo::MaterialData& material = demo.m_Materials[object.MaterialIndex];
+                const RaytracingDemo::MaterialData& material = materials[object.MaterialIndex];
 
                 RaytracingDemo::ModelConstants modelConstants{};
                 modelConstants.Model = object.WorldMatrix;
@@ -57,11 +60,11 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
                 materialConstants.HasRoughnessMap = material.HasRoughnessMap;
                 materialConstants.HasAmbientOcclusionMap = material.HasAmbientOcclusionMap;
                 demo.m_GBufferShader->SetConstantBuffer(cmd, "MaterialCBuffer", materialConstants);
-                demo.m_GBufferShader->SetTexture(cmd, "DiffuseTexture", ShaderResourceView(demo.m_Textures[material.DiffuseTextureIndex]));
-                demo.m_GBufferShader->SetTexture(cmd, "NormalTexture", ShaderResourceView(demo.m_Textures[material.NormalTextureIndex]));
-                demo.m_GBufferShader->SetTexture(cmd, "MetallicTexture", ShaderResourceView(demo.m_Textures[material.MetallicTextureIndex]));
-                demo.m_GBufferShader->SetTexture(cmd, "RoughnessTexture", ShaderResourceView(demo.m_Textures[material.RoughnessTextureIndex]));
-                demo.m_GBufferShader->SetTexture(cmd, "AmbientOcclusionTexture", ShaderResourceView(demo.m_Textures[material.AmbientOcclusionTextureIndex]));
+                demo.m_GBufferShader->SetTexture(cmd, "DiffuseTexture", ShaderResourceView(textures[material.DiffuseTextureIndex]));
+                demo.m_GBufferShader->SetTexture(cmd, "NormalTexture", ShaderResourceView(textures[material.NormalTextureIndex]));
+                demo.m_GBufferShader->SetTexture(cmd, "MetallicTexture", ShaderResourceView(textures[material.MetallicTextureIndex]));
+                demo.m_GBufferShader->SetTexture(cmd, "RoughnessTexture", ShaderResourceView(textures[material.RoughnessTextureIndex]));
+                demo.m_GBufferShader->SetTexture(cmd, "AmbientOcclusionTexture", ShaderResourceView(textures[material.AmbientOcclusionTextureIndex]));
 
                 demo.m_GBufferShader->ApplyBindings(cmd);
                 object.Model->Draw(cmd);

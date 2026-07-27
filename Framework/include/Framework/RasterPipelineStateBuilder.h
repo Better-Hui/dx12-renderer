@@ -1,6 +1,8 @@
 #pragma once
 
 #include <DX12Library/RootSignature.h>
+#include <DX12Library/RenderTargetState.h>
+#include <Framework/PipelineStateKey.h>
 
 #include <wrl.h>
 #include <d3d12.h>
@@ -16,6 +18,9 @@ public:
     explicit RasterPipelineStateBuilder(std::shared_ptr<RootSignature> rootSignature);
 
     Microsoft::WRL::ComPtr<ID3D12PipelineState> Build(Microsoft::WRL::ComPtr<ID3D12Device2> device) const;
+//Modify Begin:2026-07-27 by BestHui
+    RasterPipelineStateKey CreateKey(const RenderTargetState& renderTargetState) const;
+//Modify End
 
     RasterPipelineStateBuilder& WithRenderTargetFormats(const std::vector<DXGI_FORMAT>& renderTargetFormats, DXGI_FORMAT depthStencilFormat);
     RasterPipelineStateBuilder& WithRootSignature(std::shared_ptr<RootSignature> rootSignature);
@@ -42,6 +47,10 @@ public:
     //Modify End
 
 private:
+//Modify Begin:2026-07-27 by BestHui
+    size_t BuildFixedFunctionStateHash() const;
+//Modify End
+
     std::shared_ptr<RootSignature> m_RootSignature;
 
     std::vector<DXGI_FORMAT> m_RenderTargetFormats;

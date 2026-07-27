@@ -72,6 +72,36 @@ Microsoft::WRL::ComPtr<ID3D12PipelineState> RasterPipelineStateBuilder::Build(Mi
     return pipelineState;
 }
 
+//Modify Begin:2026-07-27 by BestHui
+RasterPipelineStateKey RasterPipelineStateBuilder::CreateKey(const RenderTargetState& renderTargetState) const
+{
+    RasterPipelineStateKey key;
+    key.VertexShader = MakePipelineShaderBytecodeKey(m_VertexShader);
+    key.PixelShader = MakePipelineShaderBytecodeKey(m_PixelShader);
+    key.LayoutHash = MakePipelineRootSignatureHash(m_RootSignature.get());
+    key.RenderTarget = renderTargetState;
+    key.FixedFunctionStateHash = BuildFixedFunctionStateHash();
+    return key;
+}
+
+size_t RasterPipelineStateBuilder::BuildFixedFunctionStateHash() const
+{
+    size_t seed = 0;
+    PipelineHashBytes(seed, &m_BlendDesc, sizeof(m_BlendDesc));
+    PipelineHashBytes(seed, &m_DepthStencilDesc, sizeof(m_DepthStencilDesc));
+    PipelineHashBytes(seed, &m_RasterizerDesc, sizeof(m_RasterizerDesc));
+    PipelineHashBytes(seed, &m_SampleDesc, sizeof(m_SampleDesc));
+    PipelineHashValue(seed, m_DepthStencilFormat);
+    PipelineHashValue(seed, m_RenderTargetFormats.size());
+    for (const DXGI_FORMAT format : m_RenderTargetFormats)
+    {
+        PipelineHashValue(seed, format);
+    }
+    PipelineHashCombine(seed, MakePipelineInputLayoutHash(m_InputLayout));
+    return seed;
+}
+//Modify End
+
 RasterPipelineStateBuilder& RasterPipelineStateBuilder::WithRenderTargetFormats(const std::vector<DXGI_FORMAT>& renderTargetFormats, DXGI_FORMAT depthStencilFormat)
 {
     Assert(renderTargetFormats.size() < MAX_RENDER_TARGETS, "Too many render target formats.");

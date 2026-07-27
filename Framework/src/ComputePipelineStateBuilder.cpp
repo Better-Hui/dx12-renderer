@@ -31,6 +31,22 @@ Microsoft::WRL::ComPtr<ID3D12PipelineState> ComputePipelineStateBuilder::Build(M
     return pipelineState;
 }
 
+//Modify Begin:2026-07-27 by BestHui
+ComputePipelineStateKey ComputePipelineStateBuilder::CreateKey(
+    const size_t definesHash,
+    const uint32_t shaderModelMajor,
+    const uint32_t shaderModelMinor) const
+{
+    ComputePipelineStateKey key;
+    key.Shader = MakePipelineShaderBytecodeKey(m_ComputeShader);
+    key.LayoutHash = MakePipelineRootSignatureHash(m_RootSignature.get());
+    key.DefinesHash = definesHash;
+    key.ShaderModelMajor = shaderModelMajor;
+    key.ShaderModelMinor = shaderModelMinor;
+    return key;
+}
+//Modify End
+
 ComputePipelineStateBuilder& ComputePipelineStateBuilder::WithRootSignature(std::shared_ptr<RootSignature> rootSignature)
 {
     Assert(rootSignature != nullptr, "Root signature cannot be null.");

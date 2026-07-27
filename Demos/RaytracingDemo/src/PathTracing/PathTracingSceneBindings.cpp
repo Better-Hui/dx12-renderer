@@ -29,7 +29,8 @@ void RaytracingDemoPassAccess::BindInlinePathTracingInputs(
     const RaytracingDemoRenderGraph::FrameGBufferResources& gbuffer,
     const RaytracingDemo::CameraConstants& camera)
 {
-    const uint32_t textureCount = static_cast<uint32_t>(demo.m_Textures.size());
+    const std::vector<std::shared_ptr<Texture>>& textures = demo.m_SceneResources.GetTextures();
+    const uint32_t textureCount = static_cast<uint32_t>(textures.size());
     const std::vector<std::shared_ptr<Mesh>>& meshes = demo.m_RayTracingAccelerationStructure.GetMeshes();
     const uint32_t meshCount = static_cast<uint32_t>(meshes.size());
 
@@ -57,11 +58,11 @@ void RaytracingDemoPassAccess::BindInlinePathTracingInputs(
     }
     if (shader.HasShaderResourceView("Materials"))
     {
-        shader.SetShaderResourceView(cmd, "Materials", 0u, demo.m_MaterialBuffer);
+        shader.SetShaderResourceView(cmd, "Materials", 0u, demo.m_SceneResources.GetMaterialBuffer());
     }
     if (shader.HasShaderResourceView("Geometries"))
     {
-        shader.SetShaderResourceView(cmd, "Geometries", 0u, demo.m_GeometryBuffer);
+        shader.SetShaderResourceView(cmd, "Geometries", 0u, demo.m_SceneResources.GetGeometryBuffer());
     }
     demo.m_Lights.BindComputeResources(cmd, shader);
 
@@ -69,7 +70,7 @@ void RaytracingDemoPassAccess::BindInlinePathTracingInputs(
     {
         for (uint32_t textureIndex = 0; textureIndex < textureCount; ++textureIndex)
         {
-            shader.SetShaderResourceView(cmd, "Textures", textureIndex, ShaderResourceView(demo.m_Textures[textureIndex]));
+            shader.SetShaderResourceView(cmd, "Textures", textureIndex, ShaderResourceView(textures[textureIndex]));
         }
     }
 

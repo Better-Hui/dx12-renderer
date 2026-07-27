@@ -3,7 +3,6 @@
 
 #include <DX12Library/Application.h>
 #include <DX12Library/Helpers.h>
-#include <Framework/CommandContext.h>
 #include <Framework/DescriptorLayout.h>
 #include <Framework/ShaderBlob.h>
 
@@ -121,121 +120,10 @@ RayTracingBindingSet RayTracingShader::CreateBindingSet() const
 {
     return RayTracingBindingSet(*this);
 }
-
-RayTracingBindingSet& RayTracingShader::GetDefaultBindingSet() const
-{
-    if (m_DefaultBindingSet == nullptr)
-    {
-        m_DefaultBindingSet = std::make_unique<RayTracingBindingSet>(*this);
-    }
-    return *m_DefaultBindingSet;
-}
 //Modify End
 
 bool RayTracingShader::HasBinding(std::string_view name) const
 {
-    return GetDefaultBindingSet().HasBinding(name);
-}
-
-void RayTracingShader::SetTexture(std::string_view name, const ShaderResourceView& shaderResourceView)
-{
-    GetDefaultBindingSet().SetTexture(name, shaderResourceView);
-}
-
-void RayTracingShader::SetTexture(std::string_view name, const uint32_t arrayIndex, const ShaderResourceView& shaderResourceView)
-{
-    GetDefaultBindingSet().SetTexture(name, arrayIndex, shaderResourceView);
-}
-
-void RayTracingShader::SetTexture(std::string_view name, const std::shared_ptr<Resource>& texture)
-{
-    GetDefaultBindingSet().SetTexture(name, texture);
-}
-
-void RayTracingShader::SetShaderResourceView(std::string_view name, const ShaderResourceView& shaderResourceView)
-{
-    GetDefaultBindingSet().SetShaderResourceView(name, shaderResourceView);
-}
-
-void RayTracingShader::SetShaderResourceView(
-    std::string_view name,
-    const uint32_t arrayIndex,
-    const ShaderResourceView& shaderResourceView)
-{
-    GetDefaultBindingSet().SetShaderResourceView(name, arrayIndex, shaderResourceView);
-}
-
-void RayTracingShader::SetUnorderedAccessView(std::string_view name, const UnorderedAccessView& unorderedAccessView)
-{
-    GetDefaultBindingSet().SetUnorderedAccessView(name, unorderedAccessView);
-}
-
-void RayTracingShader::SetBuffer(std::string_view name, const StructuredBuffer& buffer)
-{
-    GetDefaultBindingSet().SetBuffer(name, buffer);
-}
-
-void RayTracingShader::SetOutputTexture(std::string_view name, const std::shared_ptr<Texture>& texture)
-{
-    //Modify Begin:2026-07-24 by BestHui
-    GetDefaultBindingSet().SetOutputTexture(name, texture);
-    //Modify End
-}
-
-void RayTracingShader::SetAccelerationStructure(std::string_view name, const RayTracingAccelerationStructure& accelerationStructure)
-{
-    //Modify Begin:2026-07-24 by BestHui
-    GetDefaultBindingSet().SetAccelerationStructure(name, accelerationStructure);
-    //Modify End
-}
-
-void RayTracingShader::SetConstantBufferData(std::string_view name, const void* data, const size_t size)
-{
-    //Modify Begin:2026-07-24 by BestHui
-    GetDefaultBindingSet().SetConstantBufferData(name, data, size);
-    //Modify End
-}
-
-void RayTracingShader::SetStructuredBuffer(std::string_view name, const StructuredBuffer& buffer)
-{
-    //Modify Begin:2026-07-24 by BestHui
-    GetDefaultBindingSet().SetStructuredBuffer(name, buffer);
-    //Modify End
-}
-
-void RayTracingShader::SetTextureArray(std::string_view name, const std::vector<std::shared_ptr<Texture>>& textures)
-{
-    //Modify Begin:2026-07-24 by BestHui
-    GetDefaultBindingSet().SetTextureArray(name, textures);
-    //Modify End
-}
-
-void RayTracingShader::SetTextureArray(
-    std::string_view name,
-    const std::vector<std::shared_ptr<Texture>>& textures,
-    const std::vector<D3D12_SHADER_RESOURCE_VIEW_DESC>& srvDescs)
-{
-    //Modify Begin:2026-07-24 by BestHui
-    GetDefaultBindingSet().SetTextureArray(name, textures, srvDescs);
-    //Modify End
-}
-
-void RayTracingShader::SetTextureArray(std::string_view name, const std::vector<ShaderResourceView>& shaderResourceViews)
-{
-    //Modify Begin:2026-07-24 by BestHui
-    GetDefaultBindingSet().SetTextureArray(name, shaderResourceViews);
-    //Modify End
-}
-
-void RayTracingShader::Dispatch(
-    CommandList& commandList,
-    std::string_view passName,
-    const uint32_t width,
-    const uint32_t height,
-    const uint32_t depth)
-{
-    //Modify Begin:2026-07-24 by BestHui
-    CommandContext(commandList).DispatchRays(GetDefaultBindingSet(), passName, width, height, depth);
-    //Modify End
+    return m_Impl->BindingIndicesByName.find(std::string(name)) != m_Impl->BindingIndicesByName.end();
 }
 //Modify End

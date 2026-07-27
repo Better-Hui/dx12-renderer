@@ -2,7 +2,6 @@
 
 #include <DX12Library/Camera.h>
 #include <DX12Library/Game.h>
-#include <DX12Library/StructuredBuffer.h>
 
 #include <Denoising/DenoiserController.h>
 #include <Framework/ImGuiImpl.h>
@@ -15,6 +14,7 @@
 #include <RenderGraph/RenderGraphRoot.h>
 #include <Scene/SceneLightManager.h>
 #include <Scene/SceneLighting.h>
+#include <Scene/SceneResources.h>
 
 #include <memory>
 #include <string>
@@ -51,26 +51,8 @@ protected:
     void OnResize(ResizeEventArgs& e) override;
 
 private:
-    struct MaterialData
-    {
-        DirectX::XMFLOAT4 Diffuse = { 1.0f, 1.0f, 1.0f, 1.0f };
-        DirectX::XMFLOAT4 Specular = { 0.04f, 0.04f, 0.04f, 1.0f };
-        DirectX::XMFLOAT4 TilingOffset = { 1.0f, 1.0f, 0.0f, 0.0f };
-        uint32_t DiffuseTextureIndex = 0;
-        uint32_t NormalTextureIndex = 0;
-        uint32_t MetallicTextureIndex = 0;
-        uint32_t RoughnessTextureIndex = 0;
-        uint32_t AmbientOcclusionTextureIndex = 0;
-        uint32_t HasDiffuseMap = 0;
-        uint32_t HasNormalMap = 0;
-        uint32_t HasMetallicMap = 0;
-        uint32_t HasRoughnessMap = 0;
-        uint32_t HasAmbientOcclusionMap = 0;
-        float Metallic = 0.0f;
-        float Roughness = 0.5f;
-        uint32_t Padding0 = 0;
-        uint32_t Padding1 = 0;
-    };
+    using MaterialData = RaytracingDemoMaterialData;
+    using SceneObject = RaytracingDemoSceneObject;
 
     struct CameraConstants
     {
@@ -142,13 +124,6 @@ private:
         uint32_t Padding2 = 0;
     };
 
-    struct SceneObject
-    {
-        DirectX::XMMATRIX WorldMatrix = DirectX::XMMatrixIdentity();
-        std::shared_ptr<Model> Model;
-        uint32_t MaterialIndex = 0;
-    };
-
     enum class PathTracingBackend
     {
         InlineRayQuery = 0,
@@ -167,31 +142,6 @@ private:
         }
     };
 
-    uint32_t AddTexture(CommandList& commandList, const std::wstring& path, TextureUsageType usage = TextureUsageType::Albedo);
-    uint32_t AddMaterial(const MaterialData& material);
-    uint32_t AddPbrMaterial(
-        const DirectX::XMFLOAT4& diffuse,
-        const DirectX::XMFLOAT4& tilingOffset,
-        uint32_t diffuseTextureIndex,
-        uint32_t normalTextureIndex,
-        uint32_t metallicTextureIndex,
-        uint32_t roughnessTextureIndex,
-        uint32_t ambientOcclusionTextureIndex,
-        float metallic = 0.0f,
-        float roughness = 0.5f,
-        bool hasDiffuseMap = true,
-        bool hasNormalMap = false,
-        bool hasMetallicMap = false,
-        bool hasRoughnessMap = false,
-        bool hasAmbientOcclusionMap = false);
-    uint32_t AddDiffuseMaterial(
-        const DirectX::XMFLOAT4& diffuse,
-        const DirectX::XMFLOAT4& tilingOffset,
-        uint32_t diffuseTextureIndex,
-        float metallic = 0.0f,
-        float roughness = 0.5f);
-    void LoadDeferredLightingScene(CommandList& commandList);
-    void AddRaytracingInstances();
     RayTracingSceneResourceLayout BuildRayTracingSceneResourceLayout() const;
     void EnsureRayTracingPipelines();
     void BindRayTracingShaderResources();
@@ -216,8 +166,7 @@ private:
     std::unique_ptr<ComputeShader> m_LightingCompositeShader;
     DenoiserController m_Denoisers;
     RayTracingAccelerationStructure m_RayTracingAccelerationStructure;
-    StructuredBuffer m_MaterialBuffer;
-    StructuredBuffer m_GeometryBuffer;
+    RaytracingDemoSceneResources m_SceneResources;
     SceneLightManager m_Lights;
     std::unique_ptr<ImGuiImpl> m_ImGui;
     std::shared_ptr<Mesh> m_SkyboxMesh;
@@ -227,9 +176,6 @@ private:
     std::shared_ptr<Shader> m_LightBillboardShader;
     std::shared_ptr<Texture> m_SkyboxTexture;
 
-    std::vector<SceneObject> m_SceneObjects;
-    std::vector<MaterialData> m_Materials;
-    std::vector<std::shared_ptr<Texture>> m_Textures;
     RayTracingSceneResourceLayout m_RayTracingSceneResourceLayout;
 
     float m_DeltaTime = 0.0f;

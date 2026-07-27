@@ -11,6 +11,7 @@ set(HEADER_FILES
         include/Passes/RaytracingDemoPasses.h
         include/Scene/SceneLightManager.h
         include/Scene/SceneLighting.h
+        include/Scene/SceneResources.h
         )
 
 set(SOURCE_FILES
@@ -29,6 +30,7 @@ set(SOURCE_FILES
         src/Passes/RaytracingDemoPassResources.cpp
         src/Passes/SkyboxPass.cpp
         src/Scene/SceneLightManager.cpp
+        src/Scene/SceneResources.cpp
         )
 
 set(SHADER_FILES_RAYTRACING

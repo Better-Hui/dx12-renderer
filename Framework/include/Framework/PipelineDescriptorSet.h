@@ -3,6 +3,7 @@
 //Modify Begin:2026-07-27 by BestHui
 
 #include "PipelineBindingSet.h"
+#include "PipelineLayout.h"
 #include "ShaderResourceView.h"
 #include "UnorderedAccessView.h"
 

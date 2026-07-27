@@ -3,31 +3,17 @@
 
 #include <DX12Library/Application.h>
 #include <DX12Library/Helpers.h>
+//Modify Begin:2026-07-27 by BestHui
+#include <Framework/PipelineStateCache.h>
+//Modify End
 #include <Framework/ShaderBlob.h>
 
 #include <d3dx12.h>
-
-#include <unordered_map>
 
 using Microsoft::WRL::ComPtr;
 
 namespace
 {
-    template<typename T>
-    void HashCombine(size_t& seed, const T& value)
-    {
-        seed ^= std::hash<T>{}(value) + 0x9e3779b97f4a7c15ull + (seed << 6) + (seed >> 2);
-    }
-
-    void HashBytes(size_t& seed, const void* data, const size_t size)
-    {
-        const auto* bytes = static_cast<const uint8_t*>(data);
-        for (size_t i = 0; i < size; ++i)
-        {
-            HashCombine(seed, bytes[i]);
-        }
-    }
-
     bool IsDescriptorTableBinding(const RayTracingShaderBindingType type)
     {
         switch (type)
@@ -56,7 +42,9 @@ namespace
         return device5;
     }
 
-    std::unordered_map<size_t, std::weak_ptr<RayTracingPipelineState>> GPipelineStateCache;
+    //Modify Begin:2026-07-27 by BestHui
+    PipelineStateCache<RayTracingPipelineStateKey, std::shared_ptr<RayTracingPipelineState>> GPipelineStateCache;
+    //Modify End
 }
 
 RootSignature& RayTracingPipelineState::GetGlobalRootSignature() const
@@ -81,19 +69,63 @@ RayTracingPipelineStateBuilder::RayTracingPipelineStateBuilder(const ShaderBlob&
 
 std::shared_ptr<RayTracingPipelineState> RayTracingPipelineStateBuilder::Build() const
 {
-    const size_t cacheKey = BuildCacheKey();
-    if (const auto cachedState = GPipelineStateCache[cacheKey].lock())
+    const RayTracingPipelineStateKey cacheKey = CreateKey();
+    return GPipelineStateCache.GetOrCreate(
+        cacheKey,
+        [this]()
+        {
+            auto state = std::make_shared<RayTracingPipelineState>();
+            state->m_GlobalRootSignature = BuildGlobalRootSignature();
+            state->m_StateObject = BuildStateObject(state->m_GlobalRootSignature);
+            ThrowIfFailed(state->m_StateObject.As(&state->m_StateObjectProperties));
+            return state;
+        });
+}
+
+//Modify Begin:2026-07-27 by BestHui
+RayTracingPipelineStateKey RayTracingPipelineStateBuilder::CreateKey() const
+{
+    RayTracingPipelineStateKey key;
+    key.ShaderLibrary = MakePipelineShaderBytecodeKey(m_ShaderLibrary.GetBlob());
+
+    for (const std::wstring& exportName : m_Desc.Exports)
     {
-        return cachedState;
+        PipelineHashWideString(key.ExportsHash, exportName);
     }
 
-    auto state = std::make_shared<RayTracingPipelineState>();
-    state->m_GlobalRootSignature = BuildGlobalRootSignature();
-    state->m_StateObject = BuildStateObject(state->m_GlobalRootSignature);
-    ThrowIfFailed(state->m_StateObject.As(&state->m_StateObjectProperties));
-    GPipelineStateCache[cacheKey] = state;
-    return state;
+    for (const RayTracingHitGroupDesc& hitGroup : m_Desc.HitGroups)
+    {
+        PipelineHashWideString(key.HitGroupsHash, hitGroup.Name);
+        PipelineHashWideString(key.HitGroupsHash, hitGroup.ClosestHitShader);
+        PipelineHashWideString(key.HitGroupsHash, hitGroup.AnyHitShader);
+        PipelineHashWideString(key.HitGroupsHash, hitGroup.IntersectionShader);
+        PipelineHashValue(key.HitGroupsHash, hitGroup.Type);
+    }
+
+    for (const RayTracingShaderBindingDesc& binding : m_Desc.Bindings)
+    {
+        PipelineHashString(key.LayoutHash, binding.Name);
+        PipelineHashValue(key.LayoutHash, binding.Type);
+        PipelineHashValue(key.LayoutHash, binding.ShaderRegister);
+        PipelineHashValue(key.LayoutHash, binding.RegisterSpace);
+        PipelineHashValue(key.LayoutHash, binding.DescriptorCount);
+        PipelineHashValue(key.LayoutHash, binding.HasNullUnorderedAccessViewDesc);
+        if (binding.HasNullUnorderedAccessViewDesc)
+        {
+            PipelineHashBytes(
+                key.LayoutHash,
+                &binding.NullUnorderedAccessViewDesc,
+                sizeof(binding.NullUnorderedAccessViewDesc));
+        }
+    }
+
+    key.PayloadSizeInBytes = m_Desc.PayloadSizeInBytes;
+    key.AttributeSizeInBytes = m_Desc.AttributeSizeInBytes;
+    key.MaxTraceRecursionDepth = m_Desc.MaxTraceRecursionDepth;
+    key.DescriptorCapacity = m_Desc.MaxDescriptorCount;
+    return key;
 }
+//Modify End
 
 std::shared_ptr<RootSignature> RayTracingPipelineStateBuilder::BuildGlobalRootSignature() const
 {
@@ -195,39 +227,4 @@ ComPtr<ID3D12StateObject> RayTracingPipelineStateBuilder::BuildStateObject(const
     return stateObject;
 }
 
-size_t RayTracingPipelineStateBuilder::BuildCacheKey() const
-{
-    size_t seed = 0;
-    const auto& blob = m_ShaderLibrary.GetBlob();
-    HashBytes(seed, blob->GetBufferPointer(), blob->GetBufferSize());
-
-    for (const auto& exportName : m_Desc.Exports)
-    {
-        HashCombine(seed, exportName);
-    }
-
-    for (const auto& hitGroup : m_Desc.HitGroups)
-    {
-        HashCombine(seed, hitGroup.Name);
-        HashCombine(seed, hitGroup.ClosestHitShader);
-        HashCombine(seed, hitGroup.AnyHitShader);
-        HashCombine(seed, hitGroup.IntersectionShader);
-        HashCombine(seed, static_cast<int>(hitGroup.Type));
-    }
-
-    for (const auto& binding : m_Desc.Bindings)
-    {
-        HashCombine(seed, binding.Name);
-        HashCombine(seed, static_cast<int>(binding.Type));
-        HashCombine(seed, binding.ShaderRegister);
-        HashCombine(seed, binding.RegisterSpace);
-        HashCombine(seed, binding.DescriptorCount);
-    }
-
-    HashCombine(seed, m_Desc.PayloadSizeInBytes);
-    HashCombine(seed, m_Desc.AttributeSizeInBytes);
-    HashCombine(seed, m_Desc.MaxTraceRecursionDepth);
-    HashCombine(seed, m_Desc.MaxDescriptorCount);
-    return seed;
-}
 //Modify End

@@ -22,6 +22,7 @@
 #include "PipelineDescriptorSet.h"
 #include "PipelineLayout.h"
 #include "PipelineStateCache.h"
+#include "PipelineStateKey.h"
 //Modify End
 #include "ShaderBlob.h"
 #include "ShaderReflection.h"
@@ -126,5 +127,7 @@ private:
 //Modify End
 
 	RasterPipelineStateBuilder m_PipelineStateBuilder;
-	PipelineStateCache<RenderTargetState, Microsoft::WRL::ComPtr<ID3D12PipelineState>> m_PipelineStateObjects;
+//Modify Begin:2026-07-27 by BestHui
+	PipelineStateCache<RasterPipelineStateKey, Microsoft::WRL::ComPtr<ID3D12PipelineState>> m_PipelineStateObjects;
+//Modify End
 };

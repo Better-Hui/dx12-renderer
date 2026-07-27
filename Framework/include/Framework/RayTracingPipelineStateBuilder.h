@@ -2,6 +2,9 @@
 //Modify Begin:2026-07-21 by BestHui
 
 #include <Framework/RayTracingShader.h>
+//Modify Begin:2026-07-27 by BestHui
+#include <Framework/PipelineStateKey.h>
+//Modify End
 
 #include <DX12Library/RootSignature.h>
 
@@ -34,11 +37,13 @@ public:
     RayTracingPipelineStateBuilder(const ShaderBlob& shaderLibrary, RayTracingPipelineDesc desc);
 
     std::shared_ptr<RayTracingPipelineState> Build() const;
+//Modify Begin:2026-07-27 by BestHui
+    RayTracingPipelineStateKey CreateKey() const;
+//Modify End
 
 private:
     std::shared_ptr<RootSignature> BuildGlobalRootSignature() const;
     Microsoft::WRL::ComPtr<ID3D12StateObject> BuildStateObject(const std::shared_ptr<RootSignature>& globalRootSignature) const;
-    size_t BuildCacheKey() const;
 
     const ShaderBlob& m_ShaderLibrary;
     RayTracingPipelineDesc m_Desc;
