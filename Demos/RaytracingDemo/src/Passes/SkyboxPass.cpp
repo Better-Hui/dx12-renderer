@@ -1,12 +1,13 @@
 //Modify Begin:2026-07-28 by BestHui
 #include <Passes/RaytracingDemoPasses.h>
 
+#include <PathTracing/PathTracingSceneBindings.h>
 #include <RenderGraph/RaytracingDemoGraphResources.h>
 #include <RaytracingDemo.h>
 
 #include <Framework/CommandContext.h>
-#include <Framework/Mesh.h>
 #include <Framework/ShaderResourceView.h>
+#include <Framework/UnorderedAccessView.h>
 #include <RenderGraph/RenderPass.h>
 
 using namespace DirectX;
@@ -20,28 +21,31 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateSk
         L"Skybox",
         {
             { sceneReadyToken, InputType::Token },
+//Modify Begin:2026-07-28 by BestHui
+            { DemoResourceIds::DepthBuffer, InputType::ShaderResource },
+//Modify End
         },
-        {
-            { DemoResourceIds::SceneColor, OutputType::RenderTarget },
-            { DemoResourceIds::DepthBuffer, OutputType::DepthRead },
-            { DemoResourceIds::SkyboxFinishedToken, OutputType::Token },
-        },
-        [&demo](const RenderContext&, CommandList& cmd)
         {
 //Modify Begin:2026-07-28 by BestHui
-            const XMMATRIX viewProjection = demo.m_Camera.GetViewMatrix() * demo.m_Camera.GetProjectionMatrix();
-            const XMMATRIX modelMatrix = XMMatrixScaling(2.0f, 2.0f, 2.0f) * XMMatrixTranslationFromVector(demo.m_Camera.GetTranslation());
-            RaytracingDemo::ModelConstants modelConstants{};
-            modelConstants.Model = modelMatrix;
-            modelConstants.ModelViewProjection = modelMatrix * viewProjection;
-            modelConstants.InverseTransposeModel = XMMatrixTranspose(XMMatrixInverse(nullptr, modelMatrix));
+            { DemoResourceIds::SceneColor, OutputType::UnorderedAccess },
+//Modify End
+            { DemoResourceIds::SkyboxFinishedToken, OutputType::Token },
+        },
+        [&demo](const RenderContext& context, CommandList& cmd)
+        {
+//Modify Begin:2026-07-28 by BestHui
+            ComputeShader& skyboxShader = *demo.m_SkyboxComputeShader;
+            const RaytracingDemo::CameraConstants camera = RaytracingDemoPassAccess::BuildPassCameraConstants(demo, context);
 
-            demo.m_SkyboxShader->Bind(cmd);
-            cmd.SetConstantBuffer(demo.m_SkyboxShader, "ModelCBuffer", modelConstants);
-            cmd.SetTexture(demo.m_SkyboxShader, "SkyboxTexture", ShaderResourceView::TextureCube(demo.m_SkyboxTexture));
-            CommandContext(cmd).BindDescriptorSet(demo.m_SkyboxShader->GetDescriptorSet(), PipelineBindPoint::Graphics);
-            demo.m_SkyboxMesh->Draw(cmd);
-            demo.m_SkyboxShader->Unbind(cmd);
+            skyboxShader.Bind(cmd);
+            cmd.SetConstantBuffer(skyboxShader, "CameraConstants", camera);
+            cmd.SetTexture(skyboxShader, "DepthTexture", ShaderResourceView::DepthAsFloat(context.m_ResourcePool->GetTexture(DemoResourceIds::DepthBuffer)));
+            cmd.SetTexture(skyboxShader, "SkyboxTexture", ShaderResourceView::TextureCube(demo.m_SkyboxTexture));
+            cmd.SetUnorderedAccessView(skyboxShader, "SceneColor", UnorderedAccessView(context.m_ResourcePool->GetTexture(DemoResourceIds::SceneColor)));
+            CommandContext commandContext(cmd);
+            commandContext.BindDescriptorSet(skyboxShader.GetDescriptorSet(), PipelineBindPoint::Compute);
+            commandContext.Dispatch(Math::DivideByMultiple(camera.Width, 8u), Math::DivideByMultiple(camera.Height, 8u), 1u);
+            commandContext.InsertDescriptorSetOutputBarriers(skyboxShader.GetDescriptorSet());
 //Modify End
         });
 }

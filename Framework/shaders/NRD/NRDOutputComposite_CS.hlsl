@@ -16,12 +16,6 @@ Texture2D<float4> GBufferAlbedoOcclusion : register(t2);
 Texture2D<float4> GBufferEmissionMetallic : register(t3);
 RWTexture2D<float4> Output : register(u0);
 
-float3 ToneMap(float3 color)
-{
-    color = color / (color + 1.0f);
-    return pow(saturate(color), 1.0f / 2.2f);
-}
-
 float3 GetNRDDiffuseDemodulation(uint2 pixel)
 {
     float3 diffuse = saturate(GBufferAlbedoOcclusion.Load(int3(pixel, 0)).rgb);
@@ -29,6 +23,18 @@ float3 GetNRDDiffuseDemodulation(uint2 pixel)
     float3 diffuseFactor = max(diffuse * (1.0f - metallic), 0.05f);
     return lerp(diffuseFactor, float3(1.0f, 1.0f, 1.0f), metallic);
 }
+
+//Modify Begin:2026-07-28 by BestHui
+float3 SanitizeNRDCompositeColor(float3 color)
+{
+    if (!all(isfinite(color)))
+    {
+        return 0.0f;
+    }
+
+    return min(max(color, 0.0f), 250.0f);
+}
+//Modify End
 
 [numthreads(8, 8, 1)]
 void main(uint3 dispatchThreadId : SV_DispatchThreadID)
@@ -50,7 +56,9 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         denoised = REBLUR_BackEnd_UnpackRadianceAndNormHitDist(denoised);
     }
 
-    float3 color = denoised.rgb * GetNRDDiffuseDemodulation(pixel);
-    Output[pixel] = float4(ToneMap(color), 1.0f);
+//Modify Begin:2026-07-28 by BestHui
+    float3 color = SanitizeNRDCompositeColor(denoised.rgb * GetNRDDiffuseDemodulation(pixel));
+    Output[pixel] = float4(color, 1.0f);
+//Modify End
 }
 //Modify End

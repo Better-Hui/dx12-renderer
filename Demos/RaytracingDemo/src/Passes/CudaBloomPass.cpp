@@ -1,4 +1,4 @@
-#include <PostProcessing/CudaBloomPass.h>
+#include <Passes/CudaBloomPass.h>
 
 #include <DX12Library/Application.h>
 #include <DX12Library/CommandList.h>
@@ -68,11 +68,10 @@ struct CudaBloomPass::CudaDriver
 
     CUcontext Context = nullptr;
     CUmodule Module = nullptr;
-    CUfunction PrefilterDownsampleKernel = nullptr;
 //Modify Begin:2026-07-28 by BestHui
-    CUfunction PrefilterDownsamplePyramidKernel = nullptr;
+    CUfunction PrefilterDownsampleCascadeKernel = nullptr;
+    CUfunction DownsampleCascadeKernel = nullptr;
 //Modify End
-    CUfunction DownsampleKernel = nullptr;
     CUfunction UpsampleAddKernel = nullptr;
     CUfunction CompositeBloomKernel = nullptr;
     ExternalTexture InputTexture;
@@ -225,7 +224,9 @@ struct CudaBloomPass::CudaDriver
         mipDesc.arrayDesc.Width = width;
         mipDesc.arrayDesc.Height = height;
         mipDesc.arrayDesc.Depth = 0;
-        mipDesc.arrayDesc.Format = CU_AD_FORMAT_UNSIGNED_INT8;
+//Modify Begin:2026-07-28 by BestHui
+        mipDesc.arrayDesc.Format = CU_AD_FORMAT_FLOAT;
+//Modify End
         mipDesc.arrayDesc.NumChannels = 4;
         mipDesc.arrayDesc.Flags = (resourceDesc.Flags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET) != 0
             ? CUDA_ARRAY3D_COLOR_ATTACHMENT
@@ -297,6 +298,9 @@ CudaBloomPass::~CudaBloomPass()
 
 void CudaBloomPass::Shutdown()
 {
+//Modify Begin:2026-07-28 by BestHui
+    ReleaseInteropResource();
+//Modify End
     if (m_Cuda != nullptr)
     {
         m_Cuda->Destroy();
@@ -306,6 +310,19 @@ void CudaBloomPass::Shutdown()
     m_CudaAvailable = false;
     m_AvailabilityChecked = false;
 }
+
+//Modify Begin:2026-07-28 by BestHui
+void CudaBloomPass::ReleaseInteropResource()
+{
+    if (m_Cuda != nullptr)
+    {
+        m_Cuda->ReleaseExternalTextures();
+    }
+    m_SourceInteropResource = nullptr;
+    m_Width = 0;
+    m_Height = 0;
+}
+//Modify End
 
 bool CudaBloomPass::DrawImGui()
 {
@@ -379,17 +396,13 @@ bool CudaBloomPass::InitializeCuda()
         return false;
     }
 
-    result = cuModuleGetFunction(&cuda.PrefilterDownsampleKernel, cuda.Module, "PrefilterDownsampleKernel");
-    if (result == CUDA_SUCCESS)
-    {
 //Modify Begin:2026-07-28 by BestHui
-        result = cuModuleGetFunction(&cuda.PrefilterDownsamplePyramidKernel, cuda.Module, "PrefilterDownsamplePyramidKernel");
-    }
+    result = cuModuleGetFunction(&cuda.PrefilterDownsampleCascadeKernel, cuda.Module, "PrefilterDownsampleCascadeKernel");
     if (result == CUDA_SUCCESS)
     {
-//Modify End
-        result = cuModuleGetFunction(&cuda.DownsampleKernel, cuda.Module, "DownsampleKernel");
+        result = cuModuleGetFunction(&cuda.DownsampleCascadeKernel, cuda.Module, "DownsampleCascadeKernel");
     }
+//Modify End
     if (result == CUDA_SUCCESS)
     {
         result = cuModuleGetFunction(&cuda.UpsampleAddKernel, cuda.Module, "UpsampleAddKernel");
@@ -413,11 +426,13 @@ bool CudaBloomPass::InitializeCuda()
 bool CudaBloomPass::EnsureD3D12InteropResource(Texture& postProcessColor, const uint32_t width, const uint32_t height)
 {
     const D3D12_RESOURCE_DESC sourceDesc = postProcessColor.GetD3D12ResourceDesc();
-    if (sourceDesc.Format != DXGI_FORMAT_R8G8B8A8_UNORM)
+//Modify Begin:2026-07-28 by BestHui
+    if (sourceDesc.Format != DXGI_FORMAT_R32G32B32A32_FLOAT)
     {
-        m_Status = "CUDA bloom expects an R8G8B8A8_UNORM shared post-process texture.";
+        m_Status = "CUDA bloom expects an R32G32B32A32_FLOAT shared scene color texture.";
         return false;
     }
+//Modify End
 
     ID3D12Resource* sourceResource = postProcessColor.GetD3D12Resource().Get();
     if (m_Cuda != nullptr &&
@@ -503,130 +518,135 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
     CudaDriver& cuda = *m_Cuda;
     constexpr uint32_t blockX = 16;
     constexpr uint32_t blockY = 16;
+//Modify Begin:2026-07-28 by BestHui
+    constexpr uint32_t cascadeBlockX = 8;
+    constexpr uint32_t cascadeBlockY = 8;
+    constexpr uint32_t cascadeSharedBytes = cascadeBlockX * cascadeBlockY * sizeof(float) * 4u;
+
+    auto getPyramidPtr = [&cuda, levelCount](const uint32_t level) -> CUdeviceptr
+    {
+        return level < levelCount ? cuda.Pyramid[level] : 0;
+    };
+    auto getPyramidWidth = [&cuda, levelCount](const uint32_t level) -> uint32_t
+    {
+        return level < levelCount ? cuda.PyramidWidth[level] : 0u;
+    };
+    auto getPyramidHeight = [&cuda, levelCount](const uint32_t level) -> uint32_t
+    {
+        return level < levelCount ? cuda.PyramidHeight[level] : 0u;
+    };
+//Modify End
 
     CUtexObject input = cuda.InputTexture.TextureObject;
     CUsurfObject output = cuda.InputTexture.SurfaceObject;
     uint32_t cudaWidth = width;
     uint32_t cudaHeight = height;
-    CUdeviceptr level0 = cuda.Pyramid[0];
-    uint32_t level0Width = cuda.PyramidWidth[0];
-    uint32_t level0Height = cuda.PyramidHeight[0];
-    uint32_t level0Pitch = level0Width;
     float threshold = m_Threshold;
     float softThreshold = m_SoftThreshold;
     float intensity = m_Intensity;
 
 //Modify Begin:2026-07-28 by BestHui
-    uint32_t firstDownsampleLevel = 1u;
+    CUdeviceptr level0 = getPyramidPtr(0u);
+    CUdeviceptr level1 = getPyramidPtr(1u);
+    CUdeviceptr level2 = getPyramidPtr(2u);
+    CUdeviceptr level3 = getPyramidPtr(3u);
+    uint32_t level0Width = getPyramidWidth(0u);
+    uint32_t level0Height = getPyramidHeight(0u);
+    uint32_t level1Width = getPyramidWidth(1u);
+    uint32_t level1Height = getPyramidHeight(1u);
+    uint32_t level2Width = getPyramidWidth(2u);
+    uint32_t level2Height = getPyramidHeight(2u);
+    uint32_t level3Width = getPyramidWidth(3u);
+    uint32_t level3Height = getPyramidHeight(3u);
+
+    void* prefilterCascadeArgs[] = {
+        &input,
+        &level0,
+        &level1,
+        &level2,
+        &level3,
+        &cudaWidth,
+        &cudaHeight,
+        &level0Width,
+        &level0Height,
+        &level1Width,
+        &level1Height,
+        &level2Width,
+        &level2Height,
+        &level3Width,
+        &level3Height,
+        &threshold,
+        &softThreshold,
+        &intensity,
+    };
     CUresult result = CUDA_SUCCESS;
-    if (levelCount >= 2u)
-    {
-        CUdeviceptr level1 = cuda.Pyramid[1];
-        CUdeviceptr level2 = levelCount >= 3u ? cuda.Pyramid[2] : 0;
-        uint32_t level1Width = cuda.PyramidWidth[1];
-        uint32_t level1Height = cuda.PyramidHeight[1];
-        uint32_t level2Width = levelCount >= 3u ? cuda.PyramidWidth[2] : 0u;
-        uint32_t level2Height = levelCount >= 3u ? cuda.PyramidHeight[2] : 0u;
-        void* prefilterPyramidArgs[] = {
-            &input,
-            &level0,
-            &level1,
-            &level2,
-            &cudaWidth,
-            &cudaHeight,
-            &level0Width,
-            &level0Height,
-            &level1Width,
-            &level1Height,
-            &level2Width,
-            &level2Height,
-            &threshold,
-            &softThreshold,
-            &intensity,
-        };
-        constexpr uint32_t sharedLevel0Elements = 16u * 16u;
-        constexpr uint32_t sharedLevel1Elements = 8u * 8u;
-        const uint32_t sharedBytes = (sharedLevel0Elements + sharedLevel1Elements) * sizeof(float) * 4u;
-        result = cuLaunchKernel(
-            cuda.PrefilterDownsamplePyramidKernel,
-            DivideRoundUp(level0Width, blockX),
-            DivideRoundUp(level0Height, blockY),
-            1u,
-            blockX,
-            blockY,
-            1u,
-            sharedBytes,
-            nullptr,
-            prefilterPyramidArgs,
-            nullptr);
-        firstDownsampleLevel = levelCount >= 3u ? 3u : 2u;
-    }
-    else
-    {
-        void* prefilterArgs[] = {
-            &input,
-            &level0,
-            &cudaWidth,
-            &cudaHeight,
-            &level0Width,
-            &level0Height,
-            &level0Pitch,
-            &threshold,
-            &softThreshold,
-            &intensity,
-        };
-        result = cuLaunchKernel(
-            cuda.PrefilterDownsampleKernel,
-            DivideRoundUp(level0Width, blockX),
-            DivideRoundUp(level0Height, blockY),
-            1u,
-            blockX,
-            blockY,
-            1u,
-            0u,
-            nullptr,
-            prefilterArgs,
-            nullptr);
-    }
+    result = cuLaunchKernel(
+        cuda.PrefilterDownsampleCascadeKernel,
+        DivideRoundUp(level0Width, cascadeBlockX),
+        DivideRoundUp(level0Height, cascadeBlockY),
+        1u,
+        cascadeBlockX,
+        cascadeBlockY,
+        1u,
+        cascadeSharedBytes,
+        nullptr,
+        prefilterCascadeArgs,
+        nullptr);
     if (result != CUDA_SUCCESS)
     {
         m_Status = "CUDA bloom prefilter launch failed: " + cuda.GetError(result);
         return false;
     }
 
-    for (uint32_t level = firstDownsampleLevel; level < levelCount; ++level)
+    for (uint32_t baseLevel = 3u; baseLevel + 1u < levelCount; baseLevel += 4u)
 //Modify End
     {
-        CUdeviceptr previous = cuda.Pyramid[level - 1u];
-        CUdeviceptr current = cuda.Pyramid[level];
-        uint32_t previousWidth = cuda.PyramidWidth[level - 1u];
-        uint32_t previousHeight = cuda.PyramidHeight[level - 1u];
-        uint32_t previousPitch = previousWidth;
-        uint32_t currentWidth = cuda.PyramidWidth[level];
-        uint32_t currentHeight = cuda.PyramidHeight[level];
-        uint32_t currentPitch = currentWidth;
-        void* downsampleArgs[] = {
-            &previous,
-            &current,
-            &previousWidth,
-            &previousHeight,
-            &previousPitch,
-            &currentWidth,
-            &currentHeight,
-            &currentPitch,
+//Modify Begin:2026-07-28 by BestHui
+        CUdeviceptr source = cuda.Pyramid[baseLevel];
+        CUdeviceptr output0 = getPyramidPtr(baseLevel + 1u);
+        CUdeviceptr output1 = getPyramidPtr(baseLevel + 2u);
+        CUdeviceptr output2 = getPyramidPtr(baseLevel + 3u);
+        CUdeviceptr output3 = getPyramidPtr(baseLevel + 4u);
+        uint32_t sourceWidth = cuda.PyramidWidth[baseLevel];
+        uint32_t sourceHeight = cuda.PyramidHeight[baseLevel];
+        uint32_t output0Width = getPyramidWidth(baseLevel + 1u);
+        uint32_t output0Height = getPyramidHeight(baseLevel + 1u);
+        uint32_t output1Width = getPyramidWidth(baseLevel + 2u);
+        uint32_t output1Height = getPyramidHeight(baseLevel + 2u);
+        uint32_t output2Width = getPyramidWidth(baseLevel + 3u);
+        uint32_t output2Height = getPyramidHeight(baseLevel + 3u);
+        uint32_t output3Width = getPyramidWidth(baseLevel + 4u);
+        uint32_t output3Height = getPyramidHeight(baseLevel + 4u);
+        void* downsampleCascadeArgs[] = {
+            &source,
+            &output0,
+            &output1,
+            &output2,
+            &output3,
+            &sourceWidth,
+            &sourceHeight,
+            &output0Width,
+            &output0Height,
+            &output1Width,
+            &output1Height,
+            &output2Width,
+            &output2Height,
+            &output3Width,
+            &output3Height,
         };
         result = cuLaunchKernel(
-            cuda.DownsampleKernel,
-            DivideRoundUp(currentWidth, blockX),
-            DivideRoundUp(currentHeight, blockY),
+            cuda.DownsampleCascadeKernel,
+            DivideRoundUp(output0Width, cascadeBlockX),
+            DivideRoundUp(output0Height, cascadeBlockY),
             1u,
-            blockX,
-            blockY,
+            cascadeBlockX,
+            cascadeBlockY,
             1u,
-            0u,
+            cascadeSharedBytes,
             nullptr,
-            downsampleArgs,
+            downsampleCascadeArgs,
             nullptr);
+//Modify End
         if (result != CUDA_SUCCESS)
         {
             m_Status = "CUDA bloom downsample launch failed: " + cuda.GetError(result);
@@ -734,6 +754,6 @@ bool CudaBloomPass::ExecuteInPlace(Texture& postProcessColor, const uint32_t wid
         return false;
     }
 
-    m_Status = "CUDA bloom executed in-place on shared post-process color.";
+    m_Status = "CUDA bloom executed in-place on shared scene color.";
     return true;
 }

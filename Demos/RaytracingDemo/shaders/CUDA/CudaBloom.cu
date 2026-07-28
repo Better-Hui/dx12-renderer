@@ -8,15 +8,12 @@ __device__ float3 LoadRgb(cudaTextureObject_t texture, unsigned int x, unsigned 
 
 __device__ void StoreRgb(cudaSurfaceObject_t surface, unsigned int x, unsigned int y, float3 color)
 {
-    color.x = fminf(fmaxf(color.x, 0.0f), 1.0f);
-    color.y = fminf(fmaxf(color.y, 0.0f), 1.0f);
-    color.z = fminf(fmaxf(color.z, 0.0f), 1.0f);
-    const uchar4 value = make_uchar4(
-        static_cast<unsigned char>(color.x * 255.0f + 0.5f),
-        static_cast<unsigned char>(color.y * 255.0f + 0.5f),
-        static_cast<unsigned char>(color.z * 255.0f + 0.5f),
-        255u);
-    surf2Dwrite(value, surface, x * sizeof(uchar4), y);
+//Modify Begin:2026-07-28 by BestHui
+    color.x = fminf(fmaxf(color.x, 0.0f), 250.0f);
+    color.y = fminf(fmaxf(color.y, 0.0f), 250.0f);
+    color.z = fminf(fmaxf(color.z, 0.0f), 250.0f);
+    surf2Dwrite(make_float4(color.x, color.y, color.z, 1.0f), surface, x * sizeof(float4), y);
+//Modify End
 }
 
 __device__ float3 LoadFloatRgb(const float4* data, unsigned int x, unsigned int y, unsigned int pitchElements)
@@ -88,58 +85,101 @@ __device__ float3 SampleFloatBilinear(const float4* data, float u, float v, unsi
         cx0.z + (cx1.z - cx0.z) * ty);
 }
 
-extern "C" __global__
-void PrefilterDownsampleKernel(
-    cudaTextureObject_t input,
-    float4* output,
-    unsigned int sourceWidth,
-    unsigned int sourceHeight,
-    unsigned int outputWidth,
-    unsigned int outputHeight,
-    unsigned int outputPitchElements,
-    float threshold,
-    float softThreshold,
-    float intensity)
+//Modify Begin:2026-07-28 by BestHui
+__device__ float3 Average4(float3 a, float3 b, float3 c, float3 d)
 {
-    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
-    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
-    if (x >= outputWidth || y >= outputHeight)
-    {
-        return;
-    }
-
-    const int sourceX = static_cast<int>(x * 2u + 1u);
-    const int sourceY = static_cast<int>(y * 2u + 1u);
-    const int offsets[10] = { 0, 0, -1, -1, -1, 1, 1, -1, 1, 1 };
-
-    float3 total = make_float3(0.0f, 0.0f, 0.0f);
-    float weightSum = 0.0f;
-    for (int i = 0; i < 5; ++i)
-    {
-        const float3 filtered = PrefilterColor(
-            SampleNearest(input, sourceX + offsets[i * 2 + 0], sourceY + offsets[i * 2 + 1], sourceWidth, sourceHeight),
-            threshold,
-            softThreshold);
-        const float weight = 1.0f / (Luminance(filtered) + 1.0f);
-        total.x += filtered.x * weight;
-        total.y += filtered.y * weight;
-        total.z += filtered.z * weight;
-        weightSum += weight;
-    }
-
-    total.x = total.x / weightSum * intensity;
-    total.y = total.y / weightSum * intensity;
-    total.z = total.z / weightSum * intensity;
-    StoreFloatRgb(output, x, y, outputPitchElements, total);
+    return make_float3(
+        (a.x + b.x + c.x + d.x) * 0.25f,
+        (a.y + b.y + c.y + d.y) * 0.25f,
+        (a.z + b.z + c.z + d.z) * 0.25f);
 }
 
-//Modify Begin:2026-07-28 by BestHui
+__device__ float3 ToFloat3(float4 value)
+{
+    return make_float3(value.x, value.y, value.z);
+}
+
+__device__ void StoreOptional(float4* output, unsigned int width, unsigned int height, unsigned int x, unsigned int y, float3 color)
+{
+    if (output != nullptr && x < width && y < height)
+    {
+        StoreFloatRgb(output, x, y, width, color);
+    }
+}
+
+__device__ void GenerateBloomCascade(
+    unsigned int groupX,
+    unsigned int groupY,
+    unsigned int threadX,
+    unsigned int threadY,
+    float3 level0Color,
+    float4* level0,
+    float4* level1,
+    float4* level2,
+    float4* level3,
+    unsigned int level0Width,
+    unsigned int level0Height,
+    unsigned int level1Width,
+    unsigned int level1Height,
+    unsigned int level2Width,
+    unsigned int level2Height,
+    unsigned int level3Width,
+    unsigned int level3Height,
+    float4* sharedLevel0)
+{
+    const unsigned int level0X = groupX * 8u + threadX;
+    const unsigned int level0Y = groupY * 8u + threadY;
+
+    StoreOptional(level0, level0Width, level0Height, level0X, level0Y, level0Color);
+    sharedLevel0[threadY * 8u + threadX] = make_float4(level0Color.x, level0Color.y, level0Color.z, 1.0f);
+    __syncthreads();
+
+    if ((threadX % 2u) == 0u && (threadY % 2u) == 0u)
+    {
+        const float3 c00 = ToFloat3(sharedLevel0[(threadY + 0u) * 8u + threadX + 0u]);
+        const float3 c10 = ToFloat3(sharedLevel0[(threadY + 0u) * 8u + threadX + 1u]);
+        const float3 c01 = ToFloat3(sharedLevel0[(threadY + 1u) * 8u + threadX + 0u]);
+        const float3 c11 = ToFloat3(sharedLevel0[(threadY + 1u) * 8u + threadX + 1u]);
+        const float3 level1Color = Average4(c00, c10, c01, c11);
+        const unsigned int level1X = groupX * 4u + threadX / 2u;
+        const unsigned int level1Y = groupY * 4u + threadY / 2u;
+        StoreOptional(level1, level1Width, level1Height, level1X, level1Y, level1Color);
+        sharedLevel0[threadY * 8u + threadX] = make_float4(level1Color.x, level1Color.y, level1Color.z, 1.0f);
+    }
+    __syncthreads();
+
+    if ((threadX % 4u) == 0u && (threadY % 4u) == 0u)
+    {
+        const float3 c00 = ToFloat3(sharedLevel0[(threadY + 0u) * 8u + threadX + 0u]);
+        const float3 c10 = ToFloat3(sharedLevel0[(threadY + 0u) * 8u + threadX + 2u]);
+        const float3 c01 = ToFloat3(sharedLevel0[(threadY + 2u) * 8u + threadX + 0u]);
+        const float3 c11 = ToFloat3(sharedLevel0[(threadY + 2u) * 8u + threadX + 2u]);
+        const float3 level2Color = Average4(c00, c10, c01, c11);
+        const unsigned int level2X = groupX * 2u + threadX / 4u;
+        const unsigned int level2Y = groupY * 2u + threadY / 4u;
+        StoreOptional(level2, level2Width, level2Height, level2X, level2Y, level2Color);
+        sharedLevel0[threadY * 8u + threadX] = make_float4(level2Color.x, level2Color.y, level2Color.z, 1.0f);
+    }
+    __syncthreads();
+
+    if (threadX == 0u && threadY == 0u)
+    {
+        const float3 c00 = ToFloat3(sharedLevel0[0u * 8u + 0u]);
+        const float3 c10 = ToFloat3(sharedLevel0[0u * 8u + 4u]);
+        const float3 c01 = ToFloat3(sharedLevel0[4u * 8u + 0u]);
+        const float3 c11 = ToFloat3(sharedLevel0[4u * 8u + 4u]);
+        const float3 level3Color = Average4(c00, c10, c01, c11);
+        StoreOptional(level3, level3Width, level3Height, groupX, groupY, level3Color);
+    }
+}
+
 extern "C" __global__
-void PrefilterDownsamplePyramidKernel(
+void PrefilterDownsampleCascadeKernel(
     cudaTextureObject_t input,
     float4* level0,
     float4* level1,
     float4* level2,
+    float4* level3,
     unsigned int sourceWidth,
     unsigned int sourceHeight,
     unsigned int level0Width,
@@ -148,18 +188,18 @@ void PrefilterDownsamplePyramidKernel(
     unsigned int level1Height,
     unsigned int level2Width,
     unsigned int level2Height,
+    unsigned int level3Width,
+    unsigned int level3Height,
     float threshold,
     float softThreshold,
     float intensity)
 {
     extern __shared__ float4 sharedStorage[];
-    float4* sharedLevel0 = sharedStorage;
-    float4* sharedLevel1 = sharedStorage + 16u * 16u;
 
     const unsigned int tx = threadIdx.x;
     const unsigned int ty = threadIdx.y;
-    const unsigned int level0X = blockIdx.x * 16u + tx;
-    const unsigned int level0Y = blockIdx.y * 16u + ty;
+    const unsigned int level0X = blockIdx.x * 8u + tx;
+    const unsigned int level0Y = blockIdx.y * 8u + ty;
     const int sourceX = static_cast<int>(level0X * 2u + 1u);
     const int sourceY = static_cast<int>(level0Y * 2u + 1u);
     const int offsets[10] = { 0, 0, -1, -1, -1, 1, 1, -1, 1, 1 };
@@ -183,82 +223,83 @@ void PrefilterDownsamplePyramidKernel(
         total.x = total.x / weightSum * intensity;
         total.y = total.y / weightSum * intensity;
         total.z = total.z / weightSum * intensity;
-        StoreFloatRgb(level0, level0X, level0Y, level0Width, total);
     }
 
-    sharedLevel0[ty * 16u + tx] = make_float4(total.x, total.y, total.z, 1.0f);
-    __syncthreads();
-
-    if (tx < 8u && ty < 8u)
-    {
-        const unsigned int level1X = blockIdx.x * 8u + tx;
-        const unsigned int level1Y = blockIdx.y * 8u + ty;
-        const float4 c00 = sharedLevel0[(ty * 2u + 0u) * 16u + tx * 2u + 0u];
-        const float4 c10 = sharedLevel0[(ty * 2u + 0u) * 16u + tx * 2u + 1u];
-        const float4 c01 = sharedLevel0[(ty * 2u + 1u) * 16u + tx * 2u + 0u];
-        const float4 c11 = sharedLevel0[(ty * 2u + 1u) * 16u + tx * 2u + 1u];
-        const float4 averaged = make_float4(
-            (c00.x + c10.x + c01.x + c11.x) * 0.25f,
-            (c00.y + c10.y + c01.y + c11.y) * 0.25f,
-            (c00.z + c10.z + c01.z + c11.z) * 0.25f,
-            1.0f);
-        sharedLevel1[ty * 8u + tx] = averaged;
-        if (level1 != nullptr && level1X < level1Width && level1Y < level1Height)
-        {
-            level1[level1Y * level1Width + level1X] = averaged;
-        }
-    }
-    __syncthreads();
-
-    if (level2 != nullptr && tx < 4u && ty < 4u)
-    {
-        const unsigned int level2X = blockIdx.x * 4u + tx;
-        const unsigned int level2Y = blockIdx.y * 4u + ty;
-        if (level2X < level2Width && level2Y < level2Height)
-        {
-            const float4 c00 = sharedLevel1[(ty * 2u + 0u) * 8u + tx * 2u + 0u];
-            const float4 c10 = sharedLevel1[(ty * 2u + 0u) * 8u + tx * 2u + 1u];
-            const float4 c01 = sharedLevel1[(ty * 2u + 1u) * 8u + tx * 2u + 0u];
-            const float4 c11 = sharedLevel1[(ty * 2u + 1u) * 8u + tx * 2u + 1u];
-            level2[level2Y * level2Width + level2X] = make_float4(
-                (c00.x + c10.x + c01.x + c11.x) * 0.25f,
-                (c00.y + c10.y + c01.y + c11.y) * 0.25f,
-                (c00.z + c10.z + c01.z + c11.z) * 0.25f,
-                1.0f);
-        }
-    }
+    GenerateBloomCascade(
+        blockIdx.x,
+        blockIdx.y,
+        tx,
+        ty,
+        total,
+        level0,
+        level1,
+        level2,
+        level3,
+        level0Width,
+        level0Height,
+        level1Width,
+        level1Height,
+        level2Width,
+        level2Height,
+        level3Width,
+        level3Height,
+        sharedStorage);
 }
-//Modify End
 
 extern "C" __global__
-void DownsampleKernel(
+void DownsampleCascadeKernel(
     const float4* source,
-    float4* output,
+    float4* level0,
+    float4* level1,
+    float4* level2,
+    float4* level3,
     unsigned int sourceWidth,
     unsigned int sourceHeight,
-    unsigned int sourcePitchElements,
-    unsigned int outputWidth,
-    unsigned int outputHeight,
-    unsigned int outputPitchElements)
+    unsigned int level0Width,
+    unsigned int level0Height,
+    unsigned int level1Width,
+    unsigned int level1Height,
+    unsigned int level2Width,
+    unsigned int level2Height,
+    unsigned int level3Width,
+    unsigned int level3Height)
 {
-    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
-    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
-    if (x >= outputWidth || y >= outputHeight)
-    {
-        return;
-    }
+    extern __shared__ float4 sharedStorage[];
 
-    const int sourceX = static_cast<int>(x * 2u);
-    const int sourceY = static_cast<int>(y * 2u);
-    const float3 c00 = SampleFloatNearest(source, sourceX, sourceY, sourceWidth, sourceHeight, sourcePitchElements);
-    const float3 c10 = SampleFloatNearest(source, sourceX + 1, sourceY, sourceWidth, sourceHeight, sourcePitchElements);
-    const float3 c01 = SampleFloatNearest(source, sourceX, sourceY + 1, sourceWidth, sourceHeight, sourcePitchElements);
-    const float3 c11 = SampleFloatNearest(source, sourceX + 1, sourceY + 1, sourceWidth, sourceHeight, sourcePitchElements);
-    StoreFloatRgb(output, x, y, outputPitchElements, make_float3(
-        (c00.x + c10.x + c01.x + c11.x) * 0.25f,
-        (c00.y + c10.y + c01.y + c11.y) * 0.25f,
-        (c00.z + c10.z + c01.z + c11.z) * 0.25f));
+    const unsigned int tx = threadIdx.x;
+    const unsigned int ty = threadIdx.y;
+    const unsigned int level0X = blockIdx.x * 8u + tx;
+    const unsigned int level0Y = blockIdx.y * 8u + ty;
+    const int sourceX = static_cast<int>(level0X * 2u);
+    const int sourceY = static_cast<int>(level0Y * 2u);
+
+    const float3 c00 = SampleFloatNearest(source, sourceX, sourceY, sourceWidth, sourceHeight, sourceWidth);
+    const float3 c10 = SampleFloatNearest(source, sourceX + 1, sourceY, sourceWidth, sourceHeight, sourceWidth);
+    const float3 c01 = SampleFloatNearest(source, sourceX, sourceY + 1, sourceWidth, sourceHeight, sourceWidth);
+    const float3 c11 = SampleFloatNearest(source, sourceX + 1, sourceY + 1, sourceWidth, sourceHeight, sourceWidth);
+    const float3 level0Color = Average4(c00, c10, c01, c11);
+
+    GenerateBloomCascade(
+        blockIdx.x,
+        blockIdx.y,
+        tx,
+        ty,
+        level0Color,
+        level0,
+        level1,
+        level2,
+        level3,
+        level0Width,
+        level0Height,
+        level1Width,
+        level1Height,
+        level2Width,
+        level2Height,
+        level3Width,
+        level3Height,
+        sharedStorage);
 }
+//Modify End
 
 extern "C" __global__
 void UpsampleAddKernel(

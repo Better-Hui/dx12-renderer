@@ -13,6 +13,11 @@
 //Modify Begin:2026-07-21 by BestHui
 #include <fstream>
 //Modify End
+//Modify Begin:2026-07-28 by BestHui
+#include <sstream>
+#include <vector>
+#include <wrl.h>
+//Modify End
 
 #ifdef DEMO_TYPE
 
@@ -85,6 +90,111 @@ std::shared_ptr<Game> CreateGame(const Parameters& parameters)
 #endif
 }
 
+//Modify Begin:2026-07-28 by BestHui
+std::string NarrowDredName(const wchar_t* value)
+{
+	if (value == nullptr)
+	{
+		return "<unnamed>";
+	}
+
+	std::string result;
+	while (*value != L'\0')
+	{
+		result.push_back(*value < 128 ? static_cast<char>(*value) : '?');
+		++value;
+	}
+	return result;
+}
+
+void WriteDeviceRemovedDetails(std::ostream& stream)
+{
+	try
+	{
+		auto device = Application::Get().GetDevice();
+		stream << "DeviceRemovedReason=" << device->GetDeviceRemovedReason() << std::endl;
+
+		Microsoft::WRL::ComPtr<ID3D12InfoQueue> infoQueue;
+		if (SUCCEEDED(device.As(&infoQueue)))
+		{
+			const UINT64 messageCount = infoQueue->GetNumStoredMessages();
+			stream << "D3D12InfoQueueMessages=" << messageCount << std::endl;
+			const UINT64 firstMessage = messageCount > 64 ? messageCount - 64 : 0;
+			for (UINT64 messageIndex = firstMessage; messageIndex < messageCount; ++messageIndex)
+			{
+				SIZE_T messageLength = 0;
+				if (FAILED(infoQueue->GetMessage(messageIndex, nullptr, &messageLength)) || messageLength == 0)
+				{
+					continue;
+				}
+
+				std::vector<char> messageStorage(messageLength);
+				auto* message = reinterpret_cast<D3D12_MESSAGE*>(messageStorage.data());
+				if (SUCCEEDED(infoQueue->GetMessage(messageIndex, message, &messageLength)))
+				{
+					stream << "D3D12[" << messageIndex << "] Severity=" << message->Severity
+						<< " ID=" << message->ID
+						<< " Text=" << (message->pDescription != nullptr ? message->pDescription : "") << std::endl;
+				}
+			}
+		}
+
+		Microsoft::WRL::ComPtr<ID3D12DeviceRemovedExtendedData1> dred;
+		if (FAILED(device.As(&dred)))
+		{
+			return;
+		}
+
+		D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT1 breadcrumbs = {};
+		if (SUCCEEDED(dred->GetAutoBreadcrumbsOutput1(&breadcrumbs)))
+		{
+			uint32_t nodeIndex = 0;
+			for (const D3D12_AUTO_BREADCRUMB_NODE1* node = breadcrumbs.pHeadAutoBreadcrumbNode;
+				node != nullptr && nodeIndex < 16;
+				node = node->pNext, ++nodeIndex)
+			{
+				const UINT lastValue = node->pLastBreadcrumbValue != nullptr ? *node->pLastBreadcrumbValue : 0u;
+				stream << "DRED Breadcrumb[" << nodeIndex << "] Queue="
+					<< NarrowDredName(node->pCommandQueueDebugNameW)
+					<< " CommandList=" << NarrowDredName(node->pCommandListDebugNameW)
+					<< " Last=" << lastValue
+					<< " Count=" << node->BreadcrumbCount << std::endl;
+			}
+		}
+
+		D3D12_DRED_PAGE_FAULT_OUTPUT1 pageFault = {};
+		if (SUCCEEDED(dred->GetPageFaultAllocationOutput1(&pageFault)))
+		{
+			stream << "DRED PageFaultVA=" << pageFault.PageFaultVA << std::endl;
+
+			uint32_t existingIndex = 0;
+			for (const D3D12_DRED_ALLOCATION_NODE1* allocation = pageFault.pHeadExistingAllocationNode;
+				allocation != nullptr && existingIndex < 16;
+				allocation = allocation->pNext, ++existingIndex)
+			{
+				stream << "DRED ExistingAllocation[" << existingIndex << "] Type="
+					<< allocation->AllocationType
+					<< " Name=" << NarrowDredName(allocation->ObjectNameW) << std::endl;
+			}
+
+			uint32_t freedIndex = 0;
+			for (const D3D12_DRED_ALLOCATION_NODE1* allocation = pageFault.pHeadRecentFreedAllocationNode;
+				allocation != nullptr && freedIndex < 16;
+				allocation = allocation->pNext, ++freedIndex)
+			{
+				stream << "DRED RecentFreedAllocation[" << freedIndex << "] Type="
+					<< allocation->AllocationType
+					<< " Name=" << NarrowDredName(allocation->ObjectNameW) << std::endl;
+			}
+		}
+	}
+	catch (...)
+	{
+		stream << "DRED query failed." << std::endl;
+	}
+}
+//Modify End
+
 int CALLBACK wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR lpCmdLine, int nCmdShow)
 {
 	int retCode = 0;
@@ -122,6 +232,9 @@ int CALLBACK wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR lpCmdL
 		std::ofstream errorLog("DemoException.log", std::ios::out | std::ios::trunc);
 		errorLog << "Stage=" << applicationStage << std::endl;
 		errorLog << exception.what() << std::endl;
+//Modify Begin:2026-07-28 by BestHui
+		WriteDeviceRemovedDetails(errorLog);
+//Modify End
 		retCode = 3;
 	}
 	if (shouldUninitializeCom)

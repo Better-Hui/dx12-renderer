@@ -56,6 +56,9 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
 
     NRDNormalRoughness[pixel] = NRD_FrontEnd_PackNormalAndRoughness(normalWs, roughness, 0.0f);
     NRDViewZ[pixel] = viewZ;
-    NRDMotion[pixel] = float4(MotionVector.Load(int3(pixel, 0)), previousViewZ - viewZ, 0.0f);
+//Modify Begin:2026-07-28 by BestHui
+    const float2 motionInPixels = MotionVector.Load(int3(pixel, 0)) * float2(Width, Height);
+    NRDMotion[pixel] = float4(motionInPixels, previousViewZ - viewZ, 0.0f);
+//Modify End
 }
 //Modify End

@@ -25,6 +25,9 @@ namespace RaytracingDemoRenderGraph
     constexpr DXGI_FORMAT NRD_VIEWZ_FORMAT = DXGI_FORMAT_R32_FLOAT;
     constexpr DXGI_FORMAT NRD_MOTION_FORMAT = DXGI_FORMAT_R16G16B16A16_FLOAT;
     constexpr DXGI_FORMAT DEPTH_FORMAT = DXGI_FORMAT_D32_FLOAT;
+//Modify Begin:2026-07-28 by BestHui
+    constexpr DXGI_FORMAT SCENE_COLOR_FORMAT = DXGI_FORMAT_R32G32B32A32_FLOAT;
+//Modify End
     constexpr DXGI_FORMAT OUTPUT_FORMAT = DXGI_FORMAT_R8G8B8A8_UNORM;
 
     class ResourceIds
@@ -39,9 +42,6 @@ namespace RaytracingDemoRenderGraph
         static inline const RenderGraph::ResourceId DirectLighting = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DirectLighting");
         static inline const RenderGraph::ResourceId IndirectLighting = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.IndirectLighting");
         static inline const RenderGraph::ResourceId SceneColor = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.SceneColor");
-//Modify Begin:2026-07-28 by BestHui
-        static inline const RenderGraph::ResourceId PostProcessColor = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.PostProcessColor");
-//Modify End
         static inline const RenderGraph::ResourceId HistoryColor = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.HistoryColor");
         static inline const RenderGraph::ResourceId NoisyRadiance = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.NoisyRadiance");
         static inline const RenderGraph::ResourceId NRDNoisyRadiance = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.NRDNoisyRadiance");

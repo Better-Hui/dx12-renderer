@@ -16,7 +16,7 @@
 #include <Scene/SceneLighting.h>
 #include <Scene/SceneResources.h>
 #include <PathTracing/PathTracingPipelineController.h>
-#include <PostProcessing/CudaBloomPass.h>
+#include <Passes/CudaBloomPass.h>
 
 #include <memory>
 #include <string>
@@ -166,10 +166,17 @@ private:
     RaytracingDemoSceneResources m_SceneResources;
     SceneLightManager m_Lights;
     std::unique_ptr<ImGuiImpl> m_ImGui;
-    std::shared_ptr<Mesh> m_SkyboxMesh;
     std::shared_ptr<Mesh> m_LightBillboardMesh;
+//Modify Begin:2026-07-28 by BestHui
+    std::shared_ptr<Mesh> m_DisplayBlitMesh;
+//Modify End
     std::shared_ptr<Shader> m_GBufferShader;
-    std::shared_ptr<Shader> m_SkyboxShader;
+//Modify Begin:2026-07-28 by BestHui
+    std::shared_ptr<Shader> m_DisplayCompositeShader;
+//Modify End
+//Modify Begin:2026-07-28 by BestHui
+    std::shared_ptr<ComputeShader> m_SkyboxComputeShader;
+//Modify End
     std::shared_ptr<Shader> m_LightBillboardShader;
     std::shared_ptr<Texture> m_SkyboxTexture;
 

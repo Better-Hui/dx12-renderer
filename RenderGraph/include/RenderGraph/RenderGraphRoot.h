@@ -14,6 +14,8 @@
 #include "ResourceDescription.h"
 #include "ResourcePool.h"
 
+class Texture;
+
 namespace RenderGraph
 {
     class RenderGraphRoot
@@ -33,6 +35,11 @@ namespace RenderGraph
         void Present(const std::shared_ptr<Window>& pWindow, ResourceId resourceId = ResourceIds::GRAPH_OUTPUT);
 //Modify Begin:2026-07-28 by BestHui
         void PresentWithOverlay(const std::shared_ptr<Window>& pWindow, ResourceId resourceId, const std::function<void(CommandList&)>& drawCallback);
+        void PresentWithOverlayBlit(
+            const std::shared_ptr<Window>& pWindow,
+            ResourceId resourceId,
+            const std::function<void(CommandList&, const std::shared_ptr<Texture>&)>& blitCallback,
+            const std::function<void(CommandList&)>& overlayCallback);
         void CopyTexture(const RenderMetadata& renderMetadata, ResourceId sourceId, ResourceId destinationId, bool waitForCompletion = false);
         void DrawToTexture(const RenderMetadata& renderMetadata, ResourceId resourceId, const std::function<void(CommandList&)>& drawCallback);
         void TransitionTexture(const RenderMetadata& renderMetadata, ResourceId resourceId, D3D12_RESOURCE_STATES stateAfter, bool waitForCompletion = false);

@@ -18,6 +18,7 @@ public:
     bool DrawImGui();
 //Modify Begin:2026-07-28 by BestHui
     bool ExecuteInPlace(Texture& postProcessColor, uint32_t width, uint32_t height);
+    void ReleaseInteropResource();
 //Modify End
     void Shutdown();
 

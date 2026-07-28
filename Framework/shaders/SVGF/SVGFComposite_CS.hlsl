@@ -28,7 +28,9 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
-    const float3 color = FilteredColor.Load(int3(pixel, 0)).rgb;
-    Output[pixel] = float4(SVGFToneMap(color), 1.0f);
+//Modify Begin:2026-07-28 by BestHui
+    const float3 color = max(FilteredColor.Load(int3(pixel, 0)).rgb, 0.0f);
+    Output[pixel] = float4(color, 1.0f);
+//Modify End
 }
 //Modify End

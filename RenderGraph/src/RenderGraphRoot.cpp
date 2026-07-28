@@ -385,6 +385,41 @@ void RenderGraph::RenderGraphRoot::PresentWithOverlay(
     pWindow->Present();
 }
 
+void RenderGraph::RenderGraphRoot::PresentWithOverlayBlit(
+    const std::shared_ptr<Window>& pWindow,
+    const ResourceId resourceId,
+    const std::function<void(CommandList&, const std::shared_ptr<Texture>&)>& blitCallback,
+    const std::function<void(CommandList&)>& overlayCallback)
+{
+    const auto& pTexture = m_ResourcePool->GetTexture(resourceId);
+
+    const auto pCommandList = m_DirectCommandQueue->GetCommandList();
+    auto& commandList = *pCommandList;
+
+    {
+        PIXScope(commandList, L"Render Graph: Prepare Display Blit");
+
+        TransitionBarrier(*pTexture, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        FlushBarriers(commandList);
+
+        const RenderTarget& backBufferRenderTarget = pWindow->GetRenderTarget();
+        commandList.SetRenderTarget(backBufferRenderTarget);
+        commandList.SetAutomaticViewportAndScissorRect(backBufferRenderTarget);
+
+        if (blitCallback)
+        {
+            blitCallback(commandList, pTexture);
+        }
+        if (overlayCallback)
+        {
+            overlayCallback(commandList);
+        }
+    }
+
+    m_DirectCommandQueue->ExecuteCommandList(pCommandList);
+    pWindow->Present();
+}
+
 void RenderGraph::RenderGraphRoot::TransitionTexture(
     const RenderMetadata& renderMetadata,
     const ResourceId resourceId,
@@ -700,6 +735,13 @@ void RenderGraph::RenderGraphRoot::PrepareResourcesForRenderPass(CommandList& co
 
         if (lifecycle.m_BeginPassIndex == renderPassIndex)
         {
+//Modify Begin:2026-07-28 by BestHui
+            const auto& description = m_ResourcePool->GetDescription(output.m_Id);
+            if (description.m_DedicatedResource)
+            {
+                continue;
+            }
+//Modify End
             const auto& resource = m_ResourcePool->GetResource(output.m_Id);
             resource.ForEachResourceRecursive([this](const auto& r)
             {
@@ -858,7 +900,9 @@ void RenderGraph::RenderGraphRoot::TransitionBarrier(const Resource& resource, D
 
 void RenderGraph::RenderGraphRoot::UavBarrier(const Resource& resource)
 {
+//Modify Begin:2026-07-28 by BestHui
     Assert(GetCurrentResourceState(resource) == D3D12_RESOURCE_STATE_UNORDERED_ACCESS, "Resource is supposed to be in UAV state to issue a UAV barrier.");
+//Modify End
 
     // TODO: skip if there was a transition barrier after the previous UAV usage
     const auto barrier = CD3DX12_RESOURCE_BARRIER::UAV(resource.GetD3D12Resource().Get());

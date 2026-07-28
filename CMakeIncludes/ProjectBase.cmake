@@ -38,7 +38,9 @@ set_source_files_properties(${SHADER_FILES}
 # Modify End
         VS_SHADER_DISABLE_OPTIMIZATIONS $<$<CONFIG:Debug>:ON>
         VS_SHADER_ENABLE_DEBUG $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:ON>
-        VS_SHADER_FLAGS "/I \"${CMAKE_SOURCE_DIR}/Shaders\" -WX /Zi -Qembed_debug" # include shader library, treat warnings as errors, enable debugging
+# Modify Begin:2026-07-28 by BestHui
+        VS_SHADER_FLAGS "/I \"${CMAKE_SOURCE_DIR}/Shaders\" -WX" # include shader library, treat warnings as errors
+# Modify End
         )
 
 if (${SHADERS_OUTPUT_HEADERS}) 

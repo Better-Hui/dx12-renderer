@@ -25,6 +25,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <random>
+#include <stdexcept>
 #include <vector>
 
 #include <RenderGraph/RaytracingDemoRenderGraphBuilder.h>
@@ -141,21 +142,29 @@ bool RaytracingDemo::LoadContent()
 
     m_ImGui = std::make_unique<ImGuiImpl>(*commandList, *PWindow);
 
-    m_SkyboxMesh = Mesh::CreateCube(*commandList);
     m_LightBillboardMesh = Mesh::CreateVerticalQuad(*commandList);
+//Modify Begin:2026-07-28 by BestHui
+    m_DisplayBlitMesh = Mesh::CreateBlitTriangle(*commandList);
+//Modify End
 
     m_GBufferShader = std::make_shared<Shader>(
         ShaderBlob(L"GBuffer.vs.cso"),
         ShaderBlob(L"GBuffer.ps.cso"),
         [](RasterPipelineStateBuilder&) {});
 
-    m_SkyboxShader = std::make_shared<Shader>(
-        ShaderBlob(L"Skybox.vs.cso"),
-        ShaderBlob(L"Skybox.ps.cso"),
-        [](RasterPipelineStateBuilder& builder)
-        {
-            builder.WithFrontFaceCull().WithDepthTestNoWrite();
-        });
+//Modify Begin:2026-07-28 by BestHui
+    m_DisplayCompositeShader = std::make_shared<Shader>(
+        ShaderBlob(L"DisplayComposite.vs.cso"),
+        ShaderBlob(L"DisplayComposite.ps.cso"),
+        [](RasterPipelineStateBuilder&) {});
+//Modify End
+
+//Modify Begin:2026-07-28 by BestHui
+    const ShaderBlob skyboxComputeShader(L"Skybox.cs.cso");
+    m_SkyboxComputeShader = std::make_shared<ComputeShader>(
+        skyboxComputeShader,
+        ComputePipelineDescBuilder::ReflectedDefault(skyboxComputeShader).Build());
+//Modify End
 
     m_LightBillboardShader = std::make_shared<Shader>(
         ShaderBlob(L"LightBillboard.vs.cso"),
@@ -194,12 +203,20 @@ bool RaytracingDemo::LoadContent()
 
 void RaytracingDemo::UnloadContent()
 {
+//Modify Begin:2026-07-28 by BestHui
+    m_CudaBloom.ReleaseInteropResource();
+//Modify End
     m_RenderGraph.reset();
     m_LightBillboardShader.reset();
-    m_SkyboxShader.reset();
+//Modify Begin:2026-07-28 by BestHui
+    m_SkyboxComputeShader.reset();
+    m_DisplayCompositeShader.reset();
+//Modify End
     m_GBufferShader.reset();
     m_LightBillboardMesh.reset();
-    m_SkyboxMesh.reset();
+//Modify Begin:2026-07-28 by BestHui
+    m_DisplayBlitMesh.reset();
+//Modify End
     m_ImGui.reset();
     m_Denoisers.Shutdown();
 //Modify Begin:2026-07-27 by BestHui
@@ -286,6 +303,9 @@ void RaytracingDemo::RebuildRenderGraph()
     if (m_RenderGraph != nullptr)
     {
         Application::Get().Flush();
+//Modify Begin:2026-07-28 by BestHui
+        m_CudaBloom.ReleaseInteropResource();
+//Modify End
     }
     m_RenderGraph = RaytracingDemoRenderGraphBuilder::Create(*this);
     m_RenderGraphDenoiserEnabled = IsDenoiserEnabled();
@@ -335,8 +355,25 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
 //Modify Begin:2026-07-28 by BestHui
     EnsureRenderGraphTopology();
 //Modify End
-    m_RenderGraph->Execute(metadata);
-    PresentWithExternalPostProcess(metadata);
+//Modify Begin:2026-07-28 by BestHui
+    try
+    {
+        m_RenderGraph->Execute(metadata);
+    }
+    catch (const std::exception& exception)
+    {
+        throw std::runtime_error(std::string("RaytracingDemo::OnRender RenderGraph.Execute failed: ") + exception.what());
+    }
+
+    try
+    {
+        PresentWithExternalPostProcess(metadata);
+    }
+    catch (const std::exception& exception)
+    {
+        throw std::runtime_error(std::string("RaytracingDemo::OnRender PresentWithExternalPostProcess failed: ") + exception.what());
+    }
+//Modify End
 
     ++m_FrameIndex;
     if (m_AccumulationEnabled && !IsDenoiserEnabled())

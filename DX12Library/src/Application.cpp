@@ -9,6 +9,8 @@
 #include "Window.h"
 #include <ctime>
 //Modify Begin:2026-07-28 by BestHui
+#include <cstdlib>
+#include <cstring>
 #include <fstream>
 //Modify End
 
@@ -91,6 +93,29 @@ void Application::Initialize(const ExternalD3D12Context* externalContext)
 {
 //Modify Begin:2026-07-21 by BestHui
     const bool useExternalDevice = externalContext != nullptr && externalContext->Device != nullptr;
+//Modify End
+//Modify Begin:2026-07-28 by BestHui
+    char* enableDred = nullptr;
+    size_t enableDredLength = 0;
+    _dupenv_s(&enableDred, &enableDredLength, "DX12_RENDERER_ENABLE_DRED");
+    const bool forceDred = enableDred != nullptr && std::strcmp(enableDred, "0") != 0;
+    std::free(enableDred);
+    if (forceDred)
+    {
+        ComPtr<ID3D12Debug1> debugInterface;
+        if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugInterface))))
+        {
+            debugInterface->EnableDebugLayer();
+        }
+
+        ComPtr<ID3D12DeviceRemovedExtendedDataSettings1> dredSettings;
+        if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&dredSettings))))
+        {
+            dredSettings->SetAutoBreadcrumbsEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+            dredSettings->SetPageFaultEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+            dredSettings->SetBreadcrumbContextEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+        }
+    }
 //Modify End
 #if defined(_DEBUG)
 //Modify Begin:2026-07-21 by BestHui

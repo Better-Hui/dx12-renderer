@@ -389,8 +389,8 @@ void NRD::Denoise(
     StoreNRDColumnMajorMatrix(commonSettings.worldToViewMatrix, currentView);
     StoreNRDColumnMajorMatrix(commonSettings.worldToViewMatrixPrev, previousView);
 //Modify Begin:2026-07-27 by BestHui
-    commonSettings.motionVectorScale[0] = static_cast<float>(width);
-    commonSettings.motionVectorScale[1] = static_cast<float>(height);
+    commonSettings.motionVectorScale[0] = 1.0f / static_cast<float>(width);
+    commonSettings.motionVectorScale[1] = 1.0f / static_cast<float>(height);
 //Modify End
     commonSettings.motionVectorScale[2] = 1.0f;
     commonSettings.resourceSize[0] = static_cast<uint16_t>(width);

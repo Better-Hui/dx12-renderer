@@ -10,7 +10,7 @@ set(HEADER_FILES
         include/PathTracing/PathTracingPipelineController.h
         include/RenderGraph/RaytracingDemoGraphResources.h
         include/Passes/RaytracingDemoPasses.h
-        include/PostProcessing/CudaBloomPass.h
+        include/Passes/CudaBloomPass.h
         include/Scene/SceneLightManager.h
         include/Scene/SceneLighting.h
         include/Scene/SceneResources.h
@@ -25,12 +25,12 @@ set(SOURCE_FILES
         src/RenderGraph/RaytracingDemoRenderGraphBuilder.cpp
         src/Passes/BaseResourcesPass.cpp
         src/Passes/DenoisePass.cpp
-        src/PostProcessing/RaytracingDemoOverlay.cpp
+        src/Overlay/RaytracingDemoOverlay.cpp
         src/PathTracing/PathTracingSceneBindings.cpp
         src/PathTracing/PathTracingPipelineController.cpp
         src/Passes/PathTracingPass.cpp
-        src/PostProcessing/CudaBloomPass.cpp
-        src/PostProcessing/RaytracingDemoPostProcess.cpp
+        src/Passes/CudaBloomPass.cpp
+        src/Passes/PostProcessPass.cpp
         src/RenderGraph/RaytracingDemoGraphResources.cpp
         src/Passes/SkyboxPass.cpp
         src/Scene/SceneLightManager.cpp
@@ -64,12 +64,14 @@ list(APPEND SHADERS_HEADER_FILES ${SHADER_FILES_RAYTRACING})
 # Modify Begin:2026-07-28 by BestHui
 set(SHADER_FILES_VERTEX
         shaders/GBuffer/GBuffer.vs.hlsl
+        shaders/PostProcessing/DisplayComposite.vs.hlsl
         shaders/LightBillboard/LightBillboard.vs.hlsl
         shaders/Skybox/Skybox.vs.hlsl
         )
 
 set(SHADER_FILES_PIXEL
         shaders/GBuffer/GBuffer.ps.hlsl
+        shaders/PostProcessing/DisplayComposite.ps.hlsl
         shaders/LightBillboard/LightBillboard.ps.hlsl
         shaders/Skybox/Skybox.ps.hlsl
         )
@@ -79,6 +81,9 @@ set(SHADER_FILES_COMPUTE
         shaders/PathTracing/DirectLighting.cs.hlsl
         shaders/PathTracing/IndirectLighting.cs.hlsl
         shaders/PathTracing/LightingComposite.cs.hlsl
+# Modify Begin:2026-07-28 by BestHui
+        shaders/Skybox/Skybox.cs.hlsl
+# Modify End
         )
 
 # Modify Begin:2026-07-27 by BestHui

@@ -11,12 +11,6 @@ RWTexture2D<float4> HistoryColor : register(u1, space0);
 RWTexture2D<float4> NoisyRadiance : register(u2, space0);
 RWTexture2D<float4> NRDNoisyRadiance : register(u3, space0);
 
-float3 ToneMap(float3 color)
-{
-    color = color / (color + 1.0f);
-    return pow(saturate(color), 1.0f / 2.2f);
-}
-
 float3 SanitizeNRDRadiance(float3 color)
 {
     if (!all(isfinite(color)))
@@ -123,7 +117,9 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
 
     if (Camera_AccumulationEnabled == 0u)
     {
-        SceneColor[pixel] = float4(ToneMap(sampleColor), 1.0f);
+//Modify Begin:2026-07-28 by BestHui
+        SceneColor[pixel] = float4(SanitizeNRDRadiance(sampleColor), 1.0f);
+//Modify End
         return;
     }
 
@@ -136,5 +132,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     }
 
     HistoryColor[pixel] = float4(accumulatedColor, float(previousSampleCount + 1u));
-    SceneColor[pixel] = float4(ToneMap(accumulatedColor), 1.0f);
+//Modify Begin:2026-07-28 by BestHui
+    SceneColor[pixel] = float4(SanitizeNRDRadiance(accumulatedColor), 1.0f);
+//Modify End
 }
