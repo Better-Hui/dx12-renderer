@@ -58,9 +58,6 @@ Application::Application(HINSTANCE hInst, const ExternalD3D12Context* externalCo
 //Modify End
     : m_hInstance(hInst)
     , m_TearingSupported(false)
-//Modify Begin:2026-07-21 by BestHui
-    , m_UsesExternalDevice(externalContext != nullptr && externalContext->Device != nullptr)
-//Modify End
 {
     // Windows 10 Creators update adds Per Monitor V2 DPI awareness context.
     // Using this awareness context allows the client area of the window
@@ -139,7 +136,7 @@ void Application::Initialize(const ExternalD3D12Context* externalContext)
 //Modify Begin:2026-07-21 by BestHui
     if (useExternalDevice)
     {
-        ThrowIfFailed(externalContext->Device->QueryInterface(IID_PPV_ARGS(&m_d3d12Device)));
+        m_RenderContext.InitializeExternal(*externalContext);
     }
     else
     {
@@ -152,23 +149,13 @@ void Application::Initialize(const ExternalD3D12Context* externalContext)
 
         if (dxgiAdapter)
         {
-            m_d3d12Device = CreateDevice(dxgiAdapter);
+            m_RenderContext.InitializeOwned(CreateDevice(dxgiAdapter));
         }
         else
         {
             throw std::exception("DXGI adapter enumeration failed.");
         }
     }
-
-    m_DirectCommandQueue = externalContext != nullptr && externalContext->DirectCommandQueue != nullptr
-        ? std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_DIRECT, externalContext->DirectCommandQueue)
-        : std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_DIRECT);
-    m_ComputeCommandQueue = externalContext != nullptr && externalContext->ComputeCommandQueue != nullptr
-        ? std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COMPUTE, externalContext->ComputeCommandQueue)
-        : std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COMPUTE);
-    m_CopyCommandQueue = externalContext != nullptr && externalContext->CopyCommandQueue != nullptr
-        ? std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COPY, externalContext->CopyCommandQueue)
-        : std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COPY);
 //Modify End
 
     m_TearingSupported = CheckTearingSupport();
@@ -381,9 +368,12 @@ DXGI_SAMPLE_DESC Application::GetMultisampleQualityLevels(DXGI_FORMAT format, UI
     qualityLevels.Flags = flags;
     qualityLevels.NumQualityLevels = 0;
 
+//Modify Begin:2026-07-28 by BestHui
+    const auto device = m_RenderContext.GetDevice();
     while (qualityLevels.SampleCount <= numSamples && SUCCEEDED(
-        m_d3d12Device->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS, &qualityLevels, sizeof(
+        device->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS, &qualityLevels, sizeof(
             D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS))) && qualityLevels.NumQualityLevels > 0)
+//Modify End
     {
         // That works...
         sampleDesc.Count = qualityLevels.SampleCount;
@@ -489,42 +479,34 @@ void Application::Quit(int exitCode)
 
 Microsoft::WRL::ComPtr<ID3D12Device2> Application::GetDevice() const
 {
-    return m_d3d12Device;
+//Modify Begin:2026-07-28 by BestHui
+    return m_RenderContext.GetDevice();
+//Modify End
 }
 
 //Modify Begin:2026-07-21 by BestHui
 bool Application::UsesExternalDevice() const
 {
-    return m_UsesExternalDevice;
+//Modify Begin:2026-07-28 by BestHui
+    return m_RenderContext.UsesExternalDevice();
+//Modify End
 }
 //Modify End
 
 std::shared_ptr<CommandQueue> Application::GetCommandQueue(D3D12_COMMAND_LIST_TYPE type) const
 {
-    std::shared_ptr<CommandQueue> commandQueue;
-    switch (type)
-    {
-    case D3D12_COMMAND_LIST_TYPE_DIRECT:
-        commandQueue = m_DirectCommandQueue;
-        break;
-    case D3D12_COMMAND_LIST_TYPE_COMPUTE:
-        commandQueue = m_ComputeCommandQueue;
-        break;
-    case D3D12_COMMAND_LIST_TYPE_COPY:
-        commandQueue = m_CopyCommandQueue;
-        break;
-    default:
-        assert(false && "Invalid command queue type.");
-    }
-
-    return commandQueue;
+//Modify Begin:2026-07-28 by BestHui
+    return m_RenderContext.GetCommandQueue(type);
+//Modify End
 }
 
 void Application::Flush()
 {
-    m_DirectCommandQueue->Flush();
-    m_ComputeCommandQueue->Flush();
-    m_CopyCommandQueue->Flush();
+//Modify Begin:2026-07-28 by BestHui
+    m_RenderContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT)->Flush();
+    m_RenderContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE)->Flush();
+    m_RenderContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COPY)->Flush();
+//Modify End
 }
 
 DescriptorAllocation Application::AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t numDescriptors)
@@ -550,14 +532,18 @@ Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> Application::CreateDescriptorHeap(
     desc.NodeMask = 0;
 
     Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descriptorHeap;
-    ThrowIfFailed(m_d3d12Device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&descriptorHeap)));
+//Modify Begin:2026-07-28 by BestHui
+    ThrowIfFailed(m_RenderContext.GetDevice()->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&descriptorHeap)));
+//Modify End
 
     return descriptorHeap;
 }
 
 UINT Application::GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE type) const
 {
-    return m_d3d12Device->GetDescriptorHandleIncrementSize(type);
+//Modify Begin:2026-07-28 by BestHui
+    return m_RenderContext.GetDevice()->GetDescriptorHandleIncrementSize(type);
+//Modify End
 }
 
 const Microsoft::WRL::ComPtr<IDxcLibrary>& Application::GetDxcLibrary() const

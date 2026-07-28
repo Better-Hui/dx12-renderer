@@ -45,6 +45,7 @@ namespace RaytracingDemoRenderGraph
             { ResourceIds::IndirectLightingFinishedToken },
             { ResourceIds::RayTracingFinishedToken },
             { ResourceIds::DenoiseFinishedToken },
+            { ResourceIds::CudaBloomFinishedToken },
         };
     }
 

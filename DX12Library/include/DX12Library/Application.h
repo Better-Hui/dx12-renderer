@@ -32,6 +32,9 @@
   */
 
 #include "DescriptorAllocation.h"
+//Modify Begin:2026-07-28 by BestHui
+#include "D3D12RenderContext.h"
+//Modify End
 
 #include <d3d12.h>
 #include <dxgi1_6.h>
@@ -46,16 +49,6 @@ class CommandQueue;
 class DescriptorAllocator;
 class Game;
 class Window;
-
-//Modify Begin:2026-07-21 by BestHui
-struct ExternalD3D12Context
-{
-    ID3D12Device* Device = nullptr;
-    ID3D12CommandQueue* DirectCommandQueue = nullptr;
-    ID3D12CommandQueue* ComputeCommandQueue = nullptr;
-    ID3D12CommandQueue* CopyCommandQueue = nullptr;
-};
-//Modify End
 
 class Application
 {
@@ -202,19 +195,14 @@ private:
 
     HINSTANCE m_hInstance;
 
-    Microsoft::WRL::ComPtr<ID3D12Device2> m_d3d12Device;
+//Modify Begin:2026-07-28 by BestHui
+    D3D12RenderContext m_RenderContext;
+//Modify End
     Microsoft::WRL::ComPtr<IDxcLibrary> m_DxcLibrary;
-
-    std::shared_ptr<CommandQueue> m_DirectCommandQueue;
-    std::shared_ptr<CommandQueue> m_ComputeCommandQueue;
-    std::shared_ptr<CommandQueue> m_CopyCommandQueue;
 
     std::unique_ptr<DescriptorAllocator> m_DescriptorAllocators[D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES];
 
     bool m_TearingSupported;
-//Modify Begin:2026-07-21 by BestHui
-    bool m_UsesExternalDevice;
-//Modify End
 
     static uint64_t s_FrameCount;
 

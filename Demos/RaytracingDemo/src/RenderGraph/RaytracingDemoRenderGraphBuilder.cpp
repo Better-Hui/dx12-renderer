@@ -23,6 +23,12 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
         sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::DenoiseFinishedToken;
     }
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateSkyboxPass(demo, sceneReadyToken));
+    sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::SkyboxFinishedToken;
+    if (demo.m_CudaBloom.IsEnabled())
+    {
+        renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateCudaBloomPass(demo, sceneReadyToken));
+        sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::CudaBloomFinishedToken;
+    }
 //Modify End
 
     return std::make_unique<RenderGraph::RenderGraphRoot>(
@@ -32,7 +38,7 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
         RaytracingDemoRenderGraph::CreateTokenDescriptions(),
         std::vector<RenderGraph::ResourceId>{
             RaytracingDemoRenderGraph::ResourceIds::SceneColor,
-            RaytracingDemoRenderGraph::ResourceIds::SkyboxFinishedToken
+            sceneReadyToken
         });
 }
 //Modify End

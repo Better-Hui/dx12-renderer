@@ -13,6 +13,9 @@ set(HEADER_FILES
         include/DX12Library/CommandQueue.h
         include/DX12Library/ConstantBuffer.h
         include/DX12Library/Cubemap.h
+        # Modify Begin:2026-07-28 by BestHui
+        include/DX12Library/D3D12RenderContext.h
+        # Modify End
         include/DX12Library/Defines.h
         include/DX12Library/DescriptorAllocation.h
         include/DX12Library/DescriptorAllocator.h
@@ -20,6 +23,9 @@ set(HEADER_FILES
         include/DX12Library/DX12LibPCH.h
         include/DX12Library/DynamicDescriptorHeap.h
         include/DX12Library/Events.h
+        # Modify Begin:2026-07-28 by BestHui
+        include/DX12Library/FrameResourceRing.h
+        # Modify End
         include/DX12Library/Game.h
         include/DX12Library/GenerateMipsPso.h
         include/DX12Library/Helpers.h
@@ -54,12 +60,18 @@ set(SOURCE_FILES
         src/CommandQueue.cpp
         src/ConstantBuffer.cpp
         src/Cubemap.cpp
+        # Modify Begin:2026-07-28 by BestHui
+        src/D3D12RenderContext.cpp
+        # Modify End
         src/DescriptorAllocation.cpp
         src/DescriptorAllocator.cpp
         src/DescriptorAllocatorPage.cpp
         src/DX12LibPCH.cpp
         src/DynamicDescriptorHeap.cpp
         src/Game.cpp
+        # Modify Begin:2026-07-28 by BestHui
+        src/FrameResourceRing.cpp
+        # Modify End
         src/GenerateMipsPso.cpp
         src/HighResolutionClock.cpp
         src/IndexBuffer.cpp

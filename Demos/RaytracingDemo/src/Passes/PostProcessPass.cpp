@@ -1,28 +1,47 @@
 //Modify Begin:2026-07-28 by BestHui
 #include <RaytracingDemo.h>
 
+#include <DX12Library/Application.h>
 #include <DX12Library/CommandList.h>
+#include <DX12Library/CommandQueue.h>
 #include <Framework/CommandContext.h>
 #include <Framework/ShaderResourceView.h>
+#include <Passes/RaytracingDemoPasses.h>
 #include <RenderGraph/RaytracingDemoGraphResources.h>
+#include <RenderGraph/RenderContext.h>
 #include <RenderGraph/RenderMetadata.h>
+#include <RenderGraph/RenderPass.h>
 
-void RaytracingDemo::PresentWithExternalPostProcess(const RenderGraph::RenderMetadata& metadata)
+std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateCudaBloomPass(
+    RaytracingDemo& demo,
+    const RenderGraph::ResourceId sceneReadyToken)
 {
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
 
-    const uint32_t renderWidth = static_cast<uint32_t>(m_Width);
-    const uint32_t renderHeight = static_cast<uint32_t>(m_Height);
+    return RenderGraph::RenderPass::CreateExternal(
+        L"CUDA Bloom",
+        {
+            { sceneReadyToken, RenderGraph::InputType::Token },
+        },
+        {
+            { DemoResourceIds::SceneColor, RenderGraph::OutputType::ExternalAccess },
+            { DemoResourceIds::CudaBloomFinishedToken, RenderGraph::OutputType::Token },
+        },
+        [&demo](const RenderGraph::RenderContext& context)
+        {
+            const auto& sceneColor = context.m_ResourcePool->GetTexture(DemoResourceIds::SceneColor);
+            demo.m_CudaBloom.ExecuteInPlace(
+                *sceneColor,
+                context.m_Metadata.m_ScreenWidth,
+                context.m_Metadata.m_ScreenHeight,
+                Application::Get().GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT)->GetD3D12CommandQueue().Get());
+        });
+}
 
+void RaytracingDemo::PresentDisplayOutput()
+{
+    using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
     RenderGraph::ResourceId displayColor = DemoResourceIds::SceneColor;
-    if (m_CudaBloom.IsEnabled())
-    {
-//Modify Begin:2026-07-28 by BestHui
-        const auto& sceneColor = m_RenderGraph->GetTexture(DemoResourceIds::SceneColor);
-        m_RenderGraph->TransitionTexture(metadata, DemoResourceIds::SceneColor, D3D12_RESOURCE_STATE_COMMON, true);
-        m_CudaBloom.ExecuteInPlace(*sceneColor, renderWidth, renderHeight);
-//Modify End
-    }
 
 //Modify Begin:2026-07-28 by BestHui
     m_RenderGraph->PresentWithOverlayBlit(

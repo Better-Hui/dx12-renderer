@@ -309,11 +309,14 @@ void RaytracingDemo::RebuildRenderGraph()
     }
     m_RenderGraph = RaytracingDemoRenderGraphBuilder::Create(*this);
     m_RenderGraphDenoiserEnabled = IsDenoiserEnabled();
+    m_RenderGraphCudaBloomEnabled = m_CudaBloom.IsEnabled();
 }
 
 void RaytracingDemo::EnsureRenderGraphTopology()
 {
-    if (m_RenderGraph == nullptr || m_RenderGraphDenoiserEnabled != IsDenoiserEnabled())
+    if (m_RenderGraph == nullptr ||
+        m_RenderGraphDenoiserEnabled != IsDenoiserEnabled() ||
+        m_RenderGraphCudaBloomEnabled != m_CudaBloom.IsEnabled())
     {
         RebuildRenderGraph();
         ResetAccumulation();
@@ -367,11 +370,11 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
 
     try
     {
-        PresentWithExternalPostProcess(metadata);
+        PresentDisplayOutput();
     }
     catch (const std::exception& exception)
     {
-        throw std::runtime_error(std::string("RaytracingDemo::OnRender PresentWithExternalPostProcess failed: ") + exception.what());
+        throw std::runtime_error(std::string("RaytracingDemo::OnRender PresentDisplayOutput failed: ") + exception.what());
     }
 //Modify End
 

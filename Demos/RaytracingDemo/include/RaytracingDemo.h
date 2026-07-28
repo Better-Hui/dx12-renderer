@@ -133,7 +133,7 @@ private:
 //Modify Begin:2026-07-28 by BestHui
     void RebuildRenderGraph();
     void EnsureRenderGraphTopology();
-    void PresentWithExternalPostProcess(const RenderGraph::RenderMetadata& metadata);
+    void PresentDisplayOutput();
 //Modify End
     void ResetAccumulation(bool resetDenoiserHistory = true);
     bool IsDenoiserEnabled() const { return m_Denoisers.IsEnabled(); }
@@ -154,6 +154,7 @@ private:
     std::unique_ptr<RenderGraph::RenderGraphRoot> m_RenderGraph;
 //Modify Begin:2026-07-28 by BestHui
     bool m_RenderGraphDenoiserEnabled = false;
+    bool m_RenderGraphCudaBloomEnabled = false;
 //Modify End
 //Modify Begin:2026-07-27 by BestHui
     PathTracingPipelineController m_PathTracingPipelines;

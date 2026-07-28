@@ -22,8 +22,6 @@ Window::Window(HWND hWnd, const std::wstring& windowName, int clientWidth, int c
 	, ClientHeight(clientHeight)
 	, VSync(vSync)
 	, Fullscreen(false)
-	, FenceValues{ 0 }
-	, FrameValues{ 0 }
 {
 	Application& app = Application::Get();
 
@@ -36,6 +34,10 @@ Window::Window(HWND hWnd, const std::wstring& windowName, int clientWidth, int c
 	}
 
 	DxgiSwapChain = CreateSwapChain();
+//Modify Begin:2026-07-28 by BestHui
+	FrameResources.Reset(BUFFER_COUNT);
+	FrameResources.SetCurrentIndex(CurrentBackBufferIndex);
+//Modify End
 	UpdateRenderTargetViews();
 }
 
@@ -329,6 +331,10 @@ void Window::OnResize(ResizeEventArgs& e)
 			swapChainDesc.Flags));
 
 		CurrentBackBufferIndex = DxgiSwapChain->GetCurrentBackBufferIndex();
+//Modify Begin:2026-07-28 by BestHui
+		FrameResources.Reset(BUFFER_COUNT);
+		FrameResources.SetCurrentIndex(CurrentBackBufferIndex);
+//Modify End
 
 		UpdateRenderTargetViews();
 	}
@@ -439,11 +445,13 @@ UINT Window::Present(const Texture& texture)
 	UINT presentFlags = IsTearingSupported && !VSync ? DXGI_PRESENT_ALLOW_TEARING : 0;
 	ThrowIfFailed(DxgiSwapChain->Present(syncInterval, presentFlags));
 
-	FenceValues[CurrentBackBufferIndex] = commandQueue->Signal();
-	FrameValues[CurrentBackBufferIndex] = Application::GetFrameCount();
+//Modify Begin:2026-07-28 by BestHui
+	FrameResources.MarkSubmitted(CurrentBackBufferIndex, commandQueue->Signal(), Application::GetFrameCount());
 	CurrentBackBufferIndex = DxgiSwapChain->GetCurrentBackBufferIndex();
-	commandQueue->WaitForFenceValue(FenceValues[CurrentBackBufferIndex]);
-	Application::Get().ReleaseStaleDescriptors(FrameValues[CurrentBackBufferIndex]);
+	FrameResources.SetCurrentIndex(CurrentBackBufferIndex);
+	const uint64_t reusableFrame = FrameResources.WaitForSlot(*commandQueue, CurrentBackBufferIndex);
+	Application::Get().ReleaseStaleDescriptors(reusableFrame);
+//Modify End
 
 	return CurrentBackBufferIndex;
 }

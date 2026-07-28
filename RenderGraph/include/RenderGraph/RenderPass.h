@@ -20,6 +20,7 @@ namespace RenderGraph
         ShaderResource,
 //Modify Begin:2026-07-28 by BestHui
         UnorderedAccess,
+        ExternalAccess,
 //Modify End
         CopySource,
         IndirectArgument,
@@ -39,6 +40,9 @@ namespace RenderGraph
         DepthRead,
         DepthWrite,
         UnorderedAccess,
+//Modify Begin:2026-07-28 by BestHui
+        ExternalAccess,
+//Modify End
         CopyDestination,
     };
 
@@ -52,6 +56,9 @@ namespace RenderGraph
     {
     public:
         using ExecuteFuncT = std::function<void(const RenderContext&, CommandList&)>;
+//Modify Begin:2026-07-28 by BestHui
+        using ExternalExecuteFuncT = std::function<void(const RenderContext&)>;
+//Modify End
 
         static std::unique_ptr<RenderPass> Create(
             const wchar_t* passName,
@@ -59,10 +66,22 @@ namespace RenderGraph
             const std::vector<Output>& outputs,
             const ExecuteFuncT& executeFunc
         );
+//Modify Begin:2026-07-28 by BestHui
+        static std::unique_ptr<RenderPass> CreateExternal(
+            const wchar_t* passName,
+            const std::vector<Input>& inputs,
+            const std::vector<Output>& outputs,
+            const ExternalExecuteFuncT& executeFunc
+        );
+//Modify End
 
         void Init(CommandList& commandList);
 
         void Execute(const RenderContext& context, CommandList& commandList);
+//Modify Begin:2026-07-28 by BestHui
+        void ExecuteExternal(const RenderContext& context);
+        virtual bool IsExternal() const { return false; }
+//Modify End
 
         const std::vector<Input>& GetInputs() const { return m_Inputs; }
         const std::vector<Output>& GetOutputs() const { return m_Outputs; }
@@ -73,6 +92,9 @@ namespace RenderGraph
     protected:
         virtual void InitImpl(CommandList& commandList) = 0;
         virtual void ExecuteImpl(const RenderContext& context, CommandList& commandList) = 0;
+//Modify Begin:2026-07-28 by BestHui
+        virtual void ExecuteExternalImpl(const RenderContext& context);
+//Modify End
 
         void RegisterInput(const Input& input);
         void RegisterOutput(const Output& output);

@@ -24,6 +24,9 @@ set(HEADER_FILES
         "include/Framework/BloomDownsample.h"
         "include/Framework/BloomUpsample.h" 
         "include/Framework/CommandContext.h"
+# Modify Begin:2026-07-28 by BestHui
+        "include/Framework/CudaInterop.h"
+# Modify End
         "include/Framework/ComputePipelineStateBuilder.h"
         "include/Framework/DescriptorLayout.h"
 # Modify Begin:2026-07-24 by BestHui
@@ -44,6 +47,9 @@ set(HEADER_FILES
         "include/Framework/ShaderReflection.h"
         "include/Framework/SharedUploadBuffer.h"
         "include/Framework/UnorderedAccessView.h"
+        # Modify Begin:2026-07-28 by BestHui
+        "include/Framework/UnityD3D12Interop.h"
+        # Modify End
         "include/Framework/ComputeShader.h"
 # Modify Begin:2026-07-23 by BestHui
         "include/Framework/RenderTexture.h"
@@ -85,6 +91,9 @@ set(SOURCE_FILES
         "src/BloomDownsample.cpp"
         "src/BloomUpsample.cpp" 
         "src/CommandContext.cpp"
+# Modify Begin:2026-07-28 by BestHui
+        "src/CudaInterop.cpp"
+# Modify End
         "src/ComputePipelineStateBuilder.cpp"
         "src/DescriptorLayout.cpp"
 # Modify Begin:2026-07-24 by BestHui
@@ -100,6 +109,9 @@ set(SOURCE_FILES
         "src/ShaderBlob.cpp"
         "src/ShaderReflection.cpp"
         "src/ShaderVariant.cpp"
+        # Modify Begin:2026-07-28 by BestHui
+        "src/UnityD3D12Interop.cpp"
+        # Modify End
         "src/ComputeShader.cpp"
 # Modify Begin:2026-07-23 by BestHui
         "src/RenderTexture.cpp"
@@ -162,11 +174,36 @@ include(${CMAKE_SOURCE_DIR}/CMakeIncludes/ProjectBase.cmake)
 # Add source to this project's executable.
 add_library(${TARGET_NAME} STATIC ${HEADER_FILES} ${SOURCE_FILES} ${SHADER_FILES} ${SHADERS_HEADER_FILES})
 
+# Modify Begin:2026-07-28 by BestHui
+target_compile_options(${TARGET_NAME} PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+# Modify End
+
 include(${CMAKE_SOURCE_DIR}/CMakeIncludes/ProjectBasePost.cmake)
 
 target_include_directories(${TARGET_NAME}
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/Framework
         )
+
+# Modify Begin:2026-07-28 by BestHui
+find_path(CUDA_INCLUDE_DIR
+        NAMES cuda.h
+        HINTS "$ENV{CUDA_PATH}/include" "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.3/include"
+        )
+
+find_library(CUDA_DRIVER_LIBRARY
+        NAMES cuda
+        HINTS "$ENV{CUDA_PATH}/lib/x64" "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.3/lib/x64"
+        )
+
+if (NOT CUDA_INCLUDE_DIR OR NOT CUDA_DRIVER_LIBRARY)
+        message(FATAL_ERROR "Framework CUDA interop requires CUDA Toolkit driver headers/libs.")
+endif()
+
+target_include_directories(${TARGET_NAME}
+        PUBLIC "${CUDA_INCLUDE_DIR}"
+        PUBLIC "${CMAKE_SOURCE_DIR}/External/UnityPluginAPI"
+        )
+# Modify End
 
 # Modify Begin:2026-07-27 by BestHui
 set(NRD_ROOT "${CMAKE_SOURCE_DIR}/External/NRD")
@@ -183,6 +220,9 @@ target_include_directories(${TARGET_NAME}
 
 target_link_libraries(${TARGET_NAME}
         PUBLIC DX12Library
+# Modify Begin:2026-07-28 by BestHui
+        PUBLIC "${CUDA_DRIVER_LIBRARY}"
+# Modify End
 # Modify Begin:2026-07-27 by BestHui
         PUBLIC "${NRD_BIN_DIR}/NRD.lib"
         PUBLIC "${NRI_BIN_DIR}/NRI.lib"

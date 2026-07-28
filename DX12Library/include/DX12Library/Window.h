@@ -38,6 +38,9 @@
 #include <dxgi1_5.h>
 
 #include "Events.h"
+//Modify Begin:2026-07-28 by BestHui
+#include "FrameResourceRing.h"
+//Modify End
 #include "HighResolutionClock.h"
 #include "RenderTarget.h"
 #include "Texture.h"
@@ -188,8 +191,9 @@ private:
 	uint32_t FrameStatisticsCount = 0;
 //Modify End
 
-	UINT64 FenceValues[BUFFER_COUNT];
-	uint64_t FrameValues[BUFFER_COUNT];
+//Modify Begin:2026-07-28 by BestHui
+	FrameResourceRing FrameResources;
+//Modify End
 
 	std::weak_ptr<Game> PGame;
 

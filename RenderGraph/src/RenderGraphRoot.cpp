@@ -23,6 +23,7 @@ namespace
             outputType == RenderGraph::OutputType::RenderTarget ||
             outputType == RenderGraph::OutputType::DepthWrite ||
             outputType == RenderGraph::OutputType::UnorderedAccess ||
+            outputType == RenderGraph::OutputType::ExternalAccess ||
             outputType == RenderGraph::OutputType::CopyDestination;
     }
 //Modify End
@@ -284,33 +285,62 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
 {
     RebuildIfNecessary(renderMetadata);
 
-    const auto pCommandList = m_DirectCommandQueue->GetCommandList();
-    auto& cmd = *pCommandList;
+//Modify Begin:2026-07-28 by BestHui
+    auto pCommandList = m_DirectCommandQueue->GetCommandList();
+//Modify End
     Assert(m_PendingBarriers.size() == 0, "Pending barriers were left from after the previous frame.");
 
     {
-        PIXScope(cmd, L"Render Graph: Execute");
+        PIXScopeCPU(L"Render Graph: Execute");
 
         RenderContext context = {};
         context.m_ResourcePool = m_ResourcePool;
         context.m_Metadata = renderMetadata;
 
         uint32_t renderPassIndex = 0;
-        m_ResourcePool->BeginFrame(cmd);
+        m_ResourcePool->BeginFrame(*pCommandList);
 
         for (const auto& pRenderPass : m_RenderPassesBuilt)
         {
-            PIXScope(cmd, pRenderPass->GetPassName().c_str());
+//Modify Begin:2026-07-28 by BestHui
+            if (pCommandList == nullptr)
+            {
+                pCommandList = m_DirectCommandQueue->GetCommandList();
+            }
 
+            CommandList& cmd = *pCommandList;
+//Modify End
             context.m_RenderTargetInfo = {};
-            PrepareResourcesForRenderPass(cmd, *pRenderPass, renderPassIndex, context);
-            pRenderPass->Execute(context, cmd);
+//Modify Begin:2026-07-28 by BestHui
+            if (pRenderPass->IsExternal())
+            {
+                {
+                    PIXScope(cmd, pRenderPass->GetPassName().c_str());
+                    PrepareResourcesForRenderPass(cmd, *pRenderPass, renderPassIndex, context);
+                }
+                m_DirectCommandQueue->ExecuteCommandList(pCommandList);
+                pCommandList.reset();
+
+                pRenderPass->ExecuteExternal(context);
+            }
+            else
+            {
+                PIXScope(cmd, pRenderPass->GetPassName().c_str());
+                PrepareResourcesForRenderPass(cmd, *pRenderPass, renderPassIndex, context);
+                pRenderPass->Execute(context, cmd);
+            }
+//Modify End
 
             renderPassIndex++;
         }
     }
 
-    m_DirectCommandQueue->ExecuteCommandList(pCommandList);
+//Modify Begin:2026-07-28 by BestHui
+    if (pCommandList != nullptr)
+    {
+        m_DirectCommandQueue->ExecuteCommandList(pCommandList);
+    }
+//Modify End
 }
 
 void RenderGraph::RenderGraphRoot::Present(const std::shared_ptr<Window>& pWindow, ResourceId resourceId)
@@ -705,6 +735,14 @@ void RenderGraph::RenderGraphRoot::PrepareResourcesForRenderPass(CommandList& co
                 UavBarrier(r);
             });
         }
+
+        if (input.m_Type == InputType::ExternalAccess)
+        {
+            resource.ForEachResourceRecursive([this](const Resource& r)
+            {
+                TransitionBarrier(r, D3D12_RESOURCE_STATE_COMMON);
+            });
+        }
 //Modify End
 
         if (input.m_Type == InputType::CopySource)
@@ -807,6 +845,16 @@ void RenderGraph::RenderGraphRoot::PrepareResourcesForRenderPass(CommandList& co
                 UavBarrier(r);
             });
         }
+
+//Modify Begin:2026-07-28 by BestHui
+        if (output.m_Type == OutputType::ExternalAccess)
+        {
+            resource.ForEachResourceRecursive([this](const auto& r)
+            {
+                TransitionBarrier(r, D3D12_RESOURCE_STATE_COMMON);
+            });
+        }
+//Modify End
     }
 
     FlushBarriers(commandList);

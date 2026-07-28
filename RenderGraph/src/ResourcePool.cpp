@@ -316,6 +316,10 @@ void RenderGraph::ResourcePool::RegisterTexture(const TextureDescription& desc, 
                     case OutputType::UnorderedAccess:
                         unorderedAccess = true;
                         break;
+//Modify Begin:2026-07-28 by BestHui
+                    case OutputType::ExternalAccess:
+                        break;
+//Modify End
                     case OutputType::CopyDestination:
                         // still valid but do not have a related flag
                         break;
@@ -398,6 +402,10 @@ void RenderGraph::ResourcePool::RegisterBuffer(const BufferDescription& desc, co
                 case OutputType::UnorderedAccess:
                     unorderedAccess = true;
                     break;
+//Modify Begin:2026-07-28 by BestHui
+                case OutputType::ExternalAccess:
+                    break;
+//Modify End
                 case OutputType::CopyDestination:
                     // still valid but do not have a related flag
                     break;

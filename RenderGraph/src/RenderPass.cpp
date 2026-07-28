@@ -36,6 +36,50 @@ namespace RenderGraph
     private:
         ExecuteFuncT m_ExecuteFunc;
     };
+
+//Modify Begin:2026-07-28 by BestHui
+    class LambdaExternalRenderPass final : public RenderPass
+    {
+    public:
+        LambdaExternalRenderPass(
+            const std::vector<Input>& inputs,
+            const std::vector<Output>& outputs,
+            const ExternalExecuteFuncT& executeFunc)
+            : m_ExecuteFunc(executeFunc)
+        {
+            for (auto& input : inputs)
+            {
+                RegisterInput(input);
+            }
+
+            for (auto& output : outputs)
+            {
+                RegisterOutput(output);
+            }
+        }
+
+        ~LambdaExternalRenderPass() override = default;
+
+        bool IsExternal() const override { return true; }
+
+    protected:
+        void InitImpl(CommandList& commandList) override
+        {}
+
+        void ExecuteImpl(const RenderContext& context, CommandList& commandList) override
+        {
+            Assert(false, "External render passes must be executed through ExecuteExternal.");
+        }
+
+        void ExecuteExternalImpl(const RenderContext& context) override
+        {
+            m_ExecuteFunc(context);
+        }
+
+    private:
+        ExternalExecuteFuncT m_ExecuteFunc;
+    };
+//Modify End
 }
 
 std::unique_ptr<RenderGraph::RenderPass> RenderGraph::RenderPass::Create(
@@ -49,6 +93,19 @@ std::unique_ptr<RenderGraph::RenderPass> RenderGraph::RenderPass::Create(
     return std::unique_ptr<RenderPass>(pRenderPass);
 }
 
+//Modify Begin:2026-07-28 by BestHui
+std::unique_ptr<RenderGraph::RenderPass> RenderGraph::RenderPass::CreateExternal(
+    const wchar_t* passName,
+    const std::vector<Input>& inputs,
+    const std::vector<Output>& outputs,
+    const ExternalExecuteFuncT& executeFunc)
+{
+    const auto pRenderPass = new LambdaExternalRenderPass(inputs, outputs, executeFunc);
+    pRenderPass->SetPassName(passName);
+    return std::unique_ptr<RenderPass>(pRenderPass);
+}
+//Modify End
+
 void RenderGraph::RenderPass::Init(CommandList& commandList)
 {
     InitImpl(commandList);
@@ -58,6 +115,18 @@ void RenderGraph::RenderPass::Execute(const RenderContext& context, CommandList&
 {
     ExecuteImpl(context, commandList);
 }
+
+//Modify Begin:2026-07-28 by BestHui
+void RenderGraph::RenderPass::ExecuteExternal(const RenderContext& context)
+{
+    ExecuteExternalImpl(context);
+}
+
+void RenderGraph::RenderPass::ExecuteExternalImpl(const RenderContext& context)
+{
+    Assert(false, "This render pass does not support external execution.");
+}
+//Modify End
 
 void RenderGraph::RenderPass::RegisterInput(const Input& input)
 {
