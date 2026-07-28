@@ -6,6 +6,10 @@
 #include "CommandList.h"
 #include "ResourceStateTracker.h"
 
+//Modify Begin:2026-07-28 by BestHui
+#include <fstream>
+//Modify End
+
 CommandQueue::CommandQueue(D3D12_COMMAND_LIST_TYPE type)
 	: m_CommandListType(type)
 	, m_FenceValue(0)
@@ -207,6 +211,10 @@ void CommandQueue::ProcessInFlightCommandLists()
 {
 	std::unique_lock lock(m_ProcessInFlightCommandListsThreadMutex, std::defer_lock);
 
+//Modify Begin:2026-07-28 by BestHui
+	try
+	{
+//Modify End
 	while (m_IsProcessingInFlightCommandLists)
 	{
 		CommandListEntry commandListEntry;
@@ -228,4 +236,13 @@ void CommandQueue::ProcessInFlightCommandLists()
 
 		std::this_thread::yield();
 	}
+//Modify Begin:2026-07-28 by BestHui
+	}
+	catch (const std::exception& exception)
+	{
+		std::ofstream errorLog("C:\\Users\\minghuidai\\AppData\\Local\\Temp\\RaytracingDemo-CommandQueueException.log", std::ios::out | std::ios::trunc);
+		errorLog << exception.what() << std::endl;
+		Application::Get().Quit(5);
+	}
+//Modify End
 }

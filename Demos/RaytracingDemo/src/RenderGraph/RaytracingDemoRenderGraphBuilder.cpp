@@ -1,22 +1,29 @@
 //Modify Begin:2026-07-27 by BestHui
 #include <RenderGraph/RaytracingDemoRenderGraphBuilder.h>
 
-#include <Passes/RaytracingDemoPassResources.h>
+#include <RenderGraph/RaytracingDemoGraphResources.h>
 #include <Passes/RaytracingDemoPasses.h>
 #include <RaytracingDemo.h>
 #include <RenderGraph/RenderPass.h>
 
 #include <vector>
 
-std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::Create(RaytracingDemo& demo, CommandList&)
+std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::Create(RaytracingDemo& demo)
 {
     std::vector<std::unique_ptr<RenderGraph::RenderPass>> renderPasses;
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateBaseResourcesPass(demo));
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDirectLightingPass(demo));
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateIndirectLightingPass(demo));
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateLightingCompositePass(demo));
-    renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDenoisePass(demo));
-    renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateSkyboxPass(demo));
+//Modify Begin:2026-07-28 by BestHui
+    RenderGraph::ResourceId sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::RayTracingFinishedToken;
+    if (demo.IsDenoiserEnabled())
+    {
+        renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDenoisePass(demo));
+        sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::DenoiseFinishedToken;
+    }
+    renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateSkyboxPass(demo, sceneReadyToken));
+//Modify End
 
     return std::make_unique<RenderGraph::RenderGraphRoot>(
         std::move(renderPasses),
@@ -24,7 +31,8 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
         RaytracingDemoRenderGraph::CreateBufferDescriptions(),
         RaytracingDemoRenderGraph::CreateTokenDescriptions(),
         std::vector<RenderGraph::ResourceId>{
-            RaytracingDemoRenderGraph::ResourceIds::SceneColor
+            RaytracingDemoRenderGraph::ResourceIds::SceneColor,
+            RaytracingDemoRenderGraph::ResourceIds::SkyboxFinishedToken
         });
 }
 //Modify End

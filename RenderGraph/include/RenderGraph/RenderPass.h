@@ -18,6 +18,9 @@ namespace RenderGraph
         Invalid,
         Token,
         ShaderResource,
+//Modify Begin:2026-07-28 by BestHui
+        UnorderedAccess,
+//Modify End
         CopySource,
         IndirectArgument,
     };

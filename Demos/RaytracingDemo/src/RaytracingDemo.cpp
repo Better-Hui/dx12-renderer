@@ -13,7 +13,7 @@
 #include <Framework/RasterPipelineStateBuilder.h>
 #include <Framework/ShaderBlob.h>
 
-#include <Passes/RaytracingDemoPassResources.h>
+#include <RenderGraph/RaytracingDemoGraphResources.h>
 #include <RenderGraph/RenderMetadata.h>
 
 #include <DirectXMath.h>
@@ -183,7 +183,9 @@ bool RaytracingDemo::LoadContent()
 //Modify End
     BindRayTracingShaderResources();
 
-    m_RenderGraph = RaytracingDemoRenderGraphBuilder::Create(*this, *commandList);
+//Modify Begin:2026-07-28 by BestHui
+    RebuildRenderGraph();
+//Modify End
 
     const uint64_t fenceValue = commandQueue->ExecuteCommandList(commandList);
     commandQueue->WaitForFenceValue(fenceValue);
@@ -278,6 +280,27 @@ RaytracingDemo::PipelineConstants RaytracingDemo::BuildPipelineConstants() const
     return pipeline;
 }
 
+//Modify Begin:2026-07-28 by BestHui
+void RaytracingDemo::RebuildRenderGraph()
+{
+    if (m_RenderGraph != nullptr)
+    {
+        Application::Get().Flush();
+    }
+    m_RenderGraph = RaytracingDemoRenderGraphBuilder::Create(*this);
+    m_RenderGraphDenoiserEnabled = IsDenoiserEnabled();
+}
+
+void RaytracingDemo::EnsureRenderGraphTopology()
+{
+    if (m_RenderGraph == nullptr || m_RenderGraphDenoiserEnabled != IsDenoiserEnabled())
+    {
+        RebuildRenderGraph();
+        ResetAccumulation();
+    }
+}
+//Modify End
+
 void RaytracingDemo::ResetAccumulation(bool resetDenoiserHistory)
 {
     m_AccumulationFrameIndex = 0;
@@ -309,39 +332,11 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     m_Lights.Upload(*commandList);
     commandQueue->ExecuteCommandList(commandList);
 
-    m_RenderGraph->Execute(metadata);
-//Modify Begin:2026-07-27 by BestHui
-    using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
-
-    const uint32_t renderWidth = static_cast<uint32_t>(m_Width);
-    const uint32_t renderHeight = static_cast<uint32_t>(m_Height);
-    const auto& resolvedColor = m_RenderGraph->GetTexture(DemoResourceIds::ResolvedColor);
-    const auto& postProcessColor = m_RenderGraph->GetTexture(DemoResourceIds::PostProcessColor);
-
-    bool bloomApplied = false;
-    if (m_CudaBloom.IsEnabled())
-    {
-        m_RenderGraph->CopyTexture(metadata, DemoResourceIds::SceneColor, DemoResourceIds::ResolvedColor, true);
-        m_RenderGraph->TransitionTexture(metadata, DemoResourceIds::ResolvedColor, D3D12_RESOURCE_STATE_COMMON, true);
-        m_RenderGraph->TransitionTexture(metadata, DemoResourceIds::PostProcessColor, D3D12_RESOURCE_STATE_COMMON, true);
-        bloomApplied = m_CudaBloom.Execute(
-            *resolvedColor,
-            *postProcessColor,
-            renderWidth,
-            renderHeight);
-    }
-
-    const RenderGraph::ResourceId displaySource = bloomApplied
-        ? DemoResourceIds::PostProcessColor
-        : DemoResourceIds::SceneColor;
-    m_RenderGraph->PresentWithOverlay(
-        PWindow,
-        displaySource,
-        [this](CommandList& cmd)
-        {
-            DrawPostBloomOverlays(cmd);
-        });
+//Modify Begin:2026-07-28 by BestHui
+    EnsureRenderGraphTopology();
 //Modify End
+    m_RenderGraph->Execute(metadata);
+    PresentWithExternalPostProcess(metadata);
 
     ++m_FrameIndex;
     if (m_AccumulationEnabled && !IsDenoiserEnabled())

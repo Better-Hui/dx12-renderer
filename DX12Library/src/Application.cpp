@@ -8,6 +8,9 @@
 #include "DescriptorAllocator.h"
 #include "Window.h"
 #include <ctime>
+//Modify Begin:2026-07-28 by BestHui
+#include <fstream>
+//Modify End
 
 constexpr wchar_t WINDOW_CLASS_NAME[] = L"DX12RenderWindowClass";
 
@@ -584,6 +587,10 @@ MouseButtonEventArgs::MouseButton DecodeMouseButton(UINT messageID)
 
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
+//Modify Begin:2026-07-28 by BestHui
+    try
+    {
+//Modify End
     for (const auto& handler : Application::s_WndProcHandlers)
     {
         if (handler(hwnd, message, wParam, lParam))
@@ -791,4 +798,15 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
     }
 
     return 0;
+//Modify Begin:2026-07-28 by BestHui
+    }
+    catch (const std::exception& exception)
+    {
+        std::ofstream errorLog("C:\\Users\\minghuidai\\AppData\\Local\\Temp\\RaytracingDemo-WndProcException.log", std::ios::out | std::ios::trunc);
+        errorLog << "Message=" << message << std::endl;
+        errorLog << exception.what() << std::endl;
+        PostQuitMessage(4);
+        return 0;
+    }
+//Modify End
 }

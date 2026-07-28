@@ -8,7 +8,7 @@ set(HEADER_FILES
         include/RenderGraph/RaytracingDemoRenderGraphBuilder.h
         include/PathTracing/PathTracingSceneBindings.h
         include/PathTracing/PathTracingPipelineController.h
-        include/Passes/RaytracingDemoPassResources.h
+        include/RenderGraph/RaytracingDemoGraphResources.h
         include/Passes/RaytracingDemoPasses.h
         include/PostProcessing/CudaBloomPass.h
         include/Scene/SceneLightManager.h
@@ -25,13 +25,13 @@ set(SOURCE_FILES
         src/RenderGraph/RaytracingDemoRenderGraphBuilder.cpp
         src/Passes/BaseResourcesPass.cpp
         src/Passes/DenoisePass.cpp
-        src/Passes/ImGuiPass.cpp
-        src/Passes/LightBillboardPass.cpp
+        src/PostProcessing/RaytracingDemoOverlay.cpp
         src/PathTracing/PathTracingSceneBindings.cpp
         src/PathTracing/PathTracingPipelineController.cpp
         src/Passes/PathTracingPass.cpp
         src/PostProcessing/CudaBloomPass.cpp
-        src/Passes/RaytracingDemoPassResources.cpp
+        src/PostProcessing/RaytracingDemoPostProcess.cpp
+        src/RenderGraph/RaytracingDemoGraphResources.cpp
         src/Passes/SkyboxPass.cpp
         src/Scene/SceneLightManager.cpp
         src/Scene/SceneResources.cpp

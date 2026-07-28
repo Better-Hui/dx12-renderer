@@ -101,6 +101,9 @@ public:
     Microsoft::WRL::ComPtr<ID3D12PipelineState> GetPipelineState(const Microsoft::WRL::ComPtr<ID3D12Device2>& device) const;
     const RootSignature& GetRootSignature() const { return *m_RootSignature; }
     const PipelineLayout* GetPipelineLayout() const { return m_PipelineLayout.get(); }
+//Modify Begin:2026-07-28 by BestHui
+    const PipelineDescriptorSet& GetDescriptorSet() const { return *m_DescriptorSet; }
+//Modify End
     bool UsesReflectedRootSignature() const { return true; }
     void StageDefaultDescriptorTables(CommandList& commandList) const;
     //Modify End

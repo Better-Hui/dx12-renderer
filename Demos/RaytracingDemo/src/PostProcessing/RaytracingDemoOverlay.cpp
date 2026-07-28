@@ -1,15 +1,9 @@
-#include <Passes/RaytracingDemoPasses.h>
-
-#include <Passes/RaytracingDemoPassResources.h>
 #include <RaytracingDemo.h>
 
-#include <Framework/Mesh.h>
+#include <DX12Library/CommandList.h>
+#include <Framework/CommandContext.h>
 #include <Framework/ImGuiImpl.h>
-#include <RenderGraph/RenderPass.h>
-
-#include <DX12Library/Application.h>
-#include <DX12Library/CommandQueue.h>
-#include <DX12Library/RenderTarget.h>
+#include <Framework/Mesh.h>
 
 #include <algorithm>
 
@@ -32,7 +26,7 @@ void RaytracingDemo::DrawLightBillboards(CommandList& cmd)
     XMStoreFloat4(&cameraUpFloat, XMVectorSetW(cameraUp, 0.0f));
 
     m_LightBillboardShader->Bind(cmd);
-    m_LightBillboardShader->SetConstantBuffer(cmd, "PipelineCBuffer", BuildPipelineConstants());
+    cmd.SetConstantBuffer(m_LightBillboardShader, "PipelineCBuffer", BuildPipelineConstants());
 
     for (const PointLight& light : m_Lights.GetPointLights())
     {
@@ -52,8 +46,10 @@ void RaytracingDemo::DrawLightBillboards(CommandList& cmd)
         constants.CameraRight = cameraRightFloat;
         constants.CameraUp = cameraUpFloat;
 
-        m_LightBillboardShader->SetConstantBuffer(cmd, "MaterialCBuffer", constants);
-        m_LightBillboardShader->ApplyBindings(cmd);
+        cmd.SetConstantBuffer(m_LightBillboardShader, "MaterialCBuffer", constants);
+//Modify Begin:2026-07-28 by BestHui
+        CommandContext(cmd).BindDescriptorSet(m_LightBillboardShader->GetDescriptorSet(), PipelineBindPoint::Graphics);
+//Modify End
         m_LightBillboardMesh->Draw(cmd);
     }
 
@@ -75,8 +71,10 @@ void RaytracingDemo::DrawLightBillboards(CommandList& cmd)
         constants.CameraRight = cameraRightFloat;
         constants.CameraUp = cameraUpFloat;
 
-        m_LightBillboardShader->SetConstantBuffer(cmd, "MaterialCBuffer", constants);
-        m_LightBillboardShader->ApplyBindings(cmd);
+        cmd.SetConstantBuffer(m_LightBillboardShader, "MaterialCBuffer", constants);
+//Modify Begin:2026-07-28 by BestHui
+        CommandContext(cmd).BindDescriptorSet(m_LightBillboardShader->GetDescriptorSet(), PipelineBindPoint::Graphics);
+//Modify End
         m_LightBillboardMesh->Draw(cmd);
     }
 
@@ -93,25 +91,3 @@ void RaytracingDemo::DrawPostBloomOverlays(CommandList& cmd)
 }
 
 //Modify End
-
-std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateLightBillboardPass(RaytracingDemo& demo)
-{
-    using namespace RenderGraph;
-    using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
-
-    return RenderPass::Create(
-        L"Light Billboards",
-        {
-            { DemoResourceIds::DenoiseFinishedToken, InputType::Token },
-        },
-        {
-            { DemoResourceIds::DisplayColor, OutputType::RenderTarget },
-            { DemoResourceIds::LightBillboardFinishedToken, OutputType::Token },
-        },
-        [&demo](const RenderContext&, CommandList& cmd)
-        {
-//Modify Begin:2026-07-27 by BestHui
-            demo.DrawLightBillboards(cmd);
-//Modify End
-        });
-}

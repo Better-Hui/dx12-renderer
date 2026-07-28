@@ -133,6 +133,103 @@ void PrefilterDownsampleKernel(
     StoreFloatRgb(output, x, y, outputPitchElements, total);
 }
 
+//Modify Begin:2026-07-28 by BestHui
+extern "C" __global__
+void PrefilterDownsamplePyramidKernel(
+    cudaTextureObject_t input,
+    float4* level0,
+    float4* level1,
+    float4* level2,
+    unsigned int sourceWidth,
+    unsigned int sourceHeight,
+    unsigned int level0Width,
+    unsigned int level0Height,
+    unsigned int level1Width,
+    unsigned int level1Height,
+    unsigned int level2Width,
+    unsigned int level2Height,
+    float threshold,
+    float softThreshold,
+    float intensity)
+{
+    extern __shared__ float4 sharedStorage[];
+    float4* sharedLevel0 = sharedStorage;
+    float4* sharedLevel1 = sharedStorage + 16u * 16u;
+
+    const unsigned int tx = threadIdx.x;
+    const unsigned int ty = threadIdx.y;
+    const unsigned int level0X = blockIdx.x * 16u + tx;
+    const unsigned int level0Y = blockIdx.y * 16u + ty;
+    const int sourceX = static_cast<int>(level0X * 2u + 1u);
+    const int sourceY = static_cast<int>(level0Y * 2u + 1u);
+    const int offsets[10] = { 0, 0, -1, -1, -1, 1, 1, -1, 1, 1 };
+
+    float3 total = make_float3(0.0f, 0.0f, 0.0f);
+    float weightSum = 0.0f;
+    if (level0X < level0Width && level0Y < level0Height)
+    {
+        for (int i = 0; i < 5; ++i)
+        {
+            const float3 filtered = PrefilterColor(
+                SampleNearest(input, sourceX + offsets[i * 2 + 0], sourceY + offsets[i * 2 + 1], sourceWidth, sourceHeight),
+                threshold,
+                softThreshold);
+            const float weight = 1.0f / (Luminance(filtered) + 1.0f);
+            total.x += filtered.x * weight;
+            total.y += filtered.y * weight;
+            total.z += filtered.z * weight;
+            weightSum += weight;
+        }
+        total.x = total.x / weightSum * intensity;
+        total.y = total.y / weightSum * intensity;
+        total.z = total.z / weightSum * intensity;
+        StoreFloatRgb(level0, level0X, level0Y, level0Width, total);
+    }
+
+    sharedLevel0[ty * 16u + tx] = make_float4(total.x, total.y, total.z, 1.0f);
+    __syncthreads();
+
+    if (tx < 8u && ty < 8u)
+    {
+        const unsigned int level1X = blockIdx.x * 8u + tx;
+        const unsigned int level1Y = blockIdx.y * 8u + ty;
+        const float4 c00 = sharedLevel0[(ty * 2u + 0u) * 16u + tx * 2u + 0u];
+        const float4 c10 = sharedLevel0[(ty * 2u + 0u) * 16u + tx * 2u + 1u];
+        const float4 c01 = sharedLevel0[(ty * 2u + 1u) * 16u + tx * 2u + 0u];
+        const float4 c11 = sharedLevel0[(ty * 2u + 1u) * 16u + tx * 2u + 1u];
+        const float4 averaged = make_float4(
+            (c00.x + c10.x + c01.x + c11.x) * 0.25f,
+            (c00.y + c10.y + c01.y + c11.y) * 0.25f,
+            (c00.z + c10.z + c01.z + c11.z) * 0.25f,
+            1.0f);
+        sharedLevel1[ty * 8u + tx] = averaged;
+        if (level1 != nullptr && level1X < level1Width && level1Y < level1Height)
+        {
+            level1[level1Y * level1Width + level1X] = averaged;
+        }
+    }
+    __syncthreads();
+
+    if (level2 != nullptr && tx < 4u && ty < 4u)
+    {
+        const unsigned int level2X = blockIdx.x * 4u + tx;
+        const unsigned int level2Y = blockIdx.y * 4u + ty;
+        if (level2X < level2Width && level2Y < level2Height)
+        {
+            const float4 c00 = sharedLevel1[(ty * 2u + 0u) * 8u + tx * 2u + 0u];
+            const float4 c10 = sharedLevel1[(ty * 2u + 0u) * 8u + tx * 2u + 1u];
+            const float4 c01 = sharedLevel1[(ty * 2u + 1u) * 8u + tx * 2u + 0u];
+            const float4 c11 = sharedLevel1[(ty * 2u + 1u) * 8u + tx * 2u + 1u];
+            level2[level2Y * level2Width + level2X] = make_float4(
+                (c00.x + c10.x + c01.x + c11.x) * 0.25f,
+                (c00.y + c10.y + c01.y + c11.y) * 0.25f,
+                (c00.z + c10.z + c01.z + c11.z) * 0.25f,
+                1.0f);
+        }
+    }
+}
+//Modify End
+
 extern "C" __global__
 void DownsampleKernel(
     const float4* source,

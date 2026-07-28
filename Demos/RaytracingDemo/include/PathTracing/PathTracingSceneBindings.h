@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Passes/RaytracingDemoPassResources.h>
+#include <RenderGraph/RaytracingDemoGraphResources.h>
 #include <RaytracingDemo.h>
 
 class CommandList;

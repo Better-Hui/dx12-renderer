@@ -3,7 +3,7 @@
 
 #include <Framework/NRD.h>
 #include <Framework/SVGF.h>
-#include <Passes/RaytracingDemoPassResources.h>
+#include <RenderGraph/RaytracingDemoGraphResources.h>
 
 #include <DirectXMath.h>
 

@@ -1,6 +1,6 @@
 #include <Passes/RaytracingDemoPasses.h>
 
-#include <Passes/RaytracingDemoPassResources.h>
+#include <RenderGraph/RaytracingDemoGraphResources.h>
 #include <RaytracingDemo.h>
 
 #include <RenderGraph/RenderPass.h>
@@ -34,11 +34,6 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDe
         },
         [&demo](const RenderContext& context, CommandList& cmd)
         {
-            if (!demo.IsDenoiserEnabled())
-            {
-                return;
-            }
-
             const RaytracingDemoRenderGraph::FrameGBufferResources gbuffer = RaytracingDemoRenderGraph::GetFrameGBufferResources(context);
             const RaytracingDemoRenderGraph::LightingResources lighting = RaytracingDemoRenderGraph::GetLightingResources(context);
             const uint32_t width = context.m_Metadata.m_ScreenWidth;

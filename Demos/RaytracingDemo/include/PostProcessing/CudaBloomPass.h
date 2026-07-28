@@ -16,7 +16,9 @@ public:
     ~CudaBloomPass();
 
     bool DrawImGui();
-    bool Execute(Texture& source, Texture& destination, uint32_t width, uint32_t height);
+//Modify Begin:2026-07-28 by BestHui
+    bool ExecuteInPlace(Texture& postProcessColor, uint32_t width, uint32_t height);
+//Modify End
     void Shutdown();
 
     bool IsEnabled() const { return m_Enabled; }
@@ -27,7 +29,9 @@ private:
     struct CudaDriver;
 
     bool InitializeCuda();
-    bool EnsureD3D12InteropResources(Texture& source, Texture& destination, uint32_t width, uint32_t height);
+//Modify Begin:2026-07-28 by BestHui
+    bool EnsureD3D12InteropResource(Texture& postProcessColor, uint32_t width, uint32_t height);
+//Modify End
     bool EnsureCudaPyramidBuffers(uint32_t width, uint32_t height, uint32_t levelCount);
     bool RunCudaBloom(uint32_t width, uint32_t height);
 
@@ -44,5 +48,4 @@ private:
     uint32_t m_Width = 0;
     uint32_t m_Height = 0;
     ID3D12Resource* m_SourceInteropResource = nullptr;
-    ID3D12Resource* m_DestinationInteropResource = nullptr;
 };

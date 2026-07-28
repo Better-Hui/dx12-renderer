@@ -41,7 +41,7 @@ void RaytracingDemoPassAccess::BindInlinePathTracingInputs(
 //Modify End
 
     shader.Bind(cmd);
-    shader.SetConstantBuffer(cmd, "CameraConstants", camera);
+    cmd.SetConstantBuffer(shader, "CameraConstants", camera);
     shader.SetAccelerationStructure(cmd, demo.m_RayTracingAccelerationStructure);
     if (shader.HasShaderResourceView("GBufferTextures"))
     {
@@ -124,7 +124,7 @@ void RaytracingDemoPassAccess::BindCompositeInputs(
 //Modify Begin:2026-07-27 by BestHui
     ComputeShader& compositeShader = demo.m_PathTracingPipelines.GetLightingCompositeShader();
     compositeShader.Bind(cmd);
-    compositeShader.SetConstantBuffer(cmd, "CameraConstants", camera);
+    cmd.SetConstantBuffer(compositeShader, "CameraConstants", camera);
     compositeShader.SetShaderResourceView(cmd, "GBufferTextures", 0u, ShaderResourceView(gbuffer.AlbedoOcclusion));
     compositeShader.SetShaderResourceView(cmd, "GBufferTextures", 1u, ShaderResourceView(gbuffer.SpecularSmoothness));
     compositeShader.SetShaderResourceView(cmd, "GBufferTextures", 2u, ShaderResourceView(gbuffer.Normal));
@@ -133,9 +133,9 @@ void RaytracingDemoPassAccess::BindCompositeInputs(
     compositeShader.SetShaderResourceView(cmd, "DepthTexture", ShaderResourceView::DepthAsFloat(gbuffer.Depth));
     compositeShader.SetShaderResourceView(cmd, "DirectLightingTexture", ShaderResourceView(lighting.Direct));
     compositeShader.SetShaderResourceView(cmd, "IndirectLightingTexture", ShaderResourceView(lighting.Indirect));
-    compositeShader.SetUnorderedAccessView(cmd, "SceneColor", UnorderedAccessView(lighting.SceneColor));
-    compositeShader.SetUnorderedAccessView(cmd, "HistoryColor", UnorderedAccessView(lighting.HistoryColor));
-    compositeShader.SetUnorderedAccessView(cmd, "NoisyRadiance", UnorderedAccessView(lighting.NoisyRadiance));
-    compositeShader.SetUnorderedAccessView(cmd, "NRDNoisyRadiance", UnorderedAccessView(lighting.NRDNoisyRadiance));
+    cmd.SetUnorderedAccessView(compositeShader, "SceneColor", UnorderedAccessView(lighting.SceneColor));
+    cmd.SetUnorderedAccessView(compositeShader, "HistoryColor", UnorderedAccessView(lighting.HistoryColor));
+    cmd.SetUnorderedAccessView(compositeShader, "NoisyRadiance", UnorderedAccessView(lighting.NoisyRadiance));
+    cmd.SetUnorderedAccessView(compositeShader, "NRDNoisyRadiance", UnorderedAccessView(lighting.NRDNoisyRadiance));
 //Modify End
 }

@@ -24,6 +24,12 @@ namespace
 {
     void TransitionShaderResourceBinding(CommandList& commandList, const PipelineShaderResourceBinding& shaderResource)
     {
+//Modify Begin:2026-07-28 by BestHui
+        if (shaderResource.Resource == nullptr || !shaderResource.Resource->AreAutoBarriersEnabled())
+        {
+            return;
+        }
+//Modify End
         if (shaderResource.NumSubresources < D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
         {
             for (UINT i = 0; i < shaderResource.NumSubresources; ++i)
@@ -39,6 +45,12 @@ namespace
 
     void TransitionUnorderedAccessView(CommandList& commandList, const UnorderedAccessView& unorderedAccessView)
     {
+//Modify Begin:2026-07-28 by BestHui
+        if (unorderedAccessView.m_Resource == nullptr || !unorderedAccessView.m_Resource->AreAutoBarriersEnabled())
+        {
+            return;
+        }
+//Modify End
         if (unorderedAccessView.m_NumSubresources < D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
         {
             for (UINT i = 0; i < unorderedAccessView.m_NumSubresources; ++i)
@@ -58,7 +70,8 @@ namespace
         {
             (void)rootParameterIndex;
             if (boundResource.UnorderedAccessView.has_value() &&
-                boundResource.UnorderedAccessView->m_Resource != nullptr)
+                boundResource.UnorderedAccessView->m_Resource != nullptr &&
+                boundResource.UnorderedAccessView->m_Resource->AreAutoBarriersEnabled())
             {
                 commandList.UavBarrier(*boundResource.UnorderedAccessView->m_Resource);
             }

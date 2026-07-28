@@ -24,6 +24,7 @@
 
 struct GraphicsSettings;
 class CommandList;
+class RaytracingDemoRenderGraphBuilder;
 struct RaytracingDemoPassAccess;
 
 namespace RaytracingDemoPasses
@@ -129,6 +130,11 @@ private:
     void BindRayTracingShaderResources();
     CameraConstants BuildCameraConstants() const;
     PipelineConstants BuildPipelineConstants() const;
+//Modify Begin:2026-07-28 by BestHui
+    void RebuildRenderGraph();
+    void EnsureRenderGraphTopology();
+    void PresentWithExternalPostProcess(const RenderGraph::RenderMetadata& metadata);
+//Modify End
     void ResetAccumulation(bool resetDenoiserHistory = true);
     bool IsDenoiserEnabled() const { return m_Denoisers.IsEnabled(); }
     DenoiserController& GetDenoisers() { return m_Denoisers; }
@@ -142,7 +148,13 @@ private:
     Camera m_Camera;
     friend struct RaytracingDemoPassAccess;
     friend class RaytracingDemoPasses::Builder;
+//Modify Begin:2026-07-28 by BestHui
+    friend class RaytracingDemoRenderGraphBuilder;
+//Modify End
     std::unique_ptr<RenderGraph::RenderGraphRoot> m_RenderGraph;
+//Modify Begin:2026-07-28 by BestHui
+    bool m_RenderGraphDenoiserEnabled = false;
+//Modify End
 //Modify Begin:2026-07-27 by BestHui
     PathTracingPipelineController m_PathTracingPipelines;
 //Modify End

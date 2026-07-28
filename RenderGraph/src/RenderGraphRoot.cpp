@@ -661,6 +661,17 @@ void RenderGraph::RenderGraphRoot::PrepareResourcesForRenderPass(CommandList& co
             });
         }
 
+//Modify Begin:2026-07-28 by BestHui
+        if (input.m_Type == InputType::UnorderedAccess)
+        {
+            resource.ForEachResourceRecursive([this](const Resource& r)
+            {
+                TransitionBarrier(r, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                UavBarrier(r);
+            });
+        }
+//Modify End
+
         if (input.m_Type == InputType::CopySource)
         {
             resource.ForEachResourceRecursive([this](const Resource& r)

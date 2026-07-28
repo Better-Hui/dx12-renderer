@@ -457,6 +457,68 @@ public:
     {
         shader->SetTexture(*this, variableName, texture);
     }
+
+//Modify Begin:2026-07-28 by BestHui
+    template <typename ShaderLike, typename BufferLike>
+    void SetConstantBuffer(ShaderLike& shader, const std::string& variableName, const BufferLike& data)
+    {
+        shader.SetConstantBuffer(*this, variableName, data);
+    }
+
+    template <typename ShaderLike, typename BufferLike>
+    void SetConstantBuffer(std::shared_ptr<ShaderLike>& shader, const std::string& variableName, const BufferLike& data)
+    {
+        shader->SetConstantBuffer(*this, variableName, data);
+    }
+
+    template <typename ShaderLike, typename BufferLike>
+    void SetConstantBuffer(const std::shared_ptr<ShaderLike>& shader, const std::string& variableName, const BufferLike& data)
+    {
+        shader->SetConstantBuffer(*this, variableName, data);
+    }
+
+    template <typename ShaderLike, typename BufferLike>
+    void SetConstantBuffer(std::unique_ptr<ShaderLike>& shader, const std::string& variableName, const BufferLike& data)
+    {
+        shader->SetConstantBuffer(*this, variableName, data);
+    }
+
+    template <typename ShaderLike, typename BufferLike>
+    void SetConstantBuffer(const std::unique_ptr<ShaderLike>& shader, const std::string& variableName, const BufferLike& data)
+    {
+        shader->SetConstantBuffer(*this, variableName, data);
+    }
+
+    template <typename ShaderLike, typename UavLike>
+    void SetUnorderedAccessView(ShaderLike& shader, const std::string& variableName, const UavLike& unorderedAccessView)
+    {
+        shader.SetUnorderedAccessView(*this, variableName, unorderedAccessView);
+    }
+
+    template <typename ShaderLike, typename UavLike>
+    void SetUnorderedAccessView(std::shared_ptr<ShaderLike>& shader, const std::string& variableName, const UavLike& unorderedAccessView)
+    {
+        shader->SetUnorderedAccessView(*this, variableName, unorderedAccessView);
+    }
+
+    template <typename ShaderLike, typename UavLike>
+    void SetUnorderedAccessView(const std::shared_ptr<ShaderLike>& shader, const std::string& variableName, const UavLike& unorderedAccessView)
+    {
+        shader->SetUnorderedAccessView(*this, variableName, unorderedAccessView);
+    }
+
+    template <typename ShaderLike, typename UavLike>
+    void SetUnorderedAccessView(std::unique_ptr<ShaderLike>& shader, const std::string& variableName, const UavLike& unorderedAccessView)
+    {
+        shader->SetUnorderedAccessView(*this, variableName, unorderedAccessView);
+    }
+
+    template <typename ShaderLike, typename UavLike>
+    void SetUnorderedAccessView(const std::unique_ptr<ShaderLike>& shader, const std::string& variableName, const UavLike& unorderedAccessView)
+    {
+        shader->SetUnorderedAccessView(*this, variableName, unorderedAccessView);
+    }
+//Modify End
 //Modify End
 
     /**
