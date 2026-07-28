@@ -42,12 +42,20 @@ namespace RenderGraph
         void ForEachResource(const std::function<bool(const ResourceDescription&)>& func);
 
         const TransientResourceAllocator::ResourceLifecycle& GetResourceLifecycle(ResourceId resourceId);
+//Modify Begin:2026-07-28 by BestHui
+        bool HasResourceLifecycle(ResourceId resourceId) const;
+//Modify End
 
         bool IsRegistered(ResourceId resourceId) const;
         const ResourceDescription& GetDescription(ResourceId resourceId) const;
 
         void Clear();
-        void InitHeaps(const std::vector<RenderPass*>& renderPasses, const Microsoft::WRL::ComPtr<ID3D12Device2>& pDevice);
+//Modify Begin:2026-07-28 by BestHui
+        void InitHeaps(
+            const std::vector<RenderPass*>& renderPasses,
+            const Microsoft::WRL::ComPtr<ID3D12Device2>& pDevice,
+            const std::vector<ResourceId>& externalOutputIds = { ResourceIds::GRAPH_OUTPUT });
+//Modify End
 
         void RegisterTexture(
             const TextureDescription& desc,
@@ -84,6 +92,9 @@ namespace RenderGraph
         std::vector<ResourceInstance> m_ResourceInstances;
         std::map<ResourceId, ResourceDescription> m_ResourceDescriptions;
         std::vector<TransientResourceAllocator::HeapInfo> m_HeapInfos;
+//Modify Begin:2026-07-28 by BestHui
+        std::map<ResourceId, TransientResourceAllocator::ResourceLifecycle> m_ResourceLifecycles;
+//Modify End
 
         std::queue<std::pair<Microsoft::WRL::ComPtr<ID3D12Resource>, uint64_t>> m_DeferredDeletionQueue;
 

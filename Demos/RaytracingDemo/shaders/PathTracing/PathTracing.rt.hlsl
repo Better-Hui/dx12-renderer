@@ -23,9 +23,12 @@ float3 ApplyClosestHitCooperativeVector(float3 color)
 void DirectLightingRayGen()
 {
     uint2 pixel = DispatchRaysIndex().xy;
-    uint2 dimensions = DispatchRaysDimensions().xy;
+    if (pixel.x >= Camera_Width || pixel.y >= Camera_Height)
+    {
+        return;
+    }
 
-    WriteDirectLightingOutput(pixel, dimensions.x, Camera_FrameIndex);
+    WriteDirectLightingOutput(pixel, Camera_Width, Camera_FrameIndex);
 }
 
 [shader("raygeneration")]
@@ -38,9 +41,12 @@ void RayGen()
 void IndirectLightingRayGen()
 {
     uint2 pixel = DispatchRaysIndex().xy;
-    uint2 dimensions = DispatchRaysDimensions().xy;
+    if (pixel.x >= Camera_Width || pixel.y >= Camera_Height)
+    {
+        return;
+    }
 
-    WriteIndirectLightingOutput(pixel, dimensions.x, Camera_FrameIndex);
+    WriteIndirectLightingOutput(pixel, Camera_Width, Camera_FrameIndex);
 }
 
 [shader("miss")]
@@ -64,3 +70,13 @@ void ClosestHit(inout RayPayload payload, BuiltInTriangleIntersectionAttributes 
         RayTCurrent());
     payload.BaseColor = ApplyClosestHitCooperativeVector(payload.BaseColor);
 }
+
+//Modify Begin:2026-07-27 by BestHui
+[shader("closesthit")]
+void VisibilityClosestHit(inout RayPayload payload, BuiltInTriangleIntersectionAttributes attributes)
+{
+    (void)attributes;
+    payload.Hit = 1u;
+    payload.HitT = RayTCurrent();
+}
+//Modify End

@@ -4,7 +4,6 @@
 #include "BloomParameters.h"
 #include "BloomDownsample.h"
 #include "BloomUpsample.h"
-#include <Framework/CommonRootSignature.h>
 #include <memory>
 #include <DX12Library/CommandList.h>
 #include <cstdint>
@@ -12,7 +11,9 @@
 class Bloom
 {
 public:
-	explicit Bloom(const std::shared_ptr<CommonRootSignature>& rootSignature, CommandList& commandList, uint32_t width, uint32_t height, DXGI_FORMAT backBufferFormat, size_t pyramidSize = 8);
+//Modify Begin:2026-07-27 by BestHui
+	explicit Bloom(CommandList& commandList, uint32_t width, uint32_t height, DXGI_FORMAT backBufferFormat, size_t pyramidSize = 8);
+//Modify End
 
 	void Resize(uint32_t width, uint32_t height);
 

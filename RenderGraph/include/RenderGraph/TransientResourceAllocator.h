@@ -35,7 +35,11 @@ namespace RenderGraph
             Microsoft::WRL::ComPtr<ID3D12Heap> m_Heap;
         };
 
-        static std::map<ResourceId, ResourceLifecycle> GetResourceLifecycles(const std::vector<RenderPass*>& renderPasses);
+//Modify Begin:2026-07-28 by BestHui
+        static std::map<ResourceId, ResourceLifecycle> GetResourceLifecycles(
+            const std::vector<RenderPass*>& renderPasses,
+            const std::vector<ResourceId>& externalOutputIds = { ResourceIds::GRAPH_OUTPUT });
+//Modify End
         static std::vector<HeapInfo> CreateHeaps(const std::map<ResourceId, ResourceLifecycle>& lifecycles, const std::map<ResourceId, ResourceDescription>& resourceDescriptions, const Microsoft::WRL::ComPtr<ID3D12Device2>& pDevice);
     };
 }

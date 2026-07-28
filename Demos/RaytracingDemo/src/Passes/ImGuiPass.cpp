@@ -17,7 +17,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIm
             { DemoResourceIds::LightBillboardFinishedToken, InputType::Token },
         },
         {
-            { RenderGraph::ResourceIds::GRAPH_OUTPUT, OutputType::RenderTarget },
+            { DemoResourceIds::DisplayColor, OutputType::RenderTarget },
         },
         [&demo](const RenderContext&, CommandList& cmd)
         {

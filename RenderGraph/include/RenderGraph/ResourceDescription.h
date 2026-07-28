@@ -35,6 +35,11 @@ namespace RenderGraph
         uint32_t m_ArraySize = 1;
         uint32_t m_MipLevels = 1;
         uint32_t m_SampleCount = 1;
+//Modify Begin:2026-07-28 by BestHui
+        D3D12_RESOURCE_FLAGS m_ExtraResourceFlags = D3D12_RESOURCE_FLAG_NONE;
+        D3D12_HEAP_FLAGS m_HeapFlags = D3D12_HEAP_FLAG_NONE;
+        bool m_DedicatedResource = false;
+//Modify End
 
         TextureDescription()
             : m_Id(0)
@@ -47,6 +52,11 @@ namespace RenderGraph
         TextureDescription(const ResourceId id,
             const RenderMetadataExpression<uint32_t>& widthExpression, const RenderMetadataExpression<uint32_t>& heightExpression,
             const DXGI_FORMAT format, const ClearValue::COLOR clearColor, ResourceInitAction initAction
+//Modify Begin:2026-07-28 by BestHui
+            , D3D12_RESOURCE_FLAGS extraResourceFlags = D3D12_RESOURCE_FLAG_NONE,
+            D3D12_HEAP_FLAGS heapFlags = D3D12_HEAP_FLAG_NONE,
+            bool dedicatedResource = false
+//Modify End
         )
             : m_Id(id)
             , m_WidthExpression(widthExpression)
@@ -54,11 +64,21 @@ namespace RenderGraph
             , m_Format(format)
             , m_ClearValue(format, clearColor)
             , m_InitAction(initAction)
+//Modify Begin:2026-07-28 by BestHui
+            , m_ExtraResourceFlags(extraResourceFlags)
+            , m_HeapFlags(heapFlags)
+            , m_DedicatedResource(dedicatedResource)
+//Modify End
         { }
 
         TextureDescription(const ResourceId id,
             const RenderMetadataExpression<uint32_t>& widthExpression, const RenderMetadataExpression<uint32_t>& heightExpression,
             const DXGI_FORMAT format, const ClearValue::DEPTH_STENCIL_VALUE clearDepthStencilValue, ResourceInitAction initAction
+//Modify Begin:2026-07-28 by BestHui
+            , D3D12_RESOURCE_FLAGS extraResourceFlags = D3D12_RESOURCE_FLAG_NONE,
+            D3D12_HEAP_FLAGS heapFlags = D3D12_HEAP_FLAG_NONE,
+            bool dedicatedResource = false
+//Modify End
         )
             : m_Id(id)
             , m_WidthExpression(widthExpression)
@@ -66,6 +86,11 @@ namespace RenderGraph
             , m_Format(format)
             , m_ClearValue(format, clearDepthStencilValue)
             , m_InitAction(initAction)
+//Modify Begin:2026-07-28 by BestHui
+            , m_ExtraResourceFlags(extraResourceFlags)
+            , m_HeapFlags(heapFlags)
+            , m_DedicatedResource(dedicatedResource)
+//Modify End
         { }
     };
 
@@ -114,6 +139,10 @@ namespace RenderGraph
 
         TextureDescription m_TextureDescription;
         TextureUsageType m_TextureUsageType;
+//Modify Begin:2026-07-28 by BestHui
+        D3D12_HEAP_FLAGS m_HeapFlags = D3D12_HEAP_FLAG_NONE;
+        bool m_DedicatedResource = false;
+//Modify End
 
         BufferDescription m_BufferDescription;
 

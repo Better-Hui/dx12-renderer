@@ -11,7 +11,6 @@
 #include <Framework/RayTracingPipelineStateBuilder.h>
 #include <Framework/RayTracingShader.h>
 
-#include "RayTracingDescriptorTable.h"
 #include "RayTracingDispatchTables.h"
 
 #include <algorithm>
@@ -85,6 +84,9 @@ struct RayTracingShader::Impl
     RayTracingPipelineDesc Desc;
     std::shared_ptr<RayTracingPipelineState> PipelineState;
     PipelineLayout Layout;
+//Modify Begin:2026-07-27 by BestHui
+    mutable RayTracingDispatchTables DispatchTables;
+//Modify End
     std::unordered_map<std::string, uint32_t> BindingIndicesByName;
 };
 
@@ -103,8 +105,6 @@ struct RayTracingBindingSet::Impl
     PipelineDescriptorPool DescriptorPool;
 //Modify End
     PipelineDescriptorSet DescriptorSet;
-    RayTracingDescriptorTable DescriptorTable;
-    RayTracingDispatchTables DispatchTables;
 };
 
 //Modify End

@@ -7,7 +7,9 @@
 class MSAADepthResolvePass
 {
 public:
-    explicit MSAADepthResolvePass(const std::shared_ptr<CommonRootSignature>& rootSignature);
+//Modify Begin:2026-07-27 by BestHui
+    MSAADepthResolvePass();
+//Modify End
 
     void Resolve(CommandList& commandList, const std::shared_ptr<Texture>& source, const std::shared_ptr<Texture>& destination) const;
 

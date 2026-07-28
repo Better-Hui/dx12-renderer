@@ -11,11 +11,7 @@
 #include <DX12Library/ShaderUtils.h>
 //Modify End
 
-#include "CommonRootSignature.h"
 #include "ComputePipelineStateBuilder.h"
-//Modify Begin:2026-07-27 by BestHui
-#include "FrameworkDeprecated.h"
-//Modify End
 //Modify Begin:2026-07-24 by BestHui
 #include "PipelineBindingSet.h"
 #include "PipelineDescriptorPool.h"
@@ -70,16 +66,7 @@ private:
 class ComputeShader
 {
 public:
-    //Modify Begin:2026-07-23 by BestHui
-    //Modify Begin:2026-07-27 by BestHui
-    FRAMEWORK_DEPRECATED("Use ComputeShader(const ShaderBlob&, ComputePipelineDesc) and reflected named bindings.")
-    //Modify End
-    explicit ComputeShader(
-        const std::shared_ptr<CommonRootSignature>& rootSignature,
-        const ShaderBlob& shader,
-        bool collectMetadata = true);
     ComputeShader(const ShaderBlob& shader, ComputePipelineDesc desc);
-    //Modify End
 
     void Bind(CommandList& commandList) const;
     //Modify Begin:2026-07-23 by BestHui
@@ -88,42 +75,6 @@ public:
     void ApplyBindings(CommandList& commandList) const;
     //Modify End
 
-    template<typename T>
-    //Modify Begin:2026-07-27 by BestHui
-    FRAMEWORK_DEPRECATED("Use SetConstantBuffer(CommandList&, const std::string&, ...) with reflected named bindings.")
-    //Modify End
-    void SetPipelineConstantBuffer(CommandList& commandList, const T& data) const
-    {
-        m_CommonRootSignature->SetComputePipelineConstantBuffer(commandList, data);
-    }
-
-    template<typename T>
-    //Modify Begin:2026-07-27 by BestHui
-    FRAMEWORK_DEPRECATED("Use SetConstantBuffer(CommandList&, const std::string&, ...) with reflected named bindings.")
-    //Modify End
-    void SetModelConstantBuffer(CommandList& commandList, const T& data) const
-    {
-        m_CommonRootSignature->SetComputeModelConstantBuffer(commandList, data);
-    }
-
-    //Modify Begin:2026-07-27 by BestHui
-    FRAMEWORK_DEPRECATED("Use SetConstantBuffer(CommandList&, const std::string&, ...) with reflected named bindings.")
-    //Modify End
-    void SetMaterialConstantBuffer(CommandList& commandList, size_t size, const void* data) const;
-
-    template<typename T>
-    //Modify Begin:2026-07-27 by BestHui
-    FRAMEWORK_DEPRECATED("Use SetConstantBuffer(CommandList&, const std::string&, ...) with reflected named bindings.")
-    //Modify End
-    void SetComputeConstantBuffer(CommandList& commandList, const T& data) const
-    {
-        SetComputeConstantBuffer(commandList, sizeof(T), &data);
-    }
-
-    //Modify Begin:2026-07-27 by BestHui
-    FRAMEWORK_DEPRECATED("Use SetConstantBuffer(CommandList&, const std::string&, ...) with reflected named bindings.")
-    //Modify End
-    void SetComputeConstantBuffer(CommandList& commandList, size_t size, const void* data) const;
     bool HasConstantBuffer(const std::string& variableName) const;
     bool HasShaderResourceView(const std::string& variableName) const;
     bool HasUnorderedAccessView(const std::string& variableName) const;
@@ -141,16 +92,6 @@ public:
     void SetTexture(CommandList& commandList, const std::string& variableName, const ShaderResourceView& shaderResourceView) const;
     void SetTexture(CommandList& commandList, const std::string& variableName, const std::shared_ptr<Resource>& texture) const;
 
-    //Modify Begin:2026-07-27 by BestHui
-    FRAMEWORK_DEPRECATED("Use SetShaderResourceView(CommandList&, const std::string&, ...) instead.")
-    void SetPipelineShaderResourceView(CommandList& commandList, UINT index, const ShaderResourceView& shaderResourceView) const;
-    FRAMEWORK_DEPRECATED("Use SetShaderResourceView(CommandList&, const std::string&, ...) instead.")
-    void SetPipelineShaderResourceView(CommandList& commandList, UINT index, const Resource& resource, D3D12_RESOURCE_STATES stateAfter = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE) const;
-    FRAMEWORK_DEPRECATED("Use SetShaderResourceView(CommandList&, const std::string&, ...) instead.")
-    void SetComputeShaderResourceView(CommandList& commandList, UINT index, const ShaderResourceView& shaderResourceView) const;
-    FRAMEWORK_DEPRECATED("Use SetUnorderedAccessView(CommandList&, const std::string&, ...) instead.")
-    void SetUnorderedAccessView(CommandList& commandList, UINT index, const UnorderedAccessView& unorderedAccessView) const;
-    //Modify End
     void SetUnorderedAccessView(CommandList& commandList, const std::string& variableName, const UnorderedAccessView& unorderedAccessView) const;
     void SetAccelerationStructure(CommandList& commandList, const RayTracingAccelerationStructure& accelerationStructure) const;
 
@@ -160,7 +101,7 @@ public:
     Microsoft::WRL::ComPtr<ID3D12PipelineState> GetPipelineState(const Microsoft::WRL::ComPtr<ID3D12Device2>& device) const;
     const RootSignature& GetRootSignature() const { return *m_RootSignature; }
     const PipelineLayout* GetPipelineLayout() const { return m_PipelineLayout.get(); }
-    bool UsesReflectedRootSignature() const { return m_UseReflectedRootSignature; }
+    bool UsesReflectedRootSignature() const { return true; }
     void StageDefaultDescriptorTables(CommandList& commandList) const;
     //Modify End
 
@@ -171,7 +112,6 @@ private:
     void BuildReflectedRootSignature(const ComputePipelineDesc& desc);
     const DescriptorBindingInfo& GetReflectedBinding(const std::string& variableName, DescriptorBindingKind expectedKind) const;
 
-    std::shared_ptr<CommonRootSignature> m_CommonRootSignature;
     std::shared_ptr<RootSignature> m_RootSignature;
     ComputePipelineStateBuilder m_PipelineStateBuilder;
     Microsoft::WRL::ComPtr<ID3DBlob> m_Shader;
@@ -182,7 +122,6 @@ private:
 //Modify Begin:2026-07-27 by BestHui
     PipelineDescriptorPool m_DescriptorPool;
 //Modify End
-    bool m_UseReflectedRootSignature = false;
 //Modify Begin:2026-07-27 by BestHui
     mutable PipelineStateCache<ComputePipelineStateKey, Microsoft::WRL::ComPtr<ID3D12PipelineState>> m_PipelineStateCache;
 //Modify End

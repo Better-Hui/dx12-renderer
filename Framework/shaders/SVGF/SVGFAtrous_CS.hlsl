@@ -7,7 +7,9 @@ cbuffer SVGFAtrousConstants : register(b0)
     uint Width;
     uint Height;
     uint StepSize;
-    uint Padding0;
+//Modify Begin:2026-07-27 by BestHui
+    uint Direction;
+//Modify End
     float PhiColor;
     float PhiNormal;
     float PhiDepth;
@@ -54,38 +56,37 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     float3 colorSum = 0.0f;
     float weightSum = 0.0f;
 
+//Modify Begin:2026-07-27 by BestHui
     [unroll]
-    for (int y = -2; y <= 2; ++y)
+    for (int tap = -2; tap <= 2; ++tap)
     {
-        [unroll]
-        for (int x = -2; x <= 2; ++x)
+        const int2 tapOffset = Direction == 0u ? int2(tap, 0) : int2(0, tap);
+        const int2 samplePixel = int2(pixel) + tapOffset * int(StepSize);
+        if (samplePixel.x < 0 || samplePixel.y < 0 || samplePixel.x >= int(Width) || samplePixel.y >= int(Height))
         {
-            const int2 samplePixel = int2(pixel) + int2(x, y) * int(StepSize);
-            if (samplePixel.x < 0 || samplePixel.y < 0 || samplePixel.x >= int(Width) || samplePixel.y >= int(Height))
-            {
-                continue;
-            }
-
-            const float sampleDepth = DepthTexture.Load(int3(samplePixel, 0));
-            if (!SVGFIsValidDepth(sampleDepth))
-            {
-                continue;
-            }
-
-            const float4 sampleColor = InputColor.Load(int3(samplePixel, 0));
-            const float3 sampleNormal = DecodeSVGFNormal(GBufferNormal.Load(int3(samplePixel, 0)).xyz);
-            const float3 samplePosition = GBufferPosition.Load(int3(samplePixel, 0)).xyz;
-
-            const float kernelWeight = Kernel[x + 2] * Kernel[y + 2];
-            const float normalWeight = SVGFNormalWeight(centerNormal, sampleNormal, PhiNormal);
-            const float depthWeight = SVGFDepthWeight(centerDepth, sampleDepth, centerPosition, samplePosition, PhiDepth);
-            const float colorWeight = SVGFColorWeight(centerColor.rgb, sampleColor.rgb, centerVariance, PhiColor);
-            const float weight = kernelWeight * normalWeight * depthWeight * colorWeight;
-
-            colorSum += sampleColor.rgb * weight;
-            weightSum += weight;
+            continue;
         }
+
+        const float sampleDepth = DepthTexture.Load(int3(samplePixel, 0));
+        if (!SVGFIsValidDepth(sampleDepth))
+        {
+            continue;
+        }
+
+        const float4 sampleColor = InputColor.Load(int3(samplePixel, 0));
+        const float3 sampleNormal = DecodeSVGFNormal(GBufferNormal.Load(int3(samplePixel, 0)).xyz);
+        const float3 samplePosition = GBufferPosition.Load(int3(samplePixel, 0)).xyz;
+
+        const float kernelWeight = Kernel[tap + 2];
+        const float normalWeight = SVGFNormalWeight(centerNormal, sampleNormal, PhiNormal);
+        const float depthWeight = SVGFDepthWeight(centerDepth, sampleDepth, centerPosition, samplePosition, PhiDepth);
+        const float colorWeight = SVGFColorWeight(centerColor.rgb, sampleColor.rgb, centerVariance, PhiColor);
+        const float weight = kernelWeight * normalWeight * depthWeight * colorWeight;
+
+        colorSum += sampleColor.rgb * weight;
+        weightSum += weight;
     }
+//Modify End
 
     const float3 filteredColor = weightSum > 0.0f ? colorSum / weightSum : centerColor.rgb;
     OutputColor[pixel] = float4(filteredColor, centerColor.a);

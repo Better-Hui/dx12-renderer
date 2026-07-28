@@ -15,6 +15,20 @@ Texture::Texture(const D3D12_RESOURCE_DESC& resourceDesc, const ClearValue& clea
     : Texture(resourceDesc, clearValue.GetD3D12ClearValue(), textureUsage, name)
 {}
 
+//Modify Begin:2026-07-28 by BestHui
+Texture::Texture(
+    const D3D12_RESOURCE_DESC& resourceDesc,
+    const D3D12_HEAP_FLAGS heapFlags,
+    const ClearValue& clearValue,
+    TextureUsageType textureUsage,
+    const std::wstring& name)
+    : Resource(resourceDesc, heapFlags, clearValue.GetD3D12ClearValue(), name)
+    , m_TextureUsage(textureUsage)
+{
+    CreateViews();
+}
+//Modify End
+
 Texture::Texture(const D3D12_RESOURCE_DESC& resourceDesc, const ComPtr<ID3D12Heap>& pHeap, UINT64 heapOffset, const D3D12_CLEAR_VALUE* clearValue, TextureUsageType textureUsage, const std::wstring& name)
     : Resource(resourceDesc, pHeap, heapOffset, clearValue, name)
     , m_TextureUsage(textureUsage)

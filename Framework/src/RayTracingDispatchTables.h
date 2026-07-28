@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 class RayTracingDispatchTables final
@@ -23,11 +24,18 @@ private:
         const RayTracingPipelineState& pipelineState,
         const std::vector<RayTracingShaderRecordDesc>& recordDescs) const;
 
-    RayTracingShaderTable m_RayGenerationShaderTable;
-    RayTracingShaderTable m_MissShaderTable;
-    RayTracingShaderTable m_HitGroupShaderTable;
+//Modify Begin:2026-07-27 by BestHui
+    struct BuiltPassTables
+    {
+        RayTracingShaderTable RayGenerationShaderTable;
+        RayTracingShaderTable MissShaderTable;
+        RayTracingShaderTable HitGroupShaderTable;
+    };
+
+    std::unordered_map<std::string, BuiltPassTables> m_PassTables;
+    const BuiltPassTables* m_CurrentPassTables = nullptr;
+//Modify End
     RayTracingShaderPassDesc m_DefaultPass;
-    std::string m_CurrentPassName;
 };
 
 //Modify End

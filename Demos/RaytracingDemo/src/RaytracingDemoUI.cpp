@@ -37,6 +37,12 @@ void RaytracingDemo::OnImGui()
     {
         ResetAccumulation();
     }
+//Modify Begin:2026-07-27 by BestHui
+    if (m_CudaBloom.DrawImGui())
+    {
+        ResetAccumulation(false);
+    }
+//Modify End
 
     const char* modeNames[] = { "Inline Ray Query", "Shader Table DXR" };
     int selectedMode = static_cast<int>(m_PathTracingBackend);

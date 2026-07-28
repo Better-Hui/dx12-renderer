@@ -163,6 +163,55 @@ namespace
         }
         return rootParameterCount;
     }
+
+    D3D12_TEXTURE_ADDRESS_MODE GetSamplerAddressMode(const std::string& name)
+    {
+        return name.find("Clamp") != std::string::npos ?
+            D3D12_TEXTURE_ADDRESS_MODE_CLAMP :
+            D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    }
+
+    D3D12_FILTER GetSamplerFilter(const std::string& name)
+    {
+        const bool isPoint = name.find("Point") != std::string::npos;
+        const bool isComparison =
+            name.find("Comparison") != std::string::npos ||
+            name.find("Shadow") != std::string::npos;
+
+        if (isComparison)
+        {
+            return isPoint ?
+                D3D12_FILTER_COMPARISON_MIN_MAG_MIP_POINT :
+                D3D12_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR;
+        }
+
+        return isPoint ?
+            D3D12_FILTER_MIN_MAG_MIP_POINT :
+            D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+    }
+
+    D3D12_STATIC_SAMPLER_DESC CreateStaticSamplerDesc(const ShaderUtils::SamplerMetadata& sampler)
+    {
+        D3D12_STATIC_SAMPLER_DESC desc = {};
+        desc.Filter = GetSamplerFilter(sampler.Name);
+        desc.AddressU = GetSamplerAddressMode(sampler.Name);
+        desc.AddressV = desc.AddressU;
+        desc.AddressW = desc.AddressU;
+        desc.MipLODBias = 0.0f;
+        desc.MaxAnisotropy = 16u;
+        desc.ComparisonFunc =
+            desc.Filter == D3D12_FILTER_COMPARISON_MIN_MAG_MIP_POINT ||
+            desc.Filter == D3D12_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR ?
+            D3D12_COMPARISON_FUNC_LESS_EQUAL :
+            D3D12_COMPARISON_FUNC_ALWAYS;
+        desc.BorderColor = D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK;
+        desc.MinLOD = 0.0f;
+        desc.MaxLOD = D3D12_FLOAT32_MAX;
+        desc.ShaderRegister = sampler.RegisterIndex;
+        desc.RegisterSpace = sampler.Space;
+        desc.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+        return desc;
+    }
     //Modify End
 }
 
@@ -261,6 +310,24 @@ PipelineLayoutDesc PipelineLayout::CreateDescFromReflection(
             GetDescriptorCountOverride(options, uav.Name, uav.BindCount),
             PipelineDescriptorBindingMode::DescriptorTable);
     }
+
+//Modify Begin:2026-07-27 by BestHui
+    for (const auto& sampler : reflection.m_Samplers)
+    {
+        const UINT samplerCount = DescriptorLayout::NormalizeDescriptorCount(sampler.BindCount, options.MaxDescriptorCount);
+        for (UINT i = 0; i < samplerCount; ++i)
+        {
+            PipelineRootSamplerDesc rootSampler;
+            rootSampler.Name = sampler.Name;
+            rootSampler.ShaderRegister = sampler.RegisterIndex + i;
+            rootSampler.RegisterSpace = sampler.Space;
+            rootSampler.Desc = CreateStaticSamplerDesc(sampler);
+            rootSampler.Desc.ShaderRegister = rootSampler.ShaderRegister;
+            rootSampler.ShaderStages = options.ShaderStages;
+            desc.RootSamplers.push_back(std::move(rootSampler));
+        }
+    }
+//Modify End
 
     //Modify Begin:2026-07-27 by BestHui
     FlattenDescriptorSets(desc);
@@ -457,6 +524,14 @@ void PipelineLayout::AddDefaultShaderResourceViewTable(
     m_DescriptorLayout.AddDefaultShaderResourceViewTable(rootParameterIndex, descriptorCount, srv);
 }
 
+void PipelineLayout::AddDefaultShaderResourceViewTable(
+    const UINT rootParameterIndex,
+    const UINT descriptorCount,
+    const D3D12_SHADER_RESOURCE_VIEW_DESC& srvDesc)
+{
+    m_DescriptorLayout.AddDefaultShaderResourceViewTable(rootParameterIndex, descriptorCount, srvDesc);
+}
+
 void PipelineLayout::AddDefaultUnorderedAccessViewTable(
     const UINT rootParameterIndex,
     const UINT descriptorCount,
@@ -465,10 +540,25 @@ void PipelineLayout::AddDefaultUnorderedAccessViewTable(
     m_DescriptorLayout.AddDefaultUnorderedAccessViewTable(rootParameterIndex, descriptorCount, uav);
 }
 
+void PipelineLayout::AddDefaultUnorderedAccessViewTable(
+    const UINT rootParameterIndex,
+    const UINT descriptorCount,
+    const D3D12_UNORDERED_ACCESS_VIEW_DESC& uavDesc)
+{
+    m_DescriptorLayout.AddDefaultUnorderedAccessViewTable(rootParameterIndex, descriptorCount, uavDesc);
+}
+
 void PipelineLayout::StageDefaultDescriptorTables(CommandList& commandList) const
 {
     m_DescriptorLayout.StageDefaultDescriptorTables(commandList);
 }
+
+//Modify Begin:2026-07-27 by BestHui
+const DescriptorAllocation* PipelineLayout::FindDefaultDescriptorTable(const UINT rootParameterIndex) const
+{
+    return m_DescriptorLayout.FindDefaultDescriptorTable(rootParameterIndex);
+}
+//Modify End
 
 void PipelineLayout::RebuildDescriptorLayout()
 {

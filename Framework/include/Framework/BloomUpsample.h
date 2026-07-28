@@ -9,7 +9,9 @@ class Mesh;
 class BloomUpsample
 {
 public:
-	explicit BloomUpsample(const std::shared_ptr<CommonRootSignature>& rootSignature, CommandList& commandList);
+//Modify Begin:2026-07-27 by BestHui
+	explicit BloomUpsample(CommandList& commandList);
+//Modify End
 
 	void Execute(CommandList& commandList,
 		const BloomParameters& parameters,

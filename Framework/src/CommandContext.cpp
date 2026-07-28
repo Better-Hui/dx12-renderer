@@ -17,6 +17,55 @@
 #include <Framework/UnorderedAccessView.h>
 
 #include <cstring>
+#include <set>
+
+//Modify Begin:2026-07-27 by BestHui
+namespace
+{
+    void TransitionShaderResourceBinding(CommandList& commandList, const PipelineShaderResourceBinding& shaderResource)
+    {
+        if (shaderResource.NumSubresources < D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
+        {
+            for (UINT i = 0; i < shaderResource.NumSubresources; ++i)
+            {
+                commandList.TransitionBarrier(*shaderResource.Resource, shaderResource.StateAfter, shaderResource.FirstSubresource + i);
+            }
+        }
+        else
+        {
+            commandList.TransitionBarrier(*shaderResource.Resource, shaderResource.StateAfter);
+        }
+    }
+
+    void TransitionUnorderedAccessView(CommandList& commandList, const UnorderedAccessView& unorderedAccessView)
+    {
+        if (unorderedAccessView.m_NumSubresources < D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
+        {
+            for (UINT i = 0; i < unorderedAccessView.m_NumSubresources; ++i)
+            {
+                commandList.TransitionBarrier(*unorderedAccessView.m_Resource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, unorderedAccessView.m_FirstSubresource + i);
+            }
+        }
+        else
+        {
+            commandList.TransitionBarrier(*unorderedAccessView.m_Resource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        }
+    }
+
+    void InsertDescriptorSetOutputBarriersImpl(CommandList& commandList, const PipelineDescriptorSet& descriptorSet)
+    {
+        for (const auto& [rootParameterIndex, boundResource] : descriptorSet.GetBoundResources())
+        {
+            (void)rootParameterIndex;
+            if (boundResource.UnorderedAccessView.has_value() &&
+                boundResource.UnorderedAccessView->m_Resource != nullptr)
+            {
+                commandList.UavBarrier(*boundResource.UnorderedAccessView->m_Resource);
+            }
+        }
+    }
+}
+//Modify End
 
 CommandContext::CommandContext(CommandList& commandList)
     : m_CommandList(commandList)
@@ -41,9 +90,12 @@ void CommandContext::SetPipelineLayout(const PipelineBindPoint bindPoint, const 
 
 void CommandContext::SetDescriptorSet(const PipelineBindPoint bindPoint, const PipelineDescriptorSet& descriptorSet) const
 {
+//Modify Begin:2026-07-27 by BestHui
+    std::set<UINT> appliedRootParameters;
     for (const auto& [rootParameterIndex, boundResource] : descriptorSet.GetBoundResources())
     {
         (void)boundResource;
+        appliedRootParameters.insert(rootParameterIndex);
         switch (bindPoint)
         {
         case PipelineBindPoint::Graphics:
@@ -57,6 +109,29 @@ void CommandContext::SetDescriptorSet(const PipelineBindPoint bindPoint, const P
             break;
         }
     }
+
+    for (const PipelineDescriptorRangeDesc& range : descriptorSet.GetLayout().GetDesc().DescriptorRanges)
+    {
+        if (range.BindingMode != PipelineDescriptorBindingMode::DescriptorTable ||
+            appliedRootParameters.find(range.RootParameterIndex) != appliedRootParameters.end())
+        {
+            continue;
+        }
+
+        switch (bindPoint)
+        {
+        case PipelineBindPoint::Graphics:
+            ApplyGraphicsBinding(descriptorSet, range.RootParameterIndex);
+            break;
+        case PipelineBindPoint::Compute:
+            ApplyComputeBinding(descriptorSet, range.RootParameterIndex);
+            break;
+        default:
+            Assert(false, "Unsupported pipeline bind point.");
+            break;
+        }
+    }
+//Modify End
 }
 
 void CommandContext::SetPipeline(Shader& shader) const
@@ -159,6 +234,20 @@ void CommandContext::ApplyGraphicsBinding(const PipelineDescriptorSet& descripto
     const PipelineBoundResource* boundResource = descriptorSet.FindBoundResource(rootParameterIndex);
     if (boundResource == nullptr)
     {
+//Modify Begin:2026-07-27 by BestHui
+        if (range->BindingMode == PipelineDescriptorBindingMode::DescriptorTable)
+        {
+            if (const DescriptorAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
+            {
+                StageDynamicDescriptors(
+                    D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+                    rootParameterIndex,
+                    0u,
+                    allocation->GetNumHandles(),
+                    allocation->GetDescriptorHandle());
+            }
+        }
+//Modify End
         return;
     }
 
@@ -178,6 +267,32 @@ void CommandContext::ApplyGraphicsBinding(const PipelineDescriptorSet& descripto
     {
         Assert(range->BindingMode == PipelineDescriptorBindingMode::DescriptorTable, "Graphics root SRV bindings are not supported yet.");
 
+//Modify Begin:2026-07-27 by BestHui
+        if (const DescriptorAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
+        {
+            for (const auto& shaderResource : boundResource->ShaderResources)
+            {
+                if (!shaderResource.has_value() || shaderResource->Resource == nullptr)
+                {
+                    continue;
+                }
+
+                if (shaderResource->AutoTransition && shaderResource->Resource->AreAutoBarriersEnabled())
+                {
+                    TransitionShaderResourceBinding(m_CommandList, *shaderResource);
+                }
+            }
+
+            StageDynamicDescriptors(
+                D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+                rootParameterIndex,
+                0u,
+                allocation->GetNumHandles(),
+                allocation->GetDescriptorHandle());
+            return;
+        }
+//Modify End
+
         const size_t shaderResourceCount = boundResource->ShaderResources.size();
         for (UINT i = 0; i < static_cast<UINT>(shaderResourceCount); ++i)
         {
@@ -189,7 +304,7 @@ void CommandContext::ApplyGraphicsBinding(const PipelineDescriptorSet& descripto
             const PipelineShaderResourceBinding& shaderResource = *boundResource->ShaderResources[i];
             Assert(shaderResource.Resource != nullptr, "Pipeline SRV resource is not bound.");
             const D3D12_SHADER_RESOURCE_VIEW_DESC* srvDesc = shaderResource.HasDesc ? &shaderResource.Desc : nullptr;
-            if (shaderResource.Resource->AreAutoBarriersEnabled())
+            if (shaderResource.AutoTransition && shaderResource.Resource->AreAutoBarriersEnabled())
             {
                 m_CommandList.SetShaderResourceView(
                     rootParameterIndex,
@@ -218,6 +333,23 @@ void CommandContext::ApplyGraphicsBinding(const PipelineDescriptorSet& descripto
     {
         Assert(boundResource->UnorderedAccessView.has_value(), "Pipeline UAV resource is not bound.");
         const UnorderedAccessView& unorderedAccessView = *boundResource->UnorderedAccessView;
+//Modify Begin:2026-07-27 by BestHui
+        if (const DescriptorAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
+        {
+            if (unorderedAccessView.m_Resource->AreAutoBarriersEnabled())
+            {
+                TransitionUnorderedAccessView(m_CommandList, unorderedAccessView);
+            }
+
+            StageDynamicDescriptors(
+                D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+                rootParameterIndex,
+                0u,
+                allocation->GetNumHandles(),
+                allocation->GetDescriptorHandle());
+            return;
+        }
+//Modify End
         if (unorderedAccessView.m_Resource->AreAutoBarriersEnabled())
         {
             m_CommandList.SetUnorderedAccessView(
@@ -251,6 +383,20 @@ void CommandContext::ApplyComputeBinding(const PipelineDescriptorSet& descriptor
     const PipelineBoundResource* boundResource = descriptorSet.FindBoundResource(rootParameterIndex);
     if (boundResource == nullptr)
     {
+//Modify Begin:2026-07-27 by BestHui
+        if (range->BindingMode == PipelineDescriptorBindingMode::DescriptorTable)
+        {
+            if (const DescriptorAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
+            {
+                StageDynamicDescriptors(
+                    D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+                    rootParameterIndex,
+                    0u,
+                    allocation->GetNumHandles(),
+                    allocation->GetDescriptorHandle());
+            }
+        }
+//Modify End
         return;
     }
 
@@ -290,6 +436,32 @@ void CommandContext::ApplyComputeBinding(const PipelineDescriptorSet& descriptor
             return;
         }
 
+//Modify Begin:2026-07-27 by BestHui
+        if (const DescriptorAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
+        {
+            for (const auto& shaderResource : boundResource->ShaderResources)
+            {
+                if (!shaderResource.has_value() || shaderResource->Resource == nullptr)
+                {
+                    continue;
+                }
+
+                if (shaderResource->AutoTransition && shaderResource->Resource->AreAutoBarriersEnabled())
+                {
+                    TransitionShaderResourceBinding(m_CommandList, *shaderResource);
+                }
+            }
+
+            StageDynamicDescriptors(
+                D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+                rootParameterIndex,
+                0u,
+                allocation->GetNumHandles(),
+                allocation->GetDescriptorHandle());
+            return;
+        }
+//Modify End
+
         const size_t shaderResourceCount = boundResource->ShaderResources.size();
         for (UINT i = 0; i < static_cast<UINT>(shaderResourceCount); ++i)
         {
@@ -301,7 +473,7 @@ void CommandContext::ApplyComputeBinding(const PipelineDescriptorSet& descriptor
             const PipelineShaderResourceBinding& shaderResource = *boundResource->ShaderResources[i];
             Assert(shaderResource.Resource != nullptr, "Pipeline SRV resource is not bound.");
             const D3D12_SHADER_RESOURCE_VIEW_DESC* srvDesc = shaderResource.HasDesc ? &shaderResource.Desc : nullptr;
-            if (shaderResource.Resource->AreAutoBarriersEnabled())
+            if (shaderResource.AutoTransition && shaderResource.Resource->AreAutoBarriersEnabled())
             {
                 m_CommandList.SetShaderResourceView(
                     rootParameterIndex,
@@ -330,6 +502,23 @@ void CommandContext::ApplyComputeBinding(const PipelineDescriptorSet& descriptor
     {
         Assert(boundResource->UnorderedAccessView.has_value(), "Pipeline UAV resource is not bound.");
         const UnorderedAccessView& unorderedAccessView = *boundResource->UnorderedAccessView;
+//Modify Begin:2026-07-27 by BestHui
+        if (const DescriptorAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
+        {
+            if (unorderedAccessView.m_Resource->AreAutoBarriersEnabled())
+            {
+                TransitionUnorderedAccessView(m_CommandList, unorderedAccessView);
+            }
+
+            StageDynamicDescriptors(
+                D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+                rootParameterIndex,
+                0u,
+                allocation->GetNumHandles(),
+                allocation->GetDescriptorHandle());
+            return;
+        }
+//Modify End
         if (unorderedAccessView.m_Resource->AreAutoBarriersEnabled())
         {
             m_CommandList.SetUnorderedAccessView(
@@ -363,6 +552,13 @@ void CommandContext::StageDynamicDescriptors(
 {
     m_CommandList.StageDynamicDescriptors(descriptorHeapType, rootParameterIndex, offset, numDescriptors, baseDescriptor);
 }
+
+//Modify Begin:2026-07-27 by BestHui
+void CommandContext::InsertDescriptorSetOutputBarriers(const PipelineDescriptorSet& descriptorSet) const
+{
+    InsertDescriptorSetOutputBarriersImpl(m_CommandList, descriptorSet);
+}
+//Modify End
 
 void CommandContext::TransitionShaderResource(const Resource& resource) const
 {
@@ -399,20 +595,16 @@ void CommandContext::Dispatch(const uint32_t numGroupsX, const uint32_t numGroup
     m_CommandList.Dispatch(numGroupsX, numGroupsY, numGroupsZ);
 }
 
-void CommandContext::DispatchRays(
-    RayTracingBindingSet& bindingSet,
-    std::string_view passName,
-    const uint32_t width,
-    const uint32_t height,
-    const uint32_t depth) const
+void CommandContext::BindRayTracingDescriptorSet(const RayTracingBindingSet& bindingSet) const
 {
-    bindingSet.PrepareDispatch(passName);
-    bindingSet.TransitionDispatchResources(*this);
-    SetPipeline(bindingSet.GetShader());
-    bindingSet.StageDescriptorTable(*this);
-    bindingSet.ApplyRootBindings(*this);
-    DispatchRays(bindingSet.BuildDispatchDesc(width, height, depth));
-    bindingSet.InsertOutputBarriers(*this);
+//Modify Begin:2026-07-27 by BestHui
+    const RayTracingShader& shader = bindingSet.GetShader();
+    const PipelineDescriptorSet& descriptorSet = bindingSet.GetDescriptorSet();
+    Assert(descriptorSet.GetAccelerationStructure() != nullptr, "Ray tracing acceleration structure is not bound.");
+
+    SetPipeline(shader);
+    SetDescriptorSet(PipelineBindPoint::Compute, descriptorSet);
+//Modify End
 }
 
 void CommandContext::DispatchRays(const D3D12_DISPATCH_RAYS_DESC& dispatchRaysDesc) const

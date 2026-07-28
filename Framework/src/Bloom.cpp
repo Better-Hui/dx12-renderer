@@ -13,12 +13,16 @@ namespace
 	}
 }
 
-Bloom::Bloom(const std::shared_ptr<CommonRootSignature>& rootSignature, CommandList& commandList, uint32_t width, uint32_t height, DXGI_FORMAT backBufferFormat, size_t pyramidSize)
+//Modify Begin:2026-07-27 by BestHui
+Bloom::Bloom(CommandList& commandList, uint32_t width, uint32_t height, DXGI_FORMAT backBufferFormat, size_t pyramidSize)
+//Modify End
 	: m_Width(width)
 	, m_Height(height)
-	, m_Prefilter(rootSignature, commandList)
-	, m_Downsample(rootSignature, commandList)
-	, m_Upsample(rootSignature, commandList)
+//Modify Begin:2026-07-27 by BestHui
+	, m_Prefilter(commandList)
+	, m_Downsample(commandList)
+	, m_Upsample(commandList)
+//Modify End
 {
 	// create intermediate textures
 	{

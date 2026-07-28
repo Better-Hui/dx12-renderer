@@ -388,8 +388,10 @@ void NRD::Denoise(
     StoreNRDColumnMajorMatrix(commonSettings.viewToClipMatrixPrev, previousProjection);
     StoreNRDColumnMajorMatrix(commonSettings.worldToViewMatrix, currentView);
     StoreNRDColumnMajorMatrix(commonSettings.worldToViewMatrixPrev, previousView);
-    commonSettings.motionVectorScale[0] = 1.0f;
-    commonSettings.motionVectorScale[1] = 1.0f;
+//Modify Begin:2026-07-27 by BestHui
+    commonSettings.motionVectorScale[0] = static_cast<float>(width);
+    commonSettings.motionVectorScale[1] = static_cast<float>(height);
+//Modify End
     commonSettings.motionVectorScale[2] = 1.0f;
     commonSettings.resourceSize[0] = static_cast<uint16_t>(width);
     commonSettings.resourceSize[1] = static_cast<uint16_t>(height);
@@ -405,7 +407,6 @@ void NRD::Denoise(
     commonSettings.frameIndex = m_FrameIndex++;
     commonSettings.accumulationMode = resetHistory ? nrd::AccumulationMode::CLEAR_AND_RESTART : nrd::AccumulationMode::CONTINUE;
     commonSettings.isMotionVectorInWorldSpace = false;
-    m_Impl->Integration.NewFrame();
     m_Impl->Integration.SetCommonSettings(commonSettings);
     m_PreviousView = currentView;
     m_PreviousProjection = currentProjection;
@@ -460,6 +461,10 @@ void NRD::Denoise(
         relaxSettings.enableRoughnessEdgeStopping = m_Settings.RelaxEnableRoughnessEdgeStopping;
         m_Impl->Integration.SetDenoiserSettings(DIFFUSE_DENOISER_ID, &relaxSettings);
     }
+
+//Modify Begin:2026-07-27 by BestHui
+    m_Impl->Integration.NewFrame();
+//Modify End
 
     nrd::ResourceSnapshot snapshot = {};
     snapshot.restoreInitialState = false;

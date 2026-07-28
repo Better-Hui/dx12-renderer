@@ -34,6 +34,10 @@
 //Modify Begin:2026-07-21 by BestHui
 #include "DescriptorAllocation.h"
 //Modify End
+//Modify Begin:2026-07-27 by BestHui
+#include <mutex>
+#include <unordered_map>
+//Modify End
 
 class IndexBuffer : public Buffer
 {
@@ -82,5 +86,9 @@ private:
 	D3D12_INDEX_BUFFER_VIEW IndexBufferView;
 //Modify Begin:2026-07-21 by BestHui
 	DescriptorAllocation m_Srv;
+//Modify End
+//Modify Begin:2026-07-27 by BestHui
+	mutable std::unordered_map<size_t, DescriptorAllocation> m_CustomSrvs;
+	mutable std::mutex m_CustomSrvsMutex;
 //Modify End
 };

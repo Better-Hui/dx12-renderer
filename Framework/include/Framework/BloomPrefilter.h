@@ -6,7 +6,6 @@
 #include <DX12Library/Texture.h>
 #include <DX12Library/RenderTarget.h>
 #include <DX12Library/CommandList.h>
-#include <Framework/CommonRootSignature.h>
 #include <Framework/Material.h>
 
 class Mesh;
@@ -14,7 +13,9 @@ class Mesh;
 class BloomPrefilter
 {
 public:
-	explicit BloomPrefilter(const std::shared_ptr<CommonRootSignature>& rootSignature, CommandList& commandList);
+//Modify Begin:2026-07-27 by BestHui
+	explicit BloomPrefilter(CommandList& commandList);
+//Modify End
 
 	void Execute(CommandList& commandList, const BloomParameters& parameters, const std::shared_ptr<Texture>& source, const RenderTarget& destination);
 

@@ -1,22 +1,8 @@
 #include "Material.h"
-#include "CommonRootSignature.h"
-//Modify Begin:2026-07-27 by BestHui
-#include "FrameworkDeprecated.h"
-
-FRAMEWORK_SUPPRESS_DEPRECATED_WARNINGS_BEGIN
-//Modify End
 
 static const ShaderUtils::ConstantBufferMetadata* FindMaterialConstantBuffer(const Shader::ShaderMetadata& metadata)
 {
-    for (const auto& cbufferMetadata : metadata.m_ConstantBuffers)
-    {
-        if (cbufferMetadata.RegisterIndex != 0) continue;
-        if (cbufferMetadata.Space != CommonRootSignature::MATERIAL_REGISTER_SPACE) continue;
-
-        return &cbufferMetadata;
-    }
-
-    return nullptr;
+    return metadata.m_ConstantBuffers.empty() ? nullptr : &metadata.m_ConstantBuffers.front();
 }
 
 Material::Material(const std::shared_ptr<Shader>& shader)
@@ -54,6 +40,9 @@ Material::Material(const std::shared_ptr<Shader>& shader)
         return;
     }
 
+//Modify Begin:2026-07-27 by BestHui
+    m_ConstantBufferName = m_Metadata->Name;
+//Modify End
     m_ConstantBuffer.reset(new uint8_t[cbufferSize]);
     m_ConstantBufferSize = cbufferSize;
     memset(m_ConstantBuffer.get(), 0, m_ConstantBufferSize);
@@ -72,6 +61,9 @@ Material::Material(const std::shared_ptr<Shader>& shader)
 Material::Material(const Material& materialPreset)
     : m_Shader(materialPreset.m_Shader)
     , m_Metadata(materialPreset.m_Metadata)
+//Modify Begin:2026-07-27 by BestHui
+    , m_ConstantBufferName(materialPreset.m_ConstantBufferName)
+//Modify End
     , m_ConstantBuffer()
     , m_ConstantBufferSize(materialPreset.m_ConstantBufferSize)
     , m_ShaderResourceViews(materialPreset.m_ShaderResourceViews)
@@ -186,7 +178,9 @@ void Material::UploadConstantBuffer(CommandList& commandList)
         return;
     }
 
-    m_Shader->SetMaterialConstantBuffer(commandList, m_ConstantBufferSize, m_ConstantBuffer.get());
+//Modify Begin:2026-07-27 by BestHui
+    m_Shader->SetConstantBuffer(commandList, m_ConstantBufferName, m_ConstantBufferSize, m_ConstantBuffer.get());
+//Modify End
 }
 
 void Material::UploadShaderResourceViews(CommandList& commandList)
@@ -199,7 +193,3 @@ void Material::UploadShaderResourceViews(CommandList& commandList)
         m_Shader->SetShaderResourceView(commandList, name, shaderResourceView);
     }
 }
-
-//Modify Begin:2026-07-27 by BestHui
-FRAMEWORK_SUPPRESS_DEPRECATED_WARNINGS_END
-//Modify End

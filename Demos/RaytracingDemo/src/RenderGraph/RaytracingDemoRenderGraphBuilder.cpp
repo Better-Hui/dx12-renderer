@@ -12,18 +12,19 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
 {
     std::vector<std::unique_ptr<RenderGraph::RenderPass>> renderPasses;
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateBaseResourcesPass(demo));
-    renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateSkyboxPass(demo));
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDirectLightingPass(demo));
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateIndirectLightingPass(demo));
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateLightingCompositePass(demo));
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDenoisePass(demo));
-    renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateLightBillboardPass(demo));
-    renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateImGuiPass(demo));
+    renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateSkyboxPass(demo));
 
     return std::make_unique<RenderGraph::RenderGraphRoot>(
         std::move(renderPasses),
         RaytracingDemoRenderGraph::CreateTextureDescriptions(),
         RaytracingDemoRenderGraph::CreateBufferDescriptions(),
-        RaytracingDemoRenderGraph::CreateTokenDescriptions());
+        RaytracingDemoRenderGraph::CreateTokenDescriptions(),
+        std::vector<RenderGraph::ResourceId>{
+            RaytracingDemoRenderGraph::ResourceIds::SceneColor
+        });
 }
 //Modify End

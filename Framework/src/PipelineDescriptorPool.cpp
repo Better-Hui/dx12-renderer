@@ -1,6 +1,7 @@
 //Modify Begin:2026-07-27 by BestHui
 #include "PipelineDescriptorPool.h"
 
+#include <DX12Library/Application.h>
 #include <DX12Library/Helpers.h>
 #include <Framework/PipelineLayout.h>
 
@@ -34,7 +35,34 @@ PipelineDescriptorSet PipelineDescriptorPool::AllocateDescriptorSetValue(
     ++m_AllocatedDescriptorSetCount;
     m_AllocatedResourceDescriptorCount += resourceDescriptorCount;
     m_AllocatedSamplerDescriptorCount += samplerDescriptorCount;
-    return PipelineDescriptorSet(layout);
+//Modify Begin:2026-07-27 by BestHui
+    PipelineDescriptorSet descriptorSet(layout);
+    auto device = Application::Get().GetDevice();
+    for (const PipelineDescriptorSetDesc& setDesc : layout.GetDescriptorSets())
+    {
+        for (const PipelineDescriptorRangeDesc& range : setDesc.Ranges)
+        {
+            if (range.BindingMode != PipelineDescriptorBindingMode::DescriptorTable)
+            {
+                continue;
+            }
+
+            DescriptorAllocation allocation = Application::Get().AllocateDescriptors(
+                D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+                range.DescriptorCount);
+            if (const DescriptorAllocation* defaultDescriptors = layout.FindDefaultDescriptorTable(range.RootParameterIndex))
+            {
+                device->CopyDescriptorsSimple(
+                    range.DescriptorCount,
+                    allocation.GetDescriptorHandle(),
+                    defaultDescriptors->GetDescriptorHandle(),
+                    D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            }
+            descriptorSet.SetDescriptorTableAllocation(range.RootParameterIndex, std::move(allocation));
+        }
+    }
+    return descriptorSet;
+//Modify End
 }
 
 std::unique_ptr<PipelineDescriptorSet> PipelineDescriptorPool::AllocateDescriptorSet(

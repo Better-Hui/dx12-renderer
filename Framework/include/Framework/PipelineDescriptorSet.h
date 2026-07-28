@@ -7,6 +7,8 @@
 #include "ShaderResourceView.h"
 #include "UnorderedAccessView.h"
 
+#include <DX12Library/DescriptorAllocation.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <map>
@@ -26,6 +28,9 @@ struct PipelineShaderResourceBinding
     UINT NumSubresources = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
     bool HasDesc = false;
     D3D12_SHADER_RESOURCE_VIEW_DESC Desc = {};
+//Modify Begin:2026-07-27 by BestHui
+    bool AutoTransition = true;
+//Modify End
 };
 
 struct PipelineBoundResource
@@ -54,6 +59,12 @@ public:
 
     UINT SetShaderResourceView(std::string_view name, UINT arrayIndex, const ShaderResourceView& shaderResourceView);
     UINT SetShaderResource(std::string_view name, UINT arrayIndex, const Resource& resource, D3D12_RESOURCE_STATES stateAfter);
+    UINT SetShaderResource(
+        std::string_view name,
+        UINT arrayIndex,
+        const Resource& resource,
+        D3D12_RESOURCE_STATES stateAfter,
+        const D3D12_SHADER_RESOURCE_VIEW_DESC& srvDesc);
     UINT SetUnorderedAccessView(std::string_view name, const UnorderedAccessView& unorderedAccessView);
     UINT SetStructuredBuffer(std::string_view name, const StructuredBuffer& buffer);
     UINT SetAccelerationStructure(std::string_view name, const RayTracingAccelerationStructure& accelerationStructure);
@@ -64,6 +75,10 @@ public:
     void ApplyComputeBinding(CommandList& commandList, UINT rootParameterIndex) const;
 
     const PipelineLayout& GetLayout() const;
+//Modify Begin:2026-07-27 by BestHui
+    void SetDescriptorTableAllocation(UINT rootParameterIndex, DescriptorAllocation allocation);
+    const DescriptorAllocation* FindDescriptorTableAllocation(UINT rootParameterIndex) const;
+//Modify End
     const PipelineBoundResource* FindBoundResource(UINT rootParameterIndex) const;
     const PipelineBoundResource& GetBoundResource(UINT rootParameterIndex) const;
     const std::map<UINT, PipelineBoundResource>& GetBoundResources() const { return m_BoundResources; }
@@ -73,6 +88,9 @@ private:
     PipelineBindingSet m_Bindings;
     const PipelineLayout* m_Layout = nullptr;
     std::map<UINT, PipelineBoundResource> m_BoundResources;
+//Modify Begin:2026-07-27 by BestHui
+    std::map<UINT, DescriptorAllocation> m_DescriptorTableAllocations;
+//Modify End
     const RayTracingAccelerationStructure* m_AccelerationStructure = nullptr;
 };
 

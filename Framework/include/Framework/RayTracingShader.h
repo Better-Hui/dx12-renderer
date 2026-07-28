@@ -170,12 +170,6 @@ public:
 //Modify Begin:2026-07-27 by BestHui
     const RayTracingShader& GetShader() const;
     const PipelineDescriptorSet& GetDescriptorSet() const;
-    void PrepareDispatch(std::string_view passName);
-    void TransitionDispatchResources(const CommandContext& context) const;
-    void StageDescriptorTable(const CommandContext& context) const;
-    void ApplyRootBindings(const CommandContext& context) const;
-    D3D12_DISPATCH_RAYS_DESC BuildDispatchDesc(uint32_t width, uint32_t height, uint32_t depth) const;
-    void InsertOutputBarriers(const CommandContext& context) const;
 //Modify End
 
 private:
@@ -205,6 +199,9 @@ public:
 //Modify Begin:2026-07-27 by BestHui
     const RayTracingPipelineState& GetPipelineState() const;
     const PipelineLayout& GetPipelineLayout() const;
+    void PrepareDispatch(std::string_view passName) const;
+    D3D12_DISPATCH_RAYS_DESC BuildDispatchDesc(std::string_view passName, uint32_t width, uint32_t height, uint32_t depth) const;
+    D3D12_DISPATCH_RAYS_DESC BuildDispatchDesc(uint32_t width, uint32_t height, uint32_t depth) const;
 //Modify End
     //Modify Begin:2026-07-24 by BestHui
     RayTracingBindingSet CreateBindingSet() const;

@@ -34,8 +34,11 @@ void RaytracingDemoPassAccess::BindInlinePathTracingInputs(
     const std::vector<std::shared_ptr<Mesh>>& meshes = demo.m_RayTracingAccelerationStructure.GetMeshes();
     const uint32_t meshCount = static_cast<uint32_t>(meshes.size());
 
-    Assert(textureCount <= demo.m_RayTracingSceneResourceLayout.TextureDescriptorCapacity, "Ray tracing texture descriptors exceed the scene descriptor table capacity.");
-    Assert(meshCount <= demo.m_RayTracingSceneResourceLayout.GeometryDescriptorCapacity, "Ray tracing geometry descriptors exceed the scene descriptor table capacity.");
+//Modify Begin:2026-07-27 by BestHui
+    const RayTracingSceneResourceLayout& layout = demo.m_PathTracingPipelines.GetLayout();
+    Assert(textureCount <= layout.TextureDescriptorCapacity, "Ray tracing texture descriptors exceed the scene descriptor table capacity.");
+    Assert(meshCount <= layout.GeometryDescriptorCapacity, "Ray tracing geometry descriptors exceed the scene descriptor table capacity.");
+//Modify End
 
     shader.Bind(cmd);
     shader.SetConstantBuffer(cmd, "CameraConstants", camera);
@@ -118,19 +121,21 @@ void RaytracingDemoPassAccess::BindCompositeInputs(
 {
     const RaytracingDemoRenderGraph::LightingResources lighting = RaytracingDemoRenderGraph::GetLightingResources(context);
 
-    demo.m_LightingCompositeShader->Bind(cmd);
-    demo.m_LightingCompositeShader->SetConstantBuffer(cmd, "CameraConstants", camera);
-    demo.m_LightingCompositeShader->SetShaderResourceView(cmd, "GBufferTextures", 0u, ShaderResourceView(gbuffer.AlbedoOcclusion));
-    demo.m_LightingCompositeShader->SetShaderResourceView(cmd, "GBufferTextures", 1u, ShaderResourceView(gbuffer.SpecularSmoothness));
-    demo.m_LightingCompositeShader->SetShaderResourceView(cmd, "GBufferTextures", 2u, ShaderResourceView(gbuffer.Normal));
-    demo.m_LightingCompositeShader->SetShaderResourceView(cmd, "GBufferTextures", 3u, ShaderResourceView(gbuffer.EmissionMetallic));
-    demo.m_LightingCompositeShader->SetShaderResourceView(cmd, "GBufferTextures", 4u, ShaderResourceView(gbuffer.Position));
-    demo.m_LightingCompositeShader->SetShaderResourceView(cmd, "DepthTexture", ShaderResourceView::DepthAsFloat(gbuffer.Depth));
-    demo.m_LightingCompositeShader->SetShaderResourceView(cmd, "Skybox", ShaderResourceView::TextureCube(demo.m_SkyboxTexture));
-    demo.m_LightingCompositeShader->SetShaderResourceView(cmd, "DirectLightingTexture", ShaderResourceView(lighting.Direct));
-    demo.m_LightingCompositeShader->SetShaderResourceView(cmd, "IndirectLightingTexture", ShaderResourceView(lighting.Indirect));
-    demo.m_LightingCompositeShader->SetUnorderedAccessView(cmd, "Output", UnorderedAccessView(lighting.Output));
-    demo.m_LightingCompositeShader->SetUnorderedAccessView(cmd, "Accumulation", UnorderedAccessView(lighting.Accumulation));
-    demo.m_LightingCompositeShader->SetUnorderedAccessView(cmd, "NoisyRadiance", UnorderedAccessView(lighting.NoisyRadiance));
-    demo.m_LightingCompositeShader->SetUnorderedAccessView(cmd, "NRDNoisyRadiance", UnorderedAccessView(lighting.NRDNoisyRadiance));
+//Modify Begin:2026-07-27 by BestHui
+    ComputeShader& compositeShader = demo.m_PathTracingPipelines.GetLightingCompositeShader();
+    compositeShader.Bind(cmd);
+    compositeShader.SetConstantBuffer(cmd, "CameraConstants", camera);
+    compositeShader.SetShaderResourceView(cmd, "GBufferTextures", 0u, ShaderResourceView(gbuffer.AlbedoOcclusion));
+    compositeShader.SetShaderResourceView(cmd, "GBufferTextures", 1u, ShaderResourceView(gbuffer.SpecularSmoothness));
+    compositeShader.SetShaderResourceView(cmd, "GBufferTextures", 2u, ShaderResourceView(gbuffer.Normal));
+    compositeShader.SetShaderResourceView(cmd, "GBufferTextures", 3u, ShaderResourceView(gbuffer.EmissionMetallic));
+    compositeShader.SetShaderResourceView(cmd, "GBufferTextures", 4u, ShaderResourceView(gbuffer.Position));
+    compositeShader.SetShaderResourceView(cmd, "DepthTexture", ShaderResourceView::DepthAsFloat(gbuffer.Depth));
+    compositeShader.SetShaderResourceView(cmd, "DirectLightingTexture", ShaderResourceView(lighting.Direct));
+    compositeShader.SetShaderResourceView(cmd, "IndirectLightingTexture", ShaderResourceView(lighting.Indirect));
+    compositeShader.SetUnorderedAccessView(cmd, "SceneColor", UnorderedAccessView(lighting.SceneColor));
+    compositeShader.SetUnorderedAccessView(cmd, "HistoryColor", UnorderedAccessView(lighting.HistoryColor));
+    compositeShader.SetUnorderedAccessView(cmd, "NoisyRadiance", UnorderedAccessView(lighting.NoisyRadiance));
+    compositeShader.SetUnorderedAccessView(cmd, "NRDNoisyRadiance", UnorderedAccessView(lighting.NRDNoisyRadiance));
+//Modify End
 }

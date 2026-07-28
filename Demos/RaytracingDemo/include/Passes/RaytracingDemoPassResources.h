@@ -38,7 +38,11 @@ namespace RaytracingDemoRenderGraph
         static inline const RenderGraph::ResourceId MotionVector = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.MotionVector");
         static inline const RenderGraph::ResourceId DirectLighting = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DirectLighting");
         static inline const RenderGraph::ResourceId IndirectLighting = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.IndirectLighting");
-        static inline const RenderGraph::ResourceId Accumulation = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.Accumulation");
+        static inline const RenderGraph::ResourceId SceneColor = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.SceneColor");
+        static inline const RenderGraph::ResourceId ResolvedColor = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ResolvedColor");
+        static inline const RenderGraph::ResourceId PostProcessColor = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.PostProcessColor");
+        static inline const RenderGraph::ResourceId DisplayColor = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DisplayColor");
+        static inline const RenderGraph::ResourceId HistoryColor = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.HistoryColor");
         static inline const RenderGraph::ResourceId NoisyRadiance = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.NoisyRadiance");
         static inline const RenderGraph::ResourceId NRDNoisyRadiance = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.NRDNoisyRadiance");
         static inline const RenderGraph::ResourceId NRDDenoisedRadiance = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.NRDDenoisedRadiance");
@@ -71,10 +75,10 @@ namespace RaytracingDemoRenderGraph
     {
         std::shared_ptr<Texture> Direct;
         std::shared_ptr<Texture> Indirect;
-        std::shared_ptr<Texture> Accumulation;
+        std::shared_ptr<Texture> HistoryColor;
         std::shared_ptr<Texture> NoisyRadiance;
         std::shared_ptr<Texture> NRDNoisyRadiance;
-        std::shared_ptr<Texture> Output;
+        std::shared_ptr<Texture> SceneColor;
     };
 
     struct NRDResources

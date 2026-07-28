@@ -13,6 +13,7 @@
 #include <Framework/RasterPipelineStateBuilder.h>
 #include <Framework/ShaderBlob.h>
 
+#include <Passes/RaytracingDemoPassResources.h>
 #include <RenderGraph/RenderMetadata.h>
 
 #include <DirectXMath.h>
@@ -43,7 +44,7 @@ namespace
     uint32_t ComputeDescriptorArrayCapacity(const size_t resourceCount, const size_t resourceCapacity)
     {
         return static_cast<uint32_t>(std::max<size_t>(
-            RaytracingDemo::MinRayTracingDescriptorArrayCapacity,
+            RayTracingSceneResourceLayout::MinDescriptorArrayCapacity,
             std::max(resourceCount, resourceCapacity)));
     }
 
@@ -60,6 +61,11 @@ RaytracingDemo::RaytracingDemo(const std::wstring& name, const int width, const 
     const XMVECTOR cameraTarget = XMVectorSet(0, 5, 18, 1);
     const XMVECTOR cameraUp = XMVectorSet(0, 1, 0, 0);
     m_Camera.SetLookAt(cameraPos, cameraTarget, cameraUp);
+//Modify Begin:2026-07-28 by BestHui
+    const XMVECTOR initialForward = XMVector3Normalize(cameraTarget - cameraPos);
+    m_CameraController.Yaw = XMConvertToDegrees(std::atan2(XMVectorGetX(initialForward), XMVectorGetZ(initialForward)));
+    m_CameraController.Pitch = XMConvertToDegrees(std::asin(std::clamp(XMVectorGetY(initialForward), -1.0f, 1.0f)));
+//Modify End
     m_Camera.SetProjection(m_CameraFov, static_cast<float>(m_Width) / static_cast<float>(m_Height), 0.1f, 1000.0f);
 
     char* mode = nullptr;
@@ -88,6 +94,35 @@ RaytracingDemo::RaytracingDemo(const std::wstring& name, const int width, const 
         m_Denoisers.SetAlgorithmFromName(denoiserMode);
     }
     std::free(denoiserMode);
+
+//Modify Begin:2026-07-27 by BestHui
+    char* directLighting = nullptr;
+    size_t directLightingLength = 0;
+    _dupenv_s(&directLighting, &directLightingLength, "RAYTRACING_DEMO_DIRECT");
+    if (directLighting != nullptr)
+    {
+        m_DirectLightingEnabled = std::strcmp(directLighting, "0") != 0;
+    }
+    std::free(directLighting);
+
+    char* indirectLighting = nullptr;
+    size_t indirectLightingLength = 0;
+    _dupenv_s(&indirectLighting, &indirectLightingLength, "RAYTRACING_DEMO_INDIRECT");
+    if (indirectLighting != nullptr)
+    {
+        m_IndirectLightingEnabled = std::strcmp(indirectLighting, "0") != 0;
+    }
+    std::free(indirectLighting);
+
+    char* cudaBloom = nullptr;
+    size_t cudaBloomLength = 0;
+    _dupenv_s(&cudaBloom, &cudaBloomLength, "RAYTRACING_DEMO_CUDA_BLOOM");
+    if (cudaBloom != nullptr)
+    {
+        m_CudaBloom.SetEnabled(std::strcmp(cudaBloom, "0") != 0);
+    }
+    std::free(cudaBloom);
+//Modify End
 
 }
 
@@ -138,17 +173,15 @@ bool RaytracingDemo::LoadContent()
 
     m_SceneResources.AddRayTracingInstances(m_RayTracingAccelerationStructure);
 
-    EnsureRayTracingPipelines();
-
     RayTracingAccelerationStructureBuildSettings accelerationStructureSettings{};
     accelerationStructureSettings.AllowUpdate = true;
     m_RayTracingAccelerationStructure.Build(*commandList, accelerationStructureSettings);
     m_SceneResources.UploadRayTracingBuffers(*commandList, m_RayTracingAccelerationStructure);
     m_Lights.InitializeGpuBuffers(*commandList);
-    if (m_DirectRayTracingBindingSet != nullptr || m_IndirectRayTracingBindingSet != nullptr)
-    {
-        BindRayTracingShaderResources();
-    }
+//Modify Begin:2026-07-27 by BestHui
+    EnsureRayTracingPipelines();
+//Modify End
+    BindRayTracingShaderResources();
 
     m_RenderGraph = RaytracingDemoRenderGraphBuilder::Create(*this, *commandList);
 
@@ -167,17 +200,17 @@ void RaytracingDemo::UnloadContent()
     m_SkyboxMesh.reset();
     m_ImGui.reset();
     m_Denoisers.Shutdown();
+//Modify Begin:2026-07-27 by BestHui
+    m_CudaBloom.Shutdown();
+//Modify End
     m_SkyboxTexture.reset();
-    m_LightingCompositeShader.reset();
-    m_InlineIndirectLightingShader.reset();
-    m_InlineDirectLightingShader.reset();
-    m_IndirectRayTracingBindingSet.reset();
-    m_DirectRayTracingBindingSet.reset();
-    m_RayTracingShader.reset();
+//Modify Begin:2026-07-27 by BestHui
+    m_PathTracingPipelines.Reset();
+//Modify End
     m_SceneResources.Clear();
 }
 
-RaytracingDemo::RayTracingSceneResourceLayout RaytracingDemo::BuildRayTracingSceneResourceLayout() const
+RayTracingSceneResourceLayout RaytracingDemo::BuildRayTracingSceneResourceLayout() const
 {
     const std::vector<std::shared_ptr<Mesh>>& rayTracingMeshes = m_RayTracingAccelerationStructure.GetMeshes();
 
@@ -190,96 +223,24 @@ RaytracingDemo::RayTracingSceneResourceLayout RaytracingDemo::BuildRayTracingSce
 void RaytracingDemo::EnsureRayTracingPipelines()
 {
     const RayTracingSceneResourceLayout layout = BuildRayTracingSceneResourceLayout();
-    const bool needsDxrPipeline = m_PathTracingBackend == PathTracingBackend::ShaderTableDxr;
-    if ((!needsDxrPipeline || (m_RayTracingShader != nullptr &&
-            m_DirectRayTracingBindingSet != nullptr &&
-            m_IndirectRayTracingBindingSet != nullptr)) &&
-        m_InlineDirectLightingShader != nullptr &&
-        m_InlineIndirectLightingShader != nullptr &&
-        m_LightingCompositeShader != nullptr &&
-        !(m_RayTracingSceneResourceLayout != layout))
-    {
-        return;
-    }
-
-    m_RayTracingSceneResourceLayout = layout;
-
-    if (needsDxrPipeline)
-    {
-        const ShaderBlob pathTracingShader(L"PathTracing.rt.cso");
-        const RayTracingPipelineDesc rayTracingDesc = RayTracingPipelineDescBuilder::ReflectedDefault(pathTracingShader)
-            .WithExport(L"DirectLightingRayGen")
-            .WithExport(L"IndirectLightingRayGen")
-            .WithRayGenerationPass("DirectLightingRayGen", L"DirectLightingRayGen", { L"Miss" }, { L"HitGroup" })
-            .WithRayGenerationPass("IndirectLightingRayGen", L"IndirectLightingRayGen", { L"Miss" }, { L"HitGroup" })
-            .WithTextureArray("Textures", 0, 3, layout.TextureDescriptorCapacity)
-            .WithVertexBufferArray("VertexBuffers", 0, 1, layout.GeometryDescriptorCapacity)
-            .WithIndexBufferArray("IndexBuffers", 0, 2, layout.GeometryDescriptorCapacity)
-            .WithPayloadSize(64)
-            .Build();
-        m_RayTracingShader = std::make_unique<RayTracingShader>(pathTracingShader, rayTracingDesc);
-        m_DirectRayTracingBindingSet = std::make_unique<RayTracingBindingSet>(m_RayTracingShader->CreateBindingSet());
-        m_IndirectRayTracingBindingSet = std::make_unique<RayTracingBindingSet>(m_RayTracingShader->CreateBindingSet());
-    }
-    else
-    {
-        m_IndirectRayTracingBindingSet.reset();
-        m_DirectRayTracingBindingSet.reset();
-        m_RayTracingShader.reset();
-    }
-
-    const ShaderBlob inlineDirectLightingShader(L"DirectLighting.cs.cso");
-    const ComputePipelineDesc inlineDirectLightingDesc = ComputePipelineDescBuilder::ReflectedDefault(inlineDirectLightingShader)
-        .WithDescriptorArrayCount("Textures", layout.TextureDescriptorCapacity)
-        .WithDescriptorArrayCount("VertexBuffers", layout.GeometryDescriptorCapacity)
-        .WithDescriptorArrayCount("IndexBuffers", layout.GeometryDescriptorCapacity)
-        .Build();
-    m_InlineDirectLightingShader = std::make_unique<ComputeShader>(inlineDirectLightingShader, inlineDirectLightingDesc);
-
-    const ShaderBlob inlineIndirectLightingShader(L"IndirectLighting.cs.cso");
-    const ComputePipelineDesc inlineIndirectLightingDesc = ComputePipelineDescBuilder::ReflectedDefault(inlineIndirectLightingShader)
-        .WithDescriptorArrayCount("Textures", layout.TextureDescriptorCapacity)
-        .WithDescriptorArrayCount("VertexBuffers", layout.GeometryDescriptorCapacity)
-        .WithDescriptorArrayCount("IndexBuffers", layout.GeometryDescriptorCapacity)
-        .Build();
-    m_InlineIndirectLightingShader = std::make_unique<ComputeShader>(inlineIndirectLightingShader, inlineIndirectLightingDesc);
-
-    const ShaderBlob lightingCompositeShader(L"LightingComposite.cs.cso");
-    m_LightingCompositeShader = std::make_unique<ComputeShader>(
-        lightingCompositeShader,
-        ComputePipelineDescBuilder::ReflectedDefault(lightingCompositeShader).Build());
-
-    if ((m_DirectRayTracingBindingSet != nullptr || m_IndirectRayTracingBindingSet != nullptr) &&
-        m_RayTracingAccelerationStructure.GetInstanceCount() > 0)
+//Modify Begin:2026-07-27 by BestHui
+    m_PathTracingPipelines.EnsurePipelines(m_PathTracingBackend, layout);
+    if (m_RayTracingAccelerationStructure.GetInstanceCount() > 0)
     {
         BindRayTracingShaderResources();
     }
+//Modify End
 }
 
 void RaytracingDemo::BindRayTracingShaderResources()
 {
-    if (m_DirectRayTracingBindingSet != nullptr)
-    {
-        BindRayTracingShaderResources(*m_DirectRayTracingBindingSet);
-    }
-    if (m_IndirectRayTracingBindingSet != nullptr)
-    {
-        BindRayTracingShaderResources(*m_IndirectRayTracingBindingSet);
-    }
-}
-
-void RaytracingDemo::BindRayTracingShaderResources(RayTracingBindingSet& shader)
-{
-    shader.SetAccelerationStructure("Scene", m_RayTracingAccelerationStructure);
-    shader.SetBuffer("Materials", m_SceneResources.GetMaterialBuffer());
-    shader.SetBuffer("Geometries", m_SceneResources.GetGeometryBuffer());
-    m_Lights.BindRayTracingResources(shader);
-    const std::vector<std::shared_ptr<Texture>>& textures = m_SceneResources.GetTextures();
-    for (uint32_t textureIndex = 0; textureIndex < textures.size(); ++textureIndex)
-    {
-        shader.SetTexture("Textures", textureIndex, ShaderResourceView(textures[textureIndex]));
-    }
-    shader.SetTexture("Skybox", ShaderResourceView::TextureCube(m_SkyboxTexture));
+//Modify Begin:2026-07-27 by BestHui
+    m_PathTracingPipelines.BindRayTracingResources(
+        m_RayTracingAccelerationStructure,
+        m_SceneResources,
+        m_Lights,
+        m_SkyboxTexture);
+//Modify End
 }
 
 RaytracingDemo::CameraConstants RaytracingDemo::BuildCameraConstants() const
@@ -349,7 +310,38 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     commandQueue->ExecuteCommandList(commandList);
 
     m_RenderGraph->Execute(metadata);
-    m_RenderGraph->Present(PWindow);
+//Modify Begin:2026-07-27 by BestHui
+    using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
+
+    const uint32_t renderWidth = static_cast<uint32_t>(m_Width);
+    const uint32_t renderHeight = static_cast<uint32_t>(m_Height);
+    const auto& resolvedColor = m_RenderGraph->GetTexture(DemoResourceIds::ResolvedColor);
+    const auto& postProcessColor = m_RenderGraph->GetTexture(DemoResourceIds::PostProcessColor);
+
+    bool bloomApplied = false;
+    if (m_CudaBloom.IsEnabled())
+    {
+        m_RenderGraph->CopyTexture(metadata, DemoResourceIds::SceneColor, DemoResourceIds::ResolvedColor, true);
+        m_RenderGraph->TransitionTexture(metadata, DemoResourceIds::ResolvedColor, D3D12_RESOURCE_STATE_COMMON, true);
+        m_RenderGraph->TransitionTexture(metadata, DemoResourceIds::PostProcessColor, D3D12_RESOURCE_STATE_COMMON, true);
+        bloomApplied = m_CudaBloom.Execute(
+            *resolvedColor,
+            *postProcessColor,
+            renderWidth,
+            renderHeight);
+    }
+
+    const RenderGraph::ResourceId displaySource = bloomApplied
+        ? DemoResourceIds::PostProcessColor
+        : DemoResourceIds::SceneColor;
+    m_RenderGraph->PresentWithOverlay(
+        PWindow,
+        displaySource,
+        [this](CommandList& cmd)
+        {
+            DrawPostBloomOverlays(cmd);
+        });
+//Modify End
 
     ++m_FrameIndex;
     if (m_AccumulationEnabled && !IsDenoiserEnabled())

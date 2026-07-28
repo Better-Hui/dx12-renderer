@@ -57,6 +57,24 @@ namespace
         return texture;
     }
 
+//Modify Begin:2026-07-28 by BestHui
+    std::shared_ptr<Texture> CreateDedicatedTextureImpl(const RenderGraph::ResourceDescription& desc)
+    {
+        const bool useClearValue =
+            desc.m_TextureUsageType == TextureUsageType::RenderTarget ||
+            desc.m_TextureUsageType == TextureUsageType::Depth;
+        auto texture = std::make_shared<Texture>(
+            desc.m_DxDesc,
+            desc.m_HeapFlags,
+            useClearValue ? desc.m_TextureDescription.m_ClearValue : ClearValue{},
+            desc.m_TextureUsageType,
+            RenderGraph::ResourceIds::GetResourceName(desc.m_TextureDescription.m_Id)
+        );
+        texture->SetAutoBarriersEnabled(false);
+        return texture;
+    }
+//Modify End
+
     std::shared_ptr<Buffer> CreateBufferImpl(
         const RenderGraph::ResourceDescription& desc,
         const ComPtr<ID3D12Heap>& pHeap
@@ -182,10 +200,17 @@ void RenderGraph::ResourcePool::ForEachResource(const std::function<bool(const R
 
 const RenderGraph::TransientResourceAllocator::ResourceLifecycle& RenderGraph::ResourcePool::GetResourceLifecycle(ResourceId resourceId)
 {
-    const ResourceHeapInfo& resourceHeapInfo = m_ResourceHeapInfo[resourceId];
-    const TransientResourceAllocator::HeapInfo& heapInfo = m_HeapInfos[resourceHeapInfo.m_HeapIndex];
-    return heapInfo.m_ResourceLifecycles[resourceHeapInfo.m_LifecycleIndex];
+//Modify Begin:2026-07-28 by BestHui
+    return m_ResourceLifecycles.at(resourceId);
+//Modify End
 }
+
+//Modify Begin:2026-07-28 by BestHui
+bool RenderGraph::ResourcePool::HasResourceLifecycle(const ResourceId resourceId) const
+{
+    return m_ResourceLifecycles.contains(resourceId);
+}
+//Modify End
 
 bool RenderGraph::ResourcePool::IsRegistered(const ResourceId resourceId) const
 {
@@ -213,15 +238,42 @@ void RenderGraph::ResourcePool::Clear()
 
     m_ResourceDescriptions.clear();
     m_HeapInfos.clear();
+//Modify Begin:2026-07-28 by BestHui
+    m_ResourceLifecycles.clear();
+//Modify End
     m_ResourceHeapInfo.clear();
 
     m_ResourceInstances.clear();
 }
 
-void RenderGraph::ResourcePool::InitHeaps(const std::vector<RenderPass*>& renderPasses, const ComPtr<ID3D12Device2>& pDevice)
+//Modify Begin:2026-07-28 by BestHui
+void RenderGraph::ResourcePool::InitHeaps(
+    const std::vector<RenderPass*>& renderPasses,
+    const ComPtr<ID3D12Device2>& pDevice,
+    const std::vector<ResourceId>& externalOutputIds)
+//Modify End
 {
-    const auto lifecycles = TransientResourceAllocator::GetResourceLifecycles(renderPasses);
-    m_HeapInfos = TransientResourceAllocator::CreateHeaps(lifecycles, m_ResourceDescriptions, pDevice);
+//Modify Begin:2026-07-28 by BestHui
+    const auto lifecycles = TransientResourceAllocator::GetResourceLifecycles(renderPasses, externalOutputIds);
+//Modify End
+//Modify Begin:2026-07-28 by BestHui
+    m_ResourceLifecycles = lifecycles;
+    const uint32_t lastPassIndex = renderPasses.empty()
+        ? 0u
+        : static_cast<uint32_t>(renderPasses.size()) - 1u;
+    for (const auto& [resourceId, resourceDescription] : m_ResourceDescriptions)
+    {
+        if (!resourceDescription.m_DedicatedResource && !m_ResourceLifecycles.contains(resourceId))
+        {
+            m_ResourceLifecycles.insert(std::pair{
+                resourceId,
+                TransientResourceAllocator::ResourceLifecycle{ resourceId, lastPassIndex, lastPassIndex } });
+        }
+    }
+//Modify End
+//Modify Begin:2026-07-28 by BestHui
+    m_HeapInfos = TransientResourceAllocator::CreateHeaps(m_ResourceLifecycles, m_ResourceDescriptions, pDevice);
+//Modify End
 
     for (uint32_t heapIndex = 0; heapIndex < m_HeapInfos.size(); ++heapIndex)
     {
@@ -237,7 +289,9 @@ void RenderGraph::ResourcePool::InitHeaps(const std::vector<RenderPass*>& render
 
 void RenderGraph::ResourcePool::RegisterTexture(const TextureDescription& desc, const std::vector<RenderPass*>& renderPasses, const RenderMetadata& renderMetadata, const ComPtr<ID3D12Device2>& pDevice)
 {
-    D3D12_RESOURCE_FLAGS resourceFlags = D3D12_RESOURCE_FLAG_NONE;
+//Modify Begin:2026-07-28 by BestHui
+    D3D12_RESOURCE_FLAGS resourceFlags = desc.m_ExtraResourceFlags;
+//Modify End
     auto textureUsageType = TextureUsageType::Other;
     {
         bool depth = false;
@@ -290,6 +344,12 @@ void RenderGraph::ResourcePool::RegisterTexture(const TextureDescription& desc, 
             resourceFlags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
             textureUsageType = TextureUsageType::RenderTarget;
         }
+//Modify Begin:2026-07-28 by BestHui
+        if ((resourceFlags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET) != 0 && !depth)
+        {
+            textureUsageType = TextureUsageType::RenderTarget;
+        }
+//Modify End
     }
 
     UINT msaaQualityLevels = desc.m_SampleCount == 0 ? 0 : GetMsaaQualityLevels(pDevice, desc.m_Format, desc.m_SampleCount) - 1;
@@ -309,6 +369,10 @@ void RenderGraph::ResourcePool::RegisterTexture(const TextureDescription& desc, 
     description.m_DxDesc = dxDesc;
     description.m_ResourceType = ResourceType::Texture;
     description.m_TextureUsageType = textureUsageType;
+//Modify Begin:2026-07-28 by BestHui
+    description.m_HeapFlags = desc.m_HeapFlags;
+    description.m_DedicatedResource = desc.m_DedicatedResource || desc.m_HeapFlags != D3D12_HEAP_FLAG_NONE;
+//Modify End
 
     const auto allocationInfo = GetResourceAllocationInfo(pDevice, dxDesc);
     description.m_TotalSize = allocationInfo.SizeInBytes;
@@ -373,9 +437,12 @@ const std::shared_ptr<Texture>& RenderGraph::ResourcePool::CreateTexture(const R
     Assert(IsRegistered(resourceId), "The resource is not registered.");
 
     const ResourceDescription& resourceDescription = m_ResourceDescriptions[resourceId];
-    const uint32_t heapIndex = m_ResourceHeapInfo[resourceId].m_HeapIndex;
-    const ComPtr<ID3D12Heap>& pHeap = m_HeapInfos[heapIndex].m_Heap;
-    const std::shared_ptr<Texture> pTexture = CreateTextureImpl(resourceDescription, pHeap);
+//Modify Begin:2026-07-28 by BestHui
+    Assert(resourceDescription.m_DedicatedResource || m_ResourceHeapInfo.contains(resourceId), "Transient texture has no lifecycle heap.");
+    const std::shared_ptr<Texture> pTexture = resourceDescription.m_DedicatedResource
+        ? CreateDedicatedTextureImpl(resourceDescription)
+        : CreateTextureImpl(resourceDescription, m_HeapInfos[m_ResourceHeapInfo[resourceId].m_HeapIndex].m_Heap);
+//Modify End
 
     ResourceInstance resourceInstance = {};
     resourceInstance.m_Type = ResourceInstanceType::Texture;
@@ -389,6 +456,9 @@ const std::shared_ptr<Buffer>& RenderGraph::ResourcePool::CreateBuffer(const Res
     Assert(IsRegistered(resourceId), "The resource is not registered.");
 
     const ResourceDescription& resourceMetadata = m_ResourceDescriptions[resourceId];
+//Modify Begin:2026-07-28 by BestHui
+    Assert(m_ResourceHeapInfo.contains(resourceId), "Transient buffer has no lifecycle heap.");
+//Modify End
     const uint32_t heapIndex = m_ResourceHeapInfo[resourceId].m_HeapIndex;
     const ComPtr<ID3D12Heap>& pHeap = m_HeapInfos[heapIndex].m_Heap;
     const std::shared_ptr<Buffer> pBuffer = CreateBufferImpl(resourceMetadata, pHeap);

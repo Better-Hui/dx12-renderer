@@ -72,5 +72,16 @@ namespace ShaderUtils
 	std::vector<UnorderedAccessViewMetadata> GetUnorderedAccessViews(const Microsoft::WRL::ComPtr<ID3D12LibraryReflection>& libraryReflection);
 //Modify End
 
-	// TODO: GetSamplers
+//Modify Begin:2026-07-27 by BestHui
+	struct SamplerMetadata
+	{
+		UINT RegisterIndex;
+		UINT Space;
+		UINT BindCount;
+		std::string Name;
+	};
+
+	std::vector<SamplerMetadata> GetSamplers(const Microsoft::WRL::ComPtr<ID3D12ShaderReflection>& shaderReflection);
+	std::vector<SamplerMetadata> GetSamplers(const Microsoft::WRL::ComPtr<ID3D12LibraryReflection>& libraryReflection);
+//Modify End
 }

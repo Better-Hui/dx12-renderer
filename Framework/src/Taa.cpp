@@ -7,10 +7,6 @@
 #include <Framework/Blit_VS.h>
 #include <Framework/TAA_Resolve_PS.h>
 
-//Modify Begin:2026-07-27 by BestHui
-FRAMEWORK_SUPPRESS_DEPRECATED_WARNINGS_BEGIN
-//Modify End
-
 namespace
 {
     struct RootConstants
@@ -20,16 +16,19 @@ namespace
     };
 }
 
-TAA::TAA(const std::shared_ptr<CommonRootSignature>& rootSignature, CommandList& commandList, DXGI_FORMAT backBufferFormat, uint32_t width, uint32_t height)
+//Modify Begin:2026-07-27 by BestHui
+TAA::TAA(CommandList& commandList, DXGI_FORMAT backBufferFormat, uint32_t width, uint32_t height)
+//Modify End
     : m_BlitMesh(Mesh::CreateBlitTriangle(commandList))
-    , m_RootSignature(rootSignature)
     , m_Width(width)
     , m_Height(height)
 {
-    auto shader = std::make_shared<Shader>(rootSignature,
+//Modify Begin:2026-07-27 by BestHui
+    auto shader = std::make_shared<Shader>(
         ShaderBlob(ShaderBytecode_Blit_VS, sizeof ShaderBytecode_Blit_VS),
         ShaderBlob(ShaderBytecode_TAA_Resolve_PS, sizeof ShaderBytecode_TAA_Resolve_PS)
         );
+//Modify End
     m_Material = Material::Create(shader);
 
     auto rtColorDesc = CD3DX12_RESOURCE_DESC::Tex2D(backBufferFormat, width, height, 1, 1, 1, 0, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);;
@@ -62,16 +61,14 @@ void TAA::Resolve(CommandList& commandList, const std::shared_ptr<Texture>& curr
     {
         PIXScope(commandList, "Resolve TAA");
 
+        RootConstants rootConstants;
+        rootConstants.m_TexelSize =
         {
-            RootConstants rootConstants;
-            rootConstants.m_TexelSize =
-            {
-                1.0f / static_cast<float>(m_Width),
-                1.0f / static_cast<float>(m_Height),
-            };
-            rootConstants.m_ModulationFactor = modulationFactor;
-            m_RootSignature->SetGraphicsRootConstants(commandList, rootConstants);
-        }
+            1.0f / static_cast<float>(m_Width),
+            1.0f / static_cast<float>(m_Height),
+        };
+        rootConstants.m_ModulationFactor = modulationFactor;
+        m_Material->SetAllVariables(rootConstants);
 
         m_Material->SetShaderResourceView("currentColorBuffer", ShaderResourceView(currentBuffer));
         m_Material->SetShaderResourceView("historyColorBuffer", ShaderResourceView(m_HistoryBuffer));
@@ -115,7 +112,3 @@ void TAA::OnRenderedFrame(const DirectX::XMMATRIX& viewProjectionMatrix)
     m_PreviousViewProjectionMatrix = viewProjectionMatrix;
     m_FrameIndex = (m_FrameIndex + 1) % JITTER_OFFSETS_COUNT;
 }
-
-//Modify Begin:2026-07-27 by BestHui
-FRAMEWORK_SUPPRESS_DEPRECATED_WARNINGS_END
-//Modify End

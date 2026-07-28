@@ -46,12 +46,24 @@ void IndexBuffer::CreateViews(const size_t numElements, const size_t elementSize
 D3D12_CPU_DESCRIPTOR_HANDLE IndexBuffer::GetShaderResourceView(const D3D12_SHADER_RESOURCE_VIEW_DESC* srvDesc) const
 {
 //Modify Begin:2026-07-21 by BestHui
-	if (srvDesc != nullptr)
+//Modify Begin:2026-07-27 by BestHui
+	if (srvDesc == nullptr)
 	{
-		Assert(false, "Custom index buffer SRV descriptors are not supported.");
+		return m_Srv.GetDescriptorHandle();
 	}
 
-	return m_Srv.GetDescriptorHandle();
+	const size_t hash = std::hash<D3D12_SHADER_RESOURCE_VIEW_DESC>{}(*srvDesc);
+	std::lock_guard<std::mutex> lock(m_CustomSrvsMutex);
+	auto iter = m_CustomSrvs.find(hash);
+	if (iter == m_CustomSrvs.end())
+	{
+		DescriptorAllocation srv = Application::Get().AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+		Application::Get().GetDevice()->CreateShaderResourceView(m_d3d12Resource.Get(), srvDesc, srv.GetDescriptorHandle());
+		iter = m_CustomSrvs.insert({ hash, std::move(srv) }).first;
+	}
+
+	return iter->second.GetDescriptorHandle();
+//Modify End
 //Modify End
 }
 

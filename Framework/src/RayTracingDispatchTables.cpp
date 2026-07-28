@@ -53,29 +53,38 @@ void RayTracingDispatchTables::EnsureBuilt(
     const RayTracingPipelineState& pipelineState,
     const RayTracingShaderPassDesc& pass)
 {
-    if (m_CurrentPassName == pass.Name)
+//Modify Begin:2026-07-27 by BestHui
+    auto tableFindResult = m_PassTables.find(pass.Name);
+    if (tableFindResult == m_PassTables.end())
     {
-        return;
+        BuiltPassTables builtTables;
+        const auto device = Application::Get().GetDevice();
+        const std::wstring passName(pass.Name.begin(), pass.Name.end());
+
+        const std::wstring rayGenName = L"Ray Generation Shader Table " + passName;
+        const std::wstring missName = L"Miss Shader Table " + passName;
+        const std::wstring hitGroupName = L"Hit Group Shader Table " + passName;
+        builtTables.RayGenerationShaderTable.Reset(
+            device,
+            BuildShaderRecords(pipelineState, { { pass.RayGenerationShader, {} } }),
+            D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+            rayGenName.c_str());
+        builtTables.MissShaderTable.Reset(
+            device,
+            BuildShaderRecords(pipelineState, pass.MissShaderRecords),
+            D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+            missName.c_str());
+        builtTables.HitGroupShaderTable.Reset(
+            device,
+            BuildShaderRecords(pipelineState, pass.HitGroupRecords),
+            D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+            hitGroupName.c_str());
+
+        tableFindResult = m_PassTables.insert({ pass.Name, std::move(builtTables) }).first;
     }
 
-    const auto device = Application::Get().GetDevice();
-    m_RayGenerationShaderTable.Reset(
-        device,
-        BuildShaderRecords(pipelineState, { { pass.RayGenerationShader, {} } }),
-        D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
-        L"Ray Generation Shader Table");
-    m_MissShaderTable.Reset(
-        device,
-        BuildShaderRecords(pipelineState, pass.MissShaderRecords),
-        D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
-        L"Miss Shader Table");
-    m_HitGroupShaderTable.Reset(
-        device,
-        BuildShaderRecords(pipelineState, pass.HitGroupRecords),
-        D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
-        L"Hit Group Shader Table");
-
-    m_CurrentPassName = pass.Name;
+    m_CurrentPassTables = &tableFindResult->second;
+//Modify End
 }
 
 D3D12_DISPATCH_RAYS_DESC RayTracingDispatchTables::BuildDispatchDesc(
@@ -84,14 +93,17 @@ D3D12_DISPATCH_RAYS_DESC RayTracingDispatchTables::BuildDispatchDesc(
     const uint32_t depth) const
 {
     D3D12_DISPATCH_RAYS_DESC dispatchDesc = {};
-    dispatchDesc.RayGenerationShaderRecord.StartAddress = m_RayGenerationShaderTable.GetGpuVirtualAddress();
-    dispatchDesc.RayGenerationShaderRecord.SizeInBytes = m_RayGenerationShaderTable.GetSizeInBytes();
-    dispatchDesc.MissShaderTable.StartAddress = m_MissShaderTable.GetGpuVirtualAddress();
-    dispatchDesc.MissShaderTable.SizeInBytes = m_MissShaderTable.GetSizeInBytes();
-    dispatchDesc.MissShaderTable.StrideInBytes = m_MissShaderTable.GetStrideInBytes();
-    dispatchDesc.HitGroupTable.StartAddress = m_HitGroupShaderTable.GetGpuVirtualAddress();
-    dispatchDesc.HitGroupTable.SizeInBytes = m_HitGroupShaderTable.GetSizeInBytes();
-    dispatchDesc.HitGroupTable.StrideInBytes = m_HitGroupShaderTable.GetStrideInBytes();
+//Modify Begin:2026-07-27 by BestHui
+    Assert(m_CurrentPassTables != nullptr, "Ray tracing dispatch tables have not been prepared.");
+    dispatchDesc.RayGenerationShaderRecord.StartAddress = m_CurrentPassTables->RayGenerationShaderTable.GetGpuVirtualAddress();
+    dispatchDesc.RayGenerationShaderRecord.SizeInBytes = m_CurrentPassTables->RayGenerationShaderTable.GetSizeInBytes();
+    dispatchDesc.MissShaderTable.StartAddress = m_CurrentPassTables->MissShaderTable.GetGpuVirtualAddress();
+    dispatchDesc.MissShaderTable.SizeInBytes = m_CurrentPassTables->MissShaderTable.GetSizeInBytes();
+    dispatchDesc.MissShaderTable.StrideInBytes = m_CurrentPassTables->MissShaderTable.GetStrideInBytes();
+    dispatchDesc.HitGroupTable.StartAddress = m_CurrentPassTables->HitGroupShaderTable.GetGpuVirtualAddress();
+    dispatchDesc.HitGroupTable.SizeInBytes = m_CurrentPassTables->HitGroupShaderTable.GetSizeInBytes();
+    dispatchDesc.HitGroupTable.StrideInBytes = m_CurrentPassTables->HitGroupShaderTable.GetStrideInBytes();
+//Modify End
     dispatchDesc.Width = width;
     dispatchDesc.Height = height;
     dispatchDesc.Depth = depth;

@@ -4,6 +4,7 @@
 #include <DX12Library/Application.h>
 #include <DX12Library/Helpers.h>
 #include <Framework/DescriptorLayout.h>
+#include <Framework/Mesh.h>
 #include <Framework/ShaderBlob.h>
 
 #if defined(min)
@@ -16,6 +17,53 @@
 
 //Modify Begin:2026-07-27 by BestHui
 using namespace RayTracingShaderInternal;
+
+namespace
+{
+    D3D12_SHADER_RESOURCE_VIEW_DESC CreateNullRayTracingVertexBufferSrvDesc()
+    {
+        D3D12_SHADER_RESOURCE_VIEW_DESC desc = {};
+        desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+        desc.Format = DXGI_FORMAT_UNKNOWN;
+        desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        desc.Buffer.NumElements = 1;
+        desc.Buffer.StructureByteStride = sizeof(VertexAttributes);
+        desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+        return desc;
+    }
+
+    D3D12_SHADER_RESOURCE_VIEW_DESC CreateNullRayTracingIndexBufferSrvDesc()
+    {
+        D3D12_SHADER_RESOURCE_VIEW_DESC desc = {};
+        desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+        desc.Format = DXGI_FORMAT_R32_UINT;
+        desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        desc.Buffer.NumElements = 1;
+        desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+        return desc;
+    }
+
+    D3D12_SHADER_RESOURCE_VIEW_DESC CreateNullRayTracingTextureSrvDesc()
+    {
+        ShaderUtils::ShaderResourceViewMetadata metadata{};
+        metadata.InputType = D3D_SIT_TEXTURE;
+        metadata.Dimension = D3D_SRV_DIMENSION_TEXTURE2D;
+        return DescriptorLayout::CreateNullShaderResourceViewDesc(metadata);
+    }
+
+    D3D12_UNORDERED_ACCESS_VIEW_DESC CreateNullRayTracingOutputUavDesc(const RayTracingShaderBindingDesc& binding)
+    {
+        if (binding.HasNullUnorderedAccessViewDesc)
+        {
+            return binding.NullUnorderedAccessViewDesc;
+        }
+
+        D3D12_UNORDERED_ACCESS_VIEW_DESC desc = {};
+        desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+        desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+        return desc;
+    }
+}
 
 RayTracingShader::Impl::Impl(const ShaderBlob& shaderLibrary, RayTracingPipelineDesc pipelineDesc)
     : Desc(std::move(pipelineDesc))
@@ -47,6 +95,46 @@ RayTracingShader::Impl::Impl(const ShaderBlob& shaderLibrary, RayTracingPipeline
     }
 
     Layout.Reset(std::move(layoutDesc));
+//Modify Begin:2026-07-27 by BestHui
+    for (const RayTracingShaderBindingDesc& binding : Desc.Bindings)
+    {
+        if (!IsDescriptorTableBinding(binding.Type))
+        {
+            continue;
+        }
+
+        const uint32_t bindingIndex = BindingIndicesByName.at(binding.Name);
+        switch (binding.Type)
+        {
+        case RayTracingShaderBindingType::OutputTexture:
+            Layout.AddDefaultUnorderedAccessViewTable(
+                bindingIndex,
+                std::max(1u, binding.DescriptorCount),
+                CreateNullRayTracingOutputUavDesc(binding));
+            break;
+        case RayTracingShaderBindingType::TextureArray:
+            Layout.AddDefaultShaderResourceViewTable(
+                bindingIndex,
+                std::max(1u, binding.DescriptorCount),
+                CreateNullRayTracingTextureSrvDesc());
+            break;
+        case RayTracingShaderBindingType::VertexBufferArray:
+            Layout.AddDefaultShaderResourceViewTable(
+                bindingIndex,
+                std::max(1u, binding.DescriptorCount),
+                CreateNullRayTracingVertexBufferSrvDesc());
+            break;
+        case RayTracingShaderBindingType::IndexBufferArray:
+            Layout.AddDefaultShaderResourceViewTable(
+                bindingIndex,
+                std::max(1u, binding.DescriptorCount),
+                CreateNullRayTracingIndexBufferSrvDesc());
+            break;
+        default:
+            break;
+        }
+    }
+//Modify End
     Layout.SetRootSignature(PipelineState->GetGlobalRootSignaturePtr());
 }
 //Modify End
@@ -126,6 +214,31 @@ const RayTracingPipelineState& RayTracingShader::GetPipelineState() const
 const PipelineLayout& RayTracingShader::GetPipelineLayout() const
 {
     return m_Impl->Layout;
+}
+
+void RayTracingShader::PrepareDispatch(const std::string_view passName) const
+{
+    const RayTracingShaderPassDesc& pass = m_Impl->DispatchTables.ResolvePass(m_Impl->Desc, passName);
+    Assert(!pass.RayGenerationShader.empty(), "Ray tracing pass requires a ray generation shader.");
+    m_Impl->DispatchTables.EnsureBuilt(*m_Impl->PipelineState, pass);
+}
+
+D3D12_DISPATCH_RAYS_DESC RayTracingShader::BuildDispatchDesc(
+    const std::string_view passName,
+    const uint32_t width,
+    const uint32_t height,
+    const uint32_t depth) const
+{
+    PrepareDispatch(passName);
+    return BuildDispatchDesc(width, height, depth);
+}
+
+D3D12_DISPATCH_RAYS_DESC RayTracingShader::BuildDispatchDesc(
+    const uint32_t width,
+    const uint32_t height,
+    const uint32_t depth) const
+{
+    return m_Impl->DispatchTables.BuildDispatchDesc(width, height, depth);
 }
 //Modify End
 

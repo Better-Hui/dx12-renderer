@@ -48,8 +48,13 @@ public:
     const BindingMap& GetBindings() const { return m_Bindings; }
 
     void AddDefaultShaderResourceViewTable(UINT rootParameterIndex, UINT descriptorCount, const ShaderUtils::ShaderResourceViewMetadata& srv);
+    void AddDefaultShaderResourceViewTable(UINT rootParameterIndex, UINT descriptorCount, const D3D12_SHADER_RESOURCE_VIEW_DESC& srvDesc);
     void AddDefaultUnorderedAccessViewTable(UINT rootParameterIndex, UINT descriptorCount, const ShaderUtils::UnorderedAccessViewMetadata& uav);
+    void AddDefaultUnorderedAccessViewTable(UINT rootParameterIndex, UINT descriptorCount, const D3D12_UNORDERED_ACCESS_VIEW_DESC& uavDesc);
     void StageDefaultDescriptorTables(CommandList& commandList) const;
+//Modify Begin:2026-07-27 by BestHui
+    const DescriptorAllocation* FindDefaultDescriptorTable(UINT rootParameterIndex) const;
+//Modify End
 
 private:
     struct DefaultDescriptorTable

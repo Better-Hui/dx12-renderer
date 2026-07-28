@@ -2,13 +2,8 @@
 #include <Framework/Blit_VS.h>
 #include <Framework/Bloom_Downsample_PS.h>
 #include <Framework/Mesh.h>
-#include <Framework/FrameworkDeprecated.h>
 #include <DirectXMath.h>
 #include <DX12Library/Helpers.h>
-
-//Modify Begin:2026-07-27 by BestHui
-FRAMEWORK_SUPPRESS_DEPRECATED_WARNINGS_BEGIN
-//Modify End
 
 using namespace DirectX;
 
@@ -32,10 +27,13 @@ namespace
 	}
 }
 
-BloomUpsample::BloomUpsample(const std::shared_ptr<CommonRootSignature>& rootSignature, CommandList& commandList)
+//Modify Begin:2026-07-27 by BestHui
+BloomUpsample::BloomUpsample(CommandList& commandList)
+//Modify End
 	: m_BlitMesh(Mesh::CreateBlitTriangle(commandList))
 {
-	auto shader = std::make_shared<Shader>(rootSignature,
+//Modify Begin:2026-07-27 by BestHui
+	auto shader = std::make_shared<Shader>(
 		ShaderBlob(ShaderBytecode_Blit_VS, sizeof ShaderBytecode_Blit_VS),
 		ShaderBlob(ShaderBytecode_Bloom_Downsample_PS, sizeof ShaderBytecode_Bloom_Downsample_PS),
 		[](RasterPipelineStateBuilder& builder)
@@ -43,6 +41,7 @@ BloomUpsample::BloomUpsample(const std::shared_ptr<CommonRootSignature>& rootSig
 			builder.WithAdditiveBlend();
 		}
 	);
+//Modify End
 	m_Material = Material::Create(shader);
 }
 
@@ -76,7 +75,3 @@ void BloomUpsample::End(CommandList& commandList)
 {
 	m_Material->EndBatch(commandList);
 }
-
-//Modify Begin:2026-07-27 by BestHui
-FRAMEWORK_SUPPRESS_DEPRECATED_WARNINGS_END
-//Modify End

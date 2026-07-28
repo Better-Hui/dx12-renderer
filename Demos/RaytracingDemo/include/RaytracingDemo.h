@@ -15,6 +15,8 @@
 #include <Scene/SceneLightManager.h>
 #include <Scene/SceneLighting.h>
 #include <Scene/SceneResources.h>
+#include <PathTracing/PathTracingPipelineController.h>
+#include <PostProcessing/CudaBloomPass.h>
 
 #include <memory>
 #include <string>
@@ -35,8 +37,6 @@ public:
     using Base = Game;
 
     RaytracingDemo(const std::wstring& name, int width, int height, GraphicsSettings graphicsSettings);
-
-    static constexpr uint32_t MinRayTracingDescriptorArrayCapacity = 1;
 
     bool LoadContent() override;
     void UnloadContent() override;
@@ -124,47 +124,32 @@ private:
         uint32_t Padding2 = 0;
     };
 
-    enum class PathTracingBackend
-    {
-        InlineRayQuery = 0,
-        ShaderTableDxr = 1,
-    };
-
-    struct RayTracingSceneResourceLayout
-    {
-        uint32_t TextureDescriptorCapacity = MinRayTracingDescriptorArrayCapacity;
-        uint32_t GeometryDescriptorCapacity = MinRayTracingDescriptorArrayCapacity;
-
-        bool operator!=(const RayTracingSceneResourceLayout& other) const
-        {
-            return TextureDescriptorCapacity != other.TextureDescriptorCapacity ||
-                GeometryDescriptorCapacity != other.GeometryDescriptorCapacity;
-        }
-    };
-
     RayTracingSceneResourceLayout BuildRayTracingSceneResourceLayout() const;
     void EnsureRayTracingPipelines();
     void BindRayTracingShaderResources();
-    void BindRayTracingShaderResources(RayTracingBindingSet& shader);
     CameraConstants BuildCameraConstants() const;
     PipelineConstants BuildPipelineConstants() const;
     void ResetAccumulation(bool resetDenoiserHistory = true);
     bool IsDenoiserEnabled() const { return m_Denoisers.IsEnabled(); }
     DenoiserController& GetDenoisers() { return m_Denoisers; }
     const DenoiserController& GetDenoisers() const { return m_Denoisers; }
+//Modify Begin:2026-07-27 by BestHui
+    void DrawPostBloomOverlays(CommandList& cmd);
+    void DrawLightBillboards(CommandList& cmd);
+//Modify End
     void OnImGui();
 
     Camera m_Camera;
     friend struct RaytracingDemoPassAccess;
     friend class RaytracingDemoPasses::Builder;
     std::unique_ptr<RenderGraph::RenderGraphRoot> m_RenderGraph;
-    std::unique_ptr<RayTracingShader> m_RayTracingShader;
-    std::unique_ptr<RayTracingBindingSet> m_DirectRayTracingBindingSet;
-    std::unique_ptr<RayTracingBindingSet> m_IndirectRayTracingBindingSet;
-    std::unique_ptr<ComputeShader> m_InlineDirectLightingShader;
-    std::unique_ptr<ComputeShader> m_InlineIndirectLightingShader;
-    std::unique_ptr<ComputeShader> m_LightingCompositeShader;
+//Modify Begin:2026-07-27 by BestHui
+    PathTracingPipelineController m_PathTracingPipelines;
+//Modify End
     DenoiserController m_Denoisers;
+//Modify Begin:2026-07-27 by BestHui
+    CudaBloomPass m_CudaBloom;
+//Modify End
     RayTracingAccelerationStructure m_RayTracingAccelerationStructure;
     RaytracingDemoSceneResources m_SceneResources;
     SceneLightManager m_Lights;
@@ -175,8 +160,6 @@ private:
     std::shared_ptr<Shader> m_SkyboxShader;
     std::shared_ptr<Shader> m_LightBillboardShader;
     std::shared_ptr<Texture> m_SkyboxTexture;
-
-    RayTracingSceneResourceLayout m_RayTracingSceneResourceLayout;
 
     float m_DeltaTime = 0.0f;
     DirectX::XMMATRIX m_PreviousViewProjection = DirectX::XMMatrixIdentity();

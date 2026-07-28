@@ -161,15 +161,22 @@ void DescriptorLayout::AddDefaultShaderResourceViewTable(
     const UINT descriptorCount,
     const ShaderUtils::ShaderResourceViewMetadata& srv)
 {
+    const D3D12_SHADER_RESOURCE_VIEW_DESC nullDesc = CreateNullShaderResourceViewDesc(srv);
+    AddDefaultShaderResourceViewTable(rootParameterIndex, descriptorCount, nullDesc);
+}
+
+void DescriptorLayout::AddDefaultShaderResourceViewTable(
+    const UINT rootParameterIndex,
+    const UINT descriptorCount,
+    const D3D12_SHADER_RESOURCE_VIEW_DESC& srvDesc)
+{
     auto device = Application::Get().GetDevice();
     DescriptorAllocation descriptors = Application::Get().AllocateDescriptors(
         D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
         descriptorCount);
-    const D3D12_SHADER_RESOURCE_VIEW_DESC nullDesc = CreateNullShaderResourceViewDesc(srv);
-
     for (UINT i = 0; i < descriptorCount; ++i)
     {
-        device->CreateShaderResourceView(nullptr, &nullDesc, descriptors.GetDescriptorHandle(i));
+        device->CreateShaderResourceView(nullptr, &srvDesc, descriptors.GetDescriptorHandle(i));
     }
 
     DefaultDescriptorTable table;
@@ -184,15 +191,22 @@ void DescriptorLayout::AddDefaultUnorderedAccessViewTable(
     const UINT descriptorCount,
     const ShaderUtils::UnorderedAccessViewMetadata& uav)
 {
+    const D3D12_UNORDERED_ACCESS_VIEW_DESC nullDesc = CreateNullUnorderedAccessViewDesc(uav);
+    AddDefaultUnorderedAccessViewTable(rootParameterIndex, descriptorCount, nullDesc);
+}
+
+void DescriptorLayout::AddDefaultUnorderedAccessViewTable(
+    const UINT rootParameterIndex,
+    const UINT descriptorCount,
+    const D3D12_UNORDERED_ACCESS_VIEW_DESC& uavDesc)
+{
     auto device = Application::Get().GetDevice();
     DescriptorAllocation descriptors = Application::Get().AllocateDescriptors(
         D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
         descriptorCount);
-    const D3D12_UNORDERED_ACCESS_VIEW_DESC nullDesc = CreateNullUnorderedAccessViewDesc(uav);
-
     for (UINT i = 0; i < descriptorCount; ++i)
     {
-        device->CreateUnorderedAccessView(nullptr, nullptr, &nullDesc, descriptors.GetDescriptorHandle(i));
+        device->CreateUnorderedAccessView(nullptr, nullptr, &uavDesc, descriptors.GetDescriptorHandle(i));
     }
 
     DefaultDescriptorTable table;
@@ -214,5 +228,20 @@ void DescriptorLayout::StageDefaultDescriptorTables(CommandList& commandList) co
             table.Descriptors.GetDescriptorHandle());
     }
 }
+
+//Modify Begin:2026-07-27 by BestHui
+const DescriptorAllocation* DescriptorLayout::FindDefaultDescriptorTable(const UINT rootParameterIndex) const
+{
+    const auto findResult = std::find_if(
+        m_DefaultDescriptorTables.begin(),
+        m_DefaultDescriptorTables.end(),
+        [rootParameterIndex](const DefaultDescriptorTable& table)
+        {
+            return table.RootParameterIndex == rootParameterIndex;
+        });
+
+    return findResult != m_DefaultDescriptorTables.end() ? &findResult->Descriptors : nullptr;
+}
+//Modify End
 
 //Modify End

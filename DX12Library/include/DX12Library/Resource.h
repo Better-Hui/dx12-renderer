@@ -48,6 +48,12 @@ public:
     explicit Resource(const D3D12_RESOURCE_DESC& resourceDesc,
         const D3D12_CLEAR_VALUE* clearValue = nullptr,
         const std::wstring& name = L"");
+//Modify Begin:2026-07-28 by BestHui
+    explicit Resource(const D3D12_RESOURCE_DESC& resourceDesc,
+        D3D12_HEAP_FLAGS heapFlags,
+        const D3D12_CLEAR_VALUE* clearValue = nullptr,
+        const std::wstring& name = L"");
+//Modify End
 
     // placed resource
     explicit Resource(const D3D12_RESOURCE_DESC& resourceDesc,

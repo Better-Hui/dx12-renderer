@@ -62,7 +62,9 @@ private:
         uint32_t Width = 1;
         uint32_t Height = 1;
         uint32_t StepSize = 1;
-        uint32_t Padding0 = 0;
+//Modify Begin:2026-07-27 by BestHui
+        uint32_t Direction = 0;
+//Modify End
         float PhiColor = 4.0f;
         float PhiNormal = 64.0f;
         float PhiDepth = 1.0f;
@@ -94,6 +96,19 @@ private:
         const std::shared_ptr<Texture>& depthTexture,
         uint32_t width,
         uint32_t height);
+//Modify Begin:2026-07-27 by BestHui
+    void AtrousPass(
+        CommandList& commandList,
+        const std::shared_ptr<Texture>& input,
+        const std::shared_ptr<Texture>& output,
+        const std::shared_ptr<Texture>& gBufferNormal,
+        const std::shared_ptr<Texture>& gBufferPosition,
+        const std::shared_ptr<Texture>& depthTexture,
+        uint32_t width,
+        uint32_t height,
+        uint32_t stepSize,
+        uint32_t direction);
+//Modify End
     void Composite(
         CommandList& commandList,
         const std::shared_ptr<Texture>& input,

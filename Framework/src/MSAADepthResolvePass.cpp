@@ -8,12 +8,13 @@ namespace
     static constexpr uint32_t THREAD_GROUP_SIZE = 16u;
 }
 
-MSAADepthResolvePass::MSAADepthResolvePass(const std::shared_ptr<CommonRootSignature>& rootSignature)
+//Modify Begin:2026-07-27 by BestHui
+MSAADepthResolvePass::MSAADepthResolvePass()
+//Modify End
     : m_ComputeShader(
         ShaderBlob(ShaderBytecode_MSAADepthResolve_CS, sizeof(ShaderBytecode_MSAADepthResolve_CS)),
         ComputePipelineDescBuilder::ReflectedDefault(ShaderBlob(ShaderBytecode_MSAADepthResolve_CS, sizeof(ShaderBytecode_MSAADepthResolve_CS))).Build())
 {
-    (void)rootSignature;
 }
 
 void MSAADepthResolvePass::Resolve(CommandList& commandList, const std::shared_ptr<Texture>& source, const std::shared_ptr<Texture>& destination) const

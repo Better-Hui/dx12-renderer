@@ -1,6 +1,5 @@
 #pragma once
 
-#include <DX12Library/RootSignature.h>
 #include <wrl.h>
 #include <d3d12.h>
 #include <memory>
@@ -15,7 +14,9 @@ class Mesh;
 class TAA
 {
 public:
-    explicit TAA(const std::shared_ptr<CommonRootSignature>& rootSignature, CommandList& commandList, DXGI_FORMAT backBufferFormat, uint32_t width, uint32_t height);
+//Modify Begin:2026-07-27 by BestHui
+    explicit TAA(CommandList& commandList, DXGI_FORMAT backBufferFormat, uint32_t width, uint32_t height);
+//Modify End
 
     [[nodiscard]] DirectX::XMFLOAT2 ComputeJitterOffset() const;
     [[nodiscard]] const DirectX::XMMATRIX& GetPreviousViewProjectionMatrix() const;
@@ -29,7 +30,6 @@ public:
 
 private:
     RenderTarget m_ResolveRenderTarget;
-    std::shared_ptr<CommonRootSignature> m_RootSignature;
 
     std::shared_ptr<Mesh> m_BlitMesh;
     std::shared_ptr<Material> m_Material;
@@ -66,4 +66,3 @@ private:
 
     uint32_t m_Width, m_Height;
 };
-

@@ -58,6 +58,9 @@ public:
         UINT offset,
         UINT numDescriptors,
         D3D12_CPU_DESCRIPTOR_HANDLE baseDescriptor) const;
+//Modify Begin:2026-07-27 by BestHui
+    void InsertDescriptorSetOutputBarriers(const PipelineDescriptorSet& descriptorSet) const;
+//Modify End
 
     void TransitionShaderResource(const Resource& resource) const;
     void TransitionUnorderedAccess(const Resource& resource) const;
@@ -65,7 +68,7 @@ public:
 
     void Draw(uint32_t vertexCount, uint32_t instanceCount = 1, uint32_t startVertex = 0, uint32_t startInstance = 0) const;
     void Dispatch(uint32_t numGroupsX, uint32_t numGroupsY = 1, uint32_t numGroupsZ = 1) const;
-    void DispatchRays(RayTracingBindingSet& bindingSet, std::string_view passName, uint32_t width, uint32_t height, uint32_t depth = 1) const;
+    void BindRayTracingDescriptorSet(const RayTracingBindingSet& bindingSet) const;
     void DispatchRays(const D3D12_DISPATCH_RAYS_DESC& dispatchRaysDesc) const;
 
 private:

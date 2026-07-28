@@ -59,6 +59,13 @@ public:
         const ClearValue& clearValue = {},
         TextureUsageType textureUsage = TextureUsageType::Albedo,
         const std::wstring& name = L"");
+//Modify Begin:2026-07-28 by BestHui
+    explicit Texture(const D3D12_RESOURCE_DESC& resourceDesc,
+        D3D12_HEAP_FLAGS heapFlags,
+        const ClearValue& clearValue = {},
+        TextureUsageType textureUsage = TextureUsageType::Albedo,
+        const std::wstring& name = L"");
+//Modify End
 
     // placed resource
     explicit Texture(const D3D12_RESOURCE_DESC& resourceDesc,

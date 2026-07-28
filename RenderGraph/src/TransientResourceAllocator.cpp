@@ -30,7 +30,11 @@ bool TransientResourceAllocator::ResourceLifecycle::Intersect(const ResourceLife
     return IntersectHelper(lifecycle1, lifecycle2) || IntersectHelper(lifecycle2, lifecycle1);
 }
 
-std::map<ResourceId, TransientResourceAllocator::ResourceLifecycle> TransientResourceAllocator::GetResourceLifecycles(const std::vector<RenderPass*>& renderPasses)
+//Modify Begin:2026-07-28 by BestHui
+std::map<ResourceId, TransientResourceAllocator::ResourceLifecycle> TransientResourceAllocator::GetResourceLifecycles(
+    const std::vector<RenderPass*>& renderPasses,
+    const std::vector<ResourceId>& externalOutputIds)
+//Modify End
 {
     std::map<ResourceId, ResourceLifecycle> lifecycles;
 
@@ -53,11 +57,18 @@ std::map<ResourceId, TransientResourceAllocator::ResourceLifecycle> TransientRes
         }
     }
 
+//Modify Begin:2026-07-28 by BestHui
     {
-        const uint32_t lastPassIndex = static_cast<uint32_t>(renderPasses.size()) - 1;
-        auto& graphOutputLifecycle = GetOrAdd(lifecycles, ResourceIds::GRAPH_OUTPUT, lastPassIndex);
-        graphOutputLifecycle.m_EndPassIndex = lastPassIndex;
+        const uint32_t lastPassIndex = renderPasses.empty()
+            ? 0u
+            : static_cast<uint32_t>(renderPasses.size()) - 1u;
+        for (const ResourceId externalOutputId : externalOutputIds)
+        {
+            auto& lifecycle = GetOrAdd(lifecycles, externalOutputId, lastPassIndex);
+            lifecycle.m_EndPassIndex = lastPassIndex;
+        }
     }
+//Modify End
 
     return lifecycles;
 }
@@ -72,6 +83,13 @@ std::vector<TransientResourceAllocator::HeapInfo> TransientResourceAllocator::Cr
         // actually used resources should always be registered at this point
         if (const auto findResult = resourceDescriptions.find(id); findResult != resourceDescriptions.end())
         {
+//Modify Begin:2026-07-28 by BestHui
+            if (findResult->second.m_DedicatedResource)
+            {
+                continue;
+            }
+//Modify End
+
             HeapInfo heapInfo;
             heapInfo.m_Size = findResult->second.m_TotalSize;
             heapInfo.m_Alignment = findResult->second.m_Alignment;

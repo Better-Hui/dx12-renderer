@@ -7,7 +7,6 @@
 #include <DX12Library/CommandList.h>
 #include <DX12Library/ShaderUtils.h>
 #include <DX12Library/RenderTargetState.h>
-#include "CommonRootSignature.h"
 
 #include <string>
 #include <functional>
@@ -18,7 +17,6 @@
 #include "ShaderResourceView.h"
 #include "RasterPipelineStateBuilder.h"
 //Modify Begin:2026-07-24 by BestHui
-#include "FrameworkDeprecated.h"
 #include "PipelineBindingSet.h"
 #include "PipelineDescriptorPool.h"
 #include "PipelineDescriptorSet.h"
@@ -38,17 +36,6 @@ class Shader
 {
 public:
 //Modify Begin:2026-07-27 by BestHui
-	FRAMEWORK_DEPRECATED("Use Shader(const ShaderBlob&, const ShaderBlob&, ...) and reflected named bindings.")
-//Modify End
-	explicit Shader(
-		const std::shared_ptr<CommonRootSignature>& rootSignature,
-		const ShaderBlob& vertexShaderPath, const ShaderBlob& pixelShaderPath,
-//Modify Begin:2026-07-21 by BestHui
-		const std::function<void(RasterPipelineStateBuilder&)> buildPipelineState = [](RasterPipelineStateBuilder&) {},
-		bool collectMetadata = true
-//Modify End
-	);
-//Modify Begin:2026-07-27 by BestHui
 	explicit Shader(
 		const ShaderBlob& vertexShaderPath,
 		const ShaderBlob& pixelShaderPath,
@@ -66,28 +53,6 @@ public:
 	void ApplyBindings(CommandList& commandList) const;
 //Modify End
 
-	template<typename T>
-//Modify Begin:2026-07-27 by BestHui
-	FRAMEWORK_DEPRECATED("Use SetConstantBuffer(CommandList&, const std::string&, ...) with reflected named bindings.")
-//Modify End
-	void SetPipelineConstantBuffer(CommandList& commandList, const T& data)
-	{
-		m_CommonRootSignature->SetPipelineConstantBuffer(commandList, data);
-	}
-
-	template<typename T>
-//Modify Begin:2026-07-27 by BestHui
-	FRAMEWORK_DEPRECATED("Use SetConstantBuffer(CommandList&, const std::string&, ...) with reflected named bindings.")
-//Modify End
-	void SetModelConstantBuffer(CommandList& commandList, const T& data)
-	{
-		m_CommonRootSignature->SetMaterialConstantBuffer(commandList, data);
-	}
-
-//Modify Begin:2026-07-27 by BestHui
-	FRAMEWORK_DEPRECATED("Use SetConstantBuffer(CommandList&, const std::string&, ...) with reflected named bindings.")
-//Modify End
-	void SetMaterialConstantBuffer(CommandList& commandList, size_t size, const void* data);
 //Modify Begin:2026-07-24 by BestHui
 	bool HasConstantBuffer(const std::string& variableName) const;
 	bool HasShaderResourceView(const std::string& variableName) const;
@@ -116,7 +81,7 @@ public:
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> GetPipelineState(const Microsoft::WRL::ComPtr<ID3D12Device2>& device, const RenderTargetState& renderTargetState);
 	const RootSignature& GetRootSignature() const { return *m_RootSignature; }
 	const PipelineLayout* GetPipelineLayout() const { return m_PipelineLayout.get(); }
-	bool UsesReflectedRootSignature() const { return m_UseReflectedRootSignature; }
+	bool UsesReflectedRootSignature() const { return true; }
 	void StageDefaultDescriptorTables(CommandList& commandList) const;
 //Modify End
 
@@ -129,7 +94,6 @@ private:
 	const PipelineDescriptorRangeDesc* FindPipelineBinding(const std::string& variableName, DescriptorBindingKind expectedKind) const;
 //Modify End
 
-	std::shared_ptr<CommonRootSignature> m_CommonRootSignature;
 	std::shared_ptr<RootSignature> m_RootSignature;
 
 	ShaderMetadata m_VertexShaderMetadata;
@@ -141,7 +105,6 @@ private:
 //Modify Begin:2026-07-27 by BestHui
 	PipelineDescriptorPool m_DescriptorPool;
 //Modify End
-	bool m_UseReflectedRootSignature = false;
 //Modify End
 
 	RasterPipelineStateBuilder m_PipelineStateBuilder;

@@ -88,6 +88,13 @@ namespace
             return false;
         }
     }
+
+//Modify Begin:2026-07-27 by BestHui
+    bool IsSamplerType(const D3D_SHADER_INPUT_TYPE inputType)
+    {
+        return inputType == D3D_SIT_SAMPLER;
+    }
+//Modify End
 }
 
 
@@ -462,6 +469,83 @@ std::vector<ShaderUtils::UnorderedAccessViewMetadata> ShaderUtils::GetUnorderedA
             resourceMetadata.InputType = inputBindDesc.Type;
             resourceMetadata.Dimension = inputBindDesc.Dimension;
             result.push_back(resourceMetadata);
+        }
+    }
+
+    return result;
+}
+//Modify End
+
+//Modify Begin:2026-07-27 by BestHui
+std::vector<ShaderUtils::SamplerMetadata> ShaderUtils::GetSamplers(const Microsoft::WRL::ComPtr<ID3D12ShaderReflection>& shaderReflection)
+{
+    D3D12_SHADER_DESC shaderDesc;
+    ThrowIfFailed(shaderReflection->GetDesc(&shaderDesc));
+
+    std::vector<ShaderUtils::SamplerMetadata> result;
+    result.reserve(shaderDesc.BoundResources);
+
+    for (UINT resourceIndex = 0; resourceIndex < shaderDesc.BoundResources; ++resourceIndex)
+    {
+        D3D12_SHADER_INPUT_BIND_DESC inputBindDesc;
+        ThrowIfFailed(shaderReflection->GetResourceBindingDesc(resourceIndex, &inputBindDesc));
+        if (!IsSamplerType(inputBindDesc.Type))
+        {
+            continue;
+        }
+
+        SamplerMetadata samplerMetadata;
+        samplerMetadata.Name = GetBaseResourceName(inputBindDesc.Name);
+        samplerMetadata.RegisterIndex = inputBindDesc.BindPoint;
+        samplerMetadata.Space = inputBindDesc.Space;
+        samplerMetadata.BindCount = inputBindDesc.BindCount;
+        result.push_back(std::move(samplerMetadata));
+    }
+
+    return result;
+}
+
+std::vector<ShaderUtils::SamplerMetadata> ShaderUtils::GetSamplers(const Microsoft::WRL::ComPtr<ID3D12LibraryReflection>& libraryReflection)
+{
+    D3D12_LIBRARY_DESC libraryDesc{};
+    ThrowIfFailed(libraryReflection->GetDesc(&libraryDesc));
+
+    std::vector<ShaderUtils::SamplerMetadata> result;
+    std::unordered_set<std::string> visitedResources;
+
+    for (UINT functionIndex = 0; functionIndex < libraryDesc.FunctionCount; ++functionIndex)
+    {
+        ID3D12FunctionReflection* functionReflection = libraryReflection->GetFunctionByIndex(functionIndex);
+        if (functionReflection == nullptr)
+        {
+            continue;
+        }
+
+        D3D12_FUNCTION_DESC functionDesc{};
+        ThrowIfFailed(functionReflection->GetDesc(&functionDesc));
+
+        for (UINT resourceIndex = 0; resourceIndex < functionDesc.BoundResources; ++resourceIndex)
+        {
+            D3D12_SHADER_INPUT_BIND_DESC inputBindDesc{};
+            ThrowIfFailed(functionReflection->GetResourceBindingDesc(resourceIndex, &inputBindDesc));
+            if (!IsSamplerType(inputBindDesc.Type))
+            {
+                continue;
+            }
+
+            const std::string name = GetBaseResourceName(inputBindDesc.Name);
+            const std::string key = BuildResourceKey(name, inputBindDesc.BindPoint, inputBindDesc.Space);
+            if (!visitedResources.insert(key).second)
+            {
+                continue;
+            }
+
+            SamplerMetadata samplerMetadata;
+            samplerMetadata.Name = name;
+            samplerMetadata.RegisterIndex = inputBindDesc.BindPoint;
+            samplerMetadata.Space = inputBindDesc.Space;
+            samplerMetadata.BindCount = inputBindDesc.BindCount;
+            result.push_back(std::move(samplerMetadata));
         }
     }
 

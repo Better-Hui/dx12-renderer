@@ -4,14 +4,12 @@
 
 Texture2D<float4> GBufferTextures[GBuffer_Count] : register(t0, space0);
 Texture2D<float> DepthTexture : register(t5, space0);
-TextureCube Skybox : register(t6, space0);
 Texture2D<float4> DirectLightingTexture : register(t7, space0);
 Texture2D<float4> IndirectLightingTexture : register(t8, space0);
-RWTexture2D<float4> Output : register(u0, space0);
-RWTexture2D<float4> Accumulation : register(u1, space0);
+RWTexture2D<float4> SceneColor : register(u0, space0);
+RWTexture2D<float4> HistoryColor : register(u1, space0);
 RWTexture2D<float4> NoisyRadiance : register(u2, space0);
 RWTexture2D<float4> NRDNoisyRadiance : register(u3, space0);
-SamplerState LinearWrapSampler : register(s0);
 
 float3 ToneMap(float3 color)
 {
@@ -27,21 +25,6 @@ float3 SanitizeNRDRadiance(float3 color)
     }
 
     return min(max(color, 0.0f), 250.0f);
-}
-
-float3 SampleSkybox(float3 direction)
-{
-    return Skybox.SampleLevel(LinearWrapSampler, direction, 0.0f).rgb * Camera_SkyLight.ColorAndIntensity.rgb * Camera_SkyLight.ColorAndIntensity.w;
-}
-
-float3 GetPrimaryRayDirection(uint2 pixel)
-{
-    const float2 uv = (float2(pixel) + 0.5f) / float2(Camera_Width, Camera_Height);
-    float4 clip = float4(uv * 2.0f - 1.0f, 1.0f, 1.0f);
-    clip.y = -clip.y;
-    float4 view = mul(clip, Camera_InverseProjection);
-    view.xyz /= max(view.w, 0.0001f);
-    return normalize(mul(float4(normalize(view.xyz), 0.0f), Camera_InverseView).xyz);
 }
 
 float3 GetNRDDiffuseDemodulation(uint2 pixel)
@@ -62,7 +45,9 @@ float GetGBufferRoughness(uint2 pixel)
 float GetGBufferViewZ(uint2 pixel)
 {
     const float3 positionWs = GBufferTextures[GBuffer_Position].Load(int3(pixel, 0)).xyz;
-    const float3 cameraForward = normalize(mul(float4(0.0f, 0.0f, 1.0f, 0.0f), Camera_InverseView).xyz);
+//Modify Begin:2026-07-28 by BestHui
+    const float3 cameraForward = normalize(mul(Camera_InverseView, float4(0.0f, 0.0f, 1.0f, 0.0f)).xyz);
+//Modify End
     return max(0.001f, dot(positionWs - Camera_Position.xyz, cameraForward));
 }
 
@@ -93,13 +78,16 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     }
 
     const float depth = DepthTexture.Load(int3(pixel, 0));
-    if (depth >= 1.0f)
+//Modify Begin:2026-07-28 by BestHui
+    if (depth >= 0.999999f)
     {
-        const float3 skyColor = SampleSkybox(GetPrimaryRayDirection(pixel));
-        NoisyRadiance[pixel] = float4(SanitizeNRDRadiance(skyColor), 0.0f);
-        NRDNoisyRadiance[pixel] = PackNRDDiffuseRadianceHitDistance(skyColor, 0.0f, 1000000.0f, 1.0f);
+        NoisyRadiance[pixel] = 0.0f;
+        NRDNoisyRadiance[pixel] = 0.0f;
+        HistoryColor[pixel] = 0.0f;
+        SceneColor[pixel] = 0.0f;
         return;
     }
+//Modify End
 
     float3 sampleColor = 0.0f;
     float directHitDistance = 0.0f;
@@ -135,7 +123,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
 
     if (Camera_AccumulationEnabled == 0u)
     {
-        Output[pixel] = float4(ToneMap(sampleColor), 1.0f);
+        SceneColor[pixel] = float4(ToneMap(sampleColor), 1.0f);
         return;
     }
 
@@ -143,10 +131,10 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     float3 accumulatedColor = sampleColor;
     if (previousSampleCount > 0u)
     {
-        const float3 history = Accumulation[pixel].rgb;
+        const float3 history = HistoryColor[pixel].rgb;
         accumulatedColor = (history * float(previousSampleCount) + sampleColor) / float(previousSampleCount + 1u);
     }
 
-    Accumulation[pixel] = float4(accumulatedColor, float(previousSampleCount + 1u));
-    Output[pixel] = float4(ToneMap(accumulatedColor), 1.0f);
+    HistoryColor[pixel] = float4(accumulatedColor, float(previousSampleCount + 1u));
+    SceneColor[pixel] = float4(ToneMap(accumulatedColor), 1.0f);
 }

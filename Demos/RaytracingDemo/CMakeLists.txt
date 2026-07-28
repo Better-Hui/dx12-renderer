@@ -7,8 +7,10 @@ set(HEADER_FILES
         include/RaytracingDemo.h
         include/RenderGraph/RaytracingDemoRenderGraphBuilder.h
         include/PathTracing/PathTracingSceneBindings.h
+        include/PathTracing/PathTracingPipelineController.h
         include/Passes/RaytracingDemoPassResources.h
         include/Passes/RaytracingDemoPasses.h
+        include/PostProcessing/CudaBloomPass.h
         include/Scene/SceneLightManager.h
         include/Scene/SceneLighting.h
         include/Scene/SceneResources.h
@@ -26,7 +28,9 @@ set(SOURCE_FILES
         src/Passes/ImGuiPass.cpp
         src/Passes/LightBillboardPass.cpp
         src/PathTracing/PathTracingSceneBindings.cpp
+        src/PathTracing/PathTracingPipelineController.cpp
         src/Passes/PathTracingPass.cpp
+        src/PostProcessing/CudaBloomPass.cpp
         src/Passes/RaytracingDemoPassResources.cpp
         src/Passes/SkyboxPass.cpp
         src/Scene/SceneLightManager.cpp
@@ -57,6 +61,7 @@ set(SHADERS_HEADER_FILES
         )
 list(APPEND SHADERS_HEADER_FILES ${SHADER_FILES_RAYTRACING})
 
+# Modify Begin:2026-07-28 by BestHui
 set(SHADER_FILES_VERTEX
         shaders/GBuffer/GBuffer.vs.hlsl
         shaders/LightBillboard/LightBillboard.vs.hlsl
@@ -68,12 +73,20 @@ set(SHADER_FILES_PIXEL
         shaders/LightBillboard/LightBillboard.ps.hlsl
         shaders/Skybox/Skybox.ps.hlsl
         )
+# Modify End
 
 set(SHADER_FILES_COMPUTE
         shaders/PathTracing/DirectLighting.cs.hlsl
         shaders/PathTracing/IndirectLighting.cs.hlsl
         shaders/PathTracing/LightingComposite.cs.hlsl
         )
+
+# Modify Begin:2026-07-27 by BestHui
+set(CUDA_SHADER_FILES
+        shaders/CUDA/CudaBloom.cu
+        )
+list(APPEND SHADERS_HEADER_FILES ${CUDA_SHADER_FILES})
+# Modify End
 
 set(TARGET_NAME RaytracingDemo)
 include(${CMAKE_SOURCE_DIR}/CMakeIncludes/ProjectBase.cmake)
@@ -88,15 +101,48 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/shaders" PREFIX "shaders" FILES
         ${SHADER_FILES_VERTEX}
         ${SHADER_FILES_PIXEL}
         ${SHADER_FILES_COMPUTE}
+        ${CUDA_SHADER_FILES}
         )
 # Modify End
 
 set_source_files_properties(${SHADER_FILES_RAYTRACING} PROPERTIES HEADER_FILE_ONLY TRUE)
+# Modify Begin:2026-07-27 by BestHui
+set_source_files_properties(${CUDA_SHADER_FILES} PROPERTIES HEADER_FILE_ONLY TRUE)
+# Modify End
 
 target_link_libraries(${TARGET_NAME}
         PUBLIC Framework
         PUBLIC RenderGraph
         )
+
+# Modify Begin:2026-07-27 by BestHui
+target_compile_options(${TARGET_NAME} PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+target_link_options(${TARGET_NAME} PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/NODEFAULTLIB:LIBCMT>")
+
+find_program(CUDA_NVCC_EXECUTABLE
+        NAMES nvcc
+        HINTS "$ENV{CUDA_PATH}/bin" "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.3/bin"
+        )
+
+find_path(CUDA_INCLUDE_DIR
+        NAMES cuda.h
+        HINTS "$ENV{CUDA_PATH}/include" "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.3/include"
+        )
+
+find_library(CUDA_DRIVER_LIBRARY
+        NAMES cuda
+        HINTS "$ENV{CUDA_PATH}/lib/x64" "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.3/lib/x64"
+        )
+
+if (NOT CUDA_NVCC_EXECUTABLE OR NOT CUDA_INCLUDE_DIR OR NOT CUDA_DRIVER_LIBRARY)
+        message(FATAL_ERROR "RaytracingDemo CUDA bloom requires CUDA Toolkit. Install with: winget install --id Nvidia.CUDA -e")
+endif()
+
+get_filename_component(CUDA_HOST_COMPILER_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
+target_include_directories(${TARGET_NAME} PRIVATE "${CUDA_INCLUDE_DIR}")
+target_link_libraries(${TARGET_NAME} PRIVATE "${CUDA_DRIVER_LIBRARY}")
+set(CUDA_BLOOM_PTX_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/Shaders/CudaBloom.ptx")
+# Modify End
 
 set(NRD_ROOT "${CMAKE_SOURCE_DIR}/External/NRD")
 set(NRI_ROOT "${CMAKE_SOURCE_DIR}/External/NRI")
@@ -147,11 +193,18 @@ add_custom_command(TARGET ${TARGET_NAME} PRE_BUILD
 # Modify Begin:2026-07-21 by BestHui
         COMMAND "${DXC_EXECUTABLE}" -T ${RAYTRACING_SHADER_MODEL} -HV 2021 -Fo "${RAYTRACING_SHADER_OUTPUT}" "${RAYTRACING_SHADER_SOURCE}" -I "${CMAKE_SOURCE_DIR}/DXC/include" -I "${CMAKE_SOURCE_DIR}/Shaders" -I "${CMAKE_SOURCE_DIR}/External/NRD/Shaders" -I "${CMAKE_CURRENT_SOURCE_DIR}/shaders" -WX
 # Modify End
+# Modify Begin:2026-07-27 by BestHui
+        COMMAND "${CUDA_NVCC_EXECUTABLE}" -ptx -O3 -arch=sm_75 -ccbin "${CUDA_HOST_COMPILER_DIR}" -Xcompiler=/utf-8 -o "${CUDA_BLOOM_PTX_OUTPUT}" "${CMAKE_CURRENT_SOURCE_DIR}/shaders/CUDA/CudaBloom.cu"
+# Modify End
         VERBATIM
 )
 
 add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${TARGET_NAME}>/Shaders"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${RAYTRACING_SHADER_OUTPUT}" "$<TARGET_FILE_DIR:${TARGET_NAME}>/Shaders/PathTracing.rt.cso"
+# Modify Begin:2026-07-27 by BestHui
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CUDA_BLOOM_PTX_OUTPUT}" "$<TARGET_FILE_DIR:${TARGET_NAME}>/Shaders/CudaBloom.ptx"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/shaders/CUDA/CudaBloom.cu" "$<TARGET_FILE_DIR:${TARGET_NAME}>/Shaders/CudaBloom.cu"
+# Modify End
         VERBATIM
 )

@@ -22,7 +22,10 @@ RayPayload TraceScene(float3 origin, float3 direction, float tMax, uint flags)
     payload.AmbientOcclusion = 1.0f;
     payload.Padding0 = 0u;
 
-    TraceRay(RAYTRACING_DEMO_SCENE, flags, 0xFF, 0, 1, 0, ray, payload);
+//Modify Begin:2026-07-27 by BestHui
+    const uint hitGroupIndex = (flags & RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH) != 0u ? 1u : 0u;
+    TraceRay(RAYTRACING_DEMO_SCENE, flags, 0xFF, hitGroupIndex, 0, 0, ray, payload);
+//Modify End
     return payload;
 }
 

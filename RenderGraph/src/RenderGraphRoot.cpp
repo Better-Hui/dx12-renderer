@@ -1,5 +1,6 @@
 #include "RenderGraphRoot.h"
 
+#include <algorithm>
 #include <functional>
 #include <set>
 #include <queue>
@@ -15,13 +16,26 @@
 
 namespace
 {
+//Modify Begin:2026-07-28 by BestHui
+    bool IsProducerOutput(const RenderGraph::OutputType outputType)
+    {
+        return outputType == RenderGraph::OutputType::Token ||
+            outputType == RenderGraph::OutputType::RenderTarget ||
+            outputType == RenderGraph::OutputType::DepthWrite ||
+            outputType == RenderGraph::OutputType::UnorderedAccess ||
+            outputType == RenderGraph::OutputType::CopyDestination;
+    }
+//Modify End
+
     bool DirectlyDependsOn(const RenderGraph::RenderPass& pass1, const RenderGraph::RenderPass& pass2)
     {
         for (const auto& input : pass1.GetInputs())
         {
             for (const auto& output : pass2.GetOutputs())
             {
-                if (input.m_Id == output.m_Id)
+//Modify Begin:2026-07-28 by BestHui
+                if (IsProducerOutput(output.m_Type) && input.m_Id == output.m_Id)
+//Modify End
                 {
                     return true;
                 }
@@ -90,10 +104,19 @@ namespace
         return result;
     }
 
-    std::set<RenderGraph::RenderPass*> FindUnusedPasses(const std::vector<std::vector<RenderGraph::RenderPass*>>& sortedRenderPasses)
+//Modify Begin:2026-07-28 by BestHui
+    std::set<RenderGraph::RenderPass*> FindUnusedPasses(
+        const std::vector<std::vector<RenderGraph::RenderPass*>>& sortedRenderPasses,
+        const std::vector<RenderGraph::ResourceId>& externalOutputIds)
+//Modify End
     {
         std::set<RenderGraph::ResourceId> usedResources;
-        usedResources.insert(RenderGraph::ResourceIds::GRAPH_OUTPUT);
+//Modify Begin:2026-07-28 by BestHui
+        for (const RenderGraph::ResourceId outputId : externalOutputIds)
+        {
+            usedResources.insert(outputId);
+        }
+//Modify End
 
         std::set<RenderGraph::RenderPass*> unusedPasses;
 
@@ -116,7 +139,9 @@ namespace
 
                 // check if any of the outputs is used
                 const auto findResult = std::ranges::find_if(outputs,
-                    [&usedResources](const RenderGraph::Output& o) { return usedResources.contains(o.m_Id); }
+//Modify Begin:2026-07-28 by BestHui
+                    [&usedResources](const RenderGraph::Output& o) { return IsProducerOutput(o.m_Type) && usedResources.contains(o.m_Id); }
+//Modify End
                 );
 
                 if (findResult != outputs.end())
@@ -199,14 +224,27 @@ RenderGraph::RenderGraphRoot::RenderGraphRoot(
     std::vector<TextureDescription>&& textures,
     std::vector<BufferDescription>&& buffers,
     std::vector<TokenDescription>&& tokens
+//Modify Begin:2026-07-28 by BestHui
+    , std::vector<ResourceId> externalOutputs
+//Modify End
 )
     : m_DirectCommandQueue(Application::Get().GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT))
     , m_RenderPassesDescription(std::move(renderPasses))
     , m_TextureDescriptions(std::move(textures))
     , m_BufferDescriptions(std::move(buffers))
     , m_TokenDescriptions(std::move(tokens))
+//Modify Begin:2026-07-28 by BestHui
+    , m_ExternalOutputIds(std::move(externalOutputs))
+//Modify End
     , m_ResourcePool(std::make_shared<ResourcePool>())
 {
+//Modify Begin:2026-07-28 by BestHui
+    if (std::ranges::find(m_ExternalOutputIds, ResourceIds::GRAPH_OUTPUT) == m_ExternalOutputIds.end())
+    {
+        m_ExternalOutputIds.push_back(ResourceIds::GRAPH_OUTPUT);
+    }
+//Modify End
+
     {
         const auto pCommandList = m_DirectCommandQueue->GetCommandList();
 
@@ -300,25 +338,138 @@ void RenderGraph::RenderGraphRoot::Present(const std::shared_ptr<Window>& pWindo
     pWindow->Present(*pTexture);
 }
 
-void RenderGraph::RenderGraphRoot::DrawToGraphOutput(const RenderMetadata& renderMetadata, const std::function<void(CommandList&)>& drawCallback)
+//Modify Begin:2026-07-28 by BestHui
+void RenderGraph::RenderGraphRoot::PresentWithOverlay(
+    const std::shared_ptr<Window>& pWindow,
+    const ResourceId resourceId,
+    const std::function<void(CommandList&)>& drawCallback)
+{
+    const auto& pTexture = m_ResourcePool->GetTexture(resourceId);
+
+    const auto pCommandList = m_DirectCommandQueue->GetCommandList();
+    auto& commandList = *pCommandList;
+
+    {
+        PIXScope(commandList, L"Render Graph: Prepare Display");
+
+        if (pTexture->GetD3D12ResourceDesc().SampleDesc.Count > 1)
+        {
+            TransitionBarrier(*pTexture, D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
+        }
+        else
+        {
+            TransitionBarrier(*pTexture, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        }
+        FlushBarriers(commandList);
+
+        const RenderTarget& backBufferRenderTarget = pWindow->GetRenderTarget();
+        const std::shared_ptr<Texture>& backBuffer = backBufferRenderTarget.GetTexture(Color0);
+        if (pTexture->GetD3D12ResourceDesc().SampleDesc.Count > 1)
+        {
+            commandList.ResolveSubresource(*backBuffer, *pTexture);
+        }
+        else
+        {
+            commandList.CopyResource(*backBuffer, *pTexture);
+        }
+
+        if (drawCallback)
+        {
+            commandList.SetRenderTarget(backBufferRenderTarget);
+            commandList.SetAutomaticViewportAndScissorRect(backBufferRenderTarget);
+            drawCallback(commandList);
+        }
+    }
+
+    m_DirectCommandQueue->ExecuteCommandList(pCommandList);
+    pWindow->Present();
+}
+
+void RenderGraph::RenderGraphRoot::TransitionTexture(
+    const RenderMetadata& renderMetadata,
+    const ResourceId resourceId,
+    const D3D12_RESOURCE_STATES stateAfter,
+    const bool waitForCompletion)
+{
+    RebuildIfNecessary(renderMetadata);
+
+    const auto pCommandList = m_DirectCommandQueue->GetCommandList();
+    const auto& pTexture = m_ResourcePool->GetTexture(resourceId);
+
+    TransitionBarrier(*pTexture, stateAfter);
+    FlushBarriers(*pCommandList);
+
+    const uint64_t fenceValue = m_DirectCommandQueue->ExecuteCommandList(pCommandList);
+    if (waitForCompletion)
+    {
+        m_DirectCommandQueue->WaitForFenceValue(fenceValue);
+    }
+}
+
+void RenderGraph::RenderGraphRoot::CopyTexture(
+    const RenderMetadata& renderMetadata,
+    const ResourceId sourceId,
+    const ResourceId destinationId,
+    const bool waitForCompletion)
 {
     RebuildIfNecessary(renderMetadata);
 
     const auto pCommandList = m_DirectCommandQueue->GetCommandList();
     auto& commandList = *pCommandList;
+    const auto& source = m_ResourcePool->GetTexture(sourceId);
+    const auto& destination = m_ResourcePool->GetTexture(destinationId);
 
-    const auto& pGraphOutput = m_ResourcePool->GetTexture(ResourceIds::GRAPH_OUTPUT);
-    TransitionBarrier(*pGraphOutput, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    TransitionBarrier(*source, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    TransitionBarrier(*destination, D3D12_RESOURCE_STATE_COPY_DEST);
     FlushBarriers(commandList);
 
-    commandList.SetRenderTarget(*m_GraphOutputRenderTarget);
-    commandList.SetAutomaticViewportAndScissorRect(*m_GraphOutputRenderTarget);
+    commandList.CopyResource(*destination, *source);
+
+    const uint64_t fenceValue = m_DirectCommandQueue->ExecuteCommandList(pCommandList);
+    if (waitForCompletion)
+    {
+        m_DirectCommandQueue->WaitForFenceValue(fenceValue);
+    }
+}
+
+void RenderGraph::RenderGraphRoot::DrawToTexture(
+    const RenderMetadata& renderMetadata,
+    const ResourceId resourceId,
+    const std::function<void(CommandList&)>& drawCallback)
+{
+    RebuildIfNecessary(renderMetadata);
+
+    const auto pCommandList = m_DirectCommandQueue->GetCommandList();
+    auto& commandList = *pCommandList;
+    const auto& pTexture = m_ResourcePool->GetTexture(resourceId);
+
+    TransitionBarrier(*pTexture, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    FlushBarriers(commandList);
+
+    RenderTarget renderTarget;
+    renderTarget.AttachTexture(Color0, pTexture);
+    commandList.SetRenderTarget(renderTarget);
+    commandList.SetAutomaticViewportAndScissorRect(renderTarget);
 
     drawCallback(commandList);
 
     m_DirectCommandQueue->ExecuteCommandList(pCommandList);
-
 }
+//Modify End
+
+void RenderGraph::RenderGraphRoot::DrawToGraphOutput(const RenderMetadata& renderMetadata, const std::function<void(CommandList&)>& drawCallback)
+{
+//Modify Begin:2026-07-28 by BestHui
+    DrawToTexture(renderMetadata, ResourceIds::GRAPH_OUTPUT, drawCallback);
+//Modify End
+}
+
+//Modify Begin:2026-07-27 by BestHui
+const std::shared_ptr<Texture>& RenderGraph::RenderGraphRoot::GetTexture(const ResourceId resourceId) const
+{
+    return m_ResourcePool->GetTexture(resourceId);
+}
+//Modify End
 
 void RenderGraph::RenderGraphRoot::MarkDirty()
 {
@@ -392,7 +543,9 @@ void RenderGraph::RenderGraphRoot::Build(const RenderMetadata& renderMetadata)
     const auto& application = Application::Get();
     const auto& pDevice = application.GetDevice();
 
-    const auto unusedPasses = FindUnusedPasses(m_RenderPassesSorted);
+//Modify Begin:2026-07-28 by BestHui
+    const auto unusedPasses = FindUnusedPasses(m_RenderPassesSorted, m_ExternalOutputIds);
+//Modify End
 
     // Populate the final render pass list
     m_RenderPassesBuilt.clear();
@@ -422,7 +575,9 @@ void RenderGraph::RenderGraphRoot::Build(const RenderMetadata& renderMetadata)
             m_ResourcePool->RegisterBuffer(desc, m_RenderPassesBuilt, renderMetadata, pDevice);
         }
 
-        m_ResourcePool->InitHeaps(m_RenderPassesBuilt, pDevice);
+//Modify Begin:2026-07-28 by BestHui
+        m_ResourcePool->InitHeaps(m_RenderPassesBuilt, pDevice, m_ExternalOutputIds);
+//Modify End
     }
 
     // Create resources
@@ -432,16 +587,23 @@ void RenderGraph::RenderGraphRoot::Build(const RenderMetadata& renderMetadata)
         // if the resource is pruned, it won't be registered
         for (const auto& desc : m_TextureDescriptions)
         {
+//Modify Begin:2026-07-28 by BestHui
             if (m_ResourcePool->IsRegistered(desc.m_Id))
             {
-                const auto& pTexture = m_ResourcePool->CreateTexture(desc.m_Id);
-                SetCurrentResourceState(*pTexture, D3D12_RESOURCE_STATE_COMMON);
+                const auto& resourceDescription = m_ResourcePool->GetDescription(desc.m_Id);
+                if (resourceDescription.m_DedicatedResource || m_ResourcePool->HasResourceLifecycle(desc.m_Id))
+                {
+                    const auto& pTexture = m_ResourcePool->CreateTexture(desc.m_Id);
+                    SetCurrentResourceState(*pTexture, D3D12_RESOURCE_STATE_COMMON);
+                }
             }
+//Modify End
         }
 
         for (const auto& desc : m_BufferDescriptions)
         {
-            if (m_ResourcePool->IsRegistered(desc.m_Id))
+//Modify Begin:2026-07-28 by BestHui
+            if (m_ResourcePool->IsRegistered(desc.m_Id) && m_ResourcePool->HasResourceLifecycle(desc.m_Id))
             {
                 const auto& pBuffer = m_ResourcePool->CreateBuffer(desc.m_Id);
                 pBuffer->ForEachResourceRecursive([this](const auto& r)
@@ -449,21 +611,24 @@ void RenderGraph::RenderGraphRoot::Build(const RenderMetadata& renderMetadata)
                     SetCurrentResourceState(r, D3D12_RESOURCE_STATE_COMMON);
                 });
             }
+//Modify End
         }
     }
 
     // Create render targets
     m_RenderTargets.clear();
 
-    for (const auto& pRenderPass : m_RenderPassesDescription)
+//Modify Begin:2026-07-28 by BestHui
+    for (const auto& pRenderPass : m_RenderPassesBuilt)
     {
         RenderTargetInfo renderTargetInfo = CreateRenderTargetOrDefault(*pRenderPass, *m_ResourcePool);
 
         if (renderTargetInfo.m_RenderTarget != nullptr)
         {
-            m_RenderTargets.insert(std::pair{ pRenderPass.get(), renderTargetInfo });
+            m_RenderTargets.insert(std::pair{ pRenderPass, renderTargetInfo });
         }
     }
+//Modify End
 
     m_GraphOutputRenderTarget = std::make_shared<RenderTarget>();
     m_GraphOutputRenderTarget->AttachTexture(Color0, m_ResourcePool->GetTexture(ResourceIds::GRAPH_OUTPUT));

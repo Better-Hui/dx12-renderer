@@ -29,7 +29,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDe
             { DemoResourceIds::NRDViewZ, OutputType::UnorderedAccess },
             { DemoResourceIds::NRDMotion, OutputType::UnorderedAccess },
             { DemoResourceIds::NRDDenoisedRadiance, OutputType::UnorderedAccess },
-            { RenderGraph::ResourceIds::GRAPH_OUTPUT, OutputType::UnorderedAccess },
+            { DemoResourceIds::SceneColor, OutputType::UnorderedAccess },
             { DemoResourceIds::DenoiseFinishedToken, OutputType::Token },
         },
         [&demo](const RenderContext& context, CommandList& cmd)

@@ -1,3 +1,4 @@
+//Modify Begin:2026-07-28 by BestHui
 #include <Passes/RaytracingDemoPasses.h>
 
 #include <Passes/RaytracingDemoPassResources.h>
@@ -17,10 +18,10 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateSk
     return RenderPass::Create(
         L"Skybox",
         {
-            { DemoResourceIds::BaseResourcesFinishedToken, InputType::Token },
+            { DemoResourceIds::DenoiseFinishedToken, InputType::Token },
         },
         {
-            { RenderGraph::ResourceIds::GRAPH_OUTPUT, OutputType::RenderTarget },
+            { DemoResourceIds::SceneColor, OutputType::RenderTarget },
             { DemoResourceIds::DepthBuffer, OutputType::DepthRead },
             { DemoResourceIds::SkyboxFinishedToken, OutputType::Token },
         },
@@ -41,3 +42,4 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateSk
             demo.m_SkyboxShader->Unbind(cmd);
         });
 }
+//Modify End

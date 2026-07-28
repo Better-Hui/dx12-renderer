@@ -62,6 +62,9 @@ private:
 
 	std::shared_ptr<Shader> m_Shader;
 	const ShaderUtils::ConstantBufferMetadata* m_Metadata;
+//Modify Begin:2026-07-27 by BestHui
+	std::string m_ConstantBufferName;
+//Modify End
 	std::unique_ptr<uint8_t[]> m_ConstantBuffer = nullptr;
 	size_t m_ConstantBufferSize;
 

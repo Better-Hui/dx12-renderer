@@ -248,7 +248,7 @@ void DenoiserController::Execute(
             nrdResources.ViewZ,
             nrdResources.Motion,
             nrdResources.DenoisedRadiance,
-            lighting.Output,
+            lighting.SceneColor,
             width,
             height);
         return;
@@ -268,7 +268,7 @@ void DenoiserController::Execute(
             gbuffer.Position,
             gbuffer.MotionVector,
             gbuffer.Depth,
-            lighting.Output,
+            lighting.SceneColor,
             width,
             height);
     }
