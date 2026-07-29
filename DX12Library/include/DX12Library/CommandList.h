@@ -612,9 +612,6 @@ public:
      * Should only be called by the DynamicDescriptorHeap class.
      */
     void SetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE heapType, ID3D12DescriptorHeap* heap);
-    //Modify Begin:2026-07-29 by BestHui
-    void UnstageDynamicDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE heapType, UINT rootParameterIndex);
-    //Modify End
     //Modify Begin:2026-07-27 by BestHui
     void InvalidateCachedNativeState();
     //Modify End
@@ -627,9 +624,6 @@ public:
     void SetComputeRootUnorderedAccessView(UINT rootParameterIndex, const Resource& resource);
     void SetComputeRootShaderResourceView(UINT rootParameterIndex, D3D12_GPU_VIRTUAL_ADDRESS gpuAddress);
     void SetComputeRootConstantBufferView(UINT rootParameterIndex, D3D12_GPU_VIRTUAL_ADDRESS gpuAddress);
-    //Modify Begin:2026-07-29 by BestHui
-    void SetGraphicsRootDescriptorTable(UINT rootParameterIndex, D3D12_GPU_DESCRIPTOR_HANDLE descriptorHandle);
-    //Modify End
     void SetComputeRootDescriptorTable(UINT rootParameterIndex, D3D12_GPU_DESCRIPTOR_HANDLE descriptorHandle);
 
     void SetAutomaticViewportAndScissorRect(const RenderTarget& renderTarget, UINT mipLevel = 0);
@@ -677,14 +671,7 @@ private:
 
     // Keep track of the currently bound root signatures to minimize root
     // signature changes.
-    //Modify Begin:2026-07-29 by BestHui
-    ID3D12RootSignature* m_GraphicsRootSignature = nullptr;
-    ID3D12RootSignature* m_ComputeRootSignature = nullptr;
-    //Modify End
-    //Modify Begin:2026-07-29 by BestHui
-    ID3D12PipelineState* m_PipelineState = nullptr;
-    ID3D12StateObject* m_RayTracingStateObject = nullptr;
-    //Modify End
+    ID3D12RootSignature* m_RootSignature;
 
     // Resource created in an upload heap. Useful for drawing of dynamic geometry
     // or for uploading constant buffer data that changes every draw call.

@@ -93,16 +93,6 @@ void DynamicDescriptorHeap::StageDescriptors(const uint32_t rootParameterIndex, 
 	m_StaleDescriptorTableBitMask |= (1 << rootParameterIndex);
 }
 
-//Modify Begin:2026-07-29 by BestHui
-void DynamicDescriptorHeap::UnstageDescriptors(const uint32_t rootParameterIndex)
-{
-	if (rootParameterIndex < MAX_DESCRIPTOR_TABLES)
-	{
-		m_StaleDescriptorTableBitMask &= ~(1 << rootParameterIndex);
-	}
-}
-//Modify End
-
 uint32_t DynamicDescriptorHeap::ComputeStaleDescriptorCount() const
 {
 	uint32_t numStaleDescriptors = 0;
