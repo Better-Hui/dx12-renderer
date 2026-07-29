@@ -79,20 +79,6 @@ namespace
         }
     }
 
-//Modify Begin:2026-07-29 by BestHui
-    void BindDescriptorTable(
-        CommandList& commandList,
-        const UINT rootParameterIndex,
-        const PipelineDescriptorTableAllocation& allocation)
-    {
-        commandList.StageDynamicDescriptors(
-            D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-            rootParameterIndex,
-            0u,
-            allocation.GetNumHandles(),
-            allocation.GetDescriptorHandle());
-    }
-//Modify End
 }
 //Modify End
 
@@ -115,6 +101,7 @@ void CommandContext::SetPipelineLayout(const PipelineBindPoint bindPoint, const 
         SetComputeRootSignature(*rootSignature);
     }
 //Modify Begin:2026-07-29 by BestHui
+    m_DescriptorAllocator.ResetTransientBindings();
     (void)pipelineLayout;
 //Modify End
 }
@@ -299,7 +286,7 @@ void CommandContext::ApplyGraphicsBinding(const PipelineDescriptorSet& descripto
         {
             if (const PipelineDescriptorTableAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
             {
-                BindDescriptorTable(m_CommandList, rootParameterIndex, *allocation);
+                m_DescriptorAllocator.StageDescriptorTable(m_CommandList, PipelineBindPoint::Graphics, rootParameterIndex, *allocation);
             }
         }
 //Modify End
@@ -338,7 +325,7 @@ void CommandContext::ApplyGraphicsBinding(const PipelineDescriptorSet& descripto
                 }
             }
 
-            BindDescriptorTable(m_CommandList, rootParameterIndex, *allocation);
+            m_DescriptorAllocator.StageDescriptorTable(m_CommandList, PipelineBindPoint::Graphics, rootParameterIndex, *allocation);
             return;
         }
 //Modify End
@@ -391,7 +378,7 @@ void CommandContext::ApplyGraphicsBinding(const PipelineDescriptorSet& descripto
                 TransitionUnorderedAccessView(m_CommandList, unorderedAccessView);
             }
 
-            BindDescriptorTable(m_CommandList, rootParameterIndex, *allocation);
+            m_DescriptorAllocator.StageDescriptorTable(m_CommandList, PipelineBindPoint::Graphics, rootParameterIndex, *allocation);
             return;
         }
 //Modify End
@@ -433,7 +420,7 @@ void CommandContext::ApplyComputeBinding(const PipelineDescriptorSet& descriptor
         {
             if (const PipelineDescriptorTableAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
             {
-                BindDescriptorTable(m_CommandList, rootParameterIndex, *allocation);
+                m_DescriptorAllocator.StageDescriptorTable(m_CommandList, PipelineBindPoint::Compute, rootParameterIndex, *allocation);
             }
         }
 //Modify End
@@ -492,7 +479,7 @@ void CommandContext::ApplyComputeBinding(const PipelineDescriptorSet& descriptor
                 }
             }
 
-            BindDescriptorTable(m_CommandList, rootParameterIndex, *allocation);
+            m_DescriptorAllocator.StageDescriptorTable(m_CommandList, PipelineBindPoint::Compute, rootParameterIndex, *allocation);
             return;
         }
 //Modify End
@@ -545,7 +532,7 @@ void CommandContext::ApplyComputeBinding(const PipelineDescriptorSet& descriptor
                 TransitionUnorderedAccessView(m_CommandList, unorderedAccessView);
             }
 
-            BindDescriptorTable(m_CommandList, rootParameterIndex, *allocation);
+            m_DescriptorAllocator.StageDescriptorTable(m_CommandList, PipelineBindPoint::Compute, rootParameterIndex, *allocation);
             return;
         }
 //Modify End

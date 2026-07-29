@@ -39,6 +39,7 @@ Demo 层不应该直接管理：
 - `PipelineDescriptorPool`：分配 descriptor set，记录容量和逻辑 offset。
 - `PipelineDescriptorSet`：保存按名字绑定的 CBV / SRV / UAV / acceleration structure。
 - `CommandContext`：唯一的命令录制入口，负责 bind pipeline、bind descriptor set、draw、dispatch、dispatch rays。
+- `CommandContextDescriptorAllocator`：命令录制期 descriptor table 提交器，缓存同一 `CommandContext` 内未变化的 table。
 - `DynamicDescriptorHeap`：当前实际 GPU-visible descriptor table 提交点。
 
 ## 推荐 Command API
@@ -99,6 +100,10 @@ shader.SetUnorderedAccessView(commandList, "Output", UnorderedAccessView(output)
 2. 资源写入 `PipelineDescriptorSet`。
 3. pass 调用 `CommandContext::BindDescriptorSet()`。
 4. `CommandContext` 统一提交 descriptor table。
+
+当前实现中，`PipelineDescriptorTableAllocation` 带有 revision。只要 descriptor set 中某个 table 的 CPU backing 被更新，revision 就会增加。`CommandContextDescriptorAllocator` 会用 CPU handle、descriptor count、revision 判断当前 `CommandContext` 内是否需要重新 stage descriptor table。
+
+注意：这只是减少重复绑定的过渡优化，不等于最终 NRI 式 persistent GPU descriptor set。最终目标仍然是由 command context / frame resource 统一管理 shader-visible descriptor heap pages。
 
 sample 不应该硬编码：
 
@@ -241,6 +246,7 @@ CUDA interop 的关键点：
 - 有 `CommandContext`，形态接近 `CommandBuffer` command API。
 - 有 `PipelineLayout`，可从 reflection 生成 descriptor layout。
 - 有 `PipelineDescriptorPool / PipelineDescriptorSet`，资源绑定开始向 set 模型靠拢。
+- 有 `CommandContextDescriptorAllocator`，descriptor table 提交边界已经从 `CommandContext.cpp` 局部 helper 抽成独立对象。
 - raster / compute / DXR 在 RaytracingDemo 中基本都走 `BindPipeline + BindDescriptorSet + Draw/Dispatch/DispatchRays`。
 - 支持 external D3D12 resource / Unity D3D12 device 方向的封装雏形。
 
@@ -266,4 +272,3 @@ CUDA interop 的关键点：
 5. 收敛 DXR：`RayTracingBindingSet` 只保存名字绑定资源，dispatch table 和 dispatch command 继续拆薄。
 6. 补 pipeline cache key：raster / compute / DXR 使用统一 key/hash 体系。
 7. 把 RaytracingDemo 继续写成 sample：每个 pass 都展示一种推荐 API，而不是隐藏在工具函数里。
-

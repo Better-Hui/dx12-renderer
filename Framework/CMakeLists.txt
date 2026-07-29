@@ -24,6 +24,9 @@ set(HEADER_FILES
         "include/Framework/BloomDownsample.h"
         "include/Framework/BloomUpsample.h" 
         "include/Framework/CommandContext.h"
+# Modify Begin:2026-07-29 by BestHui
+        "include/Framework/CommandContextDescriptorAllocator.h"
+# Modify End
 # Modify Begin:2026-07-28 by BestHui
         "include/Framework/CudaInterop.h"
 # Modify End
@@ -91,6 +94,9 @@ set(SOURCE_FILES
         "src/BloomDownsample.cpp"
         "src/BloomUpsample.cpp" 
         "src/CommandContext.cpp"
+# Modify Begin:2026-07-29 by BestHui
+        "src/CommandContextDescriptorAllocator.cpp"
+# Modify End
 # Modify Begin:2026-07-28 by BestHui
         "src/CudaInterop.cpp"
 # Modify End

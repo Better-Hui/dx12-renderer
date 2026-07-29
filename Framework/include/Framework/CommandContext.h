@@ -5,6 +5,10 @@
 #include <d3d12.h>
 #include <wrl.h>
 
+//Modify Begin:2026-07-29 by BestHui
+#include <Framework/CommandContextDescriptorAllocator.h>
+//Modify End
+
 #include <array>
 #include <cstdint>
 #include <string_view>
@@ -94,6 +98,7 @@ private:
 
     CommandList& m_CommandList;
 //Modify Begin:2026-07-29 by BestHui
+    mutable CommandContextDescriptorAllocator m_DescriptorAllocator;
     mutable const PipelineDescriptorPool* m_DescriptorPool = nullptr;
     mutable std::array<const PipelineDescriptorSet*, MaxDescriptorSetSlots> m_DescriptorSets = {};
 //Modify End

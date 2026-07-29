@@ -44,11 +44,14 @@ struct PipelineDescriptorTableAllocation
     PipelineDescriptorHeapType HeapType = PipelineDescriptorHeapType::Resource;
     uint32_t HeapOffset = 0;
     uint32_t NumHandles = 0;
+    uint64_t Revision = 1;
     DescriptorAllocation CpuDescriptors;
 
     bool IsValid() const { return NumHandles > 0; }
     D3D12_CPU_DESCRIPTOR_HANDLE GetDescriptorHandle(uint32_t offset = 0) const;
     uint32_t GetNumHandles() const { return NumHandles; }
+    uint64_t GetRevision() const { return Revision; }
+    void MarkDirty() { ++Revision; }
 };
 //Modify End
 
@@ -136,6 +139,7 @@ private:
     std::map<UINT, PipelineBoundResource> m_BoundResources;
 //Modify Begin:2026-07-27 by BestHui
     std::map<UINT, PipelineDescriptorTableAllocation> m_DescriptorTableAllocations;
+    PipelineDescriptorTableAllocation* FindMutableDescriptorTableAllocation(UINT rootParameterIndex);
 //Modify End
 //Modify Begin:2026-07-29 by BestHui
     const PipelineDescriptorPool* m_DescriptorPool = nullptr;

@@ -173,13 +173,14 @@ UINT PipelineDescriptorSet::SetShaderResourceView(
 //Modify Begin:2026-07-27 by BestHui
     if (descriptorChanged)
     {
-        if (const PipelineDescriptorTableAllocation* allocation = FindDescriptorTableAllocation(binding.RootParameterIndex))
+        if (PipelineDescriptorTableAllocation* allocation = FindMutableDescriptorTableAllocation(binding.RootParameterIndex))
         {
                 Application::Get().GetDevice()->CopyDescriptorsSimple(
                     1u,
                     GetDescriptorHandle(*this, *allocation, arrayIndex),
                     shaderResourceView.m_Resource->GetShaderResourceView(shaderResourceView.GetDescOrNullptr()),
                     D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                allocation->MarkDirty();
         }
     }
 //Modify End
@@ -214,13 +215,14 @@ UINT PipelineDescriptorSet::SetShaderResource(
 //Modify Begin:2026-07-27 by BestHui
     if (descriptorChanged)
     {
-        if (const PipelineDescriptorTableAllocation* allocation = FindDescriptorTableAllocation(binding.RootParameterIndex))
+        if (PipelineDescriptorTableAllocation* allocation = FindMutableDescriptorTableAllocation(binding.RootParameterIndex))
         {
                 Application::Get().GetDevice()->CopyDescriptorsSimple(
                     1u,
                     GetDescriptorHandle(*this, *allocation, arrayIndex),
                     resource.GetShaderResourceView(nullptr),
                     D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                allocation->MarkDirty();
         }
     }
 //Modify End
@@ -258,12 +260,13 @@ UINT PipelineDescriptorSet::SetShaderResource(
 //Modify Begin:2026-07-27 by BestHui
     if (descriptorChanged)
     {
-        if (const PipelineDescriptorTableAllocation* allocation = FindDescriptorTableAllocation(binding.RootParameterIndex))
+        if (PipelineDescriptorTableAllocation* allocation = FindMutableDescriptorTableAllocation(binding.RootParameterIndex))
         {
             Application::Get().GetDevice()->CreateShaderResourceView(
                 resource.GetD3D12Resource().Get(),
                 &srvDesc,
                 GetDescriptorHandle(*this, *allocation, arrayIndex));
+            allocation->MarkDirty();
         }
     }
 //Modify End
@@ -288,13 +291,14 @@ UINT PipelineDescriptorSet::SetUnorderedAccessView(
 //Modify Begin:2026-07-27 by BestHui
     if (descriptorChanged)
     {
-        if (const PipelineDescriptorTableAllocation* allocation = FindDescriptorTableAllocation(binding.RootParameterIndex))
+        if (PipelineDescriptorTableAllocation* allocation = FindMutableDescriptorTableAllocation(binding.RootParameterIndex))
         {
             Application::Get().GetDevice()->CopyDescriptorsSimple(
                 1u,
                 GetDescriptorHandle(*this, *allocation, 0u),
                 unorderedAccessView.m_Resource->GetUnorderedAccessView(unorderedAccessView.GetDescOrNullptr()),
                 D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            allocation->MarkDirty();
         }
     }
 //Modify End
@@ -339,7 +343,7 @@ void PipelineDescriptorSet::ClearShaderResourceViews(std::string_view name)
     m_BoundResources[binding.RootParameterIndex].ShaderResourceViews.clear();
     m_BoundResources[binding.RootParameterIndex].ShaderResources.clear();
 //Modify Begin:2026-07-27 by BestHui
-    const PipelineDescriptorTableAllocation* allocation = FindDescriptorTableAllocation(binding.RootParameterIndex);
+    PipelineDescriptorTableAllocation* allocation = FindMutableDescriptorTableAllocation(binding.RootParameterIndex);
     const DescriptorAllocation* defaultDescriptors = GetLayout().FindDefaultDescriptorTable(binding.RootParameterIndex);
     if (allocation != nullptr && defaultDescriptors != nullptr)
     {
@@ -360,6 +364,7 @@ void PipelineDescriptorSet::ClearShaderResourceViews(std::string_view name)
                 defaultDescriptors->GetDescriptorHandle(0u),
                 D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
         }
+        allocation->MarkDirty();
 //Modify End
     }
 //Modify End
@@ -390,6 +395,12 @@ void PipelineDescriptorSet::SetDescriptorTableAllocation(
 }
 
 const PipelineDescriptorTableAllocation* PipelineDescriptorSet::FindDescriptorTableAllocation(const UINT rootParameterIndex) const
+{
+    const auto findResult = m_DescriptorTableAllocations.find(rootParameterIndex);
+    return findResult != m_DescriptorTableAllocations.end() ? &findResult->second : nullptr;
+}
+
+PipelineDescriptorTableAllocation* PipelineDescriptorSet::FindMutableDescriptorTableAllocation(const UINT rootParameterIndex)
 {
     const auto findResult = m_DescriptorTableAllocations.find(rootParameterIndex);
     return findResult != m_DescriptorTableAllocations.end() ? &findResult->second : nullptr;
