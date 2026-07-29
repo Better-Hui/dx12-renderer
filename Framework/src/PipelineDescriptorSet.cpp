@@ -71,6 +71,12 @@ void PipelineDescriptorSet::Reset(const PipelineLayout& layout)
 //Modify Begin:2026-07-27 by BestHui
     m_DescriptorTableAllocations.clear();
 //Modify End
+//Modify Begin:2026-07-29 by BestHui
+    m_DescriptorPool = nullptr;
+    m_SetIndex = 0;
+    m_ResourceDescriptorOffset = 0;
+    m_SamplerDescriptorOffset = 0;
+//Modify End
     m_AccelerationStructure = nullptr;
 }
 
@@ -354,6 +360,20 @@ const DescriptorAllocation* PipelineDescriptorSet::FindDescriptorTableAllocation
 {
     const auto findResult = m_DescriptorTableAllocations.find(rootParameterIndex);
     return findResult != m_DescriptorTableAllocations.end() ? &findResult->second : nullptr;
+}
+//Modify End
+
+//Modify Begin:2026-07-29 by BestHui
+void PipelineDescriptorSet::SetAllocationInfo(
+    const PipelineDescriptorPool* descriptorPool,
+    const uint32_t setIndex,
+    const uint32_t resourceDescriptorOffset,
+    const uint32_t samplerDescriptorOffset)
+{
+    m_DescriptorPool = descriptorPool;
+    m_SetIndex = setIndex;
+    m_ResourceDescriptorOffset = resourceDescriptorOffset;
+    m_SamplerDescriptorOffset = samplerDescriptorOffset;
 }
 //Modify End
 

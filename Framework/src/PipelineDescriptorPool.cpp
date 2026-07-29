@@ -19,7 +19,8 @@ void PipelineDescriptorPool::Reset()
 
 PipelineDescriptorSet PipelineDescriptorPool::AllocateDescriptorSetValue(
     const PipelineLayout& layout,
-    const uint32_t variableDescriptorNum)
+    const uint32_t variableDescriptorNum,
+    const uint32_t setIndex)
 {
     Assert(m_AllocatedDescriptorSetCount < m_Desc.DescriptorSetMaxNum, "Pipeline descriptor pool ran out of descriptor sets.");
 
@@ -32,11 +33,16 @@ PipelineDescriptorSet PipelineDescriptorPool::AllocateDescriptorSetValue(
         m_AllocatedSamplerDescriptorCount + samplerDescriptorCount <= m_Desc.SamplerDescriptorMaxNum || samplerDescriptorCount == 0u,
         "Pipeline descriptor pool ran out of sampler descriptors.");
 
+    const uint32_t resourceDescriptorOffset = m_AllocatedResourceDescriptorCount;
+    const uint32_t samplerDescriptorOffset = m_AllocatedSamplerDescriptorCount;
     ++m_AllocatedDescriptorSetCount;
     m_AllocatedResourceDescriptorCount += resourceDescriptorCount;
     m_AllocatedSamplerDescriptorCount += samplerDescriptorCount;
 //Modify Begin:2026-07-27 by BestHui
     PipelineDescriptorSet descriptorSet(layout);
+//Modify Begin:2026-07-29 by BestHui
+    descriptorSet.SetAllocationInfo(this, setIndex, resourceDescriptorOffset, samplerDescriptorOffset);
+//Modify End
     auto device = Application::Get().GetDevice();
     for (const PipelineDescriptorSetDesc& setDesc : layout.GetDescriptorSets())
     {
@@ -67,9 +73,10 @@ PipelineDescriptorSet PipelineDescriptorPool::AllocateDescriptorSetValue(
 
 std::unique_ptr<PipelineDescriptorSet> PipelineDescriptorPool::AllocateDescriptorSet(
     const PipelineLayout& layout,
-    const uint32_t variableDescriptorNum)
+    const uint32_t variableDescriptorNum,
+    const uint32_t setIndex)
 {
-    return std::make_unique<PipelineDescriptorSet>(AllocateDescriptorSetValue(layout, variableDescriptorNum));
+    return std::make_unique<PipelineDescriptorSet>(AllocateDescriptorSetValue(layout, variableDescriptorNum, setIndex));
 }
 
 uint32_t PipelineDescriptorPool::CountResourceDescriptors(

@@ -17,6 +17,7 @@
 
 class RayTracingAccelerationStructure;
 class CommandList;
+class PipelineDescriptorPool;
 class Resource;
 class StructuredBuffer;
 
@@ -79,6 +80,17 @@ public:
     void SetDescriptorTableAllocation(UINT rootParameterIndex, DescriptorAllocation allocation);
     const DescriptorAllocation* FindDescriptorTableAllocation(UINT rootParameterIndex) const;
 //Modify End
+//Modify Begin:2026-07-29 by BestHui
+    void SetAllocationInfo(
+        const PipelineDescriptorPool* descriptorPool,
+        uint32_t setIndex,
+        uint32_t resourceDescriptorOffset,
+        uint32_t samplerDescriptorOffset);
+    const PipelineDescriptorPool* GetDescriptorPool() const { return m_DescriptorPool; }
+    uint32_t GetSetIndex() const { return m_SetIndex; }
+    uint32_t GetResourceDescriptorOffset() const { return m_ResourceDescriptorOffset; }
+    uint32_t GetSamplerDescriptorOffset() const { return m_SamplerDescriptorOffset; }
+//Modify End
     const PipelineBoundResource* FindBoundResource(UINT rootParameterIndex) const;
     const PipelineBoundResource& GetBoundResource(UINT rootParameterIndex) const;
     const std::map<UINT, PipelineBoundResource>& GetBoundResources() const { return m_BoundResources; }
@@ -90,6 +102,12 @@ private:
     std::map<UINT, PipelineBoundResource> m_BoundResources;
 //Modify Begin:2026-07-27 by BestHui
     std::map<UINT, DescriptorAllocation> m_DescriptorTableAllocations;
+//Modify End
+//Modify Begin:2026-07-29 by BestHui
+    const PipelineDescriptorPool* m_DescriptorPool = nullptr;
+    uint32_t m_SetIndex = 0;
+    uint32_t m_ResourceDescriptorOffset = 0;
+    uint32_t m_SamplerDescriptorOffset = 0;
 //Modify End
     const RayTracingAccelerationStructure* m_AccelerationStructure = nullptr;
 };

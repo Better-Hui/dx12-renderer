@@ -20,6 +20,9 @@
 class CommandList;
 class PipelineLayout;
 class PipelineDescriptorSet;
+//Modify Begin:2026-07-29 by BestHui
+class PipelineDescriptorPool;
+//Modify End
 class CommandContext;
 class RayTracingPipelineState;
 class ShaderBlob;
@@ -170,6 +173,9 @@ public:
 //Modify Begin:2026-07-27 by BestHui
     const RayTracingShader& GetShader() const;
     const PipelineDescriptorSet& GetDescriptorSet() const;
+//Modify Begin:2026-07-29 by BestHui
+    const PipelineDescriptorPool& GetDescriptorPool() const;
+//Modify End
 //Modify End
 
 private:

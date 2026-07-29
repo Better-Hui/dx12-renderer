@@ -8,6 +8,7 @@
 #include <DX12Library/Resource.h>
 #include <DX12Library/StructuredBuffer.h>
 #include <Framework/ComputeShader.h>
+#include <Framework/PipelineDescriptorPool.h>
 #include <Framework/PipelineDescriptorSet.h>
 #include <Framework/PipelineLayout.h>
 #include <Framework/RayTracingAccelerationStructure.h>
@@ -100,6 +101,29 @@ void CommandContext::SetPipelineLayout(const PipelineBindPoint bindPoint, const 
     }
     pipelineLayout.StageDefaultDescriptorTables(m_CommandList);
 }
+
+//Modify Begin:2026-07-29 by BestHui
+void CommandContext::SetDescriptorPool(const PipelineDescriptorPool& descriptorPool) const
+{
+    m_DescriptorPool = &descriptorPool;
+}
+
+void CommandContext::SetDescriptorSet(
+    const PipelineBindPoint bindPoint,
+    const PipelineDescriptorSetBindDesc& descriptorSetDesc) const
+{
+    Assert(descriptorSetDesc.DescriptorSet != nullptr, "Pipeline descriptor set bind desc has no descriptor set.");
+    const PipelineDescriptorSet& descriptorSet = *descriptorSetDesc.DescriptorSet;
+    if (const PipelineDescriptorPool* descriptorPool = descriptorSet.GetDescriptorPool())
+    {
+        SetDescriptorPool(*descriptorPool);
+    }
+    Assert(
+        descriptorSetDesc.SetIndex == descriptorSet.GetSetIndex(),
+        "Pipeline descriptor set bind desc set index does not match the allocated descriptor set.");
+    SetDescriptorSet(bindPoint, descriptorSet);
+}
+//Modify End
 
 void CommandContext::SetDescriptorSet(const PipelineBindPoint bindPoint, const PipelineDescriptorSet& descriptorSet) const
 {
@@ -207,7 +231,9 @@ void CommandContext::BindPipeline(const RayTracingShader& shader) const
 
 void CommandContext::BindDescriptorSet(const PipelineDescriptorSet& descriptorSet, const PipelineBindPoint bindPoint) const
 {
-    SetDescriptorSet(bindPoint, descriptorSet);
+//Modify Begin:2026-07-29 by BestHui
+    SetDescriptorSet(bindPoint, PipelineDescriptorSetBindDesc{ descriptorSet.GetSetIndex(), &descriptorSet });
+//Modify End
 }
 
 void CommandContext::SetGraphicsRootSignature(const RootSignature& rootSignature) const
@@ -616,7 +642,10 @@ void CommandContext::BindRayTracingDescriptorSet(const RayTracingBindingSet& bin
     Assert(descriptorSet.GetAccelerationStructure() != nullptr, "Ray tracing acceleration structure is not bound.");
 
     SetPipeline(shader);
-    SetDescriptorSet(PipelineBindPoint::Compute, descriptorSet);
+//Modify Begin:2026-07-29 by BestHui
+    SetDescriptorPool(bindingSet.GetDescriptorPool());
+    SetDescriptorSet(PipelineBindPoint::Compute, PipelineDescriptorSetBindDesc{ descriptorSet.GetSetIndex(), &descriptorSet });
+//Modify End
 //Modify End
 }
 

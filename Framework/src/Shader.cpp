@@ -105,7 +105,9 @@ void Shader::Unbind(CommandList& commandList)
 //Modify Begin:2026-07-27 by BestHui
 void Shader::ApplyBindings(CommandList& commandList) const
 {
-    CommandContext(commandList).SetDescriptorSet(PipelineBindPoint::Graphics, *m_DescriptorSet);
+//Modify Begin:2026-07-29 by BestHui
+    CommandContext(commandList).BindDescriptorSet(*m_DescriptorSet, PipelineBindPoint::Graphics);
+//Modify End
 }
 
 void Shader::StageDefaultDescriptorTables(CommandList& commandList) const

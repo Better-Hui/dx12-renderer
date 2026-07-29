@@ -75,7 +75,9 @@ void ComputeShader::Unbind(CommandList& commandList) const
 //Modify Begin:2026-07-27 by BestHui
 void ComputeShader::ApplyBindings(CommandList& commandList) const
 {
-    CommandContext(commandList).SetDescriptorSet(PipelineBindPoint::Compute, *m_DescriptorSet);
+//Modify Begin:2026-07-29 by BestHui
+    CommandContext(commandList).BindDescriptorSet(*m_DescriptorSet, PipelineBindPoint::Compute);
+//Modify End
 }
 
 void ComputeShader::StageDefaultDescriptorTables(CommandList& commandList) const

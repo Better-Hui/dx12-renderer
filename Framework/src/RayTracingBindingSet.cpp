@@ -303,6 +303,13 @@ const PipelineDescriptorSet& RayTracingBindingSet::GetDescriptorSet() const
     return m_Impl->DescriptorSet;
 }
 
+//Modify Begin:2026-07-29 by BestHui
+const PipelineDescriptorPool& RayTracingBindingSet::GetDescriptorPool() const
+{
+    return m_Impl->DescriptorPool;
+}
+//Modify End
+
 //Modify End
 
 //Modify End

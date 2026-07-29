@@ -10,6 +10,7 @@
 
 class CommandList;
 class ComputeShader;
+class PipelineDescriptorPool;
 class PipelineDescriptorSet;
 class PipelineLayout;
 class RayTracingBindingSet;
@@ -24,6 +25,14 @@ enum class PipelineBindPoint
     Compute
 };
 
+//Modify Begin:2026-07-29 by BestHui
+struct PipelineDescriptorSetBindDesc
+{
+    uint32_t SetIndex = 0;
+    const PipelineDescriptorSet* DescriptorSet = nullptr;
+};
+//Modify End
+
 class CommandContext final
 {
 public:
@@ -32,6 +41,10 @@ public:
     CommandList& GetCommandList() const { return m_CommandList; }
 
     void SetPipelineLayout(PipelineBindPoint bindPoint, const PipelineLayout& pipelineLayout) const;
+//Modify Begin:2026-07-29 by BestHui
+    void SetDescriptorPool(const PipelineDescriptorPool& descriptorPool) const;
+    void SetDescriptorSet(PipelineBindPoint bindPoint, const PipelineDescriptorSetBindDesc& descriptorSetDesc) const;
+//Modify End
     void SetDescriptorSet(PipelineBindPoint bindPoint, const PipelineDescriptorSet& descriptorSet) const;
     void SetPipeline(Shader& shader) const;
     void SetPipeline(const ComputeShader& shader) const;
@@ -73,6 +86,9 @@ public:
 
 private:
     CommandList& m_CommandList;
+//Modify Begin:2026-07-29 by BestHui
+    mutable const PipelineDescriptorPool* m_DescriptorPool = nullptr;
+//Modify End
 };
 
 //Modify End

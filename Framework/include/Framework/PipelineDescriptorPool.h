@@ -24,10 +24,12 @@ public:
     void Reset();
     PipelineDescriptorSet AllocateDescriptorSetValue(
         const PipelineLayout& layout,
-        uint32_t variableDescriptorNum = 0);
+        uint32_t variableDescriptorNum = 0,
+        uint32_t setIndex = 0);
     std::unique_ptr<PipelineDescriptorSet> AllocateDescriptorSet(
         const PipelineLayout& layout,
-        uint32_t variableDescriptorNum = 0);
+        uint32_t variableDescriptorNum = 0,
+        uint32_t setIndex = 0);
 
     const PipelineDescriptorPoolDesc& GetDesc() const { return m_Desc; }
     uint32_t GetAllocatedDescriptorSetCount() const { return m_AllocatedDescriptorSetCount; }

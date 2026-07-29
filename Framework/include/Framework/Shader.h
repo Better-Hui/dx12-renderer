@@ -84,6 +84,9 @@ public:
 //Modify Begin:2026-07-28 by BestHui
 	const PipelineDescriptorSet& GetDescriptorSet() const { return *m_DescriptorSet; }
 //Modify End
+//Modify Begin:2026-07-29 by BestHui
+	const PipelineDescriptorPool& GetDescriptorPool() const { return m_DescriptorPool; }
+//Modify End
 	bool UsesReflectedRootSignature() const { return true; }
 	void StageDefaultDescriptorTables(CommandList& commandList) const;
 //Modify End

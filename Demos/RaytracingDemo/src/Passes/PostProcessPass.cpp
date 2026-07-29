@@ -51,7 +51,11 @@ void RaytracingDemo::PresentDisplayOutput()
         {
             m_DisplayCompositeShader->Bind(cmd);
             cmd.SetTexture(m_DisplayCompositeShader, "SceneColor", ShaderResourceView(sourceTexture));
-            CommandContext(cmd).BindDescriptorSet(m_DisplayCompositeShader->GetDescriptorSet(), PipelineBindPoint::Graphics);
+//Modify Begin:2026-07-29 by BestHui
+            CommandContext commandContext(cmd);
+            commandContext.SetDescriptorPool(m_DisplayCompositeShader->GetDescriptorPool());
+            commandContext.BindDescriptorSet(m_DisplayCompositeShader->GetDescriptorSet(), PipelineBindPoint::Graphics);
+//Modify End
             m_DisplayBlitMesh->Draw(cmd);
         },
         [this](CommandList& cmd)
