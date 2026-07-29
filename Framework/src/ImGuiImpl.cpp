@@ -8,6 +8,9 @@
 #include <DX12Library/Helpers.h>
 
 #include <Framework/Blit_VS.h>
+//Modify Begin:2026-07-29 by BestHui
+#include <Framework/CommandContext.h>
+//Modify End
 #include <Framework/ImGuiCombine_PS.h>
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -187,8 +190,11 @@ void ImGuiImpl::DrawToRenderTarget(CommandList& commandList)
 
 void ImGuiImpl::BlitCombine(CommandList& commandList, const std::shared_ptr<Texture>& pSourceTexture) const
 {
-    m_CombineShader->Bind(commandList);
     m_CombineShader->SetTexture(commandList, "source", ShaderResourceView(pSourceTexture));
-    m_CombineShader->ApplyBindings(commandList);
+//Modify Begin:2026-07-29 by BestHui
+    const CommandContext commandContext(commandList);
+    commandContext.BindPipeline(*m_CombineShader);
+    commandContext.BindDescriptorSet(m_CombineShader->GetDescriptorSet(), PipelineBindPoint::Graphics);
+//Modify End
     m_BlitMesh->Draw(commandList);
 }

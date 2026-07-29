@@ -3,6 +3,9 @@
 
 #include <DX12Library/CommandList.h>
 #include <DX12Library/Texture.h>
+//Modify Begin:2026-07-29 by BestHui
+#include <Framework/CommandContext.h>
+//Modify End
 #include <Framework/ComputeShader.h>
 #include <Framework/RenderTexture.h>
 #include <Framework/ShaderBlob.h>
@@ -88,7 +91,6 @@ void SVGF::Temporal(
     constants.PhiNormal = m_Settings.PhiNormal;
     constants.PhiDepth = m_Settings.PhiDepth;
 
-    m_TemporalShader->Bind(commandList);
     m_TemporalShader->SetConstantBuffer(commandList, "SVGFTemporalConstants", constants);
     commandList.SetTexture(*m_TemporalShader, "NoisyRadiance", ShaderResourceView(noisyRadiance));
     commandList.SetTexture(*m_TemporalShader, "GBufferNormal", ShaderResourceView(gBufferNormal));
@@ -102,8 +104,12 @@ void SVGF::Temporal(
     m_TemporalShader->SetUnorderedAccessView(commandList, "Variance", UnorderedAccessView(m_Variance));
     m_TemporalShader->SetUnorderedAccessView(commandList, "OutHistoryColor", UnorderedAccessView(m_HistoryColor[nextIndex]));
     m_TemporalShader->SetUnorderedAccessView(commandList, "OutHistoryMoments", UnorderedAccessView(m_HistoryMoments[nextIndex]));
-    m_TemporalShader->ApplyBindings(commandList);
-    commandList.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
+//Modify Begin:2026-07-29 by BestHui
+    const CommandContext commandContext(commandList);
+    commandContext.BindPipeline(*m_TemporalShader);
+    commandContext.BindDescriptorSet(m_TemporalShader->GetDescriptorSet(), PipelineBindPoint::Compute);
+    commandContext.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
+//Modify End
 
     m_HistoryIndex = nextIndex;
     m_HistoryValid = true;
@@ -131,7 +137,6 @@ void SVGF::AtrousPass(
     constants.PhiNormal = m_Settings.PhiNormal;
     constants.PhiDepth = m_Settings.PhiDepth;
 
-    m_AtrousShader->Bind(commandList);
     m_AtrousShader->SetConstantBuffer(commandList, "SVGFAtrousConstants", constants);
     commandList.SetTexture(*m_AtrousShader, "InputColor", ShaderResourceView(input));
     commandList.SetTexture(*m_AtrousShader, "Variance", ShaderResourceView(m_Variance));
@@ -139,8 +144,12 @@ void SVGF::AtrousPass(
     commandList.SetTexture(*m_AtrousShader, "GBufferPosition", ShaderResourceView(gBufferPosition));
     commandList.SetTexture(*m_AtrousShader, "DepthTexture", ShaderResourceView::DepthAsFloat(depthTexture));
     m_AtrousShader->SetUnorderedAccessView(commandList, "OutputColor", UnorderedAccessView(output));
-    m_AtrousShader->ApplyBindings(commandList);
-    commandList.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
+//Modify Begin:2026-07-29 by BestHui
+    const CommandContext commandContext(commandList);
+    commandContext.BindPipeline(*m_AtrousShader);
+    commandContext.BindDescriptorSet(m_AtrousShader->GetDescriptorSet(), PipelineBindPoint::Compute);
+    commandContext.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
+//Modify End
 }
 
 std::shared_ptr<Texture> SVGF::Atrous(
@@ -181,13 +190,16 @@ void SVGF::Composite(
     constants.Width = width;
     constants.Height = height;
 
-    m_CompositeShader->Bind(commandList);
     m_CompositeShader->SetConstantBuffer(commandList, "SVGFCompositeConstants", constants);
     commandList.SetTexture(*m_CompositeShader, "FilteredColor", ShaderResourceView(input));
     commandList.SetTexture(*m_CompositeShader, "DepthTexture", ShaderResourceView::DepthAsFloat(depthTexture));
     m_CompositeShader->SetUnorderedAccessView(commandList, "Output", UnorderedAccessView(output));
-    m_CompositeShader->ApplyBindings(commandList);
-    commandList.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
+//Modify Begin:2026-07-29 by BestHui
+    const CommandContext commandContext(commandList);
+    commandContext.BindPipeline(*m_CompositeShader);
+    commandContext.BindDescriptorSet(m_CompositeShader->GetDescriptorSet(), PipelineBindPoint::Compute);
+    commandContext.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
+//Modify End
 }
 
 void SVGF::Execute(
