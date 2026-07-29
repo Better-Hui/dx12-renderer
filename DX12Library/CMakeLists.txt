@@ -28,6 +28,9 @@ set(HEADER_FILES
         # Modify End
         include/DX12Library/Game.h
         include/DX12Library/GenerateMipsPso.h
+        # Modify Begin:2026-07-29 by BestHui
+        include/DX12Library/GpuTimestampProfiler.h
+        # Modify End
         include/DX12Library/Helpers.h
         include/DX12Library/HighResolutionClock.h
         include/DX12Library/IndexBuffer.h
@@ -73,6 +76,9 @@ set(SOURCE_FILES
         src/FrameResourceRing.cpp
         # Modify End
         src/GenerateMipsPso.cpp
+        # Modify Begin:2026-07-29 by BestHui
+        src/GpuTimestampProfiler.cpp
+        # Modify End
         src/HighResolutionClock.cpp
         src/IndexBuffer.cpp
         src/RenderTarget.cpp

@@ -4,11 +4,15 @@
 #include <functional>
 #include <set>
 #include <queue>
+#include <string>
 
 #include <d3d12.h>
 #include <d3dx12.h>
 
 #include <DX12Library/Helpers.h>
+//Modify Begin:2026-07-29 by BestHui
+#include <DX12Library/GpuTimestampProfiler.h>
+//Modify End
 #include <DX12Library/StructuredBuffer.h>
 #include <DX12Library/Texture.h>
 
@@ -16,6 +20,73 @@
 
 namespace
 {
+//Modify Begin:2026-07-29 by BestHui
+    std::string NarrowPassName(const std::wstring& passName)
+    {
+        std::string result;
+        result.reserve(passName.size());
+        for (const wchar_t character : passName)
+        {
+            result.push_back(character >= 0 && character < 128 ? static_cast<char>(character) : '?');
+        }
+        return result;
+    }
+//Modify End
+
+//Modify Begin:2026-07-29 by BestHui
+    bool TryGetInputTransition(
+        const RenderGraph::InputType inputType,
+        D3D12_RESOURCE_STATES& stateAfter,
+        bool& insertUavBarrier)
+    {
+        insertUavBarrier = false;
+        switch (inputType)
+        {
+        case RenderGraph::InputType::ShaderResource:
+            stateAfter = D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE;
+            return true;
+        case RenderGraph::InputType::UnorderedAccess:
+            stateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+            insertUavBarrier = true;
+            return true;
+        case RenderGraph::InputType::ExternalAccess:
+            stateAfter = D3D12_RESOURCE_STATE_COMMON;
+            return true;
+        case RenderGraph::InputType::CopySource:
+            stateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
+            return true;
+        case RenderGraph::InputType::IndirectArgument:
+            stateAfter = D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    bool TryGetOutputTransition(
+        const RenderGraph::OutputType outputType,
+        D3D12_RESOURCE_STATES& stateAfter,
+        bool& insertUavBarrier)
+    {
+        insertUavBarrier = false;
+        switch (outputType)
+        {
+        case RenderGraph::OutputType::CopyDestination:
+            stateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+            return true;
+        case RenderGraph::OutputType::UnorderedAccess:
+            stateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+            insertUavBarrier = true;
+            return true;
+        case RenderGraph::OutputType::ExternalAccess:
+            stateAfter = D3D12_RESOURCE_STATE_COMMON;
+            return true;
+        default:
+            return false;
+        }
+    }
+//Modify End
+
 //Modify Begin:2026-07-28 by BestHui
     bool IsProducerOutput(const RenderGraph::OutputType outputType)
     {
@@ -293,6 +364,14 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
     {
         PIXScopeCPU(L"Render Graph: Execute");
 
+//Modify Begin:2026-07-29 by BestHui
+        if (m_GpuTimestampProfiler != nullptr && m_GpuTimestampProfiler->IsAvailable())
+        {
+            m_GpuTimestampProfiler->BeginFrame(renderMetadata.m_FrameIndex);
+            m_GpuTimestampProfiler->WriteTimestamp(*pCommandList, "RenderGraph.Begin");
+        }
+//Modify End
+
         RenderContext context = {};
         context.m_ResourcePool = m_ResourcePool;
         context.m_Metadata = renderMetadata;
@@ -317,17 +396,40 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
                 {
                     PIXScope(cmd, pRenderPass->GetPassName().c_str());
                     PrepareResourcesForRenderPass(cmd, *pRenderPass, renderPassIndex, context);
+//Modify Begin:2026-07-29 by BestHui
+                    if (m_GpuTimestampProfiler != nullptr && m_GpuTimestampProfiler->IsAvailable())
+                    {
+                        const std::string passName = "BeforeExternal." + NarrowPassName(pRenderPass->GetPassName());
+                        m_GpuTimestampProfiler->WriteTimestamp(cmd, passName.c_str());
+                    }
+//Modify End
                 }
                 m_DirectCommandQueue->ExecuteCommandList(pCommandList);
                 pCommandList.reset();
 
                 pRenderPass->ExecuteExternal(context);
+
+//Modify Begin:2026-07-29 by BestHui
+                if (m_GpuTimestampProfiler != nullptr && m_GpuTimestampProfiler->IsAvailable())
+                {
+                    pCommandList = m_DirectCommandQueue->GetCommandList();
+                    const std::string passName = "AfterExternal." + NarrowPassName(pRenderPass->GetPassName());
+                    m_GpuTimestampProfiler->WriteTimestamp(*pCommandList, passName.c_str());
+                }
+//Modify End
             }
             else
             {
                 PIXScope(cmd, pRenderPass->GetPassName().c_str());
                 PrepareResourcesForRenderPass(cmd, *pRenderPass, renderPassIndex, context);
                 pRenderPass->Execute(context, cmd);
+//Modify Begin:2026-07-29 by BestHui
+                if (m_GpuTimestampProfiler != nullptr && m_GpuTimestampProfiler->IsAvailable())
+                {
+                    const std::string passName = NarrowPassName(pRenderPass->GetPassName());
+                    m_GpuTimestampProfiler->WriteTimestamp(cmd, passName.c_str());
+                }
+//Modify End
             }
 //Modify End
 
@@ -338,7 +440,19 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
 //Modify Begin:2026-07-28 by BestHui
     if (pCommandList != nullptr)
     {
-        m_DirectCommandQueue->ExecuteCommandList(pCommandList);
+//Modify Begin:2026-07-29 by BestHui
+        if (m_GpuTimestampProfiler != nullptr && m_GpuTimestampProfiler->IsAvailable())
+        {
+            m_GpuTimestampProfiler->WriteTimestamp(*pCommandList, "RenderGraph.End");
+            m_GpuTimestampProfiler->ResolveFrame(*pCommandList);
+            const uint64_t fenceValue = m_DirectCommandQueue->ExecuteCommandList(pCommandList);
+            m_GpuTimestampProfiler->EndFrame(fenceValue);
+        }
+        else
+        {
+            m_DirectCommandQueue->ExecuteCommandList(pCommandList);
+        }
+//Modify End
     }
 //Modify End
 }
@@ -697,7 +811,61 @@ void RenderGraph::RenderGraphRoot::Build(const RenderMetadata& renderMetadata)
 
     m_GraphOutputRenderTarget = std::make_shared<RenderTarget>();
     m_GraphOutputRenderTarget->AttachTexture(Color0, m_ResourcePool->GetTexture(ResourceIds::GRAPH_OUTPUT));
+
+//Modify Begin:2026-07-29 by BestHui
+    BuildPassResourceStatePlans();
+//Modify End
 }
+
+//Modify Begin:2026-07-29 by BestHui
+void RenderGraph::RenderGraphRoot::BuildPassResourceStatePlans()
+{
+    m_PassResourceStatePlans.clear();
+    for (uint32_t renderPassIndex = 0; renderPassIndex < static_cast<uint32_t>(m_RenderPassesBuilt.size()); ++renderPassIndex)
+    {
+        const RenderPass* renderPass = m_RenderPassesBuilt[renderPassIndex];
+        PassResourceStatePlan plan;
+
+        for (const Input& input : renderPass->GetInputs())
+        {
+            D3D12_RESOURCE_STATES stateAfter = D3D12_RESOURCE_STATE_COMMON;
+            bool insertUavBarrier = false;
+            if (TryGetInputTransition(input.m_Type, stateAfter, insertUavBarrier))
+            {
+                plan.InputTransitions.push_back({ input.m_Id, stateAfter, insertUavBarrier });
+            }
+        }
+
+        for (const Output& output : renderPass->GetOutputs())
+        {
+            if (output.m_Type == OutputType::Token)
+            {
+                continue;
+            }
+
+            const auto& lifecycle = m_ResourcePool->GetResourceLifecycle(output.m_Id);
+            if (lifecycle.m_BeginPassIndex == renderPassIndex)
+            {
+                const auto& description = m_ResourcePool->GetDescription(output.m_Id);
+                if (!description.m_DedicatedResource)
+                {
+                    plan.AliasingOutputs.push_back(output.m_Id);
+                }
+                plan.InitOutputs.push_back(output.m_Id);
+            }
+
+            D3D12_RESOURCE_STATES stateAfter = D3D12_RESOURCE_STATE_COMMON;
+            bool insertUavBarrier = false;
+            if (TryGetOutputTransition(output.m_Type, stateAfter, insertUavBarrier))
+            {
+                plan.OutputTransitions.push_back({ output.m_Id, stateAfter, insertUavBarrier });
+            }
+        }
+
+        m_PassResourceStatePlans.emplace(renderPass, std::move(plan));
+    }
+}
+//Modify End
 
 D3D12_RESOURCE_STATES RenderGraph::RenderGraphRoot::GetCurrentResourceState(const Resource& resource) const
 {
@@ -708,85 +876,34 @@ D3D12_RESOURCE_STATES RenderGraph::RenderGraphRoot::GetCurrentResourceState(cons
 
 void RenderGraph::RenderGraphRoot::PrepareResourcesForRenderPass(CommandList& commandList, const RenderPass& renderPass, const uint32_t renderPassIndex, RenderContext& context)
 {
-    for (const auto& input : renderPass.GetInputs())
+//Modify Begin:2026-07-29 by BestHui
+    const auto planIt = m_PassResourceStatePlans.find(&renderPass);
+    Assert(planIt != m_PassResourceStatePlans.end(), "Render pass resource state plan was not built.");
+    const PassResourceStatePlan& resourceStatePlan = planIt->second;
+
+    for (const PassResourceTransition& transition : resourceStatePlan.InputTransitions)
     {
-        if (input.m_Type == InputType::Token)
+        const auto& resource = m_ResourcePool->GetResource(transition.Id);
+        resource.ForEachResourceRecursive([this, &transition](const Resource& r)
         {
-            continue;
-        }
-
-        const auto& resource = m_ResourcePool->GetResource(input.m_Id);
-
-        // SRV barriers
-        if (input.m_Type == InputType::ShaderResource)
-        {
-            resource.ForEachResourceRecursive([this](const Resource& r)
+            TransitionBarrier(r, transition.StateAfter);
+            if (transition.InsertUavBarrier)
             {
-                TransitionBarrier(r, D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
-            });
-        }
-
-//Modify Begin:2026-07-28 by BestHui
-        if (input.m_Type == InputType::UnorderedAccess)
-        {
-            resource.ForEachResourceRecursive([this](const Resource& r)
-            {
-                TransitionBarrier(r, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
                 UavBarrier(r);
-            });
-        }
-
-        if (input.m_Type == InputType::ExternalAccess)
-        {
-            resource.ForEachResourceRecursive([this](const Resource& r)
-            {
-                TransitionBarrier(r, D3D12_RESOURCE_STATE_COMMON);
-            });
-        }
-//Modify End
-
-        if (input.m_Type == InputType::CopySource)
-        {
-            resource.ForEachResourceRecursive([this](const Resource& r)
-            {
-                TransitionBarrier(r, D3D12_RESOURCE_STATE_COPY_SOURCE);
-            });
-        }
-
-        if (input.m_Type == InputType::IndirectArgument)
-        {
-            resource.ForEachResourceRecursive([this](const Resource& r)
-            {
-                TransitionBarrier(r, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
-            });
-        }
-    }
-
-    for (const auto& output : renderPass.GetOutputs())
-    {
-        if (output.m_Type == OutputType::Token)
-        {
-            continue;
-        }
-
-        const auto& lifecycle = m_ResourcePool->GetResourceLifecycle(output.m_Id);
-
-        if (lifecycle.m_BeginPassIndex == renderPassIndex)
-        {
-//Modify Begin:2026-07-28 by BestHui
-            const auto& description = m_ResourcePool->GetDescription(output.m_Id);
-            if (description.m_DedicatedResource)
-            {
-                continue;
             }
-//Modify End
-            const auto& resource = m_ResourcePool->GetResource(output.m_Id);
-            resource.ForEachResourceRecursive([this](const auto& r)
-            {
-                AliasingBarrier(r);
-            });
-        }
+        });
     }
+
+    for (const ResourceId outputId : resourceStatePlan.AliasingOutputs)
+    {
+        (void)renderPassIndex;
+        const auto& resource = m_ResourcePool->GetResource(outputId);
+        resource.ForEachResourceRecursive([this](const auto& r)
+        {
+            AliasingBarrier(r);
+        });
+    }
+//Modify End
 
     // Render Target barriers
     const auto& renderTargetFindResult = m_RenderTargets.find(&renderPass);
@@ -818,60 +935,29 @@ void RenderGraph::RenderGraphRoot::PrepareResourcesForRenderPass(CommandList& co
     }
 
 
-    for (const auto& output : renderPass.GetOutputs())
+//Modify Begin:2026-07-29 by BestHui
+    for (const PassResourceTransition& transition : resourceStatePlan.OutputTransitions)
     {
-        if (output.m_Type == OutputType::Token)
+        const auto& resource = m_ResourcePool->GetResource(transition.Id);
+        resource.ForEachResourceRecursive([this, &transition](const auto& r)
         {
-            continue;
-        }
-
-        const auto& resource = m_ResourcePool->GetResource(output.m_Id);
-
-        // Copy Destination barriers
-        if (output.m_Type == OutputType::CopyDestination)
-        {
-            resource.ForEachResourceRecursive([this](const auto& r)
+            TransitionBarrier(r, transition.StateAfter);
+            if (transition.InsertUavBarrier)
             {
-                TransitionBarrier(r, D3D12_RESOURCE_STATE_COPY_DEST);
-            });
-        }
-
-        // UAV barriers
-        if (output.m_Type == OutputType::UnorderedAccess)
-        {
-            resource.ForEachResourceRecursive([this](const auto& r)
-            {
-                TransitionBarrier(r, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
                 UavBarrier(r);
-            });
-        }
-
-//Modify Begin:2026-07-28 by BestHui
-        if (output.m_Type == OutputType::ExternalAccess)
-        {
-            resource.ForEachResourceRecursive([this](const auto& r)
-            {
-                TransitionBarrier(r, D3D12_RESOURCE_STATE_COMMON);
-            });
-        }
-//Modify End
+            }
+        });
     }
+//Modify End
 
     FlushBarriers(commandList);
 
     // Process init actions
-    for (const auto& output : renderPass.GetOutputs())
+//Modify Begin:2026-07-29 by BestHui
+    for (const ResourceId outputId : resourceStatePlan.InitOutputs)
     {
-        if (output.m_Type == OutputType::Token)
-        {
-            continue;
-        }
-
-        const auto& lifecycle = m_ResourcePool->GetResourceLifecycle(output.m_Id);
-
-        if (lifecycle.m_BeginPassIndex == renderPassIndex)
-        {
-            const auto& description = m_ResourcePool->GetDescription(output.m_Id);
+        (void)renderPassIndex;
+        const auto& description = m_ResourcePool->GetDescription(outputId);
 
             switch (description.GetInitAction())
             {
@@ -879,14 +965,16 @@ void RenderGraph::RenderGraphRoot::PrepareResourcesForRenderPass(CommandList& co
                 {
                     Assert(description.m_ResourceType == ResourceType::Texture, "Only textures support the clear init action.");
 
-                    if (output.m_Type == OutputType::RenderTarget)
+                    if (const auto renderPassOutput = std::ranges::find_if(renderPass.GetOutputs(), [outputId](const Output& output) { return output.m_Id == outputId; });
+                        renderPassOutput != renderPass.GetOutputs().end() && renderPassOutput->m_Type == OutputType::RenderTarget)
                     {
-                        const auto& texture = *m_ResourcePool->GetTexture(output.m_Id);
+                        const auto& texture = *m_ResourcePool->GetTexture(outputId);
                         commandList.ClearTexture(texture, description.GetClearValue());
                     }
-                    else if (output.m_Type == OutputType::DepthRead || output.m_Type == OutputType::DepthWrite)
+                    else if (renderPassOutput != renderPass.GetOutputs().end() &&
+                        (renderPassOutput->m_Type == OutputType::DepthRead || renderPassOutput->m_Type == OutputType::DepthWrite))
                     {
-                        const auto& texture = *m_ResourcePool->GetTexture(output.m_Id);
+                        const auto& texture = *m_ResourcePool->GetTexture(outputId);
                         const auto dsClearValue = description.GetClearValue().GetD3D12ClearValue()->DepthStencil;
                         commandList.ClearDepthStencilTexture(texture, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, dsClearValue.Depth, dsClearValue.Stencil);
                     }
@@ -897,7 +985,7 @@ void RenderGraph::RenderGraphRoot::PrepareResourcesForRenderPass(CommandList& co
                 break;
             case Discard:
                 {
-                    const auto& resource = m_ResourcePool->GetResource(output.m_Id);
+                    const auto& resource = m_ResourcePool->GetResource(outputId);
                     commandList.DiscardResource(resource);
                 }
                 break;
@@ -905,8 +993,8 @@ void RenderGraph::RenderGraphRoot::PrepareResourcesForRenderPass(CommandList& co
                 Assert(false, "Unknown resource init action.");
                 break;
             }
-        }
     }
+//Modify End
 
     // Setup the render target
     if (renderTargetFindResult != m_RenderTargets.end())

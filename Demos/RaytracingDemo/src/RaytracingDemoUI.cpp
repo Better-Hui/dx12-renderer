@@ -12,6 +12,28 @@ void RaytracingDemo::OnImGui()
     ImGui::Text("Resolution: %d x %d", m_Width, m_Height);
     ImGui::Text("Frame: %u", m_FrameIndex);
     ImGui::Text("Accumulation: %u", m_AccumulationFrameIndex);
+//Modify Begin:2026-07-29 by BestHui
+    if (m_GpuTimestampProfiler.IsAvailable())
+    {
+        if (ImGui::Checkbox("Enable GPU Timing", &m_GpuTimingEnabled))
+        {
+            m_GpuTimestampSamples.clear();
+            m_GpuTimestampDisplaySamples.clear();
+        }
+        if (m_GpuTimingEnabled)
+        {
+            ImGui::Text("GPU RG: %.3f ms", m_GpuTimestampProfiler.GetLastFrameGpuMilliseconds());
+            if (!m_GpuTimestampDisplaySamples.empty() && ImGui::CollapsingHeader("GPU RG Timing"))
+            {
+                ImGui::Text("delta: since previous marker, total: since RG begin");
+                for (const GpuTimestampSample& sample : m_GpuTimestampDisplaySamples)
+                {
+                    ImGui::Text("%s: delta %.3f ms, total %.3f ms", sample.Name.c_str(), sample.MillisecondsFromPrevious, sample.MillisecondsFromFrameStart);
+                }
+            }
+        }
+    }
+//Modify End
 
     if (ImGui::Checkbox("Enable Accumulation", &m_AccumulationEnabled))
     {

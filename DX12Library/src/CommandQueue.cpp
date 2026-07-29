@@ -8,6 +8,9 @@
 
 //Modify Begin:2026-07-28 by BestHui
 #include <fstream>
+//Modify Begin:2026-07-29 by BestHui
+#include <chrono>
+//Modify End
 //Modify End
 
 CommandQueue::CommandQueue(D3D12_COMMAND_LIST_TYPE type)
@@ -184,6 +187,9 @@ uint64_t CommandQueue::ExecuteCommandLists(const std::vector<std::shared_ptr<Com
 	{
 		m_InFlightCommandLists.Push({ fenceValue, commandList });
 	}
+//Modify Begin:2026-07-29 by BestHui
+	m_ProcessInFlightCommandListsThreadCv.notify_one();
+//Modify End
 
 	// If there are any command lists that generate mips then execute those
 	// after the initial resource command lists have finished.
@@ -219,22 +225,31 @@ void CommandQueue::ProcessInFlightCommandLists()
 	{
 		CommandListEntry commandListEntry;
 
-		lock.lock();
-		while (m_InFlightCommandLists.TryPop(commandListEntry))
+//Modify Begin:2026-07-29 by BestHui
+		if (!m_InFlightCommandLists.TryPop(commandListEntry))
 		{
-			const auto fenceValue = std::get<0>(commandListEntry);
-			const auto commandList = std::get<1>(commandListEntry);
-
-			WaitForFenceValue(fenceValue);
-
-			commandList->Reset();
-
-			m_AvailableCommandLists.Push(commandList);
+			lock.lock();
+			m_ProcessInFlightCommandListsThreadCv.wait_for(
+				lock,
+				std::chrono::milliseconds(1),
+				[this]
+				{
+					return !m_IsProcessingInFlightCommandLists || !m_InFlightCommandLists.Empty();
+				});
+			lock.unlock();
+			continue;
 		}
-		lock.unlock();
-		m_ProcessInFlightCommandListsThreadCv.notify_one();
 
-		std::this_thread::yield();
+		const auto fenceValue = std::get<0>(commandListEntry);
+		const auto commandList = std::get<1>(commandListEntry);
+
+		WaitForFenceValue(fenceValue);
+
+		commandList->Reset();
+
+		m_AvailableCommandLists.Push(commandList);
+		m_ProcessInFlightCommandListsThreadCv.notify_one();
+//Modify End
 	}
 //Modify Begin:2026-07-28 by BestHui
 	}

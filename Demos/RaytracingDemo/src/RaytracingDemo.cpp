@@ -193,6 +193,9 @@ bool RaytracingDemo::LoadContent()
     BindRayTracingShaderResources();
 
 //Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-29 by BestHui
+    m_GpuTimestampProfiler.Initialize(128);
+//Modify End
     RebuildRenderGraph();
 //Modify End
 
@@ -225,6 +228,9 @@ void RaytracingDemo::UnloadContent()
     m_SkyboxTexture.reset();
 //Modify Begin:2026-07-27 by BestHui
     m_PathTracingPipelines.Reset();
+//Modify End
+//Modify Begin:2026-07-29 by BestHui
+    m_GpuTimestampProfiler.Shutdown();
 //Modify End
     m_SceneResources.Clear();
 }
@@ -308,6 +314,9 @@ void RaytracingDemo::RebuildRenderGraph()
 //Modify End
     }
     m_RenderGraph = RaytracingDemoRenderGraphBuilder::Create(*this);
+//Modify Begin:2026-07-29 by BestHui
+    m_RenderGraph->SetGpuTimestampProfiler(m_GpuTimingEnabled ? &m_GpuTimestampProfiler : nullptr);
+//Modify End
     m_RenderGraphDenoiserEnabled = IsDenoiserEnabled();
     m_RenderGraphCudaBloomEnabled = m_CudaBloom.IsEnabled();
 }
@@ -337,6 +346,17 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
 {
     Base::OnRender(e);
 
+//Modify Begin:2026-07-29 by BestHui
+    const auto commandQueue = Application::Get().GetCommandQueue();
+    if (m_GpuTimingEnabled &&
+        m_GpuTimestampProfiler.CollectCompletedFrame(*commandQueue, m_GpuTimestampSamples) &&
+        e.TotalTime - m_LastGpuTimingUiUpdateTime >= 0.25)
+    {
+        m_GpuTimestampDisplaySamples = m_GpuTimestampSamples;
+        m_LastGpuTimingUiUpdateTime = e.TotalTime;
+    }
+//Modify End
+
     if (m_ImGui != nullptr)
     {
         m_ImGui->BeginFrame();
@@ -350,13 +370,11 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     metadata.m_FrameIndex = m_FrameIndex;
     metadata.m_Time = e.TotalTime;
 
-    const auto commandQueue = Application::Get().GetCommandQueue();
-    const auto commandList = commandQueue->GetCommandList();
-    m_Lights.Upload(*commandList);
-    commandQueue->ExecuteCommandList(commandList);
-
 //Modify Begin:2026-07-28 by BestHui
     EnsureRenderGraphTopology();
+//Modify End
+//Modify Begin:2026-07-29 by BestHui
+    m_RenderGraph->SetGpuTimestampProfiler(m_GpuTimingEnabled ? &m_GpuTimestampProfiler : nullptr);
 //Modify End
 //Modify Begin:2026-07-28 by BestHui
     try

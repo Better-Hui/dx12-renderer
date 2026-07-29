@@ -2,6 +2,9 @@
 
 #include <DX12Library/Camera.h>
 #include <DX12Library/Game.h>
+//Modify Begin:2026-07-29 by BestHui
+#include <DX12Library/GpuTimestampProfiler.h>
+//Modify End
 
 #include <Denoising/DenoiserController.h>
 #include <Framework/ImGuiImpl.h>
@@ -162,6 +165,13 @@ private:
     DenoiserController m_Denoisers;
 //Modify Begin:2026-07-27 by BestHui
     CudaBloomPass m_CudaBloom;
+//Modify End
+//Modify Begin:2026-07-29 by BestHui
+    GpuTimestampProfiler m_GpuTimestampProfiler;
+    std::vector<GpuTimestampSample> m_GpuTimestampSamples;
+    std::vector<GpuTimestampSample> m_GpuTimestampDisplaySamples;
+    double m_LastGpuTimingUiUpdateTime = 0.0;
+    bool m_GpuTimingEnabled = true;
 //Modify End
     RayTracingAccelerationStructure m_RayTracingAccelerationStructure;
     RaytracingDemoSceneResources m_SceneResources;

@@ -1,6 +1,9 @@
 #pragma once
 
 #include <cstdint>
+//Modify Begin:2026-07-29 by BestHui
+#include <functional>
+//Modify End
 #include <vector>
 
 class CommandQueue;
@@ -13,6 +16,9 @@ public:
     {
         uint64_t FenceValue = 0;
         uint64_t FrameNumber = 0;
+//Modify Begin:2026-07-29 by BestHui
+        std::vector<std::function<void()>> RetireActions;
+//Modify End
     };
 
     void Reset(uint32_t slotCount);
@@ -22,7 +28,10 @@ public:
     const Slot& GetSlot(uint32_t slotIndex) const;
 
     void MarkSubmitted(uint32_t slotIndex, uint64_t fenceValue, uint64_t frameNumber);
-    uint64_t WaitForSlot(CommandQueue& commandQueue, uint32_t slotIndex) const;
+//Modify Begin:2026-07-29 by BestHui
+    void RetireCurrentFrameResource(std::function<void()>&& retireAction);
+    uint64_t WaitForSlot(CommandQueue& commandQueue, uint32_t slotIndex);
+//Modify End
 
 private:
     std::vector<Slot> m_Slots;

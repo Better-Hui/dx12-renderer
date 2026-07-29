@@ -7,6 +7,18 @@
 //Modify Begin:2026-07-28 by BestHui
 void FrameResourceRing::Reset(const uint32_t slotCount)
 {
+//Modify Begin:2026-07-29 by BestHui
+    for (Slot& slot : m_Slots)
+    {
+        for (auto& retireAction : slot.RetireActions)
+        {
+            if (retireAction)
+            {
+                retireAction();
+            }
+        }
+    }
+//Modify End
     m_Slots.assign(slotCount, Slot{});
     m_CurrentIndex = 0;
 }
@@ -35,14 +47,35 @@ void FrameResourceRing::MarkSubmitted(const uint32_t slotIndex, const uint64_t f
     m_Slots[slotIndex].FrameNumber = frameNumber;
 }
 
-uint64_t FrameResourceRing::WaitForSlot(CommandQueue& commandQueue, const uint32_t slotIndex) const
+//Modify Begin:2026-07-29 by BestHui
+void FrameResourceRing::RetireCurrentFrameResource(std::function<void()>&& retireAction)
+{
+    Assert(m_CurrentIndex < m_Slots.size(), "Frame resource slot index out of range.");
+    if (retireAction)
+    {
+        m_Slots[m_CurrentIndex].RetireActions.emplace_back(std::move(retireAction));
+    }
+}
+
+uint64_t FrameResourceRing::WaitForSlot(CommandQueue& commandQueue, const uint32_t slotIndex)
+//Modify End
 {
     Assert(slotIndex < m_Slots.size(), "Frame resource slot index out of range.");
-    const Slot& slot = m_Slots[slotIndex];
+    Slot& slot = m_Slots[slotIndex];
     if (slot.FenceValue != 0)
     {
         commandQueue.WaitForFenceValue(slot.FenceValue);
     }
+//Modify Begin:2026-07-29 by BestHui
+    for (auto& retireAction : slot.RetireActions)
+    {
+        if (retireAction)
+        {
+            retireAction();
+        }
+    }
+    slot.RetireActions.clear();
+//Modify End
     return slot.FrameNumber;
 }
 //Modify End

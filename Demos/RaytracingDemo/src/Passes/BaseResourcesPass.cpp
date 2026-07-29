@@ -31,6 +31,9 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
         },
         [&demo](const RenderContext&, CommandList& cmd)
         {
+//Modify Begin:2026-07-29 by BestHui
+            demo.m_Lights.Upload(cmd);
+//Modify End
             demo.m_GBufferShader->Bind(cmd);
 
             const XMMATRIX viewProjection = demo.m_Camera.GetViewMatrix() * demo.m_Camera.GetProjectionMatrix();

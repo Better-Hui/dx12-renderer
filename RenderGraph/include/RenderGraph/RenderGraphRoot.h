@@ -15,6 +15,9 @@
 #include "ResourcePool.h"
 
 class Texture;
+//Modify Begin:2026-07-29 by BestHui
+class GpuTimestampProfiler;
+//Modify End
 
 namespace RenderGraph
 {
@@ -32,6 +35,9 @@ namespace RenderGraph
         );
 
         void Execute(const RenderMetadata& renderMetadata);
+//Modify Begin:2026-07-29 by BestHui
+        void SetGpuTimestampProfiler(GpuTimestampProfiler* profiler) { m_GpuTimestampProfiler = profiler; }
+//Modify End
         void Present(const std::shared_ptr<Window>& pWindow, ResourceId resourceId = ResourceIds::GRAPH_OUTPUT);
 //Modify Begin:2026-07-28 by BestHui
         void PresentWithOverlay(const std::shared_ptr<Window>& pWindow, ResourceId resourceId, const std::function<void(CommandList&)>& drawCallback);
@@ -54,6 +60,9 @@ namespace RenderGraph
         void RebuildIfNecessary(const RenderMetadata& renderMetadata);
         void CheckPotentiallyDirtyResources(const RenderMetadata& renderMetadata);
         void Build(const RenderMetadata& renderMetadata);
+//Modify Begin:2026-07-29 by BestHui
+        void BuildPassResourceStatePlans();
+//Modify End
         void PrepareResourcesForRenderPass(CommandList& commandList, const RenderPass& renderPass, uint32_t renderPassIndex, RenderContext& context);
 
         D3D12_RESOURCE_STATES GetCurrentResourceState(const Resource& resource) const;
@@ -80,9 +89,30 @@ namespace RenderGraph
 
         std::shared_ptr<ResourcePool> m_ResourcePool;
         std::map<const RenderPass*, RenderTargetInfo> m_RenderTargets;
+//Modify Begin:2026-07-29 by BestHui
+        struct PassResourceTransition
+        {
+            ResourceId Id = 0;
+            D3D12_RESOURCE_STATES StateAfter = D3D12_RESOURCE_STATE_COMMON;
+            bool InsertUavBarrier = false;
+        };
+
+        struct PassResourceStatePlan
+        {
+            std::vector<PassResourceTransition> InputTransitions;
+            std::vector<ResourceId> AliasingOutputs;
+            std::vector<PassResourceTransition> OutputTransitions;
+            std::vector<ResourceId> InitOutputs;
+        };
+
+        std::map<const RenderPass*, PassResourceStatePlan> m_PassResourceStatePlans;
+//Modify End
         std::shared_ptr<RenderTarget> m_GraphOutputRenderTarget;
         std::map<const Resource*, D3D12_RESOURCE_STATES> m_ResourceStates;
         std::vector<D3D12_RESOURCE_BARRIER> m_PendingBarriers;
+//Modify Begin:2026-07-29 by BestHui
+        GpuTimestampProfiler* m_GpuTimestampProfiler = nullptr;
+//Modify End
 
         bool m_Dirty = true;
     };
