@@ -35,6 +35,9 @@ public:
 	void StageDescriptors(uint32_t rootParameterIndex, uint32_t offset, uint32_t numDescriptors,
 		D3D12_CPU_DESCRIPTOR_HANDLE srcDescriptor);
 
+	//Modify Begin:2026-07-29 by BestHui
+	void UnstageDescriptors(uint32_t rootParameterIndex);
+	//Modify End
 
 	/**
 	 * Copy all of the staged descriptors to the GPU visible descriptor heap and

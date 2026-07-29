@@ -7,8 +7,6 @@
 #include "ShaderResourceView.h"
 #include "UnorderedAccessView.h"
 
-#include <DX12Library/DescriptorAllocation.h>
-
 #include <cstddef>
 #include <cstdint>
 #include <map>
@@ -19,6 +17,23 @@ class RayTracingAccelerationStructure;
 class CommandList;
 class Resource;
 class StructuredBuffer;
+
+//Modify Begin:2026-07-29 by BestHui
+struct PipelineDescriptorTableAllocation
+{
+    ID3D12DescriptorHeap* Heap = nullptr;
+    D3D12_CPU_DESCRIPTOR_HANDLE CpuDescriptor = {};
+    D3D12_GPU_DESCRIPTOR_HANDLE GpuDescriptor = {};
+    uint32_t NumHandles = 0;
+    uint32_t DescriptorSize = 0;
+
+    bool IsValid() const { return CpuDescriptor.ptr != 0 && NumHandles > 0; }
+    bool IsShaderVisible() const { return Heap != nullptr && GpuDescriptor.ptr != 0; }
+    D3D12_CPU_DESCRIPTOR_HANDLE GetDescriptorHandle(uint32_t offset = 0) const;
+    D3D12_GPU_DESCRIPTOR_HANDLE GetGpuDescriptorHandle(uint32_t offset = 0) const;
+    uint32_t GetNumHandles() const { return NumHandles; }
+};
+//Modify End
 
 struct PipelineShaderResourceBinding
 {
@@ -76,8 +91,8 @@ public:
 
     const PipelineLayout& GetLayout() const;
 //Modify Begin:2026-07-27 by BestHui
-    void SetDescriptorTableAllocation(UINT rootParameterIndex, DescriptorAllocation allocation);
-    const DescriptorAllocation* FindDescriptorTableAllocation(UINT rootParameterIndex) const;
+    void SetDescriptorTableAllocation(UINT rootParameterIndex, PipelineDescriptorTableAllocation allocation);
+    const PipelineDescriptorTableAllocation* FindDescriptorTableAllocation(UINT rootParameterIndex) const;
 //Modify End
     const PipelineBoundResource* FindBoundResource(UINT rootParameterIndex) const;
     const PipelineBoundResource& GetBoundResource(UINT rootParameterIndex) const;
@@ -89,7 +104,7 @@ private:
     const PipelineLayout* m_Layout = nullptr;
     std::map<UINT, PipelineBoundResource> m_BoundResources;
 //Modify Begin:2026-07-27 by BestHui
-    std::map<UINT, DescriptorAllocation> m_DescriptorTableAllocations;
+    std::map<UINT, PipelineDescriptorTableAllocation> m_DescriptorTableAllocations;
 //Modify End
     const RayTracingAccelerationStructure* m_AccelerationStructure = nullptr;
 };

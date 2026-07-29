@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <wrl.h>
 
 class PipelineLayout;
 
@@ -37,10 +38,20 @@ public:
 private:
     uint32_t CountResourceDescriptors(const PipelineLayout& layout, uint32_t variableDescriptorNum) const;
     uint32_t CountSamplerDescriptors(const PipelineLayout& layout) const;
+//Modify Begin:2026-07-29 by BestHui
+    void EnsureResourceDescriptorHeap();
+    PipelineDescriptorTableAllocation AllocateResourceDescriptorTable(uint32_t descriptorCount);
+//Modify End
 
     PipelineDescriptorPoolDesc m_Desc;
     uint32_t m_AllocatedDescriptorSetCount = 0;
     uint32_t m_AllocatedResourceDescriptorCount = 0;
     uint32_t m_AllocatedSamplerDescriptorCount = 0;
+//Modify Begin:2026-07-29 by BestHui
+    Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> m_ResourceDescriptorHeap;
+    D3D12_CPU_DESCRIPTOR_HANDLE m_ResourceCpuStart = {};
+    D3D12_GPU_DESCRIPTOR_HANDLE m_ResourceGpuStart = {};
+    uint32_t m_ResourceDescriptorSize = 0;
+//Modify End
 };
 //Modify End

@@ -31,7 +31,10 @@ public:
 
     CommandList& GetCommandList() const { return m_CommandList; }
 
-    void SetPipelineLayout(PipelineBindPoint bindPoint, const PipelineLayout& pipelineLayout) const;
+    void SetPipelineLayout(
+        PipelineBindPoint bindPoint,
+        const PipelineLayout& pipelineLayout,
+        bool stageDefaultDescriptorTables = true) const;
     void SetDescriptorSet(PipelineBindPoint bindPoint, const PipelineDescriptorSet& descriptorSet) const;
     void SetPipeline(Shader& shader) const;
     void SetPipeline(const ComputeShader& shader) const;
