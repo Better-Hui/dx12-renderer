@@ -70,7 +70,6 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
                 cmd.SetUnorderedAccessView(directLightingShader, "DirectLighting", UnorderedAccessView(context.m_ResourcePool->GetTexture(DemoResourceIds::DirectLighting)));
 //Modify Begin:2026-07-28 by BestHui
                 CommandContext commandContext(cmd);
-                commandContext.SetDescriptorPool(directLightingShader.GetDescriptorPool());
                 commandContext.BindDescriptorSet(directLightingShader.GetDescriptorSet(), PipelineBindPoint::Compute);
                 commandContext.Dispatch(Math::DivideByMultiple(camera.Width, 8u), Math::DivideByMultiple(camera.Height, 8u), 1u);
 //Modify End
@@ -124,7 +123,6 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
                 cmd.SetUnorderedAccessView(indirectLightingShader, "IndirectLighting", UnorderedAccessView(context.m_ResourcePool->GetTexture(DemoResourceIds::IndirectLighting)));
 //Modify Begin:2026-07-28 by BestHui
                 CommandContext commandContext(cmd);
-                commandContext.SetDescriptorPool(indirectLightingShader.GetDescriptorPool());
                 commandContext.BindDescriptorSet(indirectLightingShader.GetDescriptorSet(), PipelineBindPoint::Compute);
                 commandContext.Dispatch(Math::DivideByMultiple(camera.Width, 8u), Math::DivideByMultiple(camera.Height, 8u), 1u);
 //Modify End
@@ -174,7 +172,6 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateLi
 //Modify Begin:2026-07-28 by BestHui
             ComputeShader& compositeShader = demo.m_PathTracingPipelines.GetLightingCompositeShader();
             CommandContext commandContext(cmd);
-            commandContext.SetDescriptorPool(compositeShader.GetDescriptorPool());
             commandContext.BindDescriptorSet(compositeShader.GetDescriptorSet(), PipelineBindPoint::Compute);
             commandContext.Dispatch(Math::DivideByMultiple(camera.Width, 8u), Math::DivideByMultiple(camera.Height, 8u), 1u);
 //Modify End

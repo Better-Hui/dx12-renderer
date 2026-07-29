@@ -49,7 +49,6 @@ void RaytracingDemo::DrawLightBillboards(CommandList& cmd)
         cmd.SetConstantBuffer(m_LightBillboardShader, "MaterialCBuffer", constants);
 //Modify Begin:2026-07-29 by BestHui
         CommandContext commandContext(cmd);
-        commandContext.SetDescriptorPool(m_LightBillboardShader->GetDescriptorPool());
         commandContext.BindDescriptorSet(m_LightBillboardShader->GetDescriptorSet(), PipelineBindPoint::Graphics);
 //Modify End
         m_LightBillboardMesh->Draw(cmd);
@@ -76,7 +75,6 @@ void RaytracingDemo::DrawLightBillboards(CommandList& cmd)
         cmd.SetConstantBuffer(m_LightBillboardShader, "MaterialCBuffer", constants);
 //Modify Begin:2026-07-29 by BestHui
         CommandContext commandContext(cmd);
-        commandContext.SetDescriptorPool(m_LightBillboardShader->GetDescriptorPool());
         commandContext.BindDescriptorSet(m_LightBillboardShader->GetDescriptorSet(), PipelineBindPoint::Graphics);
 //Modify End
         m_LightBillboardMesh->Draw(cmd);

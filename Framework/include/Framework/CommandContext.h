@@ -46,7 +46,6 @@ public:
 
     void SetPipelineLayout(PipelineBindPoint bindPoint, const PipelineLayout& pipelineLayout) const;
 //Modify Begin:2026-07-29 by BestHui
-    void SetDescriptorPool(const PipelineDescriptorPool& descriptorPool) const;
     void SetDescriptorSet(PipelineBindPoint bindPoint, const PipelineDescriptorSetBindDesc& descriptorSetDesc) const;
 //Modify End
     void SetDescriptorSet(PipelineBindPoint bindPoint, const PipelineDescriptorSet& descriptorSet) const;
@@ -89,6 +88,10 @@ public:
     void DispatchRays(const D3D12_DISPATCH_RAYS_DESC& dispatchRaysDesc) const;
 
 private:
+//Modify Begin:2026-07-29 by BestHui
+    void SetDescriptorPool(const PipelineDescriptorPool& descriptorPool) const;
+//Modify End
+
     CommandList& m_CommandList;
 //Modify Begin:2026-07-29 by BestHui
     mutable const PipelineDescriptorPool* m_DescriptorPool = nullptr;

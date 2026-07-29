@@ -72,7 +72,6 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
 
 //Modify Begin:2026-07-29 by BestHui
                 CommandContext commandContext(cmd);
-                commandContext.SetDescriptorPool(demo.m_GBufferShader->GetDescriptorPool());
                 commandContext.BindDescriptorSet(demo.m_GBufferShader->GetDescriptorSet(), PipelineBindPoint::Graphics);
 //Modify End
                 object.Model->Draw(cmd);
