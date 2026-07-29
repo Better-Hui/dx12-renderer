@@ -121,6 +121,10 @@ void CommandContext::SetDescriptorSet(
     Assert(
         descriptorSetDesc.SetIndex == descriptorSet.GetSetIndex(),
         "Pipeline descriptor set bind desc set index does not match the allocated descriptor set.");
+    Assert(
+        descriptorSetDesc.SetIndex < MaxDescriptorSetSlots,
+        "Pipeline descriptor set index exceeds CommandContext descriptor set slots.");
+    m_DescriptorSets[descriptorSetDesc.SetIndex] = &descriptorSet;
     SetDescriptorSet(bindPoint, descriptorSet);
 }
 //Modify End

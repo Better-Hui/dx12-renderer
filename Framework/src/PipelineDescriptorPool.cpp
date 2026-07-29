@@ -15,6 +15,9 @@ void PipelineDescriptorPool::Reset()
     m_AllocatedDescriptorSetCount = 0;
     m_AllocatedResourceDescriptorCount = 0;
     m_AllocatedSamplerDescriptorCount = 0;
+//Modify Begin:2026-07-29 by BestHui
+    m_AllocatedDescriptorCounts = {};
+//Modify End
 }
 
 PipelineDescriptorSet PipelineDescriptorPool::AllocateDescriptorSetValue(
@@ -38,10 +41,20 @@ PipelineDescriptorSet PipelineDescriptorPool::AllocateDescriptorSetValue(
     ++m_AllocatedDescriptorSetCount;
     m_AllocatedResourceDescriptorCount += resourceDescriptorCount;
     m_AllocatedSamplerDescriptorCount += samplerDescriptorCount;
+//Modify Begin:2026-07-29 by BestHui
+    m_AllocatedDescriptorCounts[static_cast<size_t>(PipelineDescriptorHeapType::Resource)] = m_AllocatedResourceDescriptorCount;
+    m_AllocatedDescriptorCounts[static_cast<size_t>(PipelineDescriptorHeapType::Sampler)] = m_AllocatedSamplerDescriptorCount;
+//Modify End
 //Modify Begin:2026-07-27 by BestHui
     PipelineDescriptorSet descriptorSet(layout);
 //Modify Begin:2026-07-29 by BestHui
-    descriptorSet.SetAllocationInfo(this, setIndex, resourceDescriptorOffset, samplerDescriptorOffset);
+    descriptorSet.SetAllocationInfo(
+        this,
+        setIndex,
+        resourceDescriptorOffset,
+        samplerDescriptorOffset,
+        resourceDescriptorCount,
+        samplerDescriptorCount);
 //Modify End
     auto device = Application::Get().GetDevice();
     for (const PipelineDescriptorSetDesc& setDesc : layout.GetDescriptorSets())
@@ -107,4 +120,11 @@ uint32_t PipelineDescriptorPool::CountSamplerDescriptors(const PipelineLayout& l
     (void)layout;
     return 0u;
 }
+
+//Modify Begin:2026-07-29 by BestHui
+uint32_t PipelineDescriptorPool::GetAllocatedDescriptorCount(const PipelineDescriptorHeapType heapType) const
+{
+    return m_AllocatedDescriptorCounts[static_cast<size_t>(heapType)];
+}
+//Modify End
 //Modify End

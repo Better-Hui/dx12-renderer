@@ -4,6 +4,7 @@
 #include "PipelineDescriptorSet.h"
 
 #include <cstdint>
+#include <array>
 #include <memory>
 
 class PipelineLayout;
@@ -35,6 +36,9 @@ public:
     uint32_t GetAllocatedDescriptorSetCount() const { return m_AllocatedDescriptorSetCount; }
     uint32_t GetAllocatedResourceDescriptorCount() const { return m_AllocatedResourceDescriptorCount; }
     uint32_t GetAllocatedSamplerDescriptorCount() const { return m_AllocatedSamplerDescriptorCount; }
+//Modify Begin:2026-07-29 by BestHui
+    uint32_t GetAllocatedDescriptorCount(PipelineDescriptorHeapType heapType) const;
+//Modify End
 
 private:
     uint32_t CountResourceDescriptors(const PipelineLayout& layout, uint32_t variableDescriptorNum) const;
@@ -44,5 +48,8 @@ private:
     uint32_t m_AllocatedDescriptorSetCount = 0;
     uint32_t m_AllocatedResourceDescriptorCount = 0;
     uint32_t m_AllocatedSamplerDescriptorCount = 0;
+//Modify Begin:2026-07-29 by BestHui
+    std::array<uint32_t, static_cast<size_t>(PipelineDescriptorHeapType::Count)> m_AllocatedDescriptorCounts = {};
+//Modify End
 };
 //Modify End

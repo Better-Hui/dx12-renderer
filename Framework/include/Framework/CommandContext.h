@@ -5,6 +5,7 @@
 #include <d3d12.h>
 #include <wrl.h>
 
+#include <array>
 #include <cstdint>
 #include <string_view>
 
@@ -36,6 +37,9 @@ struct PipelineDescriptorSetBindDesc
 class CommandContext final
 {
 public:
+//Modify Begin:2026-07-29 by BestHui
+    static constexpr uint32_t MaxDescriptorSetSlots = 16;
+//Modify End
     explicit CommandContext(CommandList& commandList);
 
     CommandList& GetCommandList() const { return m_CommandList; }
@@ -88,6 +92,7 @@ private:
     CommandList& m_CommandList;
 //Modify Begin:2026-07-29 by BestHui
     mutable const PipelineDescriptorPool* m_DescriptorPool = nullptr;
+    mutable std::array<const PipelineDescriptorSet*, MaxDescriptorSetSlots> m_DescriptorSets = {};
 //Modify End
 };
 

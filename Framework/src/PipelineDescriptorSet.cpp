@@ -76,6 +76,7 @@ void PipelineDescriptorSet::Reset(const PipelineLayout& layout)
     m_SetIndex = 0;
     m_ResourceDescriptorOffset = 0;
     m_SamplerDescriptorOffset = 0;
+    m_Allocation = {};
 //Modify End
     m_AccelerationStructure = nullptr;
 }
@@ -368,12 +369,20 @@ void PipelineDescriptorSet::SetAllocationInfo(
     const PipelineDescriptorPool* descriptorPool,
     const uint32_t setIndex,
     const uint32_t resourceDescriptorOffset,
-    const uint32_t samplerDescriptorOffset)
+    const uint32_t samplerDescriptorOffset,
+    const uint32_t resourceDescriptorCount,
+    const uint32_t samplerDescriptorCount)
 {
     m_DescriptorPool = descriptorPool;
     m_SetIndex = setIndex;
     m_ResourceDescriptorOffset = resourceDescriptorOffset;
     m_SamplerDescriptorOffset = samplerDescriptorOffset;
+    m_Allocation = {};
+    m_Allocation.SetIndex = setIndex;
+    m_Allocation.HeapOffsets[static_cast<size_t>(PipelineDescriptorHeapType::Resource)] = resourceDescriptorOffset;
+    m_Allocation.HeapOffsets[static_cast<size_t>(PipelineDescriptorHeapType::Sampler)] = samplerDescriptorOffset;
+    m_Allocation.DescriptorCounts[static_cast<size_t>(PipelineDescriptorHeapType::Resource)] = resourceDescriptorCount;
+    m_Allocation.DescriptorCounts[static_cast<size_t>(PipelineDescriptorHeapType::Sampler)] = samplerDescriptorCount;
 }
 //Modify End
 

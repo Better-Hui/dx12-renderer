@@ -11,6 +11,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <array>
 #include <map>
 #include <optional>
 #include <vector>
@@ -20,6 +21,22 @@ class CommandList;
 class PipelineDescriptorPool;
 class Resource;
 class StructuredBuffer;
+
+//Modify Begin:2026-07-29 by BestHui
+enum class PipelineDescriptorHeapType : uint32_t
+{
+    Resource = 0,
+    Sampler = 1,
+    Count
+};
+
+struct PipelineDescriptorSetAllocation
+{
+    uint32_t SetIndex = 0;
+    std::array<uint32_t, static_cast<size_t>(PipelineDescriptorHeapType::Count)> HeapOffsets = {};
+    std::array<uint32_t, static_cast<size_t>(PipelineDescriptorHeapType::Count)> DescriptorCounts = {};
+};
+//Modify End
 
 struct PipelineShaderResourceBinding
 {
@@ -85,11 +102,14 @@ public:
         const PipelineDescriptorPool* descriptorPool,
         uint32_t setIndex,
         uint32_t resourceDescriptorOffset,
-        uint32_t samplerDescriptorOffset);
+        uint32_t samplerDescriptorOffset,
+        uint32_t resourceDescriptorCount,
+        uint32_t samplerDescriptorCount);
     const PipelineDescriptorPool* GetDescriptorPool() const { return m_DescriptorPool; }
     uint32_t GetSetIndex() const { return m_SetIndex; }
     uint32_t GetResourceDescriptorOffset() const { return m_ResourceDescriptorOffset; }
     uint32_t GetSamplerDescriptorOffset() const { return m_SamplerDescriptorOffset; }
+    const PipelineDescriptorSetAllocation& GetAllocation() const { return m_Allocation; }
 //Modify End
     const PipelineBoundResource* FindBoundResource(UINT rootParameterIndex) const;
     const PipelineBoundResource& GetBoundResource(UINT rootParameterIndex) const;
@@ -108,6 +128,7 @@ private:
     uint32_t m_SetIndex = 0;
     uint32_t m_ResourceDescriptorOffset = 0;
     uint32_t m_SamplerDescriptorOffset = 0;
+    PipelineDescriptorSetAllocation m_Allocation = {};
 //Modify End
     const RayTracingAccelerationStructure* m_AccelerationStructure = nullptr;
 };
