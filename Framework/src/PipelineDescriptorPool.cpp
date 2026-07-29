@@ -5,6 +5,8 @@
 #include <DX12Library/Helpers.h>
 #include <Framework/PipelineLayout.h>
 
+#include <algorithm>
+
 PipelineDescriptorPool::PipelineDescriptorPool(PipelineDescriptorPoolDesc desc)
     : m_Desc(desc)
 {
@@ -57,6 +59,9 @@ PipelineDescriptorSet PipelineDescriptorPool::AllocateDescriptorSetValue(
         samplerDescriptorCount);
 //Modify End
     auto device = Application::Get().GetDevice();
+//Modify Begin:2026-07-29 by BestHui
+    uint32_t nextResourceDescriptorOffset = resourceDescriptorOffset;
+//Modify End
     for (const PipelineDescriptorSetDesc& setDesc : layout.GetDescriptorSets())
     {
         for (const PipelineDescriptorRangeDesc& range : setDesc.Ranges)
@@ -66,16 +71,33 @@ PipelineDescriptorSet PipelineDescriptorPool::AllocateDescriptorSetValue(
                 continue;
             }
 
-            DescriptorAllocation allocation = Application::Get().AllocateDescriptors(
-                D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-                range.DescriptorCount);
+//Modify Begin:2026-07-29 by BestHui
+            const bool isVariableSizedRange =
+                (static_cast<uint32_t>(range.Flags) & static_cast<uint32_t>(PipelineDescriptorRangeFlags::VariableSizedArray)) != 0u;
+            const uint32_t descriptorCount = isVariableSizedRange ? variableDescriptorNum : range.DescriptorCount;
+            PipelineDescriptorTableAllocation allocation = AllocateResourceDescriptorTable(descriptorCount);
+            allocation.HeapOffset = nextResourceDescriptorOffset;
+            nextResourceDescriptorOffset += descriptorCount;
+//Modify End
             if (const DescriptorAllocation* defaultDescriptors = layout.FindDefaultDescriptorTable(range.RootParameterIndex))
             {
+//Modify Begin:2026-07-29 by BestHui
+                const uint32_t defaultDescriptorCount = defaultDescriptors->GetNumHandles();
+                const uint32_t copiedDescriptorCount = (std::min)(descriptorCount, defaultDescriptorCount);
                 device->CopyDescriptorsSimple(
-                    range.DescriptorCount,
+                    copiedDescriptorCount,
                     allocation.GetDescriptorHandle(),
                     defaultDescriptors->GetDescriptorHandle(),
                     D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                for (uint32_t descriptorIndex = copiedDescriptorCount; descriptorIndex < descriptorCount; ++descriptorIndex)
+                {
+                    device->CopyDescriptorsSimple(
+                        1u,
+                        allocation.GetDescriptorHandle(descriptorIndex),
+                        defaultDescriptors->GetDescriptorHandle(0u),
+                        D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                }
+//Modify End
             }
             descriptorSet.SetDescriptorTableAllocation(range.RootParameterIndex, std::move(allocation));
         }
@@ -122,6 +144,20 @@ uint32_t PipelineDescriptorPool::CountSamplerDescriptors(const PipelineLayout& l
 }
 
 //Modify Begin:2026-07-29 by BestHui
+PipelineDescriptorTableAllocation PipelineDescriptorPool::AllocateResourceDescriptorTable(const uint32_t descriptorCount)
+{
+    Assert(descriptorCount > 0, "Pipeline descriptor table must contain at least one descriptor.");
+
+    PipelineDescriptorTableAllocation allocation = {};
+    allocation.HeapType = PipelineDescriptorHeapType::Resource;
+    allocation.HeapOffset = m_AllocatedResourceDescriptorCount;
+    allocation.NumHandles = descriptorCount;
+    allocation.CpuDescriptors = Application::Get().AllocateDescriptors(
+        D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+        descriptorCount);
+    return allocation;
+}
+
 uint32_t PipelineDescriptorPool::GetAllocatedDescriptorCount(const PipelineDescriptorHeapType heapType) const
 {
     return m_AllocatedDescriptorCounts[static_cast<size_t>(heapType)];

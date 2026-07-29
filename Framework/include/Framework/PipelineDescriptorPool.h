@@ -43,6 +43,9 @@ public:
 private:
     uint32_t CountResourceDescriptors(const PipelineLayout& layout, uint32_t variableDescriptorNum) const;
     uint32_t CountSamplerDescriptors(const PipelineLayout& layout) const;
+//Modify Begin:2026-07-29 by BestHui
+    PipelineDescriptorTableAllocation AllocateResourceDescriptorTable(uint32_t descriptorCount);
+//Modify End
 
     PipelineDescriptorPoolDesc m_Desc;
     uint32_t m_AllocatedDescriptorSetCount = 0;

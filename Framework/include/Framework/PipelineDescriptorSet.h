@@ -38,6 +38,20 @@ struct PipelineDescriptorSetAllocation
 };
 //Modify End
 
+//Modify Begin:2026-07-29 by BestHui
+struct PipelineDescriptorTableAllocation
+{
+    PipelineDescriptorHeapType HeapType = PipelineDescriptorHeapType::Resource;
+    uint32_t HeapOffset = 0;
+    uint32_t NumHandles = 0;
+    DescriptorAllocation CpuDescriptors;
+
+    bool IsValid() const { return NumHandles > 0; }
+    D3D12_CPU_DESCRIPTOR_HANDLE GetDescriptorHandle(uint32_t offset = 0) const;
+    uint32_t GetNumHandles() const { return NumHandles; }
+};
+//Modify End
+
 struct PipelineShaderResourceBinding
 {
     const Resource* Resource = nullptr;
@@ -94,8 +108,8 @@ public:
 
     const PipelineLayout& GetLayout() const;
 //Modify Begin:2026-07-27 by BestHui
-    void SetDescriptorTableAllocation(UINT rootParameterIndex, DescriptorAllocation allocation);
-    const DescriptorAllocation* FindDescriptorTableAllocation(UINT rootParameterIndex) const;
+    void SetDescriptorTableAllocation(UINT rootParameterIndex, PipelineDescriptorTableAllocation allocation);
+    const PipelineDescriptorTableAllocation* FindDescriptorTableAllocation(UINT rootParameterIndex) const;
 //Modify End
 //Modify Begin:2026-07-29 by BestHui
     void SetAllocationInfo(
@@ -121,7 +135,7 @@ private:
     const PipelineLayout* m_Layout = nullptr;
     std::map<UINT, PipelineBoundResource> m_BoundResources;
 //Modify Begin:2026-07-27 by BestHui
-    std::map<UINT, DescriptorAllocation> m_DescriptorTableAllocations;
+    std::map<UINT, PipelineDescriptorTableAllocation> m_DescriptorTableAllocations;
 //Modify End
 //Modify Begin:2026-07-29 by BestHui
     const PipelineDescriptorPool* m_DescriptorPool = nullptr;

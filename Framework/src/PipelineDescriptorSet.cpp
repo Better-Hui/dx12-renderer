@@ -7,6 +7,7 @@
 #include <DX12Library/Helpers.h>
 #include <DX12Library/StructuredBuffer.h>
 #include <Framework/CommandContext.h>
+#include <Framework/PipelineDescriptorPool.h>
 #include <Framework/RayTracingAccelerationStructure.h>
 
 #include <cstring>
@@ -54,6 +55,24 @@ namespace
 
         return !lhs.m_IsDescValid || std::memcmp(&lhs.m_Desc, &rhs.m_Desc, sizeof(D3D12_UNORDERED_ACCESS_VIEW_DESC)) == 0;
     }
+
+    D3D12_CPU_DESCRIPTOR_HANDLE GetDescriptorHandle(
+        const PipelineDescriptorSet& descriptorSet,
+        const PipelineDescriptorTableAllocation& allocation,
+        const uint32_t offset = 0)
+    {
+        (void)descriptorSet;
+        Assert(allocation.IsValid() && offset < allocation.NumHandles, "Pipeline descriptor table CPU handle is invalid.");
+        return allocation.GetDescriptorHandle(offset);
+    }
+}
+//Modify End
+
+//Modify Begin:2026-07-29 by BestHui
+D3D12_CPU_DESCRIPTOR_HANDLE PipelineDescriptorTableAllocation::GetDescriptorHandle(const uint32_t offset) const
+{
+    Assert(IsValid() && offset < NumHandles, "Pipeline descriptor table CPU handle is invalid.");
+    return CpuDescriptors.GetDescriptorHandle(offset);
 }
 //Modify End
 
@@ -154,13 +173,13 @@ UINT PipelineDescriptorSet::SetShaderResourceView(
 //Modify Begin:2026-07-27 by BestHui
     if (descriptorChanged)
     {
-        if (const DescriptorAllocation* allocation = FindDescriptorTableAllocation(binding.RootParameterIndex))
+        if (const PipelineDescriptorTableAllocation* allocation = FindDescriptorTableAllocation(binding.RootParameterIndex))
         {
-            Application::Get().GetDevice()->CopyDescriptorsSimple(
-                1u,
-                allocation->GetDescriptorHandle(arrayIndex),
-                shaderResourceView.m_Resource->GetShaderResourceView(shaderResourceView.GetDescOrNullptr()),
-                D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                Application::Get().GetDevice()->CopyDescriptorsSimple(
+                    1u,
+                    GetDescriptorHandle(*this, *allocation, arrayIndex),
+                    shaderResourceView.m_Resource->GetShaderResourceView(shaderResourceView.GetDescOrNullptr()),
+                    D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
         }
     }
 //Modify End
@@ -195,13 +214,13 @@ UINT PipelineDescriptorSet::SetShaderResource(
 //Modify Begin:2026-07-27 by BestHui
     if (descriptorChanged)
     {
-        if (const DescriptorAllocation* allocation = FindDescriptorTableAllocation(binding.RootParameterIndex))
+        if (const PipelineDescriptorTableAllocation* allocation = FindDescriptorTableAllocation(binding.RootParameterIndex))
         {
-            Application::Get().GetDevice()->CopyDescriptorsSimple(
-                1u,
-                allocation->GetDescriptorHandle(arrayIndex),
-                resource.GetShaderResourceView(nullptr),
-                D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                Application::Get().GetDevice()->CopyDescriptorsSimple(
+                    1u,
+                    GetDescriptorHandle(*this, *allocation, arrayIndex),
+                    resource.GetShaderResourceView(nullptr),
+                    D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
         }
     }
 //Modify End
@@ -239,12 +258,12 @@ UINT PipelineDescriptorSet::SetShaderResource(
 //Modify Begin:2026-07-27 by BestHui
     if (descriptorChanged)
     {
-        if (const DescriptorAllocation* allocation = FindDescriptorTableAllocation(binding.RootParameterIndex))
+        if (const PipelineDescriptorTableAllocation* allocation = FindDescriptorTableAllocation(binding.RootParameterIndex))
         {
             Application::Get().GetDevice()->CreateShaderResourceView(
                 resource.GetD3D12Resource().Get(),
                 &srvDesc,
-                allocation->GetDescriptorHandle(arrayIndex));
+                GetDescriptorHandle(*this, *allocation, arrayIndex));
         }
     }
 //Modify End
@@ -269,11 +288,11 @@ UINT PipelineDescriptorSet::SetUnorderedAccessView(
 //Modify Begin:2026-07-27 by BestHui
     if (descriptorChanged)
     {
-        if (const DescriptorAllocation* allocation = FindDescriptorTableAllocation(binding.RootParameterIndex))
+        if (const PipelineDescriptorTableAllocation* allocation = FindDescriptorTableAllocation(binding.RootParameterIndex))
         {
             Application::Get().GetDevice()->CopyDescriptorsSimple(
                 1u,
-                allocation->GetDescriptorHandle(0u),
+                GetDescriptorHandle(*this, *allocation, 0u),
                 unorderedAccessView.m_Resource->GetUnorderedAccessView(unorderedAccessView.GetDescOrNullptr()),
                 D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
         }
@@ -320,15 +339,28 @@ void PipelineDescriptorSet::ClearShaderResourceViews(std::string_view name)
     m_BoundResources[binding.RootParameterIndex].ShaderResourceViews.clear();
     m_BoundResources[binding.RootParameterIndex].ShaderResources.clear();
 //Modify Begin:2026-07-27 by BestHui
-    const DescriptorAllocation* allocation = FindDescriptorTableAllocation(binding.RootParameterIndex);
+    const PipelineDescriptorTableAllocation* allocation = FindDescriptorTableAllocation(binding.RootParameterIndex);
     const DescriptorAllocation* defaultDescriptors = GetLayout().FindDefaultDescriptorTable(binding.RootParameterIndex);
     if (allocation != nullptr && defaultDescriptors != nullptr)
     {
+//Modify Begin:2026-07-29 by BestHui
+        const uint32_t descriptorCount = allocation->GetNumHandles();
+        const uint32_t defaultDescriptorCount = defaultDescriptors->GetNumHandles();
+        const uint32_t copiedDescriptorCount = (std::min)(descriptorCount, defaultDescriptorCount);
         Application::Get().GetDevice()->CopyDescriptorsSimple(
-            allocation->GetNumHandles(),
-            allocation->GetDescriptorHandle(),
+            copiedDescriptorCount,
+            GetDescriptorHandle(*this, *allocation),
             defaultDescriptors->GetDescriptorHandle(),
             D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+        for (uint32_t descriptorIndex = copiedDescriptorCount; descriptorIndex < descriptorCount; ++descriptorIndex)
+        {
+            Application::Get().GetDevice()->CopyDescriptorsSimple(
+                1u,
+                GetDescriptorHandle(*this, *allocation, descriptorIndex),
+                defaultDescriptors->GetDescriptorHandle(0u),
+                D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+        }
+//Modify End
     }
 //Modify End
 }
@@ -352,12 +384,12 @@ const PipelineLayout& PipelineDescriptorSet::GetLayout() const
 //Modify Begin:2026-07-27 by BestHui
 void PipelineDescriptorSet::SetDescriptorTableAllocation(
     const UINT rootParameterIndex,
-    DescriptorAllocation allocation)
+    PipelineDescriptorTableAllocation allocation)
 {
     m_DescriptorTableAllocations.insert_or_assign(rootParameterIndex, std::move(allocation));
 }
 
-const DescriptorAllocation* PipelineDescriptorSet::FindDescriptorTableAllocation(const UINT rootParameterIndex) const
+const PipelineDescriptorTableAllocation* PipelineDescriptorSet::FindDescriptorTableAllocation(const UINT rootParameterIndex) const
 {
     const auto findResult = m_DescriptorTableAllocations.find(rootParameterIndex);
     return findResult != m_DescriptorTableAllocations.end() ? &findResult->second : nullptr;

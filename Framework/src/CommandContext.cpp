@@ -78,6 +78,21 @@ namespace
             }
         }
     }
+
+//Modify Begin:2026-07-29 by BestHui
+    void BindDescriptorTable(
+        CommandList& commandList,
+        const UINT rootParameterIndex,
+        const PipelineDescriptorTableAllocation& allocation)
+    {
+        commandList.StageDynamicDescriptors(
+            D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+            rootParameterIndex,
+            0u,
+            allocation.GetNumHandles(),
+            allocation.GetDescriptorHandle());
+    }
+//Modify End
 }
 //Modify End
 
@@ -99,7 +114,9 @@ void CommandContext::SetPipelineLayout(const PipelineBindPoint bindPoint, const 
     {
         SetComputeRootSignature(*rootSignature);
     }
-    pipelineLayout.StageDefaultDescriptorTables(m_CommandList);
+//Modify Begin:2026-07-29 by BestHui
+    (void)pipelineLayout;
+//Modify End
 }
 
 //Modify Begin:2026-07-29 by BestHui
@@ -280,14 +297,9 @@ void CommandContext::ApplyGraphicsBinding(const PipelineDescriptorSet& descripto
 //Modify Begin:2026-07-27 by BestHui
         if (range->BindingMode == PipelineDescriptorBindingMode::DescriptorTable)
         {
-            if (const DescriptorAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
+            if (const PipelineDescriptorTableAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
             {
-                StageDynamicDescriptors(
-                    D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-                    rootParameterIndex,
-                    0u,
-                    allocation->GetNumHandles(),
-                    allocation->GetDescriptorHandle());
+                BindDescriptorTable(m_CommandList, rootParameterIndex, *allocation);
             }
         }
 //Modify End
@@ -311,7 +323,7 @@ void CommandContext::ApplyGraphicsBinding(const PipelineDescriptorSet& descripto
         Assert(range->BindingMode == PipelineDescriptorBindingMode::DescriptorTable, "Graphics root SRV bindings are not supported yet.");
 
 //Modify Begin:2026-07-27 by BestHui
-        if (const DescriptorAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
+        if (const PipelineDescriptorTableAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
         {
             for (const auto& shaderResource : boundResource->ShaderResources)
             {
@@ -326,12 +338,7 @@ void CommandContext::ApplyGraphicsBinding(const PipelineDescriptorSet& descripto
                 }
             }
 
-            StageDynamicDescriptors(
-                D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-                rootParameterIndex,
-                0u,
-                allocation->GetNumHandles(),
-                allocation->GetDescriptorHandle());
+            BindDescriptorTable(m_CommandList, rootParameterIndex, *allocation);
             return;
         }
 //Modify End
@@ -377,19 +384,14 @@ void CommandContext::ApplyGraphicsBinding(const PipelineDescriptorSet& descripto
         Assert(boundResource->UnorderedAccessView.has_value(), "Pipeline UAV resource is not bound.");
         const UnorderedAccessView& unorderedAccessView = *boundResource->UnorderedAccessView;
 //Modify Begin:2026-07-27 by BestHui
-        if (const DescriptorAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
+        if (const PipelineDescriptorTableAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
         {
             if (unorderedAccessView.m_Resource->AreAutoBarriersEnabled())
             {
                 TransitionUnorderedAccessView(m_CommandList, unorderedAccessView);
             }
 
-            StageDynamicDescriptors(
-                D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-                rootParameterIndex,
-                0u,
-                allocation->GetNumHandles(),
-                allocation->GetDescriptorHandle());
+            BindDescriptorTable(m_CommandList, rootParameterIndex, *allocation);
             return;
         }
 //Modify End
@@ -429,14 +431,9 @@ void CommandContext::ApplyComputeBinding(const PipelineDescriptorSet& descriptor
 //Modify Begin:2026-07-27 by BestHui
         if (range->BindingMode == PipelineDescriptorBindingMode::DescriptorTable)
         {
-            if (const DescriptorAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
+            if (const PipelineDescriptorTableAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
             {
-                StageDynamicDescriptors(
-                    D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-                    rootParameterIndex,
-                    0u,
-                    allocation->GetNumHandles(),
-                    allocation->GetDescriptorHandle());
+                BindDescriptorTable(m_CommandList, rootParameterIndex, *allocation);
             }
         }
 //Modify End
@@ -480,7 +477,7 @@ void CommandContext::ApplyComputeBinding(const PipelineDescriptorSet& descriptor
         }
 
 //Modify Begin:2026-07-27 by BestHui
-        if (const DescriptorAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
+        if (const PipelineDescriptorTableAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
         {
             for (const auto& shaderResource : boundResource->ShaderResources)
             {
@@ -495,12 +492,7 @@ void CommandContext::ApplyComputeBinding(const PipelineDescriptorSet& descriptor
                 }
             }
 
-            StageDynamicDescriptors(
-                D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-                rootParameterIndex,
-                0u,
-                allocation->GetNumHandles(),
-                allocation->GetDescriptorHandle());
+            BindDescriptorTable(m_CommandList, rootParameterIndex, *allocation);
             return;
         }
 //Modify End
@@ -546,19 +538,14 @@ void CommandContext::ApplyComputeBinding(const PipelineDescriptorSet& descriptor
         Assert(boundResource->UnorderedAccessView.has_value(), "Pipeline UAV resource is not bound.");
         const UnorderedAccessView& unorderedAccessView = *boundResource->UnorderedAccessView;
 //Modify Begin:2026-07-27 by BestHui
-        if (const DescriptorAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
+        if (const PipelineDescriptorTableAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
         {
             if (unorderedAccessView.m_Resource->AreAutoBarriersEnabled())
             {
                 TransitionUnorderedAccessView(m_CommandList, unorderedAccessView);
             }
 
-            StageDynamicDescriptors(
-                D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-                rootParameterIndex,
-                0u,
-                allocation->GetNumHandles(),
-                allocation->GetDescriptorHandle());
+            BindDescriptorTable(m_CommandList, rootParameterIndex, *allocation);
             return;
         }
 //Modify End
