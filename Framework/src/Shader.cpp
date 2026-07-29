@@ -2,7 +2,6 @@
 #include <DX12Library/Helpers.h>
 #include <DX12Library/ShaderUtils.h>
 #include <DX12Library/Application.h>
-#include <Framework/CommandContext.h>
 
 //Modify Begin:2026-07-24 by BestHui
 #include <algorithm>
@@ -92,24 +91,6 @@ Shader::Shader(
 }
 //Modify End
 
-void Shader::Bind(CommandList& commandList)
-{
-    CommandContext(commandList).SetPipeline(*this);
-}
-
-void Shader::Unbind(CommandList& commandList)
-{
-    (void)commandList;
-}
-
-//Modify Begin:2026-07-27 by BestHui
-void Shader::ApplyBindings(CommandList& commandList) const
-{
-//Modify Begin:2026-07-29 by BestHui
-    CommandContext(commandList).BindDescriptorSet(*m_DescriptorSet, PipelineBindPoint::Graphics);
-//Modify End
-}
-
 void Shader::StageDefaultDescriptorTables(CommandList& commandList) const
 {
     if (m_PipelineLayout != nullptr)
@@ -117,7 +98,6 @@ void Shader::StageDefaultDescriptorTables(CommandList& commandList) const
         m_PipelineLayout->StageDefaultDescriptorTables(commandList);
     }
 }
-//Modify End
 
 //Modify Begin:2026-07-24 by BestHui
 bool Shader::HasConstantBuffer(const std::string& variableName) const

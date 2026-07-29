@@ -2,7 +2,6 @@
 #include <DX12Library/Helpers.h>
 #include <DX12Library/ShaderUtils.h>
 #include <DX12Library/Application.h>
-#include <Framework/CommandContext.h>
 #include <Framework/RayTracingAccelerationStructure.h>
 
 #include <algorithm>
@@ -59,27 +58,6 @@ ComputeShader::ComputeShader(const ShaderBlob& shader, ComputePipelineDesc desc)
 }
 //Modify End
 
-void ComputeShader::Bind(CommandList& commandList) const
-{
-    //Modify Begin:2026-07-23 by BestHui
-    CommandContext(commandList).SetPipeline(*this);
-    //Modify End
-}
-
-//Modify Begin:2026-07-23 by BestHui
-void ComputeShader::Unbind(CommandList& commandList) const
-{
-    (void)commandList;
-}
-
-//Modify Begin:2026-07-27 by BestHui
-void ComputeShader::ApplyBindings(CommandList& commandList) const
-{
-//Modify Begin:2026-07-29 by BestHui
-    CommandContext(commandList).BindDescriptorSet(*m_DescriptorSet, PipelineBindPoint::Compute);
-//Modify End
-}
-
 void ComputeShader::StageDefaultDescriptorTables(CommandList& commandList) const
 {
     if (m_PipelineLayout != nullptr)
@@ -87,7 +65,6 @@ void ComputeShader::StageDefaultDescriptorTables(CommandList& commandList) const
         m_PipelineLayout->StageDefaultDescriptorTables(commandList);
     }
 }
-//Modify End
 
 bool ComputeShader::HasConstantBuffer(const std::string& variableName) const
 {

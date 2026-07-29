@@ -33,8 +33,9 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
         {
 //Modify Begin:2026-07-29 by BestHui
             demo.m_Lights.Upload(cmd);
+            CommandContext commandContext(cmd);
+            commandContext.BindPipeline(*demo.m_GBufferShader);
 //Modify End
-            demo.m_GBufferShader->Bind(cmd);
 
             const XMMATRIX viewProjection = demo.m_Camera.GetViewMatrix() * demo.m_Camera.GetProjectionMatrix();
             const XMMATRIX previousViewProjection = demo.m_HasPreviousViewProjection ? demo.m_PreviousViewProjection : viewProjection;
@@ -71,12 +72,9 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
                 cmd.SetTexture(demo.m_GBufferShader, "AmbientOcclusionTexture", ShaderResourceView(textures[material.AmbientOcclusionTextureIndex]));
 
 //Modify Begin:2026-07-29 by BestHui
-                CommandContext commandContext(cmd);
                 commandContext.BindDescriptorSet(demo.m_GBufferShader->GetDescriptorSet(), PipelineBindPoint::Graphics);
 //Modify End
                 object.Model->Draw(cmd);
             }
-
-            demo.m_GBufferShader->Unbind(cmd);
         });
 }

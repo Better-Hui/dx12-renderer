@@ -68,13 +68,6 @@ class ComputeShader
 public:
     ComputeShader(const ShaderBlob& shader, ComputePipelineDesc desc);
 
-    void Bind(CommandList& commandList) const;
-    //Modify Begin:2026-07-23 by BestHui
-    void Unbind(CommandList& commandList) const;
-    //Modify Begin:2026-07-27 by BestHui
-    void ApplyBindings(CommandList& commandList) const;
-    //Modify End
-
     bool HasConstantBuffer(const std::string& variableName) const;
     bool HasShaderResourceView(const std::string& variableName) const;
     bool HasUnorderedAccessView(const std::string& variableName) const;
@@ -98,22 +91,22 @@ public:
     using ShaderMetadata = ShaderReflectionMetadata;
 
     const ShaderMetadata& GetShaderMetadata() const { return m_ShaderMetadata; }
-    Microsoft::WRL::ComPtr<ID3D12PipelineState> GetPipelineState(const Microsoft::WRL::ComPtr<ID3D12Device2>& device) const;
-    const RootSignature& GetRootSignature() const { return *m_RootSignature; }
-    const PipelineLayout* GetPipelineLayout() const { return m_PipelineLayout.get(); }
 //Modify Begin:2026-07-28 by BestHui
     const PipelineDescriptorSet& GetDescriptorSet() const { return *m_DescriptorSet; }
 //Modify End
-//Modify Begin:2026-07-29 by BestHui
-    const PipelineDescriptorPool& GetDescriptorPool() const { return m_DescriptorPool; }
-//Modify End
-    bool UsesReflectedRootSignature() const { return true; }
-    void StageDefaultDescriptorTables(CommandList& commandList) const;
-    //Modify End
 
 
 private:
     //Modify Begin:2026-07-23 by BestHui
+//Modify Begin:2026-07-29 by BestHui
+    friend class CommandContext;
+    Microsoft::WRL::ComPtr<ID3D12PipelineState> GetPipelineState(const Microsoft::WRL::ComPtr<ID3D12Device2>& device) const;
+    const RootSignature& GetRootSignature() const { return *m_RootSignature; }
+    const PipelineLayout* GetPipelineLayout() const { return m_PipelineLayout.get(); }
+    const PipelineDescriptorPool& GetDescriptorPool() const { return m_DescriptorPool; }
+    bool UsesReflectedRootSignature() const { return true; }
+    void StageDefaultDescriptorTables(CommandList& commandList) const;
+//Modify End
     void CollectShaderMetadata(const Microsoft::WRL::ComPtr<ID3DBlob>& shader, ShaderMetadata* outMetadata);
     void BuildReflectedRootSignature(const ComputePipelineDesc& desc);
     const DescriptorBindingInfo& GetReflectedBinding(const std::string& variableName, DescriptorBindingKind expectedKind) const;

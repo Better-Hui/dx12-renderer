@@ -1,212 +1,89 @@
 # DX12 Renderer
 
-## Demos
+This repository is a DirectX 12 renderer playground focused on a reusable rendering framework and a ray tracing sample.
 
-### Deferred
+The repository intentionally tracks only the core libraries, framework code, render graph, documentation, external integration headers, and `RaytracingDemo`. Older sample demos may still exist locally for reference, but they are not part of the tracked project anymore.
 
-- [DeferredLightingDemo](./Demos/DeferredLightingDemo)
-  - Deferred rendering pipeline:
-    - Directional, Point, Spot, and Capsule lights;
-    - Light passes are implemented using the stencil buffer;
-  - PBR:
-    - Cook-Torrance BRDF model;
-    - Image-Based Lighting:
-      - Diffuse (Irradiance Map) and Specular (Pre-Filtered Environment Map);
-      - Both maps are computed on application start based on an HDR skybox cubemap;
-  - HDR pipeline:
-    - Render targets supporting HDR (`R16G16B16A16_FLOAT`);
-    - Auto exposure via a Luminance Histogram implemented in Compute shaders;
-    - Tone mapping;
-  - TAA;
-  - SSAO;
-  - SSLR.
+## Repository Layout
 
-![Deferred Lighting Demo Screenshot](./Screenshots/DeferredLightingDemo.jpg)
+- `DX12Library`: low-level DirectX 12 wrappers for device resources, command lists, descriptors, synchronization, textures, buffers, and swap chain integration.
+- `Framework`: higher-level rendering framework built on top of `DX12Library`.
+- `RenderGraph`: render graph execution, pass dependency metadata, logical resources, and GPU timing support.
+- `Demos/RaytracingDemo`: the current sample project. It demonstrates raster base resources, inline ray tracing, DXR ray tracing, denoising, CUDA post processing interop, ImGui controls, and the recommended framework-facing APIs.
+- `Docs`: API notes and sample guidance.
+- `External`: third-party integration files that are required by the framework or sample.
 
-| SSAO Off                                                     | SSAO On                                                    |
-| ------------------------------------------------------------ | ---------------------------------------------------------- |
-| ![SSAO Off](./Screenshots/DeferredLightingDemo_SSAO_Off.jpg) | ![SSAO On](./Screenshots/DeferredLightingDemo_SSAO_On.jpg) |
+## RaytracingDemo
 
-| SSLR Off                                                     | SSLR On                                                    |
-| ------------------------------------------------------------ | ---------------------------------------------------------- |
-| ![SSLR Off](./Screenshots/DeferredLightingDemo_SSLR_Off.jpg) | ![SSLR On](./Screenshots/DeferredLightingDemo_SSLR_On.jpg) |
+`RaytracingDemo` is the main sample and should be treated as the reference for new renderer experiments.
 
-#### Controls
+It currently demonstrates:
 
-- Use <kbd>WASD</kbd>/Arrow Keys to move the camera;
-- Hold <kbd>LMB</kbd> and move the mouse to orient the camera;
-- Press <kbd>L</kbd> to toggle light animation;
-- Press <kbd>T</kbd> to toggle TAA;
-- Press <kbd>O</kbd> to toggle SSAO;
-- Press <kbd>P</kbd> to toggle SSLR.
-- Press <kbd>B</kbd> to toggle Bloom.
+- Base resource generation for GBuffer, motion vectors, world position, scene color, history color, and display color.
+- Inline ray tracing through compute shaders.
+- Standard DXR pipeline support with ray generation, miss, closest-hit shaders, shader table dispatch, and per-pass bindings.
+- Direct and indirect lighting passes.
+- Optional accumulation.
+- Optional denoising through NRD or SVGF.
+- CUDA post-processing interop for bloom.
+- ImGui runtime controls.
+- GPU timing output for render graph passes.
 
-### Forward
+The intended usage style is:
 
-- [LightingDemo](./Demos/LightingDemo)
-  - Models loaded from OBJ files;
-  - .DDS textures loading:
-    - Textures for this demo are stored in `BC7_UNORM`.
-  - Mipmapping;
-  - Phong lighting with a directional light and several point and spot lights;
-    - Using diffuse, normal, gloss, and specular maps;
-  - Particle system with CPU simulation (10000+ particles on screen) and instanced rendering;
-  - Shadow mapping for the directional, point, and spot lights;
-  - MSAA:
-    - Built-in resolve for color;
-    - Custom compute pass for the depth attachment (`min` among all samples);
-  - Soft shadows using 16x Poisson Sampling and Early Bail;
-  - Dynamic environment reflections - see the sphere;
-  - Post-processing:
-    - Screen-space fog;
-    - Bloom.
+- Build pipeline state and pipeline layout from shader reflection and explicit pipeline descriptors.
+- Bind resources by semantic name through framework binding sets or command context APIs.
+- Avoid direct D3D12 calls in sample pass code unless the framework lacks the needed abstraction.
 
-![Lighting Demo Screenshot](./Screenshots/LightingDemo.jpg)
+## Unity Scene Parser
 
-![Lighting Demo Screenshot 2](./Screenshots/LightingDemo2.jpg)
+The framework includes a lightweight Unity scene parser:
 
-#### Controls
+- Header: `Framework/include/Framework/UnitySceneParser.h`
+- Source: `Framework/src/UnitySceneParser.cpp`
+- Tool: `Framework/tools/UnitySceneDump.cpp`
 
-- Use <kbd>WASD</kbd>/Arrow Keys to move the camera;
-- Hold <kbd>LMB</kbd> and move the mouse to orient the camera;
-- Press <kbd>L</kbd> to toggle light animation.
+The parser reads Unity text-serialized `.unity` scenes and extracts:
 
-### ToonDemo
+- Game objects and active state.
+- Transform hierarchy with local and world transforms.
+- Cameras.
+- Lights.
+- Mesh references.
+- Renderer material references.
+- Material asset names and shader references.
 
-- [ToonDemo](./Demos/ToonDemo)
-  - Toon/Cel-Shading:
-    - Diffuse ramp texture;
-    - Configurable specular;
-    - Cross-hatching pattern;
-  - Variance Shadow Mapping (Directional Light);
-  - Post-processing:
-    - Outline (Sobel-filter);
-    - FXAA;
-    - Bloom.
+Unity uses Y-up world space. The parser preserves Unity coordinates as-is; renderer-side import code should explicitly decide whether to keep Unity space or convert to another convention.
 
-![Toon Demo Screenshot](./Screenshots/ToonDemo.jpg)
+Example:
 
-#### Controls
+```powershell
+UnitySceneDump.exe "C:\Program Files\Unity\MDR\ModernDeferredRenderer\project\ModernDeferredRenderer\Assets\Scenes\CornellBox.unity"
+```
 
-- Use <kbd>WASD</kbd>/Arrow Keys to move the camera;
-- Hold <kbd>LMB</kbd> and move the mouse to orient the camera;
-- Press <kbd>L</kbd> to toggle light animation.
+Current scope is static parsing. The API is structured so later work can add scene change detection, asset database caching, prefab resolution, and live Unity plugin updates.
 
-### MeshletsDemo
+## Build
 
-- [MeshletsDemo](./Demos/MeshletsDemo)
-  - Meshlets are built via [meshoptimizer](https://github.com/zeux/meshoptimizer).
-  - GPU Meshlet Culling:
-    - Cone backface culling;
-    - Frustum culling (bounding spheres);
-    - HDB (Hi-Z) occlusion culling (bounding spheres or AABBs):
-      - Additional low poly geometry is treated as occluders (red transparent in the screenshot); 
-  - Culled meshlets are rendered via `ExecuteIndirect`;
-  - Uses Render Graph.
+Generate or open the CMake build with Visual Studio or Rider. The repository currently expects a Windows DirectX 12 development environment.
 
-![Meshlets Demo Screenshot](./Screenshots/MeshletsDemo.jpg)
+Typical build command:
 
-#### Controls
+```powershell
+"C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build "C:\Program Files\Unity\dx12-renderer-master\build" --config Release --target RaytracingDemo UnitySceneDump
+```
 
-- Use <kbd>WASD</kbd>/Arrow Keys to move the camera;
-- Hold <kbd>LMB</kbd> and move the mouse to orient the camera;
-- Press <kbd>C</kbd> to "freeze" the camera for cone and frustum culling;
-- Press <kbd>M</kbd> and <kbd>N</kbd> to scroll the debugged meshlets forwards and backwards respectively.
+Required components include:
 
-### RenderGraph
+- Visual Studio 2022 C++ toolchain.
+- Windows SDK with DXC.
+- CUDA Toolkit for CUDA interop paths.
+- vcpkg dependencies used by the original framework, including `assimp`, `DirectXTex`, `DirectXMesh`, `meshoptimizer`, and `imgui`.
+- NRD/NRI runtime libraries under `External`.
+- Unity PluginAPI headers under `External/UnityPluginAPI`.
 
-- [RenderGraph](./RenderGraph)
-  - A simple implementation of a render graph:
-    - Passes are defined via lambdas;
-    - Resources are marked as either inputs or outputs;
-    - GPU memory is aliased between different buffers and render targets when their lifetimes do not overlap; 
-    - Special "Token" resources are used for more controlled render pass ordering.
+## Documentation
 
-### GrassDemo
+- `Docs/RaytracingSampleApi.md`: current sample API and renderer architecture notes.
 
-- [GrassDemo](./Demos/GrassDemo)
-  - ~45k individual grass blades sent to rendering after culling, 4kk total.
-  - Grass animation in the vertex shader;
-  - Per-chunk frustum culling (CPU);
-    - Chunks consist of 500x500 instances;
-  - Per-instance frustum culling (GPU, compute);
-  - Grass instances rendered via `ExecuteIndirect`;
-  - TAA.
-
-![Grass Demo Screenshot](./Screenshots/GrassDemo.gif)
-
-#### Controls
-
-- Use <kbd>WASD</kbd>/Arrow Keys to move the camera;
-- Hold <kbd>LMB</kbd> and move the mouse to orient the camera;
-- Press <kbd>T</kbd> to toggle TAA.
-- Press <kbd>C</kbd> to toggle GPU culling.
-
-### Animations
-
-- [AnimationsDemo](./Demos/AnimationsDemo)
-  - Model and animations loaded from FBX files;
-  - Skinning in the vertex shader;
-  - Animation state blending;
-  - Animation state merging (i.e., avatar masks).
-
-![Animations Demo GIF](./Screenshots/AnimationsDemo.gif)
-
-#### Controls
-
-- Use <kbd>WASD</kbd>/Arrow Keys to move the camera;
-- Hold <kbd>LMB</kbd> and move the mouse to orient the camera.
-
-### Requirements
-
-Packages (installed via `vcpkg`):
-
-- [assimp](https://github.com/assimp/assimp)
-- [DirectXTex](https://github.com/microsoft/DirectXTex)
-- [DirectXMesh](https://github.com/microsoft/DirectXMesh)
-- [meshoptimizer](https://github.com/zeux/meshoptimizer)
-
-## Sources
-
-- https://www.3dgep.com/learning-directx-12-1/
-- https://www.3dgep.com/learning-directx-12-2/
-- https://www.3dgep.com/learning-directx-12-3/
-- https://www.3dgep.com/learning-directx-12-4/
-- https://wiki.ogre3d.org/tiki-index.php?page=-Point+Light+Attenuation
-- https://github.com/d3dcoder/d3d12book
-- http://www.opengl-tutorial.org/ru/intermediate-tutorials/tutorial-16-shadow-mapping/
-- https://learnopengl.com/Advanced-Lighting/Shadows/Point-Shadows
-- https://catlikecoding.com/unity/tutorials/advanced-rendering/bloom/
-- https://learnopengl.com/Advanced-Lighting/HDR
-- https://www.alextardif.com/HistogramLuminance.html
-- https://bruop.github.io/exposure/
-- https://bruop.github.io/tonemapping/
-- https://learnopengl.com/Advanced-Lighting/SSAO
-- https://sugulee.wordpress.com/2021/06/21/temporal-anti-aliasingtaa-tutorial/
-- https://logins.github.io/graphics/2021/05/31/RenderGraphs.html
-- https://blog.traverseresearch.nl/render-graph-101-f42646255636
-- https://themaister.net/blog/2017/08/15/render-graphs-and-vulkan-a-deep-dive/
-- https://github.com/zeux/niagara
-- https://arm-software.github.io/opengl-es-sdk-for-android/occlusion_culling.html
-
-### Libraries and Tools
-
-- https://github.com/microsoft/DirectXTex
-- https://github.com/microsoft/DirectXMesh
-- https://github.com/assimp/assimp
-- https://github.com/Microsoft/DirectXTex/wiki/Texconv
-- https://matheowis.github.io/HDRI-to-CubeMap/
-- https://github.com/zeux/meshoptimizer
-
-### Assets
-
-- https://casual-effects.com/data/
-  - Teapot, Cube, Lat-Long Sphere
-- https://ambientcg.com/view?id=PavingStones070
-- https://ambientcg.com/view?id=Moss002
-- https://ambientcg.com/view?id=Metal036
-- https://www.mixamo.com/
-- https://sketchfab.com/3d-models/old-wooden-chest-45f93c78e5174036801bfb535c139ac7
-- https://d1ver.artstation.com/projects/3k2
-- https://ambientcg.com/view?id=Ground047
-- https://www.cgtrader.com/free-3d-models/electronics/video/retro-television-set-c4dbe4af-960e-4a5c-ac25-2265d6a97cf6
+New renderer experiments should keep this documentation updated when the recommended API shape changes.

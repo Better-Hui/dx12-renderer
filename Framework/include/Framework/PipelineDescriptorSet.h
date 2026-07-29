@@ -106,9 +106,6 @@ public:
     UINT SetConstantBufferData(std::string_view name, const void* data, size_t size);
     void ClearShaderResourceViews(std::string_view name);
 
-    void ApplyGraphicsBinding(CommandList& commandList, UINT rootParameterIndex) const;
-    void ApplyComputeBinding(CommandList& commandList, UINT rootParameterIndex) const;
-
     const PipelineLayout& GetLayout() const;
 //Modify Begin:2026-07-27 by BestHui
     void SetDescriptorTableAllocation(UINT rootParameterIndex, PipelineDescriptorTableAllocation allocation);

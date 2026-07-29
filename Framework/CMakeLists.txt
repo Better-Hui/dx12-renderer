@@ -53,6 +53,9 @@ set(HEADER_FILES
         # Modify Begin:2026-07-28 by BestHui
         "include/Framework/UnityD3D12Interop.h"
         # Modify End
+# Modify Begin:2026-07-29 by BestHui
+        "include/Framework/UnitySceneParser.h"
+# Modify End
         "include/Framework/ComputeShader.h"
 # Modify Begin:2026-07-23 by BestHui
         "include/Framework/RenderTexture.h"
@@ -118,6 +121,9 @@ set(SOURCE_FILES
         # Modify Begin:2026-07-28 by BestHui
         "src/UnityD3D12Interop.cpp"
         # Modify End
+# Modify Begin:2026-07-29 by BestHui
+        "src/UnitySceneParser.cpp"
+# Modify End
         "src/ComputeShader.cpp"
 # Modify Begin:2026-07-23 by BestHui
         "src/RenderTexture.cpp"
@@ -238,3 +244,11 @@ target_link_libraries(${TARGET_NAME}
 # imgui
 find_package(imgui CONFIG REQUIRED)
 target_link_libraries(${TARGET_NAME} PUBLIC imgui::imgui)
+
+# Modify Begin:2026-07-29 by BestHui
+add_executable(UnitySceneDump "tools/UnitySceneDump.cpp")
+target_compile_options(UnitySceneDump PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+target_compile_features(UnitySceneDump PRIVATE cxx_std_20)
+target_link_libraries(UnitySceneDump PRIVATE Framework)
+set_target_properties(UnitySceneDump PROPERTIES FOLDER "Framework/Tools")
+# Modify End

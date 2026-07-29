@@ -44,6 +44,26 @@ Demo 层不应该直接管理：
 
 ## 推荐 Command API
 
+`CommandContext` 的 public API 只保留 sample/业务代码应该直接使用的命令入口：
+
+- `BindPipeline(...)`
+- `BindDescriptorSet(...)`
+- `BindRayTracingDescriptorSet(...)`
+- `Draw(...)`
+- `Dispatch(...)`
+- `DispatchRays(...)`
+- resource transition / UAV barrier helper
+
+以下内容属于内部迁移细节，不应该在 sample/业务层直接调用：
+
+- root signature 绑定
+- pipeline state 直接绑定
+- descriptor pool 绑定
+- descriptor table staging
+- 单 root parameter binding
+
+RaytracingDemo 当前不再保留 `Shader / ComputeShader::Bind / Unbind / ApplyBindings` 这类旧入口。旧 demo 如果还依赖旧封装，应停留在旧类型或自行迁移，不再反向污染新 sample API。
+
 sample pass 中推荐写成：
 
 ```cpp
@@ -69,20 +89,20 @@ DXR shader-table pass 推荐写成：
 ```cpp
 CommandContext commandContext(commandList);
 
-commandContext.BindRayTracingDescriptorSet(bindingSet);
-commandContext.DispatchRays(dispatchDesc);
+commandContext.DispatchRays(bindingSet, "DirectLightingRayGen", width, height, 1);
 ```
 
 不推荐 sample 直接调用：
 
 ```cpp
 commandContext.SetDescriptorPool(...);
+commandContext.SetPipelineLayout(...);
 shader.ApplyBindings(...);
 shader.StageDefaultDescriptorTables(...);
 commandList.StageDynamicDescriptors(...);
 ```
 
-这些接口属于迁移期兼容路径，后续新 sample 不应该继续依赖。
+这些接口要么已经收进 private，要么属于迁移期兼容路径。后续新 sample 不应该继续依赖。
 
 ## 字符串绑定资源
 
@@ -239,6 +259,39 @@ CUDA interop 的关键点：
 - CUDA pass 不应该把 ImGui/overlay 作为输入。
 - 后处理输入应该是 scene/postprocess color，而不是 denoiser history。
 
+## Unity 场景解析
+
+Unity 场景解析属于 `Framework` 上层工具，不属于 `RaytracingDemo` 的临时代码：
+
+- `Framework/include/Framework/UnitySceneParser.h`
+- `Framework/src/UnitySceneParser.cpp`
+- `Framework/tools/UnitySceneDump.cpp`
+
+当前解析范围：
+
+- `GameObject`
+- `Transform`，包含 local / world transform。
+- `Camera`
+- `Light`
+- `MeshFilter`
+- `MeshRenderer` 的 material 引用。
+- `.mat` 材质资产名和 shader 引用。
+
+Unity 是 Y-up 世界空间。解析器保留 Unity 原始坐标，不在工具层强制转换坐标系。后续如果 RaytracingDemo 或 Unity 插件要导入 Unity 场景，应在 scene adapter 层显式决定坐标转换策略。
+
+工具验证示例：
+
+```powershell
+UnitySceneDump.exe "C:\Program Files\Unity\MDR\ModernDeferredRenderer\project\ModernDeferredRenderer\Assets\Scenes\CornellBox.unity"
+```
+
+下一步扩展方向：
+
+- Prefab / nested prefab 解析。
+- SkinnedMeshRenderer / LODGroup。
+- Unity asset database 缓存，避免每次递归扫描 `.meta`。
+- 文件监听或 Unity 插件推送，实现动态场景更新。
+
 ## 与 NRI 的差距
 
 当前已经接近 NRI 的部分：
@@ -248,6 +301,9 @@ CUDA interop 的关键点：
 - 有 `PipelineDescriptorPool / PipelineDescriptorSet`，资源绑定开始向 set 模型靠拢。
 - 有 `CommandContextDescriptorAllocator`，descriptor table 提交边界已经从 `CommandContext.cpp` 局部 helper 抽成独立对象。
 - raster / compute / DXR 在 RaytracingDemo 中基本都走 `BindPipeline + BindDescriptorSet + Draw/Dispatch/DispatchRays`。
+- `CommandContext` 的 root signature、PSO、descriptor staging、descriptor pool 绑定入口已经收进 private。
+- `Shader / ComputeShader` 的 `Bind / Unbind / ApplyBindings` 已从新封装删除；RaytracingDemo 不再调用这些入口。
+- DXR sample 不再手动构造 `D3D12_DISPATCH_RAYS_DESC`；`CommandContext::DispatchRays(bindingSet, passName, ...)` 负责准备 shader table dispatch desc、绑定 descriptor set 并提交 `DispatchRays`。
 - 支持 external D3D12 resource / Unity D3D12 device 方向的封装雏形。
 
 仍然缺失或不完整：

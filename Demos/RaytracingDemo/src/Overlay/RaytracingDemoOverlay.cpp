@@ -25,7 +25,10 @@ void RaytracingDemo::DrawLightBillboards(CommandList& cmd)
     XMStoreFloat4(&cameraRightFloat, XMVectorSetW(cameraRight, 0.0f));
     XMStoreFloat4(&cameraUpFloat, XMVectorSetW(cameraUp, 0.0f));
 
-    m_LightBillboardShader->Bind(cmd);
+//Modify Begin:2026-07-29 by BestHui
+    CommandContext commandContext(cmd);
+    commandContext.BindPipeline(*m_LightBillboardShader);
+//Modify End
     cmd.SetConstantBuffer(m_LightBillboardShader, "PipelineCBuffer", BuildPipelineConstants());
 
     for (const PointLight& light : m_Lights.GetPointLights())
@@ -47,10 +50,7 @@ void RaytracingDemo::DrawLightBillboards(CommandList& cmd)
         constants.CameraUp = cameraUpFloat;
 
         cmd.SetConstantBuffer(m_LightBillboardShader, "MaterialCBuffer", constants);
-//Modify Begin:2026-07-29 by BestHui
-        CommandContext commandContext(cmd);
         commandContext.BindDescriptorSet(m_LightBillboardShader->GetDescriptorSet(), PipelineBindPoint::Graphics);
-//Modify End
         m_LightBillboardMesh->Draw(cmd);
     }
 
@@ -73,14 +73,9 @@ void RaytracingDemo::DrawLightBillboards(CommandList& cmd)
         constants.CameraUp = cameraUpFloat;
 
         cmd.SetConstantBuffer(m_LightBillboardShader, "MaterialCBuffer", constants);
-//Modify Begin:2026-07-29 by BestHui
-        CommandContext commandContext(cmd);
         commandContext.BindDescriptorSet(m_LightBillboardShader->GetDescriptorSet(), PipelineBindPoint::Graphics);
-//Modify End
         m_LightBillboardMesh->Draw(cmd);
     }
-
-    m_LightBillboardShader->Unbind(cmd);
 }
 
 void RaytracingDemo::DrawPostBloomOverlays(CommandList& cmd)

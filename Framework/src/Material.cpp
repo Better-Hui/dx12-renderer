@@ -1,4 +1,7 @@
 #include "Material.h"
+//Modify Begin:2026-07-29 by BestHui
+#include <Framework/CommandContext.h>
+//Modify End
 
 static const ShaderUtils::ConstantBufferMetadata* FindMaterialConstantBuffer(const Shader::ShaderMetadata& metadata)
 {
@@ -136,8 +139,12 @@ void Material::SetTexture(CommandList&, const std::string& name, const ShaderRes
 
 void Material::Bind(CommandList& commandList)
 {
-    m_Shader->Bind(commandList);
+//Modify Begin:2026-07-29 by BestHui
+    CommandContext commandContext(commandList);
+    commandContext.BindPipeline(*m_Shader);
     UploadUniforms(commandList);
+    commandContext.BindDescriptorSet(m_Shader->GetDescriptorSet(), PipelineBindPoint::Graphics);
+//Modify End
 }
 
 void Material::UploadUniforms(CommandList& commandList)
@@ -148,17 +155,23 @@ void Material::UploadUniforms(CommandList& commandList)
 
 void Material::Unbind(CommandList& commandList)
 {
-    m_Shader->Unbind(commandList);
+//Modify Begin:2026-07-29 by BestHui
+    (void)commandList;
+//Modify End
 }
 
 void Material::BeginBatch(CommandList& commandList)
 {
-    m_Shader->Bind(commandList);
+//Modify Begin:2026-07-29 by BestHui
+    CommandContext(commandList).BindPipeline(*m_Shader);
+//Modify End
 }
 
 void Material::EndBatch(CommandList& commandList)
 {
-    m_Shader->Unbind(commandList);
+//Modify Begin:2026-07-29 by BestHui
+    (void)commandList;
+//Modify End
 }
 
 std::shared_ptr<Material> Material::Create(const std::shared_ptr<Shader>& shader)

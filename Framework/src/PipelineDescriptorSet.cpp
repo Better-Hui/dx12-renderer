@@ -6,7 +6,6 @@
 #include <DX12Library/Application.h>
 #include <DX12Library/Helpers.h>
 #include <DX12Library/StructuredBuffer.h>
-#include <Framework/CommandContext.h>
 #include <Framework/PipelineDescriptorPool.h>
 #include <Framework/RayTracingAccelerationStructure.h>
 
@@ -368,16 +367,6 @@ void PipelineDescriptorSet::ClearShaderResourceViews(std::string_view name)
 //Modify End
     }
 //Modify End
-}
-
-void PipelineDescriptorSet::ApplyGraphicsBinding(CommandList& commandList, const UINT rootParameterIndex) const
-{
-    CommandContext(commandList).ApplyGraphicsBinding(*this, rootParameterIndex);
-}
-
-void PipelineDescriptorSet::ApplyComputeBinding(CommandList& commandList, const UINT rootParameterIndex) const
-{
-    CommandContext(commandList).ApplyComputeBinding(*this, rootParameterIndex);
 }
 
 const PipelineLayout& PipelineDescriptorSet::GetLayout() const

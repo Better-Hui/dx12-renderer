@@ -49,10 +49,10 @@ void RaytracingDemo::PresentDisplayOutput()
         displayColor,
         [this](CommandList& cmd, const std::shared_ptr<Texture>& sourceTexture)
         {
-            m_DisplayCompositeShader->Bind(cmd);
             cmd.SetTexture(m_DisplayCompositeShader, "SceneColor", ShaderResourceView(sourceTexture));
 //Modify Begin:2026-07-29 by BestHui
             CommandContext commandContext(cmd);
+            commandContext.BindPipeline(*m_DisplayCompositeShader);
             commandContext.BindDescriptorSet(m_DisplayCompositeShader->GetDescriptorSet(), PipelineBindPoint::Graphics);
 //Modify End
             m_DisplayBlitMesh->Draw(cmd);

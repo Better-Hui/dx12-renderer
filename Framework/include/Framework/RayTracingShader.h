@@ -170,15 +170,13 @@ public:
         const std::vector<D3D12_SHADER_RESOURCE_VIEW_DESC>& srvDescs);
     void SetTextureArray(std::string_view name, const std::vector<ShaderResourceView>& shaderResourceViews);
 
-//Modify Begin:2026-07-27 by BestHui
+private:
+//Modify Begin:2026-07-29 by BestHui
+    friend class CommandContext;
     const RayTracingShader& GetShader() const;
     const PipelineDescriptorSet& GetDescriptorSet() const;
-//Modify Begin:2026-07-29 by BestHui
     const PipelineDescriptorPool& GetDescriptorPool() const;
 //Modify End
-//Modify End
-
-private:
     struct Impl;
     Impl& GetImpl();
     const Impl& GetImpl() const;
@@ -202,13 +200,7 @@ public:
     static RayTracingPipelineDesc CreateDefaultPipelineDesc();
 
     const RayTracingPipelineDesc& GetDesc() const;
-//Modify Begin:2026-07-27 by BestHui
-    const RayTracingPipelineState& GetPipelineState() const;
     const PipelineLayout& GetPipelineLayout() const;
-    void PrepareDispatch(std::string_view passName) const;
-    D3D12_DISPATCH_RAYS_DESC BuildDispatchDesc(std::string_view passName, uint32_t width, uint32_t height, uint32_t depth) const;
-    D3D12_DISPATCH_RAYS_DESC BuildDispatchDesc(uint32_t width, uint32_t height, uint32_t depth) const;
-//Modify End
     //Modify Begin:2026-07-24 by BestHui
     RayTracingBindingSet CreateBindingSet() const;
     //Modify End
@@ -216,6 +208,13 @@ public:
     bool HasBinding(std::string_view name) const;
 
 private:
+//Modify Begin:2026-07-29 by BestHui
+    friend class CommandContext;
+    const RayTracingPipelineState& GetPipelineState() const;
+    void PrepareDispatch(std::string_view passName) const;
+    D3D12_DISPATCH_RAYS_DESC BuildDispatchDesc(std::string_view passName, uint32_t width, uint32_t height, uint32_t depth) const;
+    D3D12_DISPATCH_RAYS_DESC BuildDispatchDesc(uint32_t width, uint32_t height, uint32_t depth) const;
+//Modify End
     //Modify Begin:2026-07-24 by BestHui
     friend class RayTracingBindingSet;
     //Modify End

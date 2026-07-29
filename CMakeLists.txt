@@ -35,16 +35,13 @@ add_subdirectory(Framework)
 add_subdirectory(RenderGraph)
 
 # Demos
-add_subdirectory(Demos/AnimationsDemo)
-add_subdirectory(Demos/DeferredLightingDemo)
-add_subdirectory(Demos/LightingDemo)
-add_subdirectory(Demos/ToonDemo)
-add_subdirectory(Demos/GrassDemo)
-add_subdirectory(Demos/RenderGraphDemo)
-add_subdirectory(Demos/MeshletsDemo)
+# Modify Begin:2026-07-29 by BestHui
 add_subdirectory(Demos/RaytracingDemo)
+# Modify End
 
 # Set the startup project.
 set_directory_properties(PROPERTIES
-        VS_STARTUP_PROJECT LightingDemo
+        # Modify Begin:2026-07-29 by BestHui
+        VS_STARTUP_PROJECT RaytracingDemo
+        # Modify End
         )

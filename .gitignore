@@ -27,6 +27,16 @@ packages/*
 /**/.vs
 /**/out
 
+# Modify Begin:2026-07-29 by BestHui
+/Demos/AnimationsDemo/
+/Demos/DeferredLightingDemo/
+/Demos/GrassDemo/
+/Demos/LightingDemo/
+/Demos/MeshletsDemo/
+/Demos/RenderGraphDemo/
+/Demos/ToonDemo/
+# Modify End
+
 /**/CMakeFiles/
 /**/CMakeCache.txt
 /**/cmake_install.cmake

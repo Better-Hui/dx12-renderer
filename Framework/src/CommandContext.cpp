@@ -632,4 +632,20 @@ void CommandContext::DispatchRays(const D3D12_DISPATCH_RAYS_DESC& dispatchRaysDe
     m_CommandList.DispatchRays(dispatchRaysDesc);
 }
 
+//Modify Begin:2026-07-29 by BestHui
+void CommandContext::DispatchRays(
+    const RayTracingBindingSet& bindingSet,
+    const std::string_view passName,
+    const uint32_t width,
+    const uint32_t height,
+    const uint32_t depth) const
+{
+    const RayTracingShader& shader = bindingSet.GetShader();
+    const D3D12_DISPATCH_RAYS_DESC dispatchDesc = shader.BuildDispatchDesc(passName, width, height, depth);
+    BindRayTracingDescriptorSet(bindingSet);
+    DispatchRays(dispatchDesc);
+    InsertDescriptorSetOutputBarriers(bindingSet.GetDescriptorSet());
+}
+//Modify End
+
 //Modify End

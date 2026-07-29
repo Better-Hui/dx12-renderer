@@ -40,7 +40,6 @@ void RaytracingDemoPassAccess::BindInlinePathTracingInputs(
     Assert(meshCount <= layout.GeometryDescriptorCapacity, "Ray tracing geometry descriptors exceed the scene descriptor table capacity.");
 //Modify End
 
-    shader.Bind(cmd);
     cmd.SetConstantBuffer(shader, "CameraConstants", camera);
     shader.SetAccelerationStructure(cmd, demo.m_RayTracingAccelerationStructure);
     if (shader.HasShaderResourceView("GBufferTextures"))
@@ -123,7 +122,6 @@ void RaytracingDemoPassAccess::BindCompositeInputs(
 
 //Modify Begin:2026-07-27 by BestHui
     ComputeShader& compositeShader = demo.m_PathTracingPipelines.GetLightingCompositeShader();
-    compositeShader.Bind(cmd);
     cmd.SetConstantBuffer(compositeShader, "CameraConstants", camera);
     compositeShader.SetShaderResourceView(cmd, "GBufferTextures", 0u, ShaderResourceView(gbuffer.AlbedoOcclusion));
     compositeShader.SetShaderResourceView(cmd, "GBufferTextures", 1u, ShaderResourceView(gbuffer.SpecularSmoothness));

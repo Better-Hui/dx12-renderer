@@ -1,6 +1,9 @@
 #include "MSAADepthResolvePass.h"
 #include <DX12Library/Helpers.h>
 
+//Modify Begin:2026-07-29 by BestHui
+#include <Framework/CommandContext.h>
+//Modify End
 #include <Framework/MSAADepthResolve_CS.h>
 
 namespace
@@ -26,8 +29,6 @@ void MSAADepthResolvePass::Resolve(CommandList& commandList, const std::shared_p
         throw std::exception("Source and destination sizes do not match.");
     }
 
-    m_ComputeShader.Bind(commandList);
-
     D3D12_SHADER_RESOURCE_VIEW_DESC sourceSrvDesc{};
     sourceSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMS;
     sourceSrvDesc.Format = DXGI_FORMAT_R32_FLOAT;
@@ -36,8 +37,12 @@ void MSAADepthResolvePass::Resolve(CommandList& commandList, const std::shared_p
     m_ComputeShader.SetShaderResourceView(commandList, "input", ShaderResourceView(source, sourceSrvDesc));
     m_ComputeShader.SetUnorderedAccessView(commandList, "output", UnorderedAccessView(destination));
 
-    commandList.Dispatch(
+//Modify Begin:2026-07-29 by BestHui
+    CommandContext commandContext(commandList);
+    commandContext.BindPipeline(m_ComputeShader);
+    commandContext.BindDescriptorSet(m_ComputeShader.GetDescriptorSet(), PipelineBindPoint::Compute);
+    commandContext.Dispatch(
         Math::DivideByMultiple(static_cast<uint32_t>(sourceDesc.Width), THREAD_GROUP_SIZE),
-        Math::DivideByMultiple(sourceDesc.Height, THREAD_GROUP_SIZE)
-    );
+        Math::DivideByMultiple(sourceDesc.Height, THREAD_GROUP_SIZE));
+//Modify End
 }
