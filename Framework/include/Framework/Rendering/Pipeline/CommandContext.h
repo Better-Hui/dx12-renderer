@@ -87,6 +87,7 @@ public:
     void UavBarrier(const Resource& resource) const;
 
     void Draw(uint32_t vertexCount, uint32_t instanceCount = 1, uint32_t startVertex = 0, uint32_t startInstance = 0) const;
+    void DrawIndexed(uint32_t indexCount, uint32_t instanceCount = 1, uint32_t startIndex = 0, int32_t baseVertex = 0, uint32_t startInstance = 0) const;
 //Modify Begin:2026-07-30 by BestHui
     void DispatchMesh(uint32_t numGroupsX, uint32_t numGroupsY = 1, uint32_t numGroupsZ = 1) const;
 //Modify End

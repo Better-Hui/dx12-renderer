@@ -21,6 +21,7 @@ public:
     void ResetTransientBindings();
 //Modify Begin:2026-07-30 by BestHui
     void SetBindlessDescriptorHeap(BindlessDescriptorHeap* bindlessDescriptorHeap);
+    bool HasBindlessDescriptorHeap() const { return m_BindlessDescriptorHeap != nullptr; }
 //Modify End
     void StageDescriptorTable(
         CommandList& commandList,

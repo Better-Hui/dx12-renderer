@@ -671,18 +671,58 @@ void CommandContext::Draw(
     const uint32_t startVertex,
     const uint32_t startInstance) const
 {
+//Modify Begin:2026-07-30 by BestHui
+    if (m_DescriptorAllocator.HasBindlessDescriptorHeap())
+    {
+        m_CommandList.FlushResourceBarriers();
+        m_CommandList.GetGraphicsCommandList()->DrawInstanced(vertexCount, instanceCount, startVertex, startInstance);
+        return;
+    }
+//Modify End
     m_CommandList.Draw(vertexCount, instanceCount, startVertex, startInstance);
 }
 
 //Modify Begin:2026-07-30 by BestHui
+void CommandContext::DrawIndexed(
+    const uint32_t indexCount,
+    const uint32_t instanceCount,
+    const uint32_t startIndex,
+    const int32_t baseVertex,
+    const uint32_t startInstance) const
+{
+    if (m_DescriptorAllocator.HasBindlessDescriptorHeap())
+    {
+        m_CommandList.FlushResourceBarriers();
+        m_CommandList.GetGraphicsCommandList()->DrawIndexedInstanced(indexCount, instanceCount, startIndex, baseVertex, startInstance);
+        return;
+    }
+    m_CommandList.DrawIndexed(indexCount, instanceCount, startIndex, baseVertex, startInstance);
+}
+//Modify End
+
+//Modify Begin:2026-07-30 by BestHui
 void CommandContext::DispatchMesh(const uint32_t numGroupsX, const uint32_t numGroupsY, const uint32_t numGroupsZ) const
 {
+    if (m_DescriptorAllocator.HasBindlessDescriptorHeap())
+    {
+        m_CommandList.FlushResourceBarriers();
+        m_CommandList.GetGraphicsCommandList6()->DispatchMesh(numGroupsX, numGroupsY, numGroupsZ);
+        return;
+    }
     m_CommandList.DispatchMesh(numGroupsX, numGroupsY, numGroupsZ);
 }
 //Modify End
 
 void CommandContext::Dispatch(const uint32_t numGroupsX, const uint32_t numGroupsY, const uint32_t numGroupsZ) const
 {
+//Modify Begin:2026-07-30 by BestHui
+    if (m_DescriptorAllocator.HasBindlessDescriptorHeap())
+    {
+        m_CommandList.FlushResourceBarriers();
+        m_CommandList.GetGraphicsCommandList()->Dispatch(numGroupsX, numGroupsY, numGroupsZ);
+        return;
+    }
+//Modify End
     m_CommandList.Dispatch(numGroupsX, numGroupsY, numGroupsZ);
 }
 
@@ -712,6 +752,14 @@ void CommandContext::DispatchRays(const RayTracingDispatchDesc& dispatchDesc) co
         dispatchDesc.Width,
         dispatchDesc.Height,
         dispatchDesc.Depth);
+//Modify Begin:2026-07-30 by BestHui
+    if (m_DescriptorAllocator.HasBindlessDescriptorHeap())
+    {
+        m_CommandList.FlushResourceBarriers();
+        m_CommandList.GetGraphicsCommandList5()->DispatchRays(&d3d12DispatchDesc);
+        return;
+    }
+//Modify End
     m_CommandList.DispatchRays(d3d12DispatchDesc);
 }
 

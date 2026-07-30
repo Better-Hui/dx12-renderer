@@ -140,7 +140,13 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
 //Modify Begin:2026-07-29 by BestHui
                 commandContext.BindDescriptorSet(demo.m_GBufferShader->GetDescriptorSet());
 //Modify End
-                object.Model->Draw(cmd);
+//Modify Begin:2026-07-30 by BestHui
+                for (const auto& mesh : object.Model->GetMeshes())
+                {
+                    mesh->Bind(cmd);
+                    commandContext.DrawIndexed(mesh->GetIndexCount());
+                }
+//Modify End
             }
         });
 }
