@@ -49,6 +49,9 @@ public:
     ComputeShader& GetInlineDirectLightingShader() const;
     ComputeShader& GetInlineIndirectLightingShader() const;
     ComputeShader& GetLightingCompositeShader() const;
+//Modify Begin:2026-07-30 by BestHui
+    RayTracingShader& GetRayTracingShader() const;
+//Modify End
     RayTracingBindingSet& GetDirectRayTracingBindingSet() const;
     RayTracingBindingSet& GetIndirectRayTracingBindingSet() const;
     bool HasDxrBindingSets() const;

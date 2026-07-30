@@ -19,6 +19,7 @@ namespace
 //Modify Begin:2026-07-27 by BestHui
     void DispatchDxrLightingPass(
         CommandList& cmd,
+        RayTracingShader& shader,
         RayTracingBindingSet& bindingSet,
         const std::string_view passName,
         const uint32_t width,
@@ -26,7 +27,10 @@ namespace
     {
 //Modify Begin:2026-07-29 by BestHui
         CommandContext commandContext(cmd);
-        commandContext.DispatchRays(bindingSet, passName, width, height, 1u);
+        commandContext.BindPipeline(shader);
+        commandContext.BindDescriptorSet(bindingSet);
+        commandContext.DispatchRays(RayTracingDispatchDesc{ passName, width, height, 1u });
+        commandContext.InsertDescriptorSetOutputBarriers(bindingSet);
 //Modify End
     }
 //Modify End
@@ -70,7 +74,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
 //Modify Begin:2026-07-28 by BestHui
                 CommandContext commandContext(cmd);
                 commandContext.BindPipeline(directLightingShader);
-                commandContext.BindDescriptorSet(directLightingShader.GetDescriptorSet(), PipelineBindPoint::Compute);
+                commandContext.BindDescriptorSet(directLightingShader.GetDescriptorSet());
                 commandContext.Dispatch(Math::DivideByMultiple(camera.Width, 8u), Math::DivideByMultiple(camera.Height, 8u), 1u);
 //Modify End
             }
@@ -80,7 +84,13 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
                 directBindingSet.SetUnorderedAccessView("DirectLighting", UnorderedAccessView(context.m_ResourcePool->GetTexture(DemoResourceIds::DirectLighting)));
                 RaytracingDemoPassAccess::BindDxrPathTracingInputs(demo, directBindingSet, gbuffer, camera);
 //Modify Begin:2026-07-27 by BestHui
-                DispatchDxrLightingPass(cmd, directBindingSet, "DirectLightingRayGen", camera.Width, camera.Height);
+                DispatchDxrLightingPass(
+                    cmd,
+                    demo.m_PathTracingPipelines.GetRayTracingShader(),
+                    directBindingSet,
+                    "DirectLightingRayGen",
+                    camera.Width,
+                    camera.Height);
 //Modify End
             }
         });
@@ -124,7 +134,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
 //Modify Begin:2026-07-28 by BestHui
                 CommandContext commandContext(cmd);
                 commandContext.BindPipeline(indirectLightingShader);
-                commandContext.BindDescriptorSet(indirectLightingShader.GetDescriptorSet(), PipelineBindPoint::Compute);
+                commandContext.BindDescriptorSet(indirectLightingShader.GetDescriptorSet());
                 commandContext.Dispatch(Math::DivideByMultiple(camera.Width, 8u), Math::DivideByMultiple(camera.Height, 8u), 1u);
 //Modify End
             }
@@ -134,7 +144,13 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
                 indirectBindingSet.SetUnorderedAccessView("IndirectLighting", UnorderedAccessView(context.m_ResourcePool->GetTexture(DemoResourceIds::IndirectLighting)));
                 RaytracingDemoPassAccess::BindDxrPathTracingInputs(demo, indirectBindingSet, gbuffer, camera);
 //Modify Begin:2026-07-27 by BestHui
-                DispatchDxrLightingPass(cmd, indirectBindingSet, "IndirectLightingRayGen", camera.Width, camera.Height);
+                DispatchDxrLightingPass(
+                    cmd,
+                    demo.m_PathTracingPipelines.GetRayTracingShader(),
+                    indirectBindingSet,
+                    "IndirectLightingRayGen",
+                    camera.Width,
+                    camera.Height);
 //Modify End
             }
         });
@@ -174,7 +190,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateLi
             ComputeShader& compositeShader = demo.m_PathTracingPipelines.GetLightingCompositeShader();
             CommandContext commandContext(cmd);
             commandContext.BindPipeline(compositeShader);
-            commandContext.BindDescriptorSet(compositeShader.GetDescriptorSet(), PipelineBindPoint::Compute);
+            commandContext.BindDescriptorSet(compositeShader.GetDescriptorSet());
             commandContext.Dispatch(Math::DivideByMultiple(camera.Width, 8u), Math::DivideByMultiple(camera.Height, 8u), 1u);
 //Modify End
         });

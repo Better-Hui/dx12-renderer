@@ -77,7 +77,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
                 cmd.SetTexture(demo.m_GBufferShader, "AmbientOcclusionTexture", ShaderResourceView(textures[material.AmbientOcclusionTextureIndex]));
 
 //Modify Begin:2026-07-29 by BestHui
-                commandContext.BindDescriptorSet(demo.m_GBufferShader->GetDescriptorSet(), PipelineBindPoint::Graphics);
+                commandContext.BindDescriptorSet(demo.m_GBufferShader->GetDescriptorSet());
 //Modify End
                 object.Model->Draw(cmd);
             }

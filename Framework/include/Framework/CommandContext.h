@@ -27,7 +27,10 @@ class Shader;
 enum class PipelineBindPoint
 {
     Graphics,
-    Compute
+    Compute,
+//Modify Begin:2026-07-30 by BestHui
+    RayTracing
+//Modify End
 };
 
 //Modify Begin:2026-07-29 by BestHui
@@ -35,6 +38,14 @@ struct PipelineDescriptorSetBindDesc
 {
     uint32_t SetIndex = 0;
     const PipelineDescriptorSet* DescriptorSet = nullptr;
+};
+
+struct RayTracingDispatchDesc
+{
+    std::string_view PassName;
+    uint32_t Width = 1;
+    uint32_t Height = 1;
+    uint32_t Depth = 1;
 };
 //Modify End
 
@@ -52,7 +63,7 @@ public:
     void BindPipeline(Shader& shader) const;
     void BindPipeline(const ComputeShader& shader) const;
     void BindPipeline(const RayTracingShader& shader) const;
-    void BindDescriptorSet(const PipelineDescriptorSet& descriptorSet, PipelineBindPoint bindPoint) const;
+    void BindDescriptorSet(const PipelineDescriptorSet& descriptorSet) const;
 //Modify End
 //Modify Begin:2026-07-27 by BestHui
     void InsertDescriptorSetOutputBarriers(const PipelineDescriptorSet& descriptorSet) const;
@@ -64,15 +75,10 @@ public:
 
     void Draw(uint32_t vertexCount, uint32_t instanceCount = 1, uint32_t startVertex = 0, uint32_t startInstance = 0) const;
     void Dispatch(uint32_t numGroupsX, uint32_t numGroupsY = 1, uint32_t numGroupsZ = 1) const;
-    void BindRayTracingDescriptorSet(const RayTracingBindingSet& bindingSet) const;
-    void DispatchRays(const D3D12_DISPATCH_RAYS_DESC& dispatchRaysDesc) const;
 //Modify Begin:2026-07-29 by BestHui
-    void DispatchRays(
-        const RayTracingBindingSet& bindingSet,
-        std::string_view passName,
-        uint32_t width,
-        uint32_t height,
-        uint32_t depth = 1) const;
+    void BindDescriptorSet(const RayTracingBindingSet& bindingSet) const;
+    void DispatchRays(const RayTracingDispatchDesc& dispatchDesc) const;
+    void InsertDescriptorSetOutputBarriers(const RayTracingBindingSet& bindingSet) const;
 //Modify End
 
 private:
@@ -106,6 +112,9 @@ private:
     mutable CommandContextDescriptorAllocator m_DescriptorAllocator;
     mutable const PipelineDescriptorPool* m_DescriptorPool = nullptr;
     mutable std::array<const PipelineDescriptorSet*, MaxDescriptorSetSlots> m_DescriptorSets = {};
+    mutable const RayTracingShader* m_BoundRayTracingShader = nullptr;
+    mutable PipelineBindPoint m_BoundPipelineBindPoint = PipelineBindPoint::Graphics;
+    mutable bool m_HasBoundPipeline = false;
 //Modify End
 };
 

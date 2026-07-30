@@ -107,7 +107,7 @@ void SVGF::Temporal(
 //Modify Begin:2026-07-29 by BestHui
     const CommandContext commandContext(commandList);
     commandContext.BindPipeline(*m_TemporalShader);
-    commandContext.BindDescriptorSet(m_TemporalShader->GetDescriptorSet(), PipelineBindPoint::Compute);
+    commandContext.BindDescriptorSet(m_TemporalShader->GetDescriptorSet());
     commandContext.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
 //Modify End
 
@@ -147,7 +147,7 @@ void SVGF::AtrousPass(
 //Modify Begin:2026-07-29 by BestHui
     const CommandContext commandContext(commandList);
     commandContext.BindPipeline(*m_AtrousShader);
-    commandContext.BindDescriptorSet(m_AtrousShader->GetDescriptorSet(), PipelineBindPoint::Compute);
+    commandContext.BindDescriptorSet(m_AtrousShader->GetDescriptorSet());
     commandContext.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
 //Modify End
 }
@@ -197,7 +197,7 @@ void SVGF::Composite(
 //Modify Begin:2026-07-29 by BestHui
     const CommandContext commandContext(commandList);
     commandContext.BindPipeline(*m_CompositeShader);
-    commandContext.BindDescriptorSet(m_CompositeShader->GetDescriptorSet(), PipelineBindPoint::Compute);
+    commandContext.BindDescriptorSet(m_CompositeShader->GetDescriptorSet());
     commandContext.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
 //Modify End
 }

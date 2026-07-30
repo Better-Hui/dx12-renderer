@@ -194,7 +194,7 @@ void ImGuiImpl::BlitCombine(CommandList& commandList, const std::shared_ptr<Text
 //Modify Begin:2026-07-29 by BestHui
     const CommandContext commandContext(commandList);
     commandContext.BindPipeline(*m_CombineShader);
-    commandContext.BindDescriptorSet(m_CombineShader->GetDescriptorSet(), PipelineBindPoint::Graphics);
+    commandContext.BindDescriptorSet(m_CombineShader->GetDescriptorSet());
 //Modify End
     m_BlitMesh->Draw(commandList);
 }

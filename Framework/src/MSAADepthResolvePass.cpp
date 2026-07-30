@@ -40,7 +40,7 @@ void MSAADepthResolvePass::Resolve(CommandList& commandList, const std::shared_p
 //Modify Begin:2026-07-29 by BestHui
     CommandContext commandContext(commandList);
     commandContext.BindPipeline(m_ComputeShader);
-    commandContext.BindDescriptorSet(m_ComputeShader.GetDescriptorSet(), PipelineBindPoint::Compute);
+    commandContext.BindDescriptorSet(m_ComputeShader.GetDescriptorSet());
     commandContext.Dispatch(
         Math::DivideByMultiple(static_cast<uint32_t>(sourceDesc.Width), THREAD_GROUP_SIZE),
         Math::DivideByMultiple(sourceDesc.Height, THREAD_GROUP_SIZE));

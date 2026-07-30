@@ -48,7 +48,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateSk
             cmd.SetUnorderedAccessView(skyboxShader, "SceneColor", UnorderedAccessView(context.m_ResourcePool->GetTexture(DemoResourceIds::SceneColor)));
             CommandContext commandContext(cmd);
             commandContext.BindPipeline(skyboxShader);
-            commandContext.BindDescriptorSet(skyboxShader.GetDescriptorSet(), PipelineBindPoint::Compute);
+            commandContext.BindDescriptorSet(skyboxShader.GetDescriptorSet());
             commandContext.Dispatch(Math::DivideByMultiple(camera.Width, 8u), Math::DivideByMultiple(camera.Height, 8u), 1u);
             commandContext.InsertDescriptorSetOutputBarriers(skyboxShader.GetDescriptorSet());
 //Modify End

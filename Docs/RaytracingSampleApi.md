@@ -48,7 +48,6 @@ Demo 层不应该直接管理：
 
 - `BindPipeline(...)`
 - `BindDescriptorSet(...)`
-- `BindRayTracingDescriptorSet(...)`
 - `Draw(...)`
 - `Dispatch(...)`
 - `DispatchRays(...)`
@@ -70,7 +69,7 @@ sample pass 中推荐写成：
 CommandContext commandContext(commandList);
 
 commandContext.BindPipeline(shader);
-commandContext.BindDescriptorSet(shader.GetDescriptorSet(), PipelineBindPoint::Compute);
+commandContext.BindDescriptorSet(shader.GetDescriptorSet());
 commandContext.Dispatch(groupX, groupY, groupZ);
 ```
 
@@ -80,7 +79,7 @@ raster pass 推荐写成：
 CommandContext commandContext(commandList);
 
 commandContext.BindPipeline(gBufferShader);
-commandContext.BindDescriptorSet(gBufferShader.GetDescriptorSet(), PipelineBindPoint::Graphics);
+commandContext.BindDescriptorSet(gBufferShader.GetDescriptorSet());
 mesh.Draw(commandList);
 ```
 
@@ -89,7 +88,10 @@ DXR shader-table pass 推荐写成：
 ```cpp
 CommandContext commandContext(commandList);
 
-commandContext.DispatchRays(bindingSet, "DirectLightingRayGen", width, height, 1);
+commandContext.BindPipeline(rayTracingShader);
+commandContext.BindDescriptorSet(bindingSet);
+commandContext.DispatchRays(RayTracingDispatchDesc{ "DirectLightingRayGen", width, height, 1 });
+commandContext.InsertDescriptorSetOutputBarriers(bindingSet);
 ```
 
 不推荐 sample 直接调用：
@@ -156,7 +158,7 @@ commandList.SetTexture(shader, "BaseColor", ShaderResourceView(texture));
 
 CommandContext commandContext(commandList);
 commandContext.BindPipeline(shader);
-commandContext.BindDescriptorSet(shader.GetDescriptorSet(), PipelineBindPoint::Graphics);
+commandContext.BindDescriptorSet(shader.GetDescriptorSet());
 mesh.Draw(commandList);
 ```
 
@@ -179,7 +181,7 @@ shader.SetUnorderedAccessView(commandList, "Output", UnorderedAccessView(output)
 
 CommandContext commandContext(commandList);
 commandContext.BindPipeline(shader);
-commandContext.BindDescriptorSet(shader.GetDescriptorSet(), PipelineBindPoint::Compute);
+commandContext.BindDescriptorSet(shader.GetDescriptorSet());
 commandContext.Dispatch(groupX, groupY, 1);
 ```
 
@@ -197,7 +199,8 @@ DXR shader-table 后端使用：
 - `RayTracingShader`
 - `RayTracingBindingSet`
 - `RayTracingDispatchTables`
-- `CommandContext::BindRayTracingDescriptorSet()`
+- `CommandContext::BindPipeline(const RayTracingShader&)`
+- `CommandContext::BindDescriptorSet(const RayTracingBindingSet&)`
 - `CommandContext::DispatchRays()`
 
 推荐 sample 形态：
@@ -212,8 +215,10 @@ bindingSet.SetStructuredBuffer("Materials", materialBuffer);
 bindingSet.SetOutputTexture("DirectLighting", directLighting);
 
 CommandContext commandContext(commandList);
-commandContext.BindRayTracingDescriptorSet(bindingSet);
-commandContext.DispatchRays(dispatchDesc);
+commandContext.BindPipeline(rayTracingShader);
+commandContext.BindDescriptorSet(bindingSet);
+commandContext.DispatchRays(RayTracingDispatchDesc{ "DirectLightingRayGen", width, height, 1 });
+commandContext.InsertDescriptorSetOutputBarriers(bindingSet);
 ```
 
 DXR 的 shader table 是 DXR 特有结构，负责 raygen / miss / hit group record。它不应该反向决定 demo 的资源组织方式。
@@ -303,7 +308,7 @@ UnitySceneDump.exe "C:\Program Files\Unity\MDR\ModernDeferredRenderer\project\Mo
 - raster / compute / DXR 在 RaytracingDemo 中基本都走 `BindPipeline + BindDescriptorSet + Draw/Dispatch/DispatchRays`。
 - `CommandContext` 的 root signature、PSO、descriptor staging、descriptor pool 绑定入口已经收进 private。
 - `Shader / ComputeShader` 的 `Bind / Unbind / ApplyBindings` 已从新封装删除；RaytracingDemo 不再调用这些入口。
-- DXR sample 不再手动构造 `D3D12_DISPATCH_RAYS_DESC`；`CommandContext::DispatchRays(bindingSet, passName, ...)` 负责准备 shader table dispatch desc、绑定 descriptor set 并提交 `DispatchRays`。
+- DXR sample 不再手动构造 `D3D12_DISPATCH_RAYS_DESC`；推荐路径是 `BindPipeline(rayTracingShader)`、`BindDescriptorSet(bindingSet)`、`DispatchRays(RayTracingDispatchDesc)`。`RayTracingBindingSet` 只表达资源绑定，不再作为 dispatch 入口。
 - 支持 external D3D12 resource / Unity D3D12 device 方向的封装雏形。
 
 仍然缺失或不完整：

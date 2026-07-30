@@ -143,7 +143,7 @@ void Material::Bind(CommandList& commandList)
     CommandContext commandContext(commandList);
     commandContext.BindPipeline(*m_Shader);
     UploadUniforms(commandList);
-    commandContext.BindDescriptorSet(m_Shader->GetDescriptorSet(), PipelineBindPoint::Graphics);
+    commandContext.BindDescriptorSet(m_Shader->GetDescriptorSet());
 //Modify End
 }
 

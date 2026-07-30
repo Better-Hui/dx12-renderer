@@ -53,7 +53,7 @@ void RaytracingDemo::PresentDisplayOutput()
 //Modify Begin:2026-07-29 by BestHui
             CommandContext commandContext(cmd);
             commandContext.BindPipeline(*m_DisplayCompositeShader);
-            commandContext.BindDescriptorSet(m_DisplayCompositeShader->GetDescriptorSet(), PipelineBindPoint::Graphics);
+            commandContext.BindDescriptorSet(m_DisplayCompositeShader->GetDescriptorSet());
 //Modify End
             m_DisplayBlitMesh->Draw(cmd);
         },

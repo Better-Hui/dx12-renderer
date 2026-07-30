@@ -347,7 +347,7 @@ void NRD::PrepareInputs(
 //Modify Begin:2026-07-29 by BestHui
     const CommandContext commandContext(commandList);
     commandContext.BindPipeline(*m_PrepareShader);
-    commandContext.BindDescriptorSet(m_PrepareShader->GetDescriptorSet(), PipelineBindPoint::Compute);
+    commandContext.BindDescriptorSet(m_PrepareShader->GetDescriptorSet());
     commandContext.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
 //Modify End
 }
@@ -580,7 +580,7 @@ void NRD::Composite(
 //Modify Begin:2026-07-29 by BestHui
     const CommandContext commandContext(commandList);
     commandContext.BindPipeline(*m_CompositeShader);
-    commandContext.BindDescriptorSet(m_CompositeShader->GetDescriptorSet(), PipelineBindPoint::Compute);
+    commandContext.BindDescriptorSet(m_CompositeShader->GetDescriptorSet());
     commandContext.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
 //Modify End
 }

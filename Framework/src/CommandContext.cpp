@@ -147,6 +147,7 @@ void CommandContext::SetDescriptorSet(const PipelineBindPoint bindPoint, const P
             ApplyGraphicsBinding(descriptorSet, rootParameterIndex);
             break;
         case PipelineBindPoint::Compute:
+        case PipelineBindPoint::RayTracing:
             ApplyComputeBinding(descriptorSet, rootParameterIndex);
             break;
         default:
@@ -169,6 +170,7 @@ void CommandContext::SetDescriptorSet(const PipelineBindPoint bindPoint, const P
             ApplyGraphicsBinding(descriptorSet, range.RootParameterIndex);
             break;
         case PipelineBindPoint::Compute:
+        case PipelineBindPoint::RayTracing:
             ApplyComputeBinding(descriptorSet, range.RootParameterIndex);
             break;
         default:
@@ -181,6 +183,10 @@ void CommandContext::SetDescriptorSet(const PipelineBindPoint bindPoint, const P
 
 void CommandContext::SetPipeline(Shader& shader) const
 {
+    m_BoundPipelineBindPoint = PipelineBindPoint::Graphics;
+    m_HasBoundPipeline = true;
+    m_BoundRayTracingShader = nullptr;
+
     const auto device = Application::Get().GetDevice();
     const auto& renderTargetState = m_CommandList.GetLastRenderTargetState();
     const auto pipelineState = shader.GetPipelineState(device, renderTargetState);
@@ -200,6 +206,10 @@ void CommandContext::SetPipeline(Shader& shader) const
 
 void CommandContext::SetPipeline(const ComputeShader& shader) const
 {
+    m_BoundPipelineBindPoint = PipelineBindPoint::Compute;
+    m_HasBoundPipeline = true;
+    m_BoundRayTracingShader = nullptr;
+
     const auto device = Application::Get().GetDevice();
     const auto pipelineState = shader.GetPipelineState(device);
 
@@ -217,9 +227,13 @@ void CommandContext::SetPipeline(const ComputeShader& shader) const
 
 void CommandContext::SetPipeline(const RayTracingShader& shader) const
 {
+    m_BoundPipelineBindPoint = PipelineBindPoint::RayTracing;
+    m_HasBoundPipeline = true;
+
     const RayTracingPipelineState& pipelineState = shader.GetPipelineState();
     SetRayTracingPipelineState(pipelineState.GetStateObject(), pipelineState.GetGlobalRootSignature());
-    SetPipelineLayout(PipelineBindPoint::Compute, shader.GetPipelineLayout());
+    SetPipelineLayout(PipelineBindPoint::RayTracing, shader.GetPipelineLayout());
+    m_BoundRayTracingShader = &shader;
 }
 
 void CommandContext::BindPipeline(Shader& shader) const
@@ -237,10 +251,11 @@ void CommandContext::BindPipeline(const RayTracingShader& shader) const
     SetPipeline(shader);
 }
 
-void CommandContext::BindDescriptorSet(const PipelineDescriptorSet& descriptorSet, const PipelineBindPoint bindPoint) const
+void CommandContext::BindDescriptorSet(const PipelineDescriptorSet& descriptorSet) const
 {
 //Modify Begin:2026-07-29 by BestHui
-    SetDescriptorSet(bindPoint, PipelineDescriptorSetBindDesc{ descriptorSet.GetSetIndex(), &descriptorSet });
+    Assert(m_HasBoundPipeline, "A pipeline must be bound before binding a descriptor set.");
+    SetDescriptorSet(m_BoundPipelineBindPoint, PipelineDescriptorSetBindDesc{ descriptorSet.GetSetIndex(), &descriptorSet });
 //Modify End
 }
 
@@ -612,40 +627,38 @@ void CommandContext::Dispatch(const uint32_t numGroupsX, const uint32_t numGroup
     m_CommandList.Dispatch(numGroupsX, numGroupsY, numGroupsZ);
 }
 
-void CommandContext::BindRayTracingDescriptorSet(const RayTracingBindingSet& bindingSet) const
+void CommandContext::BindDescriptorSet(const RayTracingBindingSet& bindingSet) const
 {
 //Modify Begin:2026-07-27 by BestHui
     const RayTracingShader& shader = bindingSet.GetShader();
     const PipelineDescriptorSet& descriptorSet = bindingSet.GetDescriptorSet();
     Assert(descriptorSet.GetAccelerationStructure() != nullptr, "Ray tracing acceleration structure is not bound.");
 
-    SetPipeline(shader);
+    if (m_BoundRayTracingShader != &shader)
+    {
+        SetPipeline(shader);
+    }
 //Modify Begin:2026-07-29 by BestHui
     SetDescriptorPool(bindingSet.GetDescriptorPool());
-    SetDescriptorSet(PipelineBindPoint::Compute, PipelineDescriptorSetBindDesc{ descriptorSet.GetSetIndex(), &descriptorSet });
+    SetDescriptorSet(PipelineBindPoint::RayTracing, PipelineDescriptorSetBindDesc{ descriptorSet.GetSetIndex(), &descriptorSet });
 //Modify End
 //Modify End
 }
 
-void CommandContext::DispatchRays(const D3D12_DISPATCH_RAYS_DESC& dispatchRaysDesc) const
+void CommandContext::DispatchRays(const RayTracingDispatchDesc& dispatchDesc) const
 {
-    m_CommandList.DispatchRays(dispatchRaysDesc);
+    Assert(m_BoundRayTracingShader != nullptr, "Ray tracing pipeline must be bound before DispatchRays.");
+    const D3D12_DISPATCH_RAYS_DESC d3d12DispatchDesc = m_BoundRayTracingShader->BuildDispatchDesc(
+        dispatchDesc.PassName,
+        dispatchDesc.Width,
+        dispatchDesc.Height,
+        dispatchDesc.Depth);
+    m_CommandList.DispatchRays(d3d12DispatchDesc);
 }
 
-//Modify Begin:2026-07-29 by BestHui
-void CommandContext::DispatchRays(
-    const RayTracingBindingSet& bindingSet,
-    const std::string_view passName,
-    const uint32_t width,
-    const uint32_t height,
-    const uint32_t depth) const
+void CommandContext::InsertDescriptorSetOutputBarriers(const RayTracingBindingSet& bindingSet) const
 {
-    const RayTracingShader& shader = bindingSet.GetShader();
-    const D3D12_DISPATCH_RAYS_DESC dispatchDesc = shader.BuildDispatchDesc(passName, width, height, depth);
-    BindRayTracingDescriptorSet(bindingSet);
-    DispatchRays(dispatchDesc);
     InsertDescriptorSetOutputBarriers(bindingSet.GetDescriptorSet());
 }
-//Modify End
 
 //Modify End

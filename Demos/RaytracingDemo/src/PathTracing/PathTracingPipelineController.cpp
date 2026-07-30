@@ -230,6 +230,13 @@ ComputeShader& PathTracingPipelineController::GetLightingCompositeShader() const
     return *m_LightingCompositeShader;
 }
 
+//Modify Begin:2026-07-30 by BestHui
+RayTracingShader& PathTracingPipelineController::GetRayTracingShader() const
+{
+    return *m_RayTracingShader;
+}
+//Modify End
+
 RayTracingBindingSet& PathTracingPipelineController::GetDirectRayTracingBindingSet() const
 {
     return *m_DirectRayTracingBindingSet;
