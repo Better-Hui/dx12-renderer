@@ -7,6 +7,20 @@
 
 struct UnorderedAccessView
 {
+//Modify Begin:2026-07-30 by BestHui
+    explicit UnorderedAccessView(Resource& resource,
+        UINT firstSubresource = 0, UINT numSubresources = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES
+    )
+        : m_Resource(&resource, [](Resource*) {})
+        , m_FirstSubresource(firstSubresource)
+        , m_NumSubresources(numSubresources)
+        , m_IsDescValid(false)
+        , m_Desc{}
+    {
+
+    }
+//Modify End
+
     explicit UnorderedAccessView(const std::shared_ptr<Resource>& resource,
         UINT firstSubresource = 0, UINT numSubresources = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES
     )

@@ -94,14 +94,25 @@ D3D12_UNORDERED_ACCESS_VIEW_DESC DescriptorLayout::CreateNullUnorderedAccessView
 {
     D3D12_UNORDERED_ACCESS_VIEW_DESC desc = {};
 
+//Modify Begin:2026-07-30 by BestHui
+    const bool isRawBuffer = uav.InputType == D3D_SIT_UAV_RWBYTEADDRESS;
+    const bool isStructuredBuffer =
+        uav.InputType == D3D_SIT_UAV_RWSTRUCTURED ||
+        uav.InputType == D3D_SIT_UAV_APPEND_STRUCTURED ||
+        uav.InputType == D3D_SIT_UAV_CONSUME_STRUCTURED ||
+        uav.InputType == D3D_SIT_UAV_RWSTRUCTURED_WITH_COUNTER;
+//Modify End
+
     switch (uav.Dimension)
     {
     case D3D_SRV_DIMENSION_BUFFER:
         desc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
-        desc.Format = uav.InputType == D3D_SIT_BYTEADDRESS ? DXGI_FORMAT_R32_TYPELESS : DXGI_FORMAT_UNKNOWN;
+//Modify Begin:2026-07-30 by BestHui
+        desc.Format = isRawBuffer ? DXGI_FORMAT_R32_TYPELESS : DXGI_FORMAT_UNKNOWN;
         desc.Buffer.NumElements = 1;
-        desc.Buffer.StructureByteStride = uav.InputType == D3D_SIT_STRUCTURED ? sizeof(uint32_t) : 0;
-        desc.Buffer.Flags = uav.InputType == D3D_SIT_BYTEADDRESS ? D3D12_BUFFER_UAV_FLAG_RAW : D3D12_BUFFER_UAV_FLAG_NONE;
+        desc.Buffer.StructureByteStride = isStructuredBuffer ? sizeof(uint32_t) : 0;
+        desc.Buffer.Flags = isRawBuffer ? D3D12_BUFFER_UAV_FLAG_RAW : D3D12_BUFFER_UAV_FLAG_NONE;
+//Modify End
         break;
     case D3D_SRV_DIMENSION_TEXTURE3D:
         desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE3D;

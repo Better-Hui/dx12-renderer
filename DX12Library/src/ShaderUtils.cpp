@@ -178,6 +178,12 @@ std::vector<ShaderUtils::ConstantBufferMetadata> ShaderUtils::GetConstantBuffers
 //Modify Begin:2026-07-23 by BestHui
         D3D12_SHADER_INPUT_BIND_DESC inputBindDesc{};
         HRESULT bindingResult = shaderReflection->GetResourceBindingDescByName(cbufferDesc.Name, &inputBindDesc);
+//Modify Begin:2026-07-30 by BestHui
+        if (SUCCEEDED(bindingResult) && inputBindDesc.Type != D3D_SIT_CBUFFER)
+        {
+            bindingResult = E_FAIL;
+        }
+//Modify End
         if (FAILED(bindingResult))
         {
             bool foundBinding = false;

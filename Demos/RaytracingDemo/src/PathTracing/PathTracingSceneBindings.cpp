@@ -58,10 +58,10 @@ void RaytracingDemoPassAccess::BindInlinePathTracingInputs(
         shader.SetShaderResourceView(cmd, "Geometries", 0u, demo.m_SceneResources.GetGeometryBuffer());
     }
 //Modify Begin:2026-07-30 by BestHui
-    if (shader.HasShaderResourceView("SceneTextures"))
+    if (shader.HasShaderResourceView("BindlessTextures"))
     {
         const std::vector<ShaderResourceView> sceneTextures = demo.m_SceneResources.CreateTextureShaderResourceViews();
-        shader.SetShaderResourceViews(cmd, "SceneTextures", sceneTextures);
+        shader.SetShaderResourceViews(cmd, "BindlessTextures", sceneTextures);
     }
 //Modify End
     demo.m_Lights.BindComputeResources(cmd, shader);
@@ -86,9 +86,9 @@ void RaytracingDemoPassAccess::BindDxrPathTracingInputs(
         shader.SetTexture("DepthTexture", ShaderResourceView::DepthAsFloat(gbuffer.Depth));
     }
 //Modify Begin:2026-07-30 by BestHui
-    if (shader.HasBinding("SceneTextures"))
+    if (shader.HasBinding("BindlessTextures"))
     {
-        shader.SetTextureArray("SceneTextures", demo.m_SceneResources.CreateTextureShaderResourceViews());
+        shader.SetTextureArray("BindlessTextures", demo.m_SceneResources.CreateTextureShaderResourceViews());
     }
 //Modify End
     demo.m_Lights.BindRayTracingResources(shader);

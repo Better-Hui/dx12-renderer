@@ -1,7 +1,6 @@
-#include <ShaderLibrary/Common/RootSignature.hlsli>
 //Modify Begin:2026-07-30 by BestHui
+#include <ShaderLibrary/Common/RootSignature.hlsli>
 #include "../Scene/SceneBindless.hlsli"
-//Modify End
 
 struct PixelShaderInput
 {
@@ -12,12 +11,10 @@ struct PixelShaderInput
     float2 Uv : TEXCOORD0;
     float4 CurrentPositionCs : TEXCOORD1;
     float4 PreviousPositionCs : TEXCOORD2;
-//Modify Begin:2026-07-30 by BestHui
     nointerpolation uint MeshletDebugId : TEXCOORD3;
-//Modify End
-//Modify Begin:2026-07-29 by BestHui
+    nointerpolation uint MaterialIndex : TEXCOORD4;
+    nointerpolation uint DebugMeshletClusters : TEXCOORD5;
     bool IsFrontFace : SV_IsFrontFace;
-//Modify End
 };
 
 struct PixelShaderOutput
@@ -30,40 +27,28 @@ struct PixelShaderOutput
     float2 MotionVector : SV_TARGET5;
 };
 
-cbuffer MaterialCBuffer : register(b2)
+struct MeshletMaterialData
 {
     float4 Diffuse;
     float4 Specular;
     float4 TilingOffset;
-//Modify Begin:2026-07-30 by BestHui
     uint DiffuseTextureIndex;
     uint NormalTextureIndex;
     uint MetallicTextureIndex;
     uint RoughnessTextureIndex;
     uint AmbientOcclusionTextureIndex;
-//Modify End
-    float Metallic;
-    float Roughness;
     uint HasDiffuseMap;
     uint HasNormalMap;
     uint HasMetallicMap;
     uint HasRoughnessMap;
     uint HasAmbientOcclusionMap;
-//Modify Begin:2026-07-30 by BestHui
-    uint PaddingDescriptor0;
-//Modify End
+    float Metallic;
+    float Roughness;
     uint Padding0;
     uint Padding1;
-    uint Padding2;
 };
 
-//Modify Begin:2026-07-30 by BestHui
-cbuffer GBufferDebugCBuffer : register(b3)
-{
-    uint DebugMeshletClusters;
-    uint3 GBufferDebugPadding;
-};
-//Modify End
+StructuredBuffer<MeshletMaterialData> MeshletMaterials : register(t5, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
 
 float3 EncodeNormal(float3 normal)
 {
@@ -75,19 +60,6 @@ float3 UnpackNormal(float3 normal)
     return normal * 2.0f - 1.0f;
 }
 
-float3 ApplyNormalMap(float3 normalWs, float3 tangentWs, float3 bitangentWs, float2 uv)
-{
-    const float3 tangent = normalize(tangentWs);
-    const float3 bitangent = normalize(bitangentWs);
-    const float3 normal = normalize(normalWs);
-    const float3x3 tbn = float3x3(tangent, bitangent, normal);
-//Modify Begin:2026-07-30 by BestHui
-    const float3 normalTs = UnpackNormal(SampleBindlessTexture2D(NormalTextureIndex, g_Common_LinearWrapSampler, uv).xyz);
-//Modify End
-    return normalize(mul(normalTs, tbn));
-}
-
-//Modify Begin:2026-07-30 by BestHui
 float3 HashClusterColor(uint id)
 {
     id ^= id >> 16;
@@ -102,64 +74,59 @@ float3 HashClusterColor(uint id)
         ((id >> 16) & 255u) / 255.0f);
     return lerp(color, float3(1.0f, 1.0f, 1.0f), 0.15f);
 }
-//Modify End
+
+float3 ApplyNormalMap(MeshletMaterialData material, float3 normalWs, float3 tangentWs, float3 bitangentWs, float2 uv)
+{
+    const float3 tangent = normalize(tangentWs);
+    const float3 bitangent = normalize(bitangentWs);
+    const float3 normal = normalize(normalWs);
+    const float3x3 tbn = float3x3(tangent, bitangent, normal);
+    const float3 normalTs = UnpackNormal(SampleBindlessTexture2D(material.NormalTextureIndex, g_Common_LinearWrapSampler, uv).xyz);
+    return normalize(mul(normalTs, tbn));
+}
 
 PixelShaderOutput main(PixelShaderInput IN)
 {
-    PixelShaderOutput OUT;
-
-    const float2 uv = IN.Uv * TilingOffset.xy + TilingOffset.zw;
-//Modify Begin:2026-07-30 by BestHui
-    const float3 sampledDiffuse = HasDiffuseMap != 0u ? SampleBindlessTexture2D(DiffuseTextureIndex, g_Common_LinearWrapSampler, uv).rgb : 1.0f;
-//Modify End
-    const float3 baseColor = Diffuse.rgb * sampledDiffuse;
-//Modify Begin:2026-07-30 by BestHui
-    const float3 outputBaseColor = DebugMeshletClusters != 0u ? HashClusterColor(IN.MeshletDebugId) : baseColor;
-//Modify End
+    const MeshletMaterialData material = MeshletMaterials[IN.MaterialIndex];
+    const float2 uv = IN.Uv * material.TilingOffset.xy + material.TilingOffset.zw;
+    const float3 sampledDiffuse = material.HasDiffuseMap != 0u ? SampleBindlessTexture2D(material.DiffuseTextureIndex, g_Common_LinearWrapSampler, uv).rgb : 1.0f;
+    const float3 baseColor = material.Diffuse.rgb * sampledDiffuse;
+    const float3 outputBaseColor = IN.DebugMeshletClusters != 0u ? HashClusterColor(IN.MeshletDebugId) : baseColor;
 
     float3 normalWs = normalize(IN.NormalWs);
-//Modify Begin:2026-07-29 by BestHui
     if (!IN.IsFrontFace)
     {
         normalWs = -normalWs;
     }
-//Modify End
-    if (HasNormalMap != 0u)
+    if (material.HasNormalMap != 0u)
     {
-        normalWs = ApplyNormalMap(normalWs, IN.TangentWs, IN.BitangentWs, uv);
+        normalWs = ApplyNormalMap(material, normalWs, IN.TangentWs, IN.BitangentWs, uv);
     }
 
-    float metallic = Metallic;
-    if (HasMetallicMap != 0u)
+    float metallic = material.Metallic;
+    if (material.HasMetallicMap != 0u)
     {
-//Modify Begin:2026-07-30 by BestHui
-        metallic *= SampleBindlessTexture2D(MetallicTextureIndex, g_Common_LinearWrapSampler, uv).r;
-//Modify End
+        metallic *= SampleBindlessTexture2D(material.MetallicTextureIndex, g_Common_LinearWrapSampler, uv).r;
     }
 
-    float roughness = Roughness;
-    if (HasRoughnessMap != 0u)
+    float roughness = material.Roughness;
+    if (material.HasRoughnessMap != 0u)
     {
-//Modify Begin:2026-07-30 by BestHui
-        roughness *= SampleBindlessTexture2D(RoughnessTextureIndex, g_Common_LinearWrapSampler, uv).r;
-//Modify End
+        roughness *= SampleBindlessTexture2D(material.RoughnessTextureIndex, g_Common_LinearWrapSampler, uv).r;
     }
 
     float ambientOcclusion = 1.0f;
-    if (HasAmbientOcclusionMap != 0u)
+    if (material.HasAmbientOcclusionMap != 0u)
     {
-//Modify Begin:2026-07-30 by BestHui
-        ambientOcclusion *= SampleBindlessTexture2D(AmbientOcclusionTextureIndex, g_Common_LinearWrapSampler, uv).r;
-//Modify End
+        ambientOcclusion *= SampleBindlessTexture2D(material.AmbientOcclusionTextureIndex, g_Common_LinearWrapSampler, uv).r;
     }
 
     metallic = saturate(metallic);
     roughness = saturate(roughness);
-//Modify Begin:2026-07-30 by BestHui
-    const float3 specularColor = lerp(Specular.rgb, outputBaseColor, metallic);
+    const float3 specularColor = lerp(material.Specular.rgb, outputBaseColor, metallic);
 
+    PixelShaderOutput OUT;
     OUT.AlbedoOcclusion = float4(outputBaseColor, ambientOcclusion);
-//Modify End
     OUT.SpecularSmoothness = float4(specularColor, 1.0f - roughness);
     OUT.Normal = float4(EncodeNormal(normalWs), 1.0f);
     OUT.EmissionMetallic = float4(0.0f, 0.0f, 0.0f, metallic);
@@ -175,6 +142,6 @@ PixelShaderOutput main(PixelShaderInput IN)
     const float2 currentUv = currentNdc * float2(0.5f, -0.5f) + 0.5f;
     const float2 previousUv = previousNdc * float2(0.5f, -0.5f) + 0.5f;
     OUT.MotionVector = previousUv - currentUv;
-
     return OUT;
 }
+//Modify End

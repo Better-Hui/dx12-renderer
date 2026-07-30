@@ -11,6 +11,7 @@
 #include <Framework/Geometry/Model.h>
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
 //Modify Begin:2026-07-30 by BestHui
+#include <Framework/Rendering/Pipeline/IndirectDrawCommandSignature.h>
 #include <Framework/Rendering/Pipeline/MeshShader.h>
 //Modify End
 #include <Framework/Rendering/RayTracing/RayTracingShader.h>
@@ -97,6 +98,13 @@ private:
         DirectX::XMMATRIX InverseProjection = DirectX::XMMatrixIdentity();
         DirectX::XMFLOAT2 ScreenResolution = { 1.0f, 1.0f };
         DirectX::XMFLOAT2 ScreenTexelSize = { 1.0f, 1.0f };
+//Modify Begin:2026-07-30 by BestHui
+        DirectX::XMMATRIX PreviousViewProjection = DirectX::XMMatrixIdentity();
+        uint32_t DebugMeshletClusters = 0;
+        uint32_t PipelinePadding0 = 0;
+        uint32_t PipelinePadding1 = 0;
+        uint32_t PipelinePadding2 = 0;
+//Modify End
     };
 
     struct ModelConstants
@@ -226,6 +234,9 @@ private:
 //Modify End
     std::shared_ptr<Shader> m_GBufferShader;
 //Modify Begin:2026-07-30 by BestHui
+    std::shared_ptr<Shader> m_GBufferMeshletIndirectShader;
+    std::shared_ptr<ComputeShader> m_MeshletCullShader;
+    std::unique_ptr<IndirectDrawCommandSignature> m_MeshletDrawCommandSignature;
     std::shared_ptr<MeshShader> m_GBufferMeshShader;
 //Modify End
 //Modify Begin:2026-07-28 by BestHui

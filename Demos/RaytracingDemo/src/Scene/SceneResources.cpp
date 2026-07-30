@@ -223,6 +223,9 @@ RaytracingDemoSceneResources::RaytracingDemoSceneResources()
     , m_MeshletVertexBuffer(L"RaytracingDemo Meshlet Vertices")
     , m_MeshletIndexBuffer(L"RaytracingDemo Meshlet Indices")
     , m_MeshletBuffer(L"RaytracingDemo Meshlets")
+    , m_MeshletTransformBuffer(L"RaytracingDemo Meshlet Transforms")
+    , m_MeshletInstanceBuffer(L"RaytracingDemo Meshlet Instances")
+    , m_MeshletIndirectCommandBuffer(L"RaytracingDemo Meshlet Indirect Commands")
 //Modify End
 {
 }
@@ -238,10 +241,15 @@ void RaytracingDemoSceneResources::Clear()
     m_MeshletVertexBuffer = StructuredBuffer(L"RaytracingDemo Meshlet Vertices");
     m_MeshletIndexBuffer = ByteAddressBuffer(L"RaytracingDemo Meshlet Indices");
     m_MeshletBuffer = StructuredBuffer(L"RaytracingDemo Meshlets");
+    m_MeshletTransformBuffer = StructuredBuffer(L"RaytracingDemo Meshlet Transforms");
+    m_MeshletInstanceBuffer = StructuredBuffer(L"RaytracingDemo Meshlet Instances");
+    m_MeshletIndirectCommandBuffer = StructuredBuffer(L"RaytracingDemo Meshlet Indirect Commands");
     m_MeshletVertices.clear();
     m_MeshletIndices.clear();
     m_Meshlets.clear();
     m_MeshletDraws.clear();
+    m_MeshletTransforms.clear();
+    m_MeshletInstances.clear();
 //Modify End
     m_SceneObjects.clear();
     m_Materials.clear();
@@ -658,12 +666,54 @@ void RaytracingDemoSceneResources::UploadMeshletBuffers(CommandList& commandList
         return;
     }
 
+    BuildMeshletInstances();
+    if (m_MeshletInstances.empty())
+    {
+        return;
+    }
+
     commandList.CopyStructuredBuffer(m_MeshletVertexBuffer, m_MeshletVertices);
     commandList.CopyByteAddressBuffer(
         m_MeshletIndexBuffer,
         m_MeshletIndices.size() * sizeof(uint16_t),
         m_MeshletIndices.data());
     commandList.CopyStructuredBuffer(m_MeshletBuffer, m_Meshlets);
+    commandList.CopyStructuredBuffer(m_MeshletTransformBuffer, m_MeshletTransforms);
+    commandList.CopyStructuredBuffer(m_MeshletInstanceBuffer, m_MeshletInstances);
+
+    const D3D12_RESOURCE_DESC commandBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(
+        sizeof(RaytracingDemoMeshletIndirectCommand) * m_MeshletInstances.size(),
+        D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+    m_MeshletIndirectCommandBuffer = StructuredBuffer(
+        commandBufferDesc,
+        m_MeshletInstances.size(),
+        sizeof(RaytracingDemoMeshletIndirectCommand),
+        L"RaytracingDemo Meshlet Indirect Commands");
+}
+
+void RaytracingDemoSceneResources::BuildMeshletInstances()
+{
+    m_MeshletTransforms.clear();
+    m_MeshletInstances.clear();
+    m_MeshletTransforms.reserve(m_MeshletDraws.size());
+
+    for (const RaytracingDemoMeshletDraw& draw : m_MeshletDraws)
+    {
+        RaytracingDemoMeshletTransformData transform;
+        transform.Model = draw.WorldMatrix;
+        transform.InverseTransposeModel = XMMatrixTranspose(XMMatrixInverse(nullptr, draw.WorldMatrix));
+        const uint32_t transformIndex = static_cast<uint32_t>(m_MeshletTransforms.size());
+        m_MeshletTransforms.push_back(transform);
+
+        for (uint32_t meshletIndex = 0; meshletIndex < draw.MeshletCount; ++meshletIndex)
+        {
+            RaytracingDemoMeshletInstanceData instance;
+            instance.MeshletIndex = draw.MeshletOffset + meshletIndex;
+            instance.TransformIndex = transformIndex;
+            instance.MaterialIndex = draw.MaterialIndex;
+            m_MeshletInstances.push_back(instance);
+        }
+    }
 }
 //Modify End
 

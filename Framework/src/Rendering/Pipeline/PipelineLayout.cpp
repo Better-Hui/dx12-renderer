@@ -6,6 +6,7 @@
 #include <d3dx12.h>
 
 #include <algorithm>
+#include <sstream>
 #include <utility>
 
 #if defined(min)
@@ -148,6 +149,41 @@ namespace
     bool IsRootParameterWritten(const std::vector<bool>& writtenRootParameters, const UINT rootParameterIndex)
     {
         return rootParameterIndex < writtenRootParameters.size() && writtenRootParameters[rootParameterIndex];
+    }
+
+    const char* ToString(const DescriptorBindingKind kind)
+    {
+        switch (kind)
+        {
+        case DescriptorBindingKind::ConstantBuffer:
+            return "CBV";
+        case DescriptorBindingKind::ShaderResourceView:
+            return "SRV";
+        case DescriptorBindingKind::UnorderedAccessView:
+            return "UAV";
+        case DescriptorBindingKind::AccelerationStructure:
+            return "AccelerationStructure";
+        default:
+            return "Unknown";
+        }
+    }
+
+    std::string DescribePipelineLayout(const PipelineLayoutDesc& desc)
+    {
+        std::ostringstream stream;
+        stream << " PipelineLayout ranges:";
+        for (const PipelineDescriptorRangeDesc& range : desc.DescriptorRanges)
+        {
+            stream << " [root=" << range.RootParameterIndex
+                << ", name=" << range.Name
+                << ", kind=" << ToString(range.Kind)
+                << ", reg=" << range.ShaderRegister
+                << ", space=" << range.RegisterSpace
+                << ", count=" << range.DescriptorCount
+                << ", mode=" << (range.BindingMode == PipelineDescriptorBindingMode::RootDescriptor ? "root" : "table")
+                << "]";
+        }
+        return stream.str();
     }
 
     UINT GetRootParameterCount(const PipelineLayoutDesc& desc)
@@ -465,7 +501,14 @@ std::shared_ptr<RootSignature> PipelineLayout::CreateRootSignature(const Pipelin
     rootSignatureDesc.pStaticSamplers = staticSamplers.data();
     rootSignatureDesc.Flags = buildDesc.Flags;
 
-    return std::make_shared<RootSignature>(rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1_1);
+    try
+    {
+        return std::make_shared<RootSignature>(rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1_1);
+    }
+    catch (const std::exception& exception)
+    {
+        throw std::runtime_error(std::string(exception.what()) + DescribePipelineLayout(m_Desc));
+    }
 }
 //Modify End
 

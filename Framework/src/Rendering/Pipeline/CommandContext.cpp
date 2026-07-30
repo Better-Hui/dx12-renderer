@@ -12,6 +12,7 @@
 //Modify End
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
 //Modify Begin:2026-07-30 by BestHui
+#include <Framework/Rendering/Pipeline/IndirectDrawCommandSignature.h>
 #include <Framework/Rendering/Pipeline/MeshShader.h>
 //Modify End
 #include <Framework/Rendering/Pipeline/PipelineDescriptorPool.h>
@@ -702,6 +703,39 @@ void CommandContext::DrawIndexed(
 //Modify End
 
 //Modify Begin:2026-07-30 by BestHui
+void CommandContext::DrawIndirect(
+    const IndirectDrawCommandSignature& commandSignature,
+    const uint32_t maxCommandCount,
+    StructuredBuffer& commandsBuffer) const
+{
+    if (commandsBuffer.AreAutoBarriersEnabled())
+    {
+        m_CommandList.TransitionBarrier(commandsBuffer, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+        m_CommandList.TransitionBarrier(commandsBuffer.GetCounterBuffer(), D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+    }
+
+    if (m_DescriptorAllocator.HasBindlessDescriptorHeap())
+    {
+        m_CommandList.FlushResourceBarriers();
+        m_CommandList.GetGraphicsCommandList()->ExecuteIndirect(
+            commandSignature.GetD3D12CommandSignature().Get(),
+            maxCommandCount,
+            commandsBuffer.GetD3D12Resource().Get(),
+            0,
+            commandsBuffer.GetCounterBuffer().GetD3D12Resource().Get(),
+            0);
+        return;
+    }
+
+    m_CommandList.DrawIndirect(
+        commandSignature.GetD3D12CommandSignature(),
+        maxCommandCount,
+        commandsBuffer.GetD3D12Resource(),
+        0,
+        commandsBuffer.GetCounterBuffer().GetD3D12Resource(),
+        0);
+}
+
 void CommandContext::DispatchMesh(const uint32_t numGroupsX, const uint32_t numGroupsY, const uint32_t numGroupsZ) const
 {
     if (m_DescriptorAllocator.HasBindlessDescriptorHeap())

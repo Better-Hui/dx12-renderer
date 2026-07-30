@@ -295,6 +295,22 @@ bool RaytracingDemo::LoadContent()
     m_DisplayBlitMesh = Mesh::CreateBlitTriangle(*commandList);
 //Modify End
 
+//Modify Begin:2026-07-30 by BestHui
+    const auto withShaderCreateContext = [](const char* name, const auto& createShader)
+    {
+        try
+        {
+            createShader();
+        }
+        catch (const std::exception& exception)
+        {
+            throw std::runtime_error(std::string("Failed to create shader pipeline '") + name + "': " + exception.what());
+        }
+    };
+
+    withShaderCreateContext("GBuffer", [&]()
+    {
+//Modify End
     m_GBufferShader = std::make_shared<Shader>(
         ShaderBlob(L"GBuffer.vs.cso"),
         ShaderBlob(L"GBuffer.ps.cso"),
@@ -302,8 +318,13 @@ bool RaytracingDemo::LoadContent()
         {
             builder.WithNoCull();
         });
+//Modify Begin:2026-07-30 by BestHui
+    });
+//Modify End
 
 //Modify Begin:2026-07-30 by BestHui
+    withShaderCreateContext("GBufferMeshShader", [&]()
+    {
     m_GBufferMeshShader = std::make_shared<MeshShader>(
         ShaderBlob(L"GBuffer.ms.cso"),
         ShaderBlob(L"GBuffer.ps.cso"),
@@ -311,22 +332,51 @@ bool RaytracingDemo::LoadContent()
         {
             builder.WithNoCull();
         });
+    });
+
+    withShaderCreateContext("GBufferMeshletIndirect", [&]()
+    {
+    m_GBufferMeshletIndirectShader = std::make_shared<Shader>(
+        ShaderBlob(L"GBuffer.meshletindirect.vs.cso"),
+        ShaderBlob(L"GBuffer.meshletindirect.ps.cso"),
+        [](RasterPipelineStateBuilder& builder)
+        {
+            builder.WithNoCull();
+        });
+    });
+
+    withShaderCreateContext("MeshletCull", [&]()
+    {
+    const ShaderBlob meshletCullShaderBlob(L"MeshletCull.cs.cso");
+    m_MeshletCullShader = std::make_shared<ComputeShader>(
+        meshletCullShaderBlob,
+        ComputePipelineDescBuilder::ReflectedDefault(meshletCullShaderBlob).Build());
+    m_MeshletDrawCommandSignature = std::make_unique<IndirectDrawCommandSignature>();
+    });
 //Modify End
 
 //Modify Begin:2026-07-28 by BestHui
+    withShaderCreateContext("DisplayComposite", [&]()
+    {
     m_DisplayCompositeShader = std::make_shared<Shader>(
         ShaderBlob(L"DisplayComposite.vs.cso"),
         ShaderBlob(L"DisplayComposite.ps.cso"),
         [](RasterPipelineStateBuilder&) {});
+    });
 //Modify End
 
 //Modify Begin:2026-07-28 by BestHui
+    withShaderCreateContext("SkyboxCompute", [&]()
+    {
     const ShaderBlob skyboxComputeShader(L"Skybox.cs.cso");
     m_SkyboxComputeShader = std::make_shared<ComputeShader>(
         skyboxComputeShader,
         ComputePipelineDescBuilder::ReflectedDefault(skyboxComputeShader).Build());
+    });
 //Modify End
 
+    withShaderCreateContext("LightBillboard", [&]()
+    {
     m_LightBillboardShader = std::make_shared<Shader>(
         ShaderBlob(L"LightBillboard.vs.cso"),
         ShaderBlob(L"LightBillboard.ps.cso"),
@@ -334,6 +384,7 @@ bool RaytracingDemo::LoadContent()
         {
             builder.WithAlphaBlend().WithDepthTestNoWrite().WithNoCull();
         });
+    });
 
     m_Denoisers.Initialize();
     if (IsDenoiserEnabled())
@@ -375,6 +426,9 @@ void RaytracingDemo::UnloadContent()
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
     m_GBufferMeshShader.reset();
+    m_GBufferMeshletIndirectShader.reset();
+    m_MeshletCullShader.reset();
+    m_MeshletDrawCommandSignature.reset();
 //Modify End
     m_GBufferShader.reset();
     m_LightBillboardMesh.reset();
@@ -462,6 +516,10 @@ RaytracingDemo::PipelineConstants RaytracingDemo::BuildPipelineConstants() const
     pipeline.InverseProjection = XMMatrixInverse(nullptr, pipeline.Projection);
     pipeline.ScreenResolution = { static_cast<float>(m_Width), static_cast<float>(m_Height) };
     pipeline.ScreenTexelSize = { 1.0f / pipeline.ScreenResolution.x, 1.0f / pipeline.ScreenResolution.y };
+//Modify Begin:2026-07-30 by BestHui
+    pipeline.PreviousViewProjection = m_HasPreviousViewProjection ? m_PreviousViewProjection : pipeline.ViewProjection;
+    pipeline.DebugMeshletClusters = m_DebugMeshletClusters ? 1u : 0u;
+//Modify End
     return pipeline;
 }
 

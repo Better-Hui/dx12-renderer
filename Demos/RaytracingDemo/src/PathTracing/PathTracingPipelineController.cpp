@@ -148,11 +148,17 @@ void PathTracingPipelineController::CreateInlinePipelines(const RayTracingSceneR
 {
     const std::shared_ptr<ShaderBlob> inlineDirectLightingShader = LoadShader(L"DirectLighting.cs.cso", "cs_6_6");
     const ComputePipelineDesc inlineDirectLightingDesc = ComputePipelineDescBuilder::ReflectedDefault(*inlineDirectLightingShader)
+//Modify Begin:2026-07-30 by BestHui
+        .WithDirectlyIndexedResourceHeap()
+//Modify End
         .Build();
     m_InlineDirectLightingShader = std::make_unique<ComputeShader>(*inlineDirectLightingShader, inlineDirectLightingDesc);
 
     const std::shared_ptr<ShaderBlob> inlineIndirectLightingShader = LoadShader(L"IndirectLighting.cs.cso", "cs_6_6");
     const ComputePipelineDesc inlineIndirectLightingDesc = ComputePipelineDescBuilder::ReflectedDefault(*inlineIndirectLightingShader)
+//Modify Begin:2026-07-30 by BestHui
+        .WithDirectlyIndexedResourceHeap()
+//Modify End
         .Build();
     m_InlineIndirectLightingShader = std::make_unique<ComputeShader>(*inlineIndirectLightingShader, inlineIndirectLightingDesc);
 

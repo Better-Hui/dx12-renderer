@@ -74,6 +74,7 @@ list(APPEND SHADERS_HEADER_FILES ${SHADER_FILES_MESH})
 # Modify Begin:2026-07-28 by BestHui
 set(SHADER_FILES_VERTEX
         shaders/GBuffer/GBuffer.vs.hlsl
+        shaders/GBuffer/GBuffer.meshletindirect.vs.hlsl
         shaders/PostProcessing/DisplayComposite.vs.hlsl
         shaders/LightBillboard/LightBillboard.vs.hlsl
         shaders/Skybox/Skybox.vs.hlsl
@@ -81,6 +82,7 @@ set(SHADER_FILES_VERTEX
 
 set(SHADER_FILES_PIXEL
         shaders/GBuffer/GBuffer.ps.hlsl
+        shaders/GBuffer/GBuffer.meshletindirect.ps.hlsl
         shaders/PostProcessing/DisplayComposite.ps.hlsl
         shaders/LightBillboard/LightBillboard.ps.hlsl
         shaders/Skybox/Skybox.ps.hlsl
@@ -88,6 +90,7 @@ set(SHADER_FILES_PIXEL
 # Modify End
 
 set(SHADER_FILES_COMPUTE
+        shaders/GBuffer/MeshletCull.cs.hlsl
         shaders/PathTracing/DirectLighting.cs.hlsl
         shaders/PathTracing/IndirectLighting.cs.hlsl
         shaders/PathTracing/LightingComposite.cs.hlsl

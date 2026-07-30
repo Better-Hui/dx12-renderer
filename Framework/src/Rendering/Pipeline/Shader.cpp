@@ -2,6 +2,9 @@
 #include <DX12Library/Helpers.h>
 #include <DX12Library/ShaderUtils.h>
 #include <DX12Library/Application.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <DX12Library/StructuredBuffer.h>
+//Modify End
 
 //Modify Begin:2026-07-24 by BestHui
 #include <algorithm>
@@ -155,6 +158,18 @@ void Shader::SetShaderResourceViews(CommandList& commandList, const std::string&
 {
     (void)commandList;
     m_DescriptorSet->SetShaderResourceViews(variableName, shaderResourceViews);
+}
+
+void Shader::SetShaderResource(CommandList& commandList, const std::string& variableName, const Resource& resource)
+{
+    (void)commandList;
+    m_DescriptorSet->SetShaderResource(variableName, 0u, resource, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+}
+
+void Shader::SetStructuredBuffer(CommandList& commandList, const std::string& variableName, const StructuredBuffer& buffer)
+{
+    (void)commandList;
+    m_DescriptorSet->SetStructuredBuffer(variableName, buffer);
 }
 //Modify End
 

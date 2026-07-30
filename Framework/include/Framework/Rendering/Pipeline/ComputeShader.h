@@ -33,6 +33,7 @@
 //Modify End
 
 class CommandContext;
+class StructuredBuffer;
 
 //Modify Begin:2026-07-23 by BestHui
 struct ComputePipelineDesc
@@ -45,6 +46,9 @@ struct ComputePipelineDesc
 
     std::vector<BindingOverride> BindingOverrides;
     UINT MaxDescriptorCount = 1024;
+//Modify Begin:2026-07-30 by BestHui
+    D3D12_ROOT_SIGNATURE_FLAGS RootSignatureFlags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+//Modify End
 };
 
 class ComputePipelineDescBuilder
@@ -54,6 +58,10 @@ public:
 
     ComputePipelineDescBuilder& WithDescriptorArrayCount(std::string name, UINT descriptorCount);
     ComputePipelineDescBuilder& WithMaxDescriptorCount(UINT maxDescriptorCount);
+//Modify Begin:2026-07-30 by BestHui
+    ComputePipelineDescBuilder& WithRootSignatureFlags(D3D12_ROOT_SIGNATURE_FLAGS flags);
+    ComputePipelineDescBuilder& WithDirectlyIndexedResourceHeap();
+//Modify End
 
     ComputePipelineDesc Build() const;
 
@@ -84,6 +92,9 @@ public:
     void SetShaderResourceView(CommandList& commandList, const std::string& variableName, UINT arrayIndex, const ShaderResourceView& shaderResourceView) const;
     void SetShaderResourceView(CommandList& commandList, const std::string& variableName, UINT arrayIndex, const Resource& resource, D3D12_RESOURCE_STATES stateAfter = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE) const;
     void SetShaderResourceViews(CommandList& commandList, const std::string& variableName, std::span<const ShaderResourceView> shaderResourceViews) const;
+//Modify Begin:2026-07-30 by BestHui
+    void SetStructuredBuffer(CommandList& commandList, const std::string& variableName, const StructuredBuffer& buffer) const;
+//Modify End
     void SetTexture(CommandList& commandList, const std::string& variableName, const ShaderResourceView& shaderResourceView) const;
     void SetTexture(CommandList& commandList, const std::string& variableName, const std::shared_ptr<Resource>& texture) const;
 

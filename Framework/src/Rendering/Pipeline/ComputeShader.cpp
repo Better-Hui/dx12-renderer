@@ -2,6 +2,7 @@
 #include <DX12Library/Helpers.h>
 #include <DX12Library/ShaderUtils.h>
 #include <DX12Library/Application.h>
+#include <DX12Library/StructuredBuffer.h>
 #include <Framework/Rendering/RayTracing/RayTracingAccelerationStructure.h>
 
 #include <algorithm>
@@ -42,6 +43,21 @@ ComputePipelineDescBuilder& ComputePipelineDescBuilder::WithMaxDescriptorCount(U
     m_Desc.MaxDescriptorCount = maxDescriptorCount;
     return *this;
 }
+
+//Modify Begin:2026-07-30 by BestHui
+ComputePipelineDescBuilder& ComputePipelineDescBuilder::WithRootSignatureFlags(D3D12_ROOT_SIGNATURE_FLAGS flags)
+{
+    m_Desc.RootSignatureFlags = flags;
+    return *this;
+}
+
+ComputePipelineDescBuilder& ComputePipelineDescBuilder::WithDirectlyIndexedResourceHeap()
+{
+    m_Desc.RootSignatureFlags = static_cast<D3D12_ROOT_SIGNATURE_FLAGS>(
+        m_Desc.RootSignatureFlags | D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED);
+    return *this;
+}
+//Modify End
 
 ComputePipelineDesc ComputePipelineDescBuilder::Build() const
 {
@@ -121,6 +137,12 @@ void ComputeShader::SetShaderResourceViews(CommandList& commandList, const std::
     (void)commandList;
     m_DescriptorSet->SetShaderResourceViews(variableName, shaderResourceViews);
 }
+
+void ComputeShader::SetStructuredBuffer(CommandList& commandList, const std::string& variableName, const StructuredBuffer& buffer) const
+{
+    (void)commandList;
+    m_DescriptorSet->SetStructuredBuffer(variableName, buffer);
+}
 //Modify End
 
 void ComputeShader::SetUnorderedAccessView(CommandList& commandList, const std::string& variableName, const UnorderedAccessView& unorderedAccessView) const
@@ -195,7 +217,7 @@ void ComputeShader::BuildReflectedRootSignature(const ComputePipelineDesc& desc)
 
     PipelineRootSignatureBuildDesc rootSignatureBuildDesc;
 //Modify Begin:2026-07-30 by BestHui
-    rootSignatureBuildDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED;
+    rootSignatureBuildDesc.Flags = desc.RootSignatureFlags;
 //Modify End
     m_RootSignature = m_PipelineLayout->CreateRootSignature(rootSignatureBuildDesc);
     m_PipelineLayout->SetRootSignature(m_RootSignature);

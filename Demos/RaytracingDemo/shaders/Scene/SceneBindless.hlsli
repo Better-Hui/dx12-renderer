@@ -5,13 +5,13 @@
 #include "SceneGeometry.hlsli"
 
 //Modify Begin:2026-07-30 by BestHui
-Texture2D<float4> SceneTextures[] : register(t31, space0);
+Texture2D<float4> BindlessTextures[] : register(t31, space0);
 //Modify End
 
 float4 SampleBindlessTexture2D(uint descriptorIndex, SamplerState textureSampler, float2 uv)
 {
 //Modify Begin:2026-07-30 by BestHui
-    Texture2D<float4> texture = SceneTextures[NonUniformResourceIndex(descriptorIndex)];
+    Texture2D<float4> texture = BindlessTextures[NonUniformResourceIndex(descriptorIndex)];
 //Modify End
     return texture.Sample(textureSampler, uv);
 }
@@ -19,7 +19,7 @@ float4 SampleBindlessTexture2D(uint descriptorIndex, SamplerState textureSampler
 float4 SampleBindlessTexture2DLevel(uint descriptorIndex, SamplerState textureSampler, float2 uv, float mipLevel)
 {
 //Modify Begin:2026-07-30 by BestHui
-    Texture2D<float4> texture = SceneTextures[NonUniformResourceIndex(descriptorIndex)];
+    Texture2D<float4> texture = BindlessTextures[NonUniformResourceIndex(descriptorIndex)];
 //Modify End
     return texture.SampleLevel(textureSampler, uv, mipLevel);
 }
