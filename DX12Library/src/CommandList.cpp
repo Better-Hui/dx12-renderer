@@ -189,6 +189,9 @@ void CommandList::CopyBuffer(Buffer& buffer, const size_t numElements, const siz
         throw std::exception();
     }
     const auto desc = buffer.GetD3D12ResourceDesc();
+//Modify Begin:2026-07-30 by BestHui
+    const ComPtr<ID3D12Resource> previousResource = buffer.GetD3D12Resource();
+//Modify End
 
     // see if need to create a new resource
     if (buffer.GetD3D12Resource() == nullptr || desc.Width < bufferSize || desc.Flags != flags)
@@ -240,6 +243,12 @@ void CommandList::CopyBuffer(Buffer& buffer, const size_t numElements, const siz
         TrackObject(uploadResource);
     }
     TrackObject(d3d12Resource);
+//Modify Begin:2026-07-30 by BestHui
+    if (previousResource != nullptr && previousResource.Get() != d3d12Resource.Get())
+    {
+        TrackObject(previousResource);
+    }
+//Modify End
 
     buffer.SetD3D12Resource(d3d12Resource);
     buffer.CreateViews(numElements, elementSize);

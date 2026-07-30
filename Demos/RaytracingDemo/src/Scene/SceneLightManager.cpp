@@ -1,7 +1,6 @@
 //Modify Begin:2026-07-27 by BestHui
 #include <Scene/SceneLightManager.h>
 
-#include <DX12Library/Application.h>
 #include <DX12Library/CommandList.h>
 #include <DX12Library/Helpers.h>
 
@@ -82,14 +81,6 @@ namespace
         if (values.size() <= currentCapacity)
         {
             return false;
-        }
-
-        if (buffer.GetD3D12Resource() != nullptr)
-        {
-//Modify Begin:2026-07-30 by BestHui
-            Application::Get().Flush();
-//Modify End
-            commandList.TrackResource(buffer);
         }
 
         currentCapacity = GrowLightBufferCapacity(currentCapacity, values.size());
