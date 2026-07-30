@@ -1,9 +1,9 @@
 #include <RaytracingDemo.h>
 
 #include <DX12Library/CommandList.h>
-#include <Framework/CommandContext.h>
-#include <Framework/ImGuiImpl.h>
-#include <Framework/Mesh.h>
+#include <Framework/Rendering/Pipeline/CommandContext.h>
+#include <Framework/UI/ImGuiImpl.h>
+#include <Framework/Geometry/Mesh.h>
 
 #include <algorithm>
 

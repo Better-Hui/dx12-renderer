@@ -1,8 +1,8 @@
 //Modify Begin:2026-07-27 by BestHui
 #pragma once
 
-#include <Framework/NRD.h>
-#include <Framework/SVGF.h>
+#include <Framework/Rendering/Denoising/NRD.h>
+#include <Framework/Rendering/Denoising/SVGF.h>
 #include <RenderGraph/RaytracingDemoGraphResources.h>
 
 #include <DirectXMath.h>

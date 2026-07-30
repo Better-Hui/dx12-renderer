@@ -3,9 +3,9 @@
 
 #include <DX12Library/StructuredBuffer.h>
 
-#include <Framework/Light.h>
-#include <Framework/Scene.h>
-#include <Framework/SharedUploadBuffer.h>
+#include <Framework/Scene/Light.h>
+#include <Framework/Scene/Scene.h>
+#include <Framework/Rendering/Pipeline/SharedUploadBuffer.h>
 
 #include <Scene/SceneLighting.h>
 

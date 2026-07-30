@@ -3,9 +3,9 @@
 
 #include <DX12Library/Application.h>
 #include <DX12Library/Window.h>
-#include <Framework/RayTracingAccelerationStructure.h>
-#include <Framework/ShaderBlob.h>
-#include <Framework/ShaderResourceView.h>
+#include <Framework/Rendering/RayTracing/RayTracingAccelerationStructure.h>
+#include <Framework/Rendering/Pipeline/ShaderBlob.h>
+#include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <Scene/SceneLightManager.h>
 #include <Scene/SceneResources.h>
 

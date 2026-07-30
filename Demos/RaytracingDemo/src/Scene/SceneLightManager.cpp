@@ -4,9 +4,9 @@
 #include <DX12Library/CommandList.h>
 #include <DX12Library/Helpers.h>
 
-#include <Framework/ComputeShader.h>
-#include <Framework/RayTracingShader.h>
-#include <Framework/ShaderResourceView.h>
+#include <Framework/Rendering/Pipeline/ComputeShader.h>
+#include <Framework/Rendering/RayTracing/RayTracingShader.h>
+#include <Framework/Rendering/Texture/ShaderResourceView.h>
 
 #include <DirectXMath.h>
 #include <imgui.h>

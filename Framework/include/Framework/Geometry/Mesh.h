@@ -1,0 +1,207 @@
+#pragma once
+
+/*
+ *  Copyright(c) 2018 Jeremiah van Oosten
+ *
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ *  of this software and associated documentation files(the "Software"), to deal
+ *  in the Software without restriction, including without limitation the rights
+ *  to use, copy, modify, merge, publish, distribute, sublicense, and / or sell
+ *  copies of the Software, and to permit persons to whom the Software is
+ *  furnished to do so, subject to the following conditions :
+ *
+ *  The above copyright notice and this permission notice shall be included in
+ *  all copies or substantial portions of the Software.
+ *
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE
+ *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ *  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ *  IN THE SOFTWARE.
+ */
+
+/**
+ *  @file Mesh.h
+ *  @date October 24, 2018
+ *  @author Jeremiah van Oosten
+ *
+ *  @brief A mesh class encapsulates the index and vertex buffers for a geometric primitive.
+ */
+
+#include <DX12Library/CommandList.h>
+#include <DX12Library/VertexBuffer.h>
+#include <DX12Library/IndexBuffer.h>
+
+#include <DirectXMath.h>
+#include <d3d12.h>
+
+#include <wrl.h>
+
+#include <memory> // For std::unique_ptr
+#include <vector>
+#include <map>
+#include <string>
+
+#include <Framework/Geometry/Aabb.h>
+#include <Framework/Geometry/Armature.h>
+#include <Framework/Geometry/Bone.h>
+
+struct Bone;
+
+struct VertexAttributes
+{
+    VertexAttributes()
+        : Position()
+        , Normal()
+        , Uv()
+    { }
+
+    VertexAttributes(const DirectX::XMFLOAT3& position, const DirectX::XMFLOAT3& normal,
+        const DirectX::XMFLOAT2& textureCoordinate)
+        : Position(ExtendPosition(position))
+        , Normal(ExtendVector(normal))
+        , Uv(Extend(textureCoordinate))
+    { }
+
+    VertexAttributes(const DirectX::XMFLOAT3& position, const DirectX::XMFLOAT3& normal,
+        const DirectX::XMFLOAT2& textureCoordinate, const DirectX::XMFLOAT3& tangent,
+        const DirectX::XMFLOAT3& bitangent)
+        : Position(ExtendPosition(position))
+        , Normal(ExtendVector(normal))
+        , Uv(Extend(textureCoordinate))
+        , Tangent(ExtendVector(tangent))
+        , Bitangent(ExtendVector(bitangent))
+    { }
+
+    VertexAttributes(DirectX::FXMVECTOR position, DirectX::FXMVECTOR normal, DirectX::FXMVECTOR textureCoordinate)
+    {
+        XMStoreFloat4(&this->Position, position);
+        XMStoreFloat4(&this->Normal, normal);
+        XMStoreFloat4(&this->Uv, textureCoordinate);
+    }
+
+    DirectX::XMFLOAT4 Position;
+    DirectX::XMFLOAT4 Normal{};
+    DirectX::XMFLOAT4 Uv{};
+    DirectX::XMFLOAT4 Tangent{};
+    DirectX::XMFLOAT4 Bitangent{};
+
+    static constexpr uint32_t VERTEX_BUFFER_SLOT_INDEX = 0;
+    static constexpr int INPUT_ELEMENT_COUNT = 5;
+    static const D3D12_INPUT_ELEMENT_DESC INPUT_ELEMENTS[INPUT_ELEMENT_COUNT];
+
+private:
+    static DirectX::XMFLOAT4 Extend(const DirectX::XMFLOAT2& value)
+    {
+        return { value.x, value.y, 0.0f, 0.0f };
+    }
+
+    static DirectX::XMFLOAT4 ExtendPosition(const DirectX::XMFLOAT3& value)
+    {
+        return { value.x, value.y, value.z, 1.0f };
+    }
+
+    static DirectX::XMFLOAT4 ExtendVector(const DirectX::XMFLOAT3& value)
+    {
+        return { value.x, value.y, value.z, 0.0f };
+    }
+};
+
+struct SkinningVertexAttributes
+{
+    static constexpr uint32_t BONES_PER_VERTEX = 4;
+
+    uint32_t BoneIds[BONES_PER_VERTEX];
+    float Weights[BONES_PER_VERTEX];
+
+    void NormalizeWeights();
+
+    static constexpr uint32_t VERTEX_BUFFER_SLOT_INDEX = 1;
+    static constexpr int INPUT_ELEMENT_COUNT = 2;
+    static const D3D12_INPUT_ELEMENT_DESC INPUT_ELEMENTS[INPUT_ELEMENT_COUNT];
+};
+
+using VertexCollectionType = std::vector<VertexAttributes>;
+using SkinningVertexCollectionType = std::vector<SkinningVertexAttributes>;
+using IndexCollectionType = std::vector<uint16_t>;
+
+struct MeshPrototype
+{
+//Modify Begin:2026-07-29 by BestHui
+    std::string m_Name;
+//Modify End
+    VertexCollectionType m_Vertices;
+    IndexCollectionType m_Indices;
+
+    SkinningVertexCollectionType m_SkinningVertexAttributes;
+    Armature m_Armature;
+
+    MeshPrototype() = default;
+    MeshPrototype(VertexCollectionType&& vertices, IndexCollectionType&& indices, bool rhCoords = true, bool generateTangents = false);
+
+    void AddVertexAttributes(const MeshPrototype& otherPrototype);
+};
+
+class Mesh final
+{
+public:
+    static constexpr D3D_PRIMITIVE_TOPOLOGY PRIMITIVE_TOPOLOGY = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+
+    void Draw(CommandList& commandList, uint32_t instanceCount = 1) const;
+    void Bind(CommandList& commandList) const;
+
+    UINT GetIndexCount() const;
+    const VertexBuffer& GetVertexBuffer() const;
+    const IndexBuffer& GetIndexBuffer() const;
+
+    static std::shared_ptr<Mesh> CreateCube(CommandList& commandList, float size = 1, bool rhCoords = false);
+    static std::shared_ptr<Mesh> CreateSphere(CommandList& commandList, float diameter = 1, size_t tessellation = 16,
+        bool rhCoords = false);
+    static std::shared_ptr<Mesh> CreateCone(CommandList& commandList, float diameter = 1, float height = 1,
+        size_t tessellation = 32, bool rhCoords = false);
+    static std::shared_ptr<Mesh> CreateTorus(CommandList& commandList, float diameter = 1, float thickness = 0.333f,
+        size_t tessellation = 32, bool rhCoords = false);
+    static std::shared_ptr<Mesh> CreatePlane(CommandList& commandList, float width = 1, float height = 1,
+        bool rhCoords = false);
+    static std::shared_ptr<Mesh> CreateVerticalQuad(CommandList& commandList, float width = 1, float height = 1,
+        bool rhCoords = false);
+    static std::shared_ptr<Mesh> CreateSpotlightPyramid(CommandList& commandList, float width = 1.0f, float depth = 1.0f, bool rhCoords = false);
+
+    static std::shared_ptr<Mesh> CreateBlitTriangle(CommandList& commandList);
+
+    static std::shared_ptr<Mesh> CreateMesh(CommandList& commandList, VertexCollectionType& vertices,
+        IndexCollectionType& indices, bool rhCoords = false,
+        bool generateTangents = false);
+    static std::shared_ptr<Mesh> CreateMesh(CommandList& commandList, const MeshPrototype& prototype);
+
+    Mesh(const Mesh& copy) = delete;
+    ~Mesh();
+    Mesh();
+    const Aabb& GetAabb() const;
+
+    void SetSkinningVertexAttributes(CommandList& commandList, const SkinningVertexCollectionType& vertexAttributes);
+
+    const Armature& GetArmature() const;
+    Armature& GetArmature();
+
+    uint32_t m_MeshletsOffset = 0;
+    uint32_t m_MeshletsCount = 0;
+
+private:
+    void Initialize(CommandList& commandList, VertexCollectionType& vertices, IndexCollectionType& indices,
+        bool rhCoords);
+    void Initialize(CommandList& commandList, const MeshPrototype& prototype);
+    void CalculateAabb(const VertexCollectionType& vertices);
+
+    VertexBuffer m_VertexBuffer;
+    IndexBuffer m_IndexBuffer;
+    VertexBuffer m_SkinningVertexBuffer;
+    Armature m_Armature;
+
+
+
+    Aabb m_Aabb{};
+    UINT m_IndexCount;
+};

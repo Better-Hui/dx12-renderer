@@ -4,9 +4,9 @@
 #include <RaytracingDemo.h>
 
 #include <DX12Library/CommandList.h>
-#include <Framework/Mesh.h>
-#include <Framework/CommandContext.h>
-#include <Framework/ShaderResourceView.h>
+#include <Framework/Geometry/Mesh.h>
+#include <Framework/Rendering/Pipeline/CommandContext.h>
+#include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <RenderGraph/RenderPass.h>
 
 using namespace DirectX;

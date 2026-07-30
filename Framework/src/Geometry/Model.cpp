@@ -1,0 +1,30 @@
+#include <Framework/Geometry/Model.h>
+#include <Framework/Geometry/Mesh.h>
+#include <DX12Library/CommandList.h>
+#include <Framework/Scene/Material.h>
+
+Model::Model(const MeshCollectionType& meshes)
+	: m_Meshes(meshes)
+
+{
+}
+
+Model::Model(std::shared_ptr<Mesh> mesh)
+	: m_Meshes({ mesh })
+{
+}
+
+const Model::MeshCollectionType& Model::GetMeshes() const
+{
+	return m_Meshes;
+}
+
+Model::~Model() = default;
+
+void Model::Draw(CommandList& commandList) const
+{
+	for (const auto& mesh : m_Meshes)
+	{
+		mesh->Draw(commandList);
+	}
+}

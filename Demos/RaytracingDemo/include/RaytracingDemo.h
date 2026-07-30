@@ -7,12 +7,12 @@
 //Modify End
 
 #include <Denoising/DenoiserController.h>
-#include <Framework/ImGuiImpl.h>
-#include <Framework/Model.h>
-#include <Framework/ComputeShader.h>
-#include <Framework/RayTracingShader.h>
-#include <Framework/Scene.h>
-#include <Framework/Shader.h>
+#include <Framework/UI/ImGuiImpl.h>
+#include <Framework/Geometry/Model.h>
+#include <Framework/Rendering/Pipeline/ComputeShader.h>
+#include <Framework/Rendering/RayTracing/RayTracingShader.h>
+#include <Framework/Scene/Scene.h>
+#include <Framework/Rendering/Pipeline/Shader.h>
 
 #include <RenderGraph/RenderGraphRoot.h>
 #include <Scene/SceneLightManager.h>

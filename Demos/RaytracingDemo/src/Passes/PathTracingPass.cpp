@@ -6,8 +6,8 @@
 
 #include <DX12Library/CommandList.h>
 #include <DX12Library/Helpers.h>
-#include <Framework/CommandContext.h>
-#include <Framework/UnorderedAccessView.h>
+#include <Framework/Rendering/Pipeline/CommandContext.h>
+#include <Framework/Rendering/Texture/UnorderedAccessView.h>
 #include <RenderGraph/RenderPass.h>
 
 #include <string_view>

@@ -2,160 +2,9 @@ cmake_minimum_required(VERSION 3.8.0)
 
 project("Framework")
 
-set(HEADER_FILES
-        "include/Framework/Aabb.h"
-        "include/Framework/Armature.h"
-        
-        "include/Framework/Bone.h"
-        "include/Framework/BoundingSphere.h"
-        
-        "include/Framework/Mesh.h"
-        "include/Framework/Model.h"
-        
-        "include/Framework/GameObject.h"
-        "include/Framework/Light.h"
-        "include/Framework/MatricesCb.h"
-        "include/Framework/ModelLoader.h"
-        "include/Framework/Animation.h"
-        "include/Framework/GraphicsSettings.h"
-        "include/Framework/DemoMain.h"
-        "include/Framework/Bloom.h"
-        "include/Framework/BloomPrefilter.h"
-        "include/Framework/BloomDownsample.h"
-        "include/Framework/BloomUpsample.h" 
-        "include/Framework/CommandContext.h"
-# Modify Begin:2026-07-29 by BestHui
-        "include/Framework/CommandContextDescriptorAllocator.h"
+# Modify Begin:2026-07-30 by BestHui
+# Framework C++ files are collected recursively so the source tree can stay organized by module.
 # Modify End
-# Modify Begin:2026-07-28 by BestHui
-        "include/Framework/CudaInterop.h"
-# Modify End
-        "include/Framework/ComputePipelineStateBuilder.h"
-        "include/Framework/DescriptorLayout.h"
-# Modify Begin:2026-07-24 by BestHui
-        "include/Framework/PipelineBindingSet.h"
-        "include/Framework/PipelineDescriptorPool.h"
-        "include/Framework/PipelineDescriptorSet.h"
-        "include/Framework/PipelineLayout.h"
-        "include/Framework/PipelineStateCache.h"
-        "include/Framework/PipelineStateKey.h"
-# Modify End
-        "include/Framework/FrameworkDeprecated.h"
-        "include/Framework/RasterPipelineStateBuilder.h" 
-        # Modify Begin:2026-07-30 by BestHui
-        "include/Framework/Scene.h"
-        # Modify End
-        "include/Framework/Shader.h" 
-        "include/Framework/Material.h" 
-        "include/Framework/ShaderResourceView.h"
-        "include/Framework/ShaderVariant.h"
-        "include/Framework/ShaderBlob.h"
-        "include/Framework/ShaderReflection.h"
-        "include/Framework/SharedUploadBuffer.h"
-        "include/Framework/UnorderedAccessView.h"
-        # Modify Begin:2026-07-28 by BestHui
-        "include/Framework/UnityD3D12Interop.h"
-        # Modify End
-# Modify Begin:2026-07-29 by BestHui
-        "include/Framework/UnitySceneImporter.h"
-        "include/Framework/UnitySceneParser.h"
-# Modify End
-        "include/Framework/ComputeShader.h"
-# Modify Begin:2026-07-23 by BestHui
-        "include/Framework/RenderTexture.h"
-# Modify End
-# Modify Begin:2026-07-21 by BestHui
-        "include/Framework/RayTracingAccelerationStructure.h"
-        "include/Framework/RayTracingPipelineStateBuilder.h"
-        "include/Framework/RayTracingShader.h"
-        "include/Framework/RayTracingShaderTable.h"
-# Modify End
-        "include/Framework/MSAADepthResolvePass.h"
-# Modify Begin:2026-07-27 by BestHui
-        "include/Framework/NRD.h"
-        "include/Framework/SVGF.h"
-# Modify End
-        "include/Framework/SSAOUtils.h"
-        "include/Framework/TAA.h"
-        
-        "include/Framework/ImGuiImpl.h"
-)
-
-set(SOURCE_FILES
-        "src/Aabb.cpp"
-        "src/Armature.cpp"
-        
-        "src/Bone.cpp"
-        "src/BoundingSphere.cpp"
-        "src/Framework.cpp"
-        "src/Mesh.cpp"
-        "src/Model.cpp"
-        
-        "src/GameObject.cpp"
-        "src/Light.cpp"
-        "src/MatricesCb.cpp"
-        "src/ModelLoader.cpp"
-        "src/Animation.cpp"
-        "src/Bloom.cpp"
-        "src/BloomPrefilter.cpp"
-        "src/BloomDownsample.cpp"
-        "src/BloomUpsample.cpp" 
-        "src/CommandContext.cpp"
-# Modify Begin:2026-07-29 by BestHui
-        "src/CommandContextDescriptorAllocator.cpp"
-# Modify End
-# Modify Begin:2026-07-28 by BestHui
-        "src/CudaInterop.cpp"
-# Modify End
-        "src/ComputePipelineStateBuilder.cpp"
-        "src/DescriptorLayout.cpp"
-# Modify Begin:2026-07-24 by BestHui
-        "src/PipelineBindingSet.cpp"
-        "src/PipelineDescriptorPool.cpp"
-        "src/PipelineDescriptorSet.cpp"
-        "src/PipelineLayout.cpp"
-# Modify End
-        "src/RasterPipelineStateBuilder.cpp" 
-        # Modify Begin:2026-07-30 by BestHui
-        "src/Scene.cpp"
-        # Modify End
-        "src/Shader.cpp" 
-        "src/SharedUploadBuffer.cpp" 
-        "src/Material.cpp" 
-        "src/ShaderBlob.cpp"
-        "src/ShaderReflection.cpp"
-        "src/ShaderVariant.cpp"
-        # Modify Begin:2026-07-28 by BestHui
-        "src/UnityD3D12Interop.cpp"
-        # Modify End
-# Modify Begin:2026-07-29 by BestHui
-        "src/UnitySceneParser.cpp"
-# Modify End
-        "src/ComputeShader.cpp"
-# Modify Begin:2026-07-23 by BestHui
-        "src/RenderTexture.cpp"
-# Modify End
-# Modify Begin:2026-07-21 by BestHui
-        "src/RayTracingAccelerationStructure.cpp"
-        "src/RayTracingBindingSet.cpp"
-        "src/RayTracingDispatchTables.cpp"
-        "src/RayTracingDispatchTables.h"
-        "src/RayTracingPipelineStateBuilder.cpp"
-        "src/RayTracingPipelineDescBuilder.cpp"
-        "src/RayTracingShader.cpp"
-        "src/RayTracingShaderInternal.h"
-        "src/RayTracingShaderTable.cpp"
-# Modify End
-        "src/MSAADepthResolvePass.cpp"
-# Modify Begin:2026-07-27 by BestHui
-        "src/NRD.cpp"
-        "src/SVGF.cpp"
-# Modify End
-        "src/SSAOUtils.cpp"
-        "src/TAA.cpp"
-        
-        "src/ImGuiImpl.cpp"
-        )
 
 set(SHADER_FILES_VERTEX
         "shaders/Blit_VS.hlsl"
@@ -189,6 +38,11 @@ set(SHADERS_HEADER_FILES
 set(TARGET_NAME Framework)
 set(SHADERS_OUTPUT_HEADERS TRUE)
 include(${CMAKE_SOURCE_DIR}/CMakeIncludes/ProjectBase.cmake)
+
+# Modify Begin:2026-07-30 by BestHui
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/include" PREFIX "include" FILES ${HEADER_FILES})
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "src" FILES ${SOURCE_FILES})
+# Modify End
 
 # Add source to this project's executable.
 add_library(${TARGET_NAME} STATIC ${HEADER_FILES} ${SOURCE_FILES} ${SHADER_FILES} ${SHADERS_HEADER_FILES})

@@ -4,8 +4,8 @@
 #include <DX12Library/Application.h>
 #include <DX12Library/CommandList.h>
 #include <DX12Library/CommandQueue.h>
-#include <Framework/CommandContext.h>
-#include <Framework/ShaderResourceView.h>
+#include <Framework/Rendering/Pipeline/CommandContext.h>
+#include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <Passes/RaytracingDemoPasses.h>
 #include <RenderGraph/RaytracingDemoGraphResources.h>
 #include <RenderGraph/RenderContext.h>

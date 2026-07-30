@@ -1,9 +1,9 @@
 //Modify Begin:2026-07-27 by BestHui
 #pragma once
 
-#include <Framework/ComputeShader.h>
-#include <Framework/RayTracingShader.h>
-#include <Framework/ShaderVariant.h>
+#include <Framework/Rendering/Pipeline/ComputeShader.h>
+#include <Framework/Rendering/RayTracing/RayTracingShader.h>
+#include <Framework/Rendering/Pipeline/ShaderVariant.h>
 
 #include <cstdint>
 #include <deque>

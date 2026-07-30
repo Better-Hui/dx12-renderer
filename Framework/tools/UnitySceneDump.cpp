@@ -1,7 +1,7 @@
 //Modify Begin:2026-07-29 by BestHui
-#include <Framework/UnitySceneImporter.h>
-#include <Framework/Mesh.h>
-#include <Framework/ModelLoader.h>
+#include <Framework/Unity/UnitySceneImporter.h>
+#include <Framework/Geometry/Mesh.h>
+#include <Framework/Geometry/ModelLoader.h>
 //Modify End
 
 #include <algorithm>

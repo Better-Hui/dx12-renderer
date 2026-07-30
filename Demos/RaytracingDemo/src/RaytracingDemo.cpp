@@ -7,13 +7,13 @@
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Window.h>
 
-#include <Framework/GraphicsSettings.h>
-#include <Framework/Mesh.h>
-#include <Framework/ModelLoader.h>
-#include <Framework/RasterPipelineStateBuilder.h>
-#include <Framework/ShaderBlob.h>
+#include <Framework/Core/GraphicsSettings.h>
+#include <Framework/Geometry/Mesh.h>
+#include <Framework/Geometry/ModelLoader.h>
+#include <Framework/Rendering/Pipeline/RasterPipelineStateBuilder.h>
+#include <Framework/Rendering/Pipeline/ShaderBlob.h>
 //Modify Begin:2026-07-30 by BestHui
-#include <Framework/UnitySceneImporter.h>
+#include <Framework/Unity/UnitySceneImporter.h>
 //Modify End
 
 #include <RenderGraph/RaytracingDemoGraphResources.h>

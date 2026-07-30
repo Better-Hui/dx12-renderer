@@ -2,10 +2,10 @@
 #include <Scene/SceneResources.h>
 
 #include <DX12Library/CommandList.h>
-#include <Framework/Mesh.h>
-#include <Framework/Model.h>
-#include <Framework/ModelLoader.h>
-#include <Framework/RayTracingAccelerationStructure.h>
+#include <Framework/Geometry/Mesh.h>
+#include <Framework/Geometry/Model.h>
+#include <Framework/Geometry/ModelLoader.h>
+#include <Framework/Rendering/RayTracing/RayTracingAccelerationStructure.h>
 
 #include <algorithm>
 #include <cctype>

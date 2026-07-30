@@ -4,8 +4,8 @@
 #include <DX12Library/StructuredBuffer.h>
 #include <DX12Library/Texture.h>
 
-#include <Framework/RayTracingAccelerationStructure.h>
-#include <Framework/Scene.h>
+#include <Framework/Rendering/RayTracing/RayTracingAccelerationStructure.h>
+#include <Framework/Scene/Scene.h>
 
 #include <DirectXMath.h>
 

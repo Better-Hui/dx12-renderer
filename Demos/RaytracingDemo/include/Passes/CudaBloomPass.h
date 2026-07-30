@@ -7,7 +7,7 @@
 
 #include <d3d12.h>
 
-#include <Framework/CudaInterop.h>
+#include <Framework/Interop/CudaInterop.h>
 
 class Texture;
 
