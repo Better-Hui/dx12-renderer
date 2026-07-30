@@ -588,6 +588,9 @@ public:
         UINT numDescriptors,
         D3D12_CPU_DESCRIPTOR_HANDLE srcDescriptor);
 //Modify End
+//Modify Begin:2026-07-30 by BestHui
+    void BindShaderVisibleDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE heapType, ID3D12DescriptorHeap* heap);
+//Modify End
 
     /***************************************************************************
      * Methods defined below are only intended to be used by internal classes. *

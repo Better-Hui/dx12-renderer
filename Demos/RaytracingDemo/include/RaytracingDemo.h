@@ -123,6 +123,13 @@ private:
         DirectX::XMFLOAT4 Diffuse = { 1.0f, 1.0f, 1.0f, 1.0f };
         DirectX::XMFLOAT4 Specular = { 0.04f, 0.04f, 0.04f, 1.0f };
         DirectX::XMFLOAT4 TilingOffset = { 1.0f, 1.0f, 0.0f, 0.0f };
+//Modify Begin:2026-07-30 by BestHui
+        uint32_t DiffuseTextureIndex = 0;
+        uint32_t NormalTextureIndex = 0;
+        uint32_t MetallicTextureIndex = 0;
+        uint32_t RoughnessTextureIndex = 0;
+        uint32_t AmbientOcclusionTextureIndex = 0;
+//Modify End
         float Metallic = 0.0f;
         float Roughness = 0.5f;
         uint32_t HasDiffuseMap = 0;
@@ -130,6 +137,9 @@ private:
         uint32_t HasMetallicMap = 0;
         uint32_t HasRoughnessMap = 0;
         uint32_t HasAmbientOcclusionMap = 0;
+//Modify Begin:2026-07-30 by BestHui
+        uint32_t PaddingDescriptor0 = 0;
+//Modify End
         uint32_t Padding0 = 0;
         uint32_t Padding1 = 0;
         uint32_t Padding2 = 0;

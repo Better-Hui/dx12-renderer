@@ -46,6 +46,9 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
             if (useMeshletGBuffer)
             {
                 commandContext.BindPipeline(*demo.m_GBufferMeshShader);
+//Modify Begin:2026-07-30 by BestHui
+                commandContext.BindBindlessDescriptorHeap(demo.m_SceneResources.GetBindlessDescriptorHeap());
+//Modify End
                 demo.m_GBufferMeshShader->SetStructuredBuffer(cmd, "MeshletVertices", demo.m_SceneResources.GetMeshletVertexBuffer());
                 demo.m_GBufferMeshShader->SetShaderResource(cmd, "MeshletIndices", demo.m_SceneResources.GetMeshletIndexBuffer());
                 demo.m_GBufferMeshShader->SetStructuredBuffer(cmd, "Meshlets", demo.m_SceneResources.GetMeshletBuffer());
@@ -54,7 +57,6 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
                 const XMMATRIX viewProjection = demo.GetSceneCamera().GetViewMatrix() * demo.GetSceneCamera().GetProjectionMatrix();
                 const XMMATRIX previousViewProjection = demo.m_HasPreviousViewProjection ? demo.m_PreviousViewProjection : viewProjection;
                 const auto& materials = demo.m_SceneResources.GetMaterials();
-                const auto& textures = demo.m_SceneResources.GetTextures();
                 for (const RaytracingDemoMeshletDraw& draw : demo.m_SceneResources.GetMeshletDraws())
                 {
                     const RaytracingDemo::MaterialData& material = materials[draw.MaterialIndex];
@@ -72,6 +74,13 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
                     materialConstants.Diffuse = material.Diffuse;
                     materialConstants.Specular = material.Specular;
                     materialConstants.TilingOffset = material.TilingOffset;
+//Modify Begin:2026-07-30 by BestHui
+                    materialConstants.DiffuseTextureIndex = material.DiffuseTextureIndex;
+                    materialConstants.NormalTextureIndex = material.NormalTextureIndex;
+                    materialConstants.MetallicTextureIndex = material.MetallicTextureIndex;
+                    materialConstants.RoughnessTextureIndex = material.RoughnessTextureIndex;
+                    materialConstants.AmbientOcclusionTextureIndex = material.AmbientOcclusionTextureIndex;
+//Modify End
                     materialConstants.Metallic = material.Metallic;
                     materialConstants.Roughness = material.Roughness;
                     materialConstants.HasDiffuseMap = material.HasDiffuseMap;
@@ -80,11 +89,6 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
                     materialConstants.HasRoughnessMap = material.HasRoughnessMap;
                     materialConstants.HasAmbientOcclusionMap = material.HasAmbientOcclusionMap;
                     cmd.SetConstantBuffer(demo.m_GBufferMeshShader, "MaterialCBuffer", materialConstants);
-                    cmd.SetTexture(demo.m_GBufferMeshShader, "DiffuseTexture", ShaderResourceView(textures[material.DiffuseTextureIndex]));
-                    cmd.SetTexture(demo.m_GBufferMeshShader, "NormalTexture", ShaderResourceView(textures[material.NormalTextureIndex]));
-                    cmd.SetTexture(demo.m_GBufferMeshShader, "MetallicTexture", ShaderResourceView(textures[material.MetallicTextureIndex]));
-                    cmd.SetTexture(demo.m_GBufferMeshShader, "RoughnessTexture", ShaderResourceView(textures[material.RoughnessTextureIndex]));
-                    cmd.SetTexture(demo.m_GBufferMeshShader, "AmbientOcclusionTexture", ShaderResourceView(textures[material.AmbientOcclusionTextureIndex]));
                     commandContext.BindDescriptorSet(demo.m_GBufferMeshShader->GetDescriptorSet());
                     commandContext.DispatchMesh(draw.MeshletCount, 1, 1);
                 }
@@ -92,6 +96,9 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
             }
 //Modify End
             commandContext.BindPipeline(*demo.m_GBufferShader);
+//Modify Begin:2026-07-30 by BestHui
+            commandContext.BindBindlessDescriptorHeap(demo.m_SceneResources.GetBindlessDescriptorHeap());
+//Modify End
             cmd.SetConstantBuffer(demo.m_GBufferShader, "GBufferDebugCBuffer", debugConstants);
 //Modify End
 
@@ -99,7 +106,6 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
             const XMMATRIX previousViewProjection = demo.m_HasPreviousViewProjection ? demo.m_PreviousViewProjection : viewProjection;
             const auto& sceneObjects = demo.m_SceneResources.GetSceneObjects();
             const auto& materials = demo.m_SceneResources.GetMaterials();
-            const auto& textures = demo.m_SceneResources.GetTextures();
             for (const RaytracingDemo::SceneObject& object : sceneObjects)
             {
                 const RaytracingDemo::MaterialData& material = materials[object.MaterialIndex];
@@ -115,6 +121,13 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
                 materialConstants.Diffuse = material.Diffuse;
                 materialConstants.Specular = material.Specular;
                 materialConstants.TilingOffset = material.TilingOffset;
+//Modify Begin:2026-07-30 by BestHui
+                materialConstants.DiffuseTextureIndex = material.DiffuseTextureIndex;
+                materialConstants.NormalTextureIndex = material.NormalTextureIndex;
+                materialConstants.MetallicTextureIndex = material.MetallicTextureIndex;
+                materialConstants.RoughnessTextureIndex = material.RoughnessTextureIndex;
+                materialConstants.AmbientOcclusionTextureIndex = material.AmbientOcclusionTextureIndex;
+//Modify End
                 materialConstants.Metallic = material.Metallic;
                 materialConstants.Roughness = material.Roughness;
                 materialConstants.HasDiffuseMap = material.HasDiffuseMap;
@@ -123,11 +136,6 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
                 materialConstants.HasRoughnessMap = material.HasRoughnessMap;
                 materialConstants.HasAmbientOcclusionMap = material.HasAmbientOcclusionMap;
                 cmd.SetConstantBuffer(demo.m_GBufferShader, "MaterialCBuffer", materialConstants);
-                cmd.SetTexture(demo.m_GBufferShader, "DiffuseTexture", ShaderResourceView(textures[material.DiffuseTextureIndex]));
-                cmd.SetTexture(demo.m_GBufferShader, "NormalTexture", ShaderResourceView(textures[material.NormalTextureIndex]));
-                cmd.SetTexture(demo.m_GBufferShader, "MetallicTexture", ShaderResourceView(textures[material.MetallicTextureIndex]));
-                cmd.SetTexture(demo.m_GBufferShader, "RoughnessTexture", ShaderResourceView(textures[material.RoughnessTextureIndex]));
-                cmd.SetTexture(demo.m_GBufferShader, "AmbientOcclusionTexture", ShaderResourceView(textures[material.AmbientOcclusionTextureIndex]));
 
 //Modify Begin:2026-07-29 by BestHui
                 commandContext.BindDescriptorSet(demo.m_GBufferShader->GetDescriptorSet());

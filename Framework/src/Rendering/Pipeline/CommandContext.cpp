@@ -7,6 +7,9 @@
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Resource.h>
 #include <DX12Library/StructuredBuffer.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/Rendering/Pipeline/BindlessDescriptorHeap.h>
+//Modify End
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
 //Modify Begin:2026-07-30 by BestHui
 #include <Framework/Rendering/Pipeline/MeshShader.h>
@@ -284,6 +287,16 @@ void CommandContext::BindPipeline(const RayTracingShader& shader) const
 {
     SetPipeline(shader);
 }
+
+//Modify Begin:2026-07-30 by BestHui
+void CommandContext::BindBindlessDescriptorHeap(BindlessDescriptorHeap& bindlessDescriptorHeap) const
+{
+    m_CommandList.BindShaderVisibleDescriptorHeap(
+        D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+        bindlessDescriptorHeap.GetResourceDescriptorHeap());
+    m_DescriptorAllocator.SetBindlessDescriptorHeap(&bindlessDescriptorHeap);
+}
+//Modify End
 
 void CommandContext::BindDescriptorSet(const PipelineDescriptorSetBindDesc& descriptorSetDesc) const
 {

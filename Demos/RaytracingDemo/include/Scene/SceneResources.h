@@ -10,6 +10,9 @@
 //Modify Begin:2026-07-30 by BestHui
 #include <Framework/Geometry/Meshlet.h>
 //Modify End
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/Rendering/Pipeline/BindlessDescriptorHeap.h>
+//Modify End
 #include <Framework/Rendering/RayTracing/RayTracingAccelerationStructure.h>
 #include <Framework/Scene/Scene.h>
 
@@ -81,6 +84,10 @@ public:
     const StructuredBuffer& GetMaterialBuffer() const { return m_MaterialBuffer; }
     const StructuredBuffer& GetGeometryBuffer() const { return m_GeometryBuffer; }
 //Modify Begin:2026-07-30 by BestHui
+    BindlessDescriptorHeap& GetBindlessDescriptorHeap() { return m_BindlessDescriptorHeap; }
+    const BindlessDescriptorHeap& GetBindlessDescriptorHeap() const { return m_BindlessDescriptorHeap; }
+//Modify End
+//Modify Begin:2026-07-30 by BestHui
     const StructuredBuffer& GetMeshletVertexBuffer() const { return m_MeshletVertexBuffer; }
     const ByteAddressBuffer& GetMeshletIndexBuffer() const { return m_MeshletIndexBuffer; }
     const StructuredBuffer& GetMeshletBuffer() const { return m_MeshletBuffer; }
@@ -133,6 +140,9 @@ private:
 
     StructuredBuffer m_MaterialBuffer;
     StructuredBuffer m_GeometryBuffer;
+//Modify Begin:2026-07-30 by BestHui
+    BindlessDescriptorHeap m_BindlessDescriptorHeap;
+//Modify End
 //Modify Begin:2026-07-30 by BestHui
     StructuredBuffer m_MeshletVertexBuffer;
     ByteAddressBuffer m_MeshletIndexBuffer;

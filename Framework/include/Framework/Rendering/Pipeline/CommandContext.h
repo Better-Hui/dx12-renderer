@@ -14,6 +14,9 @@
 #include <string_view>
 
 class CommandList;
+//Modify Begin:2026-07-30 by BestHui
+class BindlessDescriptorHeap;
+//Modify End
 class ComputeShader;
 //Modify Begin:2026-07-30 by BestHui
 class MeshShader;
@@ -69,6 +72,9 @@ public:
 //Modify End
     void BindPipeline(const ComputeShader& shader) const;
     void BindPipeline(const RayTracingShader& shader) const;
+//Modify Begin:2026-07-30 by BestHui
+    void BindBindlessDescriptorHeap(BindlessDescriptorHeap& bindlessDescriptorHeap) const;
+//Modify End
     void BindDescriptorSet(const PipelineDescriptorSetBindDesc& descriptorSetDesc) const;
     void BindDescriptorSet(const PipelineDescriptorSet& descriptorSet) const;
 //Modify End

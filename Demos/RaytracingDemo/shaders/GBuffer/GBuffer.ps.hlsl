@@ -1,4 +1,7 @@
 #include <ShaderLibrary/Common/RootSignature.hlsli>
+//Modify Begin:2026-07-30 by BestHui
+#include "../Scene/SceneBindless.hlsli"
+//Modify End
 
 struct PixelShaderInput
 {
@@ -32,6 +35,13 @@ cbuffer MaterialCBuffer : register(b0)
     float4 Diffuse;
     float4 Specular;
     float4 TilingOffset;
+//Modify Begin:2026-07-30 by BestHui
+    uint DiffuseTextureIndex;
+    uint NormalTextureIndex;
+    uint MetallicTextureIndex;
+    uint RoughnessTextureIndex;
+    uint AmbientOcclusionTextureIndex;
+//Modify End
     float Metallic;
     float Roughness;
     uint HasDiffuseMap;
@@ -39,6 +49,9 @@ cbuffer MaterialCBuffer : register(b0)
     uint HasMetallicMap;
     uint HasRoughnessMap;
     uint HasAmbientOcclusionMap;
+//Modify Begin:2026-07-30 by BestHui
+    uint PaddingDescriptor0;
+//Modify End
     uint Padding0;
     uint Padding1;
     uint Padding2;
@@ -51,12 +64,6 @@ cbuffer GBufferDebugCBuffer : register(b1)
     uint3 GBufferDebugPadding;
 };
 //Modify End
-
-Texture2D DiffuseTexture : register(t0);
-Texture2D NormalTexture : register(t1);
-Texture2D MetallicTexture : register(t2);
-Texture2D RoughnessTexture : register(t3);
-Texture2D AmbientOcclusionTexture : register(t4);
 
 float3 EncodeNormal(float3 normal)
 {
@@ -74,7 +81,9 @@ float3 ApplyNormalMap(float3 normalWs, float3 tangentWs, float3 bitangentWs, flo
     const float3 bitangent = normalize(bitangentWs);
     const float3 normal = normalize(normalWs);
     const float3x3 tbn = float3x3(tangent, bitangent, normal);
-    const float3 normalTs = UnpackNormal(NormalTexture.Sample(g_Common_LinearWrapSampler, uv).xyz);
+//Modify Begin:2026-07-30 by BestHui
+    const float3 normalTs = UnpackNormal(SampleBindlessTexture2D(NormalTextureIndex, g_Common_LinearWrapSampler, uv).xyz);
+//Modify End
     return normalize(mul(normalTs, tbn));
 }
 
@@ -100,7 +109,9 @@ PixelShaderOutput main(PixelShaderInput IN)
     PixelShaderOutput OUT;
 
     const float2 uv = IN.Uv * TilingOffset.xy + TilingOffset.zw;
-    const float3 sampledDiffuse = HasDiffuseMap != 0u ? DiffuseTexture.Sample(g_Common_LinearWrapSampler, uv).rgb : 1.0f;
+//Modify Begin:2026-07-30 by BestHui
+    const float3 sampledDiffuse = HasDiffuseMap != 0u ? SampleBindlessTexture2D(DiffuseTextureIndex, g_Common_LinearWrapSampler, uv).rgb : 1.0f;
+//Modify End
     const float3 baseColor = Diffuse.rgb * sampledDiffuse;
 //Modify Begin:2026-07-30 by BestHui
     const float3 outputBaseColor = DebugMeshletClusters != 0u ? HashClusterColor(IN.MeshletDebugId) : baseColor;
@@ -121,19 +132,25 @@ PixelShaderOutput main(PixelShaderInput IN)
     float metallic = Metallic;
     if (HasMetallicMap != 0u)
     {
-        metallic *= MetallicTexture.Sample(g_Common_LinearWrapSampler, uv).r;
+//Modify Begin:2026-07-30 by BestHui
+        metallic *= SampleBindlessTexture2D(MetallicTextureIndex, g_Common_LinearWrapSampler, uv).r;
+//Modify End
     }
 
     float roughness = Roughness;
     if (HasRoughnessMap != 0u)
     {
-        roughness *= RoughnessTexture.Sample(g_Common_LinearWrapSampler, uv).r;
+//Modify Begin:2026-07-30 by BestHui
+        roughness *= SampleBindlessTexture2D(RoughnessTextureIndex, g_Common_LinearWrapSampler, uv).r;
+//Modify End
     }
 
     float ambientOcclusion = 1.0f;
     if (HasAmbientOcclusionMap != 0u)
     {
-        ambientOcclusion *= AmbientOcclusionTexture.Sample(g_Common_LinearWrapSampler, uv).r;
+//Modify Begin:2026-07-30 by BestHui
+        ambientOcclusion *= SampleBindlessTexture2D(AmbientOcclusionTextureIndex, g_Common_LinearWrapSampler, uv).r;
+//Modify End
     }
 
     metallic = saturate(metallic);

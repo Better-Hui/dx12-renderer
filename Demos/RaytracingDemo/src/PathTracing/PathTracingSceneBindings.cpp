@@ -29,17 +29,7 @@ void RaytracingDemoPassAccess::BindInlinePathTracingInputs(
     const RaytracingDemoRenderGraph::FrameGBufferResources& gbuffer,
     const RaytracingDemo::CameraConstants& camera)
 {
-    const std::vector<std::shared_ptr<Texture>>& textures = demo.m_SceneResources.GetTextures();
-    const uint32_t textureCount = static_cast<uint32_t>(textures.size());
     const RayTracingAccelerationStructure& accelerationStructure = demo.m_SceneResources.GetRayTracingAccelerationStructure();
-    const std::vector<std::shared_ptr<Mesh>>& meshes = accelerationStructure.GetMeshes();
-    const uint32_t meshCount = static_cast<uint32_t>(meshes.size());
-
-//Modify Begin:2026-07-27 by BestHui
-    const RayTracingSceneResourceLayout& layout = demo.m_PathTracingPipelines.GetLayout();
-    Assert(textureCount <= layout.TextureDescriptorCapacity, "Ray tracing texture descriptors exceed the scene descriptor table capacity.");
-    Assert(meshCount <= layout.GeometryDescriptorCapacity, "Ray tracing geometry descriptors exceed the scene descriptor table capacity.");
-//Modify End
 
     cmd.SetConstantBuffer(shader, "CameraConstants", camera);
     shader.SetAccelerationStructure(cmd, accelerationStructure);
@@ -68,32 +58,6 @@ void RaytracingDemoPassAccess::BindInlinePathTracingInputs(
         shader.SetShaderResourceView(cmd, "Geometries", 0u, demo.m_SceneResources.GetGeometryBuffer());
     }
     demo.m_Lights.BindComputeResources(cmd, shader);
-
-    if (shader.HasShaderResourceView("Textures"))
-    {
-        for (uint32_t textureIndex = 0; textureIndex < textureCount; ++textureIndex)
-        {
-            shader.SetShaderResourceView(cmd, "Textures", textureIndex, ShaderResourceView(textures[textureIndex]));
-        }
-    }
-
-    if (shader.HasShaderResourceView("VertexBuffers"))
-    {
-        for (uint32_t meshIndex = 0; meshIndex < meshCount; ++meshIndex)
-        {
-            const Mesh& mesh = *meshes[meshIndex];
-            shader.SetShaderResourceView(cmd, "VertexBuffers", meshIndex, mesh.GetVertexBuffer());
-        }
-    }
-
-    if (shader.HasShaderResourceView("IndexBuffers"))
-    {
-        for (uint32_t meshIndex = 0; meshIndex < meshCount; ++meshIndex)
-        {
-            const Mesh& mesh = *meshes[meshIndex];
-            shader.SetShaderResourceView(cmd, "IndexBuffers", meshIndex, mesh.GetIndexBuffer());
-        }
-    }
 }
 
 void RaytracingDemoPassAccess::BindDxrPathTracingInputs(

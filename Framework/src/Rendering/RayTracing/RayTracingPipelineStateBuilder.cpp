@@ -189,6 +189,9 @@ std::shared_ptr<RootSignature> RayTracingPipelineStateBuilder::BuildGlobalRootSi
     PipelineLayout layout(std::move(layoutDesc));
 
     PipelineRootSignatureBuildDesc rootSignatureBuildDesc;
+//Modify Begin:2026-07-30 by BestHui
+    rootSignatureBuildDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED;
+//Modify End
     return layout.CreateRootSignature(rootSignatureBuildDesc);
 }
 

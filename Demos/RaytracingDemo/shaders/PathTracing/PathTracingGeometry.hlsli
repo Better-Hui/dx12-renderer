@@ -7,7 +7,9 @@
 
 uint LoadIndex(uint indexBufferIndex, uint indexNumber)
 {
-    return IndexBuffers[indexBufferIndex][indexNumber];
+//Modify Begin:2026-07-30 by BestHui
+    return LoadBindlessIndex(indexBufferIndex, indexNumber);
+//Modify End
 }
 
 RayPayload MakeMissPayload(float3 rayDirection)
@@ -46,9 +48,11 @@ RayPayload MakeTrianglePayload(
     const uint i1 = LoadIndex(geometry.IndexBufferIndex, firstIndex + 1u);
     const uint i2 = LoadIndex(geometry.IndexBufferIndex, firstIndex + 2u);
 
-    const VertexAttributes v0 = VertexBuffers[geometry.VertexBufferIndex][i0];
-    const VertexAttributes v1 = VertexBuffers[geometry.VertexBufferIndex][i1];
-    const VertexAttributes v2 = VertexBuffers[geometry.VertexBufferIndex][i2];
+//Modify Begin:2026-07-30 by BestHui
+    const VertexAttributes v0 = LoadBindlessVertex(geometry.VertexBufferIndex, i0);
+    const VertexAttributes v1 = LoadBindlessVertex(geometry.VertexBufferIndex, i1);
+    const VertexAttributes v2 = LoadBindlessVertex(geometry.VertexBufferIndex, i2);
+//Modify End
 
     const float3 barycentrics = float3(
         1.0f - hitBarycentrics.x - hitBarycentrics.y,
@@ -72,29 +76,39 @@ RayPayload MakeTrianglePayload(
         const float3 tangentWs = normalize(mul((float3x3)objectToWorld, tangentOs));
         const float3 bitangentWs = normalize(mul((float3x3)objectToWorld, bitangentOs));
         const float3x3 tbn = float3x3(tangentWs, bitangentWs, normalWs);
-        const float3 normalTs = UnpackNormalMap(Textures[material.NormalTextureIndex].SampleLevel(LinearWrapSampler, uv, 0.0f).xyz);
+//Modify Begin:2026-07-30 by BestHui
+        const float3 normalTs = UnpackNormalMap(SampleBindlessTexture2DLevel(material.NormalTextureIndex, LinearWrapSampler, uv, 0.0f).xyz);
+//Modify End
         normalWs = normalize(mul(normalTs, tbn));
     }
 
     normalWs = dot(normalWs, worldRayDirection) > 0.0f ? -normalWs : normalWs;
 
-    const float4 texel = material.HasDiffuseMap != 0u ? Textures[material.DiffuseTextureIndex].SampleLevel(LinearWrapSampler, uv, 0.0f) : 1.0f;
+//Modify Begin:2026-07-30 by BestHui
+    const float4 texel = material.HasDiffuseMap != 0u ? SampleBindlessTexture2DLevel(material.DiffuseTextureIndex, LinearWrapSampler, uv, 0.0f) : 1.0f;
+//Modify End
     float metallic = material.Metallic;
     if (material.HasMetallicMap != 0u)
     {
-        metallic *= Textures[material.MetallicTextureIndex].SampleLevel(LinearWrapSampler, uv, 0.0f).r;
+//Modify Begin:2026-07-30 by BestHui
+        metallic *= SampleBindlessTexture2DLevel(material.MetallicTextureIndex, LinearWrapSampler, uv, 0.0f).r;
+//Modify End
     }
 
     float roughness = material.Roughness;
     if (material.HasRoughnessMap != 0u)
     {
-        roughness *= Textures[material.RoughnessTextureIndex].SampleLevel(LinearWrapSampler, uv, 0.0f).r;
+//Modify Begin:2026-07-30 by BestHui
+        roughness *= SampleBindlessTexture2DLevel(material.RoughnessTextureIndex, LinearWrapSampler, uv, 0.0f).r;
+//Modify End
     }
 
     float ambientOcclusion = 1.0f;
     if (material.HasAmbientOcclusionMap != 0u)
     {
-        ambientOcclusion *= Textures[material.AmbientOcclusionTextureIndex].SampleLevel(LinearWrapSampler, uv, 0.0f).r;
+//Modify Begin:2026-07-30 by BestHui
+        ambientOcclusion *= SampleBindlessTexture2DLevel(material.AmbientOcclusionTextureIndex, LinearWrapSampler, uv, 0.0f).r;
+//Modify End
     }
 
     RayPayload payload;

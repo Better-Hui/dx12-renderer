@@ -19,6 +19,9 @@ namespace
 //Modify Begin:2026-07-27 by BestHui
     void DispatchDxrLightingPass(
         CommandList& cmd,
+//Modify Begin:2026-07-30 by BestHui
+        BindlessDescriptorHeap& bindlessDescriptorHeap,
+//Modify End
         RayTracingShader& shader,
         RayTracingBindingSet& bindingSet,
         const std::string_view passName,
@@ -28,6 +31,9 @@ namespace
 //Modify Begin:2026-07-29 by BestHui
         CommandContext commandContext(cmd);
         commandContext.BindPipeline(shader);
+//Modify Begin:2026-07-30 by BestHui
+        commandContext.BindBindlessDescriptorHeap(bindlessDescriptorHeap);
+//Modify End
         commandContext.BindDescriptorSet(bindingSet);
         commandContext.DispatchRays(RayTracingDispatchDesc{ passName, width, height, 1u });
         commandContext.InsertDescriptorSetOutputBarriers(bindingSet);
@@ -74,6 +80,9 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
 //Modify Begin:2026-07-28 by BestHui
                 CommandContext commandContext(cmd);
                 commandContext.BindPipeline(directLightingShader);
+//Modify Begin:2026-07-30 by BestHui
+                commandContext.BindBindlessDescriptorHeap(demo.m_SceneResources.GetBindlessDescriptorHeap());
+//Modify End
                 commandContext.BindDescriptorSet(directLightingShader.GetDescriptorSet());
                 commandContext.Dispatch(Math::DivideByMultiple(camera.Width, 8u), Math::DivideByMultiple(camera.Height, 8u), 1u);
 //Modify End
@@ -86,6 +95,9 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
 //Modify Begin:2026-07-27 by BestHui
                 DispatchDxrLightingPass(
                     cmd,
+//Modify Begin:2026-07-30 by BestHui
+                    demo.m_SceneResources.GetBindlessDescriptorHeap(),
+//Modify End
                     demo.m_PathTracingPipelines.GetRayTracingShader(),
                     directBindingSet,
                     "DirectLightingRayGen",
@@ -134,6 +146,9 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
 //Modify Begin:2026-07-28 by BestHui
                 CommandContext commandContext(cmd);
                 commandContext.BindPipeline(indirectLightingShader);
+//Modify Begin:2026-07-30 by BestHui
+                commandContext.BindBindlessDescriptorHeap(demo.m_SceneResources.GetBindlessDescriptorHeap());
+//Modify End
                 commandContext.BindDescriptorSet(indirectLightingShader.GetDescriptorSet());
                 commandContext.Dispatch(Math::DivideByMultiple(camera.Width, 8u), Math::DivideByMultiple(camera.Height, 8u), 1u);
 //Modify End
@@ -146,6 +161,9 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
 //Modify Begin:2026-07-27 by BestHui
                 DispatchDxrLightingPass(
                     cmd,
+//Modify Begin:2026-07-30 by BestHui
+                    demo.m_SceneResources.GetBindlessDescriptorHeap(),
+//Modify End
                     demo.m_PathTracingPipelines.GetRayTracingShader(),
                     indirectBindingSet,
                     "IndirectLightingRayGen",

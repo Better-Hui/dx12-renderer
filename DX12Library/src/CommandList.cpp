@@ -1172,6 +1172,15 @@ void CommandList::StageDynamicDescriptors(
 {
     m_DynamicDescriptorHeaps[heapType]->StageDescriptors(rootParameterIndex, descriptorOffset, numDescriptors, srcDescriptor);
 }
+
+//Modify Begin:2026-07-30 by BestHui
+void CommandList::BindShaderVisibleDescriptorHeap(
+    const D3D12_DESCRIPTOR_HEAP_TYPE heapType,
+    ID3D12DescriptorHeap* heap)
+{
+    SetDescriptorHeap(heapType, heap);
+}
+//Modify End
 //Modify End
 
 bool CommandList::Close(CommandList& pendingCommandList)

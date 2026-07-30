@@ -186,6 +186,9 @@ void ComputeShader::BuildReflectedRootSignature(const ComputePipelineDesc& desc)
     //Modify End
 
     PipelineRootSignatureBuildDesc rootSignatureBuildDesc;
+//Modify Begin:2026-07-30 by BestHui
+    rootSignatureBuildDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED;
+//Modify End
     m_RootSignature = m_PipelineLayout->CreateRootSignature(rootSignatureBuildDesc);
     m_PipelineLayout->SetRootSignature(m_RootSignature);
 //Modify Begin:2026-07-27 by BestHui

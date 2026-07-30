@@ -2,6 +2,9 @@
 #include <Scene/SceneResources.h>
 
 #include <DX12Library/CommandList.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <DX12Library/Helpers.h>
+//Modify End
 #include <Framework/Geometry/Mesh.h>
 //Modify Begin:2026-07-30 by BestHui
 #include <Framework/Geometry/Meshlet.h>
@@ -229,6 +232,9 @@ void RaytracingDemoSceneResources::Clear()
     m_GeometryBuffer = StructuredBuffer(L"Ray Tracing Geometry Data");
     m_MaterialBuffer = StructuredBuffer(L"Ray Tracing Materials");
 //Modify Begin:2026-07-30 by BestHui
+    m_BindlessDescriptorHeap.Reset();
+//Modify End
+//Modify Begin:2026-07-30 by BestHui
     m_MeshletVertexBuffer = StructuredBuffer(L"RaytracingDemo Meshlet Vertices");
     m_MeshletIndexBuffer = ByteAddressBuffer(L"RaytracingDemo Meshlet Indices");
     m_MeshletBuffer = StructuredBuffer(L"RaytracingDemo Meshlets");
@@ -246,8 +252,13 @@ uint32_t RaytracingDemoSceneResources::AddTexture(CommandList& commandList, cons
 {
     auto texture = std::make_shared<Texture>();
     commandList.LoadTextureFromFile(*texture, path, usage);
+//Modify Begin:2026-07-30 by BestHui
+    const uint32_t descriptorIndex = m_BindlessDescriptorHeap.AddShaderResourceView(*texture);
+//Modify End
     m_Textures.push_back(texture);
-    return static_cast<uint32_t>(m_Textures.size() - 1);
+//Modify Begin:2026-07-30 by BestHui
+    return descriptorIndex;
+//Modify End
 }
 
 uint32_t RaytracingDemoSceneResources::AddMaterial(const RaytracingDemoMaterialData& material)
@@ -673,6 +684,28 @@ void RaytracingDemoSceneResources::UploadRayTracingBuffers(
     const RayTracingAccelerationStructure& accelerationStructure)
 {
     commandList.CopyStructuredBuffer(m_MaterialBuffer, m_Materials);
-    commandList.CopyStructuredBuffer(m_GeometryBuffer, accelerationStructure.GetGeometryData());
+//Modify Begin:2026-07-30 by BestHui
+    std::vector<RayTracingGeometryData> geometryData = accelerationStructure.GetGeometryData();
+    const std::vector<std::shared_ptr<Mesh>>& meshes = accelerationStructure.GetMeshes();
+    std::vector<uint32_t> vertexBufferDescriptorIndices(meshes.size());
+    std::vector<uint32_t> indexBufferDescriptorIndices(meshes.size());
+
+    for (uint32_t meshIndex = 0; meshIndex < meshes.size(); ++meshIndex)
+    {
+        const Mesh& mesh = *meshes[meshIndex];
+        vertexBufferDescriptorIndices[meshIndex] = m_BindlessDescriptorHeap.AddShaderResourceView(mesh.GetVertexBuffer());
+        indexBufferDescriptorIndices[meshIndex] = m_BindlessDescriptorHeap.AddShaderResourceView(mesh.GetIndexBuffer());
+    }
+
+    for (RayTracingGeometryData& geometry : geometryData)
+    {
+        Assert(geometry.VertexBufferIndex < vertexBufferDescriptorIndices.size(), "Ray tracing vertex buffer descriptor index is invalid.");
+        Assert(geometry.IndexBufferIndex < indexBufferDescriptorIndices.size(), "Ray tracing index buffer descriptor index is invalid.");
+        geometry.VertexBufferIndex = vertexBufferDescriptorIndices[geometry.VertexBufferIndex];
+        geometry.IndexBufferIndex = indexBufferDescriptorIndices[geometry.IndexBufferIndex];
+    }
+
+    commandList.CopyStructuredBuffer(m_GeometryBuffer, geometryData);
+//Modify End
 }
 //Modify End

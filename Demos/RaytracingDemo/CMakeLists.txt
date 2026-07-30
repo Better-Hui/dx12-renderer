@@ -55,6 +55,9 @@ set(SHADERS_HEADER_FILES
         shaders/PathTracing/PathTracingShared.hlsli
         shaders/PathTracing/PathTracingSurface.hlsli
         shaders/Scene/SceneCamera.hlsli
+        # Modify Begin:2026-07-30 by BestHui
+        shaders/Scene/SceneBindless.hlsli
+        # Modify End
         shaders/Scene/SceneGeometry.hlsli
         shaders/Scene/SceneResources.hlsli
         shaders/Scene/SceneLighting.hlsli

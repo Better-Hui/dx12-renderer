@@ -186,7 +186,9 @@ void MeshShader::BuildReflectedRootSignature()
     }
 
     PipelineRootSignatureBuildDesc rootSignatureBuildDesc;
-    rootSignatureBuildDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+//Modify Begin:2026-07-30 by BestHui
+    rootSignatureBuildDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED;
+//Modify End
     m_RootSignature = m_PipelineLayout->CreateRootSignature(rootSignatureBuildDesc);
     m_PipelineLayout->SetRootSignature(m_RootSignature);
     m_DescriptorSet = m_DescriptorPool.AllocateDescriptorSet(*m_PipelineLayout);

@@ -8,6 +8,7 @@
 #include <d3d12.h>
 
 class CommandList;
+class BindlessDescriptorHeap;
 struct PipelineDescriptorTableAllocation;
 
 enum class PipelineBindPoint;
@@ -18,6 +19,9 @@ public:
     static constexpr uint32_t MaxRootDescriptorTables = 32;
 
     void ResetTransientBindings();
+//Modify Begin:2026-07-30 by BestHui
+    void SetBindlessDescriptorHeap(BindlessDescriptorHeap* bindlessDescriptorHeap);
+//Modify End
     void StageDescriptorTable(
         CommandList& commandList,
         PipelineBindPoint bindPoint,
@@ -34,6 +38,9 @@ private:
     };
 
     std::array<BoundTable, MaxRootDescriptorTables> m_BoundTables = {};
+//Modify Begin:2026-07-30 by BestHui
+    BindlessDescriptorHeap* m_BindlessDescriptorHeap = nullptr;
+//Modify End
 };
 
 //Modify End

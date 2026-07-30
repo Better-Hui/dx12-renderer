@@ -137,9 +137,6 @@ void PathTracingPipelineController::CreateDxrPipeline(const RayTracingSceneResou
         .WithRayGenerationPass("DirectLightingRayGen", L"DirectLightingRayGen", { L"Miss" }, { L"HitGroup", L"VisibilityHitGroup" })
         .WithRayGenerationPass("IndirectLightingRayGen", L"IndirectLightingRayGen", { L"Miss" }, { L"HitGroup", L"VisibilityHitGroup" })
 //Modify End
-        .WithTextureArray("Textures", 0, 3, layout.TextureDescriptorCapacity)
-        .WithVertexBufferArray("VertexBuffers", 0, 1, layout.GeometryDescriptorCapacity)
-        .WithIndexBufferArray("IndexBuffers", 0, 2, layout.GeometryDescriptorCapacity)
         .WithPayloadSize(64)
         .Build();
     m_RayTracingShader = std::make_unique<RayTracingShader>(*pathTracingShader, rayTracingDesc);
@@ -151,17 +148,11 @@ void PathTracingPipelineController::CreateInlinePipelines(const RayTracingSceneR
 {
     const std::shared_ptr<ShaderBlob> inlineDirectLightingShader = LoadShader(L"DirectLighting.cs.cso", "cs_6_6");
     const ComputePipelineDesc inlineDirectLightingDesc = ComputePipelineDescBuilder::ReflectedDefault(*inlineDirectLightingShader)
-        .WithDescriptorArrayCount("Textures", layout.TextureDescriptorCapacity)
-        .WithDescriptorArrayCount("VertexBuffers", layout.GeometryDescriptorCapacity)
-        .WithDescriptorArrayCount("IndexBuffers", layout.GeometryDescriptorCapacity)
         .Build();
     m_InlineDirectLightingShader = std::make_unique<ComputeShader>(*inlineDirectLightingShader, inlineDirectLightingDesc);
 
     const std::shared_ptr<ShaderBlob> inlineIndirectLightingShader = LoadShader(L"IndirectLighting.cs.cso", "cs_6_6");
     const ComputePipelineDesc inlineIndirectLightingDesc = ComputePipelineDescBuilder::ReflectedDefault(*inlineIndirectLightingShader)
-        .WithDescriptorArrayCount("Textures", layout.TextureDescriptorCapacity)
-        .WithDescriptorArrayCount("VertexBuffers", layout.GeometryDescriptorCapacity)
-        .WithDescriptorArrayCount("IndexBuffers", layout.GeometryDescriptorCapacity)
         .Build();
     m_InlineIndirectLightingShader = std::make_unique<ComputeShader>(*inlineIndirectLightingShader, inlineIndirectLightingDesc);
 
@@ -197,14 +188,6 @@ void PathTracingPipelineController::BindRayTracingResources(
             bindingSet.SetBuffer("Geometries", sceneResources.GetGeometryBuffer());
         }
         lights.BindRayTracingResources(bindingSet);
-        const std::vector<std::shared_ptr<Texture>>& textures = sceneResources.GetTextures();
-        if (bindingSet.HasBinding("Textures"))
-        {
-            for (uint32_t textureIndex = 0; textureIndex < textures.size(); ++textureIndex)
-            {
-                bindingSet.SetTexture("Textures", textureIndex, ShaderResourceView(textures[textureIndex]));
-            }
-        }
         if (bindingSet.HasBinding("Skybox"))
         {
             bindingSet.SetTexture("Skybox", ShaderResourceView::TextureCube(skyboxTexture));
