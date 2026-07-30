@@ -5,6 +5,9 @@
 //Modify Begin:2026-07-27 by BestHui
 #include <Framework\FrameworkDeprecated.h>
 //Modify End
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/PipelineLayout.h>
+//Modify End
 #include <Framework/ShaderResourceView.h>
 #include <Framework/UnorderedAccessView.h>
 
@@ -18,7 +21,6 @@
 #include <vector>
 
 class CommandList;
-class PipelineLayout;
 class PipelineDescriptorSet;
 //Modify Begin:2026-07-29 by BestHui
 class PipelineDescriptorPool;
@@ -83,6 +85,9 @@ struct RayTracingPipelineDesc
     std::vector<std::wstring> Exports;
     std::vector<RayTracingHitGroupDesc> HitGroups;
     std::vector<RayTracingShaderBindingDesc> Bindings;
+//Modify Begin:2026-07-30 by BestHui
+    std::vector<PipelineRootSamplerDesc> RootSamplers;
+//Modify End
     std::vector<RayTracingShaderPassDesc> Passes;
     uint32_t PayloadSizeInBytes = sizeof(float) * 8;
     uint32_t AttributeSizeInBytes = sizeof(float) * 2;

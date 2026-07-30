@@ -142,6 +142,16 @@ RayTracingPipelineStateKey RayTracingPipelineStateBuilder::CreateKey() const
                 sizeof(binding.NullUnorderedAccessViewDesc));
         }
     }
+//Modify Begin:2026-07-30 by BestHui
+    for (const PipelineRootSamplerDesc& sampler : m_Desc.RootSamplers)
+    {
+        PipelineHashString(key.LayoutHash, sampler.Name);
+        PipelineHashValue(key.LayoutHash, sampler.ShaderRegister);
+        PipelineHashValue(key.LayoutHash, sampler.RegisterSpace);
+        PipelineHashValue(key.LayoutHash, sampler.ShaderStages);
+        PipelineHashBytes(key.LayoutHash, &sampler.Desc, sizeof(sampler.Desc));
+    }
+//Modify End
 
     key.PayloadSizeInBytes = m_Desc.PayloadSizeInBytes;
     key.AttributeSizeInBytes = m_Desc.AttributeSizeInBytes;
@@ -153,10 +163,11 @@ RayTracingPipelineStateKey RayTracingPipelineStateBuilder::CreateKey() const
 
 std::shared_ptr<RootSignature> RayTracingPipelineStateBuilder::BuildGlobalRootSignature() const
 {
-    using StaticSampler = CD3DX12_STATIC_SAMPLER_DESC;
-
     PipelineLayoutDesc layoutDesc;
     layoutDesc.ShaderStages = PipelineShaderStageFlags::RayTracing;
+//Modify Begin:2026-07-30 by BestHui
+    layoutDesc.RootSamplers = m_Desc.RootSamplers;
+//Modify End
     layoutDesc.DescriptorRanges.reserve(m_Desc.Bindings.size());
     for (uint32_t bindingIndex = 0; bindingIndex < m_Desc.Bindings.size(); ++bindingIndex)
     {
@@ -177,13 +188,7 @@ std::shared_ptr<RootSignature> RayTracingPipelineStateBuilder::BuildGlobalRootSi
 
     PipelineLayout layout(std::move(layoutDesc));
 
-    StaticSampler staticSampler(0, D3D12_FILTER_MIN_MAG_MIP_LINEAR);
-    staticSampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-    staticSampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-    staticSampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-
     PipelineRootSignatureBuildDesc rootSignatureBuildDesc;
-    rootSignatureBuildDesc.StaticSamplers.push_back(staticSampler);
     return layout.CreateRootSignature(rootSignatureBuildDesc);
 }
 

@@ -72,6 +72,9 @@ RayTracingShader::Impl::Impl(const ShaderBlob& shaderLibrary, RayTracingPipeline
     Assert(!Desc.Bindings.empty(), "Ray tracing shader requires at least one binding.");
 
     PipelineLayoutDesc layoutDesc;
+//Modify Begin:2026-07-30 by BestHui
+    layoutDesc.RootSamplers = Desc.RootSamplers;
+//Modify End
     layoutDesc.DescriptorRanges.reserve(Desc.Bindings.size());
     for (uint32_t i = 0; i < Desc.Bindings.size(); ++i)
     {

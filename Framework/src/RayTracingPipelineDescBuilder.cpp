@@ -49,6 +49,13 @@ RayTracingPipelineDescBuilder RayTracingPipelineDescBuilder::ReflectedDefault(co
     desc.Bindings.clear();
 
     const ShaderReflectionMetadata reflection = ShaderReflection::CollectLibrary(shaderLibrary.GetBlob());
+//Modify Begin:2026-07-30 by BestHui
+    PipelineLayoutReflectionOptions layoutOptions;
+    layoutOptions.MaxDescriptorCount = desc.MaxDescriptorCount;
+    layoutOptions.AccelerationStructureFallbackName = "Scene";
+    layoutOptions.ShaderStages = PipelineShaderStageFlags::RayTracing;
+    desc.RootSamplers = PipelineLayout::CreateDescFromReflection(reflection, layoutOptions).RootSamplers;
+//Modify End
 
     for (const auto& cbuffer : reflection.m_ConstantBuffers)
     {
