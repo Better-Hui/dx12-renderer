@@ -265,9 +265,27 @@ bool RaytracingDemo::LoadContent()
     const auto commandQueue = Application::Get().GetCommandQueue();
     const auto commandList = commandQueue->GetCommandList();
 
-    const std::filesystem::path unityScenePath = GetUnityScenePath();
 //Modify Begin:2026-07-30 by BestHui
-    LoadUnitySceneContent(*commandList, unityScenePath);
+    char* useUnityScene = nullptr;
+    size_t useUnitySceneLength = 0;
+    _dupenv_s(&useUnityScene, &useUnitySceneLength, "RAYTRACING_DEMO_USE_UNITY_SCENE");
+    const bool shouldUseUnityScene = useUnityScene != nullptr && std::strcmp(useUnityScene, "0") != 0;
+    std::free(useUnityScene);
+
+    if (shouldUseUnityScene)
+    {
+        const std::filesystem::path unityScenePath = GetUnityScenePath();
+        LoadUnitySceneContent(*commandList, unityScenePath);
+    }
+    else
+    {
+        m_SceneResources.LoadDeferredLightingScene(*commandList);
+        m_Lights.CreateDemoLights();
+        m_SkyboxEnabled = true;
+        m_HasSceneCamera = false;
+        m_SkyboxTexture = std::make_shared<Texture>();
+        commandList->LoadTextureFromFile(*m_SkyboxTexture, L"Assets/Textures/skybox/skybox.dds", TextureUsageType::Albedo);
+    }
 //Modify End
 
     m_ImGui = std::make_unique<ImGuiImpl>(*commandList, *PWindow);
