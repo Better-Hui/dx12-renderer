@@ -12,7 +12,9 @@ class PipelineLayout;
 struct PipelineDescriptorPoolDesc
 {
     uint32_t DescriptorSetMaxNum = 1024;
-    uint32_t ResourceDescriptorMaxNum = 4096;
+//Modify Begin:2026-07-30 by BestHui
+    uint32_t ResourceDescriptorMaxNum = 65536;
+//Modify End
     uint32_t SamplerDescriptorMaxNum = 0;
     bool AllowUpdateAfterSet = true;
 };

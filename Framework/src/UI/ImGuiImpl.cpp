@@ -186,6 +186,9 @@ void ImGuiImpl::DrawToRenderTarget(CommandList& commandList)
     const auto pD3dCmd = commandList.GetGraphicsCommandList();
     pD3dCmd->SetDescriptorHeaps(1, m_SrvDescHeap.GetAddressOf());
     ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), pD3dCmd.Get());
+//Modify Begin:2026-07-30 by BestHui
+    commandList.InvalidateCachedNativeState();
+//Modify End
 }
 
 void ImGuiImpl::BlitCombine(CommandList& commandList, const std::shared_ptr<Texture>& pSourceTexture) const

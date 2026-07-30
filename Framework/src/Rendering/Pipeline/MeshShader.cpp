@@ -95,6 +95,12 @@ void MeshShader::SetShaderResourceView(CommandList& commandList, const std::stri
     m_DescriptorSet->SetShaderResourceView(variableName, 0u, shaderResourceView);
 }
 
+void MeshShader::SetShaderResourceViews(CommandList& commandList, const std::string& variableName, std::span<const ShaderResourceView> shaderResourceViews)
+{
+    (void)commandList;
+    m_DescriptorSet->SetShaderResourceViews(variableName, shaderResourceViews);
+}
+
 void MeshShader::SetShaderResource(CommandList& commandList, const std::string& variableName, const Resource& resource)
 {
     (void)commandList;

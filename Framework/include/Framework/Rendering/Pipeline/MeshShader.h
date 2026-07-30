@@ -16,6 +16,7 @@
 
 #include <functional>
 #include <memory>
+#include <span>
 #include <string>
 
 class CommandContext;
@@ -43,6 +44,7 @@ public:
     }
 
     void SetShaderResourceView(CommandList& commandList, const std::string& variableName, const ShaderResourceView& shaderResourceView);
+    void SetShaderResourceViews(CommandList& commandList, const std::string& variableName, std::span<const ShaderResourceView> shaderResourceViews);
     void SetShaderResource(CommandList& commandList, const std::string& variableName, const Resource& resource);
     void SetStructuredBuffer(CommandList& commandList, const std::string& variableName, const StructuredBuffer& buffer);
     void SetTexture(CommandList& commandList, const std::string& variableName, const ShaderResourceView& shaderResourceView);

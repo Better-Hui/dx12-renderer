@@ -115,6 +115,14 @@ void ComputeShader::SetShaderResourceView(CommandList& commandList, const std::s
     m_DescriptorSet->SetShaderResource(variableName, arrayIndex, resource, stateAfter);
 }
 
+//Modify Begin:2026-07-30 by BestHui
+void ComputeShader::SetShaderResourceViews(CommandList& commandList, const std::string& variableName, std::span<const ShaderResourceView> shaderResourceViews) const
+{
+    (void)commandList;
+    m_DescriptorSet->SetShaderResourceViews(variableName, shaderResourceViews);
+}
+//Modify End
+
 void ComputeShader::SetUnorderedAccessView(CommandList& commandList, const std::string& variableName, const UnorderedAccessView& unorderedAccessView) const
 {
     (void)commandList;

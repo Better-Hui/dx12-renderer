@@ -10,6 +10,7 @@
 //Modify Begin:2026-07-30 by BestHui
 #include <Framework/Geometry/Meshlet.h>
 //Modify End
+#include <Framework/Rendering/Texture/ShaderResourceView.h>
 //Modify Begin:2026-07-30 by BestHui
 #include <Framework/Rendering/Pipeline/BindlessDescriptorHeap.h>
 //Modify End
@@ -81,6 +82,7 @@ public:
     const std::vector<RaytracingDemoSceneObject>& GetSceneObjects() const { return m_SceneObjects; }
     const std::vector<RaytracingDemoMaterialData>& GetMaterials() const { return m_Materials; }
     const std::vector<std::shared_ptr<Texture>>& GetTextures() const { return m_Textures; }
+    std::vector<ShaderResourceView> CreateTextureShaderResourceViews() const;
     const StructuredBuffer& GetMaterialBuffer() const { return m_MaterialBuffer; }
     const StructuredBuffer& GetGeometryBuffer() const { return m_GeometryBuffer; }
 //Modify Begin:2026-07-30 by BestHui

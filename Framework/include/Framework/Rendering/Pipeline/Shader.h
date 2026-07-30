@@ -11,6 +11,7 @@
 #include <string>
 #include <functional>
 #include <memory>
+#include <span>
 #include <unordered_map>
 #include <vector>
 
@@ -61,6 +62,7 @@ public:
 	}
 
 	void SetShaderResourceView(CommandList& commandList, const std::string& variableName, const ShaderResourceView& shaderResourceView);
+	void SetShaderResourceViews(CommandList& commandList, const std::string& variableName, std::span<const ShaderResourceView> shaderResourceViews);
 	void SetTexture(CommandList& commandList, const std::string& variableName, const ShaderResourceView& shaderResourceView);
 	void SetTexture(CommandList& commandList, const std::string& variableName, const std::shared_ptr<Resource>& texture);
 //Modify Begin:2026-07-23 by BestHui

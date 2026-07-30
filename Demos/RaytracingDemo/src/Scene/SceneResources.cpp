@@ -253,11 +253,12 @@ uint32_t RaytracingDemoSceneResources::AddTexture(CommandList& commandList, cons
     auto texture = std::make_shared<Texture>();
     commandList.LoadTextureFromFile(*texture, path, usage);
 //Modify Begin:2026-07-30 by BestHui
-    const uint32_t descriptorIndex = m_BindlessDescriptorHeap.AddShaderResourceView(*texture);
+    const uint32_t textureIndex = static_cast<uint32_t>(m_Textures.size());
+    m_BindlessDescriptorHeap.AddShaderResourceView(*texture);
 //Modify End
     m_Textures.push_back(texture);
 //Modify Begin:2026-07-30 by BestHui
-    return descriptorIndex;
+    return textureIndex;
 //Modify End
 }
 
@@ -321,6 +322,19 @@ uint32_t RaytracingDemoSceneResources::AddDiffuseMaterial(
         roughness,
         true);
 }
+
+//Modify Begin:2026-07-30 by BestHui
+std::vector<ShaderResourceView> RaytracingDemoSceneResources::CreateTextureShaderResourceViews() const
+{
+    std::vector<ShaderResourceView> shaderResourceViews;
+    shaderResourceViews.reserve(m_Textures.size());
+    for (const std::shared_ptr<Texture>& texture : m_Textures)
+    {
+        shaderResourceViews.emplace_back(texture);
+    }
+    return shaderResourceViews;
+}
+//Modify End
 
 void RaytracingDemoSceneResources::LoadDeferredLightingScene(CommandList& commandList)
 {

@@ -43,11 +43,20 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
             const bool useMeshletGBuffer = demo.m_UseMeshletGBuffer && demo.m_SceneResources.HasMeshlets();
             RaytracingDemo::GBufferDebugConstants debugConstants{};
             debugConstants.DebugMeshletClusters = (useMeshletGBuffer && demo.m_DebugMeshletClusters) ? 1u : 0u;
+//Modify Begin:2026-07-30 by BestHui
+            const std::vector<ShaderResourceView> sceneTextures = demo.m_SceneResources.CreateTextureShaderResourceViews();
+//Modify End
             if (useMeshletGBuffer)
             {
                 commandContext.BindPipeline(*demo.m_GBufferMeshShader);
 //Modify Begin:2026-07-30 by BestHui
                 commandContext.BindBindlessDescriptorHeap(demo.m_SceneResources.GetBindlessDescriptorHeap());
+//Modify End
+//Modify Begin:2026-07-30 by BestHui
+                if (demo.m_GBufferMeshShader->GetDescriptorSet().HasBinding("SceneTextures", DescriptorBindingKind::ShaderResourceView))
+                {
+                    demo.m_GBufferMeshShader->SetShaderResourceViews(cmd, "SceneTextures", sceneTextures);
+                }
 //Modify End
                 demo.m_GBufferMeshShader->SetStructuredBuffer(cmd, "MeshletVertices", demo.m_SceneResources.GetMeshletVertexBuffer());
                 demo.m_GBufferMeshShader->SetShaderResource(cmd, "MeshletIndices", demo.m_SceneResources.GetMeshletIndexBuffer());
@@ -98,6 +107,12 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
             commandContext.BindPipeline(*demo.m_GBufferShader);
 //Modify Begin:2026-07-30 by BestHui
             commandContext.BindBindlessDescriptorHeap(demo.m_SceneResources.GetBindlessDescriptorHeap());
+//Modify End
+//Modify Begin:2026-07-30 by BestHui
+            if (demo.m_GBufferShader->HasShaderResourceView("SceneTextures"))
+            {
+                demo.m_GBufferShader->SetShaderResourceViews(cmd, "SceneTextures", sceneTextures);
+            }
 //Modify End
             cmd.SetConstantBuffer(demo.m_GBufferShader, "GBufferDebugCBuffer", debugConstants);
 //Modify End

@@ -294,6 +294,7 @@ void CommandContext::BindBindlessDescriptorHeap(BindlessDescriptorHeap& bindless
     m_CommandList.BindShaderVisibleDescriptorHeap(
         D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
         bindlessDescriptorHeap.GetResourceDescriptorHeap());
+    bindlessDescriptorHeap.TransitionShaderResources(m_CommandList, D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
     m_DescriptorAllocator.SetBindlessDescriptorHeap(&bindlessDescriptorHeap);
 }
 //Modify End

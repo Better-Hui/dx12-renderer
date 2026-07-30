@@ -2,8 +2,10 @@
 #include <Framework/Rendering/Pipeline/BindlessDescriptorHeap.h>
 
 #include <DX12Library/Application.h>
+#include <DX12Library/CommandList.h>
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Resource.h>
+#include <DX12Library/Texture.h>
 #include <Framework/Rendering/Pipeline/PipelineDescriptorSet.h>
 
 BindlessDescriptorHeap::BindlessDescriptorHeap(BindlessDescriptorHeapDesc desc)
@@ -24,6 +26,7 @@ BindlessDescriptorHeap::BindlessDescriptorHeap(BindlessDescriptorHeapDesc desc)
 void BindlessDescriptorHeap::Reset()
 {
     m_NextResourceDescriptorIndex = 0;
+    m_ShaderResources.clear();
     m_CachedDescriptorTables.clear();
 }
 
@@ -43,15 +46,39 @@ uint32_t BindlessDescriptorHeap::AddShaderResourceView(
 void BindlessDescriptorHeap::UpdateShaderResourceView(
     const uint32_t descriptorIndex,
     const Resource& resource,
-    const D3D12_SHADER_RESOURCE_VIEW_DESC* srvDesc) const
+    const D3D12_SHADER_RESOURCE_VIEW_DESC* srvDesc)
 {
     Assert(descriptorIndex < m_Desc.ResourceDescriptorCapacity, "Bindless resource descriptor index is out of range.");
 
-    Application::Get().GetDevice()->CopyDescriptorsSimple(
-        1u,
-        GetResourceCpuHandle(descriptorIndex),
-        resource.GetShaderResourceView(srvDesc),
-        D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    ID3D12Device2* device = Application::Get().GetDevice().Get();
+    const D3D12_CPU_DESCRIPTOR_HANDLE destination = GetResourceCpuHandle(descriptorIndex);
+    if (dynamic_cast<const Texture*>(&resource) != nullptr)
+    {
+        device->CreateShaderResourceView(resource.GetD3D12Resource().Get(), srvDesc, destination);
+    }
+    else
+    {
+        device->CopyDescriptorsSimple(
+            1u,
+            destination,
+            resource.GetShaderResourceView(srvDesc),
+            D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    }
+    m_ShaderResources[descriptorIndex] = &resource;
+}
+
+void BindlessDescriptorHeap::TransitionShaderResources(
+    CommandList& commandList,
+    const D3D12_RESOURCE_STATES stateAfter) const
+{
+    for (const auto& [descriptorIndex, resource] : m_ShaderResources)
+    {
+        (void)descriptorIndex;
+        if (resource != nullptr && resource->AreAutoBarriersEnabled())
+        {
+            commandList.TransitionBarrier(*resource, stateAfter);
+        }
+    }
 }
 
 D3D12_GPU_DESCRIPTOR_HANDLE BindlessDescriptorHeap::GetOrCreateDescriptorTable(

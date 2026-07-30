@@ -150,6 +150,14 @@ void Shader::SetShaderResourceView(CommandList& commandList, const std::string& 
 //Modify End
 }
 
+//Modify Begin:2026-07-30 by BestHui
+void Shader::SetShaderResourceViews(CommandList& commandList, const std::string& variableName, std::span<const ShaderResourceView> shaderResourceViews)
+{
+    (void)commandList;
+    m_DescriptorSet->SetShaderResourceViews(variableName, shaderResourceViews);
+}
+//Modify End
+
 void Shader::SetTexture(CommandList& commandList, const std::string& variableName, const ShaderResourceView& shaderResourceView)
 {
     SetShaderResourceView(commandList, variableName, shaderResourceView);
