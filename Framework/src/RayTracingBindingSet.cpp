@@ -283,11 +283,7 @@ void RayTracingBindingSet::SetTextureArray(std::string_view name, const std::vec
 {
     const RayTracingShaderBindingDesc& binding = m_Impl->GetShaderResourceBinding(name);
     Assert(shaderResourceViews.size() <= binding.DescriptorCount, "Ray tracing texture array exceeds binding descriptor count.");
-    m_Impl->DescriptorSet.ClearShaderResourceViews(name);
-    for (uint32_t i = 0; i < static_cast<uint32_t>(shaderResourceViews.size()); ++i)
-    {
-        m_Impl->DescriptorSet.SetShaderResourceView(name, i, shaderResourceViews[i]);
-    }
+    m_Impl->DescriptorSet.SetShaderResourceViews(name, shaderResourceViews);
 
     m_Impl->MarkDescriptorsDirty(binding);
 }

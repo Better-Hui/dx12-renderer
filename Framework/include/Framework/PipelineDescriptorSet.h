@@ -14,6 +14,7 @@
 #include <array>
 #include <map>
 #include <optional>
+#include <span>
 #include <vector>
 
 class RayTracingAccelerationStructure;
@@ -99,6 +100,7 @@ public:
     void ValidateArrayIndex(std::string_view name, DescriptorBindingKind expectedKind, UINT arrayIndex) const;
 
     UINT SetShaderResourceView(std::string_view name, UINT arrayIndex, const ShaderResourceView& shaderResourceView);
+    UINT SetShaderResourceViews(std::string_view name, std::span<const ShaderResourceView> shaderResourceViews);
     UINT SetShaderResource(std::string_view name, UINT arrayIndex, const Resource& resource, D3D12_RESOURCE_STATES stateAfter);
     UINT SetShaderResource(
         std::string_view name,

@@ -48,6 +48,7 @@ Demo 层不应该直接管理：
 
 - `BindPipeline(...)`
 - `BindDescriptorSet(...)`
+- `BindDescriptorSet(PipelineDescriptorSetBindDesc)`
 - `Draw(...)`
 - `Dispatch(...)`
 - `DispatchRays(...)`
@@ -126,6 +127,14 @@ shader.SetUnorderedAccessView(commandList, "Output", UnorderedAccessView(output)
 当前实现中，`PipelineDescriptorTableAllocation` 带有 revision。只要 descriptor set 中某个 table 的 CPU backing 被更新，revision 就会增加。`CommandContextDescriptorAllocator` 会用 CPU handle、descriptor count、revision 判断当前 `CommandContext` 内是否需要重新 stage descriptor table。
 
 注意：这只是减少重复绑定的过渡优化，不等于最终 NRI 式 persistent GPU descriptor set。最终目标仍然是由 command context / frame resource 统一管理 shader-visible descriptor heap pages。
+
+数组 SRV 推荐走 range update，而不是业务层逐个 descriptor 写：
+
+```cpp
+descriptorSet.SetShaderResourceViews("Textures", textureSrvs);
+```
+
+`RayTracingBindingSet::SetTextureArray()` 内部已经使用这个路径。它接近 NRI 的 `UpdateDescriptorRangeDesc` 思路：资源数组作为一个 descriptor range 更新，descriptor table revision 只增加一次。
 
 sample 不应该硬编码：
 

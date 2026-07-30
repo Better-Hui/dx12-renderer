@@ -9,6 +9,7 @@
 #include <Framework/PipelineDescriptorPool.h>
 #include <Framework/RayTracingAccelerationStructure.h>
 
+#include <algorithm>
 #include <cstring>
 
 //Modify Begin:2026-07-29 by BestHui
@@ -186,6 +187,116 @@ UINT PipelineDescriptorSet::SetShaderResourceView(
         }
     }
 //Modify End
+
+    return binding.RootParameterIndex;
+}
+
+UINT PipelineDescriptorSet::SetShaderResourceViews(
+    std::string_view name,
+    std::span<const ShaderResourceView> shaderResourceViews)
+{
+    const DescriptorBindingInfo& binding = GetBinding(name, DescriptorBindingKind::ShaderResourceView);
+    if (!shaderResourceViews.empty())
+    {
+        ValidateArrayIndex(
+            name,
+            DescriptorBindingKind::ShaderResourceView,
+            static_cast<UINT>(shaderResourceViews.size() - 1u));
+    }
+
+    std::vector<std::optional<ShaderResourceView>> nextShaderResourceViews;
+    std::vector<std::optional<PipelineShaderResourceBinding>> nextShaderResources;
+    nextShaderResourceViews.resize(shaderResourceViews.size());
+    nextShaderResources.resize(shaderResourceViews.size());
+
+    bool descriptorChanged = false;
+    PipelineBoundResource& boundResource = m_BoundResources[binding.RootParameterIndex];
+    if (boundResource.ShaderResources.size() != shaderResourceViews.size())
+    {
+        descriptorChanged = true;
+    }
+
+    std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> sourceDescriptorHandles;
+    std::vector<UINT> sourceDescriptorRangeSizes;
+    sourceDescriptorHandles.reserve(shaderResourceViews.size());
+    sourceDescriptorRangeSizes.resize(shaderResourceViews.size(), 1u);
+
+    for (size_t i = 0; i < shaderResourceViews.size(); ++i)
+    {
+        const ShaderResourceView& shaderResourceView = shaderResourceViews[i];
+        Assert(shaderResourceView.m_Resource != nullptr, "Pipeline SRV resource must not be null.");
+
+        PipelineShaderResourceBinding resourceBinding = {};
+        resourceBinding.Resource = shaderResourceView.m_Resource.get();
+        resourceBinding.ResourceIdentity = GetD3D12ResourcePtr(resourceBinding.Resource);
+        resourceBinding.StateAfter = D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE;
+        resourceBinding.FirstSubresource = shaderResourceView.m_FirstSubresource;
+        resourceBinding.NumSubresources = shaderResourceView.m_NumSubresources;
+        resourceBinding.HasDesc = shaderResourceView.GetDescOrNullptr() != nullptr;
+        if (resourceBinding.HasDesc)
+        {
+            resourceBinding.Desc = *shaderResourceView.GetDescOrNullptr();
+        }
+
+        if (!descriptorChanged &&
+            (i >= boundResource.ShaderResources.size() ||
+                !boundResource.ShaderResources[i].has_value() ||
+                !IsSameShaderResourceBinding(*boundResource.ShaderResources[i], resourceBinding)))
+        {
+            descriptorChanged = true;
+        }
+
+        nextShaderResourceViews[i] = shaderResourceView;
+        nextShaderResources[i] = resourceBinding;
+        sourceDescriptorHandles.push_back(
+            shaderResourceView.m_Resource->GetShaderResourceView(shaderResourceView.GetDescOrNullptr()));
+    }
+
+    boundResource.ShaderResourceViews = std::move(nextShaderResourceViews);
+    boundResource.ShaderResources = std::move(nextShaderResources);
+
+    if (descriptorChanged)
+    {
+        if (PipelineDescriptorTableAllocation* allocation = FindMutableDescriptorTableAllocation(binding.RootParameterIndex))
+        {
+            const DescriptorAllocation* defaultDescriptors = GetLayout().FindDefaultDescriptorTable(binding.RootParameterIndex);
+            if (defaultDescriptors != nullptr && shaderResourceViews.size() < allocation->GetNumHandles())
+            {
+                const uint32_t descriptorCount = allocation->GetNumHandles();
+                const uint32_t defaultDescriptorCount = defaultDescriptors->GetNumHandles();
+                const uint32_t copiedDescriptorCount = (std::min)(descriptorCount, defaultDescriptorCount);
+                Application::Get().GetDevice()->CopyDescriptorsSimple(
+                    copiedDescriptorCount,
+                    GetDescriptorHandle(*this, *allocation),
+                    defaultDescriptors->GetDescriptorHandle(),
+                    D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                for (uint32_t descriptorIndex = copiedDescriptorCount; descriptorIndex < descriptorCount; ++descriptorIndex)
+                {
+                    Application::Get().GetDevice()->CopyDescriptorsSimple(
+                        1u,
+                        GetDescriptorHandle(*this, *allocation, descriptorIndex),
+                        defaultDescriptors->GetDescriptorHandle(0u),
+                        D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                }
+            }
+
+            if (!sourceDescriptorHandles.empty())
+            {
+                const D3D12_CPU_DESCRIPTOR_HANDLE destinationDescriptorHandle =
+                    GetDescriptorHandle(*this, *allocation, 0u);
+                const UINT destinationRangeSize = static_cast<UINT>(sourceDescriptorHandles.size());
+                Application::Get().GetDevice()->CopyDescriptors(
+                    1u,
+                    &destinationDescriptorHandle,
+                    &destinationRangeSize,
+                    destinationRangeSize,
+                    sourceDescriptorHandles.data(),
+                    sourceDescriptorRangeSizes.data(),
+                    D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            }
+            allocation->MarkDirty();
+        }
+    }
 
     return binding.RootParameterIndex;
 }

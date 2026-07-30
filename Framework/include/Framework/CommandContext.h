@@ -63,6 +63,7 @@ public:
     void BindPipeline(Shader& shader) const;
     void BindPipeline(const ComputeShader& shader) const;
     void BindPipeline(const RayTracingShader& shader) const;
+    void BindDescriptorSet(const PipelineDescriptorSetBindDesc& descriptorSetDesc) const;
     void BindDescriptorSet(const PipelineDescriptorSet& descriptorSet) const;
 //Modify End
 //Modify Begin:2026-07-27 by BestHui

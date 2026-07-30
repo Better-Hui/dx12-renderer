@@ -251,12 +251,17 @@ void CommandContext::BindPipeline(const RayTracingShader& shader) const
     SetPipeline(shader);
 }
 
-void CommandContext::BindDescriptorSet(const PipelineDescriptorSet& descriptorSet) const
+void CommandContext::BindDescriptorSet(const PipelineDescriptorSetBindDesc& descriptorSetDesc) const
 {
 //Modify Begin:2026-07-29 by BestHui
     Assert(m_HasBoundPipeline, "A pipeline must be bound before binding a descriptor set.");
-    SetDescriptorSet(m_BoundPipelineBindPoint, PipelineDescriptorSetBindDesc{ descriptorSet.GetSetIndex(), &descriptorSet });
+    SetDescriptorSet(m_BoundPipelineBindPoint, descriptorSetDesc);
 //Modify End
+}
+
+void CommandContext::BindDescriptorSet(const PipelineDescriptorSet& descriptorSet) const
+{
+    BindDescriptorSet(PipelineDescriptorSetBindDesc{ descriptorSet.GetSetIndex(), &descriptorSet });
 }
 
 void CommandContext::SetGraphicsRootSignature(const RootSignature& rootSignature) const
