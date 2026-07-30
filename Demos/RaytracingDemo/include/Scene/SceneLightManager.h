@@ -7,6 +7,7 @@
 #include <Framework/SharedUploadBuffer.h>
 
 #include <Scene/SceneLighting.h>
+#include <Framework/UnitySceneParser.h>
 
 #include <DirectXMath.h>
 
@@ -24,8 +25,11 @@ public:
     SceneLightManager();
 
     void CreateDemoLights();
+    void CreateFromUnityScene(const UnitySceneData& scene);
     void InitializeGpuBuffers(CommandList& commandList);
-    void Upload(CommandList& commandList);
+//Modify Begin:2026-07-30 by BestHui
+    bool Upload(CommandList& commandList);
+//Modify End
     void UpdateDynamicLights(float timeSeconds);
     bool DrawImGui();
     void BindComputeResources(CommandList& commandList, ComputeShader& shader);

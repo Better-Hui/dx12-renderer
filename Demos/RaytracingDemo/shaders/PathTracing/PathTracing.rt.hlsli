@@ -8,7 +8,9 @@ RayPayload TraceScene(float3 origin, float3 direction, float tMax, uint flags)
     RayDesc ray;
     ray.Origin = origin;
     ray.Direction = direction;
-    ray.TMin = 0.0f;
+//Modify Begin:2026-07-30 by BestHui
+    ray.TMin = 0.0001f;
+//Modify End
     ray.TMax = tMax;
 
     RayPayload payload;

@@ -9,6 +9,9 @@ struct PixelShaderInput
     float2 Uv : TEXCOORD0;
     float4 CurrentPositionCs : TEXCOORD1;
     float4 PreviousPositionCs : TEXCOORD2;
+//Modify Begin:2026-07-29 by BestHui
+    bool IsFrontFace : SV_IsFrontFace;
+//Modify End
 };
 
 struct PixelShaderOutput
@@ -73,6 +76,12 @@ PixelShaderOutput main(PixelShaderInput IN)
     const float3 baseColor = Diffuse.rgb * sampledDiffuse;
 
     float3 normalWs = normalize(IN.NormalWs);
+//Modify Begin:2026-07-29 by BestHui
+    if (!IN.IsFrontFace)
+    {
+        normalWs = -normalWs;
+    }
+//Modify End
     if (HasNormalMap != 0u)
     {
         normalWs = ApplyNormalMap(normalWs, IN.TangentWs, IN.BitangentWs, uv);

@@ -184,16 +184,31 @@ void PathTracingPipelineController::BindRayTracingResources(
 
     const auto bindBindingSet = [&] (RayTracingBindingSet& bindingSet)
     {
-        bindingSet.SetAccelerationStructure("Scene", accelerationStructure);
-        bindingSet.SetBuffer("Materials", sceneResources.GetMaterialBuffer());
-        bindingSet.SetBuffer("Geometries", sceneResources.GetGeometryBuffer());
+        if (bindingSet.HasBinding("Scene"))
+        {
+            bindingSet.SetAccelerationStructure("Scene", accelerationStructure);
+        }
+        if (bindingSet.HasBinding("Materials"))
+        {
+            bindingSet.SetBuffer("Materials", sceneResources.GetMaterialBuffer());
+        }
+        if (bindingSet.HasBinding("Geometries"))
+        {
+            bindingSet.SetBuffer("Geometries", sceneResources.GetGeometryBuffer());
+        }
         lights.BindRayTracingResources(bindingSet);
         const std::vector<std::shared_ptr<Texture>>& textures = sceneResources.GetTextures();
-        for (uint32_t textureIndex = 0; textureIndex < textures.size(); ++textureIndex)
+        if (bindingSet.HasBinding("Textures"))
         {
-            bindingSet.SetTexture("Textures", textureIndex, ShaderResourceView(textures[textureIndex]));
+            for (uint32_t textureIndex = 0; textureIndex < textures.size(); ++textureIndex)
+            {
+                bindingSet.SetTexture("Textures", textureIndex, ShaderResourceView(textures[textureIndex]));
+            }
         }
-        bindingSet.SetTexture("Skybox", ShaderResourceView::TextureCube(skyboxTexture));
+        if (bindingSet.HasBinding("Skybox"))
+        {
+            bindingSet.SetTexture("Skybox", ShaderResourceView::TextureCube(skyboxTexture));
+        }
     };
 
     bindBindingSet(*m_DirectRayTracingBindingSet);

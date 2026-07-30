@@ -22,8 +22,11 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
         renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDenoisePass(demo));
         sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::DenoiseFinishedToken;
     }
-    renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateSkyboxPass(demo, sceneReadyToken));
-    sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::SkyboxFinishedToken;
+    if (demo.m_SkyboxEnabled)
+    {
+        renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateSkyboxPass(demo, sceneReadyToken));
+        sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::SkyboxFinishedToken;
+    }
     if (demo.m_CudaBloom.IsEnabled())
     {
         renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateCudaBloomPass(demo, sceneReadyToken));

@@ -14,6 +14,7 @@
 class CommandList;
 class Model;
 class RayTracingAccelerationStructure;
+struct UnitySceneData;
 
 struct RaytracingDemoMaterialData
 {
@@ -50,6 +51,7 @@ public:
 
     void Clear();
     void LoadDeferredLightingScene(CommandList& commandList);
+    bool LoadUnityScene(CommandList& commandList, const UnitySceneData& scene);
     void AddRayTracingInstances(RayTracingAccelerationStructure& accelerationStructure) const;
     void UploadRayTracingBuffers(CommandList& commandList, const RayTracingAccelerationStructure& accelerationStructure);
 

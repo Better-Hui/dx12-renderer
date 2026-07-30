@@ -50,7 +50,9 @@ float3 NextFloatAwayFrom(float3 value, float3 offset)
 
 float3 ComputePositionError(float3 positionWs)
 {
-    return Gamma(7u) * abs(positionWs);
+//Modify Begin:2026-07-30 by BestHui
+    return max(Gamma(7u) * abs(positionWs), float3(0.0001f, 0.0001f, 0.0001f));
+//Modify End
 }
 
 float3 ComputeTrianglePositionError(float3 p0Ws, float3 p1Ws, float3 p2Ws, float3 barycentrics)
@@ -59,7 +61,9 @@ float3 ComputeTrianglePositionError(float3 p0Ws, float3 p1Ws, float3 p2Ws, float
         abs(p0Ws) * barycentrics.x +
         abs(p1Ws) * barycentrics.y +
         abs(p2Ws) * barycentrics.z;
-    return Gamma(7u) * interpolatedAbsPosition;
+//Modify Begin:2026-07-30 by BestHui
+    return max(Gamma(7u) * interpolatedAbsPosition, float3(0.0001f, 0.0001f, 0.0001f));
+//Modify End
 }
 
 float3 OffsetRayOrigin(float3 positionWs, float3 positionError, float3 normalWs, float3 rayDirectionWs)

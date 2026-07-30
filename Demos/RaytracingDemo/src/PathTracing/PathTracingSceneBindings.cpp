@@ -101,14 +101,23 @@ void RaytracingDemoPassAccess::BindDxrPathTracingInputs(
     const RaytracingDemoRenderGraph::FrameGBufferResources& gbuffer,
     const RaytracingDemo::CameraConstants& camera)
 {
-    shader.SetTexture("GBufferTextures", 0u, ShaderResourceView(gbuffer.AlbedoOcclusion));
-    shader.SetTexture("GBufferTextures", 1u, ShaderResourceView(gbuffer.SpecularSmoothness));
-    shader.SetTexture("GBufferTextures", 2u, ShaderResourceView(gbuffer.Normal));
-    shader.SetTexture("GBufferTextures", 3u, ShaderResourceView(gbuffer.EmissionMetallic));
-    shader.SetTexture("GBufferTextures", 4u, ShaderResourceView(gbuffer.Position));
-    shader.SetTexture("DepthTexture", ShaderResourceView::DepthAsFloat(gbuffer.Depth));
+    if (shader.HasBinding("GBufferTextures"))
+    {
+        shader.SetTexture("GBufferTextures", 0u, ShaderResourceView(gbuffer.AlbedoOcclusion));
+        shader.SetTexture("GBufferTextures", 1u, ShaderResourceView(gbuffer.SpecularSmoothness));
+        shader.SetTexture("GBufferTextures", 2u, ShaderResourceView(gbuffer.Normal));
+        shader.SetTexture("GBufferTextures", 3u, ShaderResourceView(gbuffer.EmissionMetallic));
+        shader.SetTexture("GBufferTextures", 4u, ShaderResourceView(gbuffer.Position));
+    }
+    if (shader.HasBinding("DepthTexture"))
+    {
+        shader.SetTexture("DepthTexture", ShaderResourceView::DepthAsFloat(gbuffer.Depth));
+    }
     demo.m_Lights.BindRayTracingResources(shader);
-    shader.SetConstantBufferData("CameraConstants", &camera, sizeof(camera));
+    if (shader.HasBinding("CameraConstants"))
+    {
+        shader.SetConstantBufferData("CameraConstants", &camera, sizeof(camera));
+    }
 }
 
 void RaytracingDemoPassAccess::BindCompositeInputs(

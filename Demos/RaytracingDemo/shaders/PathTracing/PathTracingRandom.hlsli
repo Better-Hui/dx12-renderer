@@ -17,9 +17,12 @@ uint Hash(uint value)
 
 float Random01(inout uint state)
 {
-    state += 0x9E3779B9u;
-    const uint value = Hash(state);
-    return float(value & 0x00ffffffu) / 16777216.0f;
+//Modify Begin:2026-07-30 by BestHui
+    state = state * 747796405u + 2891336453u;
+    uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    word = (word >> 22u) ^ word;
+    return (float(word) + 0.5f) / 4294967296.0f;
+//Modify End
 }
 
 float HashToFloat(uint value)
@@ -40,12 +43,13 @@ float AnimatedInterleavedGradientNoise(uint2 pixel, uint frameIndex)
 
 uint InitializeRandomState(uint2 pixel, uint width, uint frameIndex, uint salt)
 {
+//Modify Begin:2026-07-30 by BestHui
     const uint pixelIndex = pixel.x + pixel.y * width;
-    const uint rotationSeed = Hash(pixelIndex ^ (frameIndex * 0x85ebca6bu) ^ salt);
-    const float rotation = HashToFloat(rotationSeed);
-    const float ign = AnimatedInterleavedGradientNoise(pixel, frameIndex);
-    const uint rotatedIgn = uint(frac(ign + rotation) * 16777216.0f);
-    return Hash(rotatedIgn ^ (pixelIndex * 0xc2b2ae35u) ^ (frameIndex * 0x27d4eb2fu) ^ salt);
+    const uint xHash = Hash(pixel.x * 0x8da6b343u);
+    const uint yHash = Hash(pixel.y * 0xd8163841u);
+    const uint frameHash = Hash(frameIndex * 0xcb1ab31fu);
+    return Hash(xHash ^ yHash ^ Hash(pixelIndex) ^ frameHash ^ salt);
+//Modify End
 }
 
 void BuildOrthonormalBasis(float3 normal, out float3 tangent, out float3 bitangent)

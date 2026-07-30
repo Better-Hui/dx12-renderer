@@ -8,7 +8,11 @@
 
 float3 SampleSkybox(float3 direction)
 {
-    return Skybox.SampleLevel(LinearWrapSampler, direction, 0.0f).rgb * Camera_SkyLight.ColorAndIntensity.rgb * Camera_SkyLight.ColorAndIntensity.w;
+//Modify Begin:2026-07-30 by BestHui
+    return Skybox.SampleLevel(LinearWrapSampler, direction, 0.0f).rgb *
+        Camera_SkyLight.ColorAndIntensity.rgb *
+        Camera_SkyLight.ColorAndIntensity.w;
+//Modify End
 }
 
 float3 ToneMap(float3 color)

@@ -36,6 +36,18 @@ add_subdirectory(RenderGraph)
 
 # Demos
 # Modify Begin:2026-07-29 by BestHui
+foreach(LOCAL_DEMO
+        AnimationsDemo
+        DeferredLightingDemo
+        LightingDemo
+        ToonDemo
+        GrassDemo
+        RenderGraphDemo
+        MeshletsDemo)
+        if (EXISTS "${CMAKE_SOURCE_DIR}/Demos/${LOCAL_DEMO}/CMakeLists.txt")
+                add_subdirectory("Demos/${LOCAL_DEMO}")
+        endif()
+endforeach()
 add_subdirectory(Demos/RaytracingDemo)
 # Modify End
 

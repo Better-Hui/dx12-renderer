@@ -1,6 +1,7 @@
 //Modify Begin:2026-07-27 by BestHui
 #include <Scene/SceneLightManager.h>
 
+#include <DX12Library/Application.h>
 #include <DX12Library/CommandList.h>
 #include <DX12Library/Helpers.h>
 
@@ -27,9 +28,15 @@ using namespace DirectX;
 
 namespace
 {
+//Modify Begin:2026-07-30 by BestHui
+    constexpr size_t InitialLightBufferCapacity = 1024;
+//Modify End
+
     size_t GrowLightBufferCapacity(const size_t currentCapacity, const size_t requiredCapacity)
     {
-        size_t newCapacity = std::max<size_t>(1, currentCapacity);
+//Modify Begin:2026-07-30 by BestHui
+        size_t newCapacity = std::max<size_t>(InitialLightBufferCapacity, currentCapacity);
+//Modify End
         while (newCapacity < requiredCapacity)
         {
             newCapacity *= 2;
@@ -79,6 +86,9 @@ namespace
 
         if (buffer.GetD3D12Resource() != nullptr)
         {
+//Modify Begin:2026-07-30 by BestHui
+            Application::Get().Flush();
+//Modify End
             commandList.TrackResource(buffer);
         }
 
@@ -109,6 +119,24 @@ namespace
         const uint64_t destinationOffset = static_cast<uint64_t>(clampedBegin * sizeof(T));
         uploadBuffer.Upload(commandList, destination, values.data() + clampedBegin, elementCount * sizeof(T), sizeof(T), destinationOffset);
     }
+
+    XMFLOAT3 RotateVector(const UnityQuaternion& rotation, const XMFLOAT3& value)
+    {
+        const XMVECTOR quaternion = XMVectorSet(rotation.X, rotation.Y, rotation.Z, rotation.W);
+        const XMVECTOR vector = XMVectorSet(value.x, value.y, value.z, 0.0f);
+        XMFLOAT3 result{};
+        XMStoreFloat3(&result, XMVector3Rotate(vector, quaternion));
+        return result;
+    }
+
+//Modify Begin:2026-07-30 by BestHui
+    XMFLOAT3 NormalizeVector(const XMFLOAT3& value)
+    {
+        XMFLOAT3 result{};
+        XMStoreFloat3(&result, XMVector3Normalize(XMLoadFloat3(&value)));
+        return result;
+    }
+//Modify End
 }
 
 SceneLightManager::SceneLightManager()
@@ -192,18 +220,148 @@ void SceneLightManager::CreateDemoLights()
     MarkAreaLightsDirty();
 }
 
+void SceneLightManager::CreateFromUnityScene(const UnitySceneData& scene)
+{
+    m_DirectionalLights.clear();
+    m_PointLights.clear();
+    m_AreaLights.clear();
+    m_PointLightBaseY.clear();
+    m_PointLightPhase.clear();
+    m_PointLightOrbitRadius.clear();
+    m_PointLightOrbitSpeed.clear();
+    m_PointLightOrbitCenter.clear();
+    m_PointLightAnimated.clear();
+
+//Modify Begin:2026-07-30 by BestHui
+    XMFLOAT3 ambientColor = {
+        scene.RenderSettings.AmbientSkyColor.R,
+        scene.RenderSettings.AmbientSkyColor.G,
+        scene.RenderSettings.AmbientSkyColor.B
+    };
+    if (scene.RenderSettings.AmbientMode == 3)
+    {
+        ambientColor = {
+            (scene.RenderSettings.AmbientSkyColor.R + scene.RenderSettings.AmbientEquatorColor.R + scene.RenderSettings.AmbientGroundColor.R) / 3.0f,
+            (scene.RenderSettings.AmbientSkyColor.G + scene.RenderSettings.AmbientEquatorColor.G + scene.RenderSettings.AmbientGroundColor.G) / 3.0f,
+            (scene.RenderSettings.AmbientSkyColor.B + scene.RenderSettings.AmbientEquatorColor.B + scene.RenderSettings.AmbientGroundColor.B) / 3.0f
+        };
+    }
+    m_SkyLight.ColorAndIntensity = {
+        ambientColor.x,
+        ambientColor.y,
+        ambientColor.z,
+        scene.RenderSettings.AmbientIntensity
+    };
+    if (scene.RenderSettings.SkyboxMaterial.IsValid() &&
+        ambientColor.x <= 0.0f &&
+        ambientColor.y <= 0.0f &&
+        ambientColor.z <= 0.0f)
+    {
+        m_SkyLight.ColorAndIntensity = { 1.0f, 1.0f, 1.0f, std::max(0.001f, scene.RenderSettings.AmbientIntensity) };
+    }
+//Modify End
+
+    for (const UnityLightInfo& unityLight : scene.Lights)
+    {
+        if (!unityLight.Enabled)
+        {
+            continue;
+        }
+
+        if (unityLight.Type == UnityLightType::Directional)
+        {
+            DirectionalLight light{};
+//Modify Begin:2026-07-30 by BestHui
+            const XMFLOAT3 direction = RotateVector(unityLight.Transform.WorldRotation, { 0.0f, 0.0f, -1.0f });
+//Modify End
+            light.m_DirectionWs = { direction.x, direction.y, direction.z, 0.0f };
+            light.m_Color = {
+                unityLight.Color.R,
+                unityLight.Color.G,
+                unityLight.Color.B,
+                unityLight.Intensity
+            };
+            m_DirectionalLights.push_back(light);
+        }
+        else if (unityLight.Type == UnityLightType::Point || unityLight.Type == UnityLightType::Spot)
+        {
+            PointLight light(
+                {
+                    unityLight.Transform.WorldPosition.X,
+                    unityLight.Transform.WorldPosition.Y,
+                    unityLight.Transform.WorldPosition.Z,
+                    1.0f
+                },
+                std::max(0.1f, unityLight.Range));
+            light.Color = {
+                unityLight.Color.R,
+                unityLight.Color.G,
+                unityLight.Color.B,
+                unityLight.Intensity
+            };
+            light.RecalculateAttenuationCoefficients();
+
+            const size_t lightIndex = m_PointLights.size();
+            m_PointLights.push_back(light);
+            m_PointLightBaseY.push_back(light.PositionWs.y);
+            m_PointLightPhase.push_back(0.0f);
+            m_PointLightOrbitRadius.push_back(0.0f);
+            m_PointLightOrbitSpeed.push_back(0.0f);
+            m_PointLightOrbitCenter.push_back({ light.PositionWs.x, light.PositionWs.y, light.PositionWs.z });
+            m_PointLightAnimated.push_back(0);
+            (void)lightIndex;
+        }
+        else if (unityLight.Type == UnityLightType::Area)
+        {
+            AreaLightData areaLight{};
+//Modify Begin:2026-07-30 by BestHui
+            const XMFLOAT3 normal = NormalizeVector(RotateVector(unityLight.Transform.WorldRotation, { 0.0f, 0.0f, 1.0f }));
+            const XMFLOAT3 axisU = NormalizeVector(RotateVector(unityLight.Transform.WorldRotation, { 1.0f, 0.0f, 0.0f }));
+            const XMFLOAT3 axisV = NormalizeVector(RotateVector(unityLight.Transform.WorldRotation, { 0.0f, 1.0f, 0.0f }));
+//Modify End
+            areaLight.PositionAndRange = {
+                unityLight.Transform.WorldPosition.X,
+                unityLight.Transform.WorldPosition.Y,
+                unityLight.Transform.WorldPosition.Z,
+                unityLight.Range
+            };
+//Modify Begin:2026-07-30 by BestHui
+            areaLight.NormalAndType = { normal.x, normal.y, normal.z, 0.0f };
+            areaLight.AxisUAndExtent = { axisU.x, axisU.y, axisU.z, unityLight.AreaSize.X * 0.5f };
+            areaLight.AxisVAndExtent = { axisV.x, axisV.y, axisV.z, unityLight.AreaSize.Y * 0.5f };
+//Modify End
+            areaLight.ColorAndIntensity = {
+                unityLight.Color.R,
+                unityLight.Color.G,
+                unityLight.Color.B,
+                unityLight.Intensity
+            };
+            m_AreaLights.push_back(areaLight);
+        }
+    }
+
+    BuildGpuData();
+    MarkDirectionalLightsDirty();
+    MarkPointLightsDirty(0, m_PointLightGpuData.size());
+    MarkAreaLightsDirty();
+}
+
 void SceneLightManager::InitializeGpuBuffers(CommandList& commandList)
 {
     m_UploadBuffer = std::make_unique<SharedUploadBuffer>();
-    m_DirectionalLightBufferCapacity = std::max<size_t>(1, m_DirectionalLightGpuData.size());
-    m_PointLightBufferCapacity = std::max<size_t>(1, m_PointLightGpuData.size());
-    m_AreaLightBufferCapacity = std::max<size_t>(1, m_AreaLightGpuData.size());
+//Modify Begin:2026-07-30 by BestHui
+    m_DirectionalLightBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_DirectionalLightGpuData.size());
+    m_PointLightBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_PointLightGpuData.size());
+    m_AreaLightBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_AreaLightGpuData.size());
+//Modify End
     commandList.CopyStructuredBuffer(m_DirectionalLightBuffer, CreateBufferCapacityData<DirectionalLightData>(m_DirectionalLightBufferCapacity));
     commandList.CopyStructuredBuffer(m_PointLightBuffer, CreateBufferCapacityData<PointLightData>(m_PointLightBufferCapacity));
     commandList.CopyStructuredBuffer(m_AreaLightBuffer, CreateBufferCapacityData<AreaLightData>(m_AreaLightBufferCapacity));
 }
 
-void SceneLightManager::Upload(CommandList& commandList)
+//Modify Begin:2026-07-30 by BestHui
+bool SceneLightManager::Upload(CommandList& commandList)
+//Modify End
 {
     Assert(m_UploadBuffer != nullptr, "Light upload buffer is not initialized.");
 
@@ -248,6 +406,9 @@ void SceneLightManager::Upload(CommandList& commandList)
         m_AreaLightDirtyBegin = 0;
         m_AreaLightDirtyEnd = 0;
     }
+//Modify Begin:2026-07-30 by BestHui
+    return directionalLightsRecreated || pointLightsRecreated || areaLightsRecreated;
+//Modify End
 }
 
 void SceneLightManager::UpdateDynamicLights(const float timeSeconds)
@@ -323,9 +484,20 @@ void SceneLightManager::BindComputeResources(CommandList& commandList, ComputeSh
 
 void SceneLightManager::BindRayTracingResources(RayTracingBindingSet& bindingSet)
 {
-    bindingSet.SetBuffer("DirectionalLights", m_DirectionalLightBuffer);
-    bindingSet.SetBuffer("PointLights", m_PointLightBuffer);
-    bindingSet.SetBuffer("AreaLights", m_AreaLightBuffer);
+//Modify Begin:2026-07-30 by BestHui
+    if (bindingSet.HasBinding("DirectionalLights"))
+    {
+        bindingSet.SetBuffer("DirectionalLights", m_DirectionalLightBuffer);
+    }
+    if (bindingSet.HasBinding("PointLights"))
+    {
+        bindingSet.SetBuffer("PointLights", m_PointLightBuffer);
+    }
+    if (bindingSet.HasBinding("AreaLights"))
+    {
+        bindingSet.SetBuffer("AreaLights", m_AreaLightBuffer);
+    }
+//Modify End
 }
 
 void SceneLightManager::FillCameraConstants(

@@ -80,6 +80,23 @@ void RaytracingDemo::OnImGui()
     const bool panSpeedChanged = ImGui::SliderFloat("Mouse Pan", &m_MousePanSpeed, 0.005f, 0.25f, "%.3f");
     const bool dollySpeedChanged = ImGui::SliderFloat("Mouse Dolly", &m_MouseDollySpeed, 0.005f, 0.25f, "%.3f");
     const bool wheelSpeedChanged = ImGui::SliderFloat("Wheel Dolly", &m_MouseWheelDollySpeed, 0.05f, 5.0f, "%.2f");
+//Modify Begin:2026-07-30 by BestHui
+    if (ImGui::Button("Save Camera To Unity Scene"))
+    {
+        try
+        {
+            SaveCurrentCameraToUnityScene();
+        }
+        catch (const std::exception& exception)
+        {
+            m_CameraSaveStatus = std::string("Save failed: ") + exception.what();
+        }
+    }
+    if (!m_CameraSaveStatus.empty())
+    {
+        ImGui::TextWrapped("%s", m_CameraSaveStatus.c_str());
+    }
+//Modify End
 
     if (bouncesChanged)
     {

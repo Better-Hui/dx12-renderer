@@ -32,7 +32,12 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
         [&demo](const RenderContext&, CommandList& cmd)
         {
 //Modify Begin:2026-07-29 by BestHui
-            demo.m_Lights.Upload(cmd);
+//Modify Begin:2026-07-30 by BestHui
+            if (demo.m_Lights.Upload(cmd))
+            {
+                demo.BindRayTracingShaderResources();
+            }
+//Modify End
             CommandContext commandContext(cmd);
             commandContext.BindPipeline(*demo.m_GBufferShader);
 //Modify End

@@ -13,6 +13,7 @@
 #include <Framework/RayTracingAccelerationStructure.h>
 #include <Framework/RayTracingShader.h>
 #include <Framework/Shader.h>
+#include <Framework/UnitySceneParser.h>
 
 #include <RenderGraph/RenderGraphRoot.h>
 #include <Scene/SceneLightManager.h>
@@ -21,6 +22,7 @@
 #include <PathTracing/PathTracingPipelineController.h>
 #include <Passes/CudaBloomPass.h>
 
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <vector>
@@ -146,6 +148,9 @@ private:
     void DrawPostBloomOverlays(CommandList& cmd);
     void DrawLightBillboards(CommandList& cmd);
 //Modify End
+//Modify Begin:2026-07-30 by BestHui
+    void SaveCurrentCameraToUnityScene();
+//Modify End
     void OnImGui();
 
     Camera m_Camera;
@@ -199,6 +204,9 @@ private:
     bool m_AccumulationEnabled = true;
     bool m_DirectLightingEnabled = true;
     bool m_IndirectLightingEnabled = true;
+//Modify Begin:2026-07-29 by BestHui
+    bool m_SkyboxEnabled = false;
+//Modify End
     bool m_HasPreviousViewProjection = false;
     float m_CameraFov = 45.0f;
     float m_MouseRotateSpeed = 0.1f;
@@ -208,6 +216,12 @@ private:
     PathTracingBackend m_PathTracingBackend = PathTracingBackend::InlineRayQuery;
     int m_Width = 1;
     int m_Height = 1;
+//Modify Begin:2026-07-30 by BestHui
+    std::filesystem::path m_UnityScenePath;
+    UnityCameraInfo m_UnitySceneCamera;
+    bool m_HasUnitySceneCamera = false;
+    std::string m_CameraSaveStatus;
+//Modify End
 
     struct
     {

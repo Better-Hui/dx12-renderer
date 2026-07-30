@@ -129,6 +129,9 @@ using IndexCollectionType = std::vector<uint16_t>;
 
 struct MeshPrototype
 {
+//Modify Begin:2026-07-29 by BestHui
+    std::string m_Name;
+//Modify End
     VertexCollectionType m_Vertices;
     IndexCollectionType m_Indices;
 

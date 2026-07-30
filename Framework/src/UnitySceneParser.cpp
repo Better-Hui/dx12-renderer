@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <iomanip>
 #include <map>
 #include <optional>
 #include <regex>
@@ -13,6 +14,15 @@
 
 namespace
 {
+//Modify Begin:2026-07-30 by BestHui
+    std::string Trim(const std::string& value);
+    bool IsUnityTopLevelProperty(const std::string& line, const char* name);
+    float ParseFloatAfterColon(const std::string& line, float fallback);
+    int ParseIntAfterColon(const std::string& line, int fallback);
+    UnityAssetReference ParseAssetReference(const std::string& line);
+    UnityColor ParseColor(const std::string& line);
+//Modify End
+
     struct UnityDocument
     {
         int ClassId = 0;
@@ -49,6 +59,40 @@ namespace
         UnityVector3 AreaSize = { 1.0f, 1.0f, 0.0f };
     };
 
+    UnityRenderSettings ParseRenderSettings(const UnityDocument& document)
+    {
+        UnityRenderSettings settings;
+        for (const std::string& line : document.Lines)
+        {
+            const std::string trimmed = Trim(line);
+            if (IsUnityTopLevelProperty(line, "m_AmbientSkyColor"))
+            {
+                settings.AmbientSkyColor = ParseColor(trimmed);
+            }
+            else if (IsUnityTopLevelProperty(line, "m_AmbientEquatorColor"))
+            {
+                settings.AmbientEquatorColor = ParseColor(trimmed);
+            }
+            else if (IsUnityTopLevelProperty(line, "m_AmbientGroundColor"))
+            {
+                settings.AmbientGroundColor = ParseColor(trimmed);
+            }
+            else if (IsUnityTopLevelProperty(line, "m_AmbientIntensity"))
+            {
+                settings.AmbientIntensity = ParseFloatAfterColon(trimmed, 1.0f);
+            }
+            else if (IsUnityTopLevelProperty(line, "m_AmbientMode"))
+            {
+                settings.AmbientMode = ParseIntAfterColon(trimmed, 0);
+            }
+            else if (IsUnityTopLevelProperty(line, "m_SkyboxMaterial"))
+            {
+                settings.SkyboxMaterial = ParseAssetReference(trimmed);
+            }
+        }
+        return settings;
+    }
+
     struct MeshFilterData
     {
         int64_t GameObjectId = 0;
@@ -58,6 +102,7 @@ namespace
     struct MeshRendererData
     {
         int64_t GameObjectId = 0;
+        bool Enabled = true;
         std::vector<UnityAssetReference> Materials;
     };
 
@@ -133,6 +178,62 @@ namespace
         return documents;
     }
 
+//Modify Begin:2026-07-30 by BestHui
+    std::string FormatFloat(const float value)
+    {
+        std::ostringstream stream;
+        stream << std::setprecision(9) << value;
+        return stream.str();
+    }
+
+    std::string FormatUnityVector3(const UnityVector3& value)
+    {
+        return "{x: " + FormatFloat(value.X) +
+            ", y: " + FormatFloat(value.Y) +
+            ", z: " + FormatFloat(value.Z) +
+            "}";
+    }
+
+    std::string FormatUnityQuaternion(const UnityQuaternion& value)
+    {
+        return "{x: " + FormatFloat(value.X) +
+            ", y: " + FormatFloat(value.Y) +
+            ", z: " + FormatFloat(value.Z) +
+            ", w: " + FormatFloat(value.W) +
+            "}";
+    }
+
+    std::string ExtractLineIndent(const std::string& line)
+    {
+        const size_t firstNonSpace = line.find_first_not_of(' ');
+        return firstNonSpace == std::string::npos ? std::string{} : line.substr(0, firstNonSpace);
+    }
+
+    bool IsDocumentHeader(const std::string& line)
+    {
+        return StartsWith(line, "--- !u!");
+    }
+
+    bool TryParseDocumentHeader(const std::string& line, int& classId, int64_t& fileId)
+    {
+        if (!IsDocumentHeader(line))
+        {
+            return false;
+        }
+
+        const size_t classBegin = line.find("!u!");
+        const size_t fileBegin = line.find('&');
+        if (classBegin == std::string::npos || fileBegin == std::string::npos || fileBegin <= classBegin + 3)
+        {
+            return false;
+        }
+
+        classId = std::stoi(line.substr(classBegin + 3, fileBegin - classBegin - 3));
+        fileId = std::stoll(line.substr(fileBegin + 1));
+        return true;
+    }
+//Modify End
+
     int64_t ParseFileId(const std::string& line)
     {
         static const std::regex fileIdRegex(R"(fileID:\s*(-?\d+))");
@@ -200,6 +301,37 @@ namespace
             ParseNamedFloat(line, "b", 1.0f),
             ParseNamedFloat(line, "a", 1.0f)
         };
+    }
+
+    UnityTextureBinding* FindTextureBinding(UnityMaterialInfo& material, const std::string& propertyName)
+    {
+        if (propertyName == "_BaseMap")
+        {
+            return &material.BaseMap;
+        }
+//Modify Begin:2026-07-30 by BestHui
+        if (propertyName == "_MainTex" || propertyName == "_Tex")
+//Modify End
+        {
+            return &material.MainTex;
+        }
+        if (propertyName == "_BumpMap")
+        {
+            return &material.NormalMap;
+        }
+        if (propertyName == "_MetallicGlossMap" || propertyName == "_SpecGlossMap")
+        {
+            return &material.MetallicGlossMap;
+        }
+        if (propertyName == "_OcclusionMap")
+        {
+            return &material.OcclusionMap;
+        }
+        if (propertyName == "_EmissionMap")
+        {
+            return &material.EmissionMap;
+        }
+        return nullptr;
     }
 
     UnityVector3 Add(const UnityVector3& lhs, const UnityVector3& rhs)
@@ -408,6 +540,10 @@ namespace
             {
                 meshRenderer.GameObjectId = ParseFileId(trimmed);
             }
+            else if (StartsWith(trimmed, "m_Enabled:"))
+            {
+                meshRenderer.Enabled = ParseIntAfterColon(trimmed, 1) != 0;
+            }
             else if (StartsWith(trimmed, "m_Materials:"))
             {
                 readingMaterials = true;
@@ -499,6 +635,7 @@ namespace
             return material;
         }
 
+        UnityTextureBinding* currentTextureBinding = nullptr;
         for (const std::string& line : SplitLines(*text))
         {
             const std::string trimmed = Trim(line);
@@ -514,8 +651,80 @@ namespace
             {
                 material.Shader = ParseAssetReference(trimmed);
             }
+            else if (StartsWith(trimmed, "- _BaseMap:")
+//Modify Begin:2026-07-30 by BestHui
+                || StartsWith(trimmed, "- _MainTex:")
+                || StartsWith(trimmed, "- _Tex:")
+//Modify End
+                || StartsWith(trimmed, "- _BumpMap:")
+                || StartsWith(trimmed, "- _MetallicGlossMap:")
+                || StartsWith(trimmed, "- _SpecGlossMap:")
+                || StartsWith(trimmed, "- _OcclusionMap:")
+                || StartsWith(trimmed, "- _EmissionMap:"))
+            {
+                const size_t propertyBegin = trimmed.find('_');
+                const size_t propertyEnd = trimmed.find(':', propertyBegin);
+                const std::string propertyName = propertyEnd == std::string::npos
+                    ? std::string{}
+                    : trimmed.substr(propertyBegin, propertyEnd - propertyBegin);
+                currentTextureBinding = FindTextureBinding(material, propertyName);
+            }
+            else if (currentTextureBinding != nullptr && StartsWith(trimmed, "m_Texture:"))
+            {
+                currentTextureBinding->Texture = ParseAssetReference(trimmed);
+            }
+            else if (currentTextureBinding != nullptr && StartsWith(trimmed, "m_Scale:"))
+            {
+                currentTextureBinding->Scale = ParseVector3(trimmed);
+            }
+            else if (currentTextureBinding != nullptr && StartsWith(trimmed, "m_Offset:"))
+            {
+                currentTextureBinding->Offset = ParseVector3(trimmed);
+            }
+            else if (StartsWith(trimmed, "- _BaseColor:") || StartsWith(trimmed, "- _Color:"))
+            {
+                material.BaseColor = ParseColor(trimmed);
+                material.IsPbrMaterial = true;
+            }
+            else if (StartsWith(trimmed, "- _SpecColor:"))
+            {
+                material.SpecColor = ParseColor(trimmed);
+            }
+            else if (StartsWith(trimmed, "- _EmissionColor:"))
+            {
+                material.EmissionColor = ParseColor(trimmed);
+            }
+            else if (StartsWith(trimmed, "- _Metallic:"))
+            {
+                material.Metallic = ParseFloatAfterColon(trimmed, 0.0f);
+                material.IsPbrMaterial = true;
+            }
+            else if (StartsWith(trimmed, "- _Smoothness:") || StartsWith(trimmed, "- _Glossiness:"))
+            {
+                material.Smoothness = ParseFloatAfterColon(trimmed, material.Smoothness);
+                material.IsPbrMaterial = true;
+            }
+            else if (StartsWith(trimmed, "- _OcclusionStrength:"))
+            {
+                material.OcclusionStrength = ParseFloatAfterColon(trimmed, 1.0f);
+            }
+            else if (StartsWith(trimmed, "- _BumpScale:"))
+            {
+                material.NormalScale = ParseFloatAfterColon(trimmed, 1.0f);
+            }
+            else if (StartsWith(trimmed, "- "))
+            {
+                currentTextureBinding = nullptr;
+            }
         }
         return material;
+    }
+
+    void ResolveTextureBinding(
+        UnityTextureBinding& binding,
+        const std::unordered_map<std::string, std::filesystem::path>& guidToAssetPath)
+    {
+        ResolveAssetReference(binding.Texture, guidToAssetPath);
     }
 
     UnityTransformInfo ResolveWorldTransform(
@@ -583,6 +792,9 @@ UnitySceneData UnitySceneParser::ParseFromFile(
     {
         switch (document.ClassId)
         {
+        case 104:
+            scene.RenderSettings = ParseRenderSettings(document);
+            break;
         case 1:
         {
             GameObjectData gameObject = ParseGameObject(document);
@@ -643,6 +855,7 @@ UnitySceneData UnitySceneParser::ParseFromFile(
         }
         if (const auto meshRenderer = meshRenderersByGameObject.find(gameObjectId); meshRenderer != meshRenderersByGameObject.end())
         {
+            object.RendererEnabled = meshRenderer->second.Enabled;
             object.Materials = meshRenderer->second.Materials;
             for (UnityAssetReference& materialReference : object.Materials)
             {
@@ -700,8 +913,20 @@ UnitySceneData UnitySceneParser::ParseFromFile(
         scene.Lights.push_back(std::move(light));
     }
 
+    ResolveAssetReference(scene.RenderSettings.SkyboxMaterial, guidToAssetPath);
+
     if (options.ParseMaterialAssets)
     {
+//Modify Begin:2026-07-30 by BestHui
+        if (!scene.RenderSettings.SkyboxMaterial.AssetPath.empty())
+        {
+            scene.SkyboxMaterial = ParseMaterialAsset(scene.RenderSettings.SkyboxMaterial);
+            ResolveAssetReference(scene.SkyboxMaterial.Shader, guidToAssetPath);
+            ResolveTextureBinding(scene.SkyboxMaterial.MainTex, guidToAssetPath);
+            ResolveTextureBinding(scene.SkyboxMaterial.BaseMap, guidToAssetPath);
+            scene.HasSkyboxMaterial = true;
+        }
+//Modify End
         for (const std::string& materialGuid : materialGuids)
         {
             UnityAssetReference reference;
@@ -709,10 +934,117 @@ UnitySceneData UnitySceneParser::ParseFromFile(
             ResolveAssetReference(reference, guidToAssetPath);
             UnityMaterialInfo material = ParseMaterialAsset(reference);
             ResolveAssetReference(material.Shader, guidToAssetPath);
+            ResolveTextureBinding(material.BaseMap, guidToAssetPath);
+            ResolveTextureBinding(material.MainTex, guidToAssetPath);
+            ResolveTextureBinding(material.NormalMap, guidToAssetPath);
+            ResolveTextureBinding(material.MetallicGlossMap, guidToAssetPath);
+            ResolveTextureBinding(material.OcclusionMap, guidToAssetPath);
+            ResolveTextureBinding(material.EmissionMap, guidToAssetPath);
             scene.Materials.push_back(std::move(material));
         }
     }
 
     return scene;
 }
+
+//Modify Begin:2026-07-30 by BestHui
+void UnitySceneParser::WriteCameraToFile(
+    const std::filesystem::path& scenePath,
+    const UnityCameraWriteInfo& camera)
+{
+    if (camera.GameObjectId == 0 || camera.TransformFileId == 0)
+    {
+        throw std::runtime_error("Unity camera write info is invalid.");
+    }
+
+    std::ifstream input(scenePath);
+    if (!input.is_open())
+    {
+        throw std::runtime_error("Failed to open Unity scene for camera write.");
+    }
+
+    std::vector<std::string> lines;
+    std::string line;
+    while (std::getline(input, line))
+    {
+        lines.push_back(line);
+    }
+
+    bool transformFound = false;
+    bool localPositionWritten = false;
+    bool localRotationWritten = false;
+    bool cameraComponentFound = false;
+    bool fieldOfViewWritten = false;
+
+    int currentClassId = 0;
+    int64_t currentFileId = 0;
+    bool currentCameraMatches = false;
+
+    for (std::string& currentLine : lines)
+    {
+        int headerClassId = 0;
+        int64_t headerFileId = 0;
+        if (TryParseDocumentHeader(currentLine, headerClassId, headerFileId))
+        {
+            currentClassId = headerClassId;
+            currentFileId = headerFileId;
+            currentCameraMatches = false;
+            continue;
+        }
+
+        const std::string trimmed = Trim(currentLine);
+        if (currentClassId == 20 && StartsWith(trimmed, "m_GameObject:"))
+        {
+            const UnityAssetReference gameObject = ParseAssetReference(trimmed);
+            currentCameraMatches = gameObject.FileId == camera.GameObjectId;
+            cameraComponentFound = cameraComponentFound || currentCameraMatches;
+            continue;
+        }
+
+        if (currentClassId == 4 && currentFileId == camera.TransformFileId)
+        {
+            transformFound = true;
+            const std::string indent = ExtractLineIndent(currentLine);
+            if (StartsWith(trimmed, "m_LocalPosition:"))
+            {
+                currentLine = indent + "m_LocalPosition: " + FormatUnityVector3(camera.LocalPosition);
+                localPositionWritten = true;
+            }
+            else if (StartsWith(trimmed, "m_LocalRotation:"))
+            {
+                currentLine = indent + "m_LocalRotation: " + FormatUnityQuaternion(camera.LocalRotation);
+                localRotationWritten = true;
+            }
+        }
+        else if (currentClassId == 20 && currentCameraMatches &&
+            (StartsWith(trimmed, "field of view:") || StartsWith(trimmed, "m_FieldOfView:")))
+        {
+            const std::string indent = ExtractLineIndent(currentLine);
+            const char* propertyName = StartsWith(trimmed, "m_FieldOfView:") ? "m_FieldOfView: " : "field of view: ";
+            currentLine = indent + propertyName + FormatFloat(camera.FieldOfView);
+            fieldOfViewWritten = true;
+        }
+    }
+
+    if (!transformFound || !localPositionWritten || !localRotationWritten)
+    {
+        throw std::runtime_error("Failed to find Unity camera transform fields to write.");
+    }
+    if (!cameraComponentFound || !fieldOfViewWritten)
+    {
+        throw std::runtime_error("Failed to find Unity camera component fields to write.");
+    }
+
+    std::ofstream output(scenePath, std::ios::trunc);
+    if (!output.is_open())
+    {
+        throw std::runtime_error("Failed to write Unity scene camera data.");
+    }
+
+    for (const std::string& outputLine : lines)
+    {
+        output << outputLine << '\n';
+    }
+}
+//Modify End
 //Modify End

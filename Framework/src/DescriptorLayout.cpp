@@ -7,6 +7,7 @@
 #include <DX12Library/Helpers.h>
 
 #include <algorithm>
+#include <stdexcept>
 
 std::string DescriptorLayout::GetBaseResourceName(const std::string& name)
 {
@@ -127,12 +128,12 @@ const DescriptorBindingInfo& DescriptorLayout::GetBinding(const std::string& nam
     const auto findResult = m_Bindings.find(name);
     if (findResult == m_Bindings.end())
     {
-        throw std::exception("Shader variable not found.");
+        throw std::runtime_error("Shader variable not found: " + name);
     }
 
     if (findResult->second.Kind != expectedKind)
     {
-        throw std::exception("Shader variable binding type does not match the setter.");
+        throw std::runtime_error("Shader variable binding type does not match the setter: " + name);
     }
 
     return findResult->second;
@@ -150,7 +151,7 @@ const DescriptorBindingInfo& DescriptorLayout::GetFirstBinding(const DescriptorB
 
     if (findResult == m_Bindings.end())
     {
-        throw std::exception("Shader binding type was not found.");
+        throw std::runtime_error("Shader binding type was not found.");
     }
 
     return findResult->second;

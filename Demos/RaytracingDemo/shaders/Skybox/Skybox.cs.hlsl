@@ -32,9 +32,11 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     }
 
     const float3 directionWs = BuildSkyboxDirection(pixel);
+//Modify Begin:2026-07-30 by BestHui
     const float3 skyColor = SkyboxTexture.SampleLevel(g_Common_LinearClampSampler, directionWs, 0.0f).rgb *
         Camera_SkyLight.ColorAndIntensity.rgb *
         Camera_SkyLight.ColorAndIntensity.w;
+//Modify End
     SceneColor[pixel] = float4(skyColor, 1.0f);
 }
 //Modify End

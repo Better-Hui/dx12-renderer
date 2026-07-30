@@ -39,7 +39,12 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateSk
 
             cmd.SetConstantBuffer(skyboxShader, "CameraConstants", camera);
             cmd.SetTexture(skyboxShader, "DepthTexture", ShaderResourceView::DepthAsFloat(context.m_ResourcePool->GetTexture(DemoResourceIds::DepthBuffer)));
-            cmd.SetTexture(skyboxShader, "SkyboxTexture", ShaderResourceView::TextureCube(demo.m_SkyboxTexture));
+//Modify Begin:2026-07-30 by BestHui
+            if (skyboxShader.HasShaderResourceView("SkyboxTexture"))
+            {
+                cmd.SetTexture(skyboxShader, "SkyboxTexture", ShaderResourceView::TextureCube(demo.m_SkyboxTexture));
+            }
+//Modify End
             cmd.SetUnorderedAccessView(skyboxShader, "SceneColor", UnorderedAccessView(context.m_ResourcePool->GetTexture(DemoResourceIds::SceneColor)));
             CommandContext commandContext(cmd);
             commandContext.BindPipeline(skyboxShader);
