@@ -3,12 +3,16 @@
 
 #include <DX12Library/CommandList.h>
 #include <Framework/Geometry/Mesh.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/Geometry/Meshlet.h>
+//Modify End
 #include <Framework/Geometry/Model.h>
 #include <Framework/Geometry/ModelLoader.h>
 #include <Framework/Rendering/RayTracing/RayTracingAccelerationStructure.h>
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <filesystem>
 #include <stdexcept>
 #include <unordered_map>
@@ -88,11 +92,135 @@ namespace
         return output;
     }
 
+//Modify Begin:2026-07-30 by BestHui
+    MeshPrototype CreateBuiltinPlanePrototype(const float width, const float height)
+    {
+        const float halfWidth = width * 0.5f;
+        const float halfHeight = height * 0.5f;
+        VertexCollectionType vertices =
+        {
+            VertexAttributes({ -halfWidth, 0.0f, -halfHeight }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 1.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, -1.0f }),
+            VertexAttributes({ -halfWidth, 0.0f, halfHeight }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, -1.0f }),
+            VertexAttributes({ halfWidth, 0.0f, halfHeight }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, -1.0f }),
+            VertexAttributes({ halfWidth, 0.0f, -halfHeight }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, -1.0f }),
+        };
+        IndexCollectionType indices = { 0, 1, 2, 0, 2, 3 };
+        MeshPrototype prototype(std::move(vertices), std::move(indices), true, false);
+        prototype.m_Name = "BuiltinPlane";
+        return prototype;
+    }
+
+    MeshPrototype CreateStressSpherePrototype(const float diameter, const size_t tessellation)
+    {
+        VertexCollectionType vertices;
+        IndexCollectionType indices;
+
+        if (tessellation < 3)
+        {
+            throw std::out_of_range("tessellation parameter out of range");
+        }
+
+        const float radius = diameter * 0.5f;
+        const size_t verticalSegments = tessellation;
+        const size_t horizontalSegments = tessellation * 2;
+
+        vertices.emplace_back(
+            XMFLOAT3(0.0f, radius, 0.0f),
+            XMFLOAT3(0.0f, 1.0f, 0.0f),
+            XMFLOAT2(0.5f, 0.0f));
+
+        for (size_t i = 1; i < verticalSegments; ++i)
+        {
+            const float v = static_cast<float>(i) / static_cast<float>(verticalSegments);
+            const float polar = static_cast<float>(i) * XM_PI / static_cast<float>(verticalSegments);
+            float sinPolar = 0.0f;
+            float cosPolar = 0.0f;
+            XMScalarSinCos(&sinPolar, &cosPolar, polar);
+
+            float dxz = 0.0f;
+            float dy = 0.0f;
+            dxz = sinPolar;
+            dy = cosPolar;
+
+            for (size_t j = 0; j < horizontalSegments; ++j)
+            {
+                const float u = static_cast<float>(j) / static_cast<float>(horizontalSegments);
+                const float longitude = static_cast<float>(j) * XM_2PI / static_cast<float>(horizontalSegments);
+                float dx = 0.0f;
+                float dz = 0.0f;
+                XMScalarSinCos(&dx, &dz, longitude);
+                dx *= dxz;
+                dz *= dxz;
+
+                const XMVECTOR normal = XMVectorSet(dx, dy, dz, 0.0f);
+                const XMVECTOR position = normal * radius;
+                const XMVECTOR uv = XMVectorSet(u, v, 0.0f, 0.0f);
+                XMFLOAT3 positionFloat{};
+                XMFLOAT3 normalFloat{};
+                XMFLOAT2 uvFloat{};
+                XMStoreFloat3(&positionFloat, position);
+                XMStoreFloat3(&normalFloat, normal);
+                XMStoreFloat2(&uvFloat, uv);
+                vertices.emplace_back(positionFloat, normalFloat, uvFloat);
+            }
+        }
+
+        const uint16_t bottomIndex = static_cast<uint16_t>(vertices.size());
+        vertices.emplace_back(
+            XMFLOAT3(0.0f, -radius, 0.0f),
+            XMFLOAT3(0.0f, -1.0f, 0.0f),
+            XMFLOAT2(0.5f, 1.0f));
+
+        const auto ringIndex = [horizontalSegments](const size_t ring, const size_t segment)
+        {
+            return static_cast<uint16_t>(1 + ring * horizontalSegments + (segment % horizontalSegments));
+        };
+
+        for (size_t j = 0; j < horizontalSegments; ++j)
+        {
+            indices.push_back(0);
+            indices.push_back(ringIndex(0, j));
+            indices.push_back(ringIndex(0, j + 1));
+        }
+
+        for (size_t i = 0; i + 1 < verticalSegments - 1; ++i)
+        {
+            for (size_t j = 0; j < horizontalSegments; ++j)
+            {
+                indices.push_back(ringIndex(i, j));
+                indices.push_back(ringIndex(i + 1, j));
+                indices.push_back(ringIndex(i, j + 1));
+
+                indices.push_back(ringIndex(i, j + 1));
+                indices.push_back(ringIndex(i + 1, j));
+                indices.push_back(ringIndex(i + 1, j + 1));
+            }
+        }
+
+        const size_t lastRing = verticalSegments - 2;
+        for (size_t j = 0; j < horizontalSegments; ++j)
+        {
+            indices.push_back(ringIndex(lastRing, j + 1));
+            indices.push_back(ringIndex(lastRing, j));
+            indices.push_back(bottomIndex);
+        }
+
+        MeshPrototype prototype(std::move(vertices), std::move(indices), true, true);
+        prototype.m_Name = "StressSphere";
+        return prototype;
+    }
+//Modify End
+
 }
 
 RaytracingDemoSceneResources::RaytracingDemoSceneResources()
     : m_MaterialBuffer(L"Ray Tracing Materials")
     , m_GeometryBuffer(L"Ray Tracing Geometry Data")
+//Modify Begin:2026-07-30 by BestHui
+    , m_MeshletVertexBuffer(L"RaytracingDemo Meshlet Vertices")
+    , m_MeshletIndexBuffer(L"RaytracingDemo Meshlet Indices")
+    , m_MeshletBuffer(L"RaytracingDemo Meshlets")
+//Modify End
 {
 }
 
@@ -100,6 +228,15 @@ void RaytracingDemoSceneResources::Clear()
 {
     m_GeometryBuffer = StructuredBuffer(L"Ray Tracing Geometry Data");
     m_MaterialBuffer = StructuredBuffer(L"Ray Tracing Materials");
+//Modify Begin:2026-07-30 by BestHui
+    m_MeshletVertexBuffer = StructuredBuffer(L"RaytracingDemo Meshlet Vertices");
+    m_MeshletIndexBuffer = ByteAddressBuffer(L"RaytracingDemo Meshlet Indices");
+    m_MeshletBuffer = StructuredBuffer(L"RaytracingDemo Meshlets");
+    m_MeshletVertices.clear();
+    m_MeshletIndices.clear();
+    m_Meshlets.clear();
+    m_MeshletDraws.clear();
+//Modify End
     m_SceneObjects.clear();
     m_Materials.clear();
     m_Textures.clear();
@@ -289,6 +426,10 @@ bool RaytracingDemoSceneResources::LoadScene(CommandList& commandList, const Sce
     const std::vector<uint32_t> materialIndexMap = LoadSceneMaterials(commandList, scene, whiteTexture);
     const uint32_t defaultMaterial = AddDiffuseMaterial({ 0.85f, 0.85f, 0.85f, 1.0f }, { 1, 1, 0, 0 }, whiteTexture, 0.0f, 0.45f);
     LoadSceneObjects(commandList, scene, materialIndexMap, defaultMaterial);
+//Modify Begin:2026-07-30 by BestHui
+    AddStressTestSpheres(commandList, whiteTexture);
+    UploadMeshletBuffers(commandList);
+//Modify End
 
     return !m_SceneObjects.empty();
 }
@@ -359,6 +500,9 @@ void RaytracingDemoSceneResources::LoadSceneObjects(
         {
             auto model = modelLoader.LoadExisting(Mesh::CreatePlane(commandList, 10.0f, 10.0f));
             m_SceneObjects.push_back({ object.WorldMatrix, model, materialIndex });
+//Modify Begin:2026-07-30 by BestHui
+            AddMeshletDraw(CreateBuiltinPlanePrototype(10.0f, 10.0f), object.WorldMatrix, materialIndex);
+//Modify End
             continue;
         }
 
@@ -378,8 +522,125 @@ void RaytracingDemoSceneResources::LoadSceneObjects(
         const MeshPrototype& prototype = FindMeshPrototypeByName(prototypeIterator->second, object.Mesh.SubmeshName);
         auto model = modelLoader.Load(commandList, std::vector<MeshPrototype>{ prototype });
         m_SceneObjects.push_back({ object.WorldMatrix, model, materialIndex });
+//Modify Begin:2026-07-30 by BestHui
+        AddMeshletDraw(prototype, object.WorldMatrix, materialIndex);
+//Modify End
     }
 }
+
+//Modify Begin:2026-07-30 by BestHui
+void RaytracingDemoSceneResources::AddMeshletDraw(
+    const MeshPrototype& prototype,
+    const XMMATRIX& worldMatrix,
+    const uint32_t materialIndex)
+{
+    const auto [meshletOffset, meshletCount] = AddMeshletGeometry(prototype, materialIndex);
+    if (meshletCount == 0)
+    {
+        return;
+    }
+
+    RaytracingDemoMeshletDraw draw;
+    draw.WorldMatrix = worldMatrix;
+    draw.MaterialIndex = materialIndex;
+    draw.MeshletOffset = meshletOffset;
+    draw.MeshletCount = meshletCount;
+    m_MeshletDraws.push_back(draw);
+}
+
+std::pair<uint32_t, uint32_t> RaytracingDemoSceneResources::AddMeshletGeometry(
+    const MeshPrototype& prototype,
+    const uint32_t materialIndex)
+{
+    MeshletBuildResult buildResult = MeshletBuilder::Build(prototype);
+    if (buildResult.Meshlets.empty())
+    {
+        return { 0, 0 };
+    }
+
+    const uint32_t baseVertex = static_cast<uint32_t>(m_MeshletVertices.size());
+    const uint32_t baseIndex = static_cast<uint32_t>(m_MeshletIndices.size());
+    const uint32_t meshletOffset = static_cast<uint32_t>(m_Meshlets.size());
+
+    m_MeshletVertices.insert(m_MeshletVertices.end(), buildResult.Mesh.m_Vertices.begin(), buildResult.Mesh.m_Vertices.end());
+    m_MeshletIndices.insert(m_MeshletIndices.end(), buildResult.Mesh.m_Indices.begin(), buildResult.Mesh.m_Indices.end());
+
+    for (Meshlet meshlet : buildResult.Meshlets)
+    {
+        meshlet.VertexOffset += baseVertex;
+        meshlet.IndexOffset += baseIndex;
+        meshlet.MaterialIndex = materialIndex;
+        m_Meshlets.push_back(meshlet);
+    }
+
+    return { meshletOffset, static_cast<uint32_t>(buildResult.Meshlets.size()) };
+}
+
+void RaytracingDemoSceneResources::AddStressTestSpheres(CommandList& commandList, const uint32_t whiteTextureIndex)
+{
+    ModelLoader modelLoader;
+    MeshPrototype spherePrototype = CreateStressSpherePrototype(1.0f, 12);
+    auto sphereModel = modelLoader.Load(commandList, std::vector<MeshPrototype>{ spherePrototype });
+
+    const uint32_t sphereMaterial = AddDiffuseMaterial(
+        { 0.72f, 0.74f, 0.80f, 1.0f },
+        { 1.0f, 1.0f, 0.0f, 0.0f },
+        whiteTextureIndex,
+        0.0f,
+        0.38f);
+
+    const auto [meshletOffset, meshletCount] = AddMeshletGeometry(spherePrototype, sphereMaterial);
+    if (meshletCount == 0)
+    {
+        return;
+    }
+
+    constexpr uint32_t Rows = 20;
+    constexpr uint32_t Columns = 20;
+    constexpr float Spacing = 0.42f;
+    constexpr float Radius = 0.15f;
+    constexpr float CenterX = 2.78f;
+    constexpr float CenterY = 6.15f;
+    constexpr float CenterZ = -2.80f;
+    const float startX = -static_cast<float>(Columns - 1) * Spacing * 0.5f;
+    const float startZ = -static_cast<float>(Rows - 1) * Spacing * 0.5f;
+
+    for (uint32_t z = 0; z < Rows; ++z)
+    {
+        for (uint32_t x = 0; x < Columns; ++x)
+        {
+            const float wave = std::sin(static_cast<float>(x) * 0.71f + static_cast<float>(z) * 0.37f);
+            const XMMATRIX worldMatrix =
+                XMMatrixScaling(Radius, Radius, Radius) *
+                XMMatrixTranslation(CenterX + startX + static_cast<float>(x) * Spacing, CenterY + wave * 0.10f, CenterZ + startZ + static_cast<float>(z) * Spacing);
+
+            m_SceneObjects.push_back({ worldMatrix, sphereModel, sphereMaterial });
+
+            RaytracingDemoMeshletDraw draw;
+            draw.WorldMatrix = worldMatrix;
+            draw.MaterialIndex = sphereMaterial;
+            draw.MeshletOffset = meshletOffset;
+            draw.MeshletCount = meshletCount;
+            m_MeshletDraws.push_back(draw);
+        }
+    }
+}
+
+void RaytracingDemoSceneResources::UploadMeshletBuffers(CommandList& commandList)
+{
+    if (m_MeshletVertices.empty() || m_MeshletIndices.empty() || m_Meshlets.empty())
+    {
+        return;
+    }
+
+    commandList.CopyStructuredBuffer(m_MeshletVertexBuffer, m_MeshletVertices);
+    commandList.CopyByteAddressBuffer(
+        m_MeshletIndexBuffer,
+        m_MeshletIndices.size() * sizeof(uint16_t),
+        m_MeshletIndices.data());
+    commandList.CopyStructuredBuffer(m_MeshletBuffer, m_Meshlets);
+}
+//Modify End
 
 void RaytracingDemoSceneResources::BuildRayTracingAccelerationStructure(
     CommandList& commandList,

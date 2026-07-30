@@ -26,6 +26,9 @@ public:
     RasterPipelineStateBuilder& WithRootSignature(std::shared_ptr<RootSignature> rootSignature);
     RasterPipelineStateBuilder& WithSampleDesc(const DXGI_SAMPLE_DESC& sampleDesc);
     RasterPipelineStateBuilder& WithShaders(const Microsoft::WRL::ComPtr<ID3DBlob>& vertexShader, const Microsoft::WRL::ComPtr<ID3DBlob>& pixelShader);
+//Modify Begin:2026-07-30 by BestHui
+    RasterPipelineStateBuilder& WithMeshShaders(const Microsoft::WRL::ComPtr<ID3DBlob>& meshShader, const Microsoft::WRL::ComPtr<ID3DBlob>& pixelShader);
+//Modify End
 
     RasterPipelineStateBuilder& WithBlend(const CD3DX12_BLEND_DESC& blendDesc);
     RasterPipelineStateBuilder& WithAlphaBlend();
@@ -58,6 +61,9 @@ private:
     DXGI_FORMAT m_DepthStencilFormat;
 
     Microsoft::WRL::ComPtr<ID3DBlob> m_VertexShader;
+//Modify Begin:2026-07-30 by BestHui
+    Microsoft::WRL::ComPtr<ID3DBlob> m_MeshShader;
+//Modify End
     Microsoft::WRL::ComPtr<ID3DBlob> m_PixelShader;
     CD3DX12_BLEND_DESC m_BlendDesc = CD3DX12_BLEND_DESC(CD3DX12_DEFAULT());
     CD3DX12_DEPTH_STENCIL_DESC m_DepthStencilDesc = CD3DX12_DEPTH_STENCIL_DESC(CD3DX12_DEFAULT());

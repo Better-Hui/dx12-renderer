@@ -48,6 +48,20 @@ void RaytracingDemo::OnImGui()
     {
         ResetAccumulation();
     }
+//Modify Begin:2026-07-30 by BestHui
+    if (ImGui::Checkbox("Use Meshlet GBuffer", &m_UseMeshletGBuffer))
+    {
+        ResetAccumulation();
+    }
+    if (ImGui::Checkbox("Debug Meshlet Clusters", &m_DebugMeshletClusters))
+    {
+        if (m_DebugMeshletClusters)
+        {
+            m_UseMeshletGBuffer = true;
+        }
+        ResetAccumulation();
+    }
+//Modify End
     if (m_Denoisers.DrawImGui())
     {
         if (IsDenoiserEnabled())

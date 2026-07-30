@@ -31,6 +31,38 @@ void RaytracingDemo::DrawLightBillboards(CommandList& cmd)
 //Modify End
     cmd.SetConstantBuffer(m_LightBillboardShader, "PipelineCBuffer", BuildPipelineConstants());
 
+//Modify Begin:2026-07-30 by BestHui
+    XMFLOAT3 cameraPosition{};
+    XMStoreFloat3(&cameraPosition, GetSceneCamera().GetTranslation());
+    for (const DirectionalLight& light : m_Lights.GetDirectionalLights())
+    {
+        const XMVECTOR direction = XMVector3Normalize(XMLoadFloat4(&light.m_DirectionWs));
+        XMFLOAT3 billboardPosition{};
+        XMStoreFloat3(&billboardPosition, XMLoadFloat3(&cameraPosition) - direction * 8.0f);
+
+        LightBillboardConstants constants{};
+        constants.PositionAndSize = {
+            billboardPosition.x,
+            billboardPosition.y,
+            billboardPosition.z,
+            1.25f
+        };
+        constants.ColorAndAlpha = {
+            light.m_Color.x,
+            light.m_Color.y,
+            light.m_Color.z,
+            0.50f
+        };
+        constants.CameraRight = cameraRightFloat;
+        constants.CameraUp = cameraUpFloat;
+        constants.TypeAndParams = { 2.0f, 0.0f, 0.0f, 0.0f };
+
+        cmd.SetConstantBuffer(m_LightBillboardShader, "MaterialCBuffer", constants);
+        commandContext.BindDescriptorSet(m_LightBillboardShader->GetDescriptorSet());
+        m_LightBillboardMesh->Draw(cmd);
+    }
+//Modify End
+
     for (const PointLight& light : m_Lights.GetPointLights())
     {
         LightBillboardConstants constants{};
@@ -48,6 +80,9 @@ void RaytracingDemo::DrawLightBillboards(CommandList& cmd)
         };
         constants.CameraRight = cameraRightFloat;
         constants.CameraUp = cameraUpFloat;
+//Modify Begin:2026-07-30 by BestHui
+        constants.TypeAndParams = { 0.0f, 0.0f, 0.0f, 0.0f };
+//Modify End
 
         cmd.SetConstantBuffer(m_LightBillboardShader, "MaterialCBuffer", constants);
         commandContext.BindDescriptorSet(m_LightBillboardShader->GetDescriptorSet());
@@ -71,6 +106,9 @@ void RaytracingDemo::DrawLightBillboards(CommandList& cmd)
         };
         constants.CameraRight = cameraRightFloat;
         constants.CameraUp = cameraUpFloat;
+//Modify Begin:2026-07-30 by BestHui
+        constants.TypeAndParams = { 1.0f, 0.0f, 0.0f, 0.0f };
+//Modify End
 
         cmd.SetConstantBuffer(m_LightBillboardShader, "MaterialCBuffer", constants);
         commandContext.BindDescriptorSet(m_LightBillboardShader->GetDescriptorSet());

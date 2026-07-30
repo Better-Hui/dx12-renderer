@@ -92,6 +92,13 @@ public:
         return m_D3d12CommandList5;
     }
 
+//Modify Begin:2026-07-30 by BestHui
+    Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList6> GetGraphicsCommandList6() const
+    {
+        return m_D3d12CommandList6;
+    }
+//Modify End
+
     /**
      * Transition a resource to a particular state.
      *
@@ -566,6 +573,10 @@ public:
      */
     void Dispatch(uint32_t numGroupsX, uint32_t numGroupsY = 1, uint32_t numGroupsZ = 1);
 
+//Modify Begin:2026-07-30 by BestHui
+    void DispatchMesh(uint32_t numGroupsX, uint32_t numGroupsY = 1, uint32_t numGroupsZ = 1);
+//Modify End
+
 //Modify Begin:2026-07-21 by BestHui
     void SetRaytracingPipelineState(const Microsoft::WRL::ComPtr<ID3D12StateObject>& stateObject);
     void DispatchRays(const D3D12_DISPATCH_RAYS_DESC& dispatchRaysDesc);
@@ -661,6 +672,9 @@ private:
     D3D12_COMMAND_LIST_TYPE m_D3d12CommandListType;
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList2> m_D3d12CommandList;
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList5> m_D3d12CommandList5;
+//Modify Begin:2026-07-30 by BestHui
+    Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList6> m_D3d12CommandList6;
+//Modify End
     Microsoft::WRL::ComPtr<ID3D12CommandAllocator> m_D3d12CommandAllocator;
 
     // For copy queues, it may be necessary to generate mips while loading textures.

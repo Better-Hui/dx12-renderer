@@ -188,6 +188,30 @@ RaytracingDemo::RaytracingDemo(const std::wstring& name, const int width, const 
 
 //Modify End
 
+//Modify Begin:2026-07-30 by BestHui
+    char* meshletGBuffer = nullptr;
+    size_t meshletGBufferLength = 0;
+    _dupenv_s(&meshletGBuffer, &meshletGBufferLength, "RAYTRACING_DEMO_MESHLET_GBUFFER");
+    if (meshletGBuffer != nullptr)
+    {
+        m_UseMeshletGBuffer = std::strcmp(meshletGBuffer, "0") != 0;
+    }
+    std::free(meshletGBuffer);
+
+    char* meshletDebug = nullptr;
+    size_t meshletDebugLength = 0;
+    _dupenv_s(&meshletDebug, &meshletDebugLength, "RAYTRACING_DEMO_MESHLET_DEBUG");
+    if (meshletDebug != nullptr)
+    {
+        m_DebugMeshletClusters = std::strcmp(meshletDebug, "0") != 0;
+        if (m_DebugMeshletClusters)
+        {
+            m_UseMeshletGBuffer = true;
+        }
+    }
+    std::free(meshletDebug);
+//Modify End
+
 }
 
 //Modify Begin:2026-07-30 by BestHui
@@ -261,6 +285,16 @@ bool RaytracingDemo::LoadContent()
             builder.WithNoCull();
         });
 
+//Modify Begin:2026-07-30 by BestHui
+    m_GBufferMeshShader = std::make_shared<MeshShader>(
+        ShaderBlob(L"GBuffer.ms.cso"),
+        ShaderBlob(L"GBuffer.ps.cso"),
+        [](RasterPipelineStateBuilder& builder)
+        {
+            builder.WithNoCull();
+        });
+//Modify End
+
 //Modify Begin:2026-07-28 by BestHui
     m_DisplayCompositeShader = std::make_shared<Shader>(
         ShaderBlob(L"DisplayComposite.vs.cso"),
@@ -320,6 +354,9 @@ void RaytracingDemo::UnloadContent()
 //Modify Begin:2026-07-28 by BestHui
     m_SkyboxComputeShader.reset();
     m_DisplayCompositeShader.reset();
+//Modify End
+//Modify Begin:2026-07-30 by BestHui
+    m_GBufferMeshShader.reset();
 //Modify End
     m_GBufferShader.reset();
     m_LightBillboardMesh.reset();

@@ -10,6 +10,9 @@
 #include <Framework/UI/ImGuiImpl.h>
 #include <Framework/Geometry/Model.h>
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/Rendering/Pipeline/MeshShader.h>
+//Modify End
 #include <Framework/Rendering/RayTracing/RayTracingShader.h>
 #include <Framework/Scene/Scene.h>
 #include <Framework/Rendering/Pipeline/Shader.h>
@@ -110,6 +113,9 @@ private:
         DirectX::XMFLOAT4 ColorAndAlpha = { 1.0f, 1.0f, 1.0f, 0.45f };
         DirectX::XMFLOAT4 CameraRight = { 1.0f, 0.0f, 0.0f, 0.0f };
         DirectX::XMFLOAT4 CameraUp = { 0.0f, 1.0f, 0.0f, 0.0f };
+//Modify Begin:2026-07-30 by BestHui
+        DirectX::XMFLOAT4 TypeAndParams = { 0.0f, 0.0f, 0.0f, 0.0f };
+//Modify End
     };
 
     struct GBufferMaterialConstants
@@ -128,6 +134,28 @@ private:
         uint32_t Padding1 = 0;
         uint32_t Padding2 = 0;
     };
+
+//Modify Begin:2026-07-30 by BestHui
+    struct MeshletGBufferDrawConstants
+    {
+        DirectX::XMMATRIX Model = DirectX::XMMatrixIdentity();
+        DirectX::XMMATRIX ModelViewProjection = DirectX::XMMatrixIdentity();
+        DirectX::XMMATRIX InverseTransposeModel = DirectX::XMMatrixIdentity();
+        DirectX::XMMATRIX PreviousModelViewProjection = DirectX::XMMatrixIdentity();
+        uint32_t MeshletOffset = 0;
+        uint32_t MeshletCount = 0;
+        uint32_t Padding0 = 0;
+        uint32_t Padding1 = 0;
+    };
+
+    struct GBufferDebugConstants
+    {
+        uint32_t DebugMeshletClusters = 0;
+        uint32_t Padding0 = 0;
+        uint32_t Padding1 = 0;
+        uint32_t Padding2 = 0;
+    };
+//Modify End
 
     RayTracingSceneResourceLayout BuildRayTracingSceneResourceLayout() const;
     void EnsureRayTracingPipelines();
@@ -187,6 +215,9 @@ private:
     std::shared_ptr<Mesh> m_DisplayBlitMesh;
 //Modify End
     std::shared_ptr<Shader> m_GBufferShader;
+//Modify Begin:2026-07-30 by BestHui
+    std::shared_ptr<MeshShader> m_GBufferMeshShader;
+//Modify End
 //Modify Begin:2026-07-28 by BestHui
     std::shared_ptr<Shader> m_DisplayCompositeShader;
 //Modify End
@@ -204,6 +235,10 @@ private:
     bool m_AccumulationEnabled = true;
     bool m_DirectLightingEnabled = true;
     bool m_IndirectLightingEnabled = true;
+//Modify Begin:2026-07-30 by BestHui
+    bool m_UseMeshletGBuffer = false;
+    bool m_DebugMeshletClusters = false;
+//Modify End
 //Modify Begin:2026-07-29 by BestHui
     bool m_SkyboxEnabled = false;
 //Modify End

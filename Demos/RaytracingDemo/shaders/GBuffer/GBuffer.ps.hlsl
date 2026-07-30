@@ -9,6 +9,9 @@ struct PixelShaderInput
     float2 Uv : TEXCOORD0;
     float4 CurrentPositionCs : TEXCOORD1;
     float4 PreviousPositionCs : TEXCOORD2;
+//Modify Begin:2026-07-30 by BestHui
+    nointerpolation uint MeshletDebugId : TEXCOORD3;
+//Modify End
 //Modify Begin:2026-07-29 by BestHui
     bool IsFrontFace : SV_IsFrontFace;
 //Modify End
@@ -41,6 +44,14 @@ cbuffer MaterialCBuffer : register(b0)
     uint Padding2;
 };
 
+//Modify Begin:2026-07-30 by BestHui
+cbuffer GBufferDebugCBuffer : register(b1)
+{
+    uint DebugMeshletClusters;
+    uint3 GBufferDebugPadding;
+};
+//Modify End
+
 Texture2D DiffuseTexture : register(t0);
 Texture2D NormalTexture : register(t1);
 Texture2D MetallicTexture : register(t2);
@@ -67,6 +78,23 @@ float3 ApplyNormalMap(float3 normalWs, float3 tangentWs, float3 bitangentWs, flo
     return normalize(mul(normalTs, tbn));
 }
 
+//Modify Begin:2026-07-30 by BestHui
+float3 HashClusterColor(uint id)
+{
+    id ^= id >> 16;
+    id *= 0x7feb352du;
+    id ^= id >> 15;
+    id *= 0x846ca68bu;
+    id ^= id >> 16;
+
+    const float3 color = float3(
+        ((id >> 0) & 255u) / 255.0f,
+        ((id >> 8) & 255u) / 255.0f,
+        ((id >> 16) & 255u) / 255.0f);
+    return lerp(color, float3(1.0f, 1.0f, 1.0f), 0.15f);
+}
+//Modify End
+
 PixelShaderOutput main(PixelShaderInput IN)
 {
     PixelShaderOutput OUT;
@@ -74,6 +102,9 @@ PixelShaderOutput main(PixelShaderInput IN)
     const float2 uv = IN.Uv * TilingOffset.xy + TilingOffset.zw;
     const float3 sampledDiffuse = HasDiffuseMap != 0u ? DiffuseTexture.Sample(g_Common_LinearWrapSampler, uv).rgb : 1.0f;
     const float3 baseColor = Diffuse.rgb * sampledDiffuse;
+//Modify Begin:2026-07-30 by BestHui
+    const float3 outputBaseColor = DebugMeshletClusters != 0u ? HashClusterColor(IN.MeshletDebugId) : baseColor;
+//Modify End
 
     float3 normalWs = normalize(IN.NormalWs);
 //Modify Begin:2026-07-29 by BestHui
@@ -107,9 +138,11 @@ PixelShaderOutput main(PixelShaderInput IN)
 
     metallic = saturate(metallic);
     roughness = saturate(roughness);
-    const float3 specularColor = lerp(Specular.rgb, baseColor, metallic);
+//Modify Begin:2026-07-30 by BestHui
+    const float3 specularColor = lerp(Specular.rgb, outputBaseColor, metallic);
 
-    OUT.AlbedoOcclusion = float4(baseColor, ambientOcclusion);
+    OUT.AlbedoOcclusion = float4(outputBaseColor, ambientOcclusion);
+//Modify End
     OUT.SpecularSmoothness = float4(specularColor, 1.0f - roughness);
     OUT.Normal = float4(EncodeNormal(normalWs), 1.0f);
     OUT.EmissionMetallic = float4(0.0f, 0.0f, 0.0f, metallic);

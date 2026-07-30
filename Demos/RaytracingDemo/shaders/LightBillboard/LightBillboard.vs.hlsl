@@ -18,6 +18,9 @@ cbuffer MaterialCBuffer : register(b0)
     float4 g_LightBillboard_ColorAndAlpha;
     float4 g_LightBillboard_CameraRight;
     float4 g_LightBillboard_CameraUp;
+//Modify Begin:2026-07-30 by BestHui
+    float4 g_LightBillboard_TypeAndParams;
+//Modify End
 };
 
 struct VertexAttributes
@@ -33,6 +36,9 @@ struct VertexShaderOutput
 {
     float2 Uv : TEXCOORD0;
     float4 ColorAndAlpha : COLOR0;
+//Modify Begin:2026-07-30 by BestHui
+    float4 TypeAndParams : TEXCOORD1;
+//Modify End
     float4 PositionCs : SV_POSITION;
 };
 
@@ -47,6 +53,9 @@ VertexShaderOutput main(VertexAttributes IN)
 
     OUT.Uv = IN.Uv;
     OUT.ColorAndAlpha = g_LightBillboard_ColorAndAlpha;
+//Modify Begin:2026-07-30 by BestHui
+    OUT.TypeAndParams = g_LightBillboard_TypeAndParams;
+//Modify End
     OUT.PositionCs = mul(g_Pipeline_ViewProjection, float4(positionWs, 1.0f));
     return OUT;
 }

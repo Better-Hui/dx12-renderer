@@ -36,6 +36,9 @@ CommandList::CommandList(D3D12_COMMAND_LIST_TYPE type) : m_D3d12CommandListType(
         nullptr, IID_PPV_ARGS(&m_D3d12CommandList)));
 
     ThrowIfFailed(m_D3d12CommandList.As(&m_D3d12CommandList5));
+//Modify Begin:2026-07-30 by BestHui
+    ThrowIfFailed(m_D3d12CommandList.As(&m_D3d12CommandList6));
+//Modify End
 
     m_PUploadBuffer = std::make_unique<UploadBuffer>();
 
@@ -1120,6 +1123,20 @@ void CommandList::Dispatch(const uint32_t numGroupsX, const uint32_t numGroupsY,
 
     m_D3d12CommandList->Dispatch(numGroupsX, numGroupsY, numGroupsZ);
 }
+
+//Modify Begin:2026-07-30 by BestHui
+void CommandList::DispatchMesh(const uint32_t numGroupsX, const uint32_t numGroupsY, const uint32_t numGroupsZ)
+{
+    FlushResourceBarriers();
+
+    for (const auto& dynamicDescriptorHeap : m_DynamicDescriptorHeaps)
+    {
+        dynamicDescriptorHeap->CommitStagedDescriptorsForDraw(*this);
+    }
+
+    m_D3d12CommandList6->DispatchMesh(numGroupsX, numGroupsY, numGroupsZ);
+}
+//Modify End
 
 //Modify Begin:2026-07-21 by BestHui
 void CommandList::SetRaytracingPipelineState(const ComPtr<ID3D12StateObject>& stateObject)

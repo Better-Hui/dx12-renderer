@@ -61,6 +61,13 @@ set(SHADERS_HEADER_FILES
         )
 list(APPEND SHADERS_HEADER_FILES ${SHADER_FILES_RAYTRACING})
 
+# Modify Begin:2026-07-30 by BestHui
+set(SHADER_FILES_MESH
+        shaders/GBuffer/GBuffer.ms.hlsl
+        )
+list(APPEND SHADERS_HEADER_FILES ${SHADER_FILES_MESH})
+# Modify End
+
 # Modify Begin:2026-07-28 by BestHui
 set(SHADER_FILES_VERTEX
         shaders/GBuffer/GBuffer.vs.hlsl
@@ -103,6 +110,7 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "src" FILES ${SOURCE_
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/shaders" PREFIX "shaders" FILES
         ${SHADER_FILES_RAYTRACING}
         ${SHADERS_HEADER_FILES}
+        ${SHADER_FILES_MESH}
         ${SHADER_FILES_VERTEX}
         ${SHADER_FILES_PIXEL}
         ${SHADER_FILES_COMPUTE}
@@ -113,6 +121,9 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/shaders" PREFIX "shaders" FILES
 set_source_files_properties(${SHADER_FILES_RAYTRACING} PROPERTIES HEADER_FILE_ONLY TRUE)
 # Modify Begin:2026-07-27 by BestHui
 set_source_files_properties(${CUDA_SHADER_FILES} PROPERTIES HEADER_FILE_ONLY TRUE)
+# Modify End
+# Modify Begin:2026-07-30 by BestHui
+set_source_files_properties(${SHADER_FILES_MESH} PROPERTIES HEADER_FILE_ONLY TRUE)
 # Modify End
 
 target_link_libraries(${TARGET_NAME}
@@ -184,6 +195,10 @@ endif()
 
 set(RAYTRACING_SHADER_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/${SHADER_FILES_RAYTRACING}")
 set(RAYTRACING_SHADER_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/Shaders/PathTracing.rt.cso")
+# Modify Begin:2026-07-30 by BestHui
+set(GBUFFER_MESH_SHADER_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/shaders/GBuffer/GBuffer.ms.hlsl")
+set(GBUFFER_MESH_SHADER_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/Shaders/GBuffer.ms.cso")
+# Modify End
 
 # Modify Begin:2026-07-21 by BestHui
 set(RAYTRACING_SHADER_MODEL lib_6_6)
@@ -198,6 +213,9 @@ add_custom_command(TARGET ${TARGET_NAME} PRE_BUILD
 # Modify Begin:2026-07-21 by BestHui
         COMMAND "${DXC_EXECUTABLE}" -T ${RAYTRACING_SHADER_MODEL} -HV 2021 -Fo "${RAYTRACING_SHADER_OUTPUT}" "${RAYTRACING_SHADER_SOURCE}" -I "${CMAKE_SOURCE_DIR}/DXC/include" -I "${CMAKE_SOURCE_DIR}/Shaders" -I "${CMAKE_SOURCE_DIR}/External/NRD/Shaders" -I "${CMAKE_CURRENT_SOURCE_DIR}/shaders" -WX
 # Modify End
+# Modify Begin:2026-07-30 by BestHui
+        COMMAND "${DXC_EXECUTABLE}" -E main -T ms_6_6 -HV 2021 -Fo "${GBUFFER_MESH_SHADER_OUTPUT}" "${GBUFFER_MESH_SHADER_SOURCE}" -I "${CMAKE_SOURCE_DIR}/Shaders" -I "${CMAKE_CURRENT_SOURCE_DIR}/shaders" -WX
+# Modify End
 # Modify Begin:2026-07-27 by BestHui
         COMMAND "${CUDA_NVCC_EXECUTABLE}" -ptx -O3 -arch=sm_75 -ccbin "${CUDA_HOST_COMPILER_DIR}" -Xcompiler=/utf-8 -o "${CUDA_BLOOM_PTX_OUTPUT}" "${CMAKE_CURRENT_SOURCE_DIR}/shaders/CUDA/CudaBloom.cu"
 # Modify End
@@ -207,6 +225,9 @@ add_custom_command(TARGET ${TARGET_NAME} PRE_BUILD
 add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${TARGET_NAME}>/Shaders"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${RAYTRACING_SHADER_OUTPUT}" "$<TARGET_FILE_DIR:${TARGET_NAME}>/Shaders/PathTracing.rt.cso"
+# Modify Begin:2026-07-30 by BestHui
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${GBUFFER_MESH_SHADER_OUTPUT}" "$<TARGET_FILE_DIR:${TARGET_NAME}>/Shaders/GBuffer.ms.cso"
+# Modify End
 # Modify Begin:2026-07-27 by BestHui
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CUDA_BLOOM_PTX_OUTPUT}" "$<TARGET_FILE_DIR:${TARGET_NAME}>/Shaders/CudaBloom.ptx"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/shaders/CUDA/CudaBloom.cu" "$<TARGET_FILE_DIR:${TARGET_NAME}>/Shaders/CudaBloom.cu"

@@ -8,6 +8,9 @@
 #include <DX12Library/Resource.h>
 #include <DX12Library/StructuredBuffer.h>
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/Rendering/Pipeline/MeshShader.h>
+//Modify End
 #include <Framework/Rendering/Pipeline/PipelineDescriptorPool.h>
 #include <Framework/Rendering/Pipeline/PipelineDescriptorSet.h>
 #include <Framework/Rendering/Pipeline/PipelineLayout.h>
@@ -204,6 +207,30 @@ void CommandContext::SetPipeline(Shader& shader) const
     SetGraphicsPipelineState(pipelineState);
 }
 
+//Modify Begin:2026-07-30 by BestHui
+void CommandContext::SetPipeline(MeshShader& shader) const
+{
+    m_BoundPipelineBindPoint = PipelineBindPoint::Graphics;
+    m_HasBoundPipeline = true;
+    m_BoundRayTracingShader = nullptr;
+
+    const auto device = Application::Get().GetDevice();
+    const auto& renderTargetState = m_CommandList.GetLastRenderTargetState();
+    const auto pipelineState = shader.GetPipelineState(device, renderTargetState);
+
+    if (shader.UsesReflectedRootSignature())
+    {
+        SetPipelineLayout(PipelineBindPoint::Graphics, *shader.GetPipelineLayout());
+    }
+    else
+    {
+        SetGraphicsRootSignature(shader.GetRootSignature());
+    }
+
+    SetGraphicsPipelineState(pipelineState);
+}
+//Modify End
+
 void CommandContext::SetPipeline(const ComputeShader& shader) const
 {
     m_BoundPipelineBindPoint = PipelineBindPoint::Compute;
@@ -240,6 +267,13 @@ void CommandContext::BindPipeline(Shader& shader) const
 {
     SetPipeline(shader);
 }
+
+//Modify Begin:2026-07-30 by BestHui
+void CommandContext::BindPipeline(MeshShader& shader) const
+{
+    SetPipeline(shader);
+}
+//Modify End
 
 void CommandContext::BindPipeline(const ComputeShader& shader) const
 {
@@ -626,6 +660,13 @@ void CommandContext::Draw(
 {
     m_CommandList.Draw(vertexCount, instanceCount, startVertex, startInstance);
 }
+
+//Modify Begin:2026-07-30 by BestHui
+void CommandContext::DispatchMesh(const uint32_t numGroupsX, const uint32_t numGroupsY, const uint32_t numGroupsZ) const
+{
+    m_CommandList.DispatchMesh(numGroupsX, numGroupsY, numGroupsZ);
+}
+//Modify End
 
 void CommandContext::Dispatch(const uint32_t numGroupsX, const uint32_t numGroupsY, const uint32_t numGroupsZ) const
 {

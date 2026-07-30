@@ -29,8 +29,11 @@ enum class PipelineShaderStageFlags : uint32_t
     Pixel = 1 << 1,
     Compute = 1 << 2,
     RayTracing = 1 << 3,
-    AllGraphics = (1 << 0) | (1 << 1),
-    All = (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3)
+//Modify Begin:2026-07-30 by BestHui
+    Mesh = 1 << 4,
+    AllGraphics = (1 << 0) | (1 << 1) | (1 << 4),
+    All = (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4)
+//Modify End
 };
 
 inline PipelineShaderStageFlags operator|(const PipelineShaderStageFlags lhs, const PipelineShaderStageFlags rhs)

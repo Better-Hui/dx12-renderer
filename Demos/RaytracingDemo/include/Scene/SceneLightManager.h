@@ -42,6 +42,9 @@ public:
         SkyLightData& skyLight) const;
 
     bool IsPointLightAnimationEnabled() const { return m_AnimatePointLights; }
+//Modify Begin:2026-07-30 by BestHui
+    const std::vector<DirectionalLight>& GetDirectionalLights() const { return m_DirectionalLights; }
+//Modify End
     size_t GetPointLightCount() const { return m_PointLights.size(); }
     const std::vector<PointLight>& GetPointLights() const { return m_PointLights; }
     const std::vector<AreaLightData>& GetAreaLights() const { return m_AreaLights; }

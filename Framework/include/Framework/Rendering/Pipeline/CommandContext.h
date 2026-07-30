@@ -15,6 +15,9 @@
 
 class CommandList;
 class ComputeShader;
+//Modify Begin:2026-07-30 by BestHui
+class MeshShader;
+//Modify End
 class PipelineDescriptorPool;
 class PipelineDescriptorSet;
 class PipelineLayout;
@@ -61,6 +64,9 @@ public:
 
 //Modify Begin:2026-07-29 by BestHui
     void BindPipeline(Shader& shader) const;
+//Modify Begin:2026-07-30 by BestHui
+    void BindPipeline(MeshShader& shader) const;
+//Modify End
     void BindPipeline(const ComputeShader& shader) const;
     void BindPipeline(const RayTracingShader& shader) const;
     void BindDescriptorSet(const PipelineDescriptorSetBindDesc& descriptorSetDesc) const;
@@ -75,6 +81,9 @@ public:
     void UavBarrier(const Resource& resource) const;
 
     void Draw(uint32_t vertexCount, uint32_t instanceCount = 1, uint32_t startVertex = 0, uint32_t startInstance = 0) const;
+//Modify Begin:2026-07-30 by BestHui
+    void DispatchMesh(uint32_t numGroupsX, uint32_t numGroupsY = 1, uint32_t numGroupsZ = 1) const;
+//Modify End
     void Dispatch(uint32_t numGroupsX, uint32_t numGroupsY = 1, uint32_t numGroupsZ = 1) const;
 //Modify Begin:2026-07-29 by BestHui
     void BindDescriptorSet(const RayTracingBindingSet& bindingSet) const;
@@ -88,6 +97,9 @@ private:
     void SetDescriptorSet(PipelineBindPoint bindPoint, const PipelineDescriptorSetBindDesc& descriptorSetDesc) const;
     void SetDescriptorSet(PipelineBindPoint bindPoint, const PipelineDescriptorSet& descriptorSet) const;
     void SetPipeline(Shader& shader) const;
+//Modify Begin:2026-07-30 by BestHui
+    void SetPipeline(MeshShader& shader) const;
+//Modify End
     void SetPipeline(const ComputeShader& shader) const;
     void SetPipeline(const RayTracingShader& shader) const;
     void SetGraphicsRootSignature(const RootSignature& rootSignature) const;

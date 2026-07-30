@@ -29,6 +29,9 @@ struct PipelineShaderBytecodeKey
 struct RasterPipelineStateKey
 {
     PipelineShaderBytecodeKey VertexShader;
+//Modify Begin:2026-07-30 by BestHui
+    PipelineShaderBytecodeKey MeshShader;
+//Modify End
     PipelineShaderBytecodeKey PixelShader;
     size_t LayoutHash = 0;
     RenderTargetState RenderTarget;
@@ -37,6 +40,9 @@ struct RasterPipelineStateKey
     bool operator==(const RasterPipelineStateKey& other) const
     {
         return VertexShader == other.VertexShader &&
+//Modify Begin:2026-07-30 by BestHui
+            MeshShader == other.MeshShader &&
+//Modify End
             PixelShader == other.PixelShader &&
             LayoutHash == other.LayoutHash &&
             RenderTarget == other.RenderTarget &&

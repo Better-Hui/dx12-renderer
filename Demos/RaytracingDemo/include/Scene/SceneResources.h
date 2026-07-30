@@ -1,9 +1,15 @@
 //Modify Begin:2026-07-27 by BestHui
 #pragma once
 
+//Modify Begin:2026-07-30 by BestHui
+#include <DX12Library/ByteAddressBuffer.h>
+//Modify End
 #include <DX12Library/StructuredBuffer.h>
 #include <DX12Library/Texture.h>
 
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/Geometry/Meshlet.h>
+//Modify End
 #include <Framework/Rendering/RayTracing/RayTracingAccelerationStructure.h>
 #include <Framework/Scene/Scene.h>
 
@@ -12,6 +18,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 class CommandList;
@@ -45,6 +52,17 @@ struct RaytracingDemoSceneObject
     uint32_t MaterialIndex = 0;
 };
 
+//Modify Begin:2026-07-30 by BestHui
+struct RaytracingDemoMeshletDraw
+{
+    DirectX::XMMATRIX WorldMatrix = DirectX::XMMatrixIdentity();
+    uint32_t MaterialIndex = 0;
+    uint32_t MeshletOffset = 0;
+    uint32_t MeshletCount = 0;
+    uint32_t Padding0 = 0;
+};
+//Modify End
+
 class RaytracingDemoSceneResources final
 {
 public:
@@ -62,6 +80,13 @@ public:
     const std::vector<std::shared_ptr<Texture>>& GetTextures() const { return m_Textures; }
     const StructuredBuffer& GetMaterialBuffer() const { return m_MaterialBuffer; }
     const StructuredBuffer& GetGeometryBuffer() const { return m_GeometryBuffer; }
+//Modify Begin:2026-07-30 by BestHui
+    const StructuredBuffer& GetMeshletVertexBuffer() const { return m_MeshletVertexBuffer; }
+    const ByteAddressBuffer& GetMeshletIndexBuffer() const { return m_MeshletIndexBuffer; }
+    const StructuredBuffer& GetMeshletBuffer() const { return m_MeshletBuffer; }
+    const std::vector<RaytracingDemoMeshletDraw>& GetMeshletDraws() const { return m_MeshletDraws; }
+    bool HasMeshlets() const { return !m_MeshletDraws.empty() && !m_Meshlets.empty(); }
+//Modify End
     const RayTracingAccelerationStructure& GetRayTracingAccelerationStructure() const { return m_RayTracingAccelerationStructure; }
     RayTracingAccelerationStructure& GetRayTracingAccelerationStructure() { return m_RayTracingAccelerationStructure; }
     size_t GetTextureCount() const { return m_Textures.size(); }
@@ -97,14 +122,31 @@ private:
         const Scene& scene,
         const std::vector<uint32_t>& materialIndexMap,
         uint32_t defaultMaterial);
+//Modify Begin:2026-07-30 by BestHui
+    void AddMeshletDraw(const MeshPrototype& prototype, const DirectX::XMMATRIX& worldMatrix, uint32_t materialIndex);
+    std::pair<uint32_t, uint32_t> AddMeshletGeometry(const MeshPrototype& prototype, uint32_t materialIndex);
+    void AddStressTestSpheres(CommandList& commandList, uint32_t whiteTextureIndex);
+    void UploadMeshletBuffers(CommandList& commandList);
+//Modify End
     void AddRayTracingInstances(RayTracingAccelerationStructure& accelerationStructure) const;
     void UploadRayTracingBuffers(CommandList& commandList, const RayTracingAccelerationStructure& accelerationStructure);
 
     StructuredBuffer m_MaterialBuffer;
     StructuredBuffer m_GeometryBuffer;
+//Modify Begin:2026-07-30 by BestHui
+    StructuredBuffer m_MeshletVertexBuffer;
+    ByteAddressBuffer m_MeshletIndexBuffer;
+    StructuredBuffer m_MeshletBuffer;
+//Modify End
     RayTracingAccelerationStructure m_RayTracingAccelerationStructure;
     std::vector<RaytracingDemoSceneObject> m_SceneObjects;
     std::vector<RaytracingDemoMaterialData> m_Materials;
     std::vector<std::shared_ptr<Texture>> m_Textures;
+//Modify Begin:2026-07-30 by BestHui
+    std::vector<VertexAttributes> m_MeshletVertices;
+    std::vector<uint16_t> m_MeshletIndices;
+    std::vector<Meshlet> m_Meshlets;
+    std::vector<RaytracingDemoMeshletDraw> m_MeshletDraws;
+//Modify End
 };
 //Modify End

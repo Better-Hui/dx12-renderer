@@ -461,24 +461,74 @@ bool SceneLightManager::DrawImGui()
             for (size_t i = 0; i < m_PointLights.size(); ++i)
             {
                 ImGui::PushID(static_cast<int>(i));
-                const PointLight& light = m_PointLights[i];
-                ImGui::Text(
-                    "#%zu Pos(%.2f, %.2f, %.2f) Range %.2f Intensity %.2f%s",
+//Modify Begin:2026-07-30 by BestHui
+                PointLight& light = m_PointLights[i];
+                const bool isAnimated = i < m_PointLightAnimated.size() && m_PointLightAnimated[i] != 0;
+                ImGui::ColorButton("Color", ImVec4(light.Color.x, light.Color.y, light.Color.z, 1.0f), ImGuiColorEditFlags_NoTooltip, ImVec2(14.0f, 14.0f));
+                ImGui::SameLine();
+                const bool open = ImGui::TreeNodeEx(
+                    "PointLight",
+                    ImGuiTreeNodeFlags_DefaultOpen,
+                    "Point Light #%zu  %s  Pos(%.2f, %.2f, %.2f)  I %.1f",
                     i,
+                    isAnimated ? "Animated" : "Static",
                     light.PositionWs.x,
                     light.PositionWs.y,
                     light.PositionWs.z,
-                    light.Range,
-                    light.Color.w,
-                    i < m_PointLightAnimated.size() && m_PointLightAnimated[i] != 0 ? " Animated" : "");
+                    light.Color.w);
                 ImGui::SameLine();
-                if (ImGui::SmallButton("Delete"))
+                if (ImGui::SmallButton("Delete Point Light"))
                 {
                     RemovePointLight(i);
                     changed = true;
                     ImGui::PopID();
                     break;
                 }
+                if (open)
+                {
+                    bool pointChanged = false;
+                    bool positionChanged = false;
+                    XMFLOAT3 position = { light.PositionWs.x, light.PositionWs.y, light.PositionWs.z };
+                    positionChanged |= ImGui::DragFloat3("Position", &position.x, 0.05f, -200.0f, 200.0f, "%.2f");
+                    pointChanged |= ImGui::ColorEdit3("Color", &light.Color.x);
+                    pointChanged |= ImGui::SliderFloat("Intensity", &light.Color.w, 0.0f, 150.0f, "%.1f");
+                    pointChanged |= ImGui::SliderFloat("Range", &light.Range, 0.1f, 200.0f, "%.1f");
+                    bool animated = isAnimated;
+                    if (ImGui::Checkbox("Animated", &animated))
+                    {
+                        if (i < m_PointLightAnimated.size())
+                        {
+                            m_PointLightAnimated[i] = animated ? 1u : 0u;
+                        }
+                        pointChanged = true;
+                    }
+                    if (positionChanged)
+                    {
+                        light.PositionWs = { position.x, position.y, position.z, 1.0f };
+                        if (i < m_PointLightBaseY.size())
+                        {
+                            m_PointLightBaseY[i] = position.y;
+                        }
+                        if (i < m_PointLightOrbitCenter.size())
+                        {
+                            m_PointLightOrbitCenter[i] = { position.x, position.y, position.z };
+                        }
+                    }
+                    if (pointChanged || positionChanged)
+                    {
+                        light.Color.x = std::max(0.0f, light.Color.x);
+                        light.Color.y = std::max(0.0f, light.Color.y);
+                        light.Color.z = std::max(0.0f, light.Color.z);
+                        light.Color.w = std::max(0.0f, light.Color.w);
+                        light.Range = std::max(0.1f, light.Range);
+                        light.RecalculateAttenuationCoefficients();
+                        UpdatePointLightGpuData(i);
+                        MarkPointLightsDirty(i, i + 1);
+                        changed = true;
+                    }
+                    ImGui::TreePop();
+                }
+//Modify End
                 ImGui::PopID();
             }
             ImGui::TreePop();

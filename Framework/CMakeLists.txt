@@ -40,7 +40,7 @@ set(SHADERS_OUTPUT_HEADERS TRUE)
 include(${CMAKE_SOURCE_DIR}/CMakeIncludes/ProjectBase.cmake)
 
 # Modify Begin:2026-07-30 by BestHui
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/include" PREFIX "include" FILES ${HEADER_FILES})
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/include/Framework" PREFIX "include" FILES ${HEADER_FILES})
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "src" FILES ${SOURCE_FILES})
 # Modify End
 
@@ -105,6 +105,11 @@ target_link_libraries(${TARGET_NAME}
 # imgui
 find_package(imgui CONFIG REQUIRED)
 target_link_libraries(${TARGET_NAME} PUBLIC imgui::imgui)
+
+# Modify Begin:2026-07-30 by BestHui
+find_package(meshoptimizer CONFIG REQUIRED)
+target_link_libraries(${TARGET_NAME} PUBLIC meshoptimizer::meshoptimizer)
+# Modify End
 
 # Modify Begin:2026-07-29 by BestHui
 add_executable(UnitySceneDump "tools/UnitySceneDump.cpp")
