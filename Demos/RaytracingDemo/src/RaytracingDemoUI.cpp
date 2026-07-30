@@ -6,7 +6,8 @@
 void RaytracingDemo::OnImGui()
 {
     ImGui::SetNextWindowSize(ImVec2(520.0f, 680.0f), ImGuiCond_FirstUseEver);
-    ImGui::Begin("Raytracing");
+    ImGui::SetNextWindowCollapsed(false, ImGuiCond_Always);
+    ImGui::Begin("Raytracing", nullptr, ImGuiWindowFlags_NoCollapse);
     ImGui::Text("GBuffer Path Tracing");
     ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
     ImGui::Text("Resolution: %d x %d", m_Width, m_Height);
@@ -105,7 +106,7 @@ void RaytracingDemo::OnImGui()
     if (fovChanged)
     {
         const float aspectRatio = static_cast<float>(m_Width) / static_cast<float>(m_Height);
-        m_Camera.SetProjection(m_CameraFov, aspectRatio, 0.1f, 1000.0f);
+        GetSceneCamera().SetProjection(m_CameraFov, aspectRatio, 0.1f, 1000.0f);
         ResetAccumulation();
     }
     if (rotateSpeedChanged || panSpeedChanged || dollySpeedChanged || wheelSpeedChanged)

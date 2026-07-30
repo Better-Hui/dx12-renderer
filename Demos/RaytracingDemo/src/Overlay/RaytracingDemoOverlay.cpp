@@ -17,8 +17,8 @@ void RaytracingDemo::DrawLightBillboards(CommandList& cmd)
         return;
     }
 
-    const XMVECTOR cameraRight = XMVector3Rotate(XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f), m_Camera.GetRotation());
-    const XMVECTOR cameraUp = XMVector3Rotate(XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f), m_Camera.GetRotation());
+    const XMVECTOR cameraRight = XMVector3Rotate(XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f), GetSceneCamera().GetRotation());
+    const XMVECTOR cameraUp = XMVector3Rotate(XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f), GetSceneCamera().GetRotation());
 
     XMFLOAT4 cameraRightFloat{};
     XMFLOAT4 cameraUpFloat{};

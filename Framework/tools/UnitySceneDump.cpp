@@ -1,6 +1,5 @@
 //Modify Begin:2026-07-29 by BestHui
-#include <Framework/UnitySceneParser.h>
-//Modify Begin:2026-07-29 by BestHui
+#include <Framework/UnitySceneImporter.h>
 #include <Framework/Mesh.h>
 #include <Framework/ModelLoader.h>
 //Modify End
@@ -12,26 +11,22 @@
 
 namespace
 {
-    const char* ToString(const UnityLightType type)
+    const char* ToString(const SceneMeshKind kind)
     {
-        switch (type)
+        switch (kind)
         {
-        case UnityLightType::Spot:
-            return "Spot";
-        case UnityLightType::Directional:
-            return "Directional";
-        case UnityLightType::Point:
-            return "Point";
-        case UnityLightType::Area:
-            return "Area";
+        case SceneMeshKind::BuiltinPlane:
+            return "BuiltinPlane";
+        case SceneMeshKind::ExternalMesh:
+            return "ExternalMesh";
         default:
             return "Unknown";
         }
     }
 
-    void PrintVector(const UnityVector3& value)
+    void PrintFloat4(const DirectX::XMFLOAT4& value)
     {
-        std::cout << value.X << ", " << value.Y << ", " << value.Z;
+        std::cout << value.x << ", " << value.y << ", " << value.z << ", " << value.w;
     }
 }
 
@@ -45,80 +40,63 @@ int main(int argc, char** argv)
 
     try
     {
-        const UnitySceneData scene = UnitySceneParser::ParseFromFile(argv[1]);
-        std::cout << "Scene: " << scene.ScenePath.string() << "\n";
-        std::cout << "ProjectRoot: " << scene.ProjectRoot.string() << "\n";
-//Modify Begin:2026-07-30 by BestHui
-        std::cout << "RenderSettings: ambientSky=("
-            << scene.RenderSettings.AmbientSkyColor.R << ", "
-            << scene.RenderSettings.AmbientSkyColor.G << ", "
-            << scene.RenderSettings.AmbientSkyColor.B << ") intensity="
-            << scene.RenderSettings.AmbientIntensity << " mode="
-            << scene.RenderSettings.AmbientMode << " skyboxFileId="
-            << scene.RenderSettings.SkyboxMaterial.FileId << " skyboxGuid="
-            << scene.RenderSettings.SkyboxMaterial.Guid << "\n";
-//Modify End
-        std::cout << "Objects: " << scene.Objects.size() << "\n";
-        for (const UnitySceneObject& object : scene.Objects)
+        const UnitySceneImportResult importResult = UnitySceneImporter::ImportFromFile(argv[1]);
+        const Scene& scene = importResult.SceneData;
+        std::cout << "Scene: " << scene.GetSourcePath().string() << "\n";
+        std::cout << "ProjectRoot: " << scene.GetProjectRoot().string() << "\n";
+        for (const std::string& diagnostic : importResult.Diagnostics)
         {
-            std::cout << "  Object " << object.Name << " active=" << (object.Active ? "true" : "false")
-                << " renderer=" << (object.RendererEnabled ? "true" : "false")
-                << " worldPos=(";
-            PrintVector(object.Transform.WorldPosition);
-            std::cout << ") materials=" << object.Materials.size();
-            if (!object.Mesh.Guid.empty() || object.Mesh.FileId != 0)
+            std::cout << "Diagnostic: " << diagnostic << "\n";
+        }
+
+        std::cout << "Camera: " << scene.GetCamera().Name
+            << " fov=" << scene.GetCamera().FieldOfView
+            << " near=" << scene.GetCamera().NearClipPlane
+            << " far=" << scene.GetCamera().FarClipPlane << "\n";
+
+        std::cout << "Skybox: ambient=(";
+        PrintFloat4(scene.GetSkybox().AmbientColorAndIntensity);
+        std::cout << ") texture=" << scene.GetSkybox().Texture.AssetPath.string() << "\n";
+
+        std::cout << "Objects: " << scene.GetObjects().size() << "\n";
+        for (const SceneObject& object : scene.GetObjects())
+        {
+            std::cout << "  Object " << object.Name
+                << " meshKind=" << ToString(object.Mesh.Kind)
+                << " material=" << object.MaterialIndex;
+            if (!object.Mesh.AssetPath.empty())
             {
-                std::cout << " meshFileId=" << object.Mesh.FileId;
-                if (!object.Mesh.Guid.empty())
-                {
-                    std::cout << " meshGuid=" << object.Mesh.Guid;
-                }
+                std::cout << " asset=" << object.Mesh.AssetPath.string()
+                    << " submesh=" << object.Mesh.SubmeshName;
             }
             std::cout << "\n";
         }
-        std::cout << "Cameras: " << scene.Cameras.size() << "\n";
-        for (const UnityCameraInfo& camera : scene.Cameras)
-        {
-            std::cout << "  Camera " << camera.Name << " enabled=" << (camera.Enabled ? "true" : "false")
-                << " fov=" << camera.FieldOfView << " worldPos=(";
-            PrintVector(camera.Transform.WorldPosition);
-            std::cout << ")\n";
-        }
 
-        std::cout << "Lights: " << scene.Lights.size() << "\n";
-        for (const UnityLightInfo& light : scene.Lights)
-        {
-            std::cout << "  Light " << light.Name << " enabled=" << (light.Enabled ? "true" : "false")
-                << " type=" << ToString(light.Type)
-                << " intensity=" << light.Intensity << " range=" << light.Range << " worldPos=(";
-            PrintVector(light.Transform.WorldPosition);
-            std::cout << ")\n";
-        }
+        std::cout << "Lights: directional=" << scene.GetDirectionalLights().size()
+            << " point=" << scene.GetPointLights().size()
+            << " area=" << scene.GetAreaLights().size() << "\n";
 
-        std::cout << "Materials: " << scene.Materials.size() << "\n";
-        for (const UnityMaterialInfo& material : scene.Materials)
+        std::cout << "Materials: " << scene.GetMaterials().size() << "\n";
+        for (const SceneMaterial& material : scene.GetMaterials())
         {
-            std::cout << "  Material " << material.Name << " guid=" << material.Reference.Guid;
-            std::cout << " pbr=" << (material.IsPbrMaterial ? "true" : "false")
-                << " base=(" << material.BaseColor.R << ", " << material.BaseColor.G << ", " << material.BaseColor.B << ")"
-                << " metallic=" << material.Metallic
-                << " smoothness=" << material.Smoothness;
-            if (!material.Reference.AssetPath.empty())
-            {
-                std::cout << " path=" << material.Reference.AssetPath.string();
-            }
-            std::cout << "\n";
+            std::cout << "  Material " << material.Name
+                << " source=" << material.SourceId
+                << " pbr=" << (material.IsPbrMaterial ? "true" : "false")
+                << " base=(";
+            PrintFloat4(material.BaseColor);
+            std::cout << ") metallic=" << material.Metallic
+                << " roughness=" << material.Roughness
+                << " baseMap=" << material.BaseMap.AssetPath.string() << "\n";
         }
 
 //Modify Begin:2026-07-29 by BestHui
         std::set<std::string> meshAssetPaths;
-        for (const UnitySceneObject& object : scene.Objects)
+        for (const SceneObject& object : scene.GetObjects())
         {
-            if (object.Mesh.AssetPath.empty())
+            if (!object.Mesh.AssetPath.empty())
             {
-                continue;
+                meshAssetPaths.insert(object.Mesh.AssetPath.string());
             }
-            meshAssetPaths.insert(object.Mesh.AssetPath.string());
         }
 
         ModelLoader modelLoader;

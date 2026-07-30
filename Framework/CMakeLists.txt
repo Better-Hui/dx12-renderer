@@ -42,6 +42,9 @@ set(HEADER_FILES
 # Modify End
         "include/Framework/FrameworkDeprecated.h"
         "include/Framework/RasterPipelineStateBuilder.h" 
+        # Modify Begin:2026-07-30 by BestHui
+        "include/Framework/Scene.h"
+        # Modify End
         "include/Framework/Shader.h" 
         "include/Framework/Material.h" 
         "include/Framework/ShaderResourceView.h"
@@ -54,6 +57,7 @@ set(HEADER_FILES
         "include/Framework/UnityD3D12Interop.h"
         # Modify End
 # Modify Begin:2026-07-29 by BestHui
+        "include/Framework/UnitySceneImporter.h"
         "include/Framework/UnitySceneParser.h"
 # Modify End
         "include/Framework/ComputeShader.h"
@@ -112,6 +116,9 @@ set(SOURCE_FILES
         "src/PipelineLayout.cpp"
 # Modify End
         "src/RasterPipelineStateBuilder.cpp" 
+        # Modify Begin:2026-07-30 by BestHui
+        "src/Scene.cpp"
+        # Modify End
         "src/Shader.cpp" 
         "src/SharedUploadBuffer.cpp" 
         "src/Material.cpp" 

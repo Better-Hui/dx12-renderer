@@ -10,10 +10,9 @@
 #include <Framework/ImGuiImpl.h>
 #include <Framework/Model.h>
 #include <Framework/ComputeShader.h>
-#include <Framework/RayTracingAccelerationStructure.h>
 #include <Framework/RayTracingShader.h>
+#include <Framework/Scene.h>
 #include <Framework/Shader.h>
-#include <Framework/UnitySceneParser.h>
 
 #include <RenderGraph/RenderGraphRoot.h>
 #include <Scene/SceneLightManager.h>
@@ -142,6 +141,8 @@ private:
 //Modify End
     void ResetAccumulation(bool resetDenoiserHistory = true);
     bool IsDenoiserEnabled() const { return m_Denoisers.IsEnabled(); }
+    Camera& GetSceneCamera() { return m_Scene.GetRuntimeCamera(); }
+    const Camera& GetSceneCamera() const { return m_Scene.GetRuntimeCamera(); }
     DenoiserController& GetDenoisers() { return m_Denoisers; }
     const DenoiserController& GetDenoisers() const { return m_Denoisers; }
 //Modify Begin:2026-07-27 by BestHui
@@ -149,11 +150,11 @@ private:
     void DrawLightBillboards(CommandList& cmd);
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
+    void LoadUnitySceneContent(CommandList& commandList, const std::filesystem::path& unityScenePath);
     void SaveCurrentCameraToUnityScene();
 //Modify End
     void OnImGui();
 
-    Camera m_Camera;
     friend struct RaytracingDemoPassAccess;
     friend class RaytracingDemoPasses::Builder;
 //Modify Begin:2026-07-28 by BestHui
@@ -178,7 +179,6 @@ private:
     double m_LastGpuTimingUiUpdateTime = 0.0;
     bool m_GpuTimingEnabled = true;
 //Modify End
-    RayTracingAccelerationStructure m_RayTracingAccelerationStructure;
     RaytracingDemoSceneResources m_SceneResources;
     SceneLightManager m_Lights;
     std::unique_ptr<ImGuiImpl> m_ImGui;
@@ -217,9 +217,8 @@ private:
     int m_Width = 1;
     int m_Height = 1;
 //Modify Begin:2026-07-30 by BestHui
-    std::filesystem::path m_UnityScenePath;
-    UnityCameraInfo m_UnitySceneCamera;
-    bool m_HasUnitySceneCamera = false;
+    Scene m_Scene;
+    bool m_HasSceneCamera = false;
     std::string m_CameraSaveStatus;
 //Modify End
 

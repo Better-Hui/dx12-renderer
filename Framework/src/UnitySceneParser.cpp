@@ -1048,3 +1048,542 @@ void UnitySceneParser::WriteCameraToFile(
 }
 //Modify End
 //Modify End
+
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/UnitySceneImporter.h>
+
+#include <DirectXMath.h>
+
+#include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <filesystem>
+#include <fstream>
+#include <optional>
+#include <regex>
+#include <sstream>
+#include <stdexcept>
+#include <unordered_map>
+
+using namespace DirectX;
+
+namespace
+{
+    constexpr const char* UnityBuiltinMeshGuid = "0000000000000000e000000000000000";
+    constexpr int64_t UnityBuiltinPlaneFileId = 10209;
+
+    bool IsRenderableObject(const UnitySceneObject& object)
+    {
+        return object.Active && object.RendererEnabled && object.Mesh.IsValid();
+    }
+
+    bool IsUnityBuiltinMesh(const UnityAssetReference& mesh)
+    {
+        return mesh.Guid == UnityBuiltinMeshGuid;
+    }
+
+    std::string ImportTrim(std::string value)
+    {
+        const auto isNotSpace = [](const unsigned char character)
+        {
+            return !std::isspace(character);
+        };
+        value.erase(value.begin(), std::find_if(value.begin(), value.end(), isNotSpace));
+        value.erase(std::find_if(value.rbegin(), value.rend(), isNotSpace).base(), value.end());
+        return value;
+    }
+
+    std::string ToLower(std::string value)
+    {
+        std::transform(value.begin(), value.end(), value.begin(), [](const unsigned char character)
+        {
+            return static_cast<char>(std::tolower(character));
+        });
+        return value;
+    }
+
+    XMFLOAT3 ToFloat3(const UnityVector3& value)
+    {
+        return { value.X, value.Y, value.Z };
+    }
+
+    XMFLOAT4 ToFloat4(const UnityQuaternion& value)
+    {
+        return { value.X, value.Y, value.Z, value.W };
+    }
+
+    XMFLOAT4 ToFloat4(const UnityColor& value)
+    {
+        return { value.R, value.G, value.B, value.A };
+    }
+
+    UnityVector3 ToUnityVector3(const XMFLOAT3& value)
+    {
+        return { value.x, value.y, value.z };
+    }
+
+    UnityQuaternion ToUnityQuaternion(const XMFLOAT4& value)
+    {
+        return { value.x, value.y, value.z, value.w };
+    }
+
+    XMFLOAT3 RotateVector(const UnityQuaternion& rotation, const XMFLOAT3& value)
+    {
+        const XMVECTOR quaternion = XMVectorSet(rotation.X, rotation.Y, rotation.Z, rotation.W);
+        const XMVECTOR vector = XMVectorSet(value.x, value.y, value.z, 0.0f);
+        XMFLOAT3 result{};
+        XMStoreFloat3(&result, XMVector3Rotate(vector, quaternion));
+        return result;
+    }
+
+    XMFLOAT3 NormalizeVector(const XMFLOAT3& value)
+    {
+        const XMVECTOR vector = XMLoadFloat3(&value);
+        if (XMVectorGetX(XMVector3LengthSq(vector)) <= 1.0e-8f)
+        {
+            return { 0.0f, 1.0f, 0.0f };
+        }
+
+        XMFLOAT3 result{};
+        XMStoreFloat3(&result, XMVector3Normalize(vector));
+        return result;
+    }
+
+    void BuildAreaLightAxes(const XMFLOAT3& normal, XMFLOAT3& axisU, XMFLOAT3& axisV)
+    {
+        const XMVECTOR normalVector = XMLoadFloat3(&normal);
+        const XMVECTOR reference = std::abs(normal.y) < 0.99f ?
+            XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f) :
+            XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f);
+        const XMVECTOR axisUVector = XMVector3Normalize(XMVector3Cross(reference, normalVector));
+        const XMVECTOR axisVVector = XMVector3Normalize(XMVector3Cross(normalVector, axisUVector));
+        XMStoreFloat3(&axisU, axisUVector);
+        XMStoreFloat3(&axisV, axisVVector);
+    }
+
+    XMMATRIX BuildWorldMatrix(const UnityTransformInfo& transform)
+    {
+        const XMVECTOR rotation = XMVectorSet(
+            transform.WorldRotation.X,
+            transform.WorldRotation.Y,
+            transform.WorldRotation.Z,
+            transform.WorldRotation.W);
+
+        return
+            XMMatrixScaling(transform.WorldScale.X, transform.WorldScale.Y, transform.WorldScale.Z) *
+            XMMatrixRotationQuaternion(rotation) *
+            XMMatrixTranslation(transform.WorldPosition.X, transform.WorldPosition.Y, transform.WorldPosition.Z);
+    }
+
+    SceneTextureBinding ConvertTextureBinding(const UnityTextureBinding& binding)
+    {
+        SceneTextureBinding result;
+        result.AssetPath = binding.Texture.AssetPath;
+        result.ScaleOffset = { binding.Scale.X, binding.Scale.Y, binding.Offset.X, binding.Offset.Y };
+        return result;
+    }
+
+    SceneMaterial ConvertMaterial(const UnityMaterialInfo& material)
+    {
+        SceneMaterial result;
+        result.Name = material.Name;
+        result.SourceId = material.Reference.Guid;
+        result.BaseColor = ToFloat4(material.BaseColor);
+        result.SpecColor = ToFloat4(material.SpecColor);
+        result.EmissionColor = ToFloat4(material.EmissionColor);
+        result.BaseMap = material.BaseMap.Texture.IsValid()
+            ? ConvertTextureBinding(material.BaseMap)
+            : ConvertTextureBinding(material.MainTex);
+        result.NormalMap = ConvertTextureBinding(material.NormalMap);
+        result.MetallicGlossMap = ConvertTextureBinding(material.MetallicGlossMap);
+        result.OcclusionMap = ConvertTextureBinding(material.OcclusionMap);
+        result.EmissionMap = ConvertTextureBinding(material.EmissionMap);
+        result.Metallic = material.Metallic;
+        result.Roughness = 1.0f - std::clamp(material.Smoothness, 0.0f, 1.0f);
+        result.OcclusionStrength = material.OcclusionStrength;
+        result.NormalScale = material.NormalScale;
+        result.IsPbrMaterial = material.IsPbrMaterial;
+        return result;
+    }
+
+    std::unordered_map<int64_t, std::string> LoadMeshFileIdNameMap(const std::filesystem::path& meshPath)
+    {
+        std::unordered_map<int64_t, std::string> result;
+        const std::filesystem::path metaPath = meshPath.wstring() + L".meta";
+        std::ifstream file(metaPath);
+        if (!file.is_open())
+        {
+            return result;
+        }
+
+        static const std::regex oldStyleEntryRegex(R"(^\s*(-?\d+):\s*(.+?)\s*$)");
+        static const std::regex firstRegex(R"(^\s*-\s*first:\s*\{fileID:\s*(-?\d+)\}\s*$)");
+        static const std::regex secondRegex(R"(^\s*second:\s*(.+?)\s*$)");
+
+        bool inOldStyleMap = false;
+        bool inInternalIdMap = false;
+        std::optional<int64_t> pendingFileId;
+        std::string line;
+        while (std::getline(file, line))
+        {
+            const std::string trimmed = ImportTrim(line);
+            if (trimmed.rfind("fileIDToRecycleName:", 0) == 0)
+            {
+                inOldStyleMap = true;
+                inInternalIdMap = false;
+                continue;
+            }
+            if (trimmed.rfind("internalIDToNameTable:", 0) == 0)
+            {
+                inOldStyleMap = false;
+                inInternalIdMap = true;
+                continue;
+            }
+
+            std::smatch match;
+            if (inOldStyleMap && std::regex_match(line, match, oldStyleEntryRegex))
+            {
+                result[std::stoll(match[1].str())] = ImportTrim(match[2].str());
+                continue;
+            }
+
+            if (inInternalIdMap && std::regex_match(line, match, firstRegex))
+            {
+                pendingFileId = std::stoll(match[1].str());
+                continue;
+            }
+
+            if (inInternalIdMap && pendingFileId.has_value() && std::regex_match(line, match, secondRegex))
+            {
+                result[*pendingFileId] = ImportTrim(match[1].str());
+                pendingFileId.reset();
+            }
+        }
+
+        return result;
+    }
+
+    void AddSceneMeshNameHints(
+        const UnitySceneData& scene,
+        const std::string& meshGuid,
+        std::unordered_map<int64_t, std::string>& fileIdToName)
+    {
+        if (!fileIdToName.empty())
+        {
+            return;
+        }
+
+        for (const UnitySceneObject& sceneObject : scene.Objects)
+        {
+            if (sceneObject.Mesh.Guid == meshGuid && sceneObject.Mesh.FileId != 0 && !sceneObject.Name.empty())
+            {
+                fileIdToName.emplace(sceneObject.Mesh.FileId, sceneObject.Name);
+            }
+        }
+    }
+
+    std::string ResolveSubmeshName(
+        const UnitySceneData& scene,
+        const UnitySceneObject& object,
+        std::unordered_map<std::string, std::unordered_map<int64_t, std::string>>& fileIdNameCache)
+    {
+        const std::string meshKey = object.Mesh.AssetPath.string();
+        auto cacheIterator = fileIdNameCache.find(meshKey);
+        if (cacheIterator == fileIdNameCache.end())
+        {
+            auto fileIdToName = LoadMeshFileIdNameMap(object.Mesh.AssetPath);
+            AddSceneMeshNameHints(scene, object.Mesh.Guid, fileIdToName);
+            cacheIterator = fileIdNameCache.emplace(meshKey, std::move(fileIdToName)).first;
+        }
+
+        const auto nameIterator = cacheIterator->second.find(object.Mesh.FileId);
+        if (nameIterator != cacheIterator->second.end())
+        {
+            return nameIterator->second;
+        }
+
+        if (!object.Name.empty())
+        {
+            return object.Name;
+        }
+
+        throw std::runtime_error("Scene mesh reference does not have a submesh name mapping.");
+    }
+
+    const UnityCameraInfo* FindPrimaryCamera(const UnitySceneData& scene)
+    {
+        for (const UnityCameraInfo& camera : scene.Cameras)
+        {
+            if (camera.Enabled)
+            {
+                return &camera;
+            }
+        }
+
+        if (!scene.Cameras.empty())
+        {
+            return &scene.Cameras.front();
+        }
+
+        return nullptr;
+    }
+
+    SceneCamera ConvertCamera(const UnityCameraInfo& camera)
+    {
+        SceneCamera result;
+        result.Name = camera.Name;
+        result.Orthographic = camera.Orthographic;
+        result.FieldOfView = camera.FieldOfView;
+        result.NearClipPlane = camera.NearClipPlane;
+        result.FarClipPlane = camera.FarClipPlane;
+        const XMFLOAT3 worldPosition = ToFloat3(camera.Transform.WorldPosition);
+        result.RuntimeCamera = std::make_shared<Camera>();
+        result.RuntimeCamera->SetTranslation(XMLoadFloat3(&worldPosition));
+        const XMFLOAT4 rotation = ToFloat4(camera.Transform.WorldRotation);
+        result.RuntimeCamera->SetRotation(XMLoadFloat4(&rotation));
+        result.SourceBinding.ObjectId = camera.GameObjectId;
+        result.SourceBinding.TransformId = camera.Transform.FileId;
+        result.SourceBinding.ParentTransformId = camera.Transform.ParentTransformId;
+        result.SourceBinding.LocalPosition = ToFloat3(camera.Transform.LocalPosition);
+        result.SourceBinding.LocalRotation = ToFloat4(camera.Transform.LocalRotation);
+        return result;
+    }
+
+    void ConvertLights(const UnitySceneData& unityScene, Scene& scene)
+    {
+        SceneSkybox skybox = scene.GetSkybox();
+        skybox.AmbientColorAndIntensity = {
+            unityScene.RenderSettings.AmbientSkyColor.R,
+            unityScene.RenderSettings.AmbientSkyColor.G,
+            unityScene.RenderSettings.AmbientSkyColor.B,
+            unityScene.RenderSettings.AmbientIntensity
+        };
+        scene.SetSkybox(skybox);
+
+        for (const UnityLightInfo& unityLight : unityScene.Lights)
+        {
+            if (!unityLight.Enabled)
+            {
+                continue;
+            }
+
+            if (unityLight.Type == UnityLightType::Directional)
+            {
+                DirectionalLight light{};
+                const XMFLOAT3 direction = RotateVector(unityLight.Transform.WorldRotation, { 0.0f, 0.0f, -1.0f });
+                light.m_DirectionWs = { direction.x, direction.y, direction.z, 0.0f };
+                light.m_Color = { unityLight.Color.R, unityLight.Color.G, unityLight.Color.B, unityLight.Intensity };
+            scene.AddDirectionalLight(light);
+            }
+            else if (unityLight.Type == UnityLightType::Point || unityLight.Type == UnityLightType::Spot)
+            {
+                PointLight light(
+                    {
+                        unityLight.Transform.WorldPosition.X,
+                        unityLight.Transform.WorldPosition.Y,
+                        unityLight.Transform.WorldPosition.Z,
+                        1.0f
+                    },
+                    std::max(0.1f, unityLight.Range));
+                light.Color = { unityLight.Color.R, unityLight.Color.G, unityLight.Color.B, unityLight.Intensity };
+                light.RecalculateAttenuationCoefficients();
+                scene.AddPointLight(light);
+            }
+            else if (unityLight.Type == UnityLightType::Area)
+            {
+                AreaLight light{};
+                const XMFLOAT3 normal = NormalizeVector(RotateVector(unityLight.Transform.WorldRotation, { 0.0f, 0.0f, 1.0f }));
+                const XMFLOAT3 axisU = NormalizeVector(RotateVector(unityLight.Transform.WorldRotation, { 1.0f, 0.0f, 0.0f }));
+                const XMFLOAT3 axisV = NormalizeVector(RotateVector(unityLight.Transform.WorldRotation, { 0.0f, 1.0f, 0.0f }));
+                light.PositionWs = {
+                    unityLight.Transform.WorldPosition.X,
+                    unityLight.Transform.WorldPosition.Y,
+                    unityLight.Transform.WorldPosition.Z,
+                    1.0f
+                };
+                light.NormalWs = { normal.x, normal.y, normal.z, 0.0f };
+                light.AxisUWsAndExtent = { axisU.x, axisU.y, axisU.z, unityLight.AreaSize.X * 0.5f };
+                light.AxisVWsAndExtent = { axisV.x, axisV.y, axisV.z, unityLight.AreaSize.Y * 0.5f };
+                light.Color = { unityLight.Color.R, unityLight.Color.G, unityLight.Color.B, unityLight.Intensity };
+                light.Range = unityLight.Range;
+                scene.AddAreaLight(light);
+            }
+        }
+    }
+
+    void ConvertMaterials(const UnitySceneData& unityScene, Scene& scene, std::unordered_map<std::string, uint32_t>& materialBySourceId)
+    {
+        SceneMaterial defaultMaterial;
+        defaultMaterial.Name = "Default PBR";
+        defaultMaterial.SourceId = "__default__";
+        defaultMaterial.BaseColor = { 0.85f, 0.85f, 0.85f, 1.0f };
+        defaultMaterial.Roughness = 0.45f;
+        defaultMaterial.IsPbrMaterial = true;
+        scene.AddMaterial(defaultMaterial);
+        materialBySourceId.emplace(defaultMaterial.SourceId, 0);
+
+        for (const UnityMaterialInfo& unityMaterial : unityScene.Materials)
+        {
+            if (unityMaterial.Reference.Guid.empty())
+            {
+                continue;
+            }
+
+            SceneMaterial material = ConvertMaterial(unityMaterial);
+            if (!material.IsPbrMaterial)
+            {
+                material.BaseColor = { 0.8f, 0.8f, 0.8f, 1.0f };
+                material.Metallic = 0.0f;
+                material.Roughness = 0.5f;
+                material.IsPbrMaterial = true;
+            }
+
+            const uint32_t materialIndex = static_cast<uint32_t>(scene.GetMaterials().size());
+            materialBySourceId.insert_or_assign(material.SourceId, materialIndex);
+            scene.AddMaterial(std::move(material));
+        }
+    }
+
+    void ConvertObjects(const UnitySceneData& unityScene, Scene& scene, const std::unordered_map<std::string, uint32_t>& materialBySourceId)
+    {
+        std::unordered_map<std::string, std::unordered_map<int64_t, std::string>> fileIdNameCache;
+
+        for (const UnitySceneObject& unityObject : unityScene.Objects)
+        {
+            if (!IsRenderableObject(unityObject))
+            {
+                continue;
+            }
+
+            SceneObject object;
+            object.Name = unityObject.Name;
+            object.WorldMatrix = BuildWorldMatrix(unityObject.Transform);
+            if (!unityObject.Materials.empty())
+            {
+                const auto material = materialBySourceId.find(unityObject.Materials.front().Guid);
+                object.MaterialIndex = material != materialBySourceId.end() ? material->second : 0;
+            }
+
+            if (IsUnityBuiltinMesh(unityObject.Mesh))
+            {
+                if (unityObject.Mesh.FileId == UnityBuiltinPlaneFileId)
+                {
+                    object.Mesh.Kind = SceneMeshKind::BuiltinPlane;
+                    scene.AddObject(std::move(object));
+                }
+                continue;
+            }
+
+            if (unityObject.Mesh.AssetPath.empty())
+            {
+                continue;
+            }
+
+            object.Mesh.Kind = SceneMeshKind::ExternalMesh;
+            object.Mesh.AssetPath = unityObject.Mesh.AssetPath;
+            object.Mesh.SubmeshName = ResolveSubmeshName(unityScene, unityObject, fileIdNameCache);
+            scene.AddObject(std::move(object));
+        }
+    }
+
+    void ConvertSkybox(const UnitySceneData& unityScene, Scene& scene)
+    {
+        if (!unityScene.HasSkyboxMaterial)
+        {
+            return;
+        }
+
+        const UnityTextureBinding& skyboxTextureBinding = unityScene.SkyboxMaterial.MainTex.Texture.IsValid()
+            ? unityScene.SkyboxMaterial.MainTex
+            : unityScene.SkyboxMaterial.BaseMap;
+        if (!skyboxTextureBinding.Texture.AssetPath.empty() && std::filesystem::exists(skyboxTextureBinding.Texture.AssetPath))
+        {
+            SceneSkybox skybox = scene.GetSkybox();
+            skybox.Texture = ConvertTextureBinding(skyboxTextureBinding);
+            scene.SetSkybox(skybox);
+        }
+    }
+
+    Scene ConvertScene(const UnitySceneData& unityScene)
+    {
+        Scene scene;
+        scene.SetSourcePaths(unityScene.ScenePath, unityScene.ProjectRoot, unityScene.AssetsRoot);
+
+        const UnityCameraInfo* primaryCamera = FindPrimaryCamera(unityScene);
+        if (primaryCamera != nullptr)
+        {
+            scene.SetCamera(ConvertCamera(*primaryCamera));
+        }
+
+        std::unordered_map<std::string, uint32_t> materialBySourceId;
+        ConvertMaterials(unityScene, scene, materialBySourceId);
+        ConvertObjects(unityScene, scene, materialBySourceId);
+        ConvertLights(unityScene, scene);
+        ConvertSkybox(unityScene, scene);
+        return scene;
+    }
+
+    std::string MakeImportSummary(const UnitySceneData& unityScene, const Scene& scene)
+    {
+        std::ostringstream stream;
+        stream << "Imported Unity scene: sourceObjects=" << unityScene.Objects.size()
+               << ", sceneObjects=" << scene.GetObjects().size()
+               << ", cameras=" << unityScene.Cameras.size()
+               << ", directionalLights=" << scene.GetDirectionalLights().size()
+               << ", pointLights=" << scene.GetPointLights().size()
+               << ", areaLights=" << scene.GetAreaLights().size()
+               << ", materials=" << scene.GetMaterials().size();
+        return stream.str();
+    }
+}
+
+UnitySceneImportResult UnitySceneImporter::ImportFromFile(
+    const std::filesystem::path& scenePath,
+    const UnitySceneImportOptions& options)
+{
+    if (!std::filesystem::exists(scenePath))
+    {
+        throw std::runtime_error("Unity scene file does not exist: " + scenePath.string());
+    }
+
+    UnitySceneImportResult result;
+    result.ScenePath = std::filesystem::absolute(scenePath);
+    const UnitySceneData unityScene = UnitySceneParser::ParseFromFile(result.ScenePath, options.ParseOptions);
+    const UnityCameraInfo* primaryCamera = FindPrimaryCamera(unityScene);
+    if (options.RequireCamera && primaryCamera == nullptr)
+    {
+        throw std::runtime_error("Unity scene has no camera: " + result.ScenePath.string());
+    }
+
+    result.SceneData = ConvertScene(unityScene);
+    if (options.RequireRenderableObject && result.SceneData.GetObjects().empty())
+    {
+        throw std::runtime_error("Unity scene has no supported renderable objects: " + result.ScenePath.string());
+    }
+
+    result.Diagnostics.push_back(MakeImportSummary(unityScene, result.SceneData));
+    if (!result.SceneData.GetSkybox().Texture.IsValid())
+    {
+        result.Diagnostics.emplace_back("Scene has no external skybox texture; renderer may use its fallback skybox.");
+    }
+    if (result.SceneData.GetCamera().Orthographic)
+    {
+        result.Diagnostics.emplace_back("Primary camera is orthographic; the current path tracing sample uses perspective projection.");
+    }
+
+    return result;
+}
+
+void UnitySceneImporter::WriteCameraToSourceFile(
+    const std::filesystem::path& scenePath,
+    const SceneCamera& camera)
+{
+    UnityCameraWriteInfo cameraWriteInfo;
+    cameraWriteInfo.GameObjectId = camera.SourceBinding.ObjectId;
+    cameraWriteInfo.TransformFileId = camera.SourceBinding.TransformId;
+    cameraWriteInfo.LocalPosition = ToUnityVector3(camera.SourceBinding.LocalPosition);
+    cameraWriteInfo.LocalRotation = ToUnityQuaternion(camera.SourceBinding.LocalRotation);
+    cameraWriteInfo.FieldOfView = camera.FieldOfView;
+    UnitySceneParser::WriteCameraToFile(scenePath, cameraWriteInfo);
+}
+//Modify End

@@ -6,58 +6,23 @@
 #include <Framework/Model.h>
 #include <Framework/ModelLoader.h>
 #include <Framework/RayTracingAccelerationStructure.h>
-#include <Framework/UnitySceneParser.h>
 
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
-#include <fstream>
 #include <stdexcept>
 #include <unordered_map>
-#include <optional>
-#include <regex>
 
 using namespace DirectX;
 
 namespace
 {
-    bool IsUnityBuiltinMesh(const UnityAssetReference& mesh)
-    {
-        return mesh.Guid == "0000000000000000e000000000000000";
-    }
-
-    XMMATRIX BuildUnityWorldMatrix(const UnityTransformInfo& transform)
-    {
-        const XMVECTOR rotation = XMVectorSet(
-            transform.WorldRotation.X,
-            transform.WorldRotation.Y,
-            transform.WorldRotation.Z,
-            transform.WorldRotation.W);
-
-        return
-            XMMatrixScaling(transform.WorldScale.X, transform.WorldScale.Y, transform.WorldScale.Z) *
-            XMMatrixRotationQuaternion(rotation) *
-            XMMatrixTranslation(transform.WorldPosition.X, transform.WorldPosition.Y, transform.WorldPosition.Z);
-    }
-
     std::string ToLower(std::string value)
     {
         std::transform(value.begin(), value.end(), value.begin(), [](const unsigned char character)
         {
             return static_cast<char>(std::tolower(character));
         });
-        return value;
-    }
-
-//Modify Begin:2026-07-30 by BestHui
-    std::string Trim(std::string value)
-    {
-        const auto isNotSpace = [](const unsigned char character)
-        {
-            return !std::isspace(character);
-        };
-        value.erase(value.begin(), std::find_if(value.begin(), value.end(), isNotSpace));
-        value.erase(std::find_if(value.rbegin(), value.rend(), isNotSpace).base(), value.end());
         return value;
     }
 
@@ -83,108 +48,7 @@ namespace
             }
         }
 
-        throw std::runtime_error("Unity imported mesh fileID resolved to a mesh name that does not exist in the FBX.");
-    }
-
-    std::unordered_map<int64_t, std::string> LoadUnityMeshFileIdNameMap(const std::filesystem::path& meshPath)
-    {
-        std::unordered_map<int64_t, std::string> result;
-        const std::filesystem::path metaPath = meshPath.wstring() + L".meta";
-        std::ifstream file(metaPath);
-        if (!file.is_open())
-        {
-            return result;
-        }
-
-        static const std::regex oldStyleEntryRegex(R"(^\s*(-?\d+):\s*(.+?)\s*$)");
-        static const std::regex firstRegex(R"(^\s*-\s*first:\s*\{fileID:\s*(-?\d+)\}\s*$)");
-        static const std::regex secondRegex(R"(^\s*second:\s*(.+?)\s*$)");
-
-        bool inOldStyleMap = false;
-        bool inInternalIdMap = false;
-        std::optional<int64_t> pendingFileId;
-        std::string line;
-        while (std::getline(file, line))
-        {
-            const std::string trimmed = Trim(line);
-            if (trimmed.rfind("fileIDToRecycleName:", 0) == 0)
-            {
-                inOldStyleMap = true;
-                inInternalIdMap = false;
-                continue;
-            }
-            if (trimmed.rfind("internalIDToNameTable:", 0) == 0)
-            {
-                inOldStyleMap = false;
-                inInternalIdMap = true;
-                continue;
-            }
-
-            std::smatch match;
-            if (inOldStyleMap && std::regex_match(line, match, oldStyleEntryRegex))
-            {
-                result[std::stoll(match[1].str())] = Trim(match[2].str());
-                continue;
-            }
-
-            if (inInternalIdMap && std::regex_match(line, match, firstRegex))
-            {
-                pendingFileId = std::stoll(match[1].str());
-                continue;
-            }
-
-            if (inInternalIdMap && pendingFileId.has_value() && std::regex_match(line, match, secondRegex))
-            {
-                result[*pendingFileId] = Trim(match[1].str());
-                pendingFileId.reset();
-            }
-        }
-
-        return result;
-    }
-
-    void AddSceneMeshFileIdNameHints(
-        const UnitySceneData& scene,
-        const std::string& meshGuid,
-        std::unordered_map<int64_t, std::string>& fileIdToName)
-    {
-        if (!fileIdToName.empty())
-        {
-            return;
-        }
-
-        for (const UnitySceneObject& sceneObject : scene.Objects)
-        {
-            if (sceneObject.Mesh.Guid == meshGuid && sceneObject.Mesh.FileId != 0 && !sceneObject.Name.empty())
-            {
-                fileIdToName.emplace(sceneObject.Mesh.FileId, sceneObject.Name);
-            }
-        }
-    }
-//Modify End
-
-    const MeshPrototype& FindUnityImportedMeshPrototype(
-        const std::vector<MeshPrototype>& prototypes,
-        const UnitySceneObject& object,
-        const std::unordered_map<int64_t, std::string>& fileIdToName)
-    {
-        if (prototypes.empty())
-        {
-            throw std::runtime_error("Unity imported mesh asset contains no mesh prototypes.");
-        }
-
-//Modify Begin:2026-07-30 by BestHui
-        if (object.Mesh.FileId != 0)
-        {
-            const auto nameIterator = fileIdToName.find(object.Mesh.FileId);
-            if (nameIterator != fileIdToName.end())
-            {
-                return FindMeshPrototypeByName(prototypes, nameIterator->second);
-            }
-        }
-
-        throw std::runtime_error("Unity imported mesh fileID does not have a mesh name mapping.");
-//Modify End
+        throw std::runtime_error("Scene mesh submesh name does not exist in the imported model.");
     }
 
     std::wstring ToWidePath(const std::filesystem::path& path)
@@ -197,8 +61,8 @@ namespace
         return path.string();
     }
 
-    RaytracingDemoMaterialData MakeUnityMaterial(
-        const UnityMaterialInfo& material,
+    RaytracingDemoMaterialData MakeSceneMaterial(
+        const SceneMaterial& material,
         const uint32_t diffuseTextureIndex,
         const uint32_t normalTextureIndex,
         const uint32_t metallicTextureIndex,
@@ -206,37 +70,21 @@ namespace
         const uint32_t ambientOcclusionTextureIndex)
     {
         RaytracingDemoMaterialData output{};
-        output.Diffuse = {
-            material.BaseColor.R,
-            material.BaseColor.G,
-            material.BaseColor.B,
-            material.BaseColor.A
-        };
-        output.Specular = {
-            material.SpecColor.R,
-            material.SpecColor.G,
-            material.SpecColor.B,
-            material.SpecColor.A
-        };
-        const UnityTextureBinding& baseTexture = material.BaseMap.Texture.IsValid() ? material.BaseMap : material.MainTex;
-        output.TilingOffset = {
-            baseTexture.Scale.X,
-            baseTexture.Scale.Y,
-            baseTexture.Offset.X,
-            baseTexture.Offset.Y
-        };
+        output.Diffuse = material.BaseColor;
+        output.Specular = material.SpecColor;
+        output.TilingOffset = material.BaseMap.ScaleOffset;
         output.DiffuseTextureIndex = diffuseTextureIndex;
         output.NormalTextureIndex = normalTextureIndex;
         output.MetallicTextureIndex = metallicTextureIndex;
         output.RoughnessTextureIndex = roughnessTextureIndex;
         output.AmbientOcclusionTextureIndex = ambientOcclusionTextureIndex;
-        output.HasDiffuseMap = material.BaseMap.Texture.IsValid() || material.MainTex.Texture.IsValid() ? 1u : 0u;
-        output.HasNormalMap = material.NormalMap.Texture.IsValid() ? 1u : 0u;
-        output.HasMetallicMap = material.MetallicGlossMap.Texture.IsValid() ? 1u : 0u;
-        output.HasRoughnessMap = material.MetallicGlossMap.Texture.IsValid() ? 1u : 0u;
-        output.HasAmbientOcclusionMap = material.OcclusionMap.Texture.IsValid() ? 1u : 0u;
+        output.HasDiffuseMap = material.BaseMap.IsValid() ? 1u : 0u;
+        output.HasNormalMap = material.NormalMap.IsValid() ? 1u : 0u;
+        output.HasMetallicMap = material.MetallicGlossMap.IsValid() ? 1u : 0u;
+        output.HasRoughnessMap = material.MetallicGlossMap.IsValid() ? 1u : 0u;
+        output.HasAmbientOcclusionMap = material.OcclusionMap.IsValid() ? 1u : 0u;
         output.Metallic = material.Metallic;
-        output.Roughness = std::clamp(1.0f - material.Smoothness, 0.02f, 1.0f);
+        output.Roughness = std::clamp(material.Roughness, 0.02f, 1.0f);
         return output;
     }
 
@@ -430,56 +278,56 @@ void RaytracingDemoSceneResources::LoadDeferredLightingScene(CommandList& comman
     }
 }
 
-bool RaytracingDemoSceneResources::LoadUnityScene(CommandList& commandList, const UnitySceneData& scene)
+bool RaytracingDemoSceneResources::LoadScene(CommandList& commandList, const Scene& scene)
 {
-    if (scene.Objects.empty())
+    if (scene.GetObjects().empty())
     {
         return false;
     }
 
-    ModelLoader modelLoader;
     const uint32_t whiteTexture = AddTexture(commandList, L"Assets/Textures/white.png");
-    const auto addUnityTextureOrFallback = [this, &commandList, whiteTexture](
-        const UnityTextureBinding& binding,
+    const std::vector<uint32_t> materialIndexMap = LoadSceneMaterials(commandList, scene, whiteTexture);
+    const uint32_t defaultMaterial = AddDiffuseMaterial({ 0.85f, 0.85f, 0.85f, 1.0f }, { 1, 1, 0, 0 }, whiteTexture, 0.0f, 0.45f);
+    LoadSceneObjects(commandList, scene, materialIndexMap, defaultMaterial);
+
+    return !m_SceneObjects.empty();
+}
+
+std::vector<uint32_t> RaytracingDemoSceneResources::LoadSceneMaterials(
+    CommandList& commandList,
+    const Scene& scene,
+    const uint32_t whiteTexture)
+{
+    const auto addTextureOrFallback = [this, &commandList, whiteTexture](
+        const SceneTextureBinding& binding,
         const TextureUsageType usage) -> uint32_t
-    {
-        if (!binding.Texture.AssetPath.empty() && std::filesystem::exists(binding.Texture.AssetPath))
         {
-            return AddTexture(commandList, ToWidePath(binding.Texture.AssetPath), usage);
-        }
-        return whiteTexture;
-    };
+            if (!binding.AssetPath.empty() && std::filesystem::exists(binding.AssetPath))
+            {
+                return AddTexture(commandList, ToWidePath(binding.AssetPath), usage);
+            }
+            return whiteTexture;
+        };
 
-    std::unordered_map<std::string, uint32_t> materialByGuid;
-    materialByGuid.reserve(scene.Materials.size());
-    for (const UnityMaterialInfo& unityMaterial : scene.Materials)
+    std::vector<uint32_t> materialIndexMap;
+    materialIndexMap.reserve(scene.GetMaterials().size());
+    for (const SceneMaterial& sceneMaterial : scene.GetMaterials())
     {
-        if (unityMaterial.Reference.Guid.empty())
+        if (!sceneMaterial.IsPbrMaterial)
         {
+            materialIndexMap.push_back(AddDiffuseMaterial({ 0.8f, 0.8f, 0.8f, 1.0f }, { 1, 1, 0, 0 }, whiteTexture, 0.0f, 0.5f));
             continue;
         }
 
-        if (!unityMaterial.IsPbrMaterial)
-        {
-            materialByGuid.insert_or_assign(
-                unityMaterial.Reference.Guid,
-                AddDiffuseMaterial({ 0.8f, 0.8f, 0.8f, 1.0f }, { 1, 1, 0, 0 }, whiteTexture, 0.0f, 0.5f));
-            continue;
-        }
+        const uint32_t diffuseTexture = addTextureOrFallback(sceneMaterial.BaseMap, TextureUsageType::Albedo);
+        const uint32_t normalTexture = addTextureOrFallback(sceneMaterial.NormalMap, TextureUsageType::Normalmap);
+        const uint32_t metallicTexture = addTextureOrFallback(sceneMaterial.MetallicGlossMap, TextureUsageType::Other);
+        const uint32_t roughnessTexture = addTextureOrFallback(sceneMaterial.MetallicGlossMap, TextureUsageType::Other);
+        const uint32_t occlusionTexture = addTextureOrFallback(sceneMaterial.OcclusionMap, TextureUsageType::Other);
 
-        const UnityTextureBinding& diffuseBinding = unityMaterial.BaseMap.Texture.IsValid()
-            ? unityMaterial.BaseMap
-            : unityMaterial.MainTex;
-        const uint32_t diffuseTexture = addUnityTextureOrFallback(diffuseBinding, TextureUsageType::Albedo);
-        const uint32_t normalTexture = addUnityTextureOrFallback(unityMaterial.NormalMap, TextureUsageType::Normalmap);
-        const uint32_t metallicTexture = addUnityTextureOrFallback(unityMaterial.MetallicGlossMap, TextureUsageType::Other);
-        const uint32_t roughnessTexture = addUnityTextureOrFallback(unityMaterial.MetallicGlossMap, TextureUsageType::Other);
-        const uint32_t occlusionTexture = addUnityTextureOrFallback(unityMaterial.OcclusionMap, TextureUsageType::Other);
-
-        materialByGuid.insert_or_assign(
-            unityMaterial.Reference.Guid,
-            AddMaterial(MakeUnityMaterial(
-                unityMaterial,
+        materialIndexMap.push_back(
+            AddMaterial(MakeSceneMaterial(
+                sceneMaterial,
                 diffuseTexture,
                 normalTexture,
                 metallicTexture,
@@ -487,42 +335,34 @@ bool RaytracingDemoSceneResources::LoadUnityScene(CommandList& commandList, cons
                 occlusionTexture)));
     }
 
-    const uint32_t defaultMaterial = AddDiffuseMaterial({ 0.85f, 0.85f, 0.85f, 1.0f }, { 1, 1, 0, 0 }, whiteTexture, 0.0f, 0.45f);
+    return materialIndexMap;
+}
+
+void RaytracingDemoSceneResources::LoadSceneObjects(
+    CommandList& commandList,
+    const Scene& scene,
+    const std::vector<uint32_t>& materialIndexMap,
+    const uint32_t defaultMaterial)
+{
+    ModelLoader modelLoader;
     std::unordered_map<std::string, std::vector<MeshPrototype>> importedMeshPrototypeCache;
-//Modify Begin:2026-07-30 by BestHui
-    std::unordered_map<std::string, std::unordered_map<int64_t, std::string>> importedMeshFileIdNameCache;
-//Modify End
 
-    for (const UnitySceneObject& object : scene.Objects)
+    for (const SceneObject& object : scene.GetObjects())
     {
-//Modify Begin:2026-07-30 by BestHui
-        if (!object.Active || !object.RendererEnabled || !object.Mesh.IsValid())
-//Modify End
-        {
-            continue;
-        }
-
         uint32_t materialIndex = defaultMaterial;
-        if (!object.Materials.empty())
+        if (object.MaterialIndex < materialIndexMap.size())
         {
-            const auto material = materialByGuid.find(object.Materials.front().Guid);
-            if (material != materialByGuid.end())
-            {
-                materialIndex = material->second;
-            }
+            materialIndex = materialIndexMap[object.MaterialIndex];
         }
 
-        if (IsUnityBuiltinMesh(object.Mesh))
+        if (object.Mesh.Kind == SceneMeshKind::BuiltinPlane)
         {
-            if (object.Mesh.FileId == 10209)
-            {
-                auto model = modelLoader.LoadExisting(Mesh::CreatePlane(commandList, 10.0f, 10.0f));
-                m_SceneObjects.push_back({ BuildUnityWorldMatrix(object.Transform), model, materialIndex });
-            }
+            auto model = modelLoader.LoadExisting(Mesh::CreatePlane(commandList, 10.0f, 10.0f));
+            m_SceneObjects.push_back({ object.WorldMatrix, model, materialIndex });
             continue;
         }
 
-        if (object.Mesh.AssetPath.empty())
+        if (object.Mesh.Kind != SceneMeshKind::ExternalMesh || object.Mesh.AssetPath.empty())
         {
             continue;
         }
@@ -535,22 +375,19 @@ bool RaytracingDemoSceneResources::LoadUnityScene(CommandList& commandList, cons
             prototypeIterator = importedMeshPrototypeCache.emplace(meshKey, modelLoader.LoadAsMeshPrototypes(ToUtf8Path(meshPath))).first;
         }
 
-//Modify Begin:2026-07-30 by BestHui
-        auto fileIdNameIterator = importedMeshFileIdNameCache.find(meshKey);
-        if (fileIdNameIterator == importedMeshFileIdNameCache.end())
-        {
-            auto fileIdToName = LoadUnityMeshFileIdNameMap(meshPath);
-            AddSceneMeshFileIdNameHints(scene, object.Mesh.Guid, fileIdToName);
-            fileIdNameIterator = importedMeshFileIdNameCache.emplace(meshKey, std::move(fileIdToName)).first;
-        }
-
-        const MeshPrototype& prototype = FindUnityImportedMeshPrototype(prototypeIterator->second, object, fileIdNameIterator->second);
-//Modify End
+        const MeshPrototype& prototype = FindMeshPrototypeByName(prototypeIterator->second, object.Mesh.SubmeshName);
         auto model = modelLoader.Load(commandList, std::vector<MeshPrototype>{ prototype });
-        m_SceneObjects.push_back({ BuildUnityWorldMatrix(object.Transform), model, materialIndex });
+        m_SceneObjects.push_back({ object.WorldMatrix, model, materialIndex });
     }
+}
 
-    return !m_SceneObjects.empty();
+void RaytracingDemoSceneResources::BuildRayTracingAccelerationStructure(
+    CommandList& commandList,
+    const RayTracingAccelerationStructureBuildSettings settings)
+{
+    AddRayTracingInstances(m_RayTracingAccelerationStructure);
+    m_RayTracingAccelerationStructure.Build(commandList, settings);
+    UploadRayTracingBuffers(commandList, m_RayTracingAccelerationStructure);
 }
 
 void RaytracingDemoSceneResources::AddRayTracingInstances(RayTracingAccelerationStructure& accelerationStructure) const

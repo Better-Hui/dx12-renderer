@@ -31,7 +31,8 @@ void RaytracingDemoPassAccess::BindInlinePathTracingInputs(
 {
     const std::vector<std::shared_ptr<Texture>>& textures = demo.m_SceneResources.GetTextures();
     const uint32_t textureCount = static_cast<uint32_t>(textures.size());
-    const std::vector<std::shared_ptr<Mesh>>& meshes = demo.m_RayTracingAccelerationStructure.GetMeshes();
+    const RayTracingAccelerationStructure& accelerationStructure = demo.m_SceneResources.GetRayTracingAccelerationStructure();
+    const std::vector<std::shared_ptr<Mesh>>& meshes = accelerationStructure.GetMeshes();
     const uint32_t meshCount = static_cast<uint32_t>(meshes.size());
 
 //Modify Begin:2026-07-27 by BestHui
@@ -41,7 +42,7 @@ void RaytracingDemoPassAccess::BindInlinePathTracingInputs(
 //Modify End
 
     cmd.SetConstantBuffer(shader, "CameraConstants", camera);
-    shader.SetAccelerationStructure(cmd, demo.m_RayTracingAccelerationStructure);
+    shader.SetAccelerationStructure(cmd, accelerationStructure);
     if (shader.HasShaderResourceView("GBufferTextures"))
     {
         shader.SetShaderResourceView(cmd, "GBufferTextures", 0u, ShaderResourceView(gbuffer.AlbedoOcclusion));

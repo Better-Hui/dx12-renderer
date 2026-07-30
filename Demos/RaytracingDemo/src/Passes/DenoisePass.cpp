@@ -41,8 +41,8 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDe
 
             const RaytracingDemoRenderGraph::NRDResources nrd = RaytracingDemoRenderGraph::GetNRDResources(context);
             const NRD::FrameMatrices frameMatrices = {
-                demo.m_Camera.GetViewMatrix(),
-                demo.m_Camera.GetProjectionMatrix(),
+                demo.GetSceneCamera().GetViewMatrix(),
+                demo.GetSceneCamera().GetProjectionMatrix(),
             };
 
             demo.GetDenoisers().Execute(

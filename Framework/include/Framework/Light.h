@@ -98,3 +98,16 @@ struct CapsuleLight
 	float Attenuation = { 0.001f };
 	float _Padding[3]{};
 };
+
+//Modify Begin:2026-07-30 by BestHui
+struct AreaLight
+{
+	DirectX::XMFLOAT4 PositionWs = { 0, 0, 0, 1 };
+	DirectX::XMFLOAT4 NormalWs = { 0, -1, 0, 0 };
+	DirectX::XMFLOAT4 AxisUWsAndExtent = { 1, 0, 0, 0.5f };
+	DirectX::XMFLOAT4 AxisVWsAndExtent = { 0, 0, 1, 0.5f };
+	DirectX::XMFLOAT4 Color = { 1, 1, 1, 1 };
+	float Range = 20.0f;
+	float _Padding[3]{};
+};
+//Modify End

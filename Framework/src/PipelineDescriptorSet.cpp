@@ -21,27 +21,11 @@ namespace
     }
 //Modify End
 
-    bool IsSameShaderResourceView(const ShaderResourceView& lhs, const ShaderResourceView& rhs)
-    {
-        if (lhs.m_Resource.get() != rhs.m_Resource.get() ||
-//Modify Begin:2026-07-30 by BestHui
-            GetD3D12ResourcePtr(lhs.m_Resource.get()) != GetD3D12ResourcePtr(rhs.m_Resource.get()) ||
-//Modify End
-            lhs.m_FirstSubresource != rhs.m_FirstSubresource ||
-            lhs.m_NumSubresources != rhs.m_NumSubresources ||
-            lhs.m_IsDescValid != rhs.m_IsDescValid)
-        {
-            return false;
-        }
-
-        return !lhs.m_IsDescValid || std::memcmp(&lhs.m_Desc, &rhs.m_Desc, sizeof(D3D12_SHADER_RESOURCE_VIEW_DESC)) == 0;
-    }
-
     bool IsSameShaderResourceBinding(const PipelineShaderResourceBinding& lhs, const PipelineShaderResourceBinding& rhs)
     {
         if (lhs.Resource != rhs.Resource ||
 //Modify Begin:2026-07-30 by BestHui
-            GetD3D12ResourcePtr(lhs.Resource) != GetD3D12ResourcePtr(rhs.Resource) ||
+            lhs.ResourceIdentity != rhs.ResourceIdentity ||
 //Modify End
             lhs.StateAfter != rhs.StateAfter ||
             lhs.FirstSubresource != rhs.FirstSubresource ||
@@ -161,11 +145,6 @@ UINT PipelineDescriptorSet::SetShaderResourceView(
     {
         shaderResourceViews.resize(static_cast<size_t>(arrayIndex) + 1u);
     }
-//Modify Begin:2026-07-29 by BestHui
-    const bool descriptorChanged =
-        !shaderResourceViews[arrayIndex].has_value() ||
-        !IsSameShaderResourceView(*shaderResourceViews[arrayIndex], shaderResourceView);
-//Modify End
     shaderResourceViews[arrayIndex] = shaderResourceView;
 
     auto& shaderResources = m_BoundResources[binding.RootParameterIndex].ShaderResources;
@@ -175,6 +154,9 @@ UINT PipelineDescriptorSet::SetShaderResourceView(
     }
     PipelineShaderResourceBinding resourceBinding = {};
     resourceBinding.Resource = shaderResourceView.m_Resource.get();
+//Modify Begin:2026-07-30 by BestHui
+    resourceBinding.ResourceIdentity = GetD3D12ResourcePtr(resourceBinding.Resource);
+//Modify End
     resourceBinding.StateAfter = D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE;
     resourceBinding.FirstSubresource = shaderResourceView.m_FirstSubresource;
     resourceBinding.NumSubresources = shaderResourceView.m_NumSubresources;
@@ -183,6 +165,11 @@ UINT PipelineDescriptorSet::SetShaderResourceView(
     {
         resourceBinding.Desc = *shaderResourceView.GetDescOrNullptr();
     }
+//Modify Begin:2026-07-30 by BestHui
+    const bool descriptorChanged =
+        !shaderResources[arrayIndex].has_value() ||
+        !IsSameShaderResourceBinding(*shaderResources[arrayIndex], resourceBinding);
+//Modify End
     shaderResources[arrayIndex] = resourceBinding;
 
 //Modify Begin:2026-07-27 by BestHui
@@ -220,6 +207,9 @@ UINT PipelineDescriptorSet::SetShaderResource(
 
     PipelineShaderResourceBinding resourceBinding = {};
     resourceBinding.Resource = &resource;
+//Modify Begin:2026-07-30 by BestHui
+    resourceBinding.ResourceIdentity = resource.GetD3D12Resource().Get();
+//Modify End
     resourceBinding.StateAfter = stateAfter;
 //Modify Begin:2026-07-29 by BestHui
     const bool descriptorChanged =
@@ -262,6 +252,9 @@ UINT PipelineDescriptorSet::SetShaderResource(
 
     PipelineShaderResourceBinding resourceBinding = {};
     resourceBinding.Resource = &resource;
+//Modify Begin:2026-07-30 by BestHui
+    resourceBinding.ResourceIdentity = resource.GetD3D12Resource().Get();
+//Modify End
     resourceBinding.StateAfter = stateAfter;
     resourceBinding.HasDesc = true;
     resourceBinding.Desc = srvDesc;
@@ -297,12 +290,23 @@ UINT PipelineDescriptorSet::SetUnorderedAccessView(
     const DescriptorBindingInfo& binding = GetBinding(name, DescriptorBindingKind::UnorderedAccessView);
 //Modify Begin:2026-07-29 by BestHui
     const auto existingResource = m_BoundResources.find(binding.RootParameterIndex);
+//Modify Begin:2026-07-30 by BestHui
+    ID3D12Resource* unorderedAccessViewResourceIdentity =
+        unorderedAccessView.m_Resource != nullptr ? unorderedAccessView.m_Resource->GetD3D12Resource().Get() : nullptr;
+//Modify End
     const bool descriptorChanged =
         existingResource == m_BoundResources.end() ||
         !existingResource->second.UnorderedAccessView.has_value() ||
+//Modify Begin:2026-07-30 by BestHui
+        existingResource->second.UnorderedAccessViewResourceIdentity != unorderedAccessViewResourceIdentity ||
+//Modify End
         !IsSameUnorderedAccessView(*existingResource->second.UnorderedAccessView, unorderedAccessView);
 //Modify End
     m_BoundResources[binding.RootParameterIndex].UnorderedAccessView = unorderedAccessView;
+//Modify Begin:2026-07-30 by BestHui
+    m_BoundResources[binding.RootParameterIndex].UnorderedAccessViewResourceIdentity =
+        unorderedAccessViewResourceIdentity;
+//Modify End
 //Modify Begin:2026-07-27 by BestHui
     if (descriptorChanged)
     {
@@ -327,6 +331,7 @@ UINT PipelineDescriptorSet::SetStructuredBuffer(std::string_view name, const Str
     auto& boundResource = m_BoundResources[binding.RootParameterIndex];
     PipelineShaderResourceBinding resourceBinding = {};
     resourceBinding.Resource = &buffer;
+    resourceBinding.ResourceIdentity = buffer.GetD3D12Resource().Get();
     resourceBinding.StateAfter = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
     const bool descriptorChanged =
         boundResource.ShaderResources.empty() ||

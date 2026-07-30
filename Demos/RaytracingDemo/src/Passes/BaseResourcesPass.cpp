@@ -42,7 +42,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
             commandContext.BindPipeline(*demo.m_GBufferShader);
 //Modify End
 
-            const XMMATRIX viewProjection = demo.m_Camera.GetViewMatrix() * demo.m_Camera.GetProjectionMatrix();
+            const XMMATRIX viewProjection = demo.GetSceneCamera().GetViewMatrix() * demo.GetSceneCamera().GetProjectionMatrix();
             const XMMATRIX previousViewProjection = demo.m_HasPreviousViewProjection ? demo.m_PreviousViewProjection : viewProjection;
             const auto& sceneObjects = demo.m_SceneResources.GetSceneObjects();
             const auto& materials = demo.m_SceneResources.GetMaterials();

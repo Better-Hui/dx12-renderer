@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <random>
 
 #if defined(min)
@@ -28,7 +29,7 @@ using namespace DirectX;
 namespace
 {
 //Modify Begin:2026-07-30 by BestHui
-    constexpr size_t InitialLightBufferCapacity = 1024;
+    constexpr size_t InitialLightBufferCapacity = 1;
 //Modify End
 
     size_t GrowLightBufferCapacity(const size_t currentCapacity, const size_t requiredCapacity)
@@ -111,21 +112,39 @@ namespace
         uploadBuffer.Upload(commandList, destination, values.data() + clampedBegin, elementCount * sizeof(T), sizeof(T), destinationOffset);
     }
 
-    XMFLOAT3 RotateVector(const UnityQuaternion& rotation, const XMFLOAT3& value)
-    {
-        const XMVECTOR quaternion = XMVectorSet(rotation.X, rotation.Y, rotation.Z, rotation.W);
-        const XMVECTOR vector = XMVectorSet(value.x, value.y, value.z, 0.0f);
-        XMFLOAT3 result{};
-        XMStoreFloat3(&result, XMVector3Rotate(vector, quaternion));
-        return result;
-    }
-
 //Modify Begin:2026-07-30 by BestHui
     XMFLOAT3 NormalizeVector(const XMFLOAT3& value)
     {
+        const XMVECTOR vector = XMLoadFloat3(&value);
+        if (XMVectorGetX(XMVector3LengthSq(vector)) <= 1.0e-8f)
+        {
+            return { 0.0f, 1.0f, 0.0f };
+        }
+
         XMFLOAT3 result{};
-        XMStoreFloat3(&result, XMVector3Normalize(XMLoadFloat3(&value)));
+        XMStoreFloat3(&result, XMVector3Normalize(vector));
         return result;
+    }
+
+    void BuildAreaLightAxes(const XMFLOAT3& normal, XMFLOAT3& axisU, XMFLOAT3& axisV)
+    {
+        const XMVECTOR normalVector = XMLoadFloat3(&normal);
+        const XMVECTOR reference = std::abs(normal.y) < 0.99f ?
+            XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f) :
+            XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f);
+        const XMVECTOR axisUVector = XMVector3Normalize(XMVector3Cross(reference, normalVector));
+        const XMVECTOR axisVVector = XMVector3Normalize(XMVector3Cross(normalVector, axisUVector));
+        XMStoreFloat3(&axisU, axisUVector);
+        XMStoreFloat3(&axisV, axisVVector);
+    }
+
+    template<typename T>
+    void EraseAt(std::vector<T>& values, const size_t index)
+    {
+        if (index < values.size())
+        {
+            values.erase(values.begin() + static_cast<std::ptrdiff_t>(index));
+        }
     }
 //Modify End
 }
@@ -150,6 +169,8 @@ void SceneLightManager::CreateDemoLights()
     m_PointLightAnimated.clear();
 
     m_SkyLight.ColorAndIntensity = { 0.85f, 0.9f, 1.0f, 0.35f };
+    m_SkyLightColor = { m_SkyLight.ColorAndIntensity.x, m_SkyLight.ColorAndIntensity.y, m_SkyLight.ColorAndIntensity.z };
+    m_SkyLightIntensity = m_SkyLight.ColorAndIntensity.w;
 
     DirectionalLight sunLight{};
     sunLight.m_DirectionWs = { -0.35f, 0.8f, -0.48f, 0.0f };
@@ -211,7 +232,7 @@ void SceneLightManager::CreateDemoLights()
     MarkAreaLightsDirty();
 }
 
-void SceneLightManager::CreateFromUnityScene(const UnitySceneData& scene)
+void SceneLightManager::CreateFromScene(const Scene& scene)
 {
     m_DirectionalLights.clear();
     m_PointLights.clear();
@@ -224,111 +245,43 @@ void SceneLightManager::CreateFromUnityScene(const UnitySceneData& scene)
     m_PointLightAnimated.clear();
 
 //Modify Begin:2026-07-30 by BestHui
-    XMFLOAT3 ambientColor = {
-        scene.RenderSettings.AmbientSkyColor.R,
-        scene.RenderSettings.AmbientSkyColor.G,
-        scene.RenderSettings.AmbientSkyColor.B
-    };
-    if (scene.RenderSettings.AmbientMode == 3)
+    m_SkyLight.ColorAndIntensity = scene.GetSkybox().AmbientColorAndIntensity;
+    if (scene.GetSkybox().Texture.IsValid() &&
+        m_SkyLight.ColorAndIntensity.x <= 0.0f &&
+        m_SkyLight.ColorAndIntensity.y <= 0.0f &&
+        m_SkyLight.ColorAndIntensity.z <= 0.0f)
     {
-        ambientColor = {
-            (scene.RenderSettings.AmbientSkyColor.R + scene.RenderSettings.AmbientEquatorColor.R + scene.RenderSettings.AmbientGroundColor.R) / 3.0f,
-            (scene.RenderSettings.AmbientSkyColor.G + scene.RenderSettings.AmbientEquatorColor.G + scene.RenderSettings.AmbientGroundColor.G) / 3.0f,
-            (scene.RenderSettings.AmbientSkyColor.B + scene.RenderSettings.AmbientEquatorColor.B + scene.RenderSettings.AmbientGroundColor.B) / 3.0f
-        };
+        m_SkyLight.ColorAndIntensity = { 1.0f, 1.0f, 1.0f, std::max(0.001f, m_SkyLight.ColorAndIntensity.w) };
     }
-    m_SkyLight.ColorAndIntensity = {
-        ambientColor.x,
-        ambientColor.y,
-        ambientColor.z,
-        scene.RenderSettings.AmbientIntensity
-    };
-    if (scene.RenderSettings.SkyboxMaterial.IsValid() &&
-        ambientColor.x <= 0.0f &&
-        ambientColor.y <= 0.0f &&
-        ambientColor.z <= 0.0f)
+    m_SkyLightColor = { m_SkyLight.ColorAndIntensity.x, m_SkyLight.ColorAndIntensity.y, m_SkyLight.ColorAndIntensity.z };
+    m_SkyLightIntensity = m_SkyLight.ColorAndIntensity.w;
+//Modify End
+
+    for (const DirectionalLight& light : scene.GetDirectionalLights())
     {
-        m_SkyLight.ColorAndIntensity = { 1.0f, 1.0f, 1.0f, std::max(0.001f, scene.RenderSettings.AmbientIntensity) };
+        m_DirectionalLights.push_back(light);
     }
-//Modify End
 
-    for (const UnityLightInfo& unityLight : scene.Lights)
+    for (const PointLight& light : scene.GetPointLights())
     {
-        if (!unityLight.Enabled)
-        {
-            continue;
-        }
+        m_PointLights.push_back(light);
+        m_PointLightBaseY.push_back(light.PositionWs.y);
+        m_PointLightPhase.push_back(0.0f);
+        m_PointLightOrbitRadius.push_back(0.0f);
+        m_PointLightOrbitSpeed.push_back(0.0f);
+        m_PointLightOrbitCenter.push_back({ light.PositionWs.x, light.PositionWs.y, light.PositionWs.z });
+        m_PointLightAnimated.push_back(0);
+    }
 
-        if (unityLight.Type == UnityLightType::Directional)
-        {
-            DirectionalLight light{};
-//Modify Begin:2026-07-30 by BestHui
-            const XMFLOAT3 direction = RotateVector(unityLight.Transform.WorldRotation, { 0.0f, 0.0f, -1.0f });
-//Modify End
-            light.m_DirectionWs = { direction.x, direction.y, direction.z, 0.0f };
-            light.m_Color = {
-                unityLight.Color.R,
-                unityLight.Color.G,
-                unityLight.Color.B,
-                unityLight.Intensity
-            };
-            m_DirectionalLights.push_back(light);
-        }
-        else if (unityLight.Type == UnityLightType::Point || unityLight.Type == UnityLightType::Spot)
-        {
-            PointLight light(
-                {
-                    unityLight.Transform.WorldPosition.X,
-                    unityLight.Transform.WorldPosition.Y,
-                    unityLight.Transform.WorldPosition.Z,
-                    1.0f
-                },
-                std::max(0.1f, unityLight.Range));
-            light.Color = {
-                unityLight.Color.R,
-                unityLight.Color.G,
-                unityLight.Color.B,
-                unityLight.Intensity
-            };
-            light.RecalculateAttenuationCoefficients();
-
-            const size_t lightIndex = m_PointLights.size();
-            m_PointLights.push_back(light);
-            m_PointLightBaseY.push_back(light.PositionWs.y);
-            m_PointLightPhase.push_back(0.0f);
-            m_PointLightOrbitRadius.push_back(0.0f);
-            m_PointLightOrbitSpeed.push_back(0.0f);
-            m_PointLightOrbitCenter.push_back({ light.PositionWs.x, light.PositionWs.y, light.PositionWs.z });
-            m_PointLightAnimated.push_back(0);
-            (void)lightIndex;
-        }
-        else if (unityLight.Type == UnityLightType::Area)
-        {
-            AreaLightData areaLight{};
-//Modify Begin:2026-07-30 by BestHui
-            const XMFLOAT3 normal = NormalizeVector(RotateVector(unityLight.Transform.WorldRotation, { 0.0f, 0.0f, 1.0f }));
-            const XMFLOAT3 axisU = NormalizeVector(RotateVector(unityLight.Transform.WorldRotation, { 1.0f, 0.0f, 0.0f }));
-            const XMFLOAT3 axisV = NormalizeVector(RotateVector(unityLight.Transform.WorldRotation, { 0.0f, 1.0f, 0.0f }));
-//Modify End
-            areaLight.PositionAndRange = {
-                unityLight.Transform.WorldPosition.X,
-                unityLight.Transform.WorldPosition.Y,
-                unityLight.Transform.WorldPosition.Z,
-                unityLight.Range
-            };
-//Modify Begin:2026-07-30 by BestHui
-            areaLight.NormalAndType = { normal.x, normal.y, normal.z, 0.0f };
-            areaLight.AxisUAndExtent = { axisU.x, axisU.y, axisU.z, unityLight.AreaSize.X * 0.5f };
-            areaLight.AxisVAndExtent = { axisV.x, axisV.y, axisV.z, unityLight.AreaSize.Y * 0.5f };
-//Modify End
-            areaLight.ColorAndIntensity = {
-                unityLight.Color.R,
-                unityLight.Color.G,
-                unityLight.Color.B,
-                unityLight.Intensity
-            };
-            m_AreaLights.push_back(areaLight);
-        }
+    for (const AreaLight& light : scene.GetAreaLights())
+    {
+        AreaLightData areaLight{};
+        areaLight.PositionAndRange = { light.PositionWs.x, light.PositionWs.y, light.PositionWs.z, light.Range };
+        areaLight.NormalAndType = light.NormalWs;
+        areaLight.AxisUAndExtent = light.AxisUWsAndExtent;
+        areaLight.AxisVAndExtent = light.AxisVWsAndExtent;
+        areaLight.ColorAndIntensity = light.Color;
+        m_AreaLights.push_back(areaLight);
     }
 
     BuildGpuData();
@@ -429,28 +382,165 @@ void SceneLightManager::UpdateDynamicLights(const float timeSeconds)
 bool SceneLightManager::DrawImGui()
 {
     bool changed = false;
-    if (ImGui::Checkbox("Animate Point Lights", &m_AnimatePointLights))
+
+    if (ImGui::CollapsingHeader("Light Counts", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        changed = true;
+        ImGui::Text("Directional: %zu", m_DirectionalLights.size());
+        ImGui::Text("Point: %zu", m_PointLights.size());
+        ImGui::Text("Area: %zu", m_AreaLights.size());
     }
-    ImGui::Text("Point Lights: %zu", m_PointLights.size());
-    if (!m_PointLights.empty())
+
+    if (ImGui::CollapsingHeader("Sky Light", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        ImGui::Text("PointLight[0].Y: %.2f", m_PointLights.front().PositionWs.y);
+        bool skyChanged = false;
+        skyChanged |= ImGui::ColorEdit3("Sky Color", &m_SkyLightColor.x);
+        skyChanged |= ImGui::SliderFloat("Sky Intensity", &m_SkyLightIntensity, 0.0f, 5.0f, "%.3f");
+        if (skyChanged)
+        {
+            m_SkyLight.ColorAndIntensity = {
+                std::max(0.0f, m_SkyLightColor.x),
+                std::max(0.0f, m_SkyLightColor.y),
+                std::max(0.0f, m_SkyLightColor.z),
+                std::max(0.0f, m_SkyLightIntensity)
+            };
+            changed = true;
+        }
     }
-    ImGui::ColorEdit3("New Point Light Color", &m_NewPointLightColor.x);
-    ImGui::SliderFloat("New Point Light Intensity", &m_NewPointLightIntensity, 0.0f, 100.0f, "%.1f");
-    ImGui::SliderFloat("New Point Light Range", &m_NewPointLightRange, 0.1f, 100.0f, "%.1f");
-    ImGui::SliderFloat("Random Light Spawn Radius", &m_RandomPointLightSpawnRadius, 1.0f, 80.0f, "%.1f");
-    if (ImGui::Button("Add Point Light At Origin"))
+
+    if (ImGui::CollapsingHeader("Directional Lights", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        AddPointLightAtOrigin();
-        changed = true;
+        if (ImGui::TreeNodeEx("Directional Light List", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            for (size_t i = 0; i < m_DirectionalLights.size(); ++i)
+            {
+                ImGui::PushID(static_cast<int>(i));
+                const DirectionalLight& light = m_DirectionalLights[i];
+                ImGui::Text(
+                    "#%zu Dir(%.2f, %.2f, %.2f) Intensity %.2f",
+                    i,
+                    light.m_DirectionWs.x,
+                    light.m_DirectionWs.y,
+                    light.m_DirectionWs.z,
+                    light.m_Color.w);
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Delete"))
+                {
+                    RemoveDirectionalLight(i);
+                    changed = true;
+                    ImGui::PopID();
+                    break;
+                }
+                ImGui::PopID();
+            }
+            ImGui::TreePop();
+        }
+
+        ImGui::DragFloat3("Direction", &m_NewDirectionalLightDirection.x, 0.01f, -1.0f, 1.0f, "%.3f");
+        ImGui::ColorEdit3("Directional Color", &m_NewDirectionalLightColor.x);
+        ImGui::SliderFloat("Directional Intensity", &m_NewDirectionalLightIntensity, 0.0f, 20.0f, "%.2f");
+        ImGui::SliderFloat("Angular Radius", &m_NewDirectionalLightAngularRadius, 0.0f, 0.25f, "%.4f");
+        if (ImGui::Button("Add Directional Light"))
+        {
+            AddDirectionalLight();
+            changed = true;
+        }
     }
-    if (ImGui::Button("Add Random Point Light"))
+
+    if (ImGui::CollapsingHeader("Point Lights", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        AddRandomPointLightInUpperHemisphere();
-        changed = true;
+        if (ImGui::Checkbox("Animate Point Lights", &m_AnimatePointLights))
+        {
+            changed = true;
+        }
+        if (!m_PointLights.empty())
+        {
+            ImGui::Text("PointLight[0].Y: %.2f", m_PointLights.front().PositionWs.y);
+        }
+        if (ImGui::TreeNodeEx("Point Light List", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            for (size_t i = 0; i < m_PointLights.size(); ++i)
+            {
+                ImGui::PushID(static_cast<int>(i));
+                const PointLight& light = m_PointLights[i];
+                ImGui::Text(
+                    "#%zu Pos(%.2f, %.2f, %.2f) Range %.2f Intensity %.2f%s",
+                    i,
+                    light.PositionWs.x,
+                    light.PositionWs.y,
+                    light.PositionWs.z,
+                    light.Range,
+                    light.Color.w,
+                    i < m_PointLightAnimated.size() && m_PointLightAnimated[i] != 0 ? " Animated" : "");
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Delete"))
+                {
+                    RemovePointLight(i);
+                    changed = true;
+                    ImGui::PopID();
+                    break;
+                }
+                ImGui::PopID();
+            }
+            ImGui::TreePop();
+        }
+        ImGui::ColorEdit3("Point Color", &m_NewPointLightColor.x);
+        ImGui::SliderFloat("Point Intensity", &m_NewPointLightIntensity, 0.0f, 100.0f, "%.1f");
+        ImGui::SliderFloat("Point Range", &m_NewPointLightRange, 0.1f, 100.0f, "%.1f");
+        ImGui::SliderFloat("Random Spawn Radius", &m_RandomPointLightSpawnRadius, 1.0f, 80.0f, "%.1f");
+        if (ImGui::Button("Add Point Light At Origin"))
+        {
+            AddPointLightAtOrigin();
+            changed = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Add Random Point Light"))
+        {
+            AddRandomPointLightInUpperHemisphere();
+            changed = true;
+        }
+    }
+
+    if (ImGui::CollapsingHeader("Area Lights", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        if (ImGui::TreeNodeEx("Area Light List", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            for (size_t i = 0; i < m_AreaLights.size(); ++i)
+            {
+                ImGui::PushID(static_cast<int>(i));
+                const AreaLightData& light = m_AreaLights[i];
+                ImGui::Text(
+                    "#%zu Pos(%.2f, %.2f, %.2f) Size(%.2f, %.2f) Intensity %.2f",
+                    i,
+                    light.PositionAndRange.x,
+                    light.PositionAndRange.y,
+                    light.PositionAndRange.z,
+                    light.AxisUAndExtent.w * 2.0f,
+                    light.AxisVAndExtent.w * 2.0f,
+                    light.ColorAndIntensity.w);
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Delete"))
+                {
+                    RemoveAreaLight(i);
+                    changed = true;
+                    ImGui::PopID();
+                    break;
+                }
+                ImGui::PopID();
+            }
+            ImGui::TreePop();
+        }
+
+        ImGui::DragFloat3("Area Position", &m_NewAreaLightPosition.x, 0.1f, -100.0f, 100.0f, "%.2f");
+        ImGui::DragFloat3("Area Normal", &m_NewAreaLightNormal.x, 0.01f, -1.0f, 1.0f, "%.3f");
+        ImGui::DragFloat2("Area Size", &m_NewAreaLightSize.x, 0.1f, 0.1f, 50.0f, "%.2f");
+        ImGui::ColorEdit3("Area Color", &m_NewAreaLightColor.x);
+        ImGui::SliderFloat("Area Intensity", &m_NewAreaLightIntensity, 0.0f, 100.0f, "%.1f");
+        ImGui::SliderFloat("Area Range", &m_NewAreaLightRange, 0.1f, 200.0f, "%.1f");
+        if (ImGui::Button("Add Area Light"))
+        {
+            AddAreaLight();
+            changed = true;
+        }
     }
     return changed;
 }
@@ -501,6 +591,33 @@ void SceneLightManager::FillCameraConstants(
     pointLightCount = static_cast<uint32_t>(m_PointLightGpuData.size());
     areaLightCount = static_cast<uint32_t>(m_AreaLightGpuData.size());
     skyLight = m_SkyLight;
+}
+
+void SceneLightManager::AddDirectionalLight()
+{
+    const XMFLOAT3 direction = NormalizeVector(m_NewDirectionalLightDirection);
+    DirectionalLight light{};
+    light.m_DirectionWs = {
+        direction.x,
+        direction.y,
+        direction.z,
+        std::max(0.0f, m_NewDirectionalLightAngularRadius)
+    };
+    light.m_Color = {
+        std::max(0.0f, m_NewDirectionalLightColor.x),
+        std::max(0.0f, m_NewDirectionalLightColor.y),
+        std::max(0.0f, m_NewDirectionalLightColor.z),
+        std::max(0.0f, m_NewDirectionalLightIntensity)
+    };
+
+    const size_t lightIndex = m_DirectionalLights.size();
+    m_DirectionalLights.push_back(light);
+
+    DirectionalLightData gpuLight{};
+    gpuLight.DirectionAndAngularRadius = light.m_DirectionWs;
+    gpuLight.ColorAndIntensity = light.m_Color;
+    m_DirectionalLightGpuData.push_back(gpuLight);
+    MarkDirectionalLightsDirty(lightIndex, lightIndex + 1);
 }
 
 void SceneLightManager::AddPointLightAtOrigin()
@@ -567,6 +684,77 @@ void SceneLightManager::AddRandomPointLightInUpperHemisphere()
 
     UpdatePointLightGpuData(lightIndex);
     MarkPointLightsDirty(lightIndex, lightIndex + 1);
+}
+
+void SceneLightManager::AddAreaLight()
+{
+    const XMFLOAT3 normal = NormalizeVector(m_NewAreaLightNormal);
+    XMFLOAT3 axisU{};
+    XMFLOAT3 axisV{};
+    BuildAreaLightAxes(normal, axisU, axisV);
+    AreaLightData areaLight{};
+    areaLight.PositionAndRange = {
+        m_NewAreaLightPosition.x,
+        m_NewAreaLightPosition.y,
+        m_NewAreaLightPosition.z,
+        std::max(0.1f, m_NewAreaLightRange)
+    };
+    areaLight.NormalAndType = { normal.x, normal.y, normal.z, 0.0f };
+    areaLight.AxisUAndExtent = { axisU.x, axisU.y, axisU.z, std::max(0.1f, m_NewAreaLightSize.x) * 0.5f };
+    areaLight.AxisVAndExtent = { axisV.x, axisV.y, axisV.z, std::max(0.1f, m_NewAreaLightSize.y) * 0.5f };
+    areaLight.ColorAndIntensity = {
+        std::max(0.0f, m_NewAreaLightColor.x),
+        std::max(0.0f, m_NewAreaLightColor.y),
+        std::max(0.0f, m_NewAreaLightColor.z),
+        std::max(0.0f, m_NewAreaLightIntensity)
+    };
+
+    const size_t lightIndex = m_AreaLights.size();
+    m_AreaLights.push_back(areaLight);
+    m_AreaLightGpuData.push_back(areaLight);
+    MarkAreaLightsDirty(lightIndex, lightIndex + 1);
+}
+
+void SceneLightManager::RemoveDirectionalLight(const size_t lightIndex)
+{
+    if (lightIndex >= m_DirectionalLights.size())
+    {
+        return;
+    }
+
+    EraseAt(m_DirectionalLights, lightIndex);
+    EraseAt(m_DirectionalLightGpuData, lightIndex);
+    MarkDirectionalLightsDirty(lightIndex, m_DirectionalLightGpuData.size());
+}
+
+void SceneLightManager::RemovePointLight(const size_t lightIndex)
+{
+    if (lightIndex >= m_PointLights.size())
+    {
+        return;
+    }
+
+    EraseAt(m_PointLights, lightIndex);
+    EraseAt(m_PointLightGpuData, lightIndex);
+    EraseAt(m_PointLightBaseY, lightIndex);
+    EraseAt(m_PointLightPhase, lightIndex);
+    EraseAt(m_PointLightOrbitRadius, lightIndex);
+    EraseAt(m_PointLightOrbitSpeed, lightIndex);
+    EraseAt(m_PointLightOrbitCenter, lightIndex);
+    EraseAt(m_PointLightAnimated, lightIndex);
+    MarkPointLightsDirty(lightIndex, m_PointLightGpuData.size());
+}
+
+void SceneLightManager::RemoveAreaLight(const size_t lightIndex)
+{
+    if (lightIndex >= m_AreaLights.size())
+    {
+        return;
+    }
+
+    EraseAt(m_AreaLights, lightIndex);
+    EraseAt(m_AreaLightGpuData, lightIndex);
+    MarkAreaLightsDirty(lightIndex, m_AreaLightGpuData.size());
 }
 
 void SceneLightManager::BuildGpuData()

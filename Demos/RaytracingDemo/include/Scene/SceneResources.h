@@ -4,6 +4,9 @@
 #include <DX12Library/StructuredBuffer.h>
 #include <DX12Library/Texture.h>
 
+#include <Framework/RayTracingAccelerationStructure.h>
+#include <Framework/Scene.h>
+
 #include <DirectXMath.h>
 
 #include <cstdint>
@@ -13,8 +16,6 @@
 
 class CommandList;
 class Model;
-class RayTracingAccelerationStructure;
-struct UnitySceneData;
 
 struct RaytracingDemoMaterialData
 {
@@ -51,15 +52,18 @@ public:
 
     void Clear();
     void LoadDeferredLightingScene(CommandList& commandList);
-    bool LoadUnityScene(CommandList& commandList, const UnitySceneData& scene);
-    void AddRayTracingInstances(RayTracingAccelerationStructure& accelerationStructure) const;
-    void UploadRayTracingBuffers(CommandList& commandList, const RayTracingAccelerationStructure& accelerationStructure);
+    bool LoadScene(CommandList& commandList, const Scene& scene);
+    void BuildRayTracingAccelerationStructure(
+        CommandList& commandList,
+        RayTracingAccelerationStructureBuildSettings settings = {});
 
     const std::vector<RaytracingDemoSceneObject>& GetSceneObjects() const { return m_SceneObjects; }
     const std::vector<RaytracingDemoMaterialData>& GetMaterials() const { return m_Materials; }
     const std::vector<std::shared_ptr<Texture>>& GetTextures() const { return m_Textures; }
     const StructuredBuffer& GetMaterialBuffer() const { return m_MaterialBuffer; }
     const StructuredBuffer& GetGeometryBuffer() const { return m_GeometryBuffer; }
+    const RayTracingAccelerationStructure& GetRayTracingAccelerationStructure() const { return m_RayTracingAccelerationStructure; }
+    RayTracingAccelerationStructure& GetRayTracingAccelerationStructure() { return m_RayTracingAccelerationStructure; }
     size_t GetTextureCount() const { return m_Textures.size(); }
     size_t GetTextureCapacity() const { return m_Textures.capacity(); }
 
@@ -87,9 +91,18 @@ private:
         uint32_t diffuseTextureIndex,
         float metallic = 0.0f,
         float roughness = 0.5f);
+    std::vector<uint32_t> LoadSceneMaterials(CommandList& commandList, const Scene& scene, uint32_t whiteTexture);
+    void LoadSceneObjects(
+        CommandList& commandList,
+        const Scene& scene,
+        const std::vector<uint32_t>& materialIndexMap,
+        uint32_t defaultMaterial);
+    void AddRayTracingInstances(RayTracingAccelerationStructure& accelerationStructure) const;
+    void UploadRayTracingBuffers(CommandList& commandList, const RayTracingAccelerationStructure& accelerationStructure);
 
     StructuredBuffer m_MaterialBuffer;
     StructuredBuffer m_GeometryBuffer;
+    RayTracingAccelerationStructure m_RayTracingAccelerationStructure;
     std::vector<RaytracingDemoSceneObject> m_SceneObjects;
     std::vector<RaytracingDemoMaterialData> m_Materials;
     std::vector<std::shared_ptr<Texture>> m_Textures;

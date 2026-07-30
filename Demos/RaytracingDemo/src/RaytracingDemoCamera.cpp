@@ -52,14 +52,14 @@ void RaytracingDemo::OnUpdate(UpdateEventArgs& e)
         0.0f,
         1.0f) * speed;
 
-    m_Camera.Translate(cameraTranslate, Space::Local);
-    m_Camera.Translate(cameraPan, Space::Local);
+    GetSceneCamera().Translate(cameraTranslate, Space::Local);
+    GetSceneCamera().Translate(cameraPan, Space::Local);
 
     const XMVECTOR cameraRotation = XMQuaternionRotationRollPitchYaw(
         XMConvertToRadians(m_CameraController.Pitch),
         XMConvertToRadians(m_CameraController.Yaw),
         0.0f);
-    m_Camera.SetRotation(cameraRotation);
+    GetSceneCamera().SetRotation(cameraRotation);
 }
 
 void RaytracingDemo::OnKeyPressed(KeyEventArgs& e)
@@ -172,7 +172,7 @@ void RaytracingDemo::OnMouseMoved(MouseMotionEventArgs& e)
                 static_cast<float>(e.RelY) * m_MousePanSpeed,
                 0.0f,
                 0.0f);
-            m_Camera.Translate(cameraPan, Space::Local);
+            GetSceneCamera().Translate(cameraPan, Space::Local);
             ResetAccumulation(false);
         }
         return;
@@ -187,7 +187,7 @@ void RaytracingDemo::OnMouseMoved(MouseMotionEventArgs& e)
                 0.0f,
                 static_cast<float>(e.RelX) * m_MouseDollySpeed,
                 0.0f);
-            m_Camera.Translate(cameraForward, Space::Local);
+            GetSceneCamera().Translate(cameraForward, Space::Local);
             ResetAccumulation(false);
         }
     }
@@ -208,7 +208,7 @@ void RaytracingDemo::OnMouseWheel(MouseWheelEventArgs& e)
             0.0f,
             e.WheelDelta * m_MouseWheelDollySpeed,
             0.0f);
-        m_Camera.Translate(cameraForward, Space::Local);
+        GetSceneCamera().Translate(cameraForward, Space::Local);
         ResetAccumulation(false);
     }
 }
@@ -229,7 +229,7 @@ void RaytracingDemo::OnResize(ResizeEventArgs& e)
     m_HasPreviousViewProjection = false;
 
     const float aspectRatio = static_cast<float>(m_Width) / static_cast<float>(m_Height);
-    m_Camera.SetProjection(m_CameraFov, aspectRatio, 0.1f, 1000.0f);
+    GetSceneCamera().SetProjection(m_CameraFov, aspectRatio, 0.1f, 1000.0f);
 
     if (m_RenderGraph != nullptr)
     {

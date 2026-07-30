@@ -58,6 +58,9 @@ struct PipelineDescriptorTableAllocation
 struct PipelineShaderResourceBinding
 {
     const Resource* Resource = nullptr;
+//Modify Begin:2026-07-30 by BestHui
+    ID3D12Resource* ResourceIdentity = nullptr;
+//Modify End
     D3D12_RESOURCE_STATES StateAfter = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
     UINT FirstSubresource = 0;
     UINT NumSubresources = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
@@ -71,6 +74,9 @@ struct PipelineShaderResourceBinding
 struct PipelineBoundResource
 {
     std::optional<UnorderedAccessView> UnorderedAccessView;
+//Modify Begin:2026-07-30 by BestHui
+    ID3D12Resource* UnorderedAccessViewResourceIdentity = nullptr;
+//Modify End
     std::vector<std::optional<ShaderResourceView>> ShaderResourceViews;
     std::vector<std::optional<PipelineShaderResourceBinding>> ShaderResources;
     const StructuredBuffer* StructuredBufferResource = nullptr;

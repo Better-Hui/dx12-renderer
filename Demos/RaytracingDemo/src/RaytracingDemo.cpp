@@ -12,7 +12,9 @@
 #include <Framework/ModelLoader.h>
 #include <Framework/RasterPipelineStateBuilder.h>
 #include <Framework/ShaderBlob.h>
-#include <Framework/UnitySceneParser.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/UnitySceneImporter.h>
+//Modify End
 
 #include <RenderGraph/RaytracingDemoGraphResources.h>
 #include <RenderGraph/RenderMetadata.h>
@@ -79,27 +81,22 @@ namespace
         throw std::runtime_error("Default Unity scene file does not exist.");
     }
 
-    XMFLOAT3 RotateUnityVector(const UnityQuaternion& rotation, const XMFLOAT3& value)
+    XMFLOAT3 RotateCameraVector(const XMVECTOR rotation, const XMFLOAT3& value)
     {
-        const XMVECTOR quaternion = XMVectorSet(rotation.X, rotation.Y, rotation.Z, rotation.W);
         const XMVECTOR vector = XMVectorSet(value.x, value.y, value.z, 0.0f);
         XMFLOAT3 result{};
-        XMStoreFloat3(&result, XMVector3Rotate(vector, quaternion));
+        XMStoreFloat3(&result, XMVector3Rotate(vector, rotation));
         return result;
     }
 
-    void ApplyUnityCamera(Camera& camera, const UnityCameraInfo& unityCamera, const int width, const int height)
+    void ApplySceneCamera(Camera& camera, const SceneCamera& sceneCamera, const int width, const int height)
     {
-        const XMVECTOR position = XMVectorSet(
-            unityCamera.Transform.WorldPosition.X,
-            unityCamera.Transform.WorldPosition.Y,
-            unityCamera.Transform.WorldPosition.Z,
-            1.0f);
-        const XMFLOAT3 forward = RotateUnityVector(unityCamera.Transform.WorldRotation, { 0.0f, 0.0f, 1.0f });
-        const XMFLOAT3 up = RotateUnityVector(unityCamera.Transform.WorldRotation, { 0.0f, 1.0f, 0.0f });
-        const XMVECTOR target = position + XMVectorSet(forward.x, forward.y, forward.z, 0.0f);
-        camera.SetLookAt(position, target, XMVectorSet(up.x, up.y, up.z, 0.0f));
-        camera.SetProjection(unityCamera.FieldOfView, static_cast<float>(width) / static_cast<float>(height), unityCamera.NearClipPlane, unityCamera.FarClipPlane);
+        if (sceneCamera.RuntimeCamera != nullptr)
+        {
+            camera.SetTranslation(sceneCamera.RuntimeCamera->GetTranslation());
+            camera.SetRotation(sceneCamera.RuntimeCamera->GetRotation());
+        }
+        camera.SetProjection(sceneCamera.FieldOfView, static_cast<float>(width) / static_cast<float>(height), sceneCamera.NearClipPlane, sceneCamera.FarClipPlane);
     }
 
 //Modify Begin:2026-07-29 by BestHui
@@ -114,21 +111,6 @@ namespace
     }
 //Modify End
 
-//Modify Begin:2026-07-30 by BestHui
-    UnityVector3 ToUnityVector3(const XMVECTOR value)
-    {
-        XMFLOAT3 stored{};
-        XMStoreFloat3(&stored, value);
-        return { stored.x, stored.y, stored.z };
-    }
-
-    UnityQuaternion ToUnityQuaternion(const XMVECTOR value)
-    {
-        XMFLOAT4 stored{};
-        XMStoreFloat4(&stored, XMQuaternionNormalize(value));
-        return { stored.x, stored.y, stored.z, stored.w };
-    }
-//Modify End
 }
 
 RaytracingDemo::RaytracingDemo(const std::wstring& name, const int width, const int height, GraphicsSettings graphicsSettings)
@@ -141,13 +123,13 @@ RaytracingDemo::RaytracingDemo(const std::wstring& name, const int width, const 
     const XMVECTOR cameraPos = XMVectorSet(0, 8, -35, 1);
     const XMVECTOR cameraTarget = XMVectorSet(0, 5, 18, 1);
     const XMVECTOR cameraUp = XMVectorSet(0, 1, 0, 0);
-    m_Camera.SetLookAt(cameraPos, cameraTarget, cameraUp);
+    GetSceneCamera().SetLookAt(cameraPos, cameraTarget, cameraUp);
 //Modify Begin:2026-07-28 by BestHui
     const XMVECTOR initialForward = XMVector3Normalize(cameraTarget - cameraPos);
     m_CameraController.Yaw = XMConvertToDegrees(std::atan2(XMVectorGetX(initialForward), XMVectorGetZ(initialForward)));
     m_CameraController.Pitch = XMConvertToDegrees(std::asin(std::clamp(XMVectorGetY(initialForward), -1.0f, 1.0f)));
 //Modify End
-    m_Camera.SetProjection(m_CameraFov, static_cast<float>(m_Width) / static_cast<float>(m_Height), 0.1f, 1000.0f);
+    GetSceneCamera().SetProjection(m_CameraFov, static_cast<float>(m_Width) / static_cast<float>(m_Height), 0.1f, 1000.0f);
 
     char* mode = nullptr;
     size_t modeLength = 0;
@@ -208,6 +190,50 @@ RaytracingDemo::RaytracingDemo(const std::wstring& name, const int width, const 
 
 }
 
+//Modify Begin:2026-07-30 by BestHui
+void RaytracingDemo::LoadUnitySceneContent(CommandList& commandList, const std::filesystem::path& unityScenePath)
+{
+    const UnitySceneImportResult unityImport = UnitySceneImporter::ImportFromFile(unityScenePath);
+    m_Scene = unityImport.SceneData;
+    const SceneCamera& sceneCamera = m_Scene.GetCamera();
+
+    if (!m_SceneResources.LoadScene(commandList, m_Scene))
+    {
+        throw std::runtime_error("Scene has no supported renderable objects.");
+    }
+
+    SceneSkybox sceneSkybox = m_Scene.GetSkybox();
+    std::filesystem::path skyboxTexturePath = sceneSkybox.Texture.AssetPath;
+    if (skyboxTexturePath.empty())
+    {
+        skyboxTexturePath = L"Assets/Textures/skybox/skybox.dds";
+        sceneSkybox.Texture.AssetPath = skyboxTexturePath;
+    }
+    if (sceneSkybox.AmbientColorAndIntensity.x <= 0.0f &&
+        sceneSkybox.AmbientColorAndIntensity.y <= 0.0f &&
+        sceneSkybox.AmbientColorAndIntensity.z <= 0.0f)
+    {
+        sceneSkybox.AmbientColorAndIntensity = { 1.0f, 1.0f, 1.0f, std::max(0.001f, sceneSkybox.AmbientColorAndIntensity.w) };
+    }
+    m_Scene.SetSkybox(sceneSkybox);
+
+    m_Lights.CreateFromScene(m_Scene);
+    m_SkyboxEnabled = true;
+    m_HasSceneCamera = sceneCamera.RuntimeCamera != nullptr;
+
+    ApplySceneCamera(GetSceneCamera(), sceneCamera, m_Width, m_Height);
+    const XMFLOAT3 forward = RotateCameraVector(GetSceneCamera().GetRotation(), { 0.0f, 0.0f, 1.0f });
+    CalculateCameraControllerFromLookDirection(
+        XMVectorSet(forward.x, forward.y, forward.z, 0.0f),
+        m_CameraController.Yaw,
+        m_CameraController.Pitch);
+    m_CameraFov = sceneCamera.FieldOfView;
+
+    m_SkyboxTexture = std::make_shared<Texture>();
+    commandList.LoadTextureFromFile(*m_SkyboxTexture, skyboxTexturePath.wstring(), TextureUsageType::Albedo);
+}
+//Modify End
+
 bool RaytracingDemo::LoadContent()
 {
     Assert(RayTracingShader::IsSupported(), "DirectX Raytracing is not supported by the selected adapter.");
@@ -216,54 +242,8 @@ bool RaytracingDemo::LoadContent()
     const auto commandList = commandQueue->GetCommandList();
 
     const std::filesystem::path unityScenePath = GetUnityScenePath();
-    const UnitySceneData unityScene = UnitySceneParser::ParseFromFile(unityScenePath);
-    if (unityScene.Cameras.empty())
-    {
-        throw std::runtime_error("Unity scene has no camera.");
-    }
-
-    if (!m_SceneResources.LoadUnityScene(*commandList, unityScene))
-    {
-        throw std::runtime_error("Unity scene has no supported renderable objects.");
-    }
-    m_Lights.CreateFromUnityScene(unityScene);
-//Modify Begin:2026-07-29 by BestHui
 //Modify Begin:2026-07-30 by BestHui
-    m_SkyboxEnabled = true;
-//Modify End
-    const UnityCameraInfo& unityCamera = unityScene.Cameras.front();
-//Modify Begin:2026-07-30 by BestHui
-    m_UnityScenePath = unityScenePath;
-    m_UnitySceneCamera = unityCamera;
-    m_HasUnitySceneCamera = true;
-//Modify End
-    ApplyUnityCamera(m_Camera, unityCamera, m_Width, m_Height);
-    const XMFLOAT3 forward = RotateUnityVector(unityCamera.Transform.WorldRotation, { 0.0f, 0.0f, 1.0f });
-    CalculateCameraControllerFromLookDirection(
-        XMVectorSet(forward.x, forward.y, forward.z, 0.0f),
-        m_CameraController.Yaw,
-        m_CameraController.Pitch);
-    m_CameraFov = unityCamera.FieldOfView;
-//Modify End
-
-    m_SkyboxTexture = std::make_shared<Texture>();
-//Modify Begin:2026-07-30 by BestHui
-    std::filesystem::path skyboxTexturePath;
-    if (unityScene.HasSkyboxMaterial)
-    {
-        const UnityTextureBinding& skyboxTextureBinding = unityScene.SkyboxMaterial.MainTex.Texture.IsValid()
-            ? unityScene.SkyboxMaterial.MainTex
-            : unityScene.SkyboxMaterial.BaseMap;
-        if (!skyboxTextureBinding.Texture.AssetPath.empty() && std::filesystem::exists(skyboxTextureBinding.Texture.AssetPath))
-        {
-            skyboxTexturePath = skyboxTextureBinding.Texture.AssetPath;
-        }
-    }
-    if (skyboxTexturePath.empty())
-    {
-        skyboxTexturePath = L"Assets/Textures/skybox/skybox.dds";
-    }
-    commandList->LoadTextureFromFile(*m_SkyboxTexture, skyboxTexturePath.wstring(), TextureUsageType::Albedo);
+    LoadUnitySceneContent(*commandList, unityScenePath);
 //Modify End
 
     m_ImGui = std::make_unique<ImGuiImpl>(*commandList, *PWindow);
@@ -309,12 +289,9 @@ bool RaytracingDemo::LoadContent()
         m_AccumulationEnabled = false;
     }
 
-    m_SceneResources.AddRayTracingInstances(m_RayTracingAccelerationStructure);
-
     RayTracingAccelerationStructureBuildSettings accelerationStructureSettings{};
     accelerationStructureSettings.AllowUpdate = true;
-    m_RayTracingAccelerationStructure.Build(*commandList, accelerationStructureSettings);
-    m_SceneResources.UploadRayTracingBuffers(*commandList, m_RayTracingAccelerationStructure);
+    m_SceneResources.BuildRayTracingAccelerationStructure(*commandList, accelerationStructureSettings);
     m_Lights.InitializeGpuBuffers(*commandList);
 //Modify Begin:2026-07-27 by BestHui
     EnsureRayTracingPipelines();
@@ -366,7 +343,8 @@ void RaytracingDemo::UnloadContent()
 
 RayTracingSceneResourceLayout RaytracingDemo::BuildRayTracingSceneResourceLayout() const
 {
-    const std::vector<std::shared_ptr<Mesh>>& rayTracingMeshes = m_RayTracingAccelerationStructure.GetMeshes();
+    const RayTracingAccelerationStructure& accelerationStructure = m_SceneResources.GetRayTracingAccelerationStructure();
+    const std::vector<std::shared_ptr<Mesh>>& rayTracingMeshes = accelerationStructure.GetMeshes();
 
     RayTracingSceneResourceLayout layout;
     layout.TextureDescriptorCapacity = ComputeDescriptorArrayCapacity(m_SceneResources.GetTextureCount(), m_SceneResources.GetTextureCapacity());
@@ -379,7 +357,7 @@ void RaytracingDemo::EnsureRayTracingPipelines()
     const RayTracingSceneResourceLayout layout = BuildRayTracingSceneResourceLayout();
 //Modify Begin:2026-07-27 by BestHui
     m_PathTracingPipelines.EnsurePipelines(m_PathTracingBackend, layout);
-    if (m_RayTracingAccelerationStructure.GetInstanceCount() > 0)
+    if (m_SceneResources.GetRayTracingAccelerationStructure().GetInstanceCount() > 0)
     {
         BindRayTracingShaderResources();
     }
@@ -390,7 +368,7 @@ void RaytracingDemo::BindRayTracingShaderResources()
 {
 //Modify Begin:2026-07-27 by BestHui
     m_PathTracingPipelines.BindRayTracingResources(
-        m_RayTracingAccelerationStructure,
+        m_SceneResources.GetRayTracingAccelerationStructure(),
         m_SceneResources,
         m_Lights,
         m_SkyboxTexture);
@@ -400,9 +378,9 @@ void RaytracingDemo::BindRayTracingShaderResources()
 RaytracingDemo::CameraConstants RaytracingDemo::BuildCameraConstants() const
 {
     CameraConstants camera{};
-    camera.InverseView = XMMatrixInverse(nullptr, m_Camera.GetViewMatrix());
-    camera.InverseProjection = XMMatrixInverse(nullptr, m_Camera.GetProjectionMatrix());
-    XMStoreFloat4(&camera.CameraPosition, m_Camera.GetTranslation());
+    camera.InverseView = XMMatrixInverse(nullptr, GetSceneCamera().GetViewMatrix());
+    camera.InverseProjection = XMMatrixInverse(nullptr, GetSceneCamera().GetProjectionMatrix());
+    XMStoreFloat4(&camera.CameraPosition, GetSceneCamera().GetTranslation());
     camera.Width = static_cast<uint32_t>(m_Width);
     camera.Height = static_cast<uint32_t>(m_Height);
     camera.MaxBounces = static_cast<uint32_t>(std::clamp(m_MaxBounces, 0, 5));
@@ -421,10 +399,10 @@ RaytracingDemo::CameraConstants RaytracingDemo::BuildCameraConstants() const
 RaytracingDemo::PipelineConstants RaytracingDemo::BuildPipelineConstants() const
 {
     PipelineConstants pipeline{};
-    pipeline.View = m_Camera.GetViewMatrix();
-    pipeline.Projection = m_Camera.GetProjectionMatrix();
+    pipeline.View = GetSceneCamera().GetViewMatrix();
+    pipeline.Projection = GetSceneCamera().GetProjectionMatrix();
     pipeline.ViewProjection = pipeline.View * pipeline.Projection;
-    XMStoreFloat4(&pipeline.CameraPosition, m_Camera.GetTranslation());
+    XMStoreFloat4(&pipeline.CameraPosition, GetSceneCamera().GetTranslation());
     pipeline.InverseView = XMMatrixInverse(nullptr, pipeline.View);
     pipeline.InverseProjection = XMMatrixInverse(nullptr, pipeline.Projection);
     pipeline.ScreenResolution = { static_cast<float>(m_Width), static_cast<float>(m_Height) };
@@ -474,28 +452,17 @@ void RaytracingDemo::ResetAccumulation(bool resetDenoiserHistory)
 //Modify Begin:2026-07-30 by BestHui
 void RaytracingDemo::SaveCurrentCameraToUnityScene()
 {
-    if (!m_HasUnitySceneCamera || m_UnityScenePath.empty())
+    if (!m_HasSceneCamera || m_Scene.GetSourcePath().empty())
     {
-        throw std::runtime_error("No Unity scene camera is loaded.");
+        throw std::runtime_error("No source scene camera is loaded.");
     }
-    if (m_UnitySceneCamera.Transform.ParentTransformId != 0)
+    if (m_Scene.GetCamera().SourceBinding.ParentTransformId != 0)
     {
         throw std::runtime_error("Saving camera with a parent transform is not supported yet.");
     }
 
-    UnityCameraWriteInfo cameraWriteInfo;
-    cameraWriteInfo.GameObjectId = m_UnitySceneCamera.GameObjectId;
-    cameraWriteInfo.TransformFileId = m_UnitySceneCamera.Transform.FileId;
-    cameraWriteInfo.LocalPosition = ToUnityVector3(m_Camera.GetTranslation());
-    cameraWriteInfo.LocalRotation = ToUnityQuaternion(m_Camera.GetRotation());
-    cameraWriteInfo.FieldOfView = m_CameraFov;
-    UnitySceneParser::WriteCameraToFile(m_UnityScenePath, cameraWriteInfo);
-
-    m_UnitySceneCamera.Transform.LocalPosition = cameraWriteInfo.LocalPosition;
-    m_UnitySceneCamera.Transform.LocalRotation = cameraWriteInfo.LocalRotation;
-    m_UnitySceneCamera.Transform.WorldPosition = cameraWriteInfo.LocalPosition;
-    m_UnitySceneCamera.Transform.WorldRotation = cameraWriteInfo.LocalRotation;
-    m_UnitySceneCamera.FieldOfView = cameraWriteInfo.FieldOfView;
+    m_Scene.UpdateCamera(GetSceneCamera(), m_CameraFov);
+    UnitySceneImporter::WriteCameraToSourceFile(m_Scene.GetSourcePath(), m_Scene.GetCamera());
     m_CameraSaveStatus = "Camera saved to Unity scene.";
 }
 //Modify End
@@ -564,6 +531,6 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
         m_AccumulationFrameIndex = 0;
     }
 
-    m_PreviousViewProjection = m_Camera.GetViewMatrix() * m_Camera.GetProjectionMatrix();
+    m_PreviousViewProjection = GetSceneCamera().GetViewMatrix() * GetSceneCamera().GetProjectionMatrix();
     m_HasPreviousViewProjection = true;
 }

@@ -4,10 +4,10 @@
 #include <DX12Library/StructuredBuffer.h>
 
 #include <Framework/Light.h>
+#include <Framework/Scene.h>
 #include <Framework/SharedUploadBuffer.h>
 
 #include <Scene/SceneLighting.h>
-#include <Framework/UnitySceneParser.h>
 
 #include <DirectXMath.h>
 
@@ -25,7 +25,7 @@ public:
     SceneLightManager();
 
     void CreateDemoLights();
-    void CreateFromUnityScene(const UnitySceneData& scene);
+    void CreateFromScene(const Scene& scene);
     void InitializeGpuBuffers(CommandList& commandList);
 //Modify Begin:2026-07-30 by BestHui
     bool Upload(CommandList& commandList);
@@ -47,8 +47,13 @@ public:
     const std::vector<AreaLightData>& GetAreaLights() const { return m_AreaLights; }
 
 private:
+    void AddDirectionalLight();
     void AddPointLightAtOrigin();
     void AddRandomPointLightInUpperHemisphere();
+    void AddAreaLight();
+    void RemoveDirectionalLight(size_t lightIndex);
+    void RemovePointLight(size_t lightIndex);
+    void RemoveAreaLight(size_t lightIndex);
     void BuildGpuData();
     void UpdatePointLightGpuData(size_t lightIndex);
     void MarkDirectionalLightsDirty();
@@ -87,10 +92,25 @@ private:
     std::vector<DirectX::XMFLOAT3> m_PointLightOrbitCenter;
     std::vector<uint8_t> m_PointLightAnimated;
 
+    DirectX::XMFLOAT3 m_SkyLightColor = { 1.0f, 1.0f, 1.0f };
+    float m_SkyLightIntensity = 0.35f;
+
+    DirectX::XMFLOAT3 m_NewDirectionalLightDirection = { -0.35f, 0.8f, -0.48f };
+    DirectX::XMFLOAT3 m_NewDirectionalLightColor = { 1.0f, 0.95f, 0.82f };
+    float m_NewDirectionalLightIntensity = 1.0f;
+    float m_NewDirectionalLightAngularRadius = 0.0f;
+
     DirectX::XMFLOAT3 m_NewPointLightColor = { 1.0f, 0.85f, 0.55f };
     float m_NewPointLightIntensity = 18.0f;
     float m_NewPointLightRange = 24.0f;
     float m_RandomPointLightSpawnRadius = 28.0f;
+
+    DirectX::XMFLOAT3 m_NewAreaLightPosition = { 0.0f, 4.0f, 0.0f };
+    DirectX::XMFLOAT3 m_NewAreaLightNormal = { 0.0f, -1.0f, 0.0f };
+    DirectX::XMFLOAT2 m_NewAreaLightSize = { 2.0f, 2.0f };
+    DirectX::XMFLOAT3 m_NewAreaLightColor = { 1.0f, 0.85f, 0.55f };
+    float m_NewAreaLightIntensity = 8.0f;
+    float m_NewAreaLightRange = 35.0f;
     bool m_AnimatePointLights = false;
 };
 //Modify End
