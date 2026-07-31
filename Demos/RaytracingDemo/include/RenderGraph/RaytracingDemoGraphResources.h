@@ -58,6 +58,9 @@ namespace RaytracingDemoRenderGraph
         static inline const RenderGraph::ResourceId RayTracingFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.RayTracingFinished");
         static inline const RenderGraph::ResourceId DenoiseFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DenoiseFinished");
         static inline const RenderGraph::ResourceId CudaBloomFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.CudaBloomFinished");
+//Modify Begin:2026-07-31 by BestHui
+        static inline const RenderGraph::ResourceId DebugOutputFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DebugOutputFinished");
+//Modify End
     };
 
     struct FrameGBufferResources

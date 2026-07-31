@@ -133,14 +133,23 @@ Framework now has:
 
 `RaytracingDemo` has:
 
-- `shaders/GBuffer/GBuffer.ms.hlsl`
 - `Use Meshlet GBuffer`
+- `Meshlet Backend`: `Task Shader` or `Compute Indirect`
 - `Debug Meshlet Clusters`
-- stress spheres above the Cornell box
+- stress spheres above the main deferred scene
 
-The meshlet path is currently a basic mesh shader GBuffer path. It is not yet a full GPU-driven meshlet renderer. It does not yet include task/amplification shader, GPU culling, HDB occlusion, indirect compaction, or LOD selection.
+Meshlet is a GBuffer backend, not a second scene API. Framework `Scene` is the source data. `RaytracingDemoSceneResources` derives ordinary draw objects, RTAS instances, and `MeshletGeometrySet` GPU inputs from the same scene objects/materials/prototypes.
+
+Current meshlet GBuffer backends:
+
+- Task shader path: `GBuffer.task.as.hlsl + GBuffer.task.ms.hlsl + GBuffer.meshletindirect.ps.hlsl`.
+- Compute-indirect path: `MeshletCull.cs.hlsl -> ExecuteIndirect -> GBuffer.meshletindirect.vs.hlsl + GBuffer.meshletindirect.ps.hlsl`.
+
+The compute-indirect path must pass meshlet identity through root constants in the indirect command plus `D3D12_DRAW_ARGUMENTS`; do not rely on `SV_InstanceID` for meshlet instance identity.
 
 Important meshlet bug found on 2026-07-30: do not use a UV sphere with a full duplicated pole ring as a DXR stress mesh. Degenerate pole triangles can produce invalid ray-hit data and trigger device removed. The current stress sphere prototype uses unique top/bottom vertices and non-degenerate triangles.
+
+Important meshlet bug found on 2026-07-31: normal draw and meshlet must be built from the same `MeshPrototype`. Splitting built-in plane/cube/sphere creation between draw and meshlet paths can produce UV/winding differences. Also bind the same bindless descriptor heap for draw, task meshlet, and compute-indirect meshlet GBuffer paths.
 
 `Demos/MeshletsDemo` is not a real mesh shader demo. It builds meshlets with `meshoptimizer`, runs compute culling, writes indirect draw commands, and draws through traditional VS/PS with `ExecuteIndirect`.
 

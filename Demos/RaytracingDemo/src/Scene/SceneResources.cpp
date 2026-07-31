@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-27 by BestHui
+﻿//Modify Begin:2026-07-27 by BestHui
 #include <Scene/SceneResources.h>
 
 #include <DX12Library/CommandList.h>
@@ -98,21 +98,16 @@ namespace
 //Modify Begin:2026-07-30 by BestHui
     MeshPrototype CreateBuiltinPlanePrototype(const float width, const float height)
     {
-        const float halfWidth = width * 0.5f;
-        const float halfHeight = height * 0.5f;
-        VertexCollectionType vertices =
-        {
-            VertexAttributes({ -halfWidth, 0.0f, -halfHeight }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 1.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, -1.0f }),
-            VertexAttributes({ -halfWidth, 0.0f, halfHeight }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, -1.0f }),
-            VertexAttributes({ halfWidth, 0.0f, halfHeight }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, -1.0f }),
-            VertexAttributes({ halfWidth, 0.0f, -halfHeight }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, -1.0f }),
-        };
-        IndexCollectionType indices = { 0, 1, 2, 0, 2, 3 };
-        MeshPrototype prototype(std::move(vertices), std::move(indices), true, false);
-        prototype.m_Name = "BuiltinPlane";
-        return prototype;
+//Modify Begin:2026-07-31 by BestHui
+        return Mesh::CreatePlanePrototype(width, height);
+//Modify End
     }
 
+//Modify Begin:2026-07-31 by BestHui
+    MeshPrototype CreateBuiltinCubePrototype(const float size)
+    {
+        return Mesh::CreateCubePrototype(size);
+    }
     MeshPrototype CreateStressSpherePrototype(const float diameter, const size_t tessellation)
     {
         VertexCollectionType vertices;
@@ -219,14 +214,6 @@ namespace
 RaytracingDemoSceneResources::RaytracingDemoSceneResources()
     : m_MaterialBuffer(L"Ray Tracing Materials")
     , m_GeometryBuffer(L"Ray Tracing Geometry Data")
-//Modify Begin:2026-07-30 by BestHui
-    , m_MeshletVertexBuffer(L"RaytracingDemo Meshlet Vertices")
-    , m_MeshletIndexBuffer(L"RaytracingDemo Meshlet Indices")
-    , m_MeshletBuffer(L"RaytracingDemo Meshlets")
-    , m_MeshletTransformBuffer(L"RaytracingDemo Meshlet Transforms")
-    , m_MeshletInstanceBuffer(L"RaytracingDemo Meshlet Instances")
-    , m_MeshletIndirectCommandBuffer(L"RaytracingDemo Meshlet Indirect Commands")
-//Modify End
 {
 }
 
@@ -237,19 +224,8 @@ void RaytracingDemoSceneResources::Clear()
 //Modify Begin:2026-07-30 by BestHui
     m_BindlessDescriptorHeap.Reset();
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
-    m_MeshletVertexBuffer = StructuredBuffer(L"RaytracingDemo Meshlet Vertices");
-    m_MeshletIndexBuffer = ByteAddressBuffer(L"RaytracingDemo Meshlet Indices");
-    m_MeshletBuffer = StructuredBuffer(L"RaytracingDemo Meshlets");
-    m_MeshletTransformBuffer = StructuredBuffer(L"RaytracingDemo Meshlet Transforms");
-    m_MeshletInstanceBuffer = StructuredBuffer(L"RaytracingDemo Meshlet Instances");
-    m_MeshletIndirectCommandBuffer = StructuredBuffer(L"RaytracingDemo Meshlet Indirect Commands");
-    m_MeshletVertices.clear();
-    m_MeshletIndices.clear();
-    m_Meshlets.clear();
-    m_MeshletDraws.clear();
-    m_MeshletTransforms.clear();
-    m_MeshletInstances.clear();
+//Modify Begin:2026-07-31 by BestHui
+    m_MeshletGeometrySet.Clear();
 //Modify End
     m_SceneObjects.clear();
     m_Materials.clear();
@@ -343,7 +319,6 @@ std::vector<ShaderResourceView> RaytracingDemoSceneResources::CreateTextureShade
     return shaderResourceViews;
 }
 //Modify End
-
 void RaytracingDemoSceneResources::LoadDeferredLightingScene(CommandList& commandList)
 {
     ModelLoader modelLoader;
@@ -377,75 +352,142 @@ void RaytracingDemoSceneResources::LoadDeferredLightingScene(CommandList& comman
     {
         auto model = modelLoader.LoadExisting(Mesh::CreatePlane(commandList));
         const XMMATRIX worldMatrix = XMMatrixScaling(200.0f, 200.0f, 200.0f);
-        m_SceneObjects.push_back({ worldMatrix, model, groundMaterial });
+//Modify Begin:2026-07-31 by BestHui
+        AddSceneObject(worldMatrix, model, groundMaterial, CreateBuiltinPlanePrototype(1.0f, 1.0f));
+//Modify End
     }
 
     {
-        auto model = modelLoader.Load(commandList, "Assets/Models/old-wooden-chest/chest_01.fbx");
+        //Modify Begin:2026-07-31 by BestHui
+        const std::vector<MeshPrototype> chestPrototypes = modelLoader.LoadAsMeshPrototypes("Assets/Models/old-wooden-chest/chest_01.fbx");
+        auto model = modelLoader.Load(commandList, chestPrototypes);
+//Modify End
 
         XMMATRIX worldMatrix =
             XMMatrixScaling(0.01f, 0.01f, 0.01f) *
             XMMatrixRotationRollPitchYaw(XMConvertToRadians(90.0f), 0.0f, 0.0f) *
             XMMatrixTranslation(0.0f, 0.25f, 15.0f);
-        m_SceneObjects.push_back({ worldMatrix, model, chestMaterial });
+//Modify Begin:2026-07-31 by BestHui
+        AddSceneObject(worldMatrix, model, chestMaterial, chestPrototypes);
+//Modify End
 
         worldMatrix =
             XMMatrixScaling(0.01f, 0.01f, 0.01f) *
             XMMatrixRotationRollPitchYaw(XMConvertToRadians(90.0f), 0.0f, 0.0f) *
             XMMatrixTranslation(-50.0f, 0.25f, 15.0f);
-        m_SceneObjects.push_back({ worldMatrix, model, chestMaterial });
+//Modify Begin:2026-07-31 by BestHui
+        AddSceneObject(worldMatrix, model, chestMaterial, chestPrototypes);
+//Modify End
     }
 
     {
         auto model = modelLoader.LoadExisting(Mesh::CreatePlane(commandList));
         const XMMATRIX worldMatrix = XMMatrixScaling(30.0f, 30.0f, 30.0f) * XMMatrixTranslation(-50.0f, 0.1f, 15.0f);
-        m_SceneObjects.push_back({ worldMatrix, model, mirrorMaterial });
+//Modify Begin:2026-07-31 by BestHui
+        AddSceneObject(worldMatrix, model, mirrorMaterial, CreateBuiltinPlanePrototype(1.0f, 1.0f));
+//Modify End
     }
 
     {
         auto model = modelLoader.LoadExisting(Mesh::CreateCube(commandList));
         const XMMATRIX worldMatrix = XMMatrixScaling(5.0f, 5.0f, 5.0f) * XMMatrixTranslation(-54.0f, 2.5f, 7.0f);
-        m_SceneObjects.push_back({ worldMatrix, model, cubeMaterial });
+//Modify Begin:2026-07-31 by BestHui
+        AddSceneObject(worldMatrix, model, cubeMaterial, CreateBuiltinCubePrototype(1.0f));
+//Modify End
     }
 
     {
-        auto model = modelLoader.Load(commandList, "Assets/Models/cerberus/Cerberus_LP.FBX");
+        //Modify Begin:2026-07-31 by BestHui
+        const std::vector<MeshPrototype> cerberusPrototypes = modelLoader.LoadAsMeshPrototypes("Assets/Models/cerberus/Cerberus_LP.FBX");
+        auto model = modelLoader.Load(commandList, cerberusPrototypes);
+//Modify End
         const XMMATRIX worldMatrix =
             XMMatrixScaling(0.10f, 0.10f, 0.10f) *
             XMMatrixRotationRollPitchYaw(XMConvertToRadians(90.0f), XMConvertToRadians(135.0f), 0.0f) *
             XMMatrixTranslation(15.0f, 5.0f, 10.0f);
-        m_SceneObjects.push_back({ worldMatrix, model, cerberusMaterial });
+//Modify Begin:2026-07-31 by BestHui
+        AddSceneObject(worldMatrix, model, cerberusMaterial, cerberusPrototypes);
+//Modify End
     }
 
     {
-        auto model = modelLoader.Load(commandList, "Assets/Models/tv/TV.FBX");
+        //Modify Begin:2026-07-31 by BestHui
+        const std::vector<MeshPrototype> tvPrototypes = modelLoader.LoadAsMeshPrototypes("Assets/Models/tv/TV.FBX");
+        auto model = modelLoader.Load(commandList, tvPrototypes);
+//Modify End
         const XMMATRIX worldMatrix =
             XMMatrixScaling(0.30f, 0.30f, 0.30f) *
             XMMatrixRotationRollPitchYaw(XMConvertToRadians(90.0f), XMConvertToRadians(-45.0f), 0.0f) *
             XMMatrixTranslation(-14.0f, 0.0f, 18.0f);
-        m_SceneObjects.push_back({ worldMatrix, model, tvMaterial });
+//Modify Begin:2026-07-31 by BestHui
+        AddSceneObject(worldMatrix, model, tvMaterial, tvPrototypes);
+//Modify End
     }
 
-    const int steps = 5;
-    for (int x = 0; x < steps; ++x)
+//Modify Begin:2026-07-31 by BestHui
+    constexpr int MaterialSteps = 5;
+    std::vector<uint32_t> sphereMaterials;
+    sphereMaterials.reserve(MaterialSteps * MaterialSteps);
+    for (int x = 0; x < MaterialSteps; ++x)
     {
-        for (int y = 0; y < steps; ++y)
+        for (int y = 0; y < MaterialSteps; ++y)
         {
-            const float metallic = static_cast<float>(x) / static_cast<float>(steps - 1);
-            const float roughness = static_cast<float>(y) / static_cast<float>(steps - 1);
+            const float metallic = static_cast<float>(x) / static_cast<float>(MaterialSteps - 1);
+            const float roughness = static_cast<float>(y) / static_cast<float>(MaterialSteps - 1);
             const XMFLOAT4 color = {
                 0.25f + metallic * 0.75f,
                 0.25f + roughness * 0.75f,
                 0.9f - roughness * 0.45f,
                 1.0f
             };
-
-            const uint32_t material = AddDiffuseMaterial(color, { 1, 1, 0, 0 }, whiteTexture, metallic, roughness);
-            auto model = modelLoader.LoadExisting(Mesh::CreateSphere(commandList));
-            const XMMATRIX worldMatrix = XMMatrixTranslation(x * 1.5f, 5.0f + y * 2.0f, 25.0f);
-            m_SceneObjects.push_back({ worldMatrix, model, material });
+            sphereMaterials.push_back(AddDiffuseMaterial(color, { 1, 1, 0, 0 }, whiteTexture, metallic, roughness));
         }
     }
+
+    const MeshPrototype spherePrototype = CreateStressSpherePrototype(1.0f, 12);
+    auto sphereModel = modelLoader.Load(commandList, std::vector<MeshPrototype>{ spherePrototype });
+    const auto [sphereMeshletOffset, sphereMeshletCount] = AddMeshletGeometry(spherePrototype, sphereMaterials.front());
+
+    constexpr int SphereColumns = 64;
+    constexpr int SphereRows = 16;
+    constexpr int SphereDepthLayers = 8;
+    constexpr float SphereSpacingX = 0.80f;
+    constexpr float SphereSpacingY = 0.82f;
+    constexpr float SphereSpacingZ = 1.55f;
+    constexpr float SphereRadius = 0.38f;
+    constexpr float CenterX = 0.0f;
+    constexpr float CenterY = 6.5f;
+    constexpr float CenterZ = 27.0f;
+    const float startX = -static_cast<float>(SphereColumns - 1) * SphereSpacingX * 0.5f;
+    const float startY = -static_cast<float>(SphereRows - 1) * SphereSpacingY * 0.5f;
+    const float startZ = -static_cast<float>(SphereDepthLayers - 1) * SphereSpacingZ * 0.5f;
+
+    for (int z = 0; z < SphereDepthLayers; ++z)
+    {
+        for (int y = 0; y < SphereRows; ++y)
+        {
+            for (int x = 0; x < SphereColumns; ++x)
+            {
+                const size_t materialIndex = static_cast<size_t>((x % MaterialSteps) * MaterialSteps + (y % MaterialSteps));
+                const float wave = std::sin(static_cast<float>(x) * 0.29f + static_cast<float>(y) * 0.47f + static_cast<float>(z) * 0.71f);
+                const float stagger = ((y + z) & 1) != 0 ? SphereSpacingX * 0.35f : 0.0f;
+                const XMMATRIX worldMatrix =
+                    XMMatrixScaling(SphereRadius, SphereRadius, SphereRadius) *
+                    XMMatrixTranslation(
+                        CenterX + startX + static_cast<float>(x) * SphereSpacingX + stagger,
+                        CenterY + startY + static_cast<float>(y) * SphereSpacingY + wave * 0.15f,
+                        CenterZ + startZ + static_cast<float>(z) * SphereSpacingZ);
+                const uint32_t material = sphereMaterials[materialIndex];
+
+//Modify Begin:2026-07-31 by BestHui
+                AddSceneObject(worldMatrix, sphereModel, material, sphereMeshletOffset, sphereMeshletCount);
+//Modify End
+            }
+        }
+    }
+
+    UploadMeshletBuffers(commandList);
+//Modify End
 }
 
 bool RaytracingDemoSceneResources::LoadScene(CommandList& commandList, const Scene& scene)
@@ -532,9 +574,10 @@ void RaytracingDemoSceneResources::LoadSceneObjects(
         if (object.Mesh.Kind == SceneMeshKind::BuiltinPlane)
         {
             auto model = modelLoader.LoadExisting(Mesh::CreatePlane(commandList, 10.0f, 10.0f));
-            m_SceneObjects.push_back({ object.WorldMatrix, model, materialIndex });
 //Modify Begin:2026-07-30 by BestHui
-            AddMeshletDraw(CreateBuiltinPlanePrototype(10.0f, 10.0f), object.WorldMatrix, materialIndex);
+//Modify Begin:2026-07-31 by BestHui
+            AddSceneObject(object.WorldMatrix, model, materialIndex, CreateBuiltinPlanePrototype(10.0f, 10.0f));
+//Modify End
 //Modify End
             continue;
         }
@@ -554,59 +597,70 @@ void RaytracingDemoSceneResources::LoadSceneObjects(
 
         const MeshPrototype& prototype = FindMeshPrototypeByName(prototypeIterator->second, object.Mesh.SubmeshName);
         auto model = modelLoader.Load(commandList, std::vector<MeshPrototype>{ prototype });
-        m_SceneObjects.push_back({ object.WorldMatrix, model, materialIndex });
 //Modify Begin:2026-07-30 by BestHui
-        AddMeshletDraw(prototype, object.WorldMatrix, materialIndex);
+//Modify Begin:2026-07-31 by BestHui
+        AddSceneObject(object.WorldMatrix, model, materialIndex, prototype);
+//Modify End
 //Modify End
     }
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-31 by BestHui
+void RaytracingDemoSceneResources::AddSceneObject(
+    const XMMATRIX& worldMatrix,
+    const std::shared_ptr<Model>& model,
+    const uint32_t materialIndex)
+{
+    m_SceneObjects.push_back({ worldMatrix, model, materialIndex });
+}
+
+void RaytracingDemoSceneResources::AddSceneObject(
+    const XMMATRIX& worldMatrix,
+    const std::shared_ptr<Model>& model,
+    const uint32_t materialIndex,
+    const MeshPrototype& prototype)
+{
+    AddSceneObject(worldMatrix, model, materialIndex);
+    AddMeshletDraw(prototype, worldMatrix, materialIndex);
+}
+
+void RaytracingDemoSceneResources::AddSceneObject(
+    const XMMATRIX& worldMatrix,
+    const std::shared_ptr<Model>& model,
+    const uint32_t materialIndex,
+    const std::vector<MeshPrototype>& prototypes)
+{
+    AddSceneObject(worldMatrix, model, materialIndex);
+    for (const MeshPrototype& prototype : prototypes)
+    {
+        AddMeshletDraw(prototype, worldMatrix, materialIndex);
+    }
+}
+
+void RaytracingDemoSceneResources::AddSceneObject(
+    const XMMATRIX& worldMatrix,
+    const std::shared_ptr<Model>& model,
+    const uint32_t materialIndex,
+    const uint32_t meshletOffset,
+    const uint32_t meshletCount)
+{
+    AddSceneObject(worldMatrix, model, materialIndex);
+    m_MeshletGeometrySet.AddDraw(meshletOffset, meshletCount, worldMatrix, materialIndex);
+}
+
 void RaytracingDemoSceneResources::AddMeshletDraw(
     const MeshPrototype& prototype,
     const XMMATRIX& worldMatrix,
     const uint32_t materialIndex)
 {
-    const auto [meshletOffset, meshletCount] = AddMeshletGeometry(prototype, materialIndex);
-    if (meshletCount == 0)
-    {
-        return;
-    }
-
-    RaytracingDemoMeshletDraw draw;
-    draw.WorldMatrix = worldMatrix;
-    draw.MaterialIndex = materialIndex;
-    draw.MeshletOffset = meshletOffset;
-    draw.MeshletCount = meshletCount;
-    m_MeshletDraws.push_back(draw);
+    m_MeshletGeometrySet.AddDraw(prototype, worldMatrix, materialIndex);
 }
 
 std::pair<uint32_t, uint32_t> RaytracingDemoSceneResources::AddMeshletGeometry(
     const MeshPrototype& prototype,
     const uint32_t materialIndex)
 {
-    MeshletBuildResult buildResult = MeshletBuilder::Build(prototype);
-    if (buildResult.Meshlets.empty())
-    {
-        return { 0, 0 };
-    }
-
-    const uint32_t baseVertex = static_cast<uint32_t>(m_MeshletVertices.size());
-    const uint32_t baseIndex = static_cast<uint32_t>(m_MeshletIndices.size());
-    const uint32_t meshletOffset = static_cast<uint32_t>(m_Meshlets.size());
-
-    m_MeshletVertices.insert(m_MeshletVertices.end(), buildResult.Mesh.m_Vertices.begin(), buildResult.Mesh.m_Vertices.end());
-    m_MeshletIndices.insert(m_MeshletIndices.end(), buildResult.Mesh.m_Indices.begin(), buildResult.Mesh.m_Indices.end());
-
-    for (Meshlet meshlet : buildResult.Meshlets)
-    {
-        meshlet.VertexOffset += baseVertex;
-        meshlet.IndexOffset += baseIndex;
-        meshlet.MaterialIndex = materialIndex;
-        m_Meshlets.push_back(meshlet);
-    }
-
-    return { meshletOffset, static_cast<uint32_t>(buildResult.Meshlets.size()) };
+    return m_MeshletGeometrySet.AddGeometry(prototype, materialIndex);
 }
 
 void RaytracingDemoSceneResources::AddStressTestSpheres(CommandList& commandList, const uint32_t whiteTextureIndex)
@@ -616,7 +670,7 @@ void RaytracingDemoSceneResources::AddStressTestSpheres(CommandList& commandList
     auto sphereModel = modelLoader.Load(commandList, std::vector<MeshPrototype>{ spherePrototype });
 
     const uint32_t sphereMaterial = AddDiffuseMaterial(
-        { 0.72f, 0.74f, 0.80f, 1.0f },
+        { 1.0f, 0.48f, 0.18f, 1.0f },
         { 1.0f, 1.0f, 0.0f, 0.0f },
         whiteTextureIndex,
         0.0f,
@@ -628,104 +682,44 @@ void RaytracingDemoSceneResources::AddStressTestSpheres(CommandList& commandList
         return;
     }
 
-//Modify Begin:2026-07-31 by BestHui
-    constexpr uint32_t Rows = 32;
-    constexpr uint32_t Columns = 32;
-    constexpr uint32_t Copies = 12;
-    constexpr float Spacing = 0.32f;
-    constexpr float CopySpacing = 0.34f;
-    constexpr float Radius = 0.10f;
-    constexpr float CenterX = 2.78f;
-    constexpr float CenterY = 5.05f;
+    constexpr uint32_t Columns = 64;
+    constexpr uint32_t Rows = 24;
+    constexpr uint32_t DepthLayers = 8;
+    constexpr float XSpacing = 0.62f;
+    constexpr float YSpacing = 0.46f;
+    constexpr float ZSpacing = 0.78f;
+    constexpr float Radius = 0.17f;
+    constexpr float CenterX = -4.50f;
+    constexpr float CenterY = 2.85f;
     constexpr float CenterZ = -2.80f;
-//Modify End
-    const float startX = -static_cast<float>(Columns - 1) * Spacing * 0.5f;
-    const float startZ = -static_cast<float>(Rows - 1) * Spacing * 0.5f;
+    const float startX = -static_cast<float>(Columns - 1) * XSpacing * 0.5f;
+    const float startY = -static_cast<float>(Rows - 1) * YSpacing * 0.5f;
+    const float startZ = -static_cast<float>(DepthLayers - 1) * ZSpacing * 0.5f;
 
-//Modify Begin:2026-07-31 by BestHui
-    for (uint32_t copy = 0; copy < Copies; ++copy)
+    for (uint32_t layer = 0; layer < DepthLayers; ++layer)
     {
-        for (uint32_t z = 0; z < Rows; ++z)
+        for (uint32_t y = 0; y < Rows; ++y)
         {
             for (uint32_t x = 0; x < Columns; ++x)
             {
-                const float wave = std::sin(static_cast<float>(x) * 0.71f + static_cast<float>(z) * 0.37f + static_cast<float>(copy) * 0.23f);
+                const float wave = std::sin(static_cast<float>(x) * 0.37f + static_cast<float>(y) * 0.61f + static_cast<float>(layer) * 0.83f);
+                const float stagger = (static_cast<float>((y + layer) & 1u) - 0.5f) * XSpacing * 0.35f;
                 const XMMATRIX worldMatrix =
                     XMMatrixScaling(Radius, Radius, Radius) *
                     XMMatrixTranslation(
-                        CenterX + startX + static_cast<float>(x) * Spacing,
-                        CenterY + static_cast<float>(copy) * CopySpacing + wave * 0.045f,
-                        CenterZ + startZ + static_cast<float>(z) * Spacing);
+                        CenterX + startX + static_cast<float>(x) * XSpacing + stagger,
+                        CenterY + startY + static_cast<float>(y) * YSpacing + wave * 0.045f,
+                        CenterZ + startZ + static_cast<float>(layer) * ZSpacing);
 
-                m_SceneObjects.push_back({ worldMatrix, sphereModel, sphereMaterial });
-
-                RaytracingDemoMeshletDraw draw;
-                draw.WorldMatrix = worldMatrix;
-                draw.MaterialIndex = sphereMaterial;
-                draw.MeshletOffset = meshletOffset;
-                draw.MeshletCount = meshletCount;
-                m_MeshletDraws.push_back(draw);
+                AddSceneObject(worldMatrix, sphereModel, sphereMaterial, meshletOffset, meshletCount);
             }
         }
     }
-//Modify End
 }
 
 void RaytracingDemoSceneResources::UploadMeshletBuffers(CommandList& commandList)
 {
-    if (m_MeshletVertices.empty() || m_MeshletIndices.empty() || m_Meshlets.empty())
-    {
-        return;
-    }
-
-    BuildMeshletInstances();
-    if (m_MeshletInstances.empty())
-    {
-        return;
-    }
-
-    commandList.CopyStructuredBuffer(m_MeshletVertexBuffer, m_MeshletVertices);
-    commandList.CopyByteAddressBuffer(
-        m_MeshletIndexBuffer,
-        m_MeshletIndices.size() * sizeof(uint16_t),
-        m_MeshletIndices.data());
-    commandList.CopyStructuredBuffer(m_MeshletBuffer, m_Meshlets);
-    commandList.CopyStructuredBuffer(m_MeshletTransformBuffer, m_MeshletTransforms);
-    commandList.CopyStructuredBuffer(m_MeshletInstanceBuffer, m_MeshletInstances);
-
-    const D3D12_RESOURCE_DESC commandBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(
-        sizeof(RaytracingDemoMeshletIndirectCommand) * m_MeshletInstances.size(),
-        D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-    m_MeshletIndirectCommandBuffer = StructuredBuffer(
-        commandBufferDesc,
-        m_MeshletInstances.size(),
-        sizeof(RaytracingDemoMeshletIndirectCommand),
-        L"RaytracingDemo Meshlet Indirect Commands");
-}
-
-void RaytracingDemoSceneResources::BuildMeshletInstances()
-{
-    m_MeshletTransforms.clear();
-    m_MeshletInstances.clear();
-    m_MeshletTransforms.reserve(m_MeshletDraws.size());
-
-    for (const RaytracingDemoMeshletDraw& draw : m_MeshletDraws)
-    {
-        RaytracingDemoMeshletTransformData transform;
-        transform.Model = draw.WorldMatrix;
-        transform.InverseTransposeModel = XMMatrixTranspose(XMMatrixInverse(nullptr, draw.WorldMatrix));
-        const uint32_t transformIndex = static_cast<uint32_t>(m_MeshletTransforms.size());
-        m_MeshletTransforms.push_back(transform);
-
-        for (uint32_t meshletIndex = 0; meshletIndex < draw.MeshletCount; ++meshletIndex)
-        {
-            RaytracingDemoMeshletInstanceData instance;
-            instance.MeshletIndex = draw.MeshletOffset + meshletIndex;
-            instance.TransformIndex = transformIndex;
-            instance.MaterialIndex = draw.MaterialIndex;
-            m_MeshletInstances.push_back(instance);
-        }
-    }
+    m_MeshletGeometrySet.Upload(commandList);
 }
 //Modify End
 

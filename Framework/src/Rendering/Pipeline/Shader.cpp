@@ -2,9 +2,15 @@
 #include <DX12Library/Helpers.h>
 #include <DX12Library/ShaderUtils.h>
 #include <DX12Library/Application.h>
+//Modify Begin:2026-07-31 by BestHui
+#include <Framework/Rendering/Pipeline/IndirectDrawCommandSignature.h>
+//Modify End
 
 //Modify Begin:2026-07-24 by BestHui
 #include <algorithm>
+//Modify Begin:2026-07-31 by BestHui
+#include <utility>
+//Modify End
 
 namespace
 {
@@ -70,6 +76,16 @@ namespace
 
         return merged;
     }
+
+//Modify Begin:2026-07-31 by BestHui
+    PipelineLayoutReflectionOptions CreateDefaultGraphicsLayoutOptions()
+    {
+        PipelineLayoutReflectionOptions layoutOptions;
+        layoutOptions.MaxDescriptorCount = 4096u;
+        layoutOptions.ShaderStages = PipelineShaderStageFlags::AllGraphics;
+        return layoutOptions;
+    }
+//Modify End
 }
 //Modify End
 
@@ -78,6 +94,18 @@ Shader::Shader(
     const ShaderBlob& vertexShader,
     const ShaderBlob& pixelShader,
     const std::function<void(RasterPipelineStateBuilder&)> buildPipelineState)
+//Modify Begin:2026-07-31 by BestHui
+    : Shader(vertexShader, pixelShader, CreateDefaultGraphicsLayoutOptions(), buildPipelineState)
+//Modify End
+{
+}
+
+Shader::Shader(
+    const ShaderBlob& vertexShader,
+    const ShaderBlob& pixelShader,
+    PipelineLayoutReflectionOptions layoutOptions,
+    const std::function<void(RasterPipelineStateBuilder&)> buildPipelineState)
+    : m_PipelineLayoutOptions(std::move(layoutOptions))
 {
     CollectShaderMetadata(vertexShader.GetBlob(), &m_VertexShaderMetadata);
     CollectShaderMetadata(pixelShader.GetBlob(), &m_PixelShaderMetadata);
@@ -131,6 +159,22 @@ bool Shader::HasUnorderedAccessView(const std::string& variableName) const
 
     return m_VertexShaderMetadata.m_UnorderedAccessViewsNameCache.find(variableName) != m_VertexShaderMetadata.m_UnorderedAccessViewsNameCache.end() ||
         m_PixelShaderMetadata.m_UnorderedAccessViewsNameCache.find(variableName) != m_PixelShaderMetadata.m_UnorderedAccessViewsNameCache.end();
+}
+//Modify End
+
+//Modify Begin:2026-07-31 by BestHui
+std::unique_ptr<IndirectDrawCommandSignature> Shader::CreateIndirectDrawCommandSignature(
+    const std::string& rootConstantBufferName,
+    const UINT byteStride) const
+{
+    Assert(m_PipelineLayout != nullptr && m_RootSignature != nullptr, "Shader pipeline layout and root signature must be created.");
+    const PipelineRootConstantDesc* rootConstant = m_PipelineLayout->FindRootConstant(rootConstantBufferName);
+    Assert(rootConstant != nullptr, "Root constant buffer was not found in shader pipeline layout.");
+    return std::make_unique<IndirectDrawCommandSignature>(
+        *m_RootSignature,
+        rootConstant->RootParameterIndex,
+        static_cast<UINT>((rootConstant->SizeInBytes + 3u) / 4u),
+        byteStride);
 }
 //Modify End
 
@@ -205,14 +249,9 @@ void Shader::CollectShaderMetadata(const Microsoft::WRL::ComPtr<ID3DBlob>& shade
 //Modify Begin:2026-07-24 by BestHui
 void Shader::BuildPipelineLayout()
 {
-    PipelineLayoutReflectionOptions layoutOptions;
-    layoutOptions.MaxDescriptorCount = 4096u;
-//Modify Begin:2026-07-27 by BestHui
-    layoutOptions.ShaderStages = PipelineShaderStageFlags::AllGraphics;
-//Modify End
     const ShaderReflectionMetadata mergedReflection = MergeGraphicsReflection(m_VertexShaderMetadata, m_PixelShaderMetadata);
     m_PipelineLayout = std::make_unique<PipelineLayout>(
-        PipelineLayout::CreateDescFromReflection(mergedReflection, layoutOptions));
+        PipelineLayout::CreateDescFromReflection(mergedReflection, m_PipelineLayoutOptions));
     m_BindingSet = std::make_unique<PipelineBindingSet>(*m_PipelineLayout);
 }
 

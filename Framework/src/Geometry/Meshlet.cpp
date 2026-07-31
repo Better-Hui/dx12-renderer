@@ -1,5 +1,8 @@
 #include <Framework/Geometry/Meshlet.h>
 
+#include <DX12Library/CommandList.h>
+#include <DX12Library/Helpers.h>
+
 #include <meshoptimizer.h>
 
 #include <cfloat>
@@ -126,5 +129,154 @@ MeshletBuildResult MeshletBuilder::Build(const MeshPrototype& meshPrototype, con
     result.Mesh.m_Name = meshPrototype.m_Name;
     result.Meshlets = std::move(meshlets);
     return result;
+}
+//Modify End
+
+//Modify Begin:2026-07-31 by BestHui
+MeshletGeometrySet::MeshletGeometrySet()
+    : m_VertexBuffer(L"MeshletGeometrySet Vertices")
+    , m_IndexBuffer(L"MeshletGeometrySet Indices")
+    , m_MeshletBuffer(L"MeshletGeometrySet Meshlets")
+    , m_TransformBuffer(L"MeshletGeometrySet Transforms")
+    , m_InstanceBuffer(L"MeshletGeometrySet Instances")
+    , m_IndirectCommandBuffer(L"MeshletGeometrySet Indirect Commands")
+{
+}
+
+void MeshletGeometrySet::Clear()
+{
+    m_VertexBuffer = StructuredBuffer(L"MeshletGeometrySet Vertices");
+    m_IndexBuffer = ByteAddressBuffer(L"MeshletGeometrySet Indices");
+    m_MeshletBuffer = StructuredBuffer(L"MeshletGeometrySet Meshlets");
+    m_TransformBuffer = StructuredBuffer(L"MeshletGeometrySet Transforms");
+    m_InstanceBuffer = StructuredBuffer(L"MeshletGeometrySet Instances");
+    m_IndirectCommandBuffer = StructuredBuffer(L"MeshletGeometrySet Indirect Commands");
+    m_Vertices.clear();
+    m_Indices.clear();
+    m_Meshlets.clear();
+    m_Draws.clear();
+    m_Transforms.clear();
+    m_Instances.clear();
+}
+
+std::pair<uint32_t, uint32_t> MeshletGeometrySet::AddGeometry(const MeshPrototype& prototype, const uint32_t materialIndex)
+{
+    MeshletBuildResult buildResult = MeshletBuilder::Build(prototype);
+    if (buildResult.Meshlets.empty())
+    {
+        return { 0, 0 };
+    }
+
+    const uint32_t baseVertex = static_cast<uint32_t>(m_Vertices.size());
+    const uint32_t baseIndex = static_cast<uint32_t>(m_Indices.size());
+    const uint32_t meshletOffset = static_cast<uint32_t>(m_Meshlets.size());
+
+    m_Vertices.insert(m_Vertices.end(), buildResult.Mesh.m_Vertices.begin(), buildResult.Mesh.m_Vertices.end());
+    m_Indices.insert(m_Indices.end(), buildResult.Mesh.m_Indices.begin(), buildResult.Mesh.m_Indices.end());
+
+    for (Meshlet meshlet : buildResult.Meshlets)
+    {
+        meshlet.VertexOffset += baseVertex;
+        meshlet.IndexOffset += baseIndex;
+        meshlet.MaterialIndex = materialIndex;
+        m_Meshlets.push_back(meshlet);
+    }
+
+    return { meshletOffset, static_cast<uint32_t>(buildResult.Meshlets.size()) };
+}
+
+void MeshletGeometrySet::AddDraw(
+    const MeshPrototype& prototype,
+    const XMMATRIX& worldMatrix,
+    const uint32_t materialIndex)
+{
+    const auto [meshletOffset, meshletCount] = AddGeometry(prototype, materialIndex);
+    AddDraw(meshletOffset, meshletCount, worldMatrix, materialIndex);
+}
+
+void MeshletGeometrySet::AddDraw(
+    const uint32_t meshletOffset,
+    const uint32_t meshletCount,
+    const XMMATRIX& worldMatrix,
+    const uint32_t materialIndex)
+{
+    if (meshletCount == 0)
+    {
+        return;
+    }
+
+    MeshletDraw draw;
+    draw.WorldMatrix = worldMatrix;
+    draw.MaterialIndex = materialIndex;
+    draw.MeshletOffset = meshletOffset;
+    draw.MeshletCount = meshletCount;
+    m_Draws.push_back(draw);
+}
+
+void MeshletGeometrySet::Upload(CommandList& commandList)
+{
+    if (m_Vertices.empty() || m_Indices.empty() || m_Meshlets.empty())
+    {
+        return;
+    }
+
+    BuildInstances();
+    if (m_Instances.empty())
+    {
+        return;
+    }
+
+    commandList.CopyStructuredBuffer(m_VertexBuffer, m_Vertices);
+    commandList.CopyByteAddressBuffer(m_IndexBuffer, m_Indices.size() * sizeof(uint16_t), m_Indices.data());
+    commandList.CopyStructuredBuffer(m_MeshletBuffer, m_Meshlets);
+    commandList.CopyStructuredBuffer(m_TransformBuffer, m_Transforms);
+    commandList.CopyStructuredBuffer(m_InstanceBuffer, m_Instances);
+
+    const D3D12_RESOURCE_DESC commandBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(
+        sizeof(MeshletIndirectCommand) * m_Instances.size(),
+        D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+    m_IndirectCommandBuffer = StructuredBuffer(
+        commandBufferDesc,
+        m_Instances.size(),
+        sizeof(MeshletIndirectCommand),
+        L"MeshletGeometrySet Indirect Commands");
+}
+
+MeshletGpuResources MeshletGeometrySet::GetGpuResources()
+{
+    return {
+        &m_VertexBuffer,
+        &m_IndexBuffer,
+        &m_MeshletBuffer,
+        &m_TransformBuffer,
+        &m_InstanceBuffer,
+        &m_IndirectCommandBuffer,
+        static_cast<uint32_t>(m_Instances.size()),
+    };
+}
+
+void MeshletGeometrySet::BuildInstances()
+{
+    m_Transforms.clear();
+    m_Instances.clear();
+    m_Transforms.reserve(m_Draws.size());
+
+    for (const MeshletDraw& draw : m_Draws)
+    {
+        MeshletTransformData transform;
+        transform.Model = draw.WorldMatrix;
+        transform.InverseTransposeModel = XMMatrixTranspose(XMMatrixInverse(nullptr, draw.WorldMatrix));
+        const uint32_t transformIndex = static_cast<uint32_t>(m_Transforms.size());
+        m_Transforms.push_back(transform);
+
+        for (uint32_t meshletIndex = 0; meshletIndex < draw.MeshletCount; ++meshletIndex)
+        {
+            MeshletInstanceData instance;
+            instance.MeshletIndex = draw.MeshletOffset + meshletIndex;
+            instance.TransformIndex = transformIndex;
+            instance.MaterialIndex = draw.MaterialIndex;
+            m_Instances.push_back(instance);
+        }
+    }
 }
 //Modify End

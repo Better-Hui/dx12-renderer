@@ -154,18 +154,6 @@ private:
     };
 
 //Modify Begin:2026-07-30 by BestHui
-    struct MeshletGBufferDrawConstants
-    {
-        DirectX::XMMATRIX Model = DirectX::XMMatrixIdentity();
-        DirectX::XMMATRIX ModelViewProjection = DirectX::XMMatrixIdentity();
-        DirectX::XMMATRIX InverseTransposeModel = DirectX::XMMatrixIdentity();
-        DirectX::XMMATRIX PreviousModelViewProjection = DirectX::XMMatrixIdentity();
-        uint32_t MeshletOffset = 0;
-        uint32_t MeshletCount = 0;
-        uint32_t Padding0 = 0;
-        uint32_t Padding1 = 0;
-    };
-
     struct GBufferDebugConstants
     {
         uint32_t DebugMeshletClusters = 0;
@@ -211,6 +199,13 @@ private:
     bool m_RenderGraphDenoiserEnabled = false;
     bool m_RenderGraphCudaBloomEnabled = false;
 //Modify End
+//Modify Begin:2026-07-31 by BestHui
+    bool m_RenderGraphMeshletGBufferEnabled = false;
+    bool m_RenderGraphTaskMeshletEnabled = true;
+    bool m_RenderGraphMeshletDebugEnabled = false;
+    int m_DebugTextureTarget = 0;
+    int m_RenderGraphDebugTextureTarget = 0;
+//Modify End
 //Modify Begin:2026-07-27 by BestHui
     PathTracingPipelineController m_PathTracingPipelines;
 //Modify End
@@ -237,7 +232,6 @@ private:
     std::shared_ptr<Shader> m_GBufferMeshletIndirectShader;
     std::shared_ptr<ComputeShader> m_MeshletCullShader;
     std::unique_ptr<IndirectDrawCommandSignature> m_MeshletDrawCommandSignature;
-    std::shared_ptr<MeshShader> m_GBufferMeshShader;
 //Modify Begin:2026-07-31 by BestHui
     std::shared_ptr<MeshShader> m_GBufferTaskMeshShader;
 //Modify End

@@ -71,6 +71,29 @@ namespace
             it->Uv.x = (1.f - it->Uv.x);
         }
     }
+
+//Modify Begin:2026-07-31 by BestHui
+    MeshPrototype FinalizePrototype(
+        VertexCollectionType&& vertices,
+        IndexCollectionType&& indices,
+        const bool rhCoords,
+        const bool generateTangents,
+        const std::string& name)
+    {
+        if (generateTangents)
+        {
+            GenerateTangents(vertices, indices);
+        }
+        if (!rhCoords)
+        {
+            ReverseWinding(indices, vertices);
+        }
+
+        MeshPrototype prototype(std::move(vertices), std::move(indices), true, false);
+        prototype.m_Name = name;
+        return prototype;
+    }
+//Modify End
 }
 
 const D3D12_INPUT_ELEMENT_DESC VertexAttributes::INPUT_ELEMENTS[] = {
@@ -297,6 +320,14 @@ std::shared_ptr<Mesh> Mesh::CreateSphere(CommandList& commandList, float diamete
 
 std::shared_ptr<Mesh> Mesh::CreateCube(CommandList& commandList, float size, bool rhcoords)
 {
+//Modify Begin:2026-07-31 by BestHui
+    return CreateMesh(commandList, CreateCubePrototype(size, rhcoords));
+//Modify End
+}
+
+//Modify Begin:2026-07-31 by BestHui
+MeshPrototype Mesh::CreateCubePrototype(float size, bool rhcoords)
+{
     // A cube has six faces, each one pointing in a different direction.
     constexpr int FaceCount = 6;
 
@@ -351,8 +382,10 @@ std::shared_ptr<Mesh> Mesh::CreateCube(CommandList& commandList, float size, boo
         vertices.push_back(VertexAttributes((normal + side1 - side2) * size, normal, textureCoordinates[3]));
     }
 
-    return CreateMesh(commandList, vertices, indices, rhcoords, true);
+    MeshPrototype prototype = FinalizePrototype(std::move(vertices), std::move(indices), rhcoords, true, "BuiltinCube");
+    return prototype;
 }
+//Modify End
 
 // Helper computes a point on a unit circle, aligned to the x/z plane and centered on the origin.
 static inline XMVECTOR GetCircleVector(size_t i, size_t tessellation)
@@ -530,6 +563,14 @@ std::shared_ptr<Mesh> Mesh::CreateTorus(CommandList& commandList, float diameter
 
 std::shared_ptr<Mesh> Mesh::CreatePlane(CommandList& commandList, float width, float height, bool rhcoords)
 {
+//Modify Begin:2026-07-31 by BestHui
+    return CreateMesh(commandList, CreatePlanePrototype(width, height, rhcoords));
+//Modify End
+}
+
+//Modify Begin:2026-07-31 by BestHui
+MeshPrototype Mesh::CreatePlanePrototype(float width, float height, bool rhcoords)
+{
     VertexCollectionType vertices =
     {
         { XMFLOAT3(-0.5f * width, 0.0f, 0.5f * height), XMFLOAT3(0.0f, 1.0f, 0.0f), XMFLOAT2(0.0f, 0.0f) }, // 0
@@ -543,8 +584,10 @@ std::shared_ptr<Mesh> Mesh::CreatePlane(CommandList& commandList, float width, f
         0, 3, 1, 1, 3, 2
     };
 
-    return CreateMesh(commandList, vertices, indices, rhcoords, true);
+    MeshPrototype prototype = FinalizePrototype(std::move(vertices), std::move(indices), rhcoords, true, "BuiltinPlane");
+    return prototype;
 }
+//Modify End
 
 std::shared_ptr<Mesh> Mesh::CreateVerticalQuad(CommandList& commandList, float width, float height, bool rhCoords)
 {

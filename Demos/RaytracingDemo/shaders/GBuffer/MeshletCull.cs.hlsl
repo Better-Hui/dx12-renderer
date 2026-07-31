@@ -46,6 +46,10 @@ struct MeshletInstanceData
 
 struct MeshletIndirectCommand
 {
+    uint MeshletInstanceIndex;
+    uint Flags;
+    uint Padding0;
+    uint Padding1;
     uint VertexCountPerInstance;
     uint InstanceCount;
     uint StartVertexLocation;
@@ -116,10 +120,14 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     MeshletIndirectCount.InterlockedAdd(0, 1, commandIndex);
 
     MeshletIndirectCommand command;
+    command.MeshletInstanceIndex = instanceIndex;
+    command.Flags = 0u;
+    command.Padding0 = 0u;
+    command.Padding1 = 0u;
     command.VertexCountPerInstance = meshlet.IndexCount;
     command.InstanceCount = 1;
     command.StartVertexLocation = 0;
-    command.StartInstanceLocation = instanceIndex;
+    command.StartInstanceLocation = 0;
     MeshletIndirectCommands[commandIndex] = command;
 }
 //Modify End

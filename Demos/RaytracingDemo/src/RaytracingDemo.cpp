@@ -333,18 +333,6 @@ bool RaytracingDemo::LoadContent()
     });
 //Modify End
 
-//Modify Begin:2026-07-30 by BestHui
-    withShaderCreateContext("GBufferMeshShader", [&]()
-    {
-    m_GBufferMeshShader = std::make_shared<MeshShader>(
-        ShaderBlob(L"GBuffer.ms.cso"),
-        ShaderBlob(L"GBuffer.ps.cso"),
-        [](RasterPipelineStateBuilder& builder)
-        {
-            builder.WithNoCull();
-        });
-    });
-
 //Modify Begin:2026-07-31 by BestHui
     withShaderCreateContext("GBufferTaskMeshShader", [&]()
     {
@@ -361,9 +349,14 @@ bool RaytracingDemo::LoadContent()
 
     withShaderCreateContext("GBufferMeshletIndirect", [&]()
     {
+    PipelineLayoutReflectionOptions meshletIndirectLayoutOptions;
+    meshletIndirectLayoutOptions.MaxDescriptorCount = 4096u;
+    meshletIndirectLayoutOptions.ShaderStages = PipelineShaderStageFlags::AllGraphics;
+    meshletIndirectLayoutOptions.RootConstantBufferNames.push_back("MeshletDrawCBuffer");
     m_GBufferMeshletIndirectShader = std::make_shared<Shader>(
         ShaderBlob(L"GBuffer.meshletindirect.vs.cso"),
         ShaderBlob(L"GBuffer.meshletindirect.ps.cso"),
+        meshletIndirectLayoutOptions,
         [](RasterPipelineStateBuilder& builder)
         {
             builder.WithNoCull();
@@ -376,7 +369,9 @@ bool RaytracingDemo::LoadContent()
     m_MeshletCullShader = std::make_shared<ComputeShader>(
         meshletCullShaderBlob,
         ComputePipelineDescBuilder::ReflectedDefault(meshletCullShaderBlob).Build());
-    m_MeshletDrawCommandSignature = std::make_unique<IndirectDrawCommandSignature>();
+    m_MeshletDrawCommandSignature = m_GBufferMeshletIndirectShader->CreateIndirectDrawCommandSignature(
+        "MeshletDrawCBuffer",
+        sizeof(MeshletIndirectCommand));
     });
 //Modify End
 
@@ -453,7 +448,6 @@ void RaytracingDemo::UnloadContent()
 //Modify Begin:2026-07-31 by BestHui
     m_GBufferTaskMeshShader.reset();
 //Modify End
-    m_GBufferMeshShader.reset();
     m_GBufferMeshletIndirectShader.reset();
     m_MeshletCullShader.reset();
     m_MeshletDrawCommandSignature.reset();
@@ -567,13 +561,26 @@ void RaytracingDemo::RebuildRenderGraph()
 //Modify End
     m_RenderGraphDenoiserEnabled = IsDenoiserEnabled();
     m_RenderGraphCudaBloomEnabled = m_CudaBloom.IsEnabled();
+//Modify Begin:2026-07-31 by BestHui
+    m_RenderGraphMeshletGBufferEnabled = m_UseMeshletGBuffer;
+    m_RenderGraphTaskMeshletEnabled = m_UseTaskShaderMeshlets;
+    m_RenderGraphMeshletDebugEnabled = m_UseMeshletGBuffer && m_DebugMeshletClusters;
+    m_RenderGraphDebugTextureTarget = m_DebugTextureTarget;
+//Modify End
 }
 
 void RaytracingDemo::EnsureRenderGraphTopology()
 {
     if (m_RenderGraph == nullptr ||
         m_RenderGraphDenoiserEnabled != IsDenoiserEnabled() ||
-        m_RenderGraphCudaBloomEnabled != m_CudaBloom.IsEnabled())
+        m_RenderGraphCudaBloomEnabled != m_CudaBloom.IsEnabled()
+//Modify Begin:2026-07-31 by BestHui
+        || m_RenderGraphMeshletGBufferEnabled != m_UseMeshletGBuffer
+        || m_RenderGraphTaskMeshletEnabled != m_UseTaskShaderMeshlets
+        || m_RenderGraphMeshletDebugEnabled != (m_UseMeshletGBuffer && m_DebugMeshletClusters)
+        || m_RenderGraphDebugTextureTarget != m_DebugTextureTarget
+//Modify End
+        )
     {
         RebuildRenderGraph();
         ResetAccumulation();

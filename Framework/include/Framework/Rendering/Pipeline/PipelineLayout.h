@@ -137,6 +137,9 @@ struct PipelineLayoutBindingOverride
 struct PipelineLayoutReflectionOptions
 {
     std::vector<PipelineLayoutBindingOverride> BindingOverrides;
+//Modify Begin:2026-07-31 by BestHui
+    std::vector<std::string> RootConstantBufferNames;
+//Modify End
     UINT MaxDescriptorCount = 1024;
     std::string AccelerationStructureFallbackName;
 //Modify Begin:2026-07-27 by BestHui
@@ -188,6 +191,9 @@ public:
 //Modify End
 
     bool HasBinding(const std::string& name, DescriptorBindingKind expectedKind) const;
+//Modify Begin:2026-07-31 by BestHui
+    const PipelineRootConstantDesc* FindRootConstant(const std::string& name) const;
+//Modify End
     const PipelineDescriptorRangeDesc* FindRange(const std::string& name, DescriptorBindingKind expectedKind) const;
     const PipelineDescriptorRangeDesc* FindRangeByRootParameterIndex(UINT rootParameterIndex) const;
     const DescriptorBindingInfo& GetBinding(const std::string& name, DescriptorBindingKind expectedKind) const;

@@ -81,6 +81,13 @@ cbuffer PipelineCBuffer : register(b0, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE)
     uint3 g_Pipeline_Padding0;
 };
 
+cbuffer MeshletDrawCBuffer : register(b4, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE)
+{
+    uint g_MeshletDraw_InstanceIndex;
+    uint g_MeshletDraw_Flags;
+    uint2 g_MeshletDraw_Padding0;
+};
+
 StructuredBuffer<VertexAttributes> MeshletVertices : register(t0, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
 ByteAddressBuffer MeshletIndices : register(t1, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
 StructuredBuffer<Meshlet> Meshlets : register(t2, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
@@ -96,9 +103,9 @@ uint LoadMeshletIndex(uint indexOffset, uint indexNumber)
     return (packed >> shift) & 0xffffu;
 }
 
-VertexShaderOutput main(uint vertexId : SV_VertexID, uint instanceId : SV_InstanceID)
+VertexShaderOutput main(uint vertexId : SV_VertexID)
 {
-    const MeshletInstanceData instance = MeshletInstances[instanceId];
+    const MeshletInstanceData instance = MeshletInstances[g_MeshletDraw_InstanceIndex];
     const Meshlet meshlet = Meshlets[instance.MeshletIndex];
     const MeshletTransformData transform = MeshletTransforms[instance.TransformIndex];
     const uint localVertexIndex = LoadMeshletIndex(meshlet.IndexOffset, vertexId);

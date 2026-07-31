@@ -6,8 +6,9 @@
 void RaytracingDemo::OnImGui()
 {
     ImGui::SetNextWindowSize(ImVec2(520.0f, 680.0f), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowCollapsed(false, ImGuiCond_Always);
-    ImGui::Begin("Raytracing", nullptr, ImGuiWindowFlags_NoCollapse);
+//Modify Begin:2026-07-31 by BestHui
+    ImGui::Begin("Raytracing");
+//Modify End
     ImGui::Text("GBuffer Path Tracing");
     ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
     ImGui::Text("Resolution: %d x %d", m_Width, m_Height);
@@ -61,6 +62,16 @@ void RaytracingDemo::OnImGui()
         }
         ResetAccumulation();
     }
+//Modify Begin:2026-07-31 by BestHui
+    if (m_DebugMeshletClusters)
+    {
+        const char* debugTargetNames[] = { "GBuffer Albedo", "GBuffer Normal", "GBuffer Position", "Motion Vector" };
+        if (ImGui::Combo("Debug Target", &m_DebugTextureTarget, debugTargetNames, 4))
+        {
+            ResetAccumulation();
+        }
+    }
+//Modify End
 //Modify Begin:2026-07-31 by BestHui
     const char* meshletBackendNames[] = { "Task Shader", "Compute Indirect" };
     int selectedMeshletBackend = m_UseTaskShaderMeshlets ? 0 : 1;

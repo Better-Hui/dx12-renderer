@@ -32,6 +32,9 @@
 //Modify End
 
 class CommandContext;
+//Modify Begin:2026-07-31 by BestHui
+class IndirectDrawCommandSignature;
+//Modify End
 
 class Shader
 {
@@ -40,6 +43,11 @@ public:
 	explicit Shader(
 		const ShaderBlob& vertexShaderPath,
 		const ShaderBlob& pixelShaderPath,
+		const std::function<void(RasterPipelineStateBuilder&)> buildPipelineState = [](RasterPipelineStateBuilder&) {});
+	explicit Shader(
+		const ShaderBlob& vertexShaderPath,
+		const ShaderBlob& pixelShaderPath,
+		PipelineLayoutReflectionOptions layoutOptions,
 		const std::function<void(RasterPipelineStateBuilder&)> buildPipelineState = [](RasterPipelineStateBuilder&) {});
 //Modify End
 
@@ -76,6 +84,11 @@ public:
 //Modify Begin:2026-07-28 by BestHui
 	const PipelineDescriptorSet& GetDescriptorSet() const { return *m_DescriptorSet; }
 //Modify End
+//Modify Begin:2026-07-31 by BestHui
+	std::unique_ptr<IndirectDrawCommandSignature> CreateIndirectDrawCommandSignature(
+		const std::string& rootConstantBufferName,
+		UINT byteStride) const;
+//Modify End
 
 private:
 //Modify Begin:2026-07-29 by BestHui
@@ -106,6 +119,9 @@ private:
 //Modify Begin:2026-07-27 by BestHui
 	PipelineDescriptorPool m_DescriptorPool;
 //Modify End
+//Modify End
+//Modify Begin:2026-07-31 by BestHui
+	PipelineLayoutReflectionOptions m_PipelineLayoutOptions;
 //Modify End
 
 	RasterPipelineStateBuilder m_PipelineStateBuilder;

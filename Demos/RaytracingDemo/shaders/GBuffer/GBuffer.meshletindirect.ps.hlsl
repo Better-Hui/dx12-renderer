@@ -14,7 +14,6 @@ struct PixelShaderInput
     nointerpolation uint MeshletDebugId : TEXCOORD3;
     nointerpolation uint MaterialIndex : TEXCOORD4;
     nointerpolation uint DebugMeshletClusters : TEXCOORD5;
-    bool IsFrontFace : SV_IsFrontFace;
 };
 
 struct PixelShaderOutput
@@ -27,28 +26,9 @@ struct PixelShaderOutput
     float2 MotionVector : SV_TARGET5;
 };
 
-struct MeshletMaterialData
-{
-    float4 Diffuse;
-    float4 Specular;
-    float4 TilingOffset;
-    uint DiffuseTextureIndex;
-    uint NormalTextureIndex;
-    uint MetallicTextureIndex;
-    uint RoughnessTextureIndex;
-    uint AmbientOcclusionTextureIndex;
-    uint HasDiffuseMap;
-    uint HasNormalMap;
-    uint HasMetallicMap;
-    uint HasRoughnessMap;
-    uint HasAmbientOcclusionMap;
-    float Metallic;
-    float Roughness;
-    uint Padding0;
-    uint Padding1;
-};
-
-StructuredBuffer<MeshletMaterialData> MeshletMaterials : register(t5, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
+//Modify Begin:2026-07-31 by BestHui
+StructuredBuffer<MaterialData> MeshletMaterials : register(t5, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
+//Modify End
 
 float3 EncodeNormal(float3 normal)
 {
@@ -75,7 +55,7 @@ float3 HashClusterColor(uint id)
     return lerp(color, float3(1.0f, 1.0f, 1.0f), 0.15f);
 }
 
-float3 ApplyNormalMap(MeshletMaterialData material, float3 normalWs, float3 tangentWs, float3 bitangentWs, float2 uv)
+float3 ApplyNormalMap(MaterialData material, float3 normalWs, float3 tangentWs, float3 bitangentWs, float2 uv)
 {
     const float3 tangent = normalize(tangentWs);
     const float3 bitangent = normalize(bitangentWs);
@@ -87,17 +67,17 @@ float3 ApplyNormalMap(MeshletMaterialData material, float3 normalWs, float3 tang
 
 PixelShaderOutput main(PixelShaderInput IN)
 {
-    const MeshletMaterialData material = MeshletMaterials[IN.MaterialIndex];
+    const MaterialData material = MeshletMaterials[IN.MaterialIndex];
     const float2 uv = IN.Uv * material.TilingOffset.xy + material.TilingOffset.zw;
     const float3 sampledDiffuse = material.HasDiffuseMap != 0u ? SampleBindlessTexture2D(material.DiffuseTextureIndex, g_Common_LinearWrapSampler, uv).rgb : 1.0f;
     const float3 baseColor = material.Diffuse.rgb * sampledDiffuse;
     const float3 outputBaseColor = IN.DebugMeshletClusters != 0u ? HashClusterColor(IN.MeshletDebugId) : baseColor;
 
     float3 normalWs = normalize(IN.NormalWs);
-    if (!IN.IsFrontFace)
-    {
-        normalWs = -normalWs;
-    }
+//Modify Begin:2026-07-31 by BestHui
+    // Meshlet GBuffer keeps authored vertex normals as shading normals. Front-face based flipping
+    // can invert generated meshlet topology and break shadow-ray offsets on closed meshes.
+//Modify End
     if (material.HasNormalMap != 0u)
     {
         normalWs = ApplyNormalMap(material, normalWs, IN.TangentWs, IN.BitangentWs, uv);

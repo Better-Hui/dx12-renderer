@@ -46,6 +46,9 @@ namespace RaytracingDemoRenderGraph
             { ResourceIds::RayTracingFinishedToken },
             { ResourceIds::DenoiseFinishedToken },
             { ResourceIds::CudaBloomFinishedToken },
+//Modify Begin:2026-07-31 by BestHui
+            { ResourceIds::DebugOutputFinishedToken },
+//Modify End
         };
     }
 

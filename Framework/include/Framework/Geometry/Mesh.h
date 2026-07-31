@@ -171,6 +171,11 @@ public:
 
     static std::shared_ptr<Mesh> CreateBlitTriangle(CommandList& commandList);
 
+//Modify Begin:2026-07-31 by BestHui
+    static MeshPrototype CreateCubePrototype(float size = 1, bool rhCoords = false);
+    static MeshPrototype CreatePlanePrototype(float width = 1, float height = 1, bool rhCoords = false);
+//Modify End
+
     static std::shared_ptr<Mesh> CreateMesh(CommandList& commandList, VertexCollectionType& vertices,
         IndexCollectionType& indices, bool rhCoords = false,
         bool generateTangents = false);
@@ -185,9 +190,6 @@ public:
 
     const Armature& GetArmature() const;
     Armature& GetArmature();
-
-    uint32_t m_MeshletsOffset = 0;
-    uint32_t m_MeshletsCount = 0;
 
 private:
     void Initialize(CommandList& commandList, VertexCollectionType& vertices, IndexCollectionType& indices,

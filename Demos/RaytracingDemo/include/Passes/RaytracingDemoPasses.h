@@ -24,6 +24,12 @@ namespace RaytracingDemoPasses
         static std::unique_ptr<RenderGraph::RenderPass> CreateDirectLightingPass(RaytracingDemo& demo);
         static std::unique_ptr<RenderGraph::RenderPass> CreateIndirectLightingPass(RaytracingDemo& demo);
         static std::unique_ptr<RenderGraph::RenderPass> CreateLightingCompositePass(RaytracingDemo& demo);
+//Modify Begin:2026-07-31 by BestHui
+        static std::unique_ptr<RenderGraph::RenderPass> CreateDebugTexturePass(
+            RaytracingDemo& demo,
+            RenderGraph::ResourceId debugTarget,
+            RenderGraph::ResourceId debugTargetReadyToken);
+//Modify End
         static std::unique_ptr<RenderGraph::RenderPass> CreateDenoisePass(RaytracingDemo& demo);
         static std::unique_ptr<RenderGraph::RenderPass> CreateCudaBloomPass(RaytracingDemo& demo, RenderGraph::ResourceId sceneReadyToken);
     };

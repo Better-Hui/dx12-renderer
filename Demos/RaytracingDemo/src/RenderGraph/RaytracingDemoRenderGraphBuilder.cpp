@@ -17,7 +17,33 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateLightingCompositePass(demo));
 //Modify Begin:2026-07-28 by BestHui
     RenderGraph::ResourceId sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::RayTracingFinishedToken;
-    if (demo.IsDenoiserEnabled())
+//Modify Begin:2026-07-31 by BestHui
+    if (demo.m_UseMeshletGBuffer && demo.m_DebugMeshletClusters)
+    {
+        RenderGraph::ResourceId debugTarget = RaytracingDemoRenderGraph::ResourceIds::GBufferAlbedoOcclusion;
+        switch (demo.m_DebugTextureTarget)
+        {
+        case 1:
+            debugTarget = RaytracingDemoRenderGraph::ResourceIds::GBufferNormal;
+            break;
+        case 2:
+            debugTarget = RaytracingDemoRenderGraph::ResourceIds::GBufferPosition;
+            break;
+        case 3:
+            debugTarget = RaytracingDemoRenderGraph::ResourceIds::MotionVector;
+            break;
+        default:
+            debugTarget = RaytracingDemoRenderGraph::ResourceIds::GBufferAlbedoOcclusion;
+            break;
+        }
+        renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDebugTexturePass(
+            demo,
+            debugTarget,
+            sceneReadyToken));
+        sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::DebugOutputFinishedToken;
+    }
+    else if (demo.IsDenoiserEnabled())
+//Modify End
     {
         renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDenoisePass(demo));
         sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::DenoiseFinishedToken;

@@ -72,6 +72,20 @@ namespace
         return DescriptorLayout::NormalizeDescriptorCount(reflectedCount, options.MaxDescriptorCount);
     }
 
+//Modify Begin:2026-07-31 by BestHui
+    bool IsRootConstantBufferName(const PipelineLayoutReflectionOptions& options, const std::string& name)
+    {
+        const std::string baseName = DescriptorLayout::GetBaseResourceName(name);
+        return std::any_of(
+            options.RootConstantBufferNames.begin(),
+            options.RootConstantBufferNames.end(),
+            [&name, &baseName](const std::string& rootConstantName)
+            {
+                return rootConstantName == name || rootConstantName == baseName;
+            });
+    }
+//Modify End
+
     bool IsAccelerationStructureSrv(
         const ShaderUtils::ShaderResourceViewMetadata& srv,
         const PipelineLayoutReflectionOptions& options)
@@ -128,9 +142,15 @@ namespace
     {
         desc.DescriptorRanges.clear();
         //Modify Begin:2026-07-27 by BestHui
+        //Modify Begin:2026-07-31 by BestHui
+        UINT rootParameterIndex = 0;
+        for (PipelineRootConstantDesc& rootConstant : desc.RootConstants)
+        {
+            rootConstant.RootParameterIndex = rootParameterIndex++;
+        }
         for (PipelineRootDescriptorDesc& rootDescriptor : desc.RootDescriptors)
         {
-            rootDescriptor.RootParameterIndex = static_cast<UINT>(desc.DescriptorRanges.size());
+            rootDescriptor.RootParameterIndex = rootParameterIndex++;
             desc.DescriptorRanges.push_back(MakeRangeFromRootDescriptor(rootDescriptor));
         }
         //Modify End
@@ -139,10 +159,11 @@ namespace
             for (PipelineDescriptorRangeDesc& range : setDesc.Ranges)
             {
                 range.RegisterSpace = setDesc.RegisterSpace;
-                range.RootParameterIndex = static_cast<UINT>(desc.DescriptorRanges.size());
+                range.RootParameterIndex = rootParameterIndex++;
                 desc.DescriptorRanges.push_back(range);
             }
         }
+        //Modify End
     }
 
     //Modify Begin:2026-07-27 by BestHui
@@ -304,10 +325,37 @@ PipelineLayoutDesc PipelineLayout::CreateDescFromReflection(
         rootDescriptor.ShaderStages = options.ShaderStages;
         desc.RootDescriptors.push_back(std::move(rootDescriptor));
     };
+
+    const auto appendRootConstant = [&desc, &options](
+        std::string name,
+        const UINT shaderRegister,
+        const UINT registerSpace,
+        const UINT sizeInBytes)
+    {
+        PipelineRootConstantDesc rootConstant;
+        rootConstant.Name = std::move(name);
+        rootConstant.ShaderRegister = shaderRegister;
+        rootConstant.RegisterSpace = registerSpace;
+        rootConstant.SizeInBytes = sizeInBytes;
+        rootConstant.RootParameterIndex = static_cast<UINT>(desc.RootConstants.size());
+        rootConstant.ShaderStages = options.ShaderStages;
+        desc.RootConstants.push_back(std::move(rootConstant));
+    };
     //Modify End
 
     for (const auto& cbuffer : reflection.m_ConstantBuffers)
     {
+//Modify Begin:2026-07-31 by BestHui
+        if (IsRootConstantBufferName(options, cbuffer.Name))
+        {
+            appendRootConstant(
+                cbuffer.Name,
+                cbuffer.RegisterIndex,
+                cbuffer.Space,
+                cbuffer.Size);
+            continue;
+        }
+//Modify End
         appendRootDescriptor(
             cbuffer.Name,
             DescriptorBindingKind::ConstantBuffer,
@@ -546,6 +594,22 @@ bool PipelineLayout::HasBinding(const std::string& name, const DescriptorBinding
 {
     return FindRange(name, expectedKind) != nullptr;
 }
+
+//Modify Begin:2026-07-31 by BestHui
+const PipelineRootConstantDesc* PipelineLayout::FindRootConstant(const std::string& name) const
+{
+    const std::string baseName = DescriptorLayout::GetBaseResourceName(name);
+    const auto findResult = std::find_if(
+        m_Desc.RootConstants.begin(),
+        m_Desc.RootConstants.end(),
+        [&name, &baseName](const PipelineRootConstantDesc& rootConstant)
+        {
+            return rootConstant.Name == name || DescriptorLayout::GetBaseResourceName(rootConstant.Name) == baseName;
+        });
+
+    return findResult != m_Desc.RootConstants.end() ? &*findResult : nullptr;
+}
+//Modify End
 
 const DescriptorBindingInfo& PipelineLayout::GetBinding(
     const std::string& name,
