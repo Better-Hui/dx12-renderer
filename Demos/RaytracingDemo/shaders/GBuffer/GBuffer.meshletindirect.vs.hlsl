@@ -1,55 +1,6 @@
 //Modify Begin:2026-07-30 by BestHui
 #include <ShaderLibrary/Common/RootSignature.hlsli>
-
-struct VertexAttributes
-{
-    float4 Position;
-    float4 Normal;
-    float4 Uv;
-    float4 Tangent;
-    float4 Bitangent;
-};
-
-struct MeshletBounds
-{
-    float3 Center;
-    float Radius;
-    float3 ConeApex;
-    float ConeCutoff;
-    float3 ConeAxis;
-    float Padding0;
-    float3 AabbCenter;
-    float Padding1;
-    float3 AabbHalfSize;
-    float Padding2;
-};
-
-struct Meshlet
-{
-    MeshletBounds Bounds;
-    uint VertexOffset;
-    uint VertexCount;
-    uint IndexOffset;
-    uint IndexCount;
-    uint TransformIndex;
-    uint MaterialIndex;
-    uint VertexBufferIndex;
-    uint IndexBufferIndex;
-};
-
-struct MeshletTransformData
-{
-    matrix Model;
-    matrix InverseTransposeModel;
-};
-
-struct MeshletInstanceData
-{
-    uint MeshletIndex;
-    uint TransformIndex;
-    uint MaterialIndex;
-    uint Padding0;
-};
+#include <Meshlet/MeshletCommon.hlsli>
 
 struct VertexShaderOutput
 {
@@ -88,28 +39,19 @@ cbuffer MeshletDrawCBuffer : register(b4, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE)
     uint2 g_MeshletDraw_Padding0;
 };
 
-StructuredBuffer<VertexAttributes> MeshletVertices : register(t0, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
+StructuredBuffer<MeshletVertexAttributes> MeshletVertices : register(t0, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
 ByteAddressBuffer MeshletIndices : register(t1, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
 StructuredBuffer<Meshlet> Meshlets : register(t2, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
 StructuredBuffer<MeshletTransformData> MeshletTransforms : register(t3, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
 StructuredBuffer<MeshletInstanceData> MeshletInstances : register(t4, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
-
-uint LoadMeshletIndex(uint indexOffset, uint indexNumber)
-{
-    const uint byteOffset = (indexOffset + indexNumber) * 2;
-    const uint alignedByteOffset = byteOffset & ~3u;
-    const uint packed = MeshletIndices.Load(alignedByteOffset);
-    const uint shift = (byteOffset & 2u) * 8u;
-    return (packed >> shift) & 0xffffu;
-}
 
 VertexShaderOutput main(uint vertexId : SV_VertexID)
 {
     const MeshletInstanceData instance = MeshletInstances[g_MeshletDraw_InstanceIndex];
     const Meshlet meshlet = Meshlets[instance.MeshletIndex];
     const MeshletTransformData transform = MeshletTransforms[instance.TransformIndex];
-    const uint localVertexIndex = LoadMeshletIndex(meshlet.IndexOffset, vertexId);
-    const VertexAttributes input = MeshletVertices[meshlet.VertexOffset + localVertexIndex];
+    const uint localVertexIndex = MeshletLoadIndex(MeshletIndices, meshlet.IndexOffset, vertexId);
+    const MeshletVertexAttributes input = MeshletVertices[meshlet.VertexOffset + localVertexIndex];
 
     VertexShaderOutput output;
     const float4 positionWs = mul(transform.Model, float4(input.Position.xyz, 1.0f));

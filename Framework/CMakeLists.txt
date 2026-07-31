@@ -32,6 +32,9 @@ set(SHADER_FILES_COMPUTE
 # Modify Begin:2026-07-27 by BestHui
 set(SHADERS_HEADER_FILES
         "shaders/SVGF/SVGFCommon.hlsli"
+# Modify Begin:2026-07-31 by BestHui
+        "shaders/Meshlet/MeshletCommon.hlsli"
+# Modify End
         )
 # Modify End
 
@@ -42,6 +45,7 @@ include(${CMAKE_SOURCE_DIR}/CMakeIncludes/ProjectBase.cmake)
 # Modify Begin:2026-07-30 by BestHui
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/include/Framework" PREFIX "include" FILES ${HEADER_FILES})
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "src" FILES ${SOURCE_FILES})
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/shaders" PREFIX "shaders" FILES ${SHADERS_HEADER_FILES})
 # Modify End
 
 # Add source to this project's executable.
