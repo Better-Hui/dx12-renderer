@@ -238,6 +238,9 @@ private:
     std::shared_ptr<ComputeShader> m_MeshletCullShader;
     std::unique_ptr<IndirectDrawCommandSignature> m_MeshletDrawCommandSignature;
     std::shared_ptr<MeshShader> m_GBufferMeshShader;
+//Modify Begin:2026-07-31 by BestHui
+    std::shared_ptr<MeshShader> m_GBufferTaskMeshShader;
+//Modify End
 //Modify End
 //Modify Begin:2026-07-28 by BestHui
     std::shared_ptr<Shader> m_DisplayCompositeShader;
@@ -259,6 +262,9 @@ private:
 //Modify Begin:2026-07-30 by BestHui
     bool m_UseMeshletGBuffer = false;
     bool m_DebugMeshletClusters = false;
+//Modify Begin:2026-07-31 by BestHui
+    bool m_UseTaskShaderMeshlets = true;
+//Modify End
 //Modify End
 //Modify Begin:2026-07-29 by BestHui
     bool m_SkyboxEnabled = false;

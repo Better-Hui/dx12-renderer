@@ -36,17 +36,17 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateSk
 //Modify Begin:2026-07-28 by BestHui
             ComputeShader& skyboxShader = *demo.m_SkyboxComputeShader;
             const RaytracingDemo::CameraConstants camera = RaytracingDemoPassAccess::BuildPassCameraConstants(demo, context);
+            CommandContext commandContext(cmd);
 
-            cmd.SetConstantBuffer(skyboxShader, "CameraConstants", camera);
-            cmd.SetTexture(skyboxShader, "DepthTexture", ShaderResourceView::DepthAsFloat(context.m_ResourcePool->GetTexture(DemoResourceIds::DepthBuffer)));
+            commandContext.SetConstantBuffer(skyboxShader, "CameraConstants", sizeof(camera), &camera);
+            commandContext.SetTexture(skyboxShader, "DepthTexture", ShaderResourceView::DepthAsFloat(context.m_ResourcePool->GetTexture(DemoResourceIds::DepthBuffer)));
 //Modify Begin:2026-07-30 by BestHui
             if (skyboxShader.HasShaderResourceView("SkyboxTexture"))
             {
-                cmd.SetTexture(skyboxShader, "SkyboxTexture", ShaderResourceView::TextureCube(demo.m_SkyboxTexture));
+                commandContext.SetTexture(skyboxShader, "SkyboxTexture", ShaderResourceView::TextureCube(demo.m_SkyboxTexture));
             }
 //Modify End
-            cmd.SetUnorderedAccessView(skyboxShader, "SceneColor", UnorderedAccessView(context.m_ResourcePool->GetTexture(DemoResourceIds::SceneColor)));
-            CommandContext commandContext(cmd);
+            commandContext.SetUnorderedAccessView(skyboxShader, "SceneColor", UnorderedAccessView(context.m_ResourcePool->GetTexture(DemoResourceIds::SceneColor)));
             commandContext.BindPipeline(skyboxShader);
             commandContext.BindDescriptorSet(skyboxShader.GetDescriptorSet());
             commandContext.Dispatch(Math::DivideByMultiple(camera.Width, 8u), Math::DivideByMultiple(camera.Height, 8u), 1u);

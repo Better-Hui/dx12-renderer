@@ -443,7 +443,9 @@ UINT PipelineDescriptorSet::SetStructuredBuffer(std::string_view name, const Str
     PipelineShaderResourceBinding resourceBinding = {};
     resourceBinding.Resource = &buffer;
     resourceBinding.ResourceIdentity = buffer.GetD3D12Resource().Get();
-    resourceBinding.StateAfter = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+//Modify Begin:2026-07-31 by BestHui
+    resourceBinding.StateAfter = D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE;
+//Modify End
     const bool descriptorChanged =
         boundResource.ShaderResources.empty() ||
         !boundResource.ShaderResources[0].has_value() ||

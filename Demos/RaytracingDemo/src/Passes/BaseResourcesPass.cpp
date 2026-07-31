@@ -82,20 +82,47 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
                 cullConstants.InstanceCount = meshletInstanceCount;
                 cullConstants.DebugDisableCulling = demo.m_DebugMeshletClusters ? 1u : 0u;
 
+//Modify Begin:2026-07-31 by BestHui
+                if (demo.m_UseTaskShaderMeshlets && demo.m_GBufferTaskMeshShader != nullptr)
+                {
+                    constexpr uint32_t MeshletTaskGroupSize = 32;
+                    MeshShader& taskMeshShader = *demo.m_GBufferTaskMeshShader;
+                    commandContext.BindPipeline(taskMeshShader);
+                    if (taskMeshShader.GetDescriptorSet().HasBinding("BindlessTextures", DescriptorBindingKind::ShaderResourceView))
+                    {
+                        commandContext.SetShaderResourceViews(taskMeshShader, "BindlessTextures", sceneTextures);
+                    }
+                    commandContext.SetStructuredBuffer(taskMeshShader, "MeshletVertices", demo.m_SceneResources.GetMeshletVertexBuffer());
+                    commandContext.SetShaderResource(taskMeshShader, "MeshletIndices", demo.m_SceneResources.GetMeshletIndexBuffer());
+                    commandContext.SetStructuredBuffer(taskMeshShader, "Meshlets", demo.m_SceneResources.GetMeshletBuffer());
+                    commandContext.SetStructuredBuffer(taskMeshShader, "MeshletTransforms", demo.m_SceneResources.GetMeshletTransformBuffer());
+                    commandContext.SetStructuredBuffer(taskMeshShader, "MeshletInstances", demo.m_SceneResources.GetMeshletInstanceBuffer());
+                    commandContext.SetStructuredBuffer(taskMeshShader, "MeshletMaterials", demo.m_SceneResources.GetMaterialBuffer());
+                    commandContext.SetConstantBuffer(taskMeshShader, "MeshletCullCBuffer", sizeof(cullConstants), &cullConstants);
+                    const RaytracingDemo::PipelineConstants pipelineConstants = demo.BuildPipelineConstants();
+                    commandContext.SetConstantBuffer(taskMeshShader, "PipelineCBuffer", sizeof(pipelineConstants), &pipelineConstants);
+                    commandContext.BindDescriptorSet(taskMeshShader.GetDescriptorSet());
+                    commandContext.DispatchMesh((meshletInstanceCount + MeshletTaskGroupSize - 1u) / MeshletTaskGroupSize, 1, 1);
+                    return;
+                }
+//Modify End
+
                 ComputeShader& cullShader = *demo.m_MeshletCullShader;
                 commandContext.BindPipeline(cullShader);
-                cullShader.SetStructuredBuffer(cmd, "Meshlets", demo.m_SceneResources.GetMeshletBuffer());
-                cullShader.SetStructuredBuffer(cmd, "MeshletInstances", demo.m_SceneResources.GetMeshletInstanceBuffer());
-                cullShader.SetStructuredBuffer(cmd, "MeshletTransforms", demo.m_SceneResources.GetMeshletTransformBuffer());
-                cullShader.SetUnorderedAccessView(
-                    cmd,
+//Modify Begin:2026-07-31 by BestHui
+                commandContext.SetStructuredBuffer(cullShader, "Meshlets", demo.m_SceneResources.GetMeshletBuffer());
+                commandContext.SetStructuredBuffer(cullShader, "MeshletInstances", demo.m_SceneResources.GetMeshletInstanceBuffer());
+                commandContext.SetStructuredBuffer(cullShader, "MeshletTransforms", demo.m_SceneResources.GetMeshletTransformBuffer());
+                commandContext.SetUnorderedAccessView(
+                    cullShader,
                     "MeshletIndirectCommands",
                     UnorderedAccessView(demo.m_SceneResources.GetMeshletIndirectCommandBuffer()));
-                cullShader.SetUnorderedAccessView(
-                    cmd,
+                commandContext.SetUnorderedAccessView(
+                    cullShader,
                     "MeshletIndirectCount",
                     UnorderedAccessView(demo.m_SceneResources.GetMeshletIndirectCommandBuffer().GetCounterBuffer()));
-                cmd.SetConstantBuffer(demo.m_MeshletCullShader, "MeshletCullCBuffer", cullConstants);
+                commandContext.SetConstantBuffer(cullShader, "MeshletCullCBuffer", sizeof(cullConstants), &cullConstants);
+//Modify End
                 commandContext.BindDescriptorSet(cullShader.GetDescriptorSet());
                 commandContext.Dispatch((meshletInstanceCount + MeshletCullThreadCount - 1u) / MeshletCullThreadCount, 1, 1);
                 commandContext.InsertDescriptorSetOutputBarriers(cullShader.GetDescriptorSet());
@@ -104,14 +131,18 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
                 commandContext.BindPipeline(indirectShader);
                 if (indirectShader.HasShaderResourceView("BindlessTextures"))
                 {
-                    indirectShader.SetShaderResourceViews(cmd, "BindlessTextures", sceneTextures);
+//Modify Begin:2026-07-31 by BestHui
+                    commandContext.SetShaderResourceViews(indirectShader, "BindlessTextures", sceneTextures);
+//Modify End
                 }
-                indirectShader.SetStructuredBuffer(cmd, "MeshletVertices", demo.m_SceneResources.GetMeshletVertexBuffer());
-                indirectShader.SetShaderResource(cmd, "MeshletIndices", demo.m_SceneResources.GetMeshletIndexBuffer());
-                indirectShader.SetStructuredBuffer(cmd, "Meshlets", demo.m_SceneResources.GetMeshletBuffer());
-                indirectShader.SetStructuredBuffer(cmd, "MeshletTransforms", demo.m_SceneResources.GetMeshletTransformBuffer());
-                indirectShader.SetStructuredBuffer(cmd, "MeshletInstances", demo.m_SceneResources.GetMeshletInstanceBuffer());
-                indirectShader.SetStructuredBuffer(cmd, "MeshletMaterials", demo.m_SceneResources.GetMaterialBuffer());
+//Modify Begin:2026-07-31 by BestHui
+                commandContext.SetStructuredBuffer(indirectShader, "MeshletVertices", demo.m_SceneResources.GetMeshletVertexBuffer());
+                commandContext.SetShaderResource(indirectShader, "MeshletIndices", demo.m_SceneResources.GetMeshletIndexBuffer());
+                commandContext.SetStructuredBuffer(indirectShader, "Meshlets", demo.m_SceneResources.GetMeshletBuffer());
+                commandContext.SetStructuredBuffer(indirectShader, "MeshletTransforms", demo.m_SceneResources.GetMeshletTransformBuffer());
+                commandContext.SetStructuredBuffer(indirectShader, "MeshletInstances", demo.m_SceneResources.GetMeshletInstanceBuffer());
+                commandContext.SetStructuredBuffer(indirectShader, "MeshletMaterials", demo.m_SceneResources.GetMaterialBuffer());
+//Modify End
                 cmd.SetConstantBuffer(demo.m_GBufferMeshletIndirectShader, "PipelineCBuffer", demo.BuildPipelineConstants());
                 commandContext.BindDescriptorSet(indirectShader.GetDescriptorSet());
                 cmd.SetPrimitiveTopology(Mesh::PRIMITIVE_TOPOLOGY);
@@ -129,7 +160,9 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
 //Modify Begin:2026-07-30 by BestHui
             if (demo.m_GBufferShader->HasShaderResourceView("BindlessTextures"))
             {
-                demo.m_GBufferShader->SetShaderResourceViews(cmd, "BindlessTextures", sceneTextures);
+//Modify Begin:2026-07-31 by BestHui
+                commandContext.SetShaderResourceViews(*demo.m_GBufferShader, "BindlessTextures", sceneTextures);
+//Modify End
             }
 //Modify End
             cmd.SetConstantBuffer(demo.m_GBufferShader, "GBufferDebugCBuffer", debugConstants);

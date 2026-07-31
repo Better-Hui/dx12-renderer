@@ -4,6 +4,7 @@
 #include <DX12Library/CommandList.h>
 #include <DX12Library/Helpers.h>
 
+#include <Framework/Rendering/Pipeline/CommandContext.h>
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
 #include <Framework/Rendering/RayTracing/RayTracingShader.h>
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
@@ -595,21 +596,21 @@ bool SceneLightManager::DrawImGui()
     return changed;
 }
 
-void SceneLightManager::BindComputeResources(CommandList& commandList, ComputeShader& shader)
+void SceneLightManager::BindComputeResources(CommandContext& commandContext, ComputeShader& shader)
 {
     if (shader.HasShaderResourceView("DirectionalLights"))
     {
-        shader.SetShaderResourceView(commandList, "DirectionalLights", 0u, m_DirectionalLightBuffer);
+        commandContext.SetShaderResource(shader, "DirectionalLights", 0u, m_DirectionalLightBuffer);
     }
 
     if (shader.HasShaderResourceView("PointLights"))
     {
-        shader.SetShaderResourceView(commandList, "PointLights", 0u, m_PointLightBuffer);
+        commandContext.SetShaderResource(shader, "PointLights", 0u, m_PointLightBuffer);
     }
 
     if (shader.HasShaderResourceView("AreaLights"))
     {
-        shader.SetShaderResourceView(commandList, "AreaLights", 0u, m_AreaLightBuffer);
+        commandContext.SetShaderResource(shader, "AreaLights", 0u, m_AreaLightBuffer);
     }
 }
 

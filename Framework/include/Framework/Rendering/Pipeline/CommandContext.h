@@ -10,7 +10,10 @@
 //Modify End
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <span>
 #include <string_view>
 
 class CommandList;
@@ -26,11 +29,14 @@ class PipelineDescriptorPool;
 class PipelineDescriptorSet;
 class PipelineLayout;
 class RayTracingBindingSet;
+class RayTracingAccelerationStructure;
 class RayTracingShader;
 class Resource;
 class RootSignature;
 class Shader;
+struct ShaderResourceView;
 class StructuredBuffer;
+struct UnorderedAccessView;
 
 enum class PipelineBindPoint
 {
@@ -79,6 +85,37 @@ public:
 //Modify End
     void BindDescriptorSet(const PipelineDescriptorSetBindDesc& descriptorSetDesc) const;
     void BindDescriptorSet(const PipelineDescriptorSet& descriptorSet) const;
+//Modify End
+//Modify Begin:2026-07-31 by BestHui
+    void SetConstantBuffer(Shader& shader, std::string_view name, size_t size, const void* data) const;
+    void SetShaderResourceView(Shader& shader, std::string_view name, const ShaderResourceView& shaderResourceView) const;
+    void SetShaderResourceView(Shader& shader, std::string_view name, uint32_t arrayIndex, const ShaderResourceView& shaderResourceView) const;
+    void SetShaderResourceViews(Shader& shader, std::string_view name, std::span<const ShaderResourceView> shaderResourceViews) const;
+    void SetShaderResource(Shader& shader, std::string_view name, const Resource& resource, D3D12_RESOURCE_STATES stateAfter = D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE) const;
+    void SetStructuredBuffer(Shader& shader, std::string_view name, const StructuredBuffer& buffer) const;
+    void SetTexture(Shader& shader, std::string_view name, const ShaderResourceView& shaderResourceView) const;
+    void SetTexture(Shader& shader, std::string_view name, const std::shared_ptr<Resource>& texture) const;
+
+    void SetConstantBuffer(MeshShader& shader, std::string_view name, size_t size, const void* data) const;
+    void SetShaderResourceView(MeshShader& shader, std::string_view name, const ShaderResourceView& shaderResourceView) const;
+    void SetShaderResourceView(MeshShader& shader, std::string_view name, uint32_t arrayIndex, const ShaderResourceView& shaderResourceView) const;
+    void SetShaderResourceViews(MeshShader& shader, std::string_view name, std::span<const ShaderResourceView> shaderResourceViews) const;
+    void SetShaderResource(MeshShader& shader, std::string_view name, const Resource& resource, D3D12_RESOURCE_STATES stateAfter = D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE) const;
+    void SetStructuredBuffer(MeshShader& shader, std::string_view name, const StructuredBuffer& buffer) const;
+    void SetTexture(MeshShader& shader, std::string_view name, const ShaderResourceView& shaderResourceView) const;
+    void SetTexture(MeshShader& shader, std::string_view name, const std::shared_ptr<Resource>& texture) const;
+
+    void SetStructuredBuffer(const ComputeShader& shader, std::string_view name, const StructuredBuffer& buffer) const;
+    void SetConstantBuffer(const ComputeShader& shader, std::string_view name, size_t size, const void* data) const;
+    void SetShaderResourceView(const ComputeShader& shader, std::string_view name, const ShaderResourceView& shaderResourceView) const;
+    void SetShaderResourceView(const ComputeShader& shader, std::string_view name, uint32_t arrayIndex, const ShaderResourceView& shaderResourceView) const;
+    void SetShaderResource(const ComputeShader& shader, std::string_view name, uint32_t arrayIndex, const Resource& resource, D3D12_RESOURCE_STATES stateAfter = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE) const;
+    void SetShaderResourceViews(const ComputeShader& shader, std::string_view name, std::span<const ShaderResourceView> shaderResourceViews) const;
+    void SetTexture(const ComputeShader& shader, std::string_view name, const ShaderResourceView& shaderResourceView) const;
+    void SetTexture(const ComputeShader& shader, std::string_view name, const std::shared_ptr<Resource>& texture) const;
+    void SetUnorderedAccessView(const ComputeShader& shader, std::string_view name, const UnorderedAccessView& unorderedAccessView) const;
+    void SetAccelerationStructure(const ComputeShader& shader, const RayTracingAccelerationStructure& accelerationStructure) const;
+    void SetAccelerationStructure(const ComputeShader& shader, std::string_view name, const RayTracingAccelerationStructure& accelerationStructure) const;
 //Modify End
 //Modify Begin:2026-07-27 by BestHui
     void InsertDescriptorSetOutputBarriers(const PipelineDescriptorSet& descriptorSet) const;

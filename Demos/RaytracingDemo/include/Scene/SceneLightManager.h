@@ -16,6 +16,7 @@
 #include <vector>
 
 class CommandList;
+class CommandContext;
 class ComputeShader;
 class RayTracingBindingSet;
 
@@ -32,7 +33,7 @@ public:
 //Modify End
     void UpdateDynamicLights(float timeSeconds);
     bool DrawImGui();
-    void BindComputeResources(CommandList& commandList, ComputeShader& shader);
+    void BindComputeResources(CommandContext& commandContext, ComputeShader& shader);
     void BindRayTracingResources(RayTracingBindingSet& bindingSet);
 
     void FillCameraConstants(

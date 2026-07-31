@@ -628,35 +628,47 @@ void RaytracingDemoSceneResources::AddStressTestSpheres(CommandList& commandList
         return;
     }
 
-    constexpr uint32_t Rows = 20;
-    constexpr uint32_t Columns = 20;
-    constexpr float Spacing = 0.42f;
-    constexpr float Radius = 0.15f;
+//Modify Begin:2026-07-31 by BestHui
+    constexpr uint32_t Rows = 32;
+    constexpr uint32_t Columns = 32;
+    constexpr uint32_t Copies = 12;
+    constexpr float Spacing = 0.32f;
+    constexpr float CopySpacing = 0.34f;
+    constexpr float Radius = 0.10f;
     constexpr float CenterX = 2.78f;
-    constexpr float CenterY = 6.15f;
+    constexpr float CenterY = 5.05f;
     constexpr float CenterZ = -2.80f;
+//Modify End
     const float startX = -static_cast<float>(Columns - 1) * Spacing * 0.5f;
     const float startZ = -static_cast<float>(Rows - 1) * Spacing * 0.5f;
 
-    for (uint32_t z = 0; z < Rows; ++z)
+//Modify Begin:2026-07-31 by BestHui
+    for (uint32_t copy = 0; copy < Copies; ++copy)
     {
-        for (uint32_t x = 0; x < Columns; ++x)
+        for (uint32_t z = 0; z < Rows; ++z)
         {
-            const float wave = std::sin(static_cast<float>(x) * 0.71f + static_cast<float>(z) * 0.37f);
-            const XMMATRIX worldMatrix =
-                XMMatrixScaling(Radius, Radius, Radius) *
-                XMMatrixTranslation(CenterX + startX + static_cast<float>(x) * Spacing, CenterY + wave * 0.10f, CenterZ + startZ + static_cast<float>(z) * Spacing);
+            for (uint32_t x = 0; x < Columns; ++x)
+            {
+                const float wave = std::sin(static_cast<float>(x) * 0.71f + static_cast<float>(z) * 0.37f + static_cast<float>(copy) * 0.23f);
+                const XMMATRIX worldMatrix =
+                    XMMatrixScaling(Radius, Radius, Radius) *
+                    XMMatrixTranslation(
+                        CenterX + startX + static_cast<float>(x) * Spacing,
+                        CenterY + static_cast<float>(copy) * CopySpacing + wave * 0.045f,
+                        CenterZ + startZ + static_cast<float>(z) * Spacing);
 
-            m_SceneObjects.push_back({ worldMatrix, sphereModel, sphereMaterial });
+                m_SceneObjects.push_back({ worldMatrix, sphereModel, sphereMaterial });
 
-            RaytracingDemoMeshletDraw draw;
-            draw.WorldMatrix = worldMatrix;
-            draw.MaterialIndex = sphereMaterial;
-            draw.MeshletOffset = meshletOffset;
-            draw.MeshletCount = meshletCount;
-            m_MeshletDraws.push_back(draw);
+                RaytracingDemoMeshletDraw draw;
+                draw.WorldMatrix = worldMatrix;
+                draw.MaterialIndex = sphereMaterial;
+                draw.MeshletOffset = meshletOffset;
+                draw.MeshletCount = meshletCount;
+                m_MeshletDraws.push_back(draw);
+            }
         }
     }
+//Modify End
 }
 
 void RaytracingDemoSceneResources::UploadMeshletBuffers(CommandList& commandList)

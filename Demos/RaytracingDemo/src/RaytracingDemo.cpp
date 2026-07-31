@@ -210,6 +210,17 @@ RaytracingDemo::RaytracingDemo(const std::wstring& name, const int width, const 
         }
     }
     std::free(meshletDebug);
+
+//Modify Begin:2026-07-31 by BestHui
+    char* meshletBackend = nullptr;
+    size_t meshletBackendLength = 0;
+    _dupenv_s(&meshletBackend, &meshletBackendLength, "RAYTRACING_DEMO_MESHLET_BACKEND");
+    if (meshletBackend != nullptr)
+    {
+        m_UseTaskShaderMeshlets = std::strcmp(meshletBackend, "indirect") != 0;
+    }
+    std::free(meshletBackend);
+//Modify End
 //Modify End
 
 }
@@ -334,6 +345,20 @@ bool RaytracingDemo::LoadContent()
         });
     });
 
+//Modify Begin:2026-07-31 by BestHui
+    withShaderCreateContext("GBufferTaskMeshShader", [&]()
+    {
+    m_GBufferTaskMeshShader = std::make_shared<MeshShader>(
+        ShaderBlob(L"GBuffer.task.as.cso"),
+        ShaderBlob(L"GBuffer.task.ms.cso"),
+        ShaderBlob(L"GBuffer.meshletindirect.ps.cso"),
+        [](RasterPipelineStateBuilder& builder)
+        {
+            builder.WithNoCull();
+        });
+    });
+//Modify End
+
     withShaderCreateContext("GBufferMeshletIndirect", [&]()
     {
     m_GBufferMeshletIndirectShader = std::make_shared<Shader>(
@@ -425,6 +450,9 @@ void RaytracingDemo::UnloadContent()
     m_DisplayCompositeShader.reset();
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-31 by BestHui
+    m_GBufferTaskMeshShader.reset();
+//Modify End
     m_GBufferMeshShader.reset();
     m_GBufferMeshletIndirectShader.reset();
     m_MeshletCullShader.reset();

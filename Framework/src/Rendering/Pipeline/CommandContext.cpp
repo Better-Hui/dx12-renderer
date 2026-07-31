@@ -22,6 +22,7 @@
 #include <Framework/Rendering/RayTracing/RayTracingPipelineStateBuilder.h>
 #include <Framework/Rendering/RayTracing/RayTracingShader.h>
 #include <Framework/Rendering/Pipeline/Shader.h>
+#include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <Framework/Rendering/Texture/UnorderedAccessView.h>
 
 #include <cstring>
@@ -312,6 +313,149 @@ void CommandContext::BindDescriptorSet(const PipelineDescriptorSet& descriptorSe
 {
     BindDescriptorSet(PipelineDescriptorSetBindDesc{ descriptorSet.GetSetIndex(), &descriptorSet });
 }
+
+//Modify Begin:2026-07-31 by BestHui
+void CommandContext::SetConstantBuffer(Shader& shader, const std::string_view name, const size_t size, const void* data) const
+{
+    shader.m_DescriptorSet->SetConstantBufferData(name, data, size);
+}
+
+void CommandContext::SetShaderResourceView(Shader& shader, const std::string_view name, const ShaderResourceView& shaderResourceView) const
+{
+    shader.m_DescriptorSet->SetShaderResourceView(name, 0u, shaderResourceView);
+}
+
+void CommandContext::SetShaderResourceView(Shader& shader, const std::string_view name, const uint32_t arrayIndex, const ShaderResourceView& shaderResourceView) const
+{
+    shader.m_DescriptorSet->SetShaderResourceView(name, arrayIndex, shaderResourceView);
+}
+
+void CommandContext::SetShaderResourceViews(Shader& shader, const std::string_view name, std::span<const ShaderResourceView> shaderResourceViews) const
+{
+    shader.m_DescriptorSet->SetShaderResourceViews(name, shaderResourceViews);
+}
+
+void CommandContext::SetShaderResource(Shader& shader, const std::string_view name, const Resource& resource, const D3D12_RESOURCE_STATES stateAfter) const
+{
+    shader.m_DescriptorSet->SetShaderResource(name, 0u, resource, stateAfter);
+}
+
+void CommandContext::SetStructuredBuffer(Shader& shader, const std::string_view name, const StructuredBuffer& buffer) const
+{
+    shader.m_DescriptorSet->SetStructuredBuffer(name, buffer);
+}
+
+void CommandContext::SetTexture(Shader& shader, const std::string_view name, const ShaderResourceView& shaderResourceView) const
+{
+    SetShaderResourceView(shader, name, shaderResourceView);
+}
+
+void CommandContext::SetTexture(Shader& shader, const std::string_view name, const std::shared_ptr<Resource>& texture) const
+{
+    SetTexture(shader, name, ShaderResourceView(texture));
+}
+
+void CommandContext::SetConstantBuffer(MeshShader& shader, const std::string_view name, const size_t size, const void* data) const
+{
+    shader.m_DescriptorSet->SetConstantBufferData(name, data, size);
+}
+
+void CommandContext::SetShaderResourceView(MeshShader& shader, const std::string_view name, const ShaderResourceView& shaderResourceView) const
+{
+    shader.m_DescriptorSet->SetShaderResourceView(name, 0u, shaderResourceView);
+}
+
+void CommandContext::SetShaderResourceView(MeshShader& shader, const std::string_view name, const uint32_t arrayIndex, const ShaderResourceView& shaderResourceView) const
+{
+    shader.m_DescriptorSet->SetShaderResourceView(name, arrayIndex, shaderResourceView);
+}
+
+void CommandContext::SetShaderResourceViews(MeshShader& shader, const std::string_view name, std::span<const ShaderResourceView> shaderResourceViews) const
+{
+    shader.m_DescriptorSet->SetShaderResourceViews(name, shaderResourceViews);
+}
+
+void CommandContext::SetShaderResource(MeshShader& shader, const std::string_view name, const Resource& resource, const D3D12_RESOURCE_STATES stateAfter) const
+{
+    shader.m_DescriptorSet->SetShaderResource(name, 0u, resource, stateAfter);
+}
+
+void CommandContext::SetStructuredBuffer(MeshShader& shader, const std::string_view name, const StructuredBuffer& buffer) const
+{
+    shader.m_DescriptorSet->SetStructuredBuffer(name, buffer);
+}
+
+void CommandContext::SetTexture(MeshShader& shader, const std::string_view name, const ShaderResourceView& shaderResourceView) const
+{
+    SetShaderResourceView(shader, name, shaderResourceView);
+}
+
+void CommandContext::SetTexture(MeshShader& shader, const std::string_view name, const std::shared_ptr<Resource>& texture) const
+{
+    SetTexture(shader, name, ShaderResourceView(texture));
+}
+
+void CommandContext::SetStructuredBuffer(const ComputeShader& shader, const std::string_view name, const StructuredBuffer& buffer) const
+{
+    shader.m_DescriptorSet->SetStructuredBuffer(name, buffer);
+}
+
+void CommandContext::SetConstantBuffer(const ComputeShader& shader, const std::string_view name, const size_t size, const void* data) const
+{
+    shader.m_DescriptorSet->SetConstantBufferData(name, data, size);
+}
+
+void CommandContext::SetShaderResourceView(const ComputeShader& shader, const std::string_view name, const ShaderResourceView& shaderResourceView) const
+{
+    shader.m_DescriptorSet->SetShaderResourceView(name, 0u, shaderResourceView);
+}
+
+void CommandContext::SetShaderResourceView(const ComputeShader& shader, const std::string_view name, const uint32_t arrayIndex, const ShaderResourceView& shaderResourceView) const
+{
+    shader.m_DescriptorSet->SetShaderResourceView(name, arrayIndex, shaderResourceView);
+}
+
+void CommandContext::SetShaderResource(
+    const ComputeShader& shader,
+    const std::string_view name,
+    const uint32_t arrayIndex,
+    const Resource& resource,
+    const D3D12_RESOURCE_STATES stateAfter) const
+{
+    shader.m_DescriptorSet->SetShaderResource(name, arrayIndex, resource, stateAfter);
+}
+
+void CommandContext::SetShaderResourceViews(const ComputeShader& shader, const std::string_view name, std::span<const ShaderResourceView> shaderResourceViews) const
+{
+    shader.m_DescriptorSet->SetShaderResourceViews(name, shaderResourceViews);
+}
+
+void CommandContext::SetTexture(const ComputeShader& shader, const std::string_view name, const ShaderResourceView& shaderResourceView) const
+{
+    SetShaderResourceView(shader, name, shaderResourceView);
+}
+
+void CommandContext::SetTexture(const ComputeShader& shader, const std::string_view name, const std::shared_ptr<Resource>& texture) const
+{
+    SetTexture(shader, name, ShaderResourceView(texture));
+}
+
+void CommandContext::SetUnorderedAccessView(const ComputeShader& shader, const std::string_view name, const UnorderedAccessView& unorderedAccessView) const
+{
+    shader.m_DescriptorSet->SetUnorderedAccessView(name, unorderedAccessView);
+}
+
+void CommandContext::SetAccelerationStructure(const ComputeShader& shader, const RayTracingAccelerationStructure& accelerationStructure) const
+{
+    const PipelineDescriptorRangeDesc& accelerationStructureBinding = shader.m_BindingSet->GetFirstRange(DescriptorBindingKind::AccelerationStructure);
+    SetAccelerationStructure(shader, accelerationStructureBinding.Name, accelerationStructure);
+}
+
+void CommandContext::SetAccelerationStructure(const ComputeShader& shader, const std::string_view name, const RayTracingAccelerationStructure& accelerationStructure) const
+{
+    shader.m_DescriptorSet->SetAccelerationStructure(name, accelerationStructure);
+}
+//Modify End
 
 void CommandContext::SetGraphicsRootSignature(const RootSignature& rootSignature) const
 {

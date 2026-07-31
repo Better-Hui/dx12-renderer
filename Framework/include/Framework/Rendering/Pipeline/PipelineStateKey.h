@@ -30,6 +30,9 @@ struct RasterPipelineStateKey
 {
     PipelineShaderBytecodeKey VertexShader;
 //Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-31 by BestHui
+    PipelineShaderBytecodeKey AmplificationShader;
+//Modify End
     PipelineShaderBytecodeKey MeshShader;
 //Modify End
     PipelineShaderBytecodeKey PixelShader;
@@ -41,6 +44,9 @@ struct RasterPipelineStateKey
     {
         return VertexShader == other.VertexShader &&
 //Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-31 by BestHui
+            AmplificationShader == other.AmplificationShader &&
+//Modify End
             MeshShader == other.MeshShader &&
 //Modify End
             PixelShader == other.PixelShader &&

@@ -28,6 +28,12 @@ public:
     RasterPipelineStateBuilder& WithShaders(const Microsoft::WRL::ComPtr<ID3DBlob>& vertexShader, const Microsoft::WRL::ComPtr<ID3DBlob>& pixelShader);
 //Modify Begin:2026-07-30 by BestHui
     RasterPipelineStateBuilder& WithMeshShaders(const Microsoft::WRL::ComPtr<ID3DBlob>& meshShader, const Microsoft::WRL::ComPtr<ID3DBlob>& pixelShader);
+//Modify Begin:2026-07-31 by BestHui
+    RasterPipelineStateBuilder& WithMeshShaders(
+        const Microsoft::WRL::ComPtr<ID3DBlob>& amplificationShader,
+        const Microsoft::WRL::ComPtr<ID3DBlob>& meshShader,
+        const Microsoft::WRL::ComPtr<ID3DBlob>& pixelShader);
+//Modify End
 //Modify End
 
     RasterPipelineStateBuilder& WithBlend(const CD3DX12_BLEND_DESC& blendDesc);
@@ -62,6 +68,9 @@ private:
 
     Microsoft::WRL::ComPtr<ID3DBlob> m_VertexShader;
 //Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-31 by BestHui
+    Microsoft::WRL::ComPtr<ID3DBlob> m_AmplificationShader;
+//Modify End
     Microsoft::WRL::ComPtr<ID3DBlob> m_MeshShader;
 //Modify End
     Microsoft::WRL::ComPtr<ID3DBlob> m_PixelShader;

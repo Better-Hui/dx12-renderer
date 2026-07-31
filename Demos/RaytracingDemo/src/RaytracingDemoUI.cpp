@@ -61,6 +61,16 @@ void RaytracingDemo::OnImGui()
         }
         ResetAccumulation();
     }
+//Modify Begin:2026-07-31 by BestHui
+    const char* meshletBackendNames[] = { "Task Shader", "Compute Indirect" };
+    int selectedMeshletBackend = m_UseTaskShaderMeshlets ? 0 : 1;
+    if (ImGui::Combo("Meshlet Backend", &selectedMeshletBackend, meshletBackendNames, 2))
+    {
+        m_UseTaskShaderMeshlets = selectedMeshletBackend == 0;
+        m_UseMeshletGBuffer = true;
+        ResetAccumulation();
+    }
+//Modify End
 //Modify End
     if (m_Denoisers.DrawImGui())
     {

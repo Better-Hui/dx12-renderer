@@ -32,7 +32,6 @@
 //Modify End
 
 class CommandContext;
-class StructuredBuffer;
 
 class Shader
 {
@@ -64,10 +63,6 @@ public:
 
 	void SetShaderResourceView(CommandList& commandList, const std::string& variableName, const ShaderResourceView& shaderResourceView);
 	void SetShaderResourceViews(CommandList& commandList, const std::string& variableName, std::span<const ShaderResourceView> shaderResourceViews);
-//Modify Begin:2026-07-30 by BestHui
-	void SetShaderResource(CommandList& commandList, const std::string& variableName, const Resource& resource);
-	void SetStructuredBuffer(CommandList& commandList, const std::string& variableName, const StructuredBuffer& buffer);
-//Modify End
 	void SetTexture(CommandList& commandList, const std::string& variableName, const ShaderResourceView& shaderResourceView);
 	void SetTexture(CommandList& commandList, const std::string& variableName, const std::shared_ptr<Resource>& texture);
 //Modify Begin:2026-07-23 by BestHui

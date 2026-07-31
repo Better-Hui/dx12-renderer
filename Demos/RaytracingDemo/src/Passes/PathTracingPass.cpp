@@ -76,9 +76,9 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
             {
                 ComputeShader& directLightingShader = demo.m_PathTracingPipelines.GetInlineDirectLightingShader();
                 RaytracingDemoPassAccess::BindInlinePathTracingInputs(demo, cmd, directLightingShader, gbuffer, camera);
-                cmd.SetUnorderedAccessView(directLightingShader, "DirectLighting", UnorderedAccessView(context.m_ResourcePool->GetTexture(DemoResourceIds::DirectLighting)));
 //Modify Begin:2026-07-28 by BestHui
                 CommandContext commandContext(cmd);
+                commandContext.SetUnorderedAccessView(directLightingShader, "DirectLighting", UnorderedAccessView(context.m_ResourcePool->GetTexture(DemoResourceIds::DirectLighting)));
                 commandContext.BindPipeline(directLightingShader);
 //Modify Begin:2026-07-30 by BestHui
                 commandContext.BindBindlessDescriptorHeap(demo.m_SceneResources.GetBindlessDescriptorHeap());
@@ -142,9 +142,9 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
             {
                 ComputeShader& indirectLightingShader = demo.m_PathTracingPipelines.GetInlineIndirectLightingShader();
                 RaytracingDemoPassAccess::BindInlinePathTracingInputs(demo, cmd, indirectLightingShader, gbuffer, camera);
-                cmd.SetUnorderedAccessView(indirectLightingShader, "IndirectLighting", UnorderedAccessView(context.m_ResourcePool->GetTexture(DemoResourceIds::IndirectLighting)));
 //Modify Begin:2026-07-28 by BestHui
                 CommandContext commandContext(cmd);
+                commandContext.SetUnorderedAccessView(indirectLightingShader, "IndirectLighting", UnorderedAccessView(context.m_ResourcePool->GetTexture(DemoResourceIds::IndirectLighting)));
                 commandContext.BindPipeline(indirectLightingShader);
 //Modify Begin:2026-07-30 by BestHui
                 commandContext.BindBindlessDescriptorHeap(demo.m_SceneResources.GetBindlessDescriptorHeap());
