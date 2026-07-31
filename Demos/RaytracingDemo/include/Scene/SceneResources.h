@@ -50,10 +50,16 @@ struct RaytracingDemoMaterialData
     uint32_t Padding1 = 0;
 };
 
+struct RaytracingDemoSceneGeometry
+{
+    std::shared_ptr<Model> Model;
+    std::vector<MeshPrototype> MeshPrototypes;
+};
+
 struct RaytracingDemoSceneObject
 {
     DirectX::XMMATRIX WorldMatrix = DirectX::XMMatrixIdentity();
-    std::shared_ptr<Model> Model;
+    uint32_t GeometryIndex = 0;
     uint32_t MaterialIndex = 0;
 };
 
@@ -70,6 +76,7 @@ public:
         RayTracingAccelerationStructureBuildSettings settings = {});
 
     const std::vector<RaytracingDemoSceneObject>& GetSceneObjects() const { return m_SceneObjects; }
+    const std::vector<RaytracingDemoSceneGeometry>& GetSceneGeometries() const { return m_SceneGeometries; }
     const std::vector<RaytracingDemoMaterialData>& GetMaterials() const { return m_Materials; }
     const std::vector<std::shared_ptr<Texture>>& GetTextures() const { return m_Textures; }
     std::vector<ShaderResourceView> CreateTextureShaderResourceViews() const;
@@ -118,25 +125,9 @@ private:
         const std::vector<uint32_t>& materialIndexMap,
         uint32_t defaultMaterial);
 //Modify Begin:2026-07-31 by BestHui
-    void AddSceneObject(const DirectX::XMMATRIX& worldMatrix, const std::shared_ptr<Model>& model, uint32_t materialIndex);
-    void AddSceneObject(
-        const DirectX::XMMATRIX& worldMatrix,
-        const std::shared_ptr<Model>& model,
-        uint32_t materialIndex,
-        const MeshPrototype& prototype);
-    void AddSceneObject(
-        const DirectX::XMMATRIX& worldMatrix,
-        const std::shared_ptr<Model>& model,
-        uint32_t materialIndex,
-        const std::vector<MeshPrototype>& prototypes);
-    void AddSceneObject(
-        const DirectX::XMMATRIX& worldMatrix,
-        const std::shared_ptr<Model>& model,
-        uint32_t materialIndex,
-        uint32_t meshletOffset,
-        uint32_t meshletCount);
-    void AddMeshletDraw(const MeshPrototype& prototype, const DirectX::XMMATRIX& worldMatrix, uint32_t materialIndex);
-    std::pair<uint32_t, uint32_t> AddMeshletGeometry(const MeshPrototype& prototype, uint32_t materialIndex);
+    uint32_t AddSceneGeometry(const std::shared_ptr<Model>& model, std::vector<MeshPrototype> prototypes);
+    void AddSceneObject(const DirectX::XMMATRIX& worldMatrix, uint32_t geometryIndex, uint32_t materialIndex);
+    void BuildMeshletDraws();
     void AddStressTestSpheres(CommandList& commandList, uint32_t whiteTextureIndex);
     void UploadMeshletBuffers(CommandList& commandList);
 //Modify End
@@ -152,6 +143,7 @@ private:
     MeshletGeometrySet m_MeshletGeometrySet;
 //Modify End
     RayTracingAccelerationStructure m_RayTracingAccelerationStructure;
+    std::vector<RaytracingDemoSceneGeometry> m_SceneGeometries;
     std::vector<RaytracingDemoSceneObject> m_SceneObjects;
     std::vector<RaytracingDemoMaterialData> m_Materials;
     std::vector<std::shared_ptr<Texture>> m_Textures;

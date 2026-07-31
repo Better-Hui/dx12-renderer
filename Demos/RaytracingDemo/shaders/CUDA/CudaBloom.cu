@@ -6,6 +6,14 @@ __device__ float3 LoadRgb(cudaTextureObject_t texture, unsigned int x, unsigned 
     return make_float3(value.x, value.y, value.z);
 }
 
+//Modify Begin:2026-07-30 by BestHui
+__device__ float3 SampleLinear(cudaTextureObject_t texture, float u, float v)
+{
+    const float4 value = tex2D<float4>(texture, u, v);
+    return make_float3(value.x, value.y, value.z);
+}
+//Modify End
+
 __device__ void StoreRgb(cudaSurfaceObject_t surface, unsigned int x, unsigned int y, float3 color)
 {
 //Modify Begin:2026-07-28 by BestHui
@@ -99,13 +107,15 @@ __device__ float3 ToFloat3(float4 value)
     return make_float3(value.x, value.y, value.z);
 }
 
-__device__ void StoreOptional(float4* output, unsigned int width, unsigned int height, unsigned int x, unsigned int y, float3 color)
+//Modify Begin:2026-07-30 by BestHui
+__device__ void StoreOptional(cudaSurfaceObject_t output, unsigned int width, unsigned int height, unsigned int x, unsigned int y, float3 color)
 {
-    if (output != nullptr && x < width && y < height)
+    if (output != 0 && x < width && y < height)
     {
-        StoreFloatRgb(output, x, y, width, color);
+        surf2Dwrite(make_float4(color.x, color.y, color.z, 1.0f), output, x * sizeof(float4), y);
     }
 }
+//Modify End
 
 __device__ void GenerateBloomCascade(
     unsigned int groupX,
@@ -113,10 +123,12 @@ __device__ void GenerateBloomCascade(
     unsigned int threadX,
     unsigned int threadY,
     float3 level0Color,
-    float4* level0,
-    float4* level1,
-    float4* level2,
-    float4* level3,
+//Modify Begin:2026-07-30 by BestHui
+    cudaSurfaceObject_t level0,
+    cudaSurfaceObject_t level1,
+    cudaSurfaceObject_t level2,
+    cudaSurfaceObject_t level3,
+//Modify End
     unsigned int level0Width,
     unsigned int level0Height,
     unsigned int level1Width,
@@ -176,10 +188,12 @@ __device__ void GenerateBloomCascade(
 extern "C" __global__
 void PrefilterDownsampleCascadeKernel(
     cudaTextureObject_t input,
-    float4* level0,
-    float4* level1,
-    float4* level2,
-    float4* level3,
+//Modify Begin:2026-07-30 by BestHui
+    cudaSurfaceObject_t level0,
+    cudaSurfaceObject_t level1,
+    cudaSurfaceObject_t level2,
+    cudaSurfaceObject_t level3,
+//Modify End
     unsigned int sourceWidth,
     unsigned int sourceHeight,
     unsigned int level0Width,
@@ -248,11 +262,13 @@ void PrefilterDownsampleCascadeKernel(
 
 extern "C" __global__
 void DownsampleCascadeKernel(
-    const float4* source,
-    float4* level0,
-    float4* level1,
-    float4* level2,
-    float4* level3,
+//Modify Begin:2026-07-30 by BestHui
+    cudaTextureObject_t source,
+    cudaSurfaceObject_t level0,
+    cudaSurfaceObject_t level1,
+    cudaSurfaceObject_t level2,
+    cudaSurfaceObject_t level3,
+//Modify End
     unsigned int sourceWidth,
     unsigned int sourceHeight,
     unsigned int level0Width,
@@ -273,10 +289,12 @@ void DownsampleCascadeKernel(
     const int sourceX = static_cast<int>(level0X * 2u);
     const int sourceY = static_cast<int>(level0Y * 2u);
 
-    const float3 c00 = SampleFloatNearest(source, sourceX, sourceY, sourceWidth, sourceHeight, sourceWidth);
-    const float3 c10 = SampleFloatNearest(source, sourceX + 1, sourceY, sourceWidth, sourceHeight, sourceWidth);
-    const float3 c01 = SampleFloatNearest(source, sourceX, sourceY + 1, sourceWidth, sourceHeight, sourceWidth);
-    const float3 c11 = SampleFloatNearest(source, sourceX + 1, sourceY + 1, sourceWidth, sourceHeight, sourceWidth);
+//Modify Begin:2026-07-30 by BestHui
+    const float3 c00 = SampleNearest(source, sourceX, sourceY, sourceWidth, sourceHeight);
+    const float3 c10 = SampleNearest(source, sourceX + 1, sourceY, sourceWidth, sourceHeight);
+    const float3 c01 = SampleNearest(source, sourceX, sourceY + 1, sourceWidth, sourceHeight);
+    const float3 c11 = SampleNearest(source, sourceX + 1, sourceY + 1, sourceWidth, sourceHeight);
+//Modify End
     const float3 level0Color = Average4(c00, c10, c01, c11);
 
     GenerateBloomCascade(
@@ -303,14 +321,13 @@ void DownsampleCascadeKernel(
 
 extern "C" __global__
 void UpsampleAddKernel(
-    const float4* low,
-    float4* high,
-    unsigned int lowWidth,
-    unsigned int lowHeight,
-    unsigned int lowPitchElements,
+//Modify Begin:2026-07-30 by BestHui
+    cudaTextureObject_t low,
+    cudaTextureObject_t high,
+    cudaSurfaceObject_t highOutput,
+//Modify End
     unsigned int highWidth,
-    unsigned int highHeight,
-    unsigned int highPitchElements)
+    unsigned int highHeight)
 {
     const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
     const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -321,21 +338,22 @@ void UpsampleAddKernel(
 
     const float u = (static_cast<float>(x) + 0.5f) / static_cast<float>(highWidth);
     const float v = (static_cast<float>(y) + 0.5f) / static_cast<float>(highHeight);
-    const float3 base = LoadFloatRgb(high, x, y, highPitchElements);
-    const float3 bloom = SampleFloatBilinear(low, u, v, lowWidth, lowHeight, lowPitchElements);
-    StoreFloatRgb(high, x, y, highPitchElements, make_float3(base.x + bloom.x, base.y + bloom.y, base.z + bloom.z));
+//Modify Begin:2026-07-30 by BestHui
+    const float3 base = LoadRgb(high, x, y);
+    const float3 bloom = SampleLinear(low, u, v);
+    StoreOptional(highOutput, highWidth, highHeight, x, y, make_float3(base.x + bloom.x, base.y + bloom.y, base.z + bloom.z));
+//Modify End
 }
 
 extern "C" __global__
 void CompositeBloomKernel(
     cudaTextureObject_t input,
-    const float4* bloom,
+//Modify Begin:2026-07-30 by BestHui
+    cudaTextureObject_t bloom,
+//Modify End
     cudaSurfaceObject_t output,
     unsigned int width,
-    unsigned int height,
-    unsigned int bloomWidth,
-    unsigned int bloomHeight,
-    unsigned int bloomPitchBytes)
+    unsigned int height)
 {
     const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
     const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -347,6 +365,8 @@ void CompositeBloomKernel(
     const float u = (static_cast<float>(x) + 0.5f) / static_cast<float>(width);
     const float v = (static_cast<float>(y) + 0.5f) / static_cast<float>(height);
     const float3 base = LoadRgb(input, x, y);
-    const float3 glow = SampleFloatBilinear(bloom, u, v, bloomWidth, bloomHeight, bloomPitchBytes);
+//Modify Begin:2026-07-30 by BestHui
+    const float3 glow = SampleLinear(bloom, u, v);
+//Modify End
     StoreRgb(output, x, y, make_float3(base.x + glow.x, base.y + glow.y, base.z + glow.z));
 }

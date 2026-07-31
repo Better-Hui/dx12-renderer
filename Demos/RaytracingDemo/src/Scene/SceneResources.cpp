@@ -19,6 +19,7 @@
 #include <filesystem>
 #include <stdexcept>
 #include <unordered_map>
+#include <utility>
 
 using namespace DirectX;
 
@@ -227,6 +228,7 @@ void RaytracingDemoSceneResources::Clear()
 //Modify Begin:2026-07-31 by BestHui
     m_MeshletGeometrySet.Clear();
 //Modify End
+    m_SceneGeometries.clear();
     m_SceneObjects.clear();
     m_Materials.clear();
     m_Textures.clear();
@@ -353,7 +355,8 @@ void RaytracingDemoSceneResources::LoadDeferredLightingScene(CommandList& comman
         auto model = modelLoader.LoadExisting(Mesh::CreatePlane(commandList));
         const XMMATRIX worldMatrix = XMMatrixScaling(200.0f, 200.0f, 200.0f);
 //Modify Begin:2026-07-31 by BestHui
-        AddSceneObject(worldMatrix, model, groundMaterial, CreateBuiltinPlanePrototype(1.0f, 1.0f));
+        const uint32_t geometryIndex = AddSceneGeometry(model, std::vector<MeshPrototype>{ CreateBuiltinPlanePrototype(1.0f, 1.0f) });
+        AddSceneObject(worldMatrix, geometryIndex, groundMaterial);
 //Modify End
     }
 
@@ -361,6 +364,7 @@ void RaytracingDemoSceneResources::LoadDeferredLightingScene(CommandList& comman
         //Modify Begin:2026-07-31 by BestHui
         const std::vector<MeshPrototype> chestPrototypes = modelLoader.LoadAsMeshPrototypes("Assets/Models/old-wooden-chest/chest_01.fbx");
         auto model = modelLoader.Load(commandList, chestPrototypes);
+        const uint32_t geometryIndex = AddSceneGeometry(model, chestPrototypes);
 //Modify End
 
         XMMATRIX worldMatrix =
@@ -368,7 +372,7 @@ void RaytracingDemoSceneResources::LoadDeferredLightingScene(CommandList& comman
             XMMatrixRotationRollPitchYaw(XMConvertToRadians(90.0f), 0.0f, 0.0f) *
             XMMatrixTranslation(0.0f, 0.25f, 15.0f);
 //Modify Begin:2026-07-31 by BestHui
-        AddSceneObject(worldMatrix, model, chestMaterial, chestPrototypes);
+        AddSceneObject(worldMatrix, geometryIndex, chestMaterial);
 //Modify End
 
         worldMatrix =
@@ -376,7 +380,7 @@ void RaytracingDemoSceneResources::LoadDeferredLightingScene(CommandList& comman
             XMMatrixRotationRollPitchYaw(XMConvertToRadians(90.0f), 0.0f, 0.0f) *
             XMMatrixTranslation(-50.0f, 0.25f, 15.0f);
 //Modify Begin:2026-07-31 by BestHui
-        AddSceneObject(worldMatrix, model, chestMaterial, chestPrototypes);
+        AddSceneObject(worldMatrix, geometryIndex, chestMaterial);
 //Modify End
     }
 
@@ -384,7 +388,8 @@ void RaytracingDemoSceneResources::LoadDeferredLightingScene(CommandList& comman
         auto model = modelLoader.LoadExisting(Mesh::CreatePlane(commandList));
         const XMMATRIX worldMatrix = XMMatrixScaling(30.0f, 30.0f, 30.0f) * XMMatrixTranslation(-50.0f, 0.1f, 15.0f);
 //Modify Begin:2026-07-31 by BestHui
-        AddSceneObject(worldMatrix, model, mirrorMaterial, CreateBuiltinPlanePrototype(1.0f, 1.0f));
+        const uint32_t geometryIndex = AddSceneGeometry(model, std::vector<MeshPrototype>{ CreateBuiltinPlanePrototype(1.0f, 1.0f) });
+        AddSceneObject(worldMatrix, geometryIndex, mirrorMaterial);
 //Modify End
     }
 
@@ -392,7 +397,8 @@ void RaytracingDemoSceneResources::LoadDeferredLightingScene(CommandList& comman
         auto model = modelLoader.LoadExisting(Mesh::CreateCube(commandList));
         const XMMATRIX worldMatrix = XMMatrixScaling(5.0f, 5.0f, 5.0f) * XMMatrixTranslation(-54.0f, 2.5f, 7.0f);
 //Modify Begin:2026-07-31 by BestHui
-        AddSceneObject(worldMatrix, model, cubeMaterial, CreateBuiltinCubePrototype(1.0f));
+        const uint32_t geometryIndex = AddSceneGeometry(model, std::vector<MeshPrototype>{ CreateBuiltinCubePrototype(1.0f) });
+        AddSceneObject(worldMatrix, geometryIndex, cubeMaterial);
 //Modify End
     }
 
@@ -400,13 +406,14 @@ void RaytracingDemoSceneResources::LoadDeferredLightingScene(CommandList& comman
         //Modify Begin:2026-07-31 by BestHui
         const std::vector<MeshPrototype> cerberusPrototypes = modelLoader.LoadAsMeshPrototypes("Assets/Models/cerberus/Cerberus_LP.FBX");
         auto model = modelLoader.Load(commandList, cerberusPrototypes);
+        const uint32_t geometryIndex = AddSceneGeometry(model, cerberusPrototypes);
 //Modify End
         const XMMATRIX worldMatrix =
             XMMatrixScaling(0.10f, 0.10f, 0.10f) *
             XMMatrixRotationRollPitchYaw(XMConvertToRadians(90.0f), XMConvertToRadians(135.0f), 0.0f) *
             XMMatrixTranslation(15.0f, 5.0f, 10.0f);
 //Modify Begin:2026-07-31 by BestHui
-        AddSceneObject(worldMatrix, model, cerberusMaterial, cerberusPrototypes);
+        AddSceneObject(worldMatrix, geometryIndex, cerberusMaterial);
 //Modify End
     }
 
@@ -414,13 +421,14 @@ void RaytracingDemoSceneResources::LoadDeferredLightingScene(CommandList& comman
         //Modify Begin:2026-07-31 by BestHui
         const std::vector<MeshPrototype> tvPrototypes = modelLoader.LoadAsMeshPrototypes("Assets/Models/tv/TV.FBX");
         auto model = modelLoader.Load(commandList, tvPrototypes);
+        const uint32_t geometryIndex = AddSceneGeometry(model, tvPrototypes);
 //Modify End
         const XMMATRIX worldMatrix =
             XMMatrixScaling(0.30f, 0.30f, 0.30f) *
             XMMatrixRotationRollPitchYaw(XMConvertToRadians(90.0f), XMConvertToRadians(-45.0f), 0.0f) *
             XMMatrixTranslation(-14.0f, 0.0f, 18.0f);
 //Modify Begin:2026-07-31 by BestHui
-        AddSceneObject(worldMatrix, model, tvMaterial, tvPrototypes);
+        AddSceneObject(worldMatrix, geometryIndex, tvMaterial);
 //Modify End
     }
 
@@ -446,7 +454,7 @@ void RaytracingDemoSceneResources::LoadDeferredLightingScene(CommandList& comman
 
     const MeshPrototype spherePrototype = CreateStressSpherePrototype(1.0f, 12);
     auto sphereModel = modelLoader.Load(commandList, std::vector<MeshPrototype>{ spherePrototype });
-    const auto [sphereMeshletOffset, sphereMeshletCount] = AddMeshletGeometry(spherePrototype, sphereMaterials.front());
+    const uint32_t sphereGeometryIndex = AddSceneGeometry(sphereModel, std::vector<MeshPrototype>{ spherePrototype });
 
     constexpr int SphereColumns = 64;
     constexpr int SphereRows = 16;
@@ -480,7 +488,7 @@ void RaytracingDemoSceneResources::LoadDeferredLightingScene(CommandList& comman
                 const uint32_t material = sphereMaterials[materialIndex];
 
 //Modify Begin:2026-07-31 by BestHui
-                AddSceneObject(worldMatrix, sphereModel, material, sphereMeshletOffset, sphereMeshletCount);
+                AddSceneObject(worldMatrix, sphereGeometryIndex, material);
 //Modify End
             }
         }
@@ -576,7 +584,8 @@ void RaytracingDemoSceneResources::LoadSceneObjects(
             auto model = modelLoader.LoadExisting(Mesh::CreatePlane(commandList, 10.0f, 10.0f));
 //Modify Begin:2026-07-30 by BestHui
 //Modify Begin:2026-07-31 by BestHui
-            AddSceneObject(object.WorldMatrix, model, materialIndex, CreateBuiltinPlanePrototype(10.0f, 10.0f));
+            const uint32_t geometryIndex = AddSceneGeometry(model, std::vector<MeshPrototype>{ CreateBuiltinPlanePrototype(10.0f, 10.0f) });
+            AddSceneObject(object.WorldMatrix, geometryIndex, materialIndex);
 //Modify End
 //Modify End
             continue;
@@ -599,68 +608,62 @@ void RaytracingDemoSceneResources::LoadSceneObjects(
         auto model = modelLoader.Load(commandList, std::vector<MeshPrototype>{ prototype });
 //Modify Begin:2026-07-30 by BestHui
 //Modify Begin:2026-07-31 by BestHui
-        AddSceneObject(object.WorldMatrix, model, materialIndex, prototype);
+        const uint32_t geometryIndex = AddSceneGeometry(model, std::vector<MeshPrototype>{ prototype });
+        AddSceneObject(object.WorldMatrix, geometryIndex, materialIndex);
 //Modify End
 //Modify End
     }
 }
 
 //Modify Begin:2026-07-31 by BestHui
+uint32_t RaytracingDemoSceneResources::AddSceneGeometry(
+    const std::shared_ptr<Model>& model,
+    std::vector<MeshPrototype> prototypes)
+{
+    Assert(model != nullptr, "Scene geometry model must not be null.");
+    const uint32_t geometryIndex = static_cast<uint32_t>(m_SceneGeometries.size());
+    m_SceneGeometries.push_back({ model, std::move(prototypes) });
+    return geometryIndex;
+}
+
 void RaytracingDemoSceneResources::AddSceneObject(
     const XMMATRIX& worldMatrix,
-    const std::shared_ptr<Model>& model,
+    const uint32_t geometryIndex,
     const uint32_t materialIndex)
 {
-    m_SceneObjects.push_back({ worldMatrix, model, materialIndex });
+    Assert(geometryIndex < m_SceneGeometries.size(), "Scene object geometry index is invalid.");
+    m_SceneObjects.push_back({ worldMatrix, geometryIndex, materialIndex });
 }
 
-void RaytracingDemoSceneResources::AddSceneObject(
-    const XMMATRIX& worldMatrix,
-    const std::shared_ptr<Model>& model,
-    const uint32_t materialIndex,
-    const MeshPrototype& prototype)
+void RaytracingDemoSceneResources::BuildMeshletDraws()
 {
-    AddSceneObject(worldMatrix, model, materialIndex);
-    AddMeshletDraw(prototype, worldMatrix, materialIndex);
-}
+    m_MeshletGeometrySet.Clear();
 
-void RaytracingDemoSceneResources::AddSceneObject(
-    const XMMATRIX& worldMatrix,
-    const std::shared_ptr<Model>& model,
-    const uint32_t materialIndex,
-    const std::vector<MeshPrototype>& prototypes)
-{
-    AddSceneObject(worldMatrix, model, materialIndex);
-    for (const MeshPrototype& prototype : prototypes)
+    std::unordered_map<uint32_t, std::vector<std::pair<uint32_t, uint32_t>>> meshletGeometryCache;
+    for (const RaytracingDemoSceneObject& object : m_SceneObjects)
     {
-        AddMeshletDraw(prototype, worldMatrix, materialIndex);
+        Assert(object.GeometryIndex < m_SceneGeometries.size(), "Scene object geometry index is invalid.");
+        const RaytracingDemoSceneGeometry& geometry = m_SceneGeometries[object.GeometryIndex];
+        if (geometry.MeshPrototypes.empty())
+        {
+            continue;
+        }
+
+        auto [cacheIterator, inserted] = meshletGeometryCache.try_emplace(object.GeometryIndex);
+        if (inserted)
+        {
+            cacheIterator->second.reserve(geometry.MeshPrototypes.size());
+            for (const MeshPrototype& prototype : geometry.MeshPrototypes)
+            {
+                cacheIterator->second.push_back(m_MeshletGeometrySet.AddGeometry(prototype));
+            }
+        }
+
+        for (const auto [meshletOffset, meshletCount] : cacheIterator->second)
+        {
+            m_MeshletGeometrySet.AddDraw(meshletOffset, meshletCount, object.WorldMatrix, object.MaterialIndex);
+        }
     }
-}
-
-void RaytracingDemoSceneResources::AddSceneObject(
-    const XMMATRIX& worldMatrix,
-    const std::shared_ptr<Model>& model,
-    const uint32_t materialIndex,
-    const uint32_t meshletOffset,
-    const uint32_t meshletCount)
-{
-    AddSceneObject(worldMatrix, model, materialIndex);
-    m_MeshletGeometrySet.AddDraw(meshletOffset, meshletCount, worldMatrix, materialIndex);
-}
-
-void RaytracingDemoSceneResources::AddMeshletDraw(
-    const MeshPrototype& prototype,
-    const XMMATRIX& worldMatrix,
-    const uint32_t materialIndex)
-{
-    m_MeshletGeometrySet.AddDraw(prototype, worldMatrix, materialIndex);
-}
-
-std::pair<uint32_t, uint32_t> RaytracingDemoSceneResources::AddMeshletGeometry(
-    const MeshPrototype& prototype,
-    const uint32_t materialIndex)
-{
-    return m_MeshletGeometrySet.AddGeometry(prototype, materialIndex);
 }
 
 void RaytracingDemoSceneResources::AddStressTestSpheres(CommandList& commandList, const uint32_t whiteTextureIndex)
@@ -668,6 +671,7 @@ void RaytracingDemoSceneResources::AddStressTestSpheres(CommandList& commandList
     ModelLoader modelLoader;
     MeshPrototype spherePrototype = CreateStressSpherePrototype(1.0f, 12);
     auto sphereModel = modelLoader.Load(commandList, std::vector<MeshPrototype>{ spherePrototype });
+    const uint32_t sphereGeometryIndex = AddSceneGeometry(sphereModel, std::vector<MeshPrototype>{ spherePrototype });
 
     const uint32_t sphereMaterial = AddDiffuseMaterial(
         { 1.0f, 0.48f, 0.18f, 1.0f },
@@ -675,12 +679,6 @@ void RaytracingDemoSceneResources::AddStressTestSpheres(CommandList& commandList
         whiteTextureIndex,
         0.0f,
         0.38f);
-
-    const auto [meshletOffset, meshletCount] = AddMeshletGeometry(spherePrototype, sphereMaterial);
-    if (meshletCount == 0)
-    {
-        return;
-    }
 
     constexpr uint32_t Columns = 64;
     constexpr uint32_t Rows = 24;
@@ -711,7 +709,7 @@ void RaytracingDemoSceneResources::AddStressTestSpheres(CommandList& commandList
                         CenterY + startY + static_cast<float>(y) * YSpacing + wave * 0.045f,
                         CenterZ + startZ + static_cast<float>(layer) * ZSpacing);
 
-                AddSceneObject(worldMatrix, sphereModel, sphereMaterial, meshletOffset, meshletCount);
+                AddSceneObject(worldMatrix, sphereGeometryIndex, sphereMaterial);
             }
         }
     }
@@ -719,6 +717,7 @@ void RaytracingDemoSceneResources::AddStressTestSpheres(CommandList& commandList
 
 void RaytracingDemoSceneResources::UploadMeshletBuffers(CommandList& commandList)
 {
+    BuildMeshletDraws();
     m_MeshletGeometrySet.Upload(commandList);
 }
 //Modify End
@@ -738,7 +737,9 @@ void RaytracingDemoSceneResources::AddRayTracingInstances(RayTracingAcceleration
 
     for (const RaytracingDemoSceneObject& object : m_SceneObjects)
     {
-        for (const auto& mesh : object.Model->GetMeshes())
+        Assert(object.GeometryIndex < m_SceneGeometries.size(), "Scene object geometry index is invalid.");
+        const RaytracingDemoSceneGeometry& geometry = m_SceneGeometries[object.GeometryIndex];
+        for (const auto& mesh : geometry.Model->GetMeshes())
         {
             accelerationStructure.AddInstance({
                 mesh,

@@ -31,7 +31,10 @@ CudaBloomPass::~CudaBloomPass()
 void CudaBloomPass::Shutdown()
 {
     ReleaseInteropResource();
-    m_PyramidBuffers.Release(&m_CudaContext);
+//Modify Begin:2026-07-30 by BestHui
+    ReleaseCudaTimingFrames();
+    m_PyramidTextures.Release(&m_CudaContext);
+//Modify End
     m_CudaContext.UnloadModule(m_Module);
     m_CudaContext.Shutdown();
     m_AvailabilityChecked = false;
@@ -58,6 +61,17 @@ bool CudaBloomPass::DrawImGui()
         changed |= ImGui::SliderFloat("Bloom Soft Knee", &m_SoftThreshold, 0.0f, 2.0f, "%.2f");
         changed |= ImGui::SliderFloat("Bloom Intensity", &m_Intensity, 0.0f, 5.0f, "%.2f");
         changed |= ImGui::SliderInt("Bloom Pyramid Levels", &m_PyramidLevels, 1, static_cast<int>(MaxBloomPyramidLevels));
+//Modify Begin:2026-07-30 by BestHui
+        if (m_LastCudaTiming.Valid)
+        {
+            ImGui::Text(
+                "CUDA timing: wait %.3f ms, kernels %.3f ms, signal %.3f ms, stream %.3f ms",
+                m_LastCudaTiming.D3DToCudaWaitMs,
+                m_LastCudaTiming.KernelsMs,
+                m_LastCudaTiming.CudaSignalMs,
+                m_LastCudaTiming.TotalCudaStreamMs);
+        }
+//Modify End
         ImGui::TextWrapped("%s", m_Status.c_str());
     }
     return changed;
@@ -163,11 +177,23 @@ bool CudaBloomPass::SignalD3D12AndWaitInCuda(ID3D12CommandQueue* d3d12CommandQue
     }
 
     std::string error;
+//Modify Begin:2026-07-30 by BestHui
+    if (m_ActiveCudaTimingFrameIndex >= 0)
+    {
+        RecordCudaTimingEvent(m_CudaTimingFrames[static_cast<size_t>(m_ActiveCudaTimingFrameIndex)].D3DWaitBegin);
+    }
+//Modify End
     if (!m_TimelineSemaphore.SignalD3D12AndWaitCuda(d3d12CommandQueue, m_CudaContext, error))
     {
         m_Status = error;
         return false;
     }
+//Modify Begin:2026-07-30 by BestHui
+    if (m_ActiveCudaTimingFrameIndex >= 0)
+    {
+        RecordCudaTimingEvent(m_CudaTimingFrames[static_cast<size_t>(m_ActiveCudaTimingFrameIndex)].D3DWaitEnd);
+    }
+//Modify End
     return true;
 }
 
@@ -179,15 +205,31 @@ bool CudaBloomPass::SignalCudaAndWaitInD3D12(ID3D12CommandQueue* d3d12CommandQue
     }
 
     std::string error;
+//Modify Begin:2026-07-30 by BestHui
+    if (m_ActiveCudaTimingFrameIndex >= 0)
+    {
+        RecordCudaTimingEvent(m_CudaTimingFrames[static_cast<size_t>(m_ActiveCudaTimingFrameIndex)].SignalBegin);
+    }
+//Modify End
     if (!m_TimelineSemaphore.SignalCudaAndWaitInD3D12(d3d12CommandQueue, m_CudaContext, error))
     {
         m_Status = error;
         return false;
     }
+//Modify Begin:2026-07-30 by BestHui
+    if (m_ActiveCudaTimingFrameIndex >= 0)
+    {
+        CudaTimingFrame& timingFrame = m_CudaTimingFrames[static_cast<size_t>(m_ActiveCudaTimingFrameIndex)];
+        RecordCudaTimingEvent(timingFrame.SignalEnd);
+        timingFrame.Pending = true;
+        m_ActiveCudaTimingFrameIndex = -1;
+    }
+//Modify End
     return true;
 }
 
-bool CudaBloomPass::EnsureCudaPyramidBuffers(const uint32_t width, const uint32_t height, const uint32_t levelCount)
+//Modify Begin:2026-07-30 by BestHui
+bool CudaBloomPass::EnsureCudaPyramidTextures(const uint32_t width, const uint32_t height, const uint32_t levelCount)
 {
     if (!InitializeCuda())
     {
@@ -198,9 +240,8 @@ bool CudaBloomPass::EnsureCudaPyramidBuffers(const uint32_t width, const uint32_
     uint32_t levelHeight = HalfSize(height);
     for (uint32_t level = 0; level < levelCount; ++level)
     {
-        const size_t requiredBytes = static_cast<size_t>(levelWidth) * static_cast<size_t>(levelHeight) * sizeof(float) * 4u;
         std::string error;
-        if (!m_PyramidBuffers.EnsureBuffer(level, requiredBytes, error))
+        if (!m_PyramidTextures.EnsureTexture(level, levelWidth, levelHeight, error))
         {
             m_Status = error;
             return false;
@@ -213,11 +254,176 @@ bool CudaBloomPass::EnsureCudaPyramidBuffers(const uint32_t width, const uint32_
     }
     return true;
 }
+//Modify End
+
+//Modify Begin:2026-07-30 by BestHui
+bool CudaBloomPass::EnsureCudaTimingFrames()
+{
+    if (!InitializeCuda())
+    {
+        return false;
+    }
+
+    for (CudaTimingFrame& timingFrame : m_CudaTimingFrames)
+    {
+        if (timingFrame.Initialized)
+        {
+            continue;
+        }
+
+        const auto createEvent = [this](CUevent& cudaEvent) -> bool
+        {
+            const CUresult result = cuEventCreate(&cudaEvent, CU_EVENT_DEFAULT);
+            if (result != CUDA_SUCCESS)
+            {
+                m_Status = "CUDA timing event creation failed: " + CudaContext::GetError(result);
+                return false;
+            }
+            return true;
+        };
+
+        if (!createEvent(timingFrame.D3DWaitBegin) ||
+            !createEvent(timingFrame.D3DWaitEnd) ||
+            !createEvent(timingFrame.KernelsBegin) ||
+            !createEvent(timingFrame.KernelsEnd) ||
+            !createEvent(timingFrame.SignalBegin) ||
+            !createEvent(timingFrame.SignalEnd))
+        {
+            ReleaseCudaTimingFrames();
+            return false;
+        }
+
+        timingFrame.Initialized = true;
+    }
+
+    return true;
+}
+
+void CudaBloomPass::BeginCudaTimingFrame()
+{
+    m_ActiveCudaTimingFrameIndex = -1;
+    if (!EnsureCudaTimingFrames())
+    {
+        return;
+    }
+
+    CudaTimingFrame& timingFrame = m_CudaTimingFrames[m_CudaTimingFrameCursor];
+    if (timingFrame.Pending && cuEventQuery(timingFrame.SignalEnd) == CUDA_ERROR_NOT_READY)
+    {
+        return;
+    }
+
+    timingFrame.Pending = false;
+    timingFrame.FrameIndex = ++m_CudaTimingFrameCounter;
+    m_ActiveCudaTimingFrameIndex = static_cast<int32_t>(m_CudaTimingFrameCursor);
+    m_CudaTimingFrameCursor = (m_CudaTimingFrameCursor + 1u) % CudaTimingFrameCount;
+}
+
+void CudaBloomPass::CollectCompletedCudaTimingFrames()
+{
+    for (CudaTimingFrame& timingFrame : m_CudaTimingFrames)
+    {
+        if (!timingFrame.Pending)
+        {
+            continue;
+        }
+
+        const CUresult queryResult = cuEventQuery(timingFrame.SignalEnd);
+        if (queryResult == CUDA_ERROR_NOT_READY)
+        {
+            continue;
+        }
+        if (queryResult != CUDA_SUCCESS)
+        {
+            m_Status = "CUDA timing query failed: " + CudaContext::GetError(queryResult);
+            timingFrame.Pending = false;
+            continue;
+        }
+
+        CudaTimingStats timingStats = {};
+        timingStats.FrameIndex = timingFrame.FrameIndex;
+        timingStats.Valid = true;
+        cuEventElapsedTime(&timingStats.D3DToCudaWaitMs, timingFrame.D3DWaitBegin, timingFrame.D3DWaitEnd);
+        cuEventElapsedTime(&timingStats.KernelsMs, timingFrame.KernelsBegin, timingFrame.KernelsEnd);
+        cuEventElapsedTime(&timingStats.CudaSignalMs, timingFrame.SignalBegin, timingFrame.SignalEnd);
+        cuEventElapsedTime(&timingStats.TotalCudaStreamMs, timingFrame.D3DWaitBegin, timingFrame.SignalEnd);
+        m_LastCudaTiming = timingStats;
+        timingFrame.Pending = false;
+    }
+}
+
+void CudaBloomPass::ReleaseCudaTimingFrames()
+{
+    if (m_CudaContext.IsInitialized())
+    {
+        m_CudaContext.Synchronize();
+    }
+
+    for (CudaTimingFrame& timingFrame : m_CudaTimingFrames)
+    {
+        if (timingFrame.SignalEnd != nullptr)
+        {
+            cuEventDestroy(timingFrame.SignalEnd);
+            timingFrame.SignalEnd = nullptr;
+        }
+        if (timingFrame.SignalBegin != nullptr)
+        {
+            cuEventDestroy(timingFrame.SignalBegin);
+            timingFrame.SignalBegin = nullptr;
+        }
+        if (timingFrame.KernelsEnd != nullptr)
+        {
+            cuEventDestroy(timingFrame.KernelsEnd);
+            timingFrame.KernelsEnd = nullptr;
+        }
+        if (timingFrame.KernelsBegin != nullptr)
+        {
+            cuEventDestroy(timingFrame.KernelsBegin);
+            timingFrame.KernelsBegin = nullptr;
+        }
+        if (timingFrame.D3DWaitEnd != nullptr)
+        {
+            cuEventDestroy(timingFrame.D3DWaitEnd);
+            timingFrame.D3DWaitEnd = nullptr;
+        }
+        if (timingFrame.D3DWaitBegin != nullptr)
+        {
+            cuEventDestroy(timingFrame.D3DWaitBegin);
+            timingFrame.D3DWaitBegin = nullptr;
+        }
+
+        timingFrame.Initialized = false;
+        timingFrame.Pending = false;
+        timingFrame.FrameIndex = 0;
+    }
+
+    m_LastCudaTiming = {};
+    m_CudaTimingFrameCursor = 0;
+    m_CudaTimingFrameCounter = 0;
+    m_ActiveCudaTimingFrameIndex = -1;
+}
+
+void CudaBloomPass::RecordCudaTimingEvent(CUevent cudaEvent)
+{
+    if (cudaEvent == nullptr)
+    {
+        return;
+    }
+
+    const CUresult result = cuEventRecord(cudaEvent, m_CudaContext.GetStream());
+    if (result != CUDA_SUCCESS)
+    {
+        m_Status = "CUDA timing event record failed: " + CudaContext::GetError(result);
+    }
+}
+//Modify End
 
 bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
 {
     const uint32_t levelCount = static_cast<uint32_t>(std::clamp(m_PyramidLevels, 1, static_cast<int>(MaxBloomPyramidLevels)));
-    if (!EnsureCudaPyramidBuffers(width, height, levelCount))
+//Modify Begin:2026-07-30 by BestHui
+    if (!EnsureCudaPyramidTextures(width, height, levelCount))
+//Modify End
     {
         return false;
     }
@@ -228,9 +434,18 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
     constexpr uint32_t cascadeBlockY = 8;
     constexpr uint32_t cascadeSharedBytes = cascadeBlockX * cascadeBlockY * sizeof(float) * 4u;
 
-    auto getPyramidPtr = [this, levelCount](const uint32_t level) -> CUdeviceptr
+//Modify Begin:2026-07-30 by BestHui
+    auto getPyramidPointTexture = [this, levelCount](const uint32_t level) -> CUtexObject
     {
-        return level < levelCount ? m_PyramidBuffers.GetBuffer(level) : 0;
+        return level < levelCount ? m_PyramidTextures.GetPointTextureObject(level) : 0;
+    };
+    auto getPyramidLinearTexture = [this, levelCount](const uint32_t level) -> CUtexObject
+    {
+        return level < levelCount ? m_PyramidTextures.GetLinearTextureObject(level) : 0;
+    };
+    auto getPyramidSurface = [this, levelCount](const uint32_t level) -> CUsurfObject
+    {
+        return level < levelCount ? m_PyramidTextures.GetSurfaceObject(level) : 0;
     };
     auto getPyramidWidth = [this, levelCount](const uint32_t level) -> uint32_t
     {
@@ -240,6 +455,7 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
     {
         return level < levelCount ? m_PyramidHeight[level] : 0u;
     };
+//Modify End
 
     CUtexObject input = m_InputTexture.GetTextureObject();
     CUsurfObject output = m_InputTexture.GetSurfaceObject();
@@ -249,10 +465,19 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
     float softThreshold = m_SoftThreshold;
     float intensity = m_Intensity;
 
-    CUdeviceptr level0 = getPyramidPtr(0u);
-    CUdeviceptr level1 = getPyramidPtr(1u);
-    CUdeviceptr level2 = getPyramidPtr(2u);
-    CUdeviceptr level3 = getPyramidPtr(3u);
+//Modify Begin:2026-07-30 by BestHui
+    if (m_ActiveCudaTimingFrameIndex >= 0)
+    {
+        RecordCudaTimingEvent(m_CudaTimingFrames[static_cast<size_t>(m_ActiveCudaTimingFrameIndex)].KernelsBegin);
+    }
+//Modify End
+
+//Modify Begin:2026-07-30 by BestHui
+    CUsurfObject level0 = getPyramidSurface(0u);
+    CUsurfObject level1 = getPyramidSurface(1u);
+    CUsurfObject level2 = getPyramidSurface(2u);
+    CUsurfObject level3 = getPyramidSurface(3u);
+//Modify End
     uint32_t level0Width = getPyramidWidth(0u);
     uint32_t level0Height = getPyramidHeight(0u);
     uint32_t level1Width = getPyramidWidth(1u);
@@ -302,11 +527,13 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
 
     for (uint32_t baseLevel = 3u; baseLevel + 1u < levelCount; baseLevel += 4u)
     {
-        CUdeviceptr source = m_PyramidBuffers.GetBuffer(baseLevel);
-        CUdeviceptr output0 = getPyramidPtr(baseLevel + 1u);
-        CUdeviceptr output1 = getPyramidPtr(baseLevel + 2u);
-        CUdeviceptr output2 = getPyramidPtr(baseLevel + 3u);
-        CUdeviceptr output3 = getPyramidPtr(baseLevel + 4u);
+//Modify Begin:2026-07-30 by BestHui
+        CUtexObject source = m_PyramidTextures.GetPointTextureObject(baseLevel);
+        CUsurfObject output0 = getPyramidSurface(baseLevel + 1u);
+        CUsurfObject output1 = getPyramidSurface(baseLevel + 2u);
+        CUsurfObject output2 = getPyramidSurface(baseLevel + 3u);
+        CUsurfObject output3 = getPyramidSurface(baseLevel + 4u);
+//Modify End
         uint32_t sourceWidth = m_PyramidWidth[baseLevel];
         uint32_t sourceHeight = m_PyramidHeight[baseLevel];
         uint32_t output0Width = getPyramidWidth(baseLevel + 1u);
@@ -355,23 +582,21 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
 
     for (uint32_t level = levelCount - 1u; level > 0u; --level)
     {
-        CUdeviceptr low = m_PyramidBuffers.GetBuffer(level);
-        CUdeviceptr high = m_PyramidBuffers.GetBuffer(level - 1u);
-        uint32_t lowWidth = m_PyramidWidth[level];
-        uint32_t lowHeight = m_PyramidHeight[level];
-        uint32_t lowPitch = lowWidth;
+//Modify Begin:2026-07-30 by BestHui
+        CUtexObject low = m_PyramidTextures.GetLinearTextureObject(level);
+        CUtexObject high = m_PyramidTextures.GetPointTextureObject(level - 1u);
+        CUsurfObject highOutput = m_PyramidTextures.GetSurfaceObject(level - 1u);
+//Modify End
         uint32_t highWidth = m_PyramidWidth[level - 1u];
         uint32_t highHeight = m_PyramidHeight[level - 1u];
-        uint32_t highPitch = highWidth;
         void* upsampleArgs[] = {
             &low,
             &high,
-            &lowWidth,
-            &lowHeight,
-            &lowPitch,
+//Modify Begin:2026-07-30 by BestHui
+            &highOutput,
+//Modify End
             &highWidth,
             &highHeight,
-            &highPitch,
         };
         result = cuLaunchKernel(
             m_UpsampleAddKernel,
@@ -392,16 +617,17 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
         }
     }
 
-    uint32_t bloomPitch = level0Width;
+//Modify Begin:2026-07-30 by BestHui
+    CUtexObject bloom = m_PyramidTextures.GetLinearTextureObject(0u);
+//Modify End
     void* compositeArgs[] = {
         &input,
-        &level0,
+//Modify Begin:2026-07-30 by BestHui
+        &bloom,
+//Modify End
         &output,
         &cudaWidth,
         &cudaHeight,
-        &level0Width,
-        &level0Height,
-        &bloomPitch,
     };
     result = cuLaunchKernel(
         m_CompositeBloomKernel,
@@ -421,6 +647,13 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
         return false;
     }
 
+//Modify Begin:2026-07-30 by BestHui
+    if (m_ActiveCudaTimingFrameIndex >= 0)
+    {
+        RecordCudaTimingEvent(m_CudaTimingFrames[static_cast<size_t>(m_ActiveCudaTimingFrameIndex)].KernelsEnd);
+    }
+//Modify End
+
     return true;
 }
 
@@ -434,21 +667,37 @@ bool CudaBloomPass::ExecuteInPlace(Texture& postProcessColor, const uint32_t wid
     {
         return false;
     }
+//Modify Begin:2026-07-30 by BestHui
+    CollectCompletedCudaTimingFrames();
+    BeginCudaTimingFrame();
+//Modify End
     if (!EnsureD3D12InteropResource(postProcessColor, width, height))
     {
+//Modify Begin:2026-07-30 by BestHui
+        m_ActiveCudaTimingFrameIndex = -1;
+//Modify End
         return false;
     }
     if (!SignalD3D12AndWaitInCuda(d3d12CommandQueue))
     {
+//Modify Begin:2026-07-30 by BestHui
+        m_ActiveCudaTimingFrameIndex = -1;
+//Modify End
         return false;
     }
     if (!RunCudaBloom(width, height))
     {
+//Modify Begin:2026-07-30 by BestHui
+        m_ActiveCudaTimingFrameIndex = -1;
+//Modify End
         m_CudaContext.Synchronize();
         return false;
     }
     if (!SignalCudaAndWaitInD3D12(d3d12CommandQueue))
     {
+//Modify Begin:2026-07-30 by BestHui
+        m_ActiveCudaTimingFrameIndex = -1;
+//Modify End
         return false;
     }
 

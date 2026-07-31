@@ -159,7 +159,7 @@ void MeshletGeometrySet::Clear()
     m_Instances.clear();
 }
 
-std::pair<uint32_t, uint32_t> MeshletGeometrySet::AddGeometry(const MeshPrototype& prototype, const uint32_t materialIndex)
+std::pair<uint32_t, uint32_t> MeshletGeometrySet::AddGeometry(const MeshPrototype& prototype)
 {
     MeshletBuildResult buildResult = MeshletBuilder::Build(prototype);
     if (buildResult.Meshlets.empty())
@@ -178,7 +178,6 @@ std::pair<uint32_t, uint32_t> MeshletGeometrySet::AddGeometry(const MeshPrototyp
     {
         meshlet.VertexOffset += baseVertex;
         meshlet.IndexOffset += baseIndex;
-        meshlet.MaterialIndex = materialIndex;
         m_Meshlets.push_back(meshlet);
     }
 
@@ -190,7 +189,7 @@ void MeshletGeometrySet::AddDraw(
     const XMMATRIX& worldMatrix,
     const uint32_t materialIndex)
 {
-    const auto [meshletOffset, meshletCount] = AddGeometry(prototype, materialIndex);
+    const auto [meshletOffset, meshletCount] = AddGeometry(prototype);
     AddDraw(meshletOffset, meshletCount, worldMatrix, materialIndex);
 }
 

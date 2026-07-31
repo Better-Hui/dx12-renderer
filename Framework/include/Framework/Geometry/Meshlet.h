@@ -122,7 +122,7 @@ public:
     MeshletGeometrySet();
 
     void Clear();
-    std::pair<uint32_t, uint32_t> AddGeometry(const MeshPrototype& prototype, uint32_t materialIndex);
+    std::pair<uint32_t, uint32_t> AddGeometry(const MeshPrototype& prototype);
     void AddDraw(const MeshPrototype& prototype, const DirectX::XMMATRIX& worldMatrix, uint32_t materialIndex);
     void AddDraw(uint32_t meshletOffset, uint32_t meshletCount, const DirectX::XMMATRIX& worldMatrix, uint32_t materialIndex);
     void Upload(CommandList& commandList);

@@ -145,28 +145,35 @@ target_link_libraries(${TARGET_NAME}
 target_compile_options(${TARGET_NAME} PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 target_link_options(${TARGET_NAME} PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/NODEFAULTLIB:LIBCMT>")
 
-find_program(CUDA_NVCC_EXECUTABLE
+# Modify Begin:2026-07-30 by BestHui
+set(DX12_RENDERER_CUDA_TOOLKIT_ROOT "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.8" CACHE PATH "CUDA Toolkit 12.8 root used by DX12 renderer CUDA interop.")
+
+find_program(DX12_RENDERER_CUDA_NVCC_EXECUTABLE
         NAMES nvcc
-        HINTS "$ENV{CUDA_PATH}/bin" "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.3/bin"
+        HINTS "${DX12_RENDERER_CUDA_TOOLKIT_ROOT}/bin"
+        NO_DEFAULT_PATH
         )
 
-find_path(CUDA_INCLUDE_DIR
+find_path(DX12_RENDERER_CUDA_INCLUDE_DIR
         NAMES cuda.h
-        HINTS "$ENV{CUDA_PATH}/include" "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.3/include"
+        HINTS "${DX12_RENDERER_CUDA_TOOLKIT_ROOT}/include"
+        NO_DEFAULT_PATH
         )
 
-find_library(CUDA_DRIVER_LIBRARY
+find_library(DX12_RENDERER_CUDA_DRIVER_LIBRARY
         NAMES cuda
-        HINTS "$ENV{CUDA_PATH}/lib/x64" "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.3/lib/x64"
+        HINTS "${DX12_RENDERER_CUDA_TOOLKIT_ROOT}/lib/x64"
+        NO_DEFAULT_PATH
         )
 
-if (NOT CUDA_NVCC_EXECUTABLE OR NOT CUDA_INCLUDE_DIR OR NOT CUDA_DRIVER_LIBRARY)
-        message(FATAL_ERROR "RaytracingDemo CUDA bloom requires CUDA Toolkit. Install with: winget install --id Nvidia.CUDA -e")
+if (NOT DX12_RENDERER_CUDA_NVCC_EXECUTABLE OR NOT DX12_RENDERER_CUDA_INCLUDE_DIR OR NOT DX12_RENDERER_CUDA_DRIVER_LIBRARY)
+        message(FATAL_ERROR "RaytracingDemo CUDA bloom requires CUDA Toolkit 12.8. Set DX12_RENDERER_CUDA_TOOLKIT_ROOT to the installed v12.8 directory.")
 endif()
+# Modify End
 
 get_filename_component(CUDA_HOST_COMPILER_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
-target_include_directories(${TARGET_NAME} PRIVATE "${CUDA_INCLUDE_DIR}")
-target_link_libraries(${TARGET_NAME} PRIVATE "${CUDA_DRIVER_LIBRARY}")
+target_include_directories(${TARGET_NAME} PRIVATE "${DX12_RENDERER_CUDA_INCLUDE_DIR}")
+target_link_libraries(${TARGET_NAME} PRIVATE "${DX12_RENDERER_CUDA_DRIVER_LIBRARY}")
 set(CUDA_BLOOM_PTX_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/Shaders/CudaBloom.ptx")
 # Modify End
 
@@ -230,7 +237,7 @@ add_custom_command(TARGET ${TARGET_NAME} PRE_BUILD
         COMMAND "${DXC_EXECUTABLE}" -E main -T ms_6_6 -HV 2021 -Fo "${GBUFFER_TASK_MESH_SHADER_OUTPUT}" "${GBUFFER_TASK_MESH_SHADER_SOURCE}" -I "${CMAKE_SOURCE_DIR}/Shaders" -I "${CMAKE_SOURCE_DIR}/Framework/shaders" -I "${CMAKE_CURRENT_SOURCE_DIR}/shaders" -WX
 # Modify End
 # Modify Begin:2026-07-27 by BestHui
-        COMMAND "${CUDA_NVCC_EXECUTABLE}" -ptx -O3 -arch=sm_75 -ccbin "${CUDA_HOST_COMPILER_DIR}" -Xcompiler=/utf-8 -o "${CUDA_BLOOM_PTX_OUTPUT}" "${CMAKE_CURRENT_SOURCE_DIR}/shaders/CUDA/CudaBloom.cu"
+        COMMAND "${DX12_RENDERER_CUDA_NVCC_EXECUTABLE}" -ptx -O3 -arch=sm_75 -ccbin "${CUDA_HOST_COMPILER_DIR}" -Xcompiler=/utf-8 -o "${CUDA_BLOOM_PTX_OUTPUT}" "${CMAKE_CURRENT_SOURCE_DIR}/shaders/CUDA/CudaBloom.cu"
 # Modify End
         VERBATIM
 )

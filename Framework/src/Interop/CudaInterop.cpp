@@ -521,3 +521,163 @@ void CudaDeviceBufferPool::Release(const CudaContext* context)
     m_Buffers.clear();
     m_Capacities.clear();
 }
+
+//Modify Begin:2026-07-30 by BestHui
+CudaDeviceTexture2DPool::~CudaDeviceTexture2DPool()
+{
+    Release();
+}
+
+bool CudaDeviceTexture2DPool::EnsureTexture(
+    const size_t index,
+    const uint32_t width,
+    const uint32_t height,
+    std::string& outError)
+{
+    if (width == 0 || height == 0)
+    {
+        outError = "CUDA texture allocation size is zero.";
+        return false;
+    }
+
+    if (m_Textures.size() <= index)
+    {
+        m_Textures.resize(index + 1u);
+    }
+
+    CudaDeviceTexture2D& texture = m_Textures[index];
+    if (texture.Array != nullptr && texture.Width == width && texture.Height == height)
+    {
+        return true;
+    }
+
+    ReleaseTexture(texture);
+
+    CUDA_ARRAY3D_DESCRIPTOR arrayDesc = {};
+    arrayDesc.Width = width;
+    arrayDesc.Height = height;
+    arrayDesc.Depth = 0;
+    arrayDesc.Format = CU_AD_FORMAT_FLOAT;
+    arrayDesc.NumChannels = 4;
+    arrayDesc.Flags = CUDA_ARRAY3D_SURFACE_LDST;
+
+    CUresult result = cuArray3DCreate(&texture.Array, &arrayDesc);
+    if (result != CUDA_SUCCESS)
+    {
+        outError = "CUDA array allocation failed: " + CudaContext::GetError(result);
+        ReleaseTexture(texture);
+        return false;
+    }
+
+    CUDA_RESOURCE_DESC resourceDesc = {};
+    resourceDesc.resType = CU_RESOURCE_TYPE_ARRAY;
+    resourceDesc.res.array.hArray = texture.Array;
+
+    CUDA_TEXTURE_DESC pointTextureDesc = {};
+    pointTextureDesc.addressMode[0] = CU_TR_ADDRESS_MODE_CLAMP;
+    pointTextureDesc.addressMode[1] = CU_TR_ADDRESS_MODE_CLAMP;
+    pointTextureDesc.addressMode[2] = CU_TR_ADDRESS_MODE_CLAMP;
+    pointTextureDesc.filterMode = CU_TR_FILTER_MODE_POINT;
+    pointTextureDesc.flags = 0;
+
+    result = cuTexObjectCreate(&texture.PointTextureObject, &resourceDesc, &pointTextureDesc, nullptr);
+    if (result != CUDA_SUCCESS)
+    {
+        outError = "CUDA point texture object creation failed: " + CudaContext::GetError(result);
+        ReleaseTexture(texture);
+        return false;
+    }
+
+    CUDA_TEXTURE_DESC linearTextureDesc = {};
+    linearTextureDesc.addressMode[0] = CU_TR_ADDRESS_MODE_CLAMP;
+    linearTextureDesc.addressMode[1] = CU_TR_ADDRESS_MODE_CLAMP;
+    linearTextureDesc.addressMode[2] = CU_TR_ADDRESS_MODE_CLAMP;
+    linearTextureDesc.filterMode = CU_TR_FILTER_MODE_LINEAR;
+    linearTextureDesc.flags = CU_TRSF_NORMALIZED_COORDINATES;
+
+    result = cuTexObjectCreate(&texture.LinearTextureObject, &resourceDesc, &linearTextureDesc, nullptr);
+    if (result != CUDA_SUCCESS)
+    {
+        outError = "CUDA linear texture object creation failed: " + CudaContext::GetError(result);
+        ReleaseTexture(texture);
+        return false;
+    }
+
+    result = cuSurfObjectCreate(&texture.SurfaceObject, &resourceDesc);
+    if (result != CUDA_SUCCESS)
+    {
+        outError = "CUDA surface object creation failed: " + CudaContext::GetError(result);
+        ReleaseTexture(texture);
+        return false;
+    }
+
+    texture.Width = width;
+    texture.Height = height;
+    return true;
+}
+
+CUtexObject CudaDeviceTexture2DPool::GetPointTextureObject(const size_t index) const
+{
+    return index < m_Textures.size() ? m_Textures[index].PointTextureObject : 0;
+}
+
+CUtexObject CudaDeviceTexture2DPool::GetLinearTextureObject(const size_t index) const
+{
+    return index < m_Textures.size() ? m_Textures[index].LinearTextureObject : 0;
+}
+
+CUsurfObject CudaDeviceTexture2DPool::GetSurfaceObject(const size_t index) const
+{
+    return index < m_Textures.size() ? m_Textures[index].SurfaceObject : 0;
+}
+
+uint32_t CudaDeviceTexture2DPool::GetWidth(const size_t index) const
+{
+    return index < m_Textures.size() ? m_Textures[index].Width : 0u;
+}
+
+uint32_t CudaDeviceTexture2DPool::GetHeight(const size_t index) const
+{
+    return index < m_Textures.size() ? m_Textures[index].Height : 0u;
+}
+
+void CudaDeviceTexture2DPool::Release(const CudaContext* context)
+{
+    if (context != nullptr)
+    {
+        context->Synchronize();
+    }
+
+    for (CudaDeviceTexture2D& texture : m_Textures)
+    {
+        ReleaseTexture(texture);
+    }
+    m_Textures.clear();
+}
+
+void CudaDeviceTexture2DPool::ReleaseTexture(CudaDeviceTexture2D& texture)
+{
+    if (texture.SurfaceObject != 0)
+    {
+        cuSurfObjectDestroy(texture.SurfaceObject);
+        texture.SurfaceObject = 0;
+    }
+    if (texture.LinearTextureObject != 0)
+    {
+        cuTexObjectDestroy(texture.LinearTextureObject);
+        texture.LinearTextureObject = 0;
+    }
+    if (texture.PointTextureObject != 0)
+    {
+        cuTexObjectDestroy(texture.PointTextureObject);
+        texture.PointTextureObject = 0;
+    }
+    if (texture.Array != nullptr)
+    {
+        cuArrayDestroy(texture.Array);
+        texture.Array = nullptr;
+    }
+    texture.Width = 0;
+    texture.Height = 0;
+}
+//Modify End

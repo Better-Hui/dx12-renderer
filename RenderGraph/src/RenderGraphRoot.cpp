@@ -415,6 +415,10 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
                     pCommandList = m_DirectCommandQueue->GetCommandList();
                     const std::string passName = "AfterExternal." + NarrowPassName(pRenderPass->GetPassName());
                     m_GpuTimestampProfiler->WriteTimestamp(*pCommandList, passName.c_str());
+//Modify Begin:2026-07-30 by BestHui
+                    m_DirectCommandQueue->ExecuteCommandList(pCommandList);
+                    pCommandList.reset();
+//Modify End
                 }
 //Modify End
             }
@@ -437,22 +441,23 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
         }
     }
 
-//Modify Begin:2026-07-28 by BestHui
-    if (pCommandList != nullptr)
-    {
 //Modify Begin:2026-07-29 by BestHui
-        if (m_GpuTimestampProfiler != nullptr && m_GpuTimestampProfiler->IsAvailable())
+    if (m_GpuTimestampProfiler != nullptr && m_GpuTimestampProfiler->IsAvailable())
+    {
+//Modify Begin:2026-07-30 by BestHui
+        if (pCommandList == nullptr)
         {
-            m_GpuTimestampProfiler->WriteTimestamp(*pCommandList, "RenderGraph.End");
-            m_GpuTimestampProfiler->ResolveFrame(*pCommandList);
-            const uint64_t fenceValue = m_DirectCommandQueue->ExecuteCommandList(pCommandList);
-            m_GpuTimestampProfiler->EndFrame(fenceValue);
-        }
-        else
-        {
-            m_DirectCommandQueue->ExecuteCommandList(pCommandList);
+            pCommandList = m_DirectCommandQueue->GetCommandList();
         }
 //Modify End
+        m_GpuTimestampProfiler->WriteTimestamp(*pCommandList, "RenderGraph.End");
+        m_GpuTimestampProfiler->ResolveFrame(*pCommandList);
+        const uint64_t fenceValue = m_DirectCommandQueue->ExecuteCommandList(pCommandList);
+        m_GpuTimestampProfiler->EndFrame(fenceValue);
+    }
+    else if (pCommandList != nullptr)
+    {
+        m_DirectCommandQueue->ExecuteCommandList(pCommandList);
     }
 //Modify End
 }

@@ -93,3 +93,34 @@ private:
     std::vector<CUdeviceptr> m_Buffers;
     std::vector<size_t> m_Capacities;
 };
+
+//Modify Begin:2026-07-30 by BestHui
+struct CudaDeviceTexture2D
+{
+    CUarray Array = nullptr;
+    CUtexObject PointTextureObject = 0;
+    CUtexObject LinearTextureObject = 0;
+    CUsurfObject SurfaceObject = 0;
+    uint32_t Width = 0;
+    uint32_t Height = 0;
+};
+
+class CudaDeviceTexture2DPool final
+{
+public:
+    ~CudaDeviceTexture2DPool();
+
+    bool EnsureTexture(size_t index, uint32_t width, uint32_t height, std::string& outError);
+    CUtexObject GetPointTextureObject(size_t index) const;
+    CUtexObject GetLinearTextureObject(size_t index) const;
+    CUsurfObject GetSurfaceObject(size_t index) const;
+    uint32_t GetWidth(size_t index) const;
+    uint32_t GetHeight(size_t index) const;
+    void Release(const CudaContext* context = nullptr);
+
+private:
+    void ReleaseTexture(CudaDeviceTexture2D& texture);
+
+    std::vector<CudaDeviceTexture2D> m_Textures;
+};
+//Modify End

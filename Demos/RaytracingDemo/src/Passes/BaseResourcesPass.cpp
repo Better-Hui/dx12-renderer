@@ -167,10 +167,12 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
             const XMMATRIX viewProjection = demo.GetSceneCamera().GetViewMatrix() * demo.GetSceneCamera().GetProjectionMatrix();
             const XMMATRIX previousViewProjection = demo.m_HasPreviousViewProjection ? demo.m_PreviousViewProjection : viewProjection;
             const auto& sceneObjects = demo.m_SceneResources.GetSceneObjects();
+            const auto& sceneGeometries = demo.m_SceneResources.GetSceneGeometries();
             const auto& materials = demo.m_SceneResources.GetMaterials();
             for (const RaytracingDemo::SceneObject& object : sceneObjects)
             {
                 const RaytracingDemo::MaterialData& material = materials[object.MaterialIndex];
+                const RaytracingDemoSceneGeometry& geometry = sceneGeometries[object.GeometryIndex];
 
                 RaytracingDemo::ModelConstants modelConstants{};
                 modelConstants.Model = object.WorldMatrix;
@@ -203,7 +205,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
                 commandContext.BindDescriptorSet(demo.m_GBufferShader->GetDescriptorSet());
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
-                for (const auto& mesh : object.Model->GetMeshes())
+                for (const auto& mesh : geometry.Model->GetMeshes())
                 {
                     mesh->Bind(cmd);
                     commandContext.DrawIndexed(mesh->GetIndexCount());

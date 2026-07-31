@@ -62,22 +62,28 @@ target_include_directories(${TARGET_NAME}
         )
 
 # Modify Begin:2026-07-28 by BestHui
-find_path(CUDA_INCLUDE_DIR
+# Modify Begin:2026-07-30 by BestHui
+set(DX12_RENDERER_CUDA_TOOLKIT_ROOT "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.8" CACHE PATH "CUDA Toolkit 12.8 root used by DX12 renderer CUDA interop.")
+
+find_path(DX12_RENDERER_CUDA_INCLUDE_DIR
         NAMES cuda.h
-        HINTS "$ENV{CUDA_PATH}/include" "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.3/include"
+        HINTS "${DX12_RENDERER_CUDA_TOOLKIT_ROOT}/include"
+        NO_DEFAULT_PATH
         )
 
-find_library(CUDA_DRIVER_LIBRARY
+find_library(DX12_RENDERER_CUDA_DRIVER_LIBRARY
         NAMES cuda
-        HINTS "$ENV{CUDA_PATH}/lib/x64" "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.3/lib/x64"
+        HINTS "${DX12_RENDERER_CUDA_TOOLKIT_ROOT}/lib/x64"
+        NO_DEFAULT_PATH
         )
 
-if (NOT CUDA_INCLUDE_DIR OR NOT CUDA_DRIVER_LIBRARY)
-        message(FATAL_ERROR "Framework CUDA interop requires CUDA Toolkit driver headers/libs.")
+if (NOT DX12_RENDERER_CUDA_INCLUDE_DIR OR NOT DX12_RENDERER_CUDA_DRIVER_LIBRARY)
+        message(FATAL_ERROR "Framework CUDA interop requires CUDA Toolkit 12.8 driver headers/libs. Set DX12_RENDERER_CUDA_TOOLKIT_ROOT to the installed v12.8 directory.")
 endif()
+# Modify End
 
 target_include_directories(${TARGET_NAME}
-        PUBLIC "${CUDA_INCLUDE_DIR}"
+        PUBLIC "${DX12_RENDERER_CUDA_INCLUDE_DIR}"
         PUBLIC "${CMAKE_SOURCE_DIR}/External/UnityPluginAPI"
         )
 # Modify End
@@ -98,7 +104,7 @@ target_include_directories(${TARGET_NAME}
 target_link_libraries(${TARGET_NAME}
         PUBLIC DX12Library
 # Modify Begin:2026-07-28 by BestHui
-        PUBLIC "${CUDA_DRIVER_LIBRARY}"
+        PUBLIC "${DX12_RENDERER_CUDA_DRIVER_LIBRARY}"
 # Modify End
 # Modify Begin:2026-07-27 by BestHui
         PUBLIC "${NRD_BIN_DIR}/NRD.lib"
