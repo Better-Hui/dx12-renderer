@@ -24,14 +24,27 @@ void RaytracingDemo::OnImGui()
         }
         if (m_GpuTimingEnabled)
         {
-            ImGui::Text("GPU RG: %.3f ms", m_GpuTimestampProfiler.GetLastFrameGpuMilliseconds());
+//Modify Begin:2026-08-02 by BestHui
+            ImGui::Text(
+                "RG Execute: gpu %.3f ms, cpu %.3f ms",
+                m_GpuTimestampProfiler.GetLastFrameGpuMilliseconds(),
+                m_LastRenderGraphCpuMilliseconds);
+//Modify End
             if (!m_GpuTimestampDisplaySamples.empty() && ImGui::CollapsingHeader("GPU RG Timing"))
             {
-                ImGui::Text("delta: since previous marker, total: since RG begin");
+//Modify Begin:2026-08-02 by BestHui
+                ImGui::Text("gpu/cpu delta: since previous marker, gpu/cpu total: since RG begin");
                 for (const GpuTimestampSample& sample : m_GpuTimestampDisplaySamples)
                 {
-                    ImGui::Text("%s: delta %.3f ms, total %.3f ms", sample.Name.c_str(), sample.MillisecondsFromPrevious, sample.MillisecondsFromFrameStart);
+                    ImGui::Text(
+                        "%s: gpu %.3f/%.3f ms, cpu %.3f/%.3f ms",
+                        sample.Name.c_str(),
+                        sample.MillisecondsFromPrevious,
+                        sample.MillisecondsFromFrameStart,
+                        sample.CpuMillisecondsFromPrevious,
+                        sample.CpuMillisecondsFromFrameStart);
                 }
+//Modify End
             }
         }
     }

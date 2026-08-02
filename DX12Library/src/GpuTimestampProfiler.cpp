@@ -64,6 +64,9 @@ void GpuTimestampProfiler::Shutdown()
     m_CurrentSlotIndex = 0;
     m_CurrentFrameNumber = 0;
     m_TimestampFrequency = 0;
+//Modify Begin:2026-08-02 by BestHui
+    m_CpuFrameStart = {};
+//Modify End
     m_Initialized = false;
     m_LastFrameGpuMilliseconds = 0.0;
 }
@@ -84,6 +87,10 @@ void GpuTimestampProfiler::BeginFrame(const uint64_t frameNumber)
     slot.FrameNumber = frameNumber;
     slot.SubmittedFenceValue = 0;
     slot.PendingReadback = false;
+//Modify Begin:2026-08-02 by BestHui
+    m_CpuFrameStart = std::chrono::steady_clock::now();
+    slot.CpuMilliseconds.clear();
+//Modify End
 }
 
 void GpuTimestampProfiler::WriteTimestamp(CommandList& commandList, const char* name)
@@ -101,6 +108,10 @@ void GpuTimestampProfiler::WriteTimestamp(CommandList& commandList, const char* 
 
     const uint32_t queryIndex = slot.TimestampCount++;
     slot.Names.emplace_back(name != nullptr ? name : "");
+//Modify Begin:2026-08-02 by BestHui
+    slot.CpuMilliseconds.push_back(
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - m_CpuFrameStart).count());
+//Modify End
     commandList.GetGraphicsCommandList()->EndQuery(slot.QueryHeap.Get(), D3D12_QUERY_TYPE_TIMESTAMP, queryIndex);
 }
 
@@ -171,6 +182,14 @@ bool GpuTimestampProfiler::CollectCompletedFrame(CommandQueue& commandQueue, std
                     static_cast<double>(timestamp - frameStart) * 1000.0 / static_cast<double>(m_TimestampFrequency);
                 sample.MillisecondsFromPrevious =
                     i == 0 ? 0.0 : static_cast<double>(timestamp - previous) * 1000.0 / static_cast<double>(m_TimestampFrequency);
+//Modify Begin:2026-08-02 by BestHui
+                sample.CpuMillisecondsFromFrameStart =
+                    i < slot.CpuMilliseconds.size() ? slot.CpuMilliseconds[i] : 0.0;
+                sample.CpuMillisecondsFromPrevious =
+                    i > 0 && i < slot.CpuMilliseconds.size()
+                        ? slot.CpuMilliseconds[i] - slot.CpuMilliseconds[i - 1]
+                        : 0.0;
+//Modify End
                 previous = timestamp;
                 samples.push_back(sample);
             }

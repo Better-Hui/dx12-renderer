@@ -24,6 +24,7 @@
 #include <imgui.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -522,6 +523,9 @@ RaytracingDemo::CameraConstants RaytracingDemo::BuildCameraConstants() const
     camera.AccumulationFrameIndex = pathAccumulationEnabled ? m_AccumulationFrameIndex : 0u;
     camera.AccumulationEnabled = pathAccumulationEnabled ? 1u : 0u;
     m_Denoisers.FillCameraConstants(camera.NRDDenoiserMode, camera.NRDReblurHitDistanceParameters);
+//Modify Begin:2026-08-02 by BestHui
+    camera.DenoiserEnabled = static_cast<uint32_t>(m_Denoisers.GetAlgorithm());
+//Modify End
     camera.DirectLightingEnabled = m_DirectLightingEnabled ? 1u : 0u;
     camera.IndirectLightingEnabled = m_IndirectLightingEnabled ? 1u : 0u;
     return camera;
@@ -649,6 +653,9 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
 //Modify Begin:2026-07-29 by BestHui
     m_RenderGraph->SetGpuTimestampProfiler(m_GpuTimingEnabled ? &m_GpuTimestampProfiler : nullptr);
 //Modify End
+//Modify Begin:2026-08-02 by BestHui
+    const auto renderGraphCpuStart = std::chrono::steady_clock::now();
+//Modify End
 //Modify Begin:2026-07-28 by BestHui
     try
     {
@@ -658,6 +665,10 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     {
         throw std::runtime_error(std::string("RaytracingDemo::OnRender RenderGraph.Execute failed: ") + exception.what());
     }
+//Modify Begin:2026-08-02 by BestHui
+    m_LastRenderGraphCpuMilliseconds = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - renderGraphCpuStart).count();
+//Modify End
 
     try
     {

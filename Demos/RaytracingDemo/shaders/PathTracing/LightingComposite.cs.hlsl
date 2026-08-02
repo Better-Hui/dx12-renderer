@@ -75,9 +75,24 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
 //Modify Begin:2026-07-28 by BestHui
     if (depth >= 0.999999f)
     {
-        NoisyRadiance[pixel] = 0.0f;
-        NRDNoisyRadiance[pixel] = 0.0f;
-        HistoryColor[pixel] = 0.0f;
+//Modify Begin:2026-08-02 by BestHui
+        // NRD consumes NRDNoisyRadiance, SVGF consumes NoisyRadiance; only write the input
+        // that the active denoiser actually reads.
+        if (Camera_DenoiserEnabled == 1u)
+        {
+            NRDNoisyRadiance[pixel] = 0.0f;
+        }
+        else if (Camera_DenoiserEnabled == 2u)
+        {
+            NoisyRadiance[pixel] = 0.0f;
+        }
+//Modify End
+//Modify Begin:2026-08-02 by BestHui
+        if (Camera_AccumulationEnabled != 0u)
+        {
+            HistoryColor[pixel] = 0.0f;
+        }
+//Modify End
         SceneColor[pixel] = 0.0f;
         return;
     }
@@ -112,8 +127,16 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     const float viewZ = GetGBufferViewZ(pixel);
     const float roughness = GetGBufferRoughness(pixel);
     const float3 nrdDemodulation = GetNRDDiffuseDemodulation(pixel);
-    NoisyRadiance[pixel] = float4(SanitizeNRDRadiance(sampleColor), hitDistance);
-    NRDNoisyRadiance[pixel] = PackNRDDiffuseRadianceHitDistance(sampleColor / nrdDemodulation, hitDistance, viewZ, roughness);
+//Modify Begin:2026-08-02 by BestHui
+    if (Camera_DenoiserEnabled == 1u)
+    {
+        NRDNoisyRadiance[pixel] = PackNRDDiffuseRadianceHitDistance(sampleColor / nrdDemodulation, hitDistance, viewZ, roughness);
+    }
+    else if (Camera_DenoiserEnabled == 2u)
+    {
+        NoisyRadiance[pixel] = float4(SanitizeNRDRadiance(sampleColor), hitDistance);
+    }
+//Modify End
 
     if (Camera_AccumulationEnabled == 0u)
     {

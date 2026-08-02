@@ -79,7 +79,10 @@ private:
         uint32_t AccumulationFrameIndex = 0;
         uint32_t AccumulationEnabled = 1;
         uint32_t NRDDenoiserMode = 0;
-        uint32_t Padding0 = 0;
+//Modify Begin:2026-08-02 by BestHui
+        // Denoiser algorithm: 0 = Off, 1 = NRD, 2 = SVGF.
+        uint32_t DenoiserEnabled = 0;
+//Modify End
         DirectX::XMFLOAT4 NRDReblurHitDistanceParameters = { 3.0f, 0.1f, 20.0f, 0.0f };
         uint32_t DirectLightingEnabled = 1;
         uint32_t IndirectLightingEnabled = 1;
@@ -219,6 +222,9 @@ private:
     std::vector<GpuTimestampSample> m_GpuTimestampDisplaySamples;
     double m_LastGpuTimingUiUpdateTime = 0.0;
     bool m_GpuTimingEnabled = true;
+//Modify Begin:2026-08-02 by BestHui
+    double m_LastRenderGraphCpuMilliseconds = 0.0;
+//Modify End
 //Modify End
     RaytracingDemoSceneResources m_SceneResources;
     SceneLightManager m_Lights;

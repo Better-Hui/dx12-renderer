@@ -103,7 +103,10 @@ bool CudaContext::InitializeForD3D12Device(ID3D12Device* d3d12Device, std::strin
         return false;
     }
 
-    result = cuCtxCreate(&m_Context, nullptr, 0, device);
+    //Modify Begin:2026-08-01 by BestHui
+    // cuCtxCreate takes (CUcontext*, unsigned int flags, CUdevice) since CUDA 12.8.
+    result = cuCtxCreate(&m_Context, 0, device);
+    //Modify End
     if (result != CUDA_SUCCESS)
     {
         outError = GetError(result);

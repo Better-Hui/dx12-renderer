@@ -19,7 +19,9 @@ cbuffer CameraConstants : register(b0, space0)
     uint Camera_AccumulationFrameIndex;
     uint Camera_AccumulationEnabled;
     uint Camera_NRDDenoiserMode;
-    uint Camera_Padding0;
+//Modify Begin:2026-08-02 by BestHui
+    uint Camera_DenoiserEnabled;
+//Modify End
     float4 Camera_NRDReblurHitDistanceParameters;
     uint Camera_DirectLightingEnabled;
     uint Camera_IndirectLightingEnabled;
