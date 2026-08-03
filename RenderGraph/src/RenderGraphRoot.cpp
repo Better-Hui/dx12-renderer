@@ -507,6 +507,11 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
                 FlushBarriers(*pCommandList);
 //Modify Begin:2026-08-03 by BestHui
                 pass.PrepareAsyncCompute(*pCommandList);
+                if (directProfilerFrameStarted)
+                {
+                    const std::string markerName = "Async Prepare." + NarrowPassName(pass.GetPassName());
+                    m_GpuTimestampProfiler->WriteTimestamp(*pCommandList, markerName.c_str());
+                }
 //Modify End
                 flushDirectCommandList();
             }

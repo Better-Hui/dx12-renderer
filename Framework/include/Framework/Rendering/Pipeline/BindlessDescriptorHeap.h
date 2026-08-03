@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <map>
+#include <vector>
 
 class CommandList;
 class Resource;
@@ -44,7 +45,9 @@ private:
         uint32_t DescriptorCount = 0;
         uint64_t Revision = 0;
     };
-    std::map<uint32_t, const Resource*> m_ShaderResources;
+//Modify Begin:2026-08-03 by BestHui
+    std::vector<const Resource*> m_ShaderResources;
+//Modify End
     std::map<uint64_t, CachedDescriptorTable> m_CachedDescriptorTables;
 };
 //Modify End

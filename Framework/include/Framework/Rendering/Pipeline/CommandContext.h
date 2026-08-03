@@ -84,7 +84,8 @@ public:
 //Modify Begin:2026-08-03 by BestHui
     void BindBindlessDescriptorHeap(
         BindlessDescriptorHeap& bindlessDescriptorHeap,
-        D3D12_RESOURCE_STATES shaderResourceState = D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE) const;
+        D3D12_RESOURCE_STATES shaderResourceState = D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE,
+        bool transitionShaderResources = true) const;
 //Modify End
 //Modify End
     void BindDescriptorSet(const PipelineDescriptorSetBindDesc& descriptorSetDesc) const;

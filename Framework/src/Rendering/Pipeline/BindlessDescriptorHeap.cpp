@@ -64,16 +64,21 @@ void BindlessDescriptorHeap::UpdateShaderResourceView(
             resource.GetShaderResourceView(srvDesc),
             D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
     }
+//Modify Begin:2026-08-03 by BestHui
+    if (descriptorIndex >= m_ShaderResources.size())
+    {
+        m_ShaderResources.resize(static_cast<size_t>(descriptorIndex) + 1u, nullptr);
+    }
     m_ShaderResources[descriptorIndex] = &resource;
+//Modify End
 }
 
 void BindlessDescriptorHeap::TransitionShaderResources(
     CommandList& commandList,
     const D3D12_RESOURCE_STATES stateAfter) const
 {
-    for (const auto& [descriptorIndex, resource] : m_ShaderResources)
+    for (const Resource* resource : m_ShaderResources)
     {
-        (void)descriptorIndex;
         if (resource != nullptr && resource->AreAutoBarriersEnabled())
         {
             commandList.TransitionBarrier(*resource, stateAfter);

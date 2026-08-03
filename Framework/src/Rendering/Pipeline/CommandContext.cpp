@@ -293,13 +293,17 @@ void CommandContext::BindPipeline(const RayTracingShader& shader) const
 //Modify Begin:2026-07-30 by BestHui
 void CommandContext::BindBindlessDescriptorHeap(
     BindlessDescriptorHeap& bindlessDescriptorHeap,
-    const D3D12_RESOURCE_STATES shaderResourceState) const
+    const D3D12_RESOURCE_STATES shaderResourceState,
+    const bool transitionShaderResources) const
 {
     m_CommandList.BindShaderVisibleDescriptorHeap(
         D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
         bindlessDescriptorHeap.GetResourceDescriptorHeap());
 //Modify Begin:2026-08-03 by BestHui
-    bindlessDescriptorHeap.TransitionShaderResources(m_CommandList, shaderResourceState);
+    if (transitionShaderResources)
+    {
+        bindlessDescriptorHeap.TransitionShaderResources(m_CommandList, shaderResourceState);
+    }
 //Modify End
     m_DescriptorAllocator.SetBindlessDescriptorHeap(&bindlessDescriptorHeap);
 }
