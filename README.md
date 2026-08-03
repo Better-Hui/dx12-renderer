@@ -39,8 +39,8 @@ The intended usage style is:
 
 The framework includes a lightweight Unity scene parser:
 
-- Header: `Framework/include/Framework/UnitySceneParser.h`
-- Source: `Framework/src/UnitySceneParser.cpp`
+- Header: `Framework/include/Framework/Scene/SceneImporter.h`
+- Source: `Framework/src/Scene/SceneYamlParser.cpp`
 - Tool: `Framework/tools/UnitySceneDump.cpp`
 
 The parser reads Unity text-serialized `.unity` scenes and extracts:

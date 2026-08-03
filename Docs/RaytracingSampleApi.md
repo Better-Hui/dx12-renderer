@@ -277,8 +277,8 @@ CUDA interop 的关键点：
 
 Unity 场景解析属于 `Framework` 上层工具，不属于 `RaytracingDemo` 的临时代码：
 
-- `Framework/include/Framework/UnitySceneParser.h`
-- `Framework/src/UnitySceneParser.cpp`
+- `Framework/include/Framework/Scene/SceneImporter.h`
+- `Framework/src/Scene/SceneYamlParser.cpp`
 - `Framework/tools/UnitySceneDump.cpp`
 
 当前解析范围：

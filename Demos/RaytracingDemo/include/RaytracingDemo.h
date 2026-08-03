@@ -25,6 +25,9 @@
 #include <PathTracing/PathTracingPipelineController.h>
 #include <Passes/CudaBloomPass.h>
 
+//Modify Begin:2026-08-03 by BestHui
+#include <deque>
+//Modify End
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -62,6 +65,14 @@ protected:
 private:
     using MaterialData = RaytracingDemoMaterialData;
     using SceneObject = RaytracingDemoSceneObject;
+
+//Modify Begin:2026-08-03 by BestHui
+    struct RenderGraphTimingFrame
+    {
+        uint64_t FrameNumber = 0;
+        std::vector<GpuTimestampSample> Samples;
+    };
+//Modify End
 
     struct CameraConstants
     {
@@ -187,8 +198,14 @@ private:
     void DrawLightBillboards(CommandList& cmd);
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
-    void LoadUnitySceneContent(CommandList& commandList, const std::filesystem::path& unityScenePath);
+//Modify Begin:2026-08-03 by BestHui
+    void LoadSceneContent(CommandList& commandList, const std::filesystem::path& scenePath);
+//Modify End
     void SaveCurrentCameraToUnityScene();
+//Modify End
+//Modify Begin:2026-08-03 by BestHui
+    void ClearRenderGraphTimingHistory();
+    bool DumpRenderGraphTimingHistory();
 //Modify End
     void OnImGui();
 
@@ -220,8 +237,16 @@ private:
     GpuTimestampProfiler m_GpuTimestampProfiler;
     std::vector<GpuTimestampSample> m_GpuTimestampSamples;
     std::vector<GpuTimestampSample> m_GpuTimestampDisplaySamples;
+//Modify Begin:2026-08-03 by BestHui
+    std::deque<RenderGraphTimingFrame> m_RenderGraphTimingHistory;
+//Modify End
     double m_LastGpuTimingUiUpdateTime = 0.0;
-    bool m_GpuTimingEnabled = true;
+//Modify Begin:2026-08-03 by BestHui
+    bool m_GpuTimingEnabled = false;
+    bool m_RenderGraphTimingCaptureEnabled = false;
+    int m_RenderGraphTimingHistoryCapacity = 300;
+    std::string m_RenderGraphTimingExportStatus;
+//Modify End
 //Modify Begin:2026-08-02 by BestHui
     double m_LastRenderGraphCpuMilliseconds = 0.0;
 //Modify End

@@ -581,15 +581,27 @@ void RaytracingDemoSceneResources::LoadSceneObjects(
 
         if (object.Mesh.Kind == SceneMeshKind::BuiltinPlane)
         {
-            auto model = modelLoader.LoadExisting(Mesh::CreatePlane(commandList, 10.0f, 10.0f));
+//Modify Begin:2026-08-03 by BestHui
+            auto model = modelLoader.LoadExisting(Mesh::CreatePlane(commandList));
 //Modify Begin:2026-07-30 by BestHui
 //Modify Begin:2026-07-31 by BestHui
-            const uint32_t geometryIndex = AddSceneGeometry(model, std::vector<MeshPrototype>{ CreateBuiltinPlanePrototype(10.0f, 10.0f) });
+            const uint32_t geometryIndex = AddSceneGeometry(model, std::vector<MeshPrototype>{ CreateBuiltinPlanePrototype(1.0f, 1.0f) });
             AddSceneObject(object.WorldMatrix, geometryIndex, materialIndex);
+//Modify End
 //Modify End
 //Modify End
             continue;
         }
+
+//Modify Begin:2026-08-03 by BestHui
+        if (object.Mesh.Kind == SceneMeshKind::BuiltinCube)
+        {
+            auto model = modelLoader.LoadExisting(Mesh::CreateCube(commandList));
+            const uint32_t geometryIndex = AddSceneGeometry(model, std::vector<MeshPrototype>{ CreateBuiltinCubePrototype(1.0f) });
+            AddSceneObject(object.WorldMatrix, geometryIndex, materialIndex);
+            continue;
+        }
+//Modify End
 
         if (object.Mesh.Kind != SceneMeshKind::ExternalMesh || object.Mesh.AssetPath.empty())
         {
@@ -604,7 +616,15 @@ void RaytracingDemoSceneResources::LoadSceneObjects(
             prototypeIterator = importedMeshPrototypeCache.emplace(meshKey, modelLoader.LoadAsMeshPrototypes(ToUtf8Path(meshPath))).first;
         }
 
-        const MeshPrototype& prototype = FindMeshPrototypeByName(prototypeIterator->second, object.Mesh.SubmeshName);
+//Modify Begin:2026-08-03 by BestHui
+        if (prototypeIterator->second.empty())
+        {
+            throw std::runtime_error("Imported mesh does not contain any renderable prototypes.");
+        }
+        const MeshPrototype& prototype = object.Mesh.SubmeshName.empty()
+            ? prototypeIterator->second.front()
+            : FindMeshPrototypeByName(prototypeIterator->second, object.Mesh.SubmeshName);
+//Modify End
         auto model = modelLoader.Load(commandList, std::vector<MeshPrototype>{ prototype });
 //Modify Begin:2026-07-30 by BestHui
 //Modify Begin:2026-07-31 by BestHui

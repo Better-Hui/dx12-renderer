@@ -196,6 +196,9 @@ bool GpuTimestampProfiler::CollectCompletedFrame(CommandQueue& commandQueue, std
             m_LastFrameGpuMilliseconds = samples.back().MillisecondsFromFrameStart;
         }
 
+//Modify Begin:2026-08-03 by BestHui
+        m_LastCollectedFrameNumber = slot.FrameNumber;
+//Modify End
         D3D12_RANGE writeRange = { 0, 0 };
         slot.ReadbackBuffer->Unmap(0, &writeRange);
         slot.PendingReadback = false;

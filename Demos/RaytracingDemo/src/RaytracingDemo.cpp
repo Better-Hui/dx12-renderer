@@ -13,7 +13,7 @@
 #include <Framework/Rendering/Pipeline/RasterPipelineStateBuilder.h>
 #include <Framework/Rendering/Pipeline/ShaderBlob.h>
 //Modify Begin:2026-07-30 by BestHui
-#include <Framework/Unity/UnitySceneImporter.h>
+#include <Framework/Scene/SceneImporter.h>
 //Modify End
 
 #include <RenderGraph/RaytracingDemoGraphResources.h>
@@ -28,8 +28,16 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+//Modify Begin:2026-08-03 by BestHui
+#include <ctime>
+//Modify End
 #include <filesystem>
+//Modify Begin:2026-08-03 by BestHui
+#include <fstream>
+#include <iomanip>
+//Modify End
 #include <random>
+#include <sstream>
 #include <stdexcept>
 #include <vector>
 
@@ -54,11 +62,12 @@ namespace
             std::max(resourceCount, resourceCapacity)));
     }
 
-    std::filesystem::path GetUnityScenePath()
+//Modify Begin:2026-08-03 by BestHui
+    std::filesystem::path GetScenePath()
     {
         char* scenePath = nullptr;
         size_t scenePathLength = 0;
-        _dupenv_s(&scenePath, &scenePathLength, "RAYTRACING_DEMO_UNITY_SCENE");
+        _dupenv_s(&scenePath, &scenePathLength, "RAYTRACING_DEMO_SCENE");
         if (scenePath != nullptr)
         {
             std::filesystem::path result(scenePath);
@@ -68,19 +77,52 @@ namespace
             {
                 return result;
             }
+            throw std::runtime_error("RAYTRACING_DEMO_SCENE is set but the scene file does not exist.");
+        }
+        std::free(scenePath);
+
+        _dupenv_s(&scenePath, &scenePathLength, "RAYTRACING_DEMO_UNITY_SCENE");
+        if (scenePath != nullptr)
+        {
+            std::filesystem::path result(scenePath);
+            std::free(scenePath);
+            if (!result.empty() && std::filesystem::exists(result))
+            {
+                return result;
+            }
             throw std::runtime_error("RAYTRACING_DEMO_UNITY_SCENE is set but the scene file does not exist.");
         }
         std::free(scenePath);
 
-        const std::filesystem::path defaultScene =
-            "C:/Program Files/Unity/MDR/ModernDeferredRenderer/project/ModernDeferredRenderer/Assets/Scenes/CornellBox.unity";
+        const std::filesystem::path defaultScene = "Assets/Scenes/DefaultScene.json";
         if (std::filesystem::exists(defaultScene))
         {
             return defaultScene;
         }
 
-        throw std::runtime_error("Default Unity scene file does not exist.");
+        throw std::runtime_error("Default JSON scene file does not exist. Set RAYTRACING_DEMO_SCENE to a .json or .unity file.");
     }
+//Modify End
+
+//Modify Begin:2026-08-03 by BestHui
+    std::string EscapeCsvField(const std::string& value)
+    {
+        std::string escaped = "\"";
+        for (const char character : value)
+        {
+            if (character == '\"')
+            {
+                escaped += "\"\"";
+            }
+            else
+            {
+                escaped += character;
+            }
+        }
+        escaped += "\"";
+        return escaped;
+    }
+//Modify End
 
     XMFLOAT3 RotateCameraVector(const XMVECTOR rotation, const XMFLOAT3& value)
     {
@@ -227,10 +269,11 @@ RaytracingDemo::RaytracingDemo(const std::wstring& name, const int width, const 
 }
 
 //Modify Begin:2026-07-30 by BestHui
-void RaytracingDemo::LoadUnitySceneContent(CommandList& commandList, const std::filesystem::path& unityScenePath)
+//Modify Begin:2026-08-03 by BestHui
+void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::filesystem::path& scenePath)
 {
-    const UnitySceneImportResult unityImport = UnitySceneImporter::ImportFromFile(unityScenePath);
-    m_Scene = unityImport.SceneData;
+    const SceneImportResult sceneImport = SceneImporter::ImportFromFile(scenePath);
+    m_Scene = sceneImport.SceneData;
     const SceneCamera& sceneCamera = m_Scene.GetCamera();
 
     if (!m_SceneResources.LoadScene(commandList, m_Scene))
@@ -277,27 +320,8 @@ bool RaytracingDemo::LoadContent()
     const auto commandQueue = Application::Get().GetCommandQueue();
     const auto commandList = commandQueue->GetCommandList();
 
-//Modify Begin:2026-07-30 by BestHui
-    char* useUnityScene = nullptr;
-    size_t useUnitySceneLength = 0;
-    _dupenv_s(&useUnityScene, &useUnitySceneLength, "RAYTRACING_DEMO_USE_UNITY_SCENE");
-    const bool shouldUseUnityScene = useUnityScene != nullptr && std::strcmp(useUnityScene, "0") != 0;
-    std::free(useUnityScene);
-
-    if (shouldUseUnityScene)
-    {
-        const std::filesystem::path unityScenePath = GetUnityScenePath();
-        LoadUnitySceneContent(*commandList, unityScenePath);
-    }
-    else
-    {
-        m_SceneResources.LoadDeferredLightingScene(*commandList);
-        m_Lights.CreateDemoLights();
-        m_SkyboxEnabled = true;
-        m_HasSceneCamera = false;
-        m_SkyboxTexture = std::make_shared<Texture>();
-        commandList->LoadTextureFromFile(*m_SkyboxTexture, L"Assets/Textures/skybox/skybox.dds", TextureUsageType::Albedo);
-    }
+//Modify Begin:2026-08-03 by BestHui
+    LoadSceneContent(*commandList, GetScenePath());
 //Modify End
 
     m_ImGui = std::make_unique<ImGuiImpl>(*commandList, *PWindow);
@@ -604,6 +628,12 @@ void RaytracingDemo::ResetAccumulation(bool resetDenoiserHistory)
 //Modify Begin:2026-07-30 by BestHui
 void RaytracingDemo::SaveCurrentCameraToUnityScene()
 {
+//Modify Begin:2026-08-03 by BestHui
+    if (m_Scene.GetSourcePath().extension() != ".unity")
+    {
+        throw std::runtime_error("Saving a JSON scene camera is not implemented yet.");
+    }
+//Modify End
     if (!m_HasSceneCamera || m_Scene.GetSourcePath().empty())
     {
         throw std::runtime_error("No source scene camera is loaded.");
@@ -614,8 +644,70 @@ void RaytracingDemo::SaveCurrentCameraToUnityScene()
     }
 
     m_Scene.UpdateCamera(GetSceneCamera(), m_CameraFov);
-    UnitySceneImporter::WriteCameraToSourceFile(m_Scene.GetSourcePath(), m_Scene.GetCamera());
+    SceneImporter::WriteCameraToSourceFile(m_Scene.GetSourcePath(), m_Scene.GetCamera());
     m_CameraSaveStatus = "Camera saved to Unity scene.";
+}
+//Modify End
+//Modify End
+
+//Modify Begin:2026-08-03 by BestHui
+void RaytracingDemo::ClearRenderGraphTimingHistory()
+{
+    m_RenderGraphTimingHistory.clear();
+    m_RenderGraphTimingExportStatus = "RG timing history cleared.";
+}
+
+bool RaytracingDemo::DumpRenderGraphTimingHistory()
+{
+    if (m_RenderGraphTimingHistory.empty())
+    {
+        m_RenderGraphTimingExportStatus = "RG timing history is empty.";
+        return false;
+    }
+
+    try
+    {
+        const std::filesystem::path outputDirectory = std::filesystem::current_path() / "Profiling";
+        std::filesystem::create_directories(outputDirectory);
+
+        const auto currentTime = std::chrono::system_clock::now();
+        const std::time_t currentTimeValue = std::chrono::system_clock::to_time_t(currentTime);
+        std::tm localTime{};
+        localtime_s(&localTime, &currentTimeValue);
+        std::ostringstream filename;
+        filename << "RenderGraphTiming_" << std::put_time(&localTime, "%Y%m%d_%H%M%S") << ".csv";
+        const std::filesystem::path outputPath = outputDirectory / filename.str();
+
+        std::ofstream output(outputPath, std::ios::out | std::ios::trunc);
+        if (!output.is_open())
+        {
+            throw std::runtime_error("Failed to open output file.");
+        }
+
+        output << "frame,marker,gpu_delta_ms,gpu_total_ms,cpu_delta_ms,cpu_total_ms\n";
+        output << std::fixed << std::setprecision(6);
+        for (const RenderGraphTimingFrame& frame : m_RenderGraphTimingHistory)
+        {
+            for (const GpuTimestampSample& sample : frame.Samples)
+            {
+                output << frame.FrameNumber << ','
+                       << EscapeCsvField(sample.Name) << ','
+                       << sample.MillisecondsFromPrevious << ','
+                       << sample.MillisecondsFromFrameStart << ','
+                       << sample.CpuMillisecondsFromPrevious << ','
+                       << sample.CpuMillisecondsFromFrameStart << '\n';
+            }
+        }
+
+        m_RenderGraphTimingExportStatus = "Exported " + std::to_string(m_RenderGraphTimingHistory.size()) +
+            " frames to " + outputPath.string();
+        return true;
+    }
+    catch (const std::exception& exception)
+    {
+        m_RenderGraphTimingExportStatus = std::string("RG timing export failed: ") + exception.what();
+        return false;
+    }
 }
 //Modify End
 
@@ -625,12 +717,28 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
 
 //Modify Begin:2026-07-29 by BestHui
     const auto commandQueue = Application::Get().GetCommandQueue();
-    if (m_GpuTimingEnabled &&
-        m_GpuTimestampProfiler.CollectCompletedFrame(*commandQueue, m_GpuTimestampSamples) &&
+//Modify Begin:2026-08-03 by BestHui
+    const bool collectedGpuTimingFrame =
+        m_GpuTimingEnabled && m_GpuTimestampProfiler.CollectCompletedFrame(*commandQueue, m_GpuTimestampSamples);
+//Modify End
+    if (collectedGpuTimingFrame &&
         e.TotalTime - m_LastGpuTimingUiUpdateTime >= 0.25)
     {
         m_GpuTimestampDisplaySamples = m_GpuTimestampSamples;
         m_LastGpuTimingUiUpdateTime = e.TotalTime;
+    }
+    if (collectedGpuTimingFrame &&
+        m_RenderGraphTimingCaptureEnabled &&
+        !m_GpuTimestampSamples.empty())
+    {
+        m_RenderGraphTimingHistory.push_back({
+            m_GpuTimestampProfiler.GetLastCollectedFrameNumber(),
+            m_GpuTimestampSamples
+        });
+        while (m_RenderGraphTimingHistory.size() > static_cast<size_t>(m_RenderGraphTimingHistoryCapacity))
+        {
+            m_RenderGraphTimingHistory.pop_front();
+        }
     }
 //Modify End
 

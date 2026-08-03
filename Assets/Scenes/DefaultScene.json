@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "scene": {
+    "name": "DefaultDeferred",
+    "assetsRoot": "Assets",
+    "renderSettings": {
+      "ambientColor": [1.0, 1.0, 1.0, 1.0],
+      "ambientIntensity": 1.0,
+      "skybox": "Textures/skybox/skybox.dds"
+    },
+    "materials": {
+      "Ground": {
+        "baseMap": "Textures/Ground047/Ground047_1K_Color.jpg",
+        "normalMap": "Textures/Ground047/Ground047_1K_NormalDX.jpg",
+        "metallicGlossMap": "Textures/Ground047/Ground047_1K_Roughness.jpg",
+        "occlusionMap": "Textures/Ground047/Ground047_1K_AmbientOcclusion.jpg",
+        "metallic": 0.0,
+        "roughness": 1.0
+      },
+      "Chest": {
+        "baseMap": "Models/old-wooden-chest/chest_01_BaseColor.png",
+        "normalMap": "Models/old-wooden-chest/chest_01_Normal.png",
+        "metallicGlossMap": "Models/old-wooden-chest/chest_01_Metallic.png",
+        "metallic": 1.0,
+        "roughness": 1.0
+      },
+      "Mirror": {
+        "baseColor": [0.85, 0.85, 0.92, 1.0],
+        "metallic": 1.0,
+        "roughness": 0.08
+      },
+      "Cube": {
+        "baseColor": [0.9, 0.9, 0.9, 1.0],
+        "metallic": 0.0,
+        "roughness": 0.35
+      },
+      "Cerberus": {
+        "baseMap": "Models/cerberus/Cerberus_A.jpg",
+        "normalMap": "Models/cerberus/Cerberus_N.jpg",
+        "metallicGlossMap": "Models/cerberus/Cerberus_M.jpg",
+        "metallic": 1.0,
+        "roughness": 1.0
+      },
+      "TV": {
+        "baseMap": "Models/tv/TV_Color.jpg",
+        "normalMap": "Models/tv/TV_Normal.jpg",
+        "metallicGlossMap": "Models/tv/TV_Metallic.jpg",
+        "occlusionMap": "Models/tv/TV_Occlusion.jpg",
+        "metallic": 1.0,
+        "roughness": 1.0
+      }
+    },
+    "gameObjects": [
+      {
+        "name": "Main Camera",
+        "transform": { "position": [0.0, 8.0, -35.0], "rotationEulerDegrees": [-3.24, 0.0, 0.0] },
+        "camera": { "fieldOfView": 45.0, "nearClipPlane": 0.1, "farClipPlane": 1000.0 }
+      },
+      {
+        "name": "Ground",
+        "transform": { "scale": [200.0, 200.0, 200.0] },
+        "meshRenderer": { "mesh": { "builtin": "plane" }, "material": "Ground" }
+      },
+      {
+        "name": "Chest Center",
+        "transform": { "position": [0.0, 0.25, 15.0], "rotationEulerDegrees": [90.0, 0.0, 0.0], "scale": [0.01, 0.01, 0.01] },
+        "meshRenderer": { "mesh": "Models/old-wooden-chest/chest_01.fbx", "material": "Chest" }
+      },
+      {
+        "name": "Chest Mirror",
+        "transform": { "position": [-50.0, 0.25, 15.0], "rotationEulerDegrees": [90.0, 0.0, 0.0], "scale": [0.01, 0.01, 0.01] },
+        "meshRenderer": { "mesh": "Models/old-wooden-chest/chest_01.fbx", "material": "Chest" }
+      },
+      {
+        "name": "Mirror Floor",
+        "transform": { "position": [-50.0, 0.1, 15.0], "scale": [30.0, 30.0, 30.0] },
+        "meshRenderer": { "mesh": { "builtin": "plane" }, "material": "Mirror" }
+      },
+      {
+        "name": "Mirror Cube",
+        "transform": { "position": [-54.0, 2.5, 7.0], "scale": [5.0, 5.0, 5.0] },
+        "meshRenderer": { "mesh": { "builtin": "cube" }, "material": "Cube" }
+      },
+      {
+        "name": "Cerberus",
+        "transform": { "position": [15.0, 5.0, 10.0], "rotationEulerDegrees": [90.0, 135.0, 0.0], "scale": [0.1, 0.1, 0.1] },
+        "meshRenderer": { "mesh": "Models/cerberus/Cerberus_LP.FBX", "material": "Cerberus" }
+      },
+      {
+        "name": "TV",
+        "transform": { "position": [-14.0, 0.0, 18.0], "rotationEulerDegrees": [90.0, -45.0, 0.0], "scale": [0.3, 0.3, 0.3] },
+        "meshRenderer": { "mesh": "Models/tv/TV.FBX", "material": "TV" }
+      },
+      {
+        "name": "Key Directional Light",
+        "transform": { "rotationEulerDegrees": [45.0, -30.0, 0.0] },
+        "light": { "type": "directional", "color": [1.0, 0.95, 0.85, 1.0], "intensity": 3.0 }
+      },
+      {
+        "name": "Warm Area Light",
+        "transform": { "position": [-18.0, 10.0, 18.0], "rotationEulerDegrees": [180.0, 0.0, 0.0] },
+        "light": { "type": "area", "color": [1.0, 0.82, 0.55, 1.0], "intensity": 6.0, "range": 35.0, "areaSize": [8.0, 6.0, 0.0] }
+      }
+    ]
+  }
+}

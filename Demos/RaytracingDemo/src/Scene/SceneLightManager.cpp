@@ -408,9 +408,13 @@ bool SceneLightManager::DrawImGui()
         }
     }
 
-    if (ImGui::CollapsingHeader("Directional Lights", ImGuiTreeNodeFlags_DefaultOpen))
+//Modify Begin:2026-08-03 by BestHui
+    if (ImGui::CollapsingHeader("Directional Lights"))
+//Modify End
     {
-        if (ImGui::TreeNodeEx("Directional Light List", ImGuiTreeNodeFlags_DefaultOpen))
+//Modify Begin:2026-08-03 by BestHui
+        if (ImGui::TreeNodeEx("Directional Light List"))
+//Modify End
         {
             for (size_t i = 0; i < m_DirectionalLights.size(); ++i)
             {
@@ -447,7 +451,9 @@ bool SceneLightManager::DrawImGui()
         }
     }
 
-    if (ImGui::CollapsingHeader("Point Lights", ImGuiTreeNodeFlags_DefaultOpen))
+//Modify Begin:2026-08-03 by BestHui
+    if (ImGui::CollapsingHeader("Point Lights"))
+//Modify End
     {
         if (ImGui::Checkbox("Animate Point Lights", &m_AnimatePointLights))
         {
@@ -457,7 +463,9 @@ bool SceneLightManager::DrawImGui()
         {
             ImGui::Text("PointLight[0].Y: %.2f", m_PointLights.front().PositionWs.y);
         }
-        if (ImGui::TreeNodeEx("Point Light List", ImGuiTreeNodeFlags_DefaultOpen))
+//Modify Begin:2026-08-03 by BestHui
+        if (ImGui::TreeNodeEx("Point Light List"))
+//Modify End
         {
             for (size_t i = 0; i < m_PointLights.size(); ++i)
             {
@@ -469,7 +477,9 @@ bool SceneLightManager::DrawImGui()
                 ImGui::SameLine();
                 const bool open = ImGui::TreeNodeEx(
                     "PointLight",
-                    ImGuiTreeNodeFlags_DefaultOpen,
+//Modify Begin:2026-08-03 by BestHui
+                    ImGuiTreeNodeFlags_None,
+//Modify End
                     "Point Light #%zu  %s  Pos(%.2f, %.2f, %.2f)  I %.1f",
                     i,
                     isAnimated ? "Animated" : "Static",
@@ -551,9 +561,13 @@ bool SceneLightManager::DrawImGui()
         }
     }
 
-    if (ImGui::CollapsingHeader("Area Lights", ImGuiTreeNodeFlags_DefaultOpen))
+//Modify Begin:2026-08-03 by BestHui
+    if (ImGui::CollapsingHeader("Area Lights"))
+//Modify End
     {
-        if (ImGui::TreeNodeEx("Area Light List", ImGuiTreeNodeFlags_DefaultOpen))
+//Modify Begin:2026-08-03 by BestHui
+        if (ImGui::TreeNodeEx("Area Light List"))
+//Modify End
         {
             for (size_t i = 0; i < m_AreaLights.size(); ++i)
             {

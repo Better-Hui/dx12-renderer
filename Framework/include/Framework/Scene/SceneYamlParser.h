@@ -169,7 +169,7 @@ struct UnityCameraWriteInfo
 };
 //Modify End
 
-class UnitySceneParser
+class SceneYamlParser
 {
 public:
     static UnitySceneData ParseFromFile(

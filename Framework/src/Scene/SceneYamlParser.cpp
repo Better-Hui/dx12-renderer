@@ -1,5 +1,5 @@
 //Modify Begin:2026-07-29 by BestHui
-#include <Framework/Unity/UnitySceneParser.h>
+#include <Framework/Scene/SceneYamlParser.h>
 
 #include <algorithm>
 #include <fstream>
@@ -759,7 +759,7 @@ namespace
     }
 }
 
-UnitySceneData UnitySceneParser::ParseFromFile(
+UnitySceneData SceneYamlParser::ParseFromFile(
     const std::filesystem::path& scenePath,
     const UnitySceneParseOptions& options)
 {
@@ -948,7 +948,7 @@ UnitySceneData UnitySceneParser::ParseFromFile(
 }
 
 //Modify Begin:2026-07-30 by BestHui
-void UnitySceneParser::WriteCameraToFile(
+void SceneYamlParser::WriteCameraToFile(
     const std::filesystem::path& scenePath,
     const UnityCameraWriteInfo& camera)
 {
@@ -1050,7 +1050,7 @@ void UnitySceneParser::WriteCameraToFile(
 //Modify End
 
 //Modify Begin:2026-07-30 by BestHui
-#include <Framework/Unity/UnitySceneImporter.h>
+#include <Framework/Scene/SceneImporter.h>
 
 #include <DirectXMath.h>
 
@@ -1537,18 +1537,24 @@ namespace
     }
 }
 
-UnitySceneImportResult UnitySceneImporter::ImportFromFile(
+SceneImportResult SceneImporter::ImportFromFile(
     const std::filesystem::path& scenePath,
-    const UnitySceneImportOptions& options)
+    const SceneImportOptions& options)
 {
+//Modify Begin:2026-08-03 by BestHui
+    if (scenePath.extension() == ".json")
+    {
+        return ImportJsonFromFile(scenePath, options);
+    }
+//Modify End
     if (!std::filesystem::exists(scenePath))
     {
         throw std::runtime_error("Unity scene file does not exist: " + scenePath.string());
     }
 
-    UnitySceneImportResult result;
+    SceneImportResult result;
     result.ScenePath = std::filesystem::absolute(scenePath);
-    const UnitySceneData unityScene = UnitySceneParser::ParseFromFile(result.ScenePath, options.ParseOptions);
+    const UnitySceneData unityScene = SceneYamlParser::ParseFromFile(result.ScenePath, options.ParseOptions);
     const UnityCameraInfo* primaryCamera = FindPrimaryCamera(unityScene);
     if (options.RequireCamera && primaryCamera == nullptr)
     {
@@ -1574,7 +1580,7 @@ UnitySceneImportResult UnitySceneImporter::ImportFromFile(
     return result;
 }
 
-void UnitySceneImporter::WriteCameraToSourceFile(
+void SceneImporter::WriteCameraToSourceFile(
     const std::filesystem::path& scenePath,
     const SceneCamera& camera)
 {
@@ -1584,6 +1590,6 @@ void UnitySceneImporter::WriteCameraToSourceFile(
     cameraWriteInfo.LocalPosition = ToUnityVector3(camera.SourceBinding.LocalPosition);
     cameraWriteInfo.LocalRotation = ToUnityQuaternion(camera.SourceBinding.LocalRotation);
     cameraWriteInfo.FieldOfView = camera.FieldOfView;
-    UnitySceneParser::WriteCameraToFile(scenePath, cameraWriteInfo);
+    SceneYamlParser::WriteCameraToFile(scenePath, cameraWriteInfo);
 }
 //Modify End

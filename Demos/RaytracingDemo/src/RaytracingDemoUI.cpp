@@ -17,13 +17,52 @@ void RaytracingDemo::OnImGui()
 //Modify Begin:2026-07-29 by BestHui
     if (m_GpuTimestampProfiler.IsAvailable())
     {
-        if (ImGui::Checkbox("Enable GPU Timing", &m_GpuTimingEnabled))
+        if (ImGui::Checkbox("Enable RG Timing", &m_GpuTimingEnabled))
         {
             m_GpuTimestampSamples.clear();
             m_GpuTimestampDisplaySamples.clear();
+//Modify Begin:2026-08-03 by BestHui
+            if (!m_GpuTimingEnabled)
+            {
+                m_RenderGraphTimingCaptureEnabled = false;
+            }
+            ClearRenderGraphTimingHistory();
+//Modify End
         }
         if (m_GpuTimingEnabled)
         {
+//Modify Begin:2026-08-03 by BestHui
+            if (ImGui::Checkbox("Capture RG Timing History", &m_RenderGraphTimingCaptureEnabled))
+            {
+                ClearRenderGraphTimingHistory();
+            }
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(140.0f);
+            if (ImGui::SliderInt("History Frames", &m_RenderGraphTimingHistoryCapacity, 30, 3600))
+            {
+                while (m_RenderGraphTimingHistory.size() > static_cast<size_t>(m_RenderGraphTimingHistoryCapacity))
+                {
+                    m_RenderGraphTimingHistory.pop_front();
+                }
+            }
+            if (ImGui::Button("Dump RG Timing CSV"))
+            {
+                DumpRenderGraphTimingHistory();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Clear RG Timing History"))
+            {
+                ClearRenderGraphTimingHistory();
+            }
+            ImGui::Text(
+                "History: %zu/%d frames",
+                m_RenderGraphTimingHistory.size(),
+                m_RenderGraphTimingHistoryCapacity);
+            if (!m_RenderGraphTimingExportStatus.empty())
+            {
+                ImGui::TextWrapped("%s", m_RenderGraphTimingExportStatus.c_str());
+            }
+//Modify End
 //Modify Begin:2026-08-02 by BestHui
             ImGui::Text(
                 "RG Execute: gpu %.3f ms, cpu %.3f ms",
@@ -130,7 +169,9 @@ void RaytracingDemo::OnImGui()
     const bool dollySpeedChanged = ImGui::SliderFloat("Mouse Dolly", &m_MouseDollySpeed, 0.005f, 0.25f, "%.3f");
     const bool wheelSpeedChanged = ImGui::SliderFloat("Wheel Dolly", &m_MouseWheelDollySpeed, 0.05f, 5.0f, "%.2f");
 //Modify Begin:2026-07-30 by BestHui
-    if (ImGui::Button("Save Camera To Unity Scene"))
+//Modify Begin:2026-08-03 by BestHui
+    if (m_Scene.GetSourcePath().extension() == ".unity" && ImGui::Button("Save Camera To Unity Scene"))
+//Modify End
     {
         try
         {

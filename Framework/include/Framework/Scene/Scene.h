@@ -18,6 +18,9 @@ enum class SceneMeshKind
 {
     Unknown,
     BuiltinPlane,
+//Modify Begin:2026-08-03 by BestHui
+    BuiltinCube,
+//Modify End
     ExternalMesh
 };
 

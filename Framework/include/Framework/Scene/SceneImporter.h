@@ -2,20 +2,20 @@
 #pragma once
 
 #include <Framework/Scene/Scene.h>
-#include <Framework/Unity/UnitySceneParser.h>
+#include <Framework/Scene/SceneYamlParser.h>
 
 #include <filesystem>
 #include <string>
 #include <vector>
 
-struct UnitySceneImportOptions
+struct SceneImportOptions
 {
     UnitySceneParseOptions ParseOptions;
     bool RequireCamera = true;
     bool RequireRenderableObject = true;
 };
 
-struct UnitySceneImportResult
+struct SceneImportResult
 {
     std::filesystem::path ScenePath;
     Scene SceneData;
@@ -24,12 +24,21 @@ struct UnitySceneImportResult
     size_t GetRenderableObjectCount() const { return SceneData.GetObjects().size(); }
 };
 
-class UnitySceneImporter final
+class SceneImporter final
 {
 public:
-    static UnitySceneImportResult ImportFromFile(
+//Modify Begin:2026-08-03 by BestHui
+    // Imports Unity YAML scenes and Unity-style JSON scenes into the shared Scene representation.
+//Modify End
+    static SceneImportResult ImportFromFile(
         const std::filesystem::path& scenePath,
-        const UnitySceneImportOptions& options = {});
+        const SceneImportOptions& options = {});
+
+//Modify Begin:2026-08-03 by BestHui
+    static SceneImportResult ImportJsonFromFile(
+        const std::filesystem::path& scenePath,
+        const SceneImportOptions& options = {});
+//Modify End
 
     static void WriteCameraToSourceFile(
         const std::filesystem::path& scenePath,

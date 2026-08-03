@@ -1,5 +1,5 @@
 //Modify Begin:2026-07-29 by BestHui
-#include <Framework/Unity/UnitySceneImporter.h>
+#include <Framework/Scene/SceneImporter.h>
 #include <Framework/Geometry/Mesh.h>
 #include <Framework/Geometry/ModelLoader.h>
 //Modify End
@@ -40,7 +40,7 @@ int main(int argc, char** argv)
 
     try
     {
-        const UnitySceneImportResult importResult = UnitySceneImporter::ImportFromFile(argv[1]);
+        const SceneImportResult importResult = SceneImporter::ImportFromFile(argv[1]);
         const Scene& scene = importResult.SceneData;
         std::cout << "Scene: " << scene.GetSourcePath().string() << "\n";
         std::cout << "ProjectRoot: " << scene.GetProjectRoot().string() << "\n";

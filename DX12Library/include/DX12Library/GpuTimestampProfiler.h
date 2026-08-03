@@ -41,6 +41,9 @@ public:
     bool IsAvailable() const { return m_Initialized; }
     uint32_t GetCurrentTimestampCount() const;
     double GetLastFrameGpuMilliseconds() const { return m_LastFrameGpuMilliseconds; }
+//Modify Begin:2026-08-03 by BestHui
+    uint64_t GetLastCollectedFrameNumber() const { return m_LastCollectedFrameNumber; }
+//Modify End
 
 private:
     struct FrameSlot
@@ -70,5 +73,8 @@ private:
 //Modify End
     bool m_Initialized = false;
     double m_LastFrameGpuMilliseconds = 0.0;
+//Modify Begin:2026-08-03 by BestHui
+    uint64_t m_LastCollectedFrameNumber = 0;
+//Modify End
 };
 //Modify End

@@ -196,6 +196,10 @@ target_link_libraries(${TARGET_NAME}
 add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${NRD_BIN_DIR}/NRD.dll" "$<TARGET_FILE_DIR:${TARGET_NAME}>/NRD.dll"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${NRI_BIN_DIR}/NRI.dll" "$<TARGET_FILE_DIR:${TARGET_NAME}>/NRI.dll"
+        # Modify Begin:2026-08-03 by BestHui
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${TARGET_NAME}>/Assets/Scenes"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/Assets/Scenes/DefaultScene.json" "$<TARGET_FILE_DIR:${TARGET_NAME}>/Assets/Scenes/DefaultScene.json"
+        # Modify End
         VERBATIM
 )
 
