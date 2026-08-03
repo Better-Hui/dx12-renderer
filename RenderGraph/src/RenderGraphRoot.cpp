@@ -413,6 +413,14 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
 //Modify Begin:2026-08-03 by BestHui
     bool directProfilerFrameStarted = false;
     bool asyncComputeProfilerFrameStarted = false;
+    const RenderPass* lastAsyncComputePass = nullptr;
+    for (const auto& renderPass : m_RenderPassesBuilt)
+    {
+        if (renderPass->GetQueue() == RenderPassQueue::AsyncCompute)
+        {
+            lastAsyncComputePass = renderPass;
+        }
+    }
 //Modify End
 
     {
@@ -566,7 +574,17 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
                     const std::string passName = NarrowPassName(pRenderPass->GetPassName());
                     m_AsyncComputeGpuTimestampProfiler->WriteTimestamp(*computeCommandList, passName.c_str());
                 }
-                m_AsyncComputeCommandQueue->ExecuteCommandList(computeCommandList);
+                const bool isLastAsyncComputePass = pRenderPass == lastAsyncComputePass;
+                if (isLastAsyncComputePass && asyncComputeProfilerFrameStarted)
+                {
+                    m_AsyncComputeGpuTimestampProfiler->WriteTimestamp(*computeCommandList, "RenderGraph.End");
+                    m_AsyncComputeGpuTimestampProfiler->ResolveFrame(*computeCommandList);
+                }
+                const uint64_t computeFenceValue = m_AsyncComputeCommandQueue->ExecuteCommandList(computeCommandList);
+                if (isLastAsyncComputePass && asyncComputeProfilerFrameStarted)
+                {
+                    m_AsyncComputeGpuTimestampProfiler->EndFrame(computeFenceValue);
+                }
                 m_AsyncComputeSubmittedThisFrame = true;
                 markPassOutputs(*pRenderPass);
                 ++renderPassIndex;
@@ -635,16 +653,6 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
     }
 
 //Modify Begin:2026-08-03 by BestHui
-    if (asyncComputeProfilerFrameStarted)
-    {
-        const auto computeCommandList = m_AsyncComputeCommandQueue->GetCommandList();
-        m_AsyncComputeGpuTimestampProfiler->WriteTimestamp(*computeCommandList, "RenderGraph.End");
-        m_AsyncComputeGpuTimestampProfiler->ResolveFrame(*computeCommandList);
-        const uint64_t fenceValue = m_AsyncComputeCommandQueue->ExecuteCommandList(computeCommandList);
-        m_AsyncComputeGpuTimestampProfiler->EndFrame(fenceValue);
-    }
-//Modify End
-
 //Modify Begin:2026-07-29 by BestHui
     if (directProfilerFrameStarted)
     {
