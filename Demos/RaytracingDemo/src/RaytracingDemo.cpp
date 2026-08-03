@@ -449,6 +449,9 @@ bool RaytracingDemo::LoadContent()
 //Modify Begin:2026-07-28 by BestHui
 //Modify Begin:2026-07-29 by BestHui
     m_GpuTimestampProfiler.Initialize(128);
+//Modify Begin:2026-08-03 by BestHui
+    m_AsyncComputeGpuTimestampProfiler.Initialize(128, D3D12_COMMAND_LIST_TYPE_COMPUTE);
+//Modify End
 //Modify End
     RebuildRenderGraph();
 //Modify End
@@ -493,6 +496,9 @@ void RaytracingDemo::UnloadContent()
 //Modify End
 //Modify Begin:2026-07-29 by BestHui
     m_GpuTimestampProfiler.Shutdown();
+//Modify Begin:2026-08-03 by BestHui
+    m_AsyncComputeGpuTimestampProfiler.Shutdown();
+//Modify End
 //Modify End
     m_SceneResources.Clear();
 }
@@ -586,9 +592,17 @@ void RaytracingDemo::RebuildRenderGraph()
     m_RenderGraph = RaytracingDemoRenderGraphBuilder::Create(*this);
 //Modify Begin:2026-07-29 by BestHui
     m_RenderGraph->SetGpuTimestampProfiler(m_GpuTimingEnabled ? &m_GpuTimestampProfiler : nullptr);
+//Modify Begin:2026-08-03 by BestHui
+    m_RenderGraph->SetAsyncComputeGpuTimestampProfiler(
+        m_GpuTimingEnabled ? &m_AsyncComputeGpuTimestampProfiler : nullptr);
+//Modify End
 //Modify End
     m_RenderGraphDenoiserEnabled = IsDenoiserEnabled();
     m_RenderGraphCudaBloomEnabled = m_CudaBloom.IsEnabled();
+//Modify Begin:2026-08-03 by BestHui
+    m_RenderGraphAsyncComputeEnabled = m_AsyncComputeEnabled;
+    m_RenderGraphPathTracingBackend = m_PathTracingBackend;
+//Modify End
 //Modify Begin:2026-07-31 by BestHui
     m_RenderGraphMeshletGBufferEnabled = m_UseMeshletGBuffer;
     m_RenderGraphTaskMeshletEnabled = m_UseTaskShaderMeshlets;
@@ -602,6 +616,10 @@ void RaytracingDemo::EnsureRenderGraphTopology()
     if (m_RenderGraph == nullptr ||
         m_RenderGraphDenoiserEnabled != IsDenoiserEnabled() ||
         m_RenderGraphCudaBloomEnabled != m_CudaBloom.IsEnabled()
+//Modify Begin:2026-08-03 by BestHui
+        || m_RenderGraphAsyncComputeEnabled != m_AsyncComputeEnabled
+        || m_RenderGraphPathTracingBackend != m_PathTracingBackend
+//Modify End
 //Modify Begin:2026-07-31 by BestHui
         || m_RenderGraphMeshletGBufferEnabled != m_UseMeshletGBuffer
         || m_RenderGraphTaskMeshletEnabled != m_UseTaskShaderMeshlets
@@ -657,6 +675,49 @@ void RaytracingDemo::ClearRenderGraphTimingHistory()
     m_RenderGraphTimingExportStatus = "RG timing history cleared.";
 }
 
+void RaytracingDemo::RecordRenderGraphTimingSamples(
+    const uint64_t frameNumber,
+    const char* queueName,
+    const std::vector<GpuTimestampSample>& samples)
+{
+    if (samples.empty())
+    {
+        return;
+    }
+
+    auto frameIt = std::find_if(
+        m_RenderGraphTimingHistory.begin(),
+        m_RenderGraphTimingHistory.end(),
+        [frameNumber](const RenderGraphTimingFrame& frame) { return frame.FrameNumber == frameNumber; });
+    if (frameIt == m_RenderGraphTimingHistory.end())
+    {
+        const auto insertPosition = std::find_if(
+            m_RenderGraphTimingHistory.begin(),
+            m_RenderGraphTimingHistory.end(),
+            [frameNumber](const RenderGraphTimingFrame& frame) { return frame.FrameNumber > frameNumber; });
+        frameIt = m_RenderGraphTimingHistory.insert(insertPosition, { frameNumber, {} });
+    }
+
+    const std::string queueNameString = queueName != nullptr ? queueName : "Unknown";
+    auto queueIt = std::find_if(
+        frameIt->Queues.begin(),
+        frameIt->Queues.end(),
+        [&queueNameString](const RenderGraphTimingQueue& queue) { return queue.QueueName == queueNameString; });
+    if (queueIt == frameIt->Queues.end())
+    {
+        frameIt->Queues.push_back({ queueNameString, samples });
+    }
+    else
+    {
+        queueIt->Samples = samples;
+    }
+
+    while (m_RenderGraphTimingHistory.size() > static_cast<size_t>(m_RenderGraphTimingHistoryCapacity))
+    {
+        m_RenderGraphTimingHistory.pop_front();
+    }
+}
+
 bool RaytracingDemo::DumpRenderGraphTimingHistory()
 {
     if (m_RenderGraphTimingHistory.empty())
@@ -684,18 +745,22 @@ bool RaytracingDemo::DumpRenderGraphTimingHistory()
             throw std::runtime_error("Failed to open output file.");
         }
 
-        output << "frame,marker,gpu_delta_ms,gpu_total_ms,cpu_delta_ms,cpu_total_ms\n";
+        output << "frame,queue,marker,gpu_delta_ms,gpu_total_ms,cpu_delta_ms,cpu_total_ms\n";
         output << std::fixed << std::setprecision(6);
         for (const RenderGraphTimingFrame& frame : m_RenderGraphTimingHistory)
         {
-            for (const GpuTimestampSample& sample : frame.Samples)
+            for (const RenderGraphTimingQueue& queue : frame.Queues)
             {
-                output << frame.FrameNumber << ','
-                       << EscapeCsvField(sample.Name) << ','
-                       << sample.MillisecondsFromPrevious << ','
-                       << sample.MillisecondsFromFrameStart << ','
-                       << sample.CpuMillisecondsFromPrevious << ','
-                       << sample.CpuMillisecondsFromFrameStart << '\n';
+                for (const GpuTimestampSample& sample : queue.Samples)
+                {
+                    output << frame.FrameNumber << ','
+                           << EscapeCsvField(queue.QueueName) << ','
+                           << EscapeCsvField(sample.Name) << ','
+                           << sample.MillisecondsFromPrevious << ','
+                           << sample.MillisecondsFromFrameStart << ','
+                           << sample.CpuMillisecondsFromPrevious << ','
+                           << sample.CpuMillisecondsFromFrameStart << '\n';
+                }
             }
         }
 
@@ -716,29 +781,44 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     Base::OnRender(e);
 
 //Modify Begin:2026-07-29 by BestHui
-    const auto commandQueue = Application::Get().GetCommandQueue();
+    const auto directCommandQueue = Application::Get().GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
 //Modify Begin:2026-08-03 by BestHui
-    const bool collectedGpuTimingFrame =
-        m_GpuTimingEnabled && m_GpuTimestampProfiler.CollectCompletedFrame(*commandQueue, m_GpuTimestampSamples);
+    const auto asyncComputeCommandQueue = Application::Get().GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE);
 //Modify End
-    if (collectedGpuTimingFrame &&
+//Modify Begin:2026-08-03 by BestHui
+    const bool collectedDirectGpuTimingFrame =
+        m_GpuTimingEnabled && m_GpuTimestampProfiler.CollectCompletedFrame(*directCommandQueue, m_GpuTimestampSamples);
+    const bool collectedAsyncComputeGpuTimingFrame =
+        m_GpuTimingEnabled && m_AsyncComputeGpuTimestampProfiler.CollectCompletedFrame(
+            *asyncComputeCommandQueue,
+            m_AsyncComputeGpuTimestampSamples);
+//Modify End
+    if ((collectedDirectGpuTimingFrame || collectedAsyncComputeGpuTimingFrame) &&
         e.TotalTime - m_LastGpuTimingUiUpdateTime >= 0.25)
     {
-        m_GpuTimestampDisplaySamples = m_GpuTimestampSamples;
+        if (collectedDirectGpuTimingFrame)
+        {
+            m_GpuTimestampDisplaySamples = m_GpuTimestampSamples;
+        }
+        if (collectedAsyncComputeGpuTimingFrame)
+        {
+            m_AsyncComputeGpuTimestampDisplaySamples = m_AsyncComputeGpuTimestampSamples;
+        }
         m_LastGpuTimingUiUpdateTime = e.TotalTime;
     }
-    if (collectedGpuTimingFrame &&
-        m_RenderGraphTimingCaptureEnabled &&
-        !m_GpuTimestampSamples.empty())
+    if (m_RenderGraphTimingCaptureEnabled && collectedDirectGpuTimingFrame)
     {
-        m_RenderGraphTimingHistory.push_back({
+        RecordRenderGraphTimingSamples(
             m_GpuTimestampProfiler.GetLastCollectedFrameNumber(),
-            m_GpuTimestampSamples
-        });
-        while (m_RenderGraphTimingHistory.size() > static_cast<size_t>(m_RenderGraphTimingHistoryCapacity))
-        {
-            m_RenderGraphTimingHistory.pop_front();
-        }
+            "Direct",
+            m_GpuTimestampSamples);
+    }
+    if (m_RenderGraphTimingCaptureEnabled && collectedAsyncComputeGpuTimingFrame)
+    {
+        RecordRenderGraphTimingSamples(
+            m_AsyncComputeGpuTimestampProfiler.GetLastCollectedFrameNumber(),
+            "AsyncCompute",
+            m_AsyncComputeGpuTimestampSamples);
     }
 //Modify End
 
@@ -760,6 +840,10 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
 //Modify End
 //Modify Begin:2026-07-29 by BestHui
     m_RenderGraph->SetGpuTimestampProfiler(m_GpuTimingEnabled ? &m_GpuTimestampProfiler : nullptr);
+//Modify Begin:2026-08-03 by BestHui
+    m_RenderGraph->SetAsyncComputeGpuTimestampProfiler(
+        m_GpuTimingEnabled ? &m_AsyncComputeGpuTimestampProfiler : nullptr);
+//Modify End
 //Modify End
 //Modify Begin:2026-08-02 by BestHui
     const auto renderGraphCpuStart = std::chrono::steady_clock::now();

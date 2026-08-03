@@ -86,10 +86,14 @@ std::unique_ptr<RenderGraph::RenderPass> RenderGraph::RenderPass::Create(
     const wchar_t* passName,
     const std::vector<Input>& inputs,
     const std::vector<Output>& outputs,
-    const ExecuteFuncT& executeFunc)
+    const ExecuteFuncT& executeFunc,
+    const RenderPassQueue queue)
 {
     const auto pRenderPass = new LambdaRenderPass(inputs, outputs, executeFunc);
     pRenderPass->SetPassName(passName);
+//Modify Begin:2026-08-03 by BestHui
+    pRenderPass->SetQueue(queue);
+//Modify End
     return std::unique_ptr<RenderPass>(pRenderPass);
 }
 
@@ -115,6 +119,16 @@ void RenderGraph::RenderPass::Execute(const RenderContext& context, CommandList&
 {
     ExecuteImpl(context, commandList);
 }
+
+//Modify Begin:2026-08-03 by BestHui
+void RenderGraph::RenderPass::PrepareAsyncCompute(CommandList& commandList) const
+{
+    if (m_AsyncComputePrepareFunc)
+    {
+        m_AsyncComputePrepareFunc(commandList);
+    }
+}
+//Modify End
 
 //Modify Begin:2026-07-28 by BestHui
 void RenderGraph::RenderPass::ExecuteExternal(const RenderContext& context)

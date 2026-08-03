@@ -13,6 +13,14 @@
 
 namespace RenderGraph
 {
+//Modify Begin:2026-08-03 by BestHui
+    enum class RenderPassQueue
+    {
+        Direct,
+        AsyncCompute,
+    };
+//Modify End
+
     enum class InputType
     {
         Invalid,
@@ -56,6 +64,9 @@ namespace RenderGraph
     {
     public:
         using ExecuteFuncT = std::function<void(const RenderContext&, CommandList&)>;
+//Modify Begin:2026-08-03 by BestHui
+        using AsyncComputePrepareFuncT = std::function<void(CommandList&)>;
+//Modify End
 //Modify Begin:2026-07-28 by BestHui
         using ExternalExecuteFuncT = std::function<void(const RenderContext&)>;
 //Modify End
@@ -64,7 +75,8 @@ namespace RenderGraph
             const wchar_t* passName,
             const std::vector<Input>& inputs,
             const std::vector<Output>& outputs,
-            const ExecuteFuncT& executeFunc
+            const ExecuteFuncT& executeFunc,
+            RenderPassQueue queue = RenderPassQueue::Direct
         );
 //Modify Begin:2026-07-28 by BestHui
         static std::unique_ptr<RenderPass> CreateExternal(
@@ -78,6 +90,10 @@ namespace RenderGraph
         void Init(CommandList& commandList);
 
         void Execute(const RenderContext& context, CommandList& commandList);
+//Modify Begin:2026-08-03 by BestHui
+        void PrepareAsyncCompute(CommandList& commandList) const;
+        void SetAsyncComputePrepare(const AsyncComputePrepareFuncT& prepareFunc) { m_AsyncComputePrepareFunc = prepareFunc; }
+//Modify End
 //Modify Begin:2026-07-28 by BestHui
         void ExecuteExternal(const RenderContext& context);
         virtual bool IsExternal() const { return false; }
@@ -86,6 +102,9 @@ namespace RenderGraph
         const std::vector<Input>& GetInputs() const { return m_Inputs; }
         const std::vector<Output>& GetOutputs() const { return m_Outputs; }
         const std::wstring& GetPassName() const { return m_PassName; }
+//Modify Begin:2026-08-03 by BestHui
+        RenderPassQueue GetQueue() const { return m_Queue; }
+//Modify End
 
         virtual ~RenderPass() = default;
 
@@ -101,10 +120,17 @@ namespace RenderGraph
 
         void SetPassName(const wchar_t* passName);
         void SetPassName(const std::wstring& passName);
+//Modify Begin:2026-08-03 by BestHui
+        void SetQueue(RenderPassQueue queue) { m_Queue = queue; }
+//Modify End
 
     private:
         std::vector<Input> m_Inputs;
         std::vector<Output> m_Outputs;
         std::wstring m_PassName = L"Render Pass";
+//Modify Begin:2026-08-03 by BestHui
+        RenderPassQueue m_Queue = RenderPassQueue::Direct;
+        AsyncComputePrepareFuncT m_AsyncComputePrepareFunc;
+//Modify End
     };
 }

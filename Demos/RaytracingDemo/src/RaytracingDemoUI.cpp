@@ -22,6 +22,10 @@ void RaytracingDemo::OnImGui()
             m_GpuTimestampSamples.clear();
             m_GpuTimestampDisplaySamples.clear();
 //Modify Begin:2026-08-03 by BestHui
+            m_AsyncComputeGpuTimestampSamples.clear();
+            m_AsyncComputeGpuTimestampDisplaySamples.clear();
+//Modify End
+//Modify Begin:2026-08-03 by BestHui
             if (!m_GpuTimingEnabled)
             {
                 m_RenderGraphTimingCaptureEnabled = false;
@@ -65,11 +69,14 @@ void RaytracingDemo::OnImGui()
 //Modify End
 //Modify Begin:2026-08-02 by BestHui
             ImGui::Text(
-                "RG Execute: gpu %.3f ms, cpu %.3f ms",
+                "RG Direct Queue: gpu %.3f ms, cpu %.3f ms",
                 m_GpuTimestampProfiler.GetLastFrameGpuMilliseconds(),
                 m_LastRenderGraphCpuMilliseconds);
 //Modify End
-            if (!m_GpuTimestampDisplaySamples.empty() && ImGui::CollapsingHeader("GPU RG Timing"))
+            ImGui::Text(
+                "RG Async Compute Queue: gpu %.3f ms",
+                m_AsyncComputeGpuTimestampProfiler.GetLastFrameGpuMilliseconds());
+            if (!m_GpuTimestampDisplaySamples.empty() && ImGui::CollapsingHeader("GPU RG Timing: Direct"))
             {
 //Modify Begin:2026-08-02 by BestHui
                 ImGui::Text("gpu/cpu delta: since previous marker, gpu/cpu total: since RG begin");
@@ -84,6 +91,20 @@ void RaytracingDemo::OnImGui()
                         sample.CpuMillisecondsFromFrameStart);
                 }
 //Modify End
+            }
+            if (!m_AsyncComputeGpuTimestampDisplaySamples.empty() && ImGui::CollapsingHeader("GPU RG Timing: Async Compute"))
+            {
+                ImGui::Text("gpu/cpu delta: since previous marker, gpu/cpu total: since async queue begin");
+                for (const GpuTimestampSample& sample : m_AsyncComputeGpuTimestampDisplaySamples)
+                {
+                    ImGui::Text(
+                        "%s: gpu %.3f/%.3f ms, cpu %.3f/%.3f ms",
+                        sample.Name.c_str(),
+                        sample.MillisecondsFromPrevious,
+                        sample.MillisecondsFromFrameStart,
+                        sample.CpuMillisecondsFromPrevious,
+                        sample.CpuMillisecondsFromFrameStart);
+                }
             }
         }
     }
@@ -101,6 +122,19 @@ void RaytracingDemo::OnImGui()
     {
         ResetAccumulation();
     }
+//Modify Begin:2026-08-03 by BestHui
+    if (m_PathTracingBackend == PathTracingBackend::InlineRayQuery)
+    {
+        if (ImGui::Checkbox("Use Async Compute for Indirect Lighting", &m_AsyncComputeEnabled))
+        {
+            ResetAccumulation();
+        }
+    }
+    else
+    {
+        ImGui::TextDisabled("Async Compute: Inline Ray Query only");
+    }
+//Modify End
 //Modify Begin:2026-07-30 by BestHui
     if (ImGui::Checkbox("Use Meshlet GBuffer", &m_UseMeshletGBuffer))
     {

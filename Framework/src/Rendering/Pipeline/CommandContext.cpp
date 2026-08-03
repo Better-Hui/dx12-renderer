@@ -291,12 +291,16 @@ void CommandContext::BindPipeline(const RayTracingShader& shader) const
 }
 
 //Modify Begin:2026-07-30 by BestHui
-void CommandContext::BindBindlessDescriptorHeap(BindlessDescriptorHeap& bindlessDescriptorHeap) const
+void CommandContext::BindBindlessDescriptorHeap(
+    BindlessDescriptorHeap& bindlessDescriptorHeap,
+    const D3D12_RESOURCE_STATES shaderResourceState) const
 {
     m_CommandList.BindShaderVisibleDescriptorHeap(
         D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
         bindlessDescriptorHeap.GetResourceDescriptorHeap());
-    bindlessDescriptorHeap.TransitionShaderResources(m_CommandList, D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
+//Modify Begin:2026-08-03 by BestHui
+    bindlessDescriptorHeap.TransitionShaderResources(m_CommandList, shaderResourceState);
+//Modify End
     m_DescriptorAllocator.SetBindlessDescriptorHeap(&bindlessDescriptorHeap);
 }
 //Modify End
@@ -397,7 +401,12 @@ void CommandContext::SetTexture(MeshShader& shader, const std::string_view name,
 
 void CommandContext::SetStructuredBuffer(const ComputeShader& shader, const std::string_view name, const StructuredBuffer& buffer) const
 {
-    shader.m_DescriptorSet->SetStructuredBuffer(name, buffer);
+//Modify Begin:2026-08-03 by BestHui
+    shader.m_DescriptorSet->SetStructuredBuffer(
+        name,
+        buffer,
+        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+//Modify End
 }
 
 void CommandContext::SetConstantBuffer(const ComputeShader& shader, const std::string_view name, const size_t size, const void* data) const
@@ -407,12 +416,24 @@ void CommandContext::SetConstantBuffer(const ComputeShader& shader, const std::s
 
 void CommandContext::SetShaderResourceView(const ComputeShader& shader, const std::string_view name, const ShaderResourceView& shaderResourceView) const
 {
-    shader.m_DescriptorSet->SetShaderResourceView(name, 0u, shaderResourceView);
+//Modify Begin:2026-08-03 by BestHui
+    shader.m_DescriptorSet->SetShaderResourceView(
+        name,
+        0u,
+        shaderResourceView,
+        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+//Modify End
 }
 
 void CommandContext::SetShaderResourceView(const ComputeShader& shader, const std::string_view name, const uint32_t arrayIndex, const ShaderResourceView& shaderResourceView) const
 {
-    shader.m_DescriptorSet->SetShaderResourceView(name, arrayIndex, shaderResourceView);
+//Modify Begin:2026-08-03 by BestHui
+    shader.m_DescriptorSet->SetShaderResourceView(
+        name,
+        arrayIndex,
+        shaderResourceView,
+        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+//Modify End
 }
 
 void CommandContext::SetShaderResource(
@@ -427,7 +448,12 @@ void CommandContext::SetShaderResource(
 
 void CommandContext::SetShaderResourceViews(const ComputeShader& shader, const std::string_view name, std::span<const ShaderResourceView> shaderResourceViews) const
 {
-    shader.m_DescriptorSet->SetShaderResourceViews(name, shaderResourceViews);
+//Modify Begin:2026-08-03 by BestHui
+    shader.m_DescriptorSet->SetShaderResourceViews(
+        name,
+        shaderResourceViews,
+        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+//Modify End
 }
 
 void CommandContext::SetTexture(const ComputeShader& shader, const std::string_view name, const ShaderResourceView& shaderResourceView) const

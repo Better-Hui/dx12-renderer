@@ -12,8 +12,8 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
 {
     std::vector<std::unique_ptr<RenderGraph::RenderPass>> renderPasses;
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateBaseResourcesPass(demo));
-    renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDirectLightingPass(demo));
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateIndirectLightingPass(demo));
+    renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDirectLightingPass(demo));
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateLightingCompositePass(demo));
 //Modify Begin:2026-07-28 by BestHui
     RenderGraph::ResourceId sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::RayTracingFinishedToken;

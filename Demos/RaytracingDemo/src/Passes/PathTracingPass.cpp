@@ -30,10 +30,10 @@ namespace
     {
 //Modify Begin:2026-07-29 by BestHui
         CommandContext commandContext(cmd);
-        commandContext.BindPipeline(shader);
 //Modify Begin:2026-07-30 by BestHui
         commandContext.BindBindlessDescriptorHeap(bindlessDescriptorHeap);
 //Modify End
+        commandContext.BindPipeline(shader);
         commandContext.BindDescriptorSet(bindingSet);
         commandContext.DispatchRays(RayTracingDispatchDesc{ passName, width, height, 1u });
         commandContext.InsertDescriptorSetOutputBarriers(bindingSet);
@@ -79,10 +79,12 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
 //Modify Begin:2026-07-28 by BestHui
                 CommandContext commandContext(cmd);
                 commandContext.SetUnorderedAccessView(directLightingShader, "DirectLighting", UnorderedAccessView(context.m_ResourcePool->GetTexture(DemoResourceIds::DirectLighting)));
-                commandContext.BindPipeline(directLightingShader);
 //Modify Begin:2026-07-30 by BestHui
-                commandContext.BindBindlessDescriptorHeap(demo.m_SceneResources.GetBindlessDescriptorHeap());
+                commandContext.BindBindlessDescriptorHeap(
+                    demo.m_SceneResources.GetBindlessDescriptorHeap(),
+                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 //Modify End
+                commandContext.BindPipeline(directLightingShader);
                 commandContext.BindDescriptorSet(directLightingShader.GetDescriptorSet());
                 commandContext.Dispatch(Math::DivideByMultiple(camera.Width, 8u), Math::DivideByMultiple(camera.Height, 8u), 1u);
 //Modify End
@@ -111,11 +113,19 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
 std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIndirectLightingPass(RaytracingDemo& demo)
 {
     using namespace RenderGraph;
+//Modify Begin:2026-08-03 by BestHui
+    const RenderPassQueue queue =
+        demo.m_AsyncComputeEnabled && demo.m_PathTracingBackend == PathTracingBackend::InlineRayQuery
+            ? RenderPassQueue::AsyncCompute
+            : RenderPassQueue::Direct;
+//Modify End
 
-    return RenderPass::Create(
+    auto pass = RenderPass::Create(
         L"Indirect Lighting",
         {
-            { DemoResourceIds::DirectLightingFinishedToken, InputType::Token },
+//Modify Begin:2026-08-03 by BestHui
+            { DemoResourceIds::BaseResourcesFinishedToken, InputType::Token },
+//Modify End
             { DemoResourceIds::GBufferAlbedoOcclusion, InputType::ShaderResource },
             { DemoResourceIds::GBufferSpecularSmoothness, InputType::ShaderResource },
             { DemoResourceIds::GBufferNormal, InputType::ShaderResource },
@@ -145,10 +155,12 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
 //Modify Begin:2026-07-28 by BestHui
                 CommandContext commandContext(cmd);
                 commandContext.SetUnorderedAccessView(indirectLightingShader, "IndirectLighting", UnorderedAccessView(context.m_ResourcePool->GetTexture(DemoResourceIds::IndirectLighting)));
-                commandContext.BindPipeline(indirectLightingShader);
 //Modify Begin:2026-07-30 by BestHui
-                commandContext.BindBindlessDescriptorHeap(demo.m_SceneResources.GetBindlessDescriptorHeap());
+                commandContext.BindBindlessDescriptorHeap(
+                    demo.m_SceneResources.GetBindlessDescriptorHeap(),
+                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 //Modify End
+                commandContext.BindPipeline(indirectLightingShader);
                 commandContext.BindDescriptorSet(indirectLightingShader.GetDescriptorSet());
                 commandContext.Dispatch(Math::DivideByMultiple(camera.Width, 8u), Math::DivideByMultiple(camera.Height, 8u), 1u);
 //Modify End
@@ -171,7 +183,33 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
                     camera.Height);
 //Modify End
             }
+//Modify Begin:2026-08-03 by BestHui
+        },
+        queue);
+    if (queue == RenderPassQueue::AsyncCompute)
+    {
+        pass->SetAsyncComputePrepare([&demo](CommandList& commandList)
+        {
+            demo.m_SceneResources.GetBindlessDescriptorHeap().TransitionShaderResources(
+                commandList,
+                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            commandList.TransitionBarrier(
+                demo.m_SceneResources.GetMaterialBuffer(),
+                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            commandList.TransitionBarrier(
+                demo.m_SceneResources.GetGeometryBuffer(),
+                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            if (demo.m_SkyboxTexture != nullptr)
+            {
+                commandList.TransitionBarrier(
+                    *demo.m_SkyboxTexture,
+                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            }
+            demo.m_Lights.PrepareAsyncComputeResources(commandList);
         });
+    }
+    return pass;
+//Modify End
 }
 
 std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateLightingCompositePass(RaytracingDemo& demo)

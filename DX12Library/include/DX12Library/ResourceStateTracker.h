@@ -98,7 +98,7 @@ public:
 	 * Add a resource with a given state to the global resource state array (map).
 	 * This should be done when the resource is created for the first time.
 	 */
-	static void AddGlobalResourceState(ID3D12Resource* resource, D3D12_RESOURCE_STATES state);
+    static void AddGlobalResourceState(ID3D12Resource* resource, D3D12_RESOURCE_STATES state);
 
 	/**
 	 * Remove a resource from the global resource state array (map).

@@ -38,6 +38,9 @@ namespace RenderGraph
 //Modify Begin:2026-07-29 by BestHui
         void SetGpuTimestampProfiler(GpuTimestampProfiler* profiler) { m_GpuTimestampProfiler = profiler; }
 //Modify End
+//Modify Begin:2026-08-03 by BestHui
+        void SetAsyncComputeGpuTimestampProfiler(GpuTimestampProfiler* profiler) { m_AsyncComputeGpuTimestampProfiler = profiler; }
+//Modify End
         void Present(const std::shared_ptr<Window>& pWindow, ResourceId resourceId = ResourceIds::GRAPH_OUTPUT);
 //Modify Begin:2026-07-28 by BestHui
         void PresentWithOverlay(const std::shared_ptr<Window>& pWindow, ResourceId resourceId, const std::function<void(CommandList&)>& drawCallback);
@@ -75,6 +78,13 @@ namespace RenderGraph
         bool IsResourceDefined(ResourceId id) const;
 
         std::shared_ptr<CommandQueue> m_DirectCommandQueue;
+//Modify Begin:2026-08-03 by BestHui
+        std::shared_ptr<CommandQueue> m_AsyncComputeCommandQueue;
+//Modify End
+//Modify Begin:2026-08-03 by BestHui
+        std::map<ResourceId, RenderPassQueue> m_LastWriterQueues;
+        bool m_AsyncComputeSubmittedThisFrame = false;
+//Modify End
 
         std::vector<std::unique_ptr<RenderPass>> m_RenderPassesDescription;
         std::vector<std::vector<RenderPass*>> m_RenderPassesSorted;
@@ -112,6 +122,9 @@ namespace RenderGraph
         std::vector<D3D12_RESOURCE_BARRIER> m_PendingBarriers;
 //Modify Begin:2026-07-29 by BestHui
         GpuTimestampProfiler* m_GpuTimestampProfiler = nullptr;
+//Modify End
+//Modify Begin:2026-08-03 by BestHui
+        GpuTimestampProfiler* m_AsyncComputeGpuTimestampProfiler = nullptr;
 //Modify End
 
         bool m_Dirty = true;

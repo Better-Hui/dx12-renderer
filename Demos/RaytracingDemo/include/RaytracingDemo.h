@@ -67,10 +67,16 @@ private:
     using SceneObject = RaytracingDemoSceneObject;
 
 //Modify Begin:2026-08-03 by BestHui
+    struct RenderGraphTimingQueue
+    {
+        std::string QueueName;
+        std::vector<GpuTimestampSample> Samples;
+    };
+
     struct RenderGraphTimingFrame
     {
         uint64_t FrameNumber = 0;
-        std::vector<GpuTimestampSample> Samples;
+        std::vector<RenderGraphTimingQueue> Queues;
     };
 //Modify End
 
@@ -206,6 +212,10 @@ private:
 //Modify Begin:2026-08-03 by BestHui
     void ClearRenderGraphTimingHistory();
     bool DumpRenderGraphTimingHistory();
+    void RecordRenderGraphTimingSamples(
+        uint64_t frameNumber,
+        const char* queueName,
+        const std::vector<GpuTimestampSample>& samples);
 //Modify End
     void OnImGui();
 
@@ -218,6 +228,10 @@ private:
 //Modify Begin:2026-07-28 by BestHui
     bool m_RenderGraphDenoiserEnabled = false;
     bool m_RenderGraphCudaBloomEnabled = false;
+//Modify Begin:2026-08-03 by BestHui
+    bool m_RenderGraphAsyncComputeEnabled = false;
+    PathTracingBackend m_RenderGraphPathTracingBackend = PathTracingBackend::InlineRayQuery;
+//Modify End
 //Modify End
 //Modify Begin:2026-07-31 by BestHui
     bool m_RenderGraphMeshletGBufferEnabled = false;
@@ -237,6 +251,11 @@ private:
     GpuTimestampProfiler m_GpuTimestampProfiler;
     std::vector<GpuTimestampSample> m_GpuTimestampSamples;
     std::vector<GpuTimestampSample> m_GpuTimestampDisplaySamples;
+//Modify Begin:2026-08-03 by BestHui
+    GpuTimestampProfiler m_AsyncComputeGpuTimestampProfiler;
+    std::vector<GpuTimestampSample> m_AsyncComputeGpuTimestampSamples;
+    std::vector<GpuTimestampSample> m_AsyncComputeGpuTimestampDisplaySamples;
+//Modify End
 //Modify Begin:2026-08-03 by BestHui
     std::deque<RenderGraphTimingFrame> m_RenderGraphTimingHistory;
 //Modify End
@@ -284,6 +303,9 @@ private:
     bool m_AccumulationEnabled = true;
     bool m_DirectLightingEnabled = true;
     bool m_IndirectLightingEnabled = true;
+//Modify Begin:2026-08-03 by BestHui
+    bool m_AsyncComputeEnabled = false;
+//Modify End
 //Modify Begin:2026-07-30 by BestHui
     bool m_UseMeshletGBuffer = false;
     bool m_DebugMeshletClusters = false;

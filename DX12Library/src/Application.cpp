@@ -816,6 +816,34 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
         std::ofstream errorLog("C:\\Users\\minghuidai\\AppData\\Local\\Temp\\RaytracingDemo-WndProcException.log", std::ios::out | std::ios::trunc);
         errorLog << "Message=" << message << std::endl;
         errorLog << exception.what() << std::endl;
+//Modify Begin:2026-08-03 by BestHui
+        const auto device = Application::Get().GetDevice();
+        errorLog << "DeviceRemovedReason=" << device->GetDeviceRemovedReason() << std::endl;
+
+        Microsoft::WRL::ComPtr<ID3D12InfoQueue> infoQueue;
+        if (SUCCEEDED(device.As(&infoQueue)))
+        {
+            const UINT64 messageCount = infoQueue->GetNumStoredMessages();
+            const UINT64 firstMessage = messageCount > 32u ? messageCount - 32u : 0u;
+            for (UINT64 messageIndex = firstMessage; messageIndex < messageCount; ++messageIndex)
+            {
+                SIZE_T messageLength = 0;
+                if (FAILED(infoQueue->GetMessage(messageIndex, nullptr, &messageLength)) || messageLength == 0u)
+                {
+                    continue;
+                }
+
+                std::vector<char> storage(messageLength);
+                auto* debugMessage = reinterpret_cast<D3D12_MESSAGE*>(storage.data());
+                if (SUCCEEDED(infoQueue->GetMessage(messageIndex, debugMessage, &messageLength)))
+                {
+                    errorLog << "D3D12[" << messageIndex << "]="
+                        << (debugMessage->pDescription != nullptr ? debugMessage->pDescription : "")
+                        << std::endl;
+                }
+            }
+        }
+//Modify End
         PostQuitMessage(4);
         return 0;
     }

@@ -28,7 +28,9 @@ class GpuTimestampProfiler final
 public:
     static constexpr uint32_t FrameSlotCount = 3;
 
-    bool Initialize(uint32_t maxTimestampCount = 128);
+    bool Initialize(
+        uint32_t maxTimestampCount = 128,
+        D3D12_COMMAND_LIST_TYPE commandListType = D3D12_COMMAND_LIST_TYPE_DIRECT);
     void Shutdown();
 
     void BeginFrame(uint64_t frameNumber);
@@ -68,6 +70,9 @@ private:
     uint32_t m_CurrentSlotIndex = 0;
     uint64_t m_CurrentFrameNumber = 0;
     uint64_t m_TimestampFrequency = 0;
+//Modify Begin:2026-08-03 by BestHui
+    D3D12_COMMAND_LIST_TYPE m_CommandListType = D3D12_COMMAND_LIST_TYPE_DIRECT;
+//Modify End
 //Modify Begin:2026-08-02 by BestHui
     std::chrono::steady_clock::time_point m_CpuFrameStart = {};
 //Modify End

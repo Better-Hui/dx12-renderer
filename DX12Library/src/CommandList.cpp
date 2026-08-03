@@ -879,8 +879,12 @@ void CommandList::SetShaderResourceView(const uint32_t rootParameterIndex, const
 {
     if (resource.AreAutoBarriersEnabled())
     {
-        constexpr auto stateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE |
-        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+//Modify Begin:2026-08-03 by BestHui
+        const D3D12_RESOURCE_STATES stateAfter =
+            m_D3d12CommandListType == D3D12_COMMAND_LIST_TYPE_COMPUTE
+            ? D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE
+            : D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE;
+//Modify End
         if (numSubresources < D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
         {
             for (uint32_t i = 0; i < numSubresources; ++i)

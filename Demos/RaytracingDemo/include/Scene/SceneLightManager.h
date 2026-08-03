@@ -34,6 +34,9 @@ public:
     void UpdateDynamicLights(float timeSeconds);
     bool DrawImGui();
     void BindComputeResources(CommandContext& commandContext, ComputeShader& shader);
+//Modify Begin:2026-08-03 by BestHui
+    void PrepareAsyncComputeResources(CommandList& commandList) const;
+//Modify End
     void BindRayTracingResources(RayTracingBindingSet& bindingSet);
 
     void FillCameraConstants(

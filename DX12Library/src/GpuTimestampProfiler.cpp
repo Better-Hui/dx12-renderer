@@ -13,7 +13,9 @@
 #include <cstring>
 
 //Modify Begin:2026-07-29 by BestHui
-bool GpuTimestampProfiler::Initialize(const uint32_t maxTimestampCount)
+bool GpuTimestampProfiler::Initialize(
+    const uint32_t maxTimestampCount,
+    const D3D12_COMMAND_LIST_TYPE commandListType)
 {
     Shutdown();
 
@@ -23,14 +25,16 @@ bool GpuTimestampProfiler::Initialize(const uint32_t maxTimestampCount)
     }
 
     const auto device = Application::Get().GetDevice();
-    const auto directQueue = Application::Get().GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
-    if (directQueue == nullptr || FAILED(directQueue->GetD3D12CommandQueue()->GetTimestampFrequency(&m_TimestampFrequency)) ||
+//Modify Begin:2026-08-03 by BestHui
+    const auto commandQueue = Application::Get().GetCommandQueue(commandListType);
+    if (commandQueue == nullptr || FAILED(commandQueue->GetD3D12CommandQueue()->GetTimestampFrequency(&m_TimestampFrequency)) ||
         m_TimestampFrequency == 0)
     {
         return false;
     }
 
     m_MaxTimestampCount = maxTimestampCount;
+    m_CommandListType = commandListType;
     m_FrameSlots.resize(FrameSlotCount);
 
     for (FrameSlot& slot : m_FrameSlots)

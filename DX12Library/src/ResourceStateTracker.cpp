@@ -128,19 +128,19 @@ uint32_t ResourceStateTracker::FlushPendingResourceBarriers(const CommandList& c
 	// Reserve enough space (worst-cast, all pending barriers).
 	resourceBarriers.reserve(m_PendingResourceBarriers.size());
 
-	for (auto pendingBarrier : m_PendingResourceBarriers)
+    for (auto pendingBarrier : m_PendingResourceBarriers)
 	{
 		// Only transition barriers should be pending...
 		if (pendingBarrier.Type == D3D12_RESOURCE_BARRIER_TYPE_TRANSITION)
 		{
 			auto pendingTransition = pendingBarrier.Transition;
-			const auto& iter = s_GlobalResourceStates.find(pendingTransition.pResource);
-			if (iter != s_GlobalResourceStates.end())
-			{
+            const auto& iter = s_GlobalResourceStates.find(pendingTransition.pResource);
+            if (iter != s_GlobalResourceStates.end())
+            {
 				// If all subresources are being transitioned, and there are multiple
 				// subresources of the resource that are in a different state...
 
-				auto& resourceState = iter->second;
+                auto& resourceState = iter->second;
 				if (pendingTransition.Subresource == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES &&
 					!resourceState.m_SubresourceStates.empty()
 					)
@@ -223,6 +223,7 @@ void ResourceStateTracker::AddGlobalResourceState(ID3D12Resource* resource, cons
 		s_GlobalResourceStates[resource].SetSubresourceState(D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, state);
 	}
 }
+
 
 void ResourceStateTracker::RemoveGlobalResourceState(ID3D12Resource* resource)
 {

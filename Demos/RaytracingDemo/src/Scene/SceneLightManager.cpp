@@ -628,6 +628,15 @@ void SceneLightManager::BindComputeResources(CommandContext& commandContext, Com
     }
 }
 
+//Modify Begin:2026-08-03 by BestHui
+void SceneLightManager::PrepareAsyncComputeResources(CommandList& commandList) const
+{
+    commandList.TransitionBarrier(m_DirectionalLightBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    commandList.TransitionBarrier(m_PointLightBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    commandList.TransitionBarrier(m_AreaLightBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+}
+//Modify End
+
 void SceneLightManager::BindRayTracingResources(RayTracingBindingSet& bindingSet)
 {
 //Modify Begin:2026-07-30 by BestHui
