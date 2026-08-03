@@ -72,34 +72,50 @@ void GpuTimestampProfiler::Shutdown()
     m_CpuFrameStart = {};
 //Modify End
     m_Initialized = false;
+//Modify Begin:2026-08-03 by BestHui
+    m_FrameActive = false;
+//Modify End
     m_LastFrameGpuMilliseconds = 0.0;
 }
 
-void GpuTimestampProfiler::BeginFrame(const uint64_t frameNumber)
+bool GpuTimestampProfiler::BeginFrame(const uint64_t frameNumber)
 {
     if (!m_Initialized)
     {
-        return;
+        return false;
     }
 
-    m_CurrentFrameNumber = frameNumber;
-    m_CurrentSlotIndex = static_cast<uint32_t>(frameNumber % FrameSlotCount);
+//Modify Begin:2026-08-03 by BestHui
+    for (uint32_t offset = 0; offset < FrameSlotCount; ++offset)
+    {
+        const uint32_t slotIndex = (m_CurrentSlotIndex + offset) % FrameSlotCount;
+        FrameSlot& slot = m_FrameSlots[slotIndex];
+        if (slot.PendingReadback)
+        {
+            continue;
+        }
 
-    FrameSlot& slot = GetCurrentSlot();
-    slot.Names.clear();
-    slot.TimestampCount = 0;
-    slot.FrameNumber = frameNumber;
-    slot.SubmittedFenceValue = 0;
-    slot.PendingReadback = false;
-//Modify Begin:2026-08-02 by BestHui
-    m_CpuFrameStart = std::chrono::steady_clock::now();
-    slot.CpuMilliseconds.clear();
+        m_CurrentFrameNumber = frameNumber;
+        m_CurrentSlotIndex = slotIndex;
+        slot.Names.clear();
+        slot.TimestampCount = 0;
+        slot.FrameNumber = frameNumber;
+        slot.SubmittedFenceValue = 0;
+        slot.PendingReadback = false;
+        m_CpuFrameStart = std::chrono::steady_clock::now();
+        slot.CpuMilliseconds.clear();
+        m_FrameActive = true;
+        return true;
+    }
+
+    m_FrameActive = false;
+    return false;
 //Modify End
 }
 
 void GpuTimestampProfiler::WriteTimestamp(CommandList& commandList, const char* name)
 {
-    if (!m_Initialized)
+    if (!m_Initialized || !m_FrameActive)
     {
         return;
     }
@@ -121,7 +137,7 @@ void GpuTimestampProfiler::WriteTimestamp(CommandList& commandList, const char* 
 
 void GpuTimestampProfiler::ResolveFrame(CommandList& commandList)
 {
-    if (!m_Initialized)
+    if (!m_Initialized || !m_FrameActive)
     {
         return;
     }
@@ -144,7 +160,7 @@ void GpuTimestampProfiler::ResolveFrame(CommandList& commandList)
 
 void GpuTimestampProfiler::EndFrame(const uint64_t submittedFenceValue)
 {
-    if (!m_Initialized)
+    if (!m_Initialized || !m_FrameActive)
     {
         return;
     }
@@ -214,7 +230,7 @@ bool GpuTimestampProfiler::CollectCompletedFrame(CommandQueue& commandQueue, std
 
 uint32_t GpuTimestampProfiler::GetCurrentTimestampCount() const
 {
-    return m_Initialized ? GetCurrentSlot().TimestampCount : 0;
+    return m_Initialized && m_FrameActive ? GetCurrentSlot().TimestampCount : 0;
 }
 
 GpuTimestampProfiler::FrameSlot& GpuTimestampProfiler::GetCurrentSlot()

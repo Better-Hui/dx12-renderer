@@ -786,12 +786,38 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     const auto asyncComputeCommandQueue = Application::Get().GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE);
 //Modify End
 //Modify Begin:2026-08-03 by BestHui
-    const bool collectedDirectGpuTimingFrame =
-        m_GpuTimingEnabled && m_GpuTimestampProfiler.CollectCompletedFrame(*directCommandQueue, m_GpuTimestampSamples);
-    const bool collectedAsyncComputeGpuTimingFrame =
-        m_GpuTimingEnabled && m_AsyncComputeGpuTimestampProfiler.CollectCompletedFrame(
-            *asyncComputeCommandQueue,
-            m_AsyncComputeGpuTimestampSamples);
+    const auto collectGpuTimingFrames = [this](
+        GpuTimestampProfiler& profiler,
+        CommandQueue& commandQueue,
+        std::vector<GpuTimestampSample>& latestSamples,
+        const char* queueName)
+    {
+        bool collectedAnyFrame = false;
+        std::vector<GpuTimestampSample> completedSamples;
+        while (profiler.CollectCompletedFrame(commandQueue, completedSamples))
+        {
+            latestSamples = completedSamples;
+            if (m_RenderGraphTimingCaptureEnabled)
+            {
+                RecordRenderGraphTimingSamples(
+                    profiler.GetLastCollectedFrameNumber(),
+                    queueName,
+                    completedSamples);
+            }
+            collectedAnyFrame = true;
+        }
+        return collectedAnyFrame;
+    };
+    const bool collectedDirectGpuTimingFrame = m_GpuTimingEnabled && collectGpuTimingFrames(
+        m_GpuTimestampProfiler,
+        *directCommandQueue,
+        m_GpuTimestampSamples,
+        "Direct");
+    const bool collectedAsyncComputeGpuTimingFrame = m_GpuTimingEnabled && collectGpuTimingFrames(
+        m_AsyncComputeGpuTimestampProfiler,
+        *asyncComputeCommandQueue,
+        m_AsyncComputeGpuTimestampSamples,
+        "AsyncCompute");
 //Modify End
     if ((collectedDirectGpuTimingFrame || collectedAsyncComputeGpuTimingFrame) &&
         e.TotalTime - m_LastGpuTimingUiUpdateTime >= 0.25)
@@ -805,20 +831,6 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
             m_AsyncComputeGpuTimestampDisplaySamples = m_AsyncComputeGpuTimestampSamples;
         }
         m_LastGpuTimingUiUpdateTime = e.TotalTime;
-    }
-    if (m_RenderGraphTimingCaptureEnabled && collectedDirectGpuTimingFrame)
-    {
-        RecordRenderGraphTimingSamples(
-            m_GpuTimestampProfiler.GetLastCollectedFrameNumber(),
-            "Direct",
-            m_GpuTimestampSamples);
-    }
-    if (m_RenderGraphTimingCaptureEnabled && collectedAsyncComputeGpuTimingFrame)
-    {
-        RecordRenderGraphTimingSamples(
-            m_AsyncComputeGpuTimestampProfiler.GetLastCollectedFrameNumber(),
-            "AsyncCompute",
-            m_AsyncComputeGpuTimestampSamples);
     }
 //Modify End
 

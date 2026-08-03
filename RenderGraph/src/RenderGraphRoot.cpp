@@ -411,6 +411,7 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
 //Modify End
     Assert(m_PendingBarriers.size() == 0, "Pending barriers were left from after the previous frame.");
 //Modify Begin:2026-08-03 by BestHui
+    bool directProfilerFrameStarted = false;
     bool asyncComputeProfilerFrameStarted = false;
 //Modify End
 
@@ -420,8 +421,11 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
 //Modify Begin:2026-07-29 by BestHui
         if (m_GpuTimestampProfiler != nullptr && m_GpuTimestampProfiler->IsAvailable())
         {
-            m_GpuTimestampProfiler->BeginFrame(renderMetadata.m_FrameIndex);
-            m_GpuTimestampProfiler->WriteTimestamp(*pCommandList, "RenderGraph.Begin");
+            directProfilerFrameStarted = m_GpuTimestampProfiler->BeginFrame(renderMetadata.m_FrameIndex);
+            if (directProfilerFrameStarted)
+            {
+                m_GpuTimestampProfiler->WriteTimestamp(*pCommandList, "RenderGraph.Begin");
+            }
         }
 //Modify End
 
@@ -546,9 +550,11 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
                 {
                     if (!asyncComputeProfilerFrameStarted)
                     {
-                        m_AsyncComputeGpuTimestampProfiler->BeginFrame(renderMetadata.m_FrameIndex);
-                        m_AsyncComputeGpuTimestampProfiler->WriteTimestamp(*computeCommandList, "RenderGraph.Begin");
-                        asyncComputeProfilerFrameStarted = true;
+                        asyncComputeProfilerFrameStarted = m_AsyncComputeGpuTimestampProfiler->BeginFrame(renderMetadata.m_FrameIndex);
+                        if (asyncComputeProfilerFrameStarted)
+                        {
+                            m_AsyncComputeGpuTimestampProfiler->WriteTimestamp(*computeCommandList, "RenderGraph.Begin");
+                        }
                     }
                 }
                 context.m_RenderTargetInfo = {};
@@ -581,7 +587,7 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
                     PIXScope(cmd, pRenderPass->GetPassName().c_str());
                     PrepareResourcesForRenderPass(cmd, *pRenderPass, renderPassIndex, context);
 //Modify Begin:2026-07-29 by BestHui
-                    if (m_GpuTimestampProfiler != nullptr && m_GpuTimestampProfiler->IsAvailable())
+                    if (directProfilerFrameStarted)
                     {
                         const std::string passName = "BeforeExternal." + NarrowPassName(pRenderPass->GetPassName());
                         m_GpuTimestampProfiler->WriteTimestamp(cmd, passName.c_str());
@@ -594,7 +600,7 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
                 pRenderPass->ExecuteExternal(context);
 
 //Modify Begin:2026-07-29 by BestHui
-                if (m_GpuTimestampProfiler != nullptr && m_GpuTimestampProfiler->IsAvailable())
+                if (directProfilerFrameStarted)
                 {
                     pCommandList = m_DirectCommandQueue->GetCommandList();
                     const std::string passName = "AfterExternal." + NarrowPassName(pRenderPass->GetPassName());
@@ -612,7 +618,7 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
                 PrepareResourcesForRenderPass(cmd, *pRenderPass, renderPassIndex, context);
                 pRenderPass->Execute(context, cmd);
 //Modify Begin:2026-07-29 by BestHui
-                if (m_GpuTimestampProfiler != nullptr && m_GpuTimestampProfiler->IsAvailable())
+                if (directProfilerFrameStarted)
                 {
                     const std::string passName = NarrowPassName(pRenderPass->GetPassName());
                     m_GpuTimestampProfiler->WriteTimestamp(cmd, passName.c_str());
@@ -640,7 +646,7 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
 //Modify End
 
 //Modify Begin:2026-07-29 by BestHui
-    if (m_GpuTimestampProfiler != nullptr && m_GpuTimestampProfiler->IsAvailable())
+    if (directProfilerFrameStarted)
     {
 //Modify Begin:2026-07-30 by BestHui
         if (pCommandList == nullptr)

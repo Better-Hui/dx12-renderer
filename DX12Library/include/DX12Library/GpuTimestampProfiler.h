@@ -26,14 +26,16 @@ struct GpuTimestampSample
 class GpuTimestampProfiler final
 {
 public:
-    static constexpr uint32_t FrameSlotCount = 3;
+//Modify Begin:2026-08-03 by BestHui
+    static constexpr uint32_t FrameSlotCount = 64;
+//Modify End
 
     bool Initialize(
         uint32_t maxTimestampCount = 128,
         D3D12_COMMAND_LIST_TYPE commandListType = D3D12_COMMAND_LIST_TYPE_DIRECT);
     void Shutdown();
 
-    void BeginFrame(uint64_t frameNumber);
+    bool BeginFrame(uint64_t frameNumber);
     void WriteTimestamp(CommandList& commandList, const char* name);
     void ResolveFrame(CommandList& commandList);
     void EndFrame(uint64_t submittedFenceValue);
@@ -77,6 +79,9 @@ private:
     std::chrono::steady_clock::time_point m_CpuFrameStart = {};
 //Modify End
     bool m_Initialized = false;
+//Modify Begin:2026-08-03 by BestHui
+    bool m_FrameActive = false;
+//Modify End
     double m_LastFrameGpuMilliseconds = 0.0;
 //Modify Begin:2026-08-03 by BestHui
     uint64_t m_LastCollectedFrameNumber = 0;
