@@ -51,7 +51,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
         : InputType::ShaderResource;
     const bool transitionBindlessResources =
         demo.m_PathTracingBackend != PathTracingBackend::InlineRayQuery ||
-        (!demo.m_AsyncComputeEnabled && !demo.m_IndirectLightingEnabled);
+        !demo.m_AsyncComputeEnabled;
 //Modify End
 
     return RenderPass::Create(

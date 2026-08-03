@@ -83,7 +83,9 @@ namespace RenderGraph
 //Modify End
 //Modify Begin:2026-08-03 by BestHui
         std::map<ResourceId, RenderPassQueue> m_LastWriterQueues;
+        std::map<ResourceId, uint64_t> m_LastWriterFenceValues;
         bool m_AsyncComputeSubmittedThisFrame = false;
+        uint64_t m_LastAsyncComputeFenceValue = 0;
 //Modify End
 
         std::vector<std::unique_ptr<RenderPass>> m_RenderPassesDescription;

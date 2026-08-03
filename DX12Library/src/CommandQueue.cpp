@@ -205,8 +205,18 @@ uint64_t CommandQueue::ExecuteCommandLists(const std::vector<std::shared_ptr<Com
 
 void CommandQueue::Wait(const CommandQueue& other)
 {
-	m_D3d12CommandQueue->Wait(other.m_D3d12Fence.Get(), other.m_FenceValue);
+	Wait(other, other.m_FenceValue.load());
 }
+
+//Modify Begin:2026-08-03 by BestHui
+void CommandQueue::Wait(const CommandQueue& other, const uint64_t fenceValue)
+{
+	if (fenceValue != 0u)
+	{
+		m_D3d12CommandQueue->Wait(other.m_D3d12Fence.Get(), fenceValue);
+	}
+}
+//Modify End
 
 ComPtr<ID3D12CommandQueue> CommandQueue::GetD3D12CommandQueue() const
 {

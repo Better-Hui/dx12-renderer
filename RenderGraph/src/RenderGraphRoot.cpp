@@ -400,10 +400,12 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
 //Modify Begin:2026-08-03 by BestHui
     if (m_AsyncComputeSubmittedThisFrame)
     {
-        m_DirectCommandQueue->Wait(*m_AsyncComputeCommandQueue);
+        m_DirectCommandQueue->Wait(*m_AsyncComputeCommandQueue, m_LastAsyncComputeFenceValue);
         m_AsyncComputeSubmittedThisFrame = false;
+        m_LastAsyncComputeFenceValue = 0;
     }
     m_LastWriterQueues.clear();
+    m_LastWriterFenceValues.clear();
 //Modify End
 
 //Modify Begin:2026-07-28 by BestHui
@@ -449,15 +451,25 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
         {
             if (pCommandList != nullptr)
             {
-                m_DirectCommandQueue->ExecuteCommandList(pCommandList);
+                const uint64_t fenceValue = m_DirectCommandQueue->ExecuteCommandList(pCommandList);
+                for (const auto& [resourceId, queue] : m_LastWriterQueues)
+                {
+                    if (queue == RenderPassQueue::Direct && m_LastWriterFenceValues[resourceId] == 0u)
+                    {
+                        m_LastWriterFenceValues[resourceId] = fenceValue;
+                    }
+                }
                 pCommandList.reset();
+                return fenceValue;
             }
+            return uint64_t{ 0u };
         };
 
         const auto prepareQueueDependency = [&](const RenderPass& pass)
         {
             const RenderPassQueue queue = pass.GetQueue();
             bool dependsOnOtherQueue = false;
+            uint64_t producerFenceValue = 0;
             auto inspectResource = [&](const ResourceId resourceId)
             {
                 const auto writer = m_LastWriterQueues.find(resourceId);
@@ -466,6 +478,9 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
                     return;
                 }
                 dependsOnOtherQueue = true;
+                const auto fence = m_LastWriterFenceValues.find(resourceId);
+                Assert(fence != m_LastWriterFenceValues.end(), "Render pass writer fence was not recorded.");
+                producerFenceValue = (std::max)(producerFenceValue, fence->second);
             };
             for (const auto& input : pass.GetInputs()) inspectResource(input.m_Id);
             for (const auto& output : pass.GetOutputs()) inspectResource(output.m_Id);
@@ -513,7 +528,7 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
                     m_GpuTimestampProfiler->WriteTimestamp(*pCommandList, markerName.c_str());
                 }
 //Modify End
-                flushDirectCommandList();
+                producerFenceValue = flushDirectCommandList();
             }
             if (!dependsOnOtherQueue)
             {
@@ -521,21 +536,23 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
             }
             if (queue == RenderPassQueue::AsyncCompute)
             {
-                m_AsyncComputeCommandQueue->Wait(*m_DirectCommandQueue);
+                m_AsyncComputeCommandQueue->Wait(*m_DirectCommandQueue, producerFenceValue);
             }
             else
             {
                 flushDirectCommandList();
-                m_DirectCommandQueue->Wait(*m_AsyncComputeCommandQueue);
+                m_DirectCommandQueue->Wait(*m_AsyncComputeCommandQueue, producerFenceValue);
                 m_AsyncComputeSubmittedThisFrame = false;
+                m_LastAsyncComputeFenceValue = 0;
             }
         };
 
-        const auto markPassOutputs = [&](const RenderPass& pass)
+        const auto markPassOutputs = [&](const RenderPass& pass, const uint64_t fenceValue)
         {
             for (const auto& output : pass.GetOutputs())
             {
                 m_LastWriterQueues[output.m_Id] = pass.GetQueue();
+                m_LastWriterFenceValues[output.m_Id] = fenceValue;
             }
         };
 //Modify End
@@ -591,7 +608,8 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
                     m_AsyncComputeGpuTimestampProfiler->EndFrame(computeFenceValue);
                 }
                 m_AsyncComputeSubmittedThisFrame = true;
-                markPassOutputs(*pRenderPass);
+                m_LastAsyncComputeFenceValue = computeFenceValue;
+                markPassOutputs(*pRenderPass, computeFenceValue);
                 ++renderPassIndex;
                 continue;
             }
@@ -649,7 +667,7 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
 //Modify End
             }
 //Modify Begin:2026-08-03 by BestHui
-            markPassOutputs(*pRenderPass);
+            markPassOutputs(*pRenderPass, 0u);
 //Modify End
 //Modify End
 

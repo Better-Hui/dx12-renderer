@@ -305,6 +305,7 @@ private:
     bool m_IndirectLightingEnabled = true;
 //Modify Begin:2026-08-03 by BestHui
     bool m_AsyncComputeEnabled = false;
+    bool m_DebugStressPathTracingBackendSwitch = false;
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
     bool m_UseMeshletGBuffer = false;

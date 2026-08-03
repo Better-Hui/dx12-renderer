@@ -68,6 +68,9 @@ public:
 
 	// Wait for another command queue to finish.
 	void Wait(const CommandQueue& other);
+//Modify Begin:2026-08-03 by BestHui
+	void Wait(const CommandQueue& other, uint64_t fenceValue);
+//Modify End
 
 	Microsoft::WRL::ComPtr<ID3D12CommandQueue> GetD3D12CommandQueue() const;
 

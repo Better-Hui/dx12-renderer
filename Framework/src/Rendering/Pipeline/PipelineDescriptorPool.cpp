@@ -6,6 +6,16 @@
 #include <Framework/Rendering/Pipeline/PipelineLayout.h>
 
 #include <algorithm>
+//Modify Begin:2026-08-03 by BestHui
+#include <atomic>
+//Modify End
+
+namespace
+{
+//Modify Begin:2026-08-03 by BestHui
+    std::atomic_uint64_t GNextDescriptorTableRevision = 1u;
+//Modify End
+}
 
 PipelineDescriptorPool::PipelineDescriptorPool(PipelineDescriptorPoolDesc desc)
     : m_Desc(desc)
@@ -152,6 +162,9 @@ PipelineDescriptorTableAllocation PipelineDescriptorPool::AllocateResourceDescri
     allocation.HeapType = PipelineDescriptorHeapType::Resource;
     allocation.HeapOffset = m_AllocatedResourceDescriptorCount;
     allocation.NumHandles = descriptorCount;
+//Modify Begin:2026-08-03 by BestHui
+    allocation.Revision = GNextDescriptorTableRevision.fetch_add(1u);
+//Modify End
     allocation.CpuDescriptors = Application::Get().AllocateDescriptors(
         D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
         descriptorCount);

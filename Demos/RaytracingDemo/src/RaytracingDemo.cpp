@@ -841,6 +841,18 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
         m_ImGui->Render();
     }
 
+//Modify Begin:2026-08-03 by BestHui
+    if (m_DebugStressPathTracingBackendSwitch &&
+        m_FrameIndex != 0u &&
+        m_FrameIndex % 30u == 0u)
+    {
+        m_PathTracingBackend = m_PathTracingBackend == PathTracingBackend::InlineRayQuery
+            ? PathTracingBackend::ShaderTableDxr
+            : PathTracingBackend::InlineRayQuery;
+        ResetAccumulation();
+    }
+//Modify End
+
     RenderGraph::RenderMetadata metadata;
     metadata.m_ScreenWidth = static_cast<uint32_t>(m_Width);
     metadata.m_ScreenHeight = static_cast<uint32_t>(m_Height);
@@ -880,7 +892,15 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     }
     catch (const std::exception& exception)
     {
-        throw std::runtime_error(std::string("RaytracingDemo::OnRender PresentDisplayOutput failed: ") + exception.what());
+//Modify Begin:2026-08-03 by BestHui
+        const char* backendName = m_PathTracingBackend == PathTracingBackend::InlineRayQuery
+            ? "InlineRayQuery"
+            : "ShaderTableDxr";
+        throw std::runtime_error(
+            std::string("RaytracingDemo::OnRender PresentDisplayOutput failed: ") + exception.what() +
+            " [Backend=" + backendName +
+            ", AsyncCompute=" + (m_AsyncComputeEnabled ? "true" : "false") + "]");
+//Modify End
     }
 //Modify End
 

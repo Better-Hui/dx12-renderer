@@ -195,6 +195,12 @@ void RaytracingDemo::OnImGui()
         m_PathTracingBackend = static_cast<PathTracingBackend>(selectedMode);
         ResetAccumulation();
     }
+//Modify Begin:2026-08-03 by BestHui
+    if (ImGui::Checkbox("Debug Stress Toggle DXR / Inline", &m_DebugStressPathTracingBackendSwitch))
+    {
+        ResetAccumulation();
+    }
+//Modify End
 
     const bool bouncesChanged = ImGui::SliderInt("Bounces", &m_MaxBounces, 0, 5);
     const bool fovChanged = ImGui::SliderFloat("FOV", &m_CameraFov, 12.0f, 90.0f, "%.1f");
