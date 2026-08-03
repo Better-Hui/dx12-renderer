@@ -45,6 +45,11 @@ namespace
         case RenderGraph::InputType::ShaderResource:
             stateAfter = D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE;
             return true;
+//Modify Begin:2026-08-03 by BestHui
+        case RenderGraph::InputType::NonPixelShaderResource:
+            stateAfter = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+            return true;
+//Modify End
         case RenderGraph::InputType::UnorderedAccess:
             stateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
             insertUavBarrier = true;
@@ -104,6 +109,7 @@ namespace
     {
         return inputType == RenderGraph::InputType::Token ||
             inputType == RenderGraph::InputType::ShaderResource ||
+            inputType == RenderGraph::InputType::NonPixelShaderResource ||
             inputType == RenderGraph::InputType::CopySource ||
             inputType == RenderGraph::InputType::IndirectArgument;
     }
@@ -502,7 +508,9 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
             }
             else
             {
+                flushDirectCommandList();
                 m_DirectCommandQueue->Wait(*m_AsyncComputeCommandQueue);
+                m_AsyncComputeSubmittedThisFrame = false;
             }
         };
 
@@ -559,21 +567,12 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
                 continue;
             }
 //Modify End
-//Modify Begin:2026-07-28 by BestHui
-//Modify Begin:2026-08-03 by BestHui
-            if (m_AsyncComputeSubmittedThisFrame)
-            {
-                flushDirectCommandList();
-                m_DirectCommandQueue->Wait(*m_AsyncComputeCommandQueue);
-            }
-//Modify End
             if (pCommandList == nullptr)
             {
                 pCommandList = m_DirectCommandQueue->GetCommandList();
             }
 
             CommandList& cmd = *pCommandList;
-//Modify End
             context.m_RenderTargetInfo = {};
 //Modify Begin:2026-07-28 by BestHui
             if (pRenderPass->IsExternal())

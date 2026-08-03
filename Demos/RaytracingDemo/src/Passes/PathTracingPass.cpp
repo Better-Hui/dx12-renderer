@@ -45,17 +45,22 @@ namespace
 std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDirectLightingPass(RaytracingDemo& demo)
 {
     using namespace RenderGraph;
+//Modify Begin:2026-08-03 by BestHui
+    const InputType gbufferInputType = demo.m_PathTracingBackend == PathTracingBackend::InlineRayQuery
+        ? InputType::NonPixelShaderResource
+        : InputType::ShaderResource;
+//Modify End
 
     return RenderPass::Create(
         L"Direct Lighting",
         {
             { DemoResourceIds::BaseResourcesFinishedToken, InputType::Token },
-            { DemoResourceIds::GBufferAlbedoOcclusion, InputType::ShaderResource },
-            { DemoResourceIds::GBufferSpecularSmoothness, InputType::ShaderResource },
-            { DemoResourceIds::GBufferNormal, InputType::ShaderResource },
-            { DemoResourceIds::GBufferEmissionMetallic, InputType::ShaderResource },
-            { DemoResourceIds::GBufferPosition, InputType::ShaderResource },
-            { DemoResourceIds::DepthBuffer, InputType::ShaderResource },
+            { DemoResourceIds::GBufferAlbedoOcclusion, gbufferInputType },
+            { DemoResourceIds::GBufferSpecularSmoothness, gbufferInputType },
+            { DemoResourceIds::GBufferNormal, gbufferInputType },
+            { DemoResourceIds::GBufferEmissionMetallic, gbufferInputType },
+            { DemoResourceIds::GBufferPosition, gbufferInputType },
+            { DemoResourceIds::DepthBuffer, gbufferInputType },
         },
         {
             { DemoResourceIds::DirectLighting, OutputType::UnorderedAccess },
@@ -118,6 +123,9 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
         demo.m_AsyncComputeEnabled && demo.m_PathTracingBackend == PathTracingBackend::InlineRayQuery
             ? RenderPassQueue::AsyncCompute
             : RenderPassQueue::Direct;
+    const InputType gbufferInputType = demo.m_PathTracingBackend == PathTracingBackend::InlineRayQuery
+        ? InputType::NonPixelShaderResource
+        : InputType::ShaderResource;
 //Modify End
 
     auto pass = RenderPass::Create(
@@ -126,12 +134,12 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
 //Modify Begin:2026-08-03 by BestHui
             { DemoResourceIds::BaseResourcesFinishedToken, InputType::Token },
 //Modify End
-            { DemoResourceIds::GBufferAlbedoOcclusion, InputType::ShaderResource },
-            { DemoResourceIds::GBufferSpecularSmoothness, InputType::ShaderResource },
-            { DemoResourceIds::GBufferNormal, InputType::ShaderResource },
-            { DemoResourceIds::GBufferEmissionMetallic, InputType::ShaderResource },
-            { DemoResourceIds::GBufferPosition, InputType::ShaderResource },
-            { DemoResourceIds::DepthBuffer, InputType::ShaderResource },
+            { DemoResourceIds::GBufferAlbedoOcclusion, gbufferInputType },
+            { DemoResourceIds::GBufferSpecularSmoothness, gbufferInputType },
+            { DemoResourceIds::GBufferNormal, gbufferInputType },
+            { DemoResourceIds::GBufferEmissionMetallic, gbufferInputType },
+            { DemoResourceIds::GBufferPosition, gbufferInputType },
+            { DemoResourceIds::DepthBuffer, gbufferInputType },
         },
         {
             { DemoResourceIds::IndirectLighting, OutputType::UnorderedAccess },

@@ -26,6 +26,9 @@ namespace RenderGraph
         Invalid,
         Token,
         ShaderResource,
+//Modify Begin:2026-08-03 by BestHui
+        NonPixelShaderResource,
+//Modify End
 //Modify Begin:2026-07-28 by BestHui
         UnorderedAccess,
         ExternalAccess,
