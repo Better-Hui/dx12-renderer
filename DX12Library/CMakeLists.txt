@@ -37,6 +37,9 @@ set(HEADER_FILES
         include/DX12Library/KeyCodes.h
         include/DX12Library/RenderTarget.h
         include/DX12Library/Resource.h
+        # Modify Begin:2026-07-30 by BestHui
+        include/DX12Library/ResourceStateTransition.h
+        # Modify End
         include/DX12Library/ResourceStateTracker.h
         include/DX12Library/RootSignature.h
         include/DX12Library/ShaderUtils.h

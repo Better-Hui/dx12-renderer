@@ -5,6 +5,7 @@
 
 #include <meshoptimizer.h>
 
+#include <algorithm>
 #include <cfloat>
 #include <stdexcept>
 
@@ -157,6 +158,16 @@ void MeshletGeometrySet::Clear()
     m_Draws.clear();
     m_Transforms.clear();
     m_Instances.clear();
+    m_GeometryDataDirty = true;
+    m_InstanceDataDirty = true;
+}
+
+void MeshletGeometrySet::ClearDraws()
+{
+    m_Draws.clear();
+    m_Transforms.clear();
+    m_Instances.clear();
+    m_InstanceDataDirty = true;
 }
 
 std::pair<uint32_t, uint32_t> MeshletGeometrySet::AddGeometry(const MeshPrototype& prototype)
@@ -181,6 +192,7 @@ std::pair<uint32_t, uint32_t> MeshletGeometrySet::AddGeometry(const MeshPrototyp
         m_Meshlets.push_back(meshlet);
     }
 
+    m_GeometryDataDirty = true;
     return { meshletOffset, static_cast<uint32_t>(buildResult.Meshlets.size()) };
 }
 
@@ -210,6 +222,7 @@ void MeshletGeometrySet::AddDraw(
     draw.MeshletOffset = meshletOffset;
     draw.MeshletCount = meshletCount;
     m_Draws.push_back(draw);
+    m_InstanceDataDirty = true;
 }
 
 void MeshletGeometrySet::Upload(CommandList& commandList)
@@ -219,26 +232,53 @@ void MeshletGeometrySet::Upload(CommandList& commandList)
         return;
     }
 
-    BuildInstances();
-    if (m_Instances.empty())
+    if (m_GeometryDataDirty)
+    {
+        commandList.CopyStructuredBuffer(m_VertexBuffer, m_Vertices);
+        commandList.CopyByteAddressBuffer(m_IndexBuffer, m_Indices.size() * sizeof(uint16_t), m_Indices.data());
+        commandList.CopyStructuredBuffer(m_MeshletBuffer, m_Meshlets);
+        m_GeometryDataDirty = false;
+    }
+
+    if (!m_InstanceDataDirty)
     {
         return;
     }
 
-    commandList.CopyStructuredBuffer(m_VertexBuffer, m_Vertices);
-    commandList.CopyByteAddressBuffer(m_IndexBuffer, m_Indices.size() * sizeof(uint16_t), m_Indices.data());
-    commandList.CopyStructuredBuffer(m_MeshletBuffer, m_Meshlets);
+    BuildInstances();
+    if (m_Instances.empty())
+    {
+        m_InstanceDataDirty = false;
+        return;
+    }
+
     commandList.CopyStructuredBuffer(m_TransformBuffer, m_Transforms);
     commandList.CopyStructuredBuffer(m_InstanceBuffer, m_Instances);
 
-    const D3D12_RESOURCE_DESC commandBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(
-        sizeof(MeshletIndirectCommand) * m_Instances.size(),
-        D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-    m_IndirectCommandBuffer = StructuredBuffer(
-        commandBufferDesc,
-        m_Instances.size(),
-        sizeof(MeshletIndirectCommand),
-        L"MeshletGeometrySet Indirect Commands");
+    const uint64_t requiredCommandBufferSize = sizeof(MeshletIndirectCommand) * m_Instances.size();
+    const D3D12_RESOURCE_DESC currentCommandBufferDesc = m_IndirectCommandBuffer.GetD3D12ResourceDesc();
+    if (m_IndirectCommandBuffer.GetD3D12Resource() == nullptr ||
+        currentCommandBufferDesc.Width < requiredCommandBufferSize)
+    {
+        if (m_IndirectCommandBuffer.GetD3D12Resource() != nullptr)
+        {
+            commandList.TrackResource(m_IndirectCommandBuffer);
+        }
+
+        const D3D12_RESOURCE_DESC commandBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(
+            requiredCommandBufferSize,
+            D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+        m_IndirectCommandBuffer = StructuredBuffer(
+            commandBufferDesc,
+            m_Instances.size(),
+            sizeof(MeshletIndirectCommand),
+            L"MeshletGeometrySet Indirect Commands");
+    }
+    else
+    {
+        m_IndirectCommandBuffer.CreateViews(m_Instances.size(), sizeof(MeshletIndirectCommand));
+    }
+    m_InstanceDataDirty = false;
 }
 
 MeshletGpuResources MeshletGeometrySet::GetGpuResources()
@@ -278,4 +318,117 @@ void MeshletGeometrySet::BuildInstances()
         }
     }
 }
+
+//Modify Begin:2026-07-30 by BestHui
+void MeshletSceneResources::Clear()
+{
+    m_GeometrySet.Clear();
+    m_GeometryMeshletRanges.clear();
+    m_Instances.clear();
+    m_InstanceIndices.clear();
+    m_NextInstanceHandle = 1;
+    m_DrawsDirty = true;
+}
+
+void MeshletSceneResources::InitializeGeometries(const std::vector<MeshletSceneGeometrySource>& geometries)
+{
+    Assert(m_Instances.empty(), "Meshlet scene geometries cannot change while instances are registered.");
+
+    m_GeometrySet.Clear();
+    m_GeometryMeshletRanges.clear();
+    m_GeometryMeshletRanges.reserve(geometries.size());
+    for (const MeshletSceneGeometrySource& geometry : geometries)
+    {
+        Assert(geometry.MeshPrototypes != nullptr, "Meshlet scene geometry prototypes must not be null.");
+
+        std::vector<std::pair<uint32_t, uint32_t>> meshletRanges;
+        meshletRanges.reserve(geometry.MeshPrototypes->size());
+        for (const MeshPrototype& prototype : *geometry.MeshPrototypes)
+        {
+            meshletRanges.push_back(m_GeometrySet.AddGeometry(prototype));
+        }
+        m_GeometryMeshletRanges.push_back(std::move(meshletRanges));
+    }
+    m_DrawsDirty = true;
+}
+
+void MeshletSceneResources::Rebuild(
+    const std::vector<MeshletSceneGeometrySource>& geometries,
+    const std::vector<MeshletSceneInstanceSource>& instances)
+{
+    Clear();
+    InitializeGeometries(geometries);
+    for (const MeshletSceneInstanceSource& instance : instances)
+    {
+        AddInstance(instance);
+    }
+}
+
+MeshletSceneInstanceHandle MeshletSceneResources::AddInstance(const MeshletSceneInstanceSource& instance)
+{
+    Assert(instance.GeometryIndex < m_GeometryMeshletRanges.size(), "Meshlet scene instance geometry index is invalid.");
+
+    const MeshletSceneInstanceHandle handle = m_NextInstanceHandle++;
+    const uint32_t instanceIndex = static_cast<uint32_t>(m_Instances.size());
+    m_Instances.push_back({ handle, instance });
+    m_InstanceIndices.emplace(handle, instanceIndex);
+    m_DrawsDirty = true;
+    return handle;
+}
+
+bool MeshletSceneResources::RemoveInstance(const MeshletSceneInstanceHandle handle)
+{
+    const auto indexResult = m_InstanceIndices.find(handle);
+    if (indexResult == m_InstanceIndices.end())
+    {
+        return false;
+    }
+
+    const uint32_t instanceIndex = indexResult->second;
+    const uint32_t lastIndex = static_cast<uint32_t>(m_Instances.size() - 1);
+    if (instanceIndex != lastIndex)
+    {
+        m_Instances[instanceIndex] = std::move(m_Instances[lastIndex]);
+        m_InstanceIndices[m_Instances[instanceIndex].Handle] = instanceIndex;
+    }
+
+    m_Instances.pop_back();
+    m_InstanceIndices.erase(indexResult);
+    m_DrawsDirty = true;
+    return true;
+}
+
+void MeshletSceneResources::Upload(CommandList& commandList)
+{
+    if (m_DrawsDirty)
+    {
+        RebuildDraws();
+    }
+    m_GeometrySet.Upload(commandList);
+}
+
+MeshletGpuResources MeshletSceneResources::GetGpuResources()
+{
+    return m_GeometrySet.GetGpuResources();
+}
+
+void MeshletSceneResources::RebuildDraws()
+{
+    m_GeometrySet.ClearDraws();
+    for (const InstanceEntry& instance : m_Instances)
+    {
+        const std::vector<std::pair<uint32_t, uint32_t>>& meshletRanges =
+            m_GeometryMeshletRanges[instance.Source.GeometryIndex];
+        for (const auto [meshletOffset, meshletCount] : meshletRanges)
+        {
+            m_GeometrySet.AddDraw(
+                meshletOffset,
+                meshletCount,
+                instance.Source.WorldMatrix,
+                instance.Source.MaterialIndex);
+        }
+    }
+    m_DrawsDirty = false;
+}
+//Modify End
 //Modify End

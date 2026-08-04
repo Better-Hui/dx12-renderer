@@ -58,11 +58,25 @@ RenderGraph::RenderPass::Create(
 Current behavior:
 
 - Direct and Async Compute queues are created and profiled separately.
-- The graph records the last writer queue and submitted fence value for each logical resource.
+- `RenderGraphQueueScheduler` records the last writer queue and submitted fence value for each logical resource.
+- `RenderGraphResourceStateTracker` owns the graph's current-state table and pending transition/UAV/aliasing barriers.
 - A cross-queue consumer submits the producer work, then receives a GPU-side fence wait.
 - Direct-to-Compute transitions are recorded on Direct before submission; a Direct consumer of Compute output receives the reciprocal wait.
 - Async inputs are limited to read-only classes; async outputs are tokens, UAVs, or copy destinations. Render targets, depth, and external passes remain Direct-only.
 - Inline-ray-query `Indirect Lighting` is the sample's current Async Compute example.
+
+### Native resource-state handoff
+
+Native integrations that record barriers inside a normal RenderGraph pass must report the resulting state through `RenderContext`:
+
+```cpp
+const ResourceStateTransition transitions[] = {
+    { texture.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE },
+};
+context.TransitionResources(commandList, transitions);
+```
+
+NRD uses this path to batch its adapter/input/output transitions. Without a RenderGraph callback, the NRD wrapper retains a raw D3D12 fallback for standalone use. External passes such as CUDA Bloom remain explicit queue-boundary operations with their own shared-fence protocol.
 
 This is an explicit queue API, not an automatic multi-queue scheduler. It does not decide queue placement, split or batch passes, optimize overlap, or schedule a Copy queue. A pass may become slower when dependencies expose its compute tail or when graphics and compute contend for GPU execution/cache/bandwidth.
 
@@ -84,7 +98,7 @@ PIX is the authority for cross-queue wall-clock overlap; CSV is the lightweight 
 
 `RaytracingDemoSceneResources::LoadScene` adapts a `Scene` into textures, materials, geometry, meshlet buffers, and RTAS. A fallback PBR-like material is used when an imported object lacks a supported material.
 
-The default sample still appends C++ stress-test spheres for renderer load testing; the runtime scene is therefore not yet fully data-authored.
+The default sample still appends C++ stress-test spheres for renderer load testing; the runtime scene is therefore not yet fully data-authored. The UI toggle uses incremental add/remove handles: static meshlet geometry and existing BLAS data are reused, while meshlet instance buffers and the TLAS are updated.
 
 Current importer limits: no full prefab/nested-prefab support, no complete `SkinnedMeshRenderer` or `LODGroup`, no Unity asset-database cache/live sync, and no automatic coordinate-system conversion. `UnitySceneDump` inspects supported scenes without launching the renderer.
 
@@ -93,7 +107,7 @@ Current importer limits: no full prefab/nested-prefab support, no complete `Skin
 - **Ray tracing:** inline ray query is the default path; shader-table DXR uses ray-generation, miss, and hit groups. Both share scene resources.
 - **Meshlets:** task-shader and compute-indirect GBuffer backends plus cluster debugging. This is not yet a production visibility, streaming, residency, or LOD system.
 - **CUDA Bloom:** imports shared D3D12 resources/fences once and uses timeline values for D3D12-to-CUDA and CUDA-to-D3D12 ordering. It must not overwrite history or overlay resources.
-- **Denoising:** NRD and SVGF are selectable sample integrations. History must reset after incompatible resolution, layout, or backend changes.
+- **Denoising:** NRD and SVGF are selectable sample integrations. NRD reports native D3D12 state changes back to RenderGraph; history must reset after incompatible resolution, layout, or backend changes.
 
 ## Current API boundaries
 
@@ -101,6 +115,8 @@ Current importer limits: no full prefab/nested-prefab support, no complete `Skin
 - Sampler reflection/binding and root constants/root descriptors are not fully unified.
 - Pipeline cache keys do not yet represent every raster, compute, and DXR state dimension.
 - RenderGraph supports explicit async queue placement but no automatic scheduling or Copy-queue path.
+- `RenderGraphRoot::Execute` still combines pass execution and profiler orchestration even though queue and resource-state ownership have been split into dedicated components.
+- Transient-resource aliasing/lifetime planning is not yet fully queue-fence-aware.
 - DLSS/Streamline is not integrated.
 
 Prefer a small, explicit framework API addition plus a clear sample usage site over increasing low-level D3D12 exposure.

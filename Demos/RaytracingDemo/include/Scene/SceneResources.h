@@ -19,6 +19,7 @@
 
 #include <DirectXMath.h>
 #include <d3d12.h>
+#include <wrl.h>
 
 #include <cstdint>
 #include <memory>
@@ -66,11 +67,15 @@ struct RaytracingDemoSceneObject
 class RaytracingDemoSceneResources final
 {
 public:
-    RaytracingDemoSceneResources();
+    explicit RaytracingDemoSceneResources(Microsoft::WRL::ComPtr<ID3D12Device2> device);
 
     void Clear();
     void LoadDeferredLightingScene(CommandList& commandList);
-    bool LoadScene(CommandList& commandList, const Scene& scene);
+//Modify Begin:2026-07-30 by BestHui
+    bool LoadScene(CommandList& commandList, const Scene& scene, bool enableStressTestSpheres = true);
+    bool SetStressTestSpheresEnabled(CommandList& commandList, bool enabled);
+    bool AreStressTestSpheresEnabled() const { return m_StressTestSpheresEnabled; }
+//Modify End
     void BuildRayTracingAccelerationStructure(
         CommandList& commandList,
         RayTracingAccelerationStructureBuildSettings settings = {});
@@ -82,12 +87,15 @@ public:
     std::vector<ShaderResourceView> CreateTextureShaderResourceViews() const;
     const StructuredBuffer& GetMaterialBuffer() const { return m_MaterialBuffer; }
     const StructuredBuffer& GetGeometryBuffer() const { return m_GeometryBuffer; }
+    void TransitionRayTracingShaderResources(CommandList& commandList, D3D12_RESOURCE_STATES stateAfter) const;
 //Modify Begin:2026-07-30 by BestHui
     BindlessDescriptorHeap& GetBindlessDescriptorHeap() { return m_BindlessDescriptorHeap; }
     const BindlessDescriptorHeap& GetBindlessDescriptorHeap() const { return m_BindlessDescriptorHeap; }
 //Modify End
 //Modify Begin:2026-07-31 by BestHui
-    MeshletGpuResources GetMeshletGpuResources() { return m_MeshletGeometrySet.GetGpuResources(); }
+//Modify Begin:2026-07-30 by BestHui
+    MeshletGpuResources GetMeshletGpuResources() { return m_MeshletSceneResources.GetGpuResources(); }
+//Modify End
 //Modify End
     const RayTracingAccelerationStructure& GetRayTracingAccelerationStructure() const { return m_RayTracingAccelerationStructure; }
     RayTracingAccelerationStructure& GetRayTracingAccelerationStructure() { return m_RayTracingAccelerationStructure; }
@@ -127,12 +135,18 @@ private:
 //Modify Begin:2026-07-31 by BestHui
     uint32_t AddSceneGeometry(const std::shared_ptr<Model>& model, std::vector<MeshPrototype> prototypes);
     void AddSceneObject(const DirectX::XMMATRIX& worldMatrix, uint32_t geometryIndex, uint32_t materialIndex);
-    void BuildMeshletDraws();
+//Modify Begin:2026-07-30 by BestHui
+    void InitializeMeshletSceneResources();
+//Modify End
     void AddStressTestSpheres(CommandList& commandList, uint32_t whiteTextureIndex);
     void UploadMeshletBuffers(CommandList& commandList);
 //Modify End
-    void AddRayTracingInstances(RayTracingAccelerationStructure& accelerationStructure) const;
-    void UploadRayTracingBuffers(CommandList& commandList, const RayTracingAccelerationStructure& accelerationStructure);
+    void AddRayTracingInstances(
+        RayTracingAccelerationStructure& accelerationStructure,
+        const RaytracingDemoSceneObject& object,
+        std::vector<RayTracingInstanceHandle>* instanceHandles = nullptr) const;
+    void UploadRayTracingMaterialBuffer(CommandList& commandList);
+    void UploadRayTracingGeometryBuffer(CommandList& commandList, const RayTracingAccelerationStructure& accelerationStructure);
 
     StructuredBuffer m_MaterialBuffer;
     StructuredBuffer m_GeometryBuffer;
@@ -140,7 +154,16 @@ private:
     BindlessDescriptorHeap m_BindlessDescriptorHeap;
 //Modify End
 //Modify Begin:2026-07-31 by BestHui
-    MeshletGeometrySet m_MeshletGeometrySet;
+//Modify Begin:2026-07-30 by BestHui
+    MeshletSceneResources m_MeshletSceneResources;
+//Modify End
+//Modify End
+//Modify Begin:2026-07-30 by BestHui
+    std::vector<RaytracingDemoSceneObject> m_StressTestSphereObjects;
+    std::vector<MeshletSceneInstanceHandle> m_StressTestSphereMeshletInstances;
+    std::vector<RayTracingInstanceHandle> m_StressTestSphereRayTracingInstances;
+    size_t m_StressTestSphereObjectStart = 0;
+    bool m_StressTestSpheresEnabled = true;
 //Modify End
     RayTracingAccelerationStructure m_RayTracingAccelerationStructure;
     std::vector<RaytracingDemoSceneGeometry> m_SceneGeometries;

@@ -42,11 +42,44 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
             sceneReadyToken));
         sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::DebugOutputFinishedToken;
     }
-    else if (demo.IsDenoiserEnabled())
+    else
 //Modify End
     {
-        renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDenoisePass(demo));
-        sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::DenoiseFinishedToken;
+//Modify Begin:2026-07-30 by BestHui
+        if (demo.IsDenoiserEnabled())
+        {
+            renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDenoisePass(demo));
+            sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::DenoiseFinishedToken;
+        }
+
+        RenderGraph::ResourceId debugTarget = 0;
+        switch (demo.m_DebugLightingTextureTarget)
+        {
+        case 1:
+            debugTarget = RaytracingDemoRenderGraph::ResourceIds::IndirectLighting;
+            break;
+        case 2:
+            debugTarget = RaytracingDemoRenderGraph::ResourceIds::NRDNoisyRadiance;
+            break;
+        case 3:
+            if (demo.m_Denoisers.IsNRDEnabled())
+            {
+                debugTarget = RaytracingDemoRenderGraph::ResourceIds::NRDDenoisedRadiance;
+            }
+            break;
+        default:
+            break;
+        }
+
+        if (debugTarget != 0)
+        {
+            renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDebugTexturePass(
+                demo,
+                debugTarget,
+                sceneReadyToken));
+            sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::DebugOutputFinishedToken;
+        }
+//Modify End
     }
     if (demo.m_SkyboxEnabled)
     {

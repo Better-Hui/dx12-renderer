@@ -10,6 +10,10 @@
 #include <DX12Library/Window.h>
 
 #include "RenderPass.h"
+//Modify Begin:2026-07-30 by BestHui
+#include "RenderGraphQueueScheduler.h"
+#include "RenderGraphResourceStateTracker.h"
+//Modify End
 #include "RenderMetadata.h"
 #include "ResourceDescription.h"
 #include "ResourcePool.h"
@@ -41,6 +45,9 @@ namespace RenderGraph
 //Modify Begin:2026-08-03 by BestHui
         void SetAsyncComputeGpuTimestampProfiler(GpuTimestampProfiler* profiler) { m_AsyncComputeGpuTimestampProfiler = profiler; }
 //Modify End
+//Modify Begin:2026-07-30 by BestHui
+        void SetDebugSerializeAsyncCompute(bool enabled) { m_DebugSerializeAsyncCompute = enabled; }
+//Modify End
         void Present(const std::shared_ptr<Window>& pWindow, ResourceId resourceId = ResourceIds::GRAPH_OUTPUT);
 //Modify Begin:2026-07-28 by BestHui
         void PresentWithOverlay(const std::shared_ptr<Window>& pWindow, ResourceId resourceId, const std::function<void(CommandList&)>& drawCallback);
@@ -66,7 +73,14 @@ namespace RenderGraph
 //Modify Begin:2026-07-29 by BestHui
         void BuildPassResourceStatePlans();
 //Modify End
-        void PrepareResourcesForRenderPass(CommandList& commandList, const RenderPass& renderPass, uint32_t renderPassIndex, RenderContext& context);
+//Modify Begin:2026-07-30 by BestHui
+        void PrepareResourcesForRenderPass(
+            CommandList& commandList,
+            const RenderPass& renderPass,
+            uint32_t renderPassIndex,
+            RenderContext& context,
+            bool skipAliasingOutputs = false);
+//Modify End
 
         D3D12_RESOURCE_STATES GetCurrentResourceState(const Resource& resource) const;
         void SetCurrentResourceState(const Resource& resource, D3D12_RESOURCE_STATES state);
@@ -81,11 +95,9 @@ namespace RenderGraph
 //Modify Begin:2026-08-03 by BestHui
         std::shared_ptr<CommandQueue> m_AsyncComputeCommandQueue;
 //Modify End
-//Modify Begin:2026-08-03 by BestHui
-        std::map<ResourceId, RenderPassQueue> m_LastWriterQueues;
-        std::map<ResourceId, uint64_t> m_LastWriterFenceValues;
-        bool m_AsyncComputeSubmittedThisFrame = false;
-        uint64_t m_LastAsyncComputeFenceValue = 0;
+//Modify Begin:2026-07-30 by BestHui
+        RenderGraphQueueScheduler m_QueueScheduler;
+        bool m_DebugSerializeAsyncCompute = false;
 //Modify End
 
         std::vector<std::unique_ptr<RenderPass>> m_RenderPassesDescription;
@@ -120,8 +132,7 @@ namespace RenderGraph
         std::map<const RenderPass*, PassResourceStatePlan> m_PassResourceStatePlans;
 //Modify End
         std::shared_ptr<RenderTarget> m_GraphOutputRenderTarget;
-        std::map<const Resource*, D3D12_RESOURCE_STATES> m_ResourceStates;
-        std::vector<D3D12_RESOURCE_BARRIER> m_PendingBarriers;
+        RenderGraphResourceStateTracker m_ResourceStateTracker;
 //Modify Begin:2026-07-29 by BestHui
         GpuTimestampProfiler* m_GpuTimestampProfiler = nullptr;
 //Modify End

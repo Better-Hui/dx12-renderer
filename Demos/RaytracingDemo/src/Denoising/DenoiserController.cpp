@@ -209,7 +209,8 @@ void DenoiserController::Execute(
     const RaytracingDemoRenderGraph::LightingResources& lighting,
     const RaytracingDemoRenderGraph::NRDResources& nrdResources,
     const uint32_t width,
-    const uint32_t height)
+    const uint32_t height,
+    const NRD::ResourceTransitionCallback& transitionResource)
 {
     if (!IsEnabled())
     {
@@ -250,7 +251,8 @@ void DenoiserController::Execute(
             nrdResources.DenoisedRadiance,
             lighting.SceneColor,
             width,
-            height);
+            height,
+            transitionResource);
         return;
     }
 

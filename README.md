@@ -15,12 +15,12 @@ The upstream renderer remains the foundation. This fork adds framework and sampl
 | Area | Added or extended here |
 | --- | --- |
 | Framework API | `CommandContext`, reflection-driven pipeline layouts, named descriptor-set bindings, bindless descriptor submission, DXR helpers, and mesh-shader pipeline support. |
-| RenderGraph | Logical resources, resource-state plans, external passes, per-queue GPU timestamps/CSV export, and explicit Direct/Async Compute queue synchronization. |
+| RenderGraph | Logical resources, compiled resource-state plans, centralized resource-state tracking, native/external state handoff, per-queue GPU timestamps/CSV export, and explicit Direct/Async Compute queue synchronization. |
 | RaytracingDemo | The maintained integration sample. It demonstrates this repository's framework APIs rather than treating raw D3D12 calls as normal sample-facing code. |
 | Ray tracing | Runtime-selectable inline ray-query and shader-table DXR paths sharing the same scene/resource model. |
-| Scene workflow | Shared `Scene` data plus `SceneImporter` support for Unity text scenes and JSON scene descriptions. |
-| Meshlets | Meshlet generation/GPU resources plus task-shader and compute-indirect GBuffer backends. |
-| Denoising and interop | NRD/SVGF sample paths and CUDA Bloom using D3D12 shared resources with external fence/semaphore synchronization. |
+| Scene workflow | Shared `Scene` data, Unity/JSON import, and incremental runtime instance add/remove used by the stress-scene controls. |
+| Meshlets | Meshlet generation/GPU resources, task-shader and compute-indirect GBuffer backends, and incremental instance-buffer updates. |
+| Denoising and interop | NRD/SVGF sample paths, RenderGraph-aware NRD resource-state handoff, and CUDA Bloom using D3D12 shared resources with external fence/semaphore synchronization. |
 | Investigation | PIX scopes, RenderGraph timing history/CSV export, `UnitySceneDump`, and runtime UI controls. |
 
 ## Repository layout
@@ -64,6 +64,8 @@ auto pass = RenderGraph::RenderPass::Create(
 
 Pass input/output declarations drive ordering, resource states, and cross-queue waits. The graph currently supports explicit `Direct` and `AsyncCompute` assignment, tracks each resource's producer queue and submitted fence value, and inserts GPU-side waits for dependent consumers. Inline-ray-query `Indirect Lighting` is the current async-compute sample path.
 
+Queue submission and last-writer fence tracking live in `RenderGraphQueueScheduler`; barrier ownership lives in `RenderGraphResourceStateTracker`. Native integrations such as NRD can batch `ResourceStateTransition` requests through `RenderContext`, so native barriers and the graph's tracked state stay synchronized.
+
 ### Scene import and rendering features
 
 ```cpp
@@ -71,7 +73,7 @@ const SceneImportResult result = SceneImporter::ImportFromFile(scenePath);
 const Scene& scene = result.SceneData;
 ```
 
-`SceneImporter` accepts Unity text-serialized `.unity` files and JSON scene files. `RaytracingDemoSceneResources` adapts the imported scene into textures, materials, geometry, meshlet buffers, and acceleration structures.
+`SceneImporter` accepts Unity text-serialized `.unity` files and JSON scene files. `RaytracingDemoSceneResources` adapts the imported scene into textures, materials, geometry, meshlet buffers, and acceleration structures. The stress-sphere UI toggle exercises incremental scene mutation: meshlet geometry and existing BLAS data are reused while instance data and the TLAS are updated.
 
 | Feature | Demonstrated usage |
 | --- | --- |
@@ -82,6 +84,7 @@ const Scene& scene = result.SceneData;
 | Meshlets | Task-shader and compute-indirect GBuffer backends with cluster debugging. |
 | CUDA Bloom | External D3D12/CUDA post process with shared-resource and shared-fence synchronization. |
 | Profiling | PIX scopes and RenderGraph GPU timestamp history exported as CSV. |
+| Runtime scene changes | Incremental stress-instance add/remove without rebuilding all meshlet geometry or every BLAS. |
 
 ## Requirements
 
@@ -136,9 +139,12 @@ The demo loads `Assets/Scenes/DefaultScene.json` by default.
 | `RAYTRACING_DEMO_UNITY_SCENE` | `C:\Scenes\CornellBox.unity` | Compatibility variable for a Unity text scene. |
 | `RAYTRACING_DEMO_MODE` | `shader-table` | Starts shader-table DXR; default is inline ray query. |
 | `RAYTRACING_DEMO_DENOISER` | `nrd` or `svgf` | Selects a denoiser. |
+| `RAYTRACING_DEMO_ASYNC_COMPUTE` | `1` | Places the eligible inline indirect-lighting pass on the compute queue. |
+| `RAYTRACING_DEMO_ASYNC_CPU_SERIALIZE` | `1` | Debug-only CPU wait after async submission; useful for synchronization diagnosis, not performance measurement. |
 | `RAYTRACING_DEMO_CUDA_BLOOM` | `1` | Enables CUDA Bloom. |
 | `RAYTRACING_DEMO_MESHLET_GBUFFER` | `1` | Enables the meshlet GBuffer backend. |
 | `RAYTRACING_DEMO_MESHLET_BACKEND` | `indirect` | Selects compute-indirect meshlet rendering; otherwise task shaders are used. |
+| `RAYTRACING_DEMO_MESHLET_DEBUG` | `1` | Enables meshlet-cluster debug visualization. |
 
 `UnitySceneDump` inspects a supported scene without launching the renderer:
 
@@ -153,9 +159,11 @@ The demo loads `Assets/Scenes/DefaultScene.json` by default.
 - CUDA 12.8 is required at configure time even when CUDA Bloom is disabled at runtime; fully optional CUDA remains build-system work.
 - Async compute is **explicitly assigned per pass**. The graph does not automatically choose queues, split passes, optimize overlap, or schedule a Copy queue.
 - Consecutive async passes are currently submitted per pass rather than batch-scheduled as a larger compute segment.
+- Queue and resource-state tracking are separated from `RenderGraphRoot`, but `RenderGraphRoot::Execute` still owns pass execution and profiler orchestration and remains a refactoring target.
+- Transient-resource lifetime is still planned primarily from pass order rather than complete multi-queue fence retirement; broader async graphs need a queue-aware allocator before aggressive aliasing.
 - Per-queue RenderGraph timestamps are useful for pass duration; PIX Timing Capture is required to inspect cross-queue wall-clock overlap, waits, and GPU bubbles.
 - The Unity importer is static and limited: prefab resolution, nested prefabs, skinned meshes, `LODGroup`, and an asset-database cache are not complete.
-- JSON scene import exists, but the default sample still appends C++ stress-test spheres for renderer load testing.
+- JSON scene import exists, but the stress-test spheres are still defined by sample C++ rather than scene data. They are enabled by default and can be added or removed incrementally from the runtime UI.
 - Meshlet rendering is an experimental GBuffer backend, not a complete visibility/streaming system or a claim of optimal meshlet performance.
 - DLSS/Streamline is not currently integrated.
 

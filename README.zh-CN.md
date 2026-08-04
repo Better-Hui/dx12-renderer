@@ -15,11 +15,11 @@
 ## 本 fork 在上游基础上增加了什么
 
 - **Framework 层接口**：围绕 `CommandContext` 提供 pipeline、descriptor set、bindless descriptor、DXR 和 mesh shader 等常用封装，sample 不需要把 raw D3D12 调用铺满业务代码。
-- **RenderGraph**：提供资源读写声明、依赖排序、资源状态切换、外部 pass、GPU timing 记录和 CSV 导出。
+- **RenderGraph**：提供资源读写声明、依赖排序、编译后的状态计划、统一资源状态追踪、native/external 状态交接、GPU timing 记录和 CSV 导出。
 - **显式异步计算**：pass 可以指定使用 `Direct` 或 `AsyncCompute` queue；RenderGraph 负责跨 queue 的 GPU fence 等待与资源交接。
 - **光线追踪与降噪**：同一场景可在 inline ray query 和 shader-table DXR 之间切换，并可使用 NRD 或 SVGF。
-- **场景工作流**：新增公共 `Scene` 和 `SceneImporter`，可以读取 Unity 文本序列化场景和本仓库使用的 JSON 场景描述。
-- **Meshlet 实验路径**：包含 Meshlet 构建、GPU 资源以及 task shader / compute-indirect 两种 GBuffer 后端。
+- **场景工作流**：新增公共 `Scene` 和 `SceneImporter`，可以读取 Unity 文本序列化场景和 JSON 场景，并通过压力球开关验证增量增删实例。
+- **Meshlet 实验路径**：包含 Meshlet 构建、GPU 资源、task shader / compute-indirect 两种 GBuffer 后端，以及只更新实例数据的增量路径。
 - **CUDA Bloom**：演示 D3D12 shared resource、shared fence 与 CUDA external semaphore 的互操作流程。
 - **调试与分析工具**：集成 PIX event、RenderGraph timing history/CSV、运行时调试 UI 和 `UnitySceneDump`。
 
@@ -53,6 +53,8 @@ auto pass = RenderGraph::RenderPass::Create(
 
 输入/输出声明会参与依赖分析与资源状态安排。`AsyncCompute` 表示“这个 pass 明确请求 compute queue”，不是自动性能优化开关：RenderGraph 会处理必要的 GPU fence 等待，但不会自动判断哪个 pass 最适合异步、拆分 pass，或保证一定产生 direct/compute overlap。
 
+当前 queue 提交、last-writer 和跨 queue fence 由 `RenderGraphQueueScheduler` 管理；barrier 与资源当前状态由 `RenderGraphResourceStateTracker` 管理。NRD 这类 native 集成可以通过 `RenderContext` 批量提交 `ResourceStateTransition`，让真实 D3D12 barrier 和 RenderGraph 状态表保持一致。
+
 ## 你可以从 sample 中看到的功能
 
 | 方向 | 具体内容 |
@@ -60,11 +62,12 @@ auto pass = RenderGraph::RenderPass::Create(
 | GBuffer | 常规 raster GBuffer，以及实验性的 Meshlet GBuffer 路径。 |
 | 光线追踪 | inline ray query compute shader 与 shader-table DXR，可在运行时切换。 |
 | 光照 | direct lighting 和 indirect lighting 分离，再进行 composite。 |
-| 降噪 | NRD 与 SVGF 两条可选路径。 |
-| Meshlet | task shader 和 compute-indirect 后端，以及 cluster 调试显示。 |
+| 降噪 | NRD 与 SVGF 两条可选路径；NRD 的 native 状态变化会回写 RenderGraph。 |
+| Meshlet | task shader 和 compute-indirect 后端、cluster 调试显示，以及实例数据增量更新。 |
 | CUDA 互操作 | 基于 shared resource / shared fence 的 Bloom 后处理。 |
 | 性能分析 | PIX scope，以及 Direct、Compute queue 分别记录的 RenderGraph GPU timing / CSV。 |
 | 场景导入 | `.unity` 文本场景和 JSON 场景导入，最终转换为材质、几何、Meshlet buffer 和 acceleration structure。 |
+| 动态场景测试 | 压力球可以在运行时增删；复用静态 Meshlet geometry 和已有 BLAS，只更新实例数据与 TLAS。 |
 
 默认场景是 `Assets/Scenes/DefaultScene.json`。如需查看 Unity 场景转换后的信息，可以使用 `UnitySceneDump`。
 
@@ -134,9 +137,12 @@ cmake --build ..\build --config Release --target RaytracingDemo UnitySceneDump
 | `RAYTRACING_DEMO_UNITY_SCENE` | `C:\Scenes\CornellBox.unity` | 兼容旧调用方式的 Unity 场景变量。 |
 | `RAYTRACING_DEMO_MODE` | `shader-table` | 使用 shader-table DXR；默认是 inline ray query。 |
 | `RAYTRACING_DEMO_DENOISER` | `nrd` 或 `svgf` | 选择降噪器。 |
+| `RAYTRACING_DEMO_ASYNC_COMPUTE` | `1` | 将符合条件的 inline indirect-lighting pass 放到 compute queue。 |
+| `RAYTRACING_DEMO_ASYNC_CPU_SERIALIZE` | `1` | 调试用：async 提交后执行 CPU wait；不能用于性能测试。 |
 | `RAYTRACING_DEMO_CUDA_BLOOM` | `1` | 开启 CUDA Bloom。 |
 | `RAYTRACING_DEMO_MESHLET_GBUFFER` | `1` | 开启 Meshlet GBuffer。 |
 | `RAYTRACING_DEMO_MESHLET_BACKEND` | `indirect` | Meshlet GBuffer 使用 compute-indirect；不设置时使用 task shader。 |
+| `RAYTRACING_DEMO_MESHLET_DEBUG` | `1` | 开启 Meshlet cluster 调试显示。 |
 
 ## 目录导航
 
@@ -156,9 +162,11 @@ cmake --build ..\build --config Release --target RaytracingDemo UnitySceneDump
 - CUDA 在运行时可以关闭，但仍是当前构建流程的硬依赖；将它做成真正可选的模块仍需调整 build system。
 - Async Compute 目前采用**显式指定**方式。RenderGraph 不会自动选择 queue、拆分 pass、优化 overlap，也还没有 Copy queue 调度器。
 - 连续的 async pass 目前逐 pass 提交，尚未合并成更大的 compute segment。
+- queue 与资源状态追踪已经从 `RenderGraphRoot` 拆出，但 `RenderGraphRoot::Execute()` 仍同时组织 pass 执行和 profiler 生命周期，还是下一步需要继续拆分的位置。
+- transient resource 的生命周期目前主要按 pass 顺序规划，还不是完整的多 queue fence retirement；在扩展更复杂的 async graph 前，需要先让 allocator 感知 queue/fence。
 - RenderGraph timing 分别记录每条 queue 上的 pass 时长；判断跨 queue overlap、wait 和 GPU bubble 时，请使用 PIX Timing Capture。
 - Unity importer 是静态、有限的导入器；prefab / nested prefab、skinned mesh、`LODGroup` 与 asset-database cache 尚未覆盖。
-- JSON 场景已经可用，但默认 sample 仍会追加 C++ stress-test spheres，用于制造稳定的渲染压力。
+- JSON 场景已经可用，但压力球仍由 sample C++ 定义，不属于场景数据。它们默认开启，可以通过运行时 UI 走增量 Add/Remove 路径切换。
 - Meshlet 路径是实验性 GBuffer 后端，不是完整的 visibility / streaming 系统，也不代表已达到最优 Meshlet 性能。
 - 尚未接入 DLSS / Streamline。
 

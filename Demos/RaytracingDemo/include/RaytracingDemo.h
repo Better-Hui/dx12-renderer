@@ -207,6 +207,9 @@ private:
 //Modify Begin:2026-08-03 by BestHui
     void LoadSceneContent(CommandList& commandList, const std::filesystem::path& scenePath);
 //Modify End
+//Modify Begin:2026-07-30 by BestHui
+    void ApplyStressTestSpheresState();
+//Modify End
     void SaveCurrentCameraToUnityScene();
 //Modify End
 //Modify Begin:2026-08-03 by BestHui
@@ -231,6 +234,9 @@ private:
 //Modify Begin:2026-08-03 by BestHui
     bool m_RenderGraphAsyncComputeEnabled = false;
     PathTracingBackend m_RenderGraphPathTracingBackend = PathTracingBackend::InlineRayQuery;
+//Modify Begin:2026-07-30 by BestHui
+    int m_RenderGraphLightingDebugTextureTarget = 0;
+//Modify End
 //Modify End
 //Modify End
 //Modify Begin:2026-07-31 by BestHui
@@ -305,7 +311,15 @@ private:
     bool m_IndirectLightingEnabled = true;
 //Modify Begin:2026-08-03 by BestHui
     bool m_AsyncComputeEnabled = false;
+//Modify Begin:2026-07-30 by BestHui
+    bool m_DebugSerializeAsyncCompute = false;
+    int m_DebugLightingTextureTarget = 0;
+//Modify End
     bool m_DebugStressPathTracingBackendSwitch = false;
+//Modify End
+//Modify Begin:2026-07-30 by BestHui
+    bool m_StressTestSpheresEnabled = true;
+    bool m_StressTestSpheresStateDirty = false;
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
     bool m_UseMeshletGBuffer = false;

@@ -14,15 +14,17 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDe
         L"Denoise",
         {
             { DemoResourceIds::RayTracingFinishedToken, InputType::Token },
-            { DemoResourceIds::NoisyRadiance, InputType::ShaderResource },
-            { DemoResourceIds::NRDNoisyRadiance, InputType::ShaderResource },
-            { DemoResourceIds::GBufferAlbedoOcclusion, InputType::ShaderResource },
-            { DemoResourceIds::GBufferSpecularSmoothness, InputType::ShaderResource },
-            { DemoResourceIds::GBufferNormal, InputType::ShaderResource },
-            { DemoResourceIds::GBufferEmissionMetallic, InputType::ShaderResource },
-            { DemoResourceIds::GBufferPosition, InputType::ShaderResource },
-            { DemoResourceIds::MotionVector, InputType::ShaderResource },
-            { DemoResourceIds::DepthBuffer, InputType::ShaderResource },
+//Modify Begin:2026-07-30 by BestHui
+            { DemoResourceIds::NoisyRadiance, InputType::NonPixelShaderResource },
+            { DemoResourceIds::NRDNoisyRadiance, InputType::NonPixelShaderResource },
+            { DemoResourceIds::GBufferAlbedoOcclusion, InputType::NonPixelShaderResource },
+            { DemoResourceIds::GBufferSpecularSmoothness, InputType::NonPixelShaderResource },
+            { DemoResourceIds::GBufferNormal, InputType::NonPixelShaderResource },
+            { DemoResourceIds::GBufferEmissionMetallic, InputType::NonPixelShaderResource },
+            { DemoResourceIds::GBufferPosition, InputType::NonPixelShaderResource },
+            { DemoResourceIds::MotionVector, InputType::NonPixelShaderResource },
+            { DemoResourceIds::DepthBuffer, InputType::NonPixelShaderResource },
+//Modify End
         },
         {
             { DemoResourceIds::NRDNormalRoughness, OutputType::UnorderedAccess },
@@ -45,6 +47,16 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDe
                 demo.GetSceneCamera().GetProjectionMatrix(),
             };
 
+//Modify Begin:2026-07-30 by BestHui
+            const NRD::ResourceTransitionCallback transitionResource =
+                [&context](
+                    CommandList& transitionCommandList,
+                    const std::span<const ResourceStateTransition> transitions)
+                {
+                    context.TransitionResources(transitionCommandList, transitions);
+                };
+//Modify End
+
             demo.GetDenoisers().Execute(
                 cmd,
                 frameMatrices,
@@ -52,6 +64,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDe
                 lighting,
                 nrd,
                 width,
-                height);
+                height,
+                transitionResource);
         });
 }

@@ -1,7 +1,6 @@
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-30 by BestHui
 #include <Framework/Rendering/RayTracing/RayTracingAccelerationStructure.h>
 
-#include <DX12Library/Application.h>
 #include <DX12Library/CommandList.h>
 #include <DX12Library/Helpers.h>
 #include <Framework/Geometry/Mesh.h>
@@ -13,50 +12,59 @@
 
 using Microsoft::WRL::ComPtr;
 
-namespace
+RayTracingAccelerationStructure::RayTracingAccelerationStructure(ComPtr<ID3D12Device5> device)
+    : m_Device(std::move(device))
 {
-    ComPtr<ID3D12Device5> GetDxrDevice()
-    {
-        ComPtr<ID3D12Device5> device5;
-        ThrowIfFailed(Application::Get().GetDevice().As(&device5));
-        return device5;
-    }
+    Assert(m_Device != nullptr, "Ray tracing acceleration structure requires a DXR-capable device.");
 }
 
 RayTracingInstanceHandle RayTracingAccelerationStructure::AddInstance(const RayTracingInstanceDesc& instanceDesc)
 {
     Assert(instanceDesc.Mesh != nullptr, "Ray tracing instance mesh must not be null.");
     const RayTracingInstanceHandle handle = m_NextInstanceHandle++;
+    const uint32_t instanceIndex = static_cast<uint32_t>(m_Instances.size());
     m_InstanceHandles.push_back(handle);
     m_Instances.push_back(instanceDesc);
+    m_InstanceIndices.emplace(handle, instanceIndex);
     return handle;
 }
 
 bool RayTracingAccelerationStructure::UpdateInstance(const RayTracingInstanceHandle handle, const RayTracingInstanceDesc& instanceDesc)
 {
     Assert(instanceDesc.Mesh != nullptr, "Ray tracing instance mesh must not be null.");
-    const auto findResult = std::find(m_InstanceHandles.begin(), m_InstanceHandles.end(), handle);
-    if (findResult == m_InstanceHandles.end())
+    const auto indexResult = m_InstanceIndices.find(handle);
+    if (indexResult == m_InstanceIndices.end())
     {
         return false;
     }
 
-    const size_t instanceIndex = static_cast<size_t>(std::distance(m_InstanceHandles.begin(), findResult));
+    const uint32_t instanceIndex = indexResult->second;
+    m_InstanceMeshChanged |= m_Instances[instanceIndex].Mesh != instanceDesc.Mesh;
     m_Instances[instanceIndex] = instanceDesc;
     return true;
 }
 
 bool RayTracingAccelerationStructure::RemoveInstance(const RayTracingInstanceHandle handle)
 {
-    const auto findResult = std::find(m_InstanceHandles.begin(), m_InstanceHandles.end(), handle);
-    if (findResult == m_InstanceHandles.end())
+    const auto indexResult = m_InstanceIndices.find(handle);
+    if (indexResult == m_InstanceIndices.end())
     {
         return false;
     }
 
-    const size_t instanceIndex = static_cast<size_t>(std::distance(m_InstanceHandles.begin(), findResult));
-    m_InstanceHandles.erase(m_InstanceHandles.begin() + instanceIndex);
-    m_Instances.erase(m_Instances.begin() + instanceIndex);
+    const uint32_t instanceIndex = indexResult->second;
+    const uint32_t lastIndex = static_cast<uint32_t>(m_InstanceHandles.size() - 1);
+    if (instanceIndex != lastIndex)
+    {
+        const RayTracingInstanceHandle movedHandle = m_InstanceHandles[lastIndex];
+        m_InstanceHandles[instanceIndex] = movedHandle;
+        m_Instances[instanceIndex] = std::move(m_Instances[lastIndex]);
+        m_InstanceIndices[movedHandle] = instanceIndex;
+    }
+
+    m_InstanceHandles.pop_back();
+    m_Instances.pop_back();
+    m_InstanceIndices.erase(indexResult);
     return true;
 }
 
@@ -64,6 +72,8 @@ void RayTracingAccelerationStructure::ClearInstances()
 {
     m_InstanceHandles.clear();
     m_Instances.clear();
+    m_InstanceIndices.clear();
+    m_InstanceMeshChanged = false;
 }
 
 void RayTracingAccelerationStructure::Build(CommandList& commandList, RayTracingAccelerationStructureBuildSettings settings)
@@ -78,6 +88,18 @@ void RayTracingAccelerationStructure::Build(CommandList& commandList, RayTracing
         m_LastBuildSettings = settings;
     }
 
+    for (const BottomLevelAccelerationStructure& bottomLevel : m_BottomLevelAccelerationStructures)
+    {
+        commandList.TrackObject(bottomLevel.Resource);
+    }
+    if (m_TopLevelAccelerationStructure != nullptr)
+    {
+        commandList.TrackObject(m_TopLevelAccelerationStructure);
+    }
+    if (m_InstanceDescUpload != nullptr)
+    {
+        commandList.TrackObject(m_InstanceDescUpload);
+    }
     m_BottomLevelAccelerationStructures.clear();
     m_TopLevelAccelerationStructure.Reset();
     m_InstanceDescUpload.Reset();
@@ -87,6 +109,7 @@ void RayTracingAccelerationStructure::Build(CommandList& commandList, RayTracing
     const std::map<const Mesh*, uint32_t> meshToBlasIndex = BuildBottomLevelAccelerationStructures(commandList);
     BuildTopLevelAccelerationStructure(commandList, meshToBlasIndex, false);
     m_BuiltInstanceCount = static_cast<uint32_t>(m_Instances.size());
+    m_InstanceMeshChanged = false;
 }
 
 void RayTracingAccelerationStructure::Build(CommandList& commandList, const std::vector<RayTracingMeshInstance>& instances)
@@ -106,15 +129,29 @@ void RayTracingAccelerationStructure::Build(CommandList& commandList, const std:
 
 void RayTracingAccelerationStructure::Update(CommandList& commandList)
 {
-    if (!m_LastBuildSettings.AllowUpdate || m_TopLevelAccelerationStructure == nullptr || m_BuiltInstanceCount != m_Instances.size())
+    if (!m_LastBuildSettings.AllowUpdate || m_TopLevelAccelerationStructure == nullptr)
     {
         Build(commandList, m_LastBuildSettings);
         return;
     }
 
+    Assert(!m_Instances.empty(), "Ray tracing acceleration structure requires at least one instance.");
     m_InstanceDescUpload.Reset();
     m_GeometryData.clear();
-    BuildTopLevelAccelerationStructure(commandList, CreateMeshToBlasIndex(), true);
+    const size_t previousBottomLevelCount = m_BottomLevelAccelerationStructures.size();
+    const std::map<const Mesh*, uint32_t> meshToBlasIndex = BuildBottomLevelAccelerationStructures(commandList);
+    const bool instanceCountChanged = m_BuiltInstanceCount != m_Instances.size();
+    const bool bottomLevelSetChanged = previousBottomLevelCount != m_BottomLevelAccelerationStructures.size();
+    const bool canPerformUpdate = !instanceCountChanged && !bottomLevelSetChanged && !m_InstanceMeshChanged;
+    if (!canPerformUpdate)
+    {
+        commandList.TrackObject(m_TopLevelAccelerationStructure);
+        m_TopLevelAccelerationStructure.Reset();
+    }
+
+    BuildTopLevelAccelerationStructure(commandList, meshToBlasIndex, canPerformUpdate);
+    m_BuiltInstanceCount = static_cast<uint32_t>(m_Instances.size());
+    m_InstanceMeshChanged = false;
 }
 
 bool RayTracingAccelerationStructure::IsBuilt() const
@@ -152,7 +189,7 @@ ComPtr<ID3D12Resource> RayTracingAccelerationStructure::CreateAccelerationStruct
     const D3D12_RESOURCE_STATES initialState,
     const wchar_t* name) const
 {
-    const auto device = Application::Get().GetDevice();
+    const auto& device = m_Device;
     const auto heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
     const auto resourceDesc = CD3DX12_RESOURCE_DESC::Buffer(size, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
@@ -178,7 +215,7 @@ ComPtr<ID3D12Resource> RayTracingAccelerationStructure::CreateUploadBuffer(
     const uint64_t size,
     const wchar_t* name) const
 {
-    const auto device = Application::Get().GetDevice();
+    const auto& device = m_Device;
     const auto heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
     const auto resourceDesc = CD3DX12_RESOURCE_DESC::Buffer(size);
 
@@ -209,7 +246,7 @@ RayTracingAccelerationStructure::BottomLevelAccelerationStructure RayTracingAcce
     const std::shared_ptr<Mesh>& mesh,
     const D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags) const
 {
-    const auto device = GetDxrDevice();
+    const auto& device = m_Device;
     const VertexBuffer& vertexBuffer = mesh->GetVertexBuffer();
     const IndexBuffer& indexBuffer = mesh->GetIndexBuffer();
 
@@ -266,7 +303,7 @@ RayTracingAccelerationStructure::BottomLevelAccelerationStructure RayTracingAcce
 
 std::map<const Mesh*, uint32_t> RayTracingAccelerationStructure::BuildBottomLevelAccelerationStructures(CommandList& commandList)
 {
-    std::map<const Mesh*, uint32_t> meshToBlasIndex;
+    std::map<const Mesh*, uint32_t> meshToBlasIndex = CreateMeshToBlasIndex();
 
     for (const RayTracingInstanceDesc& instance : m_Instances)
     {
@@ -300,7 +337,7 @@ void RayTracingAccelerationStructure::BuildTopLevelAccelerationStructure(
     const std::map<const Mesh*, uint32_t>& meshToBlasIndex,
     const bool update)
 {
-    const auto device = GetDxrDevice();
+    const auto& device = m_Device;
 
     std::vector<D3D12_RAYTRACING_INSTANCE_DESC> instanceDescs;
     instanceDescs.reserve(m_Instances.size());
@@ -352,6 +389,10 @@ void RayTracingAccelerationStructure::BuildTopLevelAccelerationStructure(
 
     if (!update)
     {
+        if (m_TopLevelAccelerationStructure != nullptr)
+        {
+            commandList.TrackObject(m_TopLevelAccelerationStructure);
+        }
         m_TopLevelAccelerationStructure = CreateAccelerationStructureBuffer(
             prebuildInfo.ResultDataMaxSizeInBytes,
             D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
@@ -378,5 +419,6 @@ void RayTracingAccelerationStructure::BuildTopLevelAccelerationStructure(
     commandList.GetGraphicsCommandList()->ResourceBarrier(1, &uavBarrier);
     commandList.TrackObject(scratch);
     commandList.TrackObject(m_InstanceDescUpload);
+    commandList.TrackObject(m_TopLevelAccelerationStructure);
 }
 //Modify End

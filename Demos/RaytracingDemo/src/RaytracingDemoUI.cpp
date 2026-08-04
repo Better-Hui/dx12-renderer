@@ -122,6 +122,13 @@ void RaytracingDemo::OnImGui()
     {
         ResetAccumulation();
     }
+//Modify Begin:2026-07-30 by BestHui
+    if (ImGui::Checkbox("Enable Stress Test Spheres (12,288)", &m_StressTestSpheresEnabled))
+    {
+        m_StressTestSpheresStateDirty = true;
+    }
+    ImGui::TextDisabled("Adds or removes instances; BLAS and static meshlet geometry stay resident.");
+//Modify End
 //Modify Begin:2026-08-03 by BestHui
     if (m_PathTracingBackend == PathTracingBackend::InlineRayQuery)
     {
@@ -129,11 +136,35 @@ void RaytracingDemo::OnImGui()
         {
             ResetAccumulation();
         }
+//Modify Begin:2026-07-30 by BestHui
+        ImGui::Checkbox("Debug: CPU Serialize Async Compute", &m_DebugSerializeAsyncCompute);
+        ImGui::TextDisabled("Diagnostic only: waits on the CPU after each async submission.");
+//Modify End
     }
     else
     {
         ImGui::TextDisabled("Async Compute: Inline Ray Query only");
     }
+//Modify Begin:2026-07-30 by BestHui
+    const char* lightingDebugTargetNames[] = {
+        "Off",
+        "Indirect Lighting",
+        "NRD Noisy Radiance",
+        "NRD Denoised Radiance",
+    };
+    if (ImGui::Combo(
+        "Debug Lighting Texture",
+        &m_DebugLightingTextureTarget,
+        lightingDebugTargetNames,
+        4))
+    {
+        ResetAccumulation();
+    }
+    if (m_DebugLightingTextureTarget == 3 && !m_Denoisers.IsNRDEnabled())
+    {
+        ImGui::TextDisabled("NRD Denoised Radiance requires the NRD denoiser.");
+    }
+//Modify End
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
     if (ImGui::Checkbox("Use Meshlet GBuffer", &m_UseMeshletGBuffer))

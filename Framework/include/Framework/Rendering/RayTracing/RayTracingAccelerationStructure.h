@@ -1,5 +1,5 @@
 #pragma once
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-30 by BestHui
 
 #include <DirectXMath.h>
 
@@ -9,6 +9,8 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 class CommandList;
@@ -54,6 +56,8 @@ struct RayTracingAccelerationStructureBuildSettings
 class RayTracingAccelerationStructure
 {
 public:
+    explicit RayTracingAccelerationStructure(Microsoft::WRL::ComPtr<ID3D12Device5> device);
+
     RayTracingInstanceHandle AddInstance(const RayTracingInstanceDesc& instanceDesc);
     bool UpdateInstance(RayTracingInstanceHandle handle, const RayTracingInstanceDesc& instanceDesc);
     bool RemoveInstance(RayTracingInstanceHandle handle);
@@ -103,6 +107,7 @@ private:
     RayTracingInstanceHandle m_NextInstanceHandle = 1;
     std::vector<RayTracingInstanceHandle> m_InstanceHandles;
     std::vector<RayTracingInstanceDesc> m_Instances;
+    std::unordered_map<RayTracingInstanceHandle, uint32_t> m_InstanceIndices;
     std::vector<BottomLevelAccelerationStructure> m_BottomLevelAccelerationStructures;
     Microsoft::WRL::ComPtr<ID3D12Resource> m_TopLevelAccelerationStructure;
     Microsoft::WRL::ComPtr<ID3D12Resource> m_InstanceDescUpload;
@@ -110,5 +115,7 @@ private:
     std::vector<RayTracingGeometryData> m_GeometryData;
     RayTracingAccelerationStructureBuildSettings m_LastBuildSettings;
     uint32_t m_BuiltInstanceCount = 0;
+    Microsoft::WRL::ComPtr<ID3D12Device5> m_Device;
+    bool m_InstanceMeshChanged = false;
 };
 //Modify End

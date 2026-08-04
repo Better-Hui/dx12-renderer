@@ -45,7 +45,8 @@ public:
         const RaytracingDemoRenderGraph::LightingResources& lighting,
         const RaytracingDemoRenderGraph::NRDResources& nrdResources,
         uint32_t width,
-        uint32_t height);
+        uint32_t height,
+        const NRD::ResourceTransitionCallback& transitionResource = {});
 
 private:
     void ApplySelection();

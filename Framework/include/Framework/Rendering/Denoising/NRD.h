@@ -2,18 +2,25 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <memory>
+#include <span>
 
 #include <DirectXMath.h>
 #include <d3d12.h>
 
+#include <DX12Library/ResourceStateTransition.h>
+
 class CommandList;
 class ComputeShader;
+class Resource;
 class Texture;
 
 class NRD
 {
 public:
+    using ResourceTransitionCallback = std::function<void(CommandList&, std::span<const ResourceStateTransition>)>;
+
     struct FrameMatrices
     {
         DirectX::XMMATRIX WorldToView = DirectX::XMMatrixIdentity();
@@ -106,7 +113,8 @@ public:
         const std::shared_ptr<Texture>& denoisedRadiance,
         const std::shared_ptr<Texture>& output,
         uint32_t width,
-        uint32_t height);
+        uint32_t height,
+        const ResourceTransitionCallback& transitionResource = {});
 
 private:
     struct PrepareConstants
@@ -150,7 +158,8 @@ private:
         const std::shared_ptr<Texture>& nrdMotion,
         const std::shared_ptr<Texture>& denoisedRadiance,
         uint32_t width,
-        uint32_t height);
+        uint32_t height,
+        const ResourceTransitionCallback& transitionResource);
     void Composite(
         CommandList& commandList,
         const std::shared_ptr<Texture>& denoisedRadiance,
@@ -159,7 +168,8 @@ private:
         const std::shared_ptr<Texture>& gBufferEmissionMetallic,
         const std::shared_ptr<Texture>& output,
         uint32_t width,
-        uint32_t height);
+        uint32_t height,
+        const ResourceTransitionCallback& transitionResource);
 
     std::unique_ptr<ComputeShader> m_PrepareShader;
     std::unique_ptr<ComputeShader> m_CompositeShader;

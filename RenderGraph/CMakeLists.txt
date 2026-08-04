@@ -4,6 +4,10 @@ project("RenderGraph")
 
 set(HEADER_FILES
         include/RenderGraph/RenderContext.h
+        # Modify Begin:2026-07-30 by BestHui
+        include/RenderGraph/RenderGraphQueueScheduler.h
+        include/RenderGraph/RenderGraphResourceStateTracker.h
+        # Modify End
         include/RenderGraph/RenderGraphRoot.h
         include/RenderGraph/RenderMetadata.h
         include/RenderGraph/RenderPass.h
@@ -15,7 +19,14 @@ set(HEADER_FILES
         )
 
 set(SOURCE_FILES
+        # Modify Begin:2026-07-30 by BestHui
+        src/RenderContext.cpp
+        # Modify End
         src/RenderGraphRoot.cpp
+        # Modify Begin:2026-07-30 by BestHui
+        src/RenderGraphQueueScheduler.cpp
+        src/RenderGraphResourceStateTracker.cpp
+        # Modify End
         src/RenderPass.cpp
         src/ResourceId.cpp
         src/ResourcePool.cpp
@@ -48,4 +59,3 @@ target_link_libraries(${TARGET_NAME}
         PUBLIC DX12Library
         PUBLIC Framework
         )
-

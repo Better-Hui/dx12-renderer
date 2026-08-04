@@ -134,6 +134,7 @@ namespace
         }
         return state;
     }
+
 //Modify End
 
     bool DirectlyDependsOn(const RenderGraph::RenderPass& pass1, const RenderGraph::RenderPass& pass2)
@@ -341,6 +342,9 @@ RenderGraph::RenderGraphRoot::RenderGraphRoot(
 //Modify Begin:2026-08-03 by BestHui
     , m_AsyncComputeCommandQueue(Application::Get().GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE))
 //Modify End
+//Modify Begin:2026-07-30 by BestHui
+    , m_QueueScheduler(m_DirectCommandQueue, m_AsyncComputeCommandQueue)
+//Modify End
     , m_RenderPassesDescription(std::move(renderPasses))
     , m_TextureDescriptions(std::move(textures))
     , m_BufferDescriptions(std::move(buffers))
@@ -397,21 +401,14 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
 {
     RebuildIfNecessary(renderMetadata);
 
-//Modify Begin:2026-08-03 by BestHui
-    if (m_AsyncComputeSubmittedThisFrame)
-    {
-        m_DirectCommandQueue->Wait(*m_AsyncComputeCommandQueue, m_LastAsyncComputeFenceValue);
-        m_AsyncComputeSubmittedThisFrame = false;
-        m_LastAsyncComputeFenceValue = 0;
-    }
-    m_LastWriterQueues.clear();
-    m_LastWriterFenceValues.clear();
+//Modify Begin:2026-07-30 by BestHui
+    m_QueueScheduler.BeginFrame();
 //Modify End
 
 //Modify Begin:2026-07-28 by BestHui
     auto pCommandList = m_DirectCommandQueue->GetCommandList();
 //Modify End
-    Assert(m_PendingBarriers.size() == 0, "Pending barriers were left from after the previous frame.");
+    Assert(!m_ResourceStateTracker.HasPendingBarriers(), "Pending barriers were left from after the previous frame.");
 //Modify Begin:2026-08-03 by BestHui
     bool directProfilerFrameStarted = false;
     bool asyncComputeProfilerFrameStarted = false;
@@ -442,6 +439,9 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
         RenderContext context = {};
         context.m_ResourcePool = m_ResourcePool;
         context.m_Metadata = renderMetadata;
+//Modify Begin:2026-07-30 by BestHui
+        context.m_ResourceStateTracker = &m_ResourceStateTracker;
+//Modify End
 
         uint32_t renderPassIndex = 0;
         m_ResourcePool->BeginFrame(*pCommandList);
@@ -449,43 +449,15 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
 //Modify Begin:2026-08-03 by BestHui
         const auto flushDirectCommandList = [&]()
         {
-            if (pCommandList != nullptr)
-            {
-                const uint64_t fenceValue = m_DirectCommandQueue->ExecuteCommandList(pCommandList);
-                for (const auto& [resourceId, queue] : m_LastWriterQueues)
-                {
-                    if (queue == RenderPassQueue::Direct && m_LastWriterFenceValues[resourceId] == 0u)
-                    {
-                        m_LastWriterFenceValues[resourceId] = fenceValue;
-                    }
-                }
-                pCommandList.reset();
-                return fenceValue;
-            }
-            return uint64_t{ 0u };
+            return m_QueueScheduler.SubmitDirect(pCommandList);
         };
 
         const auto prepareQueueDependency = [&](const RenderPass& pass)
         {
             const RenderPassQueue queue = pass.GetQueue();
-            bool dependsOnOtherQueue = false;
-            uint64_t producerFenceValue = 0;
-            auto inspectResource = [&](const ResourceId resourceId)
-            {
-                const auto writer = m_LastWriterQueues.find(resourceId);
-                if (writer == m_LastWriterQueues.end() || writer->second == queue)
-                {
-                    return;
-                }
-                dependsOnOtherQueue = true;
-                const auto fence = m_LastWriterFenceValues.find(resourceId);
-                Assert(fence != m_LastWriterFenceValues.end(), "Render pass writer fence was not recorded.");
-                producerFenceValue = (std::max)(producerFenceValue, fence->second);
-            };
-            for (const auto& input : pass.GetInputs()) inspectResource(input.m_Id);
-            for (const auto& output : pass.GetOutputs()) inspectResource(output.m_Id);
-
-            if (queue == RenderPassQueue::AsyncCompute && dependsOnOtherQueue)
+//Modify Begin:2026-07-30 by BestHui
+            if (queue == RenderPassQueue::AsyncCompute)
+//Modify End
             {
                 const auto planIt = m_PassResourceStatePlans.find(&pass);
                 Assert(planIt != m_PassResourceStatePlans.end(), "Render pass resource state plan was not built.");
@@ -497,8 +469,7 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
 
                 for (const PassResourceTransition& transition : planIt->second.InputTransitions)
                 {
-                    const auto writer = m_LastWriterQueues.find(transition.Id);
-                    if (writer == m_LastWriterQueues.end() || writer->second != RenderPassQueue::Direct)
+                    if (!m_QueueScheduler.WasLastWrittenBy(transition.Id, RenderPassQueue::Direct))
                     {
                         continue;
                     }
@@ -510,6 +481,16 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
                     });
                 }
 //Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-07-30 by BestHui
+                for (const ResourceId outputId : planIt->second.AliasingOutputs)
+                {
+                    const auto& resource = m_ResourcePool->GetResource(outputId);
+                    resource.ForEachResourceRecursive([this](const Resource& r)
+                    {
+                        AliasingBarrier(r);
+                    });
+                }
+//Modify End
                 for (const PassResourceTransition& transition : planIt->second.OutputTransitions)
                 {
                     const auto& resource = m_ResourcePool->GetResource(transition.Id);
@@ -528,31 +509,31 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
                     m_GpuTimestampProfiler->WriteTimestamp(*pCommandList, markerName.c_str());
                 }
 //Modify End
-                producerFenceValue = flushDirectCommandList();
-            }
-            if (!dependsOnOtherQueue)
-            {
-                return;
-            }
-            if (queue == RenderPassQueue::AsyncCompute)
-            {
-                m_AsyncComputeCommandQueue->Wait(*m_DirectCommandQueue, producerFenceValue);
+                const uint64_t producerFenceValue = flushDirectCommandList();
+                m_QueueScheduler.WaitForDirectSubmissionOnAsyncCompute(producerFenceValue);
             }
             else
             {
+                const uint64_t producerFenceValue = m_QueueScheduler.GetCrossQueueProducerFence(pass);
+                if (producerFenceValue == 0)
+                {
+                    return;
+                }
+                if (directProfilerFrameStarted)
+                {
+                    if (pCommandList == nullptr)
+                    {
+                        pCommandList = m_DirectCommandQueue->GetCommandList();
+                    }
+                    m_GpuTimestampProfiler->WriteTimestamp(*pCommandList, "Async Wait.Begin");
+                }
                 flushDirectCommandList();
-                m_DirectCommandQueue->Wait(*m_AsyncComputeCommandQueue, producerFenceValue);
-                m_AsyncComputeSubmittedThisFrame = false;
-                m_LastAsyncComputeFenceValue = 0;
-            }
-        };
-
-        const auto markPassOutputs = [&](const RenderPass& pass, const uint64_t fenceValue)
-        {
-            for (const auto& output : pass.GetOutputs())
-            {
-                m_LastWriterQueues[output.m_Id] = pass.GetQueue();
-                m_LastWriterFenceValues[output.m_Id] = fenceValue;
+                m_QueueScheduler.WaitForAsyncComputeSubmissionOnDirect(producerFenceValue);
+                if (directProfilerFrameStarted)
+                {
+                    pCommandList = m_DirectCommandQueue->GetCommandList();
+                    m_GpuTimestampProfiler->WriteTimestamp(*pCommandList, "Async Wait.End");
+                }
             }
         };
 //Modify End
@@ -589,7 +570,14 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
                 }
                 context.m_RenderTargetInfo = {};
                 RenderContext& computeContext = context;
-                PrepareResourcesForRenderPass(*computeCommandList, *pRenderPass, renderPassIndex, computeContext);
+//Modify Begin:2026-07-30 by BestHui
+                PrepareResourcesForRenderPass(
+                    *computeCommandList,
+                    *pRenderPass,
+                    renderPassIndex,
+                    computeContext,
+                    true);
+//Modify End
                 pRenderPass->Execute(computeContext, *computeCommandList);
                 if (m_AsyncComputeGpuTimestampProfiler != nullptr && m_AsyncComputeGpuTimestampProfiler->IsAvailable())
                 {
@@ -602,14 +590,14 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
                     m_AsyncComputeGpuTimestampProfiler->WriteTimestamp(*computeCommandList, "RenderGraph.End");
                     m_AsyncComputeGpuTimestampProfiler->ResolveFrame(*computeCommandList);
                 }
-                const uint64_t computeFenceValue = m_AsyncComputeCommandQueue->ExecuteCommandList(computeCommandList);
+                const uint64_t computeFenceValue = m_QueueScheduler.SubmitAsyncCompute(
+                    computeCommandList,
+                    m_DebugSerializeAsyncCompute);
                 if (isLastAsyncComputePass && asyncComputeProfilerFrameStarted)
                 {
                     m_AsyncComputeGpuTimestampProfiler->EndFrame(computeFenceValue);
                 }
-                m_AsyncComputeSubmittedThisFrame = true;
-                m_LastAsyncComputeFenceValue = computeFenceValue;
-                markPassOutputs(*pRenderPass, computeFenceValue);
+                m_QueueScheduler.MarkPassOutputs(*pRenderPass, computeFenceValue);
                 ++renderPassIndex;
                 continue;
             }
@@ -635,8 +623,7 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
                     }
 //Modify End
                 }
-                m_DirectCommandQueue->ExecuteCommandList(pCommandList);
-                pCommandList.reset();
+                flushDirectCommandList();
 
                 pRenderPass->ExecuteExternal(context);
 
@@ -647,8 +634,7 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
                     const std::string passName = "AfterExternal." + NarrowPassName(pRenderPass->GetPassName());
                     m_GpuTimestampProfiler->WriteTimestamp(*pCommandList, passName.c_str());
 //Modify Begin:2026-07-30 by BestHui
-                    m_DirectCommandQueue->ExecuteCommandList(pCommandList);
-                    pCommandList.reset();
+                    flushDirectCommandList();
 //Modify End
                 }
 //Modify End
@@ -667,7 +653,7 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
 //Modify End
             }
 //Modify Begin:2026-08-03 by BestHui
-            markPassOutputs(*pRenderPass, 0u);
+            m_QueueScheduler.MarkPassOutputs(*pRenderPass, 0u);
 //Modify End
 //Modify End
 
@@ -687,12 +673,12 @@ void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
 //Modify End
         m_GpuTimestampProfiler->WriteTimestamp(*pCommandList, "RenderGraph.End");
         m_GpuTimestampProfiler->ResolveFrame(*pCommandList);
-        const uint64_t fenceValue = m_DirectCommandQueue->ExecuteCommandList(pCommandList);
+        const uint64_t fenceValue = m_QueueScheduler.SubmitDirect(pCommandList);
         m_GpuTimestampProfiler->EndFrame(fenceValue);
     }
     else if (pCommandList != nullptr)
     {
-        m_DirectCommandQueue->ExecuteCommandList(pCommandList);
+        m_QueueScheduler.SubmitDirect(pCommandList);
     }
 //Modify End
 }
@@ -1001,7 +987,7 @@ void RenderGraph::RenderGraphRoot::Build(const RenderMetadata& renderMetadata)
 
     // Create resources
     {
-        m_ResourceStates.clear();
+        m_ResourceStateTracker.Reset();
 
         // if the resource is pruned, it won't be registered
         for (const auto& desc : m_TextureDescriptions)
@@ -1109,12 +1095,17 @@ void RenderGraph::RenderGraphRoot::BuildPassResourceStatePlans()
 
 D3D12_RESOURCE_STATES RenderGraph::RenderGraphRoot::GetCurrentResourceState(const Resource& resource) const
 {
-    const auto& result = m_ResourceStates.find(&resource);
-    Assert(result != m_ResourceStates.end(), "Resource does not have a registered state");
-    return result->second;
+    return m_ResourceStateTracker.GetCurrentResourceState(resource);
 }
 
-void RenderGraph::RenderGraphRoot::PrepareResourcesForRenderPass(CommandList& commandList, const RenderPass& renderPass, const uint32_t renderPassIndex, RenderContext& context)
+//Modify Begin:2026-07-30 by BestHui
+void RenderGraph::RenderGraphRoot::PrepareResourcesForRenderPass(
+    CommandList& commandList,
+    const RenderPass& renderPass,
+    const uint32_t renderPassIndex,
+    RenderContext& context,
+    const bool skipAliasingOutputs)
+//Modify End
 {
 //Modify Begin:2026-07-29 by BestHui
     const auto planIt = m_PassResourceStatePlans.find(&renderPass);
@@ -1136,15 +1127,20 @@ void RenderGraph::RenderGraphRoot::PrepareResourcesForRenderPass(CommandList& co
         });
     }
 
-    for (const ResourceId outputId : resourceStatePlan.AliasingOutputs)
+//Modify Begin:2026-07-30 by BestHui
+    if (!skipAliasingOutputs)
     {
-        (void)renderPassIndex;
-        const auto& resource = m_ResourcePool->GetResource(outputId);
-        resource.ForEachResourceRecursive([this](const auto& r)
+        for (const ResourceId outputId : resourceStatePlan.AliasingOutputs)
         {
-            AliasingBarrier(r);
-        });
+            (void)renderPassIndex;
+            const auto& resource = m_ResourcePool->GetResource(outputId);
+            resource.ForEachResourceRecursive([this](const auto& r)
+            {
+                AliasingBarrier(r);
+            });
+        }
     }
+//Modify End
 //Modify End
 
     // Render Target barriers
@@ -1251,58 +1247,27 @@ void RenderGraph::RenderGraphRoot::PrepareResourcesForRenderPass(CommandList& co
 
 void RenderGraph::RenderGraphRoot::SetCurrentResourceState(const Resource& resource, D3D12_RESOURCE_STATES state)
 {
-    if (const auto existingEntry = m_ResourceStates.find(&resource); existingEntry == m_ResourceStates.end())
-    {
-        m_ResourceStates.insert(std::pair{ &resource, state });
-    }
-    else
-    {
-        existingEntry->second = state;
-    }
+    m_ResourceStateTracker.SetCurrentResourceState(resource, state);
 }
 
 void RenderGraph::RenderGraphRoot::TransitionBarrier(const Resource& resource, D3D12_RESOURCE_STATES stateAfter)
 {
-    const auto stateBefore = GetCurrentResourceState(resource);
-    if (stateBefore == stateAfter)
-    {
-        // no need for a barrier
-        return;
-    }
-
-    const auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(resource.GetD3D12Resource().Get(), stateBefore, stateAfter);
-    m_PendingBarriers.push_back(barrier);
-
-    SetCurrentResourceState(resource, stateAfter);
+    m_ResourceStateTracker.TransitionBarrier(resource, stateAfter);
 }
 
 void RenderGraph::RenderGraphRoot::UavBarrier(const Resource& resource)
 {
-//Modify Begin:2026-07-28 by BestHui
-    Assert(GetCurrentResourceState(resource) == D3D12_RESOURCE_STATE_UNORDERED_ACCESS, "Resource is supposed to be in UAV state to issue a UAV barrier.");
-//Modify End
-
-    // TODO: skip if there was a transition barrier after the previous UAV usage
-    const auto barrier = CD3DX12_RESOURCE_BARRIER::UAV(resource.GetD3D12Resource().Get());
-    m_PendingBarriers.push_back(barrier);
+    m_ResourceStateTracker.UavBarrier(resource);
 }
 
 void RenderGraph::RenderGraphRoot::AliasingBarrier(const Resource& resourceAfter)
 {
-    const auto barrier = CD3DX12_RESOURCE_BARRIER::Aliasing(nullptr, resourceAfter.GetD3D12Resource().Get());
-    m_PendingBarriers.push_back(barrier);
+    m_ResourceStateTracker.AliasingBarrier(resourceAfter);
 }
 
 void RenderGraph::RenderGraphRoot::FlushBarriers(const CommandList& commandList)
 {
-    if (m_PendingBarriers.size() == 0)
-    {
-        return;
-    }
-
-    const auto& pDxCmd = commandList.GetGraphicsCommandList();
-    pDxCmd->ResourceBarrier(static_cast<UINT>(m_PendingBarriers.size()), m_PendingBarriers.data());
-    m_PendingBarriers.clear();
+    m_ResourceStateTracker.FlushBarriers(commandList);
 }
 
 bool RenderGraph::RenderGraphRoot::IsResourceDefined(const ResourceId id) const

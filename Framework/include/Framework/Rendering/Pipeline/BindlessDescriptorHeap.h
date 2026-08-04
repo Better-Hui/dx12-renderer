@@ -19,12 +19,11 @@ struct BindlessDescriptorHeapDesc
 class BindlessDescriptorHeap final
 {
 public:
-    explicit BindlessDescriptorHeap(BindlessDescriptorHeapDesc desc = {});
+    explicit BindlessDescriptorHeap(ID3D12Device2& device, BindlessDescriptorHeapDesc desc = {});
 
     void Reset();
     uint32_t AddShaderResourceView(const Resource& resource, const D3D12_SHADER_RESOURCE_VIEW_DESC* srvDesc = nullptr);
     void UpdateShaderResourceView(uint32_t descriptorIndex, const Resource& resource, const D3D12_SHADER_RESOURCE_VIEW_DESC* srvDesc = nullptr);
-    void TransitionShaderResources(CommandList& commandList, D3D12_RESOURCE_STATES stateAfter) const;
     D3D12_GPU_DESCRIPTOR_HANDLE GetOrCreateDescriptorTable(const PipelineDescriptorTableAllocation& allocation);
 
     ID3D12DescriptorHeap* GetResourceDescriptorHeap() const { return m_ResourceDescriptorHeap.Get(); }
@@ -44,7 +43,16 @@ private:
         uint32_t DescriptorCount = 0;
         uint64_t Revision = 0;
     };
-    std::map<uint32_t, const Resource*> m_ShaderResources;
+//Modify Begin:2026-07-30 by BestHui
+    struct CachedShaderResourceDescriptor
+    {
+        uint32_t DescriptorIndex = 0;
+        ID3D12Resource* NativeResource = nullptr;
+    };
+//Modify End
+    std::map<const Resource*, CachedShaderResourceDescriptor> m_DefaultShaderResourceDescriptors;
+//Modify End
     std::map<uint64_t, CachedDescriptorTable> m_CachedDescriptorTables;
+    ID3D12Device2* m_Device = nullptr;
 };
 //Modify End

@@ -160,6 +160,7 @@ RaytracingDemo::RaytracingDemo(const std::wstring& name, const int width, const 
     : Base(name, width, height, false)
     , m_Width(width)
     , m_Height(height)
+    , m_SceneResources(Application::Get().GetDevice())
 {
     (void)graphicsSettings;
 
@@ -220,6 +221,29 @@ RaytracingDemo::RaytracingDemo(const std::wstring& name, const int width, const 
     }
     std::free(indirectLighting);
 
+//Modify Begin:2026-07-30 by BestHui
+    char* asyncCompute = nullptr;
+    size_t asyncComputeLength = 0;
+    _dupenv_s(&asyncCompute, &asyncComputeLength, "RAYTRACING_DEMO_ASYNC_COMPUTE");
+    if (asyncCompute != nullptr)
+    {
+        m_AsyncComputeEnabled = std::strcmp(asyncCompute, "0") != 0;
+    }
+    std::free(asyncCompute);
+
+    char* debugSerializeAsyncCompute = nullptr;
+    size_t debugSerializeAsyncComputeLength = 0;
+    _dupenv_s(
+        &debugSerializeAsyncCompute,
+        &debugSerializeAsyncComputeLength,
+        "RAYTRACING_DEMO_ASYNC_CPU_SERIALIZE");
+    if (debugSerializeAsyncCompute != nullptr)
+    {
+        m_DebugSerializeAsyncCompute = std::strcmp(debugSerializeAsyncCompute, "0") != 0;
+    }
+    std::free(debugSerializeAsyncCompute);
+//Modify End
+
     char* cudaBloom = nullptr;
     size_t cudaBloomLength = 0;
     _dupenv_s(&cudaBloom, &cudaBloomLength, "RAYTRACING_DEMO_CUDA_BLOOM");
@@ -276,7 +300,7 @@ void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::files
     m_Scene = sceneImport.SceneData;
     const SceneCamera& sceneCamera = m_Scene.GetCamera();
 
-    if (!m_SceneResources.LoadScene(commandList, m_Scene))
+    if (!m_SceneResources.LoadScene(commandList, m_Scene, m_StressTestSpheresEnabled))
     {
         throw std::runtime_error("Scene has no supported renderable objects.");
     }
@@ -310,6 +334,29 @@ void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::files
 
     m_SkyboxTexture = std::make_shared<Texture>();
     commandList.LoadTextureFromFile(*m_SkyboxTexture, skyboxTexturePath.wstring(), TextureUsageType::Albedo);
+}
+//Modify End
+
+//Modify Begin:2026-07-30 by BestHui
+void RaytracingDemo::ApplyStressTestSpheresState()
+{
+    if (!m_StressTestSpheresStateDirty)
+    {
+        return;
+    }
+
+    const auto commandQueue = Application::Get().GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
+    const auto commandList = commandQueue->GetCommandList();
+    if (m_SceneResources.SetStressTestSpheresEnabled(*commandList, m_StressTestSpheresEnabled))
+    {
+        EnsureRayTracingPipelines();
+
+        commandQueue->ExecuteCommandList(commandList);
+        ClearRenderGraphTimingHistory();
+        ResetAccumulation();
+    }
+
+    m_StressTestSpheresStateDirty = false;
 }
 //Modify End
 
@@ -595,6 +642,9 @@ void RaytracingDemo::RebuildRenderGraph()
 //Modify Begin:2026-08-03 by BestHui
     m_RenderGraph->SetAsyncComputeGpuTimestampProfiler(
         m_GpuTimingEnabled ? &m_AsyncComputeGpuTimestampProfiler : nullptr);
+//Modify Begin:2026-07-30 by BestHui
+    m_RenderGraph->SetDebugSerializeAsyncCompute(m_DebugSerializeAsyncCompute);
+//Modify End
 //Modify End
 //Modify End
     m_RenderGraphDenoiserEnabled = IsDenoiserEnabled();
@@ -602,6 +652,9 @@ void RaytracingDemo::RebuildRenderGraph()
 //Modify Begin:2026-08-03 by BestHui
     m_RenderGraphAsyncComputeEnabled = m_AsyncComputeEnabled;
     m_RenderGraphPathTracingBackend = m_PathTracingBackend;
+//Modify Begin:2026-07-30 by BestHui
+    m_RenderGraphLightingDebugTextureTarget = m_DebugLightingTextureTarget;
+//Modify End
 //Modify End
 //Modify Begin:2026-07-31 by BestHui
     m_RenderGraphMeshletGBufferEnabled = m_UseMeshletGBuffer;
@@ -619,6 +672,9 @@ void RaytracingDemo::EnsureRenderGraphTopology()
 //Modify Begin:2026-08-03 by BestHui
         || m_RenderGraphAsyncComputeEnabled != m_AsyncComputeEnabled
         || m_RenderGraphPathTracingBackend != m_PathTracingBackend
+//Modify Begin:2026-07-30 by BestHui
+        || m_RenderGraphLightingDebugTextureTarget != m_DebugLightingTextureTarget
+//Modify End
 //Modify End
 //Modify Begin:2026-07-31 by BestHui
         || m_RenderGraphMeshletGBufferEnabled != m_UseMeshletGBuffer
@@ -841,6 +897,10 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
         m_ImGui->Render();
     }
 
+//Modify Begin:2026-07-30 by BestHui
+    ApplyStressTestSpheresState();
+//Modify End
+
 //Modify Begin:2026-08-03 by BestHui
     if (m_DebugStressPathTracingBackendSwitch &&
         m_FrameIndex != 0u &&
@@ -867,6 +927,9 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
 //Modify Begin:2026-08-03 by BestHui
     m_RenderGraph->SetAsyncComputeGpuTimestampProfiler(
         m_GpuTimingEnabled ? &m_AsyncComputeGpuTimestampProfiler : nullptr);
+//Modify Begin:2026-07-30 by BestHui
+    m_RenderGraph->SetDebugSerializeAsyncCompute(m_DebugSerializeAsyncCompute);
+//Modify End
 //Modify End
 //Modify End
 //Modify Begin:2026-08-02 by BestHui

@@ -41,6 +41,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
                 demo.BindRayTracingShaderResources();
             }
 //Modify End
+            demo.m_SceneResources.TransitionRayTracingShaderResources(cmd, D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
             CommandContext commandContext(cmd);
 //Modify Begin:2026-07-30 by BestHui
             commandContext.BindBindlessDescriptorHeap(demo.m_SceneResources.GetBindlessDescriptorHeap());

@@ -1,32 +1,30 @@
 //Modify Begin:2026-07-30 by BestHui
 #include <Framework/Rendering/Pipeline/BindlessDescriptorHeap.h>
 
-#include <DX12Library/Application.h>
-#include <DX12Library/CommandList.h>
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Resource.h>
 #include <DX12Library/Texture.h>
 #include <Framework/Rendering/Pipeline/PipelineDescriptorSet.h>
 
-BindlessDescriptorHeap::BindlessDescriptorHeap(BindlessDescriptorHeapDesc desc)
+BindlessDescriptorHeap::BindlessDescriptorHeap(ID3D12Device2& device, BindlessDescriptorHeapDesc desc)
     : m_Desc(desc)
+    , m_Device(&device)
 {
-    const auto device = Application::Get().GetDevice();
-
     D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
     heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
     heapDesc.NumDescriptors = m_Desc.ResourceDescriptorCapacity;
     heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-    ThrowIfFailed(device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&m_ResourceDescriptorHeap)));
+    ThrowIfFailed(m_Device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&m_ResourceDescriptorHeap)));
     ThrowIfFailed(m_ResourceDescriptorHeap->SetName(L"Framework Bindless Resource Descriptor Heap"));
 
-    m_ResourceDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    m_ResourceDescriptorSize = m_Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 }
 
 void BindlessDescriptorHeap::Reset()
 {
     m_NextResourceDescriptorIndex = 0;
-    m_ShaderResources.clear();
+    m_DefaultShaderResourceDescriptors.clear();
+//Modify End
     m_CachedDescriptorTables.clear();
 }
 
@@ -34,12 +32,38 @@ uint32_t BindlessDescriptorHeap::AddShaderResourceView(
     const Resource& resource,
     const D3D12_SHADER_RESOURCE_VIEW_DESC* srvDesc)
 {
+//Modify Begin:2026-07-30 by BestHui
+    if (srvDesc == nullptr)
+    {
+        const auto cachedDescriptor = m_DefaultShaderResourceDescriptors.find(&resource);
+        if (cachedDescriptor != m_DefaultShaderResourceDescriptors.end())
+        {
+            CachedShaderResourceDescriptor& cached = cachedDescriptor->second;
+            ID3D12Resource* nativeResource = resource.GetD3D12Resource().Get();
+            if (cached.NativeResource != nativeResource)
+            {
+                UpdateShaderResourceView(cached.DescriptorIndex, resource);
+                cached.NativeResource = nativeResource;
+            }
+            return cached.DescriptorIndex;
+        }
+    }
+//Modify End
+
     Assert(
         m_NextResourceDescriptorIndex < m_Desc.ResourceDescriptorCapacity,
         "Bindless resource descriptor heap capacity was exceeded.");
 
     const uint32_t descriptorIndex = m_NextResourceDescriptorIndex++;
     UpdateShaderResourceView(descriptorIndex, resource, srvDesc);
+//Modify Begin:2026-07-30 by BestHui
+    if (srvDesc == nullptr)
+    {
+        m_DefaultShaderResourceDescriptors.emplace(
+            &resource,
+            CachedShaderResourceDescriptor{ descriptorIndex, resource.GetD3D12Resource().Get() });
+    }
+//Modify End
     return descriptorIndex;
 }
 
@@ -50,34 +74,18 @@ void BindlessDescriptorHeap::UpdateShaderResourceView(
 {
     Assert(descriptorIndex < m_Desc.ResourceDescriptorCapacity, "Bindless resource descriptor index is out of range.");
 
-    ID3D12Device2* device = Application::Get().GetDevice().Get();
     const D3D12_CPU_DESCRIPTOR_HANDLE destination = GetResourceCpuHandle(descriptorIndex);
     if (dynamic_cast<const Texture*>(&resource) != nullptr)
     {
-        device->CreateShaderResourceView(resource.GetD3D12Resource().Get(), srvDesc, destination);
+        m_Device->CreateShaderResourceView(resource.GetD3D12Resource().Get(), srvDesc, destination);
     }
     else
     {
-        device->CopyDescriptorsSimple(
+        m_Device->CopyDescriptorsSimple(
             1u,
             destination,
             resource.GetShaderResourceView(srvDesc),
             D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    }
-    m_ShaderResources[descriptorIndex] = &resource;
-}
-
-void BindlessDescriptorHeap::TransitionShaderResources(
-    CommandList& commandList,
-    const D3D12_RESOURCE_STATES stateAfter) const
-{
-    for (const auto& [descriptorIndex, resource] : m_ShaderResources)
-    {
-        (void)descriptorIndex;
-        if (resource != nullptr && resource->AreAutoBarriersEnabled())
-        {
-            commandList.TransitionBarrier(*resource, stateAfter);
-        }
     }
 }
 
@@ -108,7 +116,7 @@ D3D12_GPU_DESCRIPTOR_HANDLE BindlessDescriptorHeap::GetOrCreateDescriptorTable(
     Assert(cachedTable.DescriptorCount == allocation.GetNumHandles(), "Bindless descriptor table cache count mismatch.");
     if (cachedTable.Revision != allocation.GetRevision())
     {
-        Application::Get().GetDevice()->CopyDescriptorsSimple(
+        m_Device->CopyDescriptorsSimple(
             allocation.GetNumHandles(),
             GetResourceCpuHandle(cachedTable.DescriptorIndex),
             allocation.GetDescriptorHandle(),
