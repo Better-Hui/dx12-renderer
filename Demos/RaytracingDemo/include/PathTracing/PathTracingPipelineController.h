@@ -10,6 +10,9 @@
 #include <memory>
 
 class RayTracingAccelerationStructure;
+//Modify Begin:2026-07-30 by BestHui
+class FrameworkDeviceContext;
+//Modify End
 class SceneLightManager;
 class Texture;
 class RaytracingDemoSceneResources;
@@ -19,6 +22,14 @@ enum class PathTracingBackend
     InlineRayQuery = 0,
     ShaderTableDxr = 1,
 };
+
+//Modify Begin:2026-07-30 by BestHui
+enum class PathTracingShadowMode
+{
+    HardShadows = 0,
+    SoftShadows = 1,
+};
+//Modify End
 
 struct RayTracingSceneResourceLayout
 {
@@ -37,8 +48,18 @@ struct RayTracingSceneResourceLayout
 class PathTracingPipelineController final
 {
 public:
+    explicit PathTracingPipelineController(FrameworkDeviceContext& deviceContext)
+        : m_DeviceContext(deviceContext)
+    {
+    }
+
     void Reset();
-    void EnsurePipelines(PathTracingBackend backend, const RayTracingSceneResourceLayout& layout);
+    //Modify Begin:2026-07-30 by BestHui
+    void EnsurePipelines(
+        PathTracingBackend backend,
+        PathTracingShadowMode shadowMode,
+        const RayTracingSceneResourceLayout& layout);
+    //Modify End
     void BindRayTracingResources(
         const RayTracingAccelerationStructure& accelerationStructure,
         const RaytracingDemoSceneResources& sceneResources,
@@ -46,6 +67,9 @@ public:
         const std::shared_ptr<Texture>& skyboxTexture);
 
     PathTracingBackend GetBackend() const { return m_Backend; }
+    //Modify Begin:2026-07-30 by BestHui
+    PathTracingShadowMode GetShadowMode() const { return m_ShadowMode; }
+    //Modify End
     ComputeShader& GetInlineDirectLightingShader() const;
     ComputeShader& GetInlineIndirectLightingShader() const;
     ComputeShader& GetLightingCompositeShader() const;
@@ -77,8 +101,12 @@ private:
     void CreateInlinePipelines(const RayTracingSceneResourceLayout& layout);
     void CreateDxrPipeline(const RayTracingSceneResourceLayout& layout);
 
+    FrameworkDeviceContext& m_DeviceContext;
     ShaderVariantManager m_ShaderVariants;
     PathTracingBackend m_Backend = PathTracingBackend::InlineRayQuery;
+    //Modify Begin:2026-07-30 by BestHui
+    PathTracingShadowMode m_ShadowMode = PathTracingShadowMode::HardShadows;
+    //Modify End
     RayTracingSceneResourceLayout m_Layout;
     std::unique_ptr<RayTracingShader> m_RayTracingShader;
     std::unique_ptr<RayTracingBindingSet> m_DirectRayTracingBindingSet;

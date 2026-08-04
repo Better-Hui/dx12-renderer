@@ -5,12 +5,15 @@
 #include <Framework/Scene/Material.h>
 
 class Mesh;
+//Modify Begin:2026-07-30 by BestHui
+class FrameworkDeviceContext;
+//Modify End
 
 class BloomUpsample
 {
 public:
 //Modify Begin:2026-07-27 by BestHui
-	explicit BloomUpsample(CommandList& commandList);
+	explicit BloomUpsample(FrameworkDeviceContext& deviceContext, CommandList& commandList);
 //Modify End
 
 	void Execute(CommandList& commandList,

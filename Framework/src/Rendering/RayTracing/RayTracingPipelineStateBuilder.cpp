@@ -1,8 +1,10 @@
 //Modify Begin:2026-07-21 by BestHui
 #include <Framework/Rendering/RayTracing/RayTracingPipelineStateBuilder.h>
 
-#include <DX12Library/Application.h>
 #include <DX12Library/Helpers.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/Core/FrameworkDeviceContext.h>
+//Modify End
 //Modify Begin:2026-07-27 by BestHui
 #include <Framework/Rendering/Pipeline/PipelineLayout.h>
 #include <Framework/Rendering/Pipeline/PipelineStateCache.h>
@@ -52,10 +54,10 @@ namespace
         }
     }
 
-    ComPtr<ID3D12Device5> GetDxrDevice()
+    ComPtr<ID3D12Device5> GetDxrDevice(const FrameworkDeviceContext& deviceContext)
     {
         ComPtr<ID3D12Device5> device5;
-        ThrowIfFailed(Application::Get().GetDevice().As(&device5));
+        ThrowIfFailed(deviceContext.GetDevice().As(&device5));
         return device5;
     }
 
@@ -86,8 +88,12 @@ const void* RayTracingPipelineState::GetShaderIdentifier(const std::wstring& sha
     return m_StateObjectProperties->GetShaderIdentifier(shaderName.c_str());
 }
 
-RayTracingPipelineStateBuilder::RayTracingPipelineStateBuilder(const ShaderBlob& shaderLibrary, RayTracingPipelineDesc desc)
+RayTracingPipelineStateBuilder::RayTracingPipelineStateBuilder(
+    FrameworkDeviceContext& deviceContext,
+    const ShaderBlob& shaderLibrary,
+    RayTracingPipelineDesc desc)
     : m_ShaderLibrary(shaderLibrary)
+    , m_DeviceContext(deviceContext)
     , m_Desc(std::move(desc))
 {}
 
@@ -186,7 +192,7 @@ std::shared_ptr<RootSignature> RayTracingPipelineStateBuilder::BuildGlobalRootSi
         layoutDesc.DescriptorRanges.push_back(std::move(range));
     }
 
-    PipelineLayout layout(std::move(layoutDesc));
+    PipelineLayout layout(m_DeviceContext, std::move(layoutDesc));
 
     PipelineRootSignatureBuildDesc rootSignatureBuildDesc;
 //Modify Begin:2026-07-30 by BestHui
@@ -197,7 +203,7 @@ std::shared_ptr<RootSignature> RayTracingPipelineStateBuilder::BuildGlobalRootSi
 
 ComPtr<ID3D12StateObject> RayTracingPipelineStateBuilder::BuildStateObject(const std::shared_ptr<RootSignature>& globalRootSignature) const
 {
-    const auto device = GetDxrDevice();
+    const auto device = GetDxrDevice(m_DeviceContext);
 
     CD3DX12_STATE_OBJECT_DESC stateObjectDesc(D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE);
 

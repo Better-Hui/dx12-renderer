@@ -8,7 +8,7 @@ class MSAADepthResolvePass
 {
 public:
 //Modify Begin:2026-07-27 by BestHui
-    MSAADepthResolvePass();
+    explicit MSAADepthResolvePass(FrameworkDeviceContext& deviceContext);
 //Modify End
 
     void Resolve(CommandList& commandList, const std::shared_ptr<Texture>& source, const std::shared_ptr<Texture>& destination) const;

@@ -7,6 +7,9 @@
 //Modify End
 
 #include <Denoising/DenoiserController.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/Core/FrameworkDeviceContext.h>
+//Modify End
 #include <Framework/UI/ImGuiImpl.h>
 #include <Framework/Geometry/Model.h>
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
@@ -24,6 +27,9 @@
 #include <Scene/SceneResources.h>
 #include <PathTracing/PathTracingPipelineController.h>
 #include <Passes/CudaBloomPass.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <Passes/RaytracingDemoPassResources.h>
+//Modify End
 
 //Modify Begin:2026-08-03 by BestHui
 #include <deque>
@@ -35,9 +41,6 @@
 
 struct GraphicsSettings;
 class CommandList;
-class RaytracingDemoRenderGraphBuilder;
-struct RaytracingDemoPassAccess;
-
 namespace RaytracingDemoPasses
 {
     class Builder;
@@ -53,6 +56,11 @@ public:
     bool LoadContent() override;
     void UnloadContent() override;
 
+    //Modify Begin:2026-07-30 by BestHui
+    RaytracingDemoPassResources CreatePassResources();
+    RaytracingDemoPassConfig CreatePassConfig() const;
+    //Modify End
+
 protected:
     void OnUpdate(UpdateEventArgs& e) override;
     void OnRender(RenderEventArgs& e) override;
@@ -65,6 +73,10 @@ protected:
 private:
     using MaterialData = RaytracingDemoMaterialData;
     using SceneObject = RaytracingDemoSceneObject;
+    using PipelineConstants = RaytracingDemoPipelineConstants;
+    using ModelConstants = RaytracingDemoModelConstants;
+    using GBufferMaterialConstants = RaytracingDemoGBufferMaterialConstants;
+    using GBufferDebugConstants = RaytracingDemoGBufferDebugConstants;
 
 //Modify Begin:2026-08-03 by BestHui
     struct RenderGraphTimingQueue
@@ -80,61 +92,6 @@ private:
     };
 //Modify End
 
-    struct CameraConstants
-    {
-        DirectX::XMMATRIX InverseView = DirectX::XMMatrixIdentity();
-        DirectX::XMMATRIX InverseProjection = DirectX::XMMatrixIdentity();
-        DirectX::XMFLOAT4 CameraPosition = { 0.0f, 0.0f, 0.0f, 1.0f };
-        uint32_t Width = 1;
-        uint32_t Height = 1;
-        uint32_t MaxBounces = 5;
-        uint32_t SamplesPerPixel = 1;
-        uint32_t DirectionalLightCount = 0;
-        uint32_t PointLightCount = 0;
-        uint32_t AreaLightCount = 0;
-        uint32_t FrameIndex = 0;
-        uint32_t AccumulationFrameIndex = 0;
-        uint32_t AccumulationEnabled = 1;
-        uint32_t NRDDenoiserMode = 0;
-//Modify Begin:2026-08-02 by BestHui
-        // Denoiser algorithm: 0 = Off, 1 = NRD, 2 = SVGF.
-        uint32_t DenoiserEnabled = 0;
-//Modify End
-        DirectX::XMFLOAT4 NRDReblurHitDistanceParameters = { 3.0f, 0.1f, 20.0f, 0.0f };
-        uint32_t DirectLightingEnabled = 1;
-        uint32_t IndirectLightingEnabled = 1;
-        uint32_t Padding1 = 0;
-        uint32_t Padding2 = 0;
-        SkyLightData SkyLight = {};
-    };
-
-    struct PipelineConstants
-    {
-        DirectX::XMMATRIX View = DirectX::XMMatrixIdentity();
-        DirectX::XMMATRIX Projection = DirectX::XMMatrixIdentity();
-        DirectX::XMMATRIX ViewProjection = DirectX::XMMatrixIdentity();
-        DirectX::XMFLOAT4 CameraPosition = { 0.0f, 0.0f, 0.0f, 1.0f };
-        DirectX::XMMATRIX InverseView = DirectX::XMMatrixIdentity();
-        DirectX::XMMATRIX InverseProjection = DirectX::XMMatrixIdentity();
-        DirectX::XMFLOAT2 ScreenResolution = { 1.0f, 1.0f };
-        DirectX::XMFLOAT2 ScreenTexelSize = { 1.0f, 1.0f };
-//Modify Begin:2026-07-30 by BestHui
-        DirectX::XMMATRIX PreviousViewProjection = DirectX::XMMatrixIdentity();
-        uint32_t DebugMeshletClusters = 0;
-        uint32_t PipelinePadding0 = 0;
-        uint32_t PipelinePadding1 = 0;
-        uint32_t PipelinePadding2 = 0;
-//Modify End
-    };
-
-    struct ModelConstants
-    {
-        DirectX::XMMATRIX Model = DirectX::XMMatrixIdentity();
-        DirectX::XMMATRIX ModelViewProjection = DirectX::XMMatrixIdentity();
-        DirectX::XMMATRIX InverseTransposeModel = DirectX::XMMatrixIdentity();
-        DirectX::XMMATRIX PreviousModelViewProjection = DirectX::XMMatrixIdentity();
-    };
-
     struct LightBillboardConstants
     {
         DirectX::XMFLOAT4 PositionAndSize = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -146,47 +103,9 @@ private:
 //Modify End
     };
 
-    struct GBufferMaterialConstants
-    {
-        DirectX::XMFLOAT4 Diffuse = { 1.0f, 1.0f, 1.0f, 1.0f };
-        DirectX::XMFLOAT4 Specular = { 0.04f, 0.04f, 0.04f, 1.0f };
-        DirectX::XMFLOAT4 TilingOffset = { 1.0f, 1.0f, 0.0f, 0.0f };
-//Modify Begin:2026-07-30 by BestHui
-        uint32_t DiffuseTextureIndex = 0;
-        uint32_t NormalTextureIndex = 0;
-        uint32_t MetallicTextureIndex = 0;
-        uint32_t RoughnessTextureIndex = 0;
-        uint32_t AmbientOcclusionTextureIndex = 0;
-//Modify End
-        float Metallic = 0.0f;
-        float Roughness = 0.5f;
-        uint32_t HasDiffuseMap = 0;
-        uint32_t HasNormalMap = 0;
-        uint32_t HasMetallicMap = 0;
-        uint32_t HasRoughnessMap = 0;
-        uint32_t HasAmbientOcclusionMap = 0;
-//Modify Begin:2026-07-30 by BestHui
-        uint32_t PaddingDescriptor0 = 0;
-//Modify End
-        uint32_t Padding0 = 0;
-        uint32_t Padding1 = 0;
-        uint32_t Padding2 = 0;
-    };
-
-//Modify Begin:2026-07-30 by BestHui
-    struct GBufferDebugConstants
-    {
-        uint32_t DebugMeshletClusters = 0;
-        uint32_t Padding0 = 0;
-        uint32_t Padding1 = 0;
-        uint32_t Padding2 = 0;
-    };
-//Modify End
-
     RayTracingSceneResourceLayout BuildRayTracingSceneResourceLayout() const;
     void EnsureRayTracingPipelines();
     void BindRayTracingShaderResources();
-    CameraConstants BuildCameraConstants() const;
     PipelineConstants BuildPipelineConstants() const;
 //Modify Begin:2026-07-28 by BestHui
     void RebuildRenderGraph();
@@ -222,11 +141,6 @@ private:
 //Modify End
     void OnImGui();
 
-    friend struct RaytracingDemoPassAccess;
-    friend class RaytracingDemoPasses::Builder;
-//Modify Begin:2026-07-28 by BestHui
-    friend class RaytracingDemoRenderGraphBuilder;
-//Modify End
     std::unique_ptr<RenderGraph::RenderGraphRoot> m_RenderGraph;
 //Modify Begin:2026-07-28 by BestHui
     bool m_RenderGraphDenoiserEnabled = false;
@@ -247,6 +161,7 @@ private:
     int m_RenderGraphDebugTextureTarget = 0;
 //Modify End
 //Modify Begin:2026-07-27 by BestHui
+    FrameworkDeviceContext m_FrameworkDeviceContext;
     PathTracingPipelineController m_PathTracingPipelines;
 //Modify End
     DenoiserController m_Denoisers;
@@ -315,7 +230,8 @@ private:
     bool m_DebugSerializeAsyncCompute = false;
     int m_DebugLightingTextureTarget = 0;
 //Modify End
-    bool m_DebugStressPathTracingBackendSwitch = false;
+//Modify Begin:2026-07-30 by BestHui
+    bool m_SoftShadowsEnabled = false;
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
     bool m_StressTestSpheresEnabled = true;

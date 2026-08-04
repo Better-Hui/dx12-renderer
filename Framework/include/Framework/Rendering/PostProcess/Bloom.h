@@ -12,7 +12,7 @@ class Bloom
 {
 public:
 //Modify Begin:2026-07-27 by BestHui
-	explicit Bloom(CommandList& commandList, uint32_t width, uint32_t height, DXGI_FORMAT backBufferFormat, size_t pyramidSize = 8);
+	explicit Bloom(FrameworkDeviceContext& deviceContext, CommandList& commandList, uint32_t width, uint32_t height, DXGI_FORMAT backBufferFormat, size_t pyramidSize = 8);
 //Modify End
 
 	void Resize(uint32_t width, uint32_t height);

@@ -21,12 +21,13 @@ namespace
 }
 
 //Modify Begin:2026-07-27 by BestHui
-BloomDownsample::BloomDownsample(CommandList& commandList)
+BloomDownsample::BloomDownsample(FrameworkDeviceContext& deviceContext, CommandList& commandList)
 //Modify End
 	: m_BlitMesh(Mesh::CreateBlitTriangle(commandList))
 {
 //Modify Begin:2026-07-27 by BestHui
 	auto shader = std::make_shared<Shader>(
+		deviceContext,
 		ShaderBlob(ShaderBytecode_Blit_VS, sizeof ShaderBytecode_Blit_VS),
 		ShaderBlob(ShaderBytecode_Bloom_Downsample_PS, sizeof ShaderBytecode_Bloom_Downsample_PS)
 		);

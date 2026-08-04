@@ -1,8 +1,10 @@
 //Modify Begin:2026-07-21 by BestHui
 #include "RayTracingShaderInternal.h"
 
-#include <DX12Library/Application.h>
 #include <DX12Library/Helpers.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/Core/FrameworkDeviceContext.h>
+//Modify End
 #include <Framework/Rendering/Pipeline/DescriptorLayout.h>
 #include <Framework/Geometry/Mesh.h>
 #include <Framework/Rendering/Pipeline/ShaderBlob.h>
@@ -65,9 +67,15 @@ namespace
     }
 }
 
-RayTracingShader::Impl::Impl(const ShaderBlob& shaderLibrary, RayTracingPipelineDesc pipelineDesc)
-    : Desc(std::move(pipelineDesc))
-    , PipelineState(RayTracingPipelineStateBuilder(shaderLibrary, Desc).Build())
+RayTracingShader::Impl::Impl(
+    FrameworkDeviceContext& deviceContext,
+    const ShaderBlob& shaderLibrary,
+    RayTracingPipelineDesc pipelineDesc)
+    : DeviceContext(deviceContext)
+    , Desc(std::move(pipelineDesc))
+    , PipelineState(RayTracingPipelineStateBuilder(deviceContext, shaderLibrary, Desc).Build())
+    , Layout(deviceContext)
+    , DispatchTables(deviceContext)
 {
     Assert(!Desc.Bindings.empty(), "Ray tracing shader requires at least one binding.");
 
@@ -180,27 +188,37 @@ RayTracingPipelineDesc RayTracingShader::CreateDefaultPipelineDesc()
     return desc;
 }
 
-RayTracingShader::RayTracingShader(const ShaderBlob& shaderLibrary)
-    : RayTracingShader(shaderLibrary, CreateDefaultPipelineDesc())
+RayTracingShader::RayTracingShader(
+    FrameworkDeviceContext& deviceContext,
+    const ShaderBlob& shaderLibrary)
+    : RayTracingShader(deviceContext, shaderLibrary, CreateDefaultPipelineDesc())
 {}
 
-RayTracingShader::RayTracingShader(const ShaderBlob& shaderLibrary, RayTracingPipelineDesc desc)
-    : m_Impl(std::make_unique<Impl>(shaderLibrary, std::move(desc)))
+RayTracingShader::RayTracingShader(
+    FrameworkDeviceContext& deviceContext,
+    const ShaderBlob& shaderLibrary,
+    RayTracingPipelineDesc desc)
+    : m_Impl(std::make_unique<Impl>(deviceContext, shaderLibrary, std::move(desc)))
 {}
 
 RayTracingShader::~RayTracingShader() = default;
 RayTracingShader::RayTracingShader(RayTracingShader&&) noexcept = default;
 RayTracingShader& RayTracingShader::operator=(RayTracingShader&&) noexcept = default;
 
-bool RayTracingShader::IsSupported()
+bool RayTracingShader::IsSupported(const FrameworkDeviceContext& deviceContext)
 {
     D3D12_FEATURE_DATA_D3D12_OPTIONS5 options5 = {};
-    if (FAILED(Application::Get().GetDevice()->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &options5, sizeof(options5))))
+    if (FAILED(deviceContext.GetDevice()->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &options5, sizeof(options5))))
     {
         return false;
     }
 
     return options5.RaytracingTier != D3D12_RAYTRACING_TIER_NOT_SUPPORTED;
+}
+
+FrameworkDeviceContext& RayTracingShader::GetDeviceContext() const
+{
+    return m_Impl->DeviceContext;
 }
 
 const RayTracingPipelineDesc& RayTracingShader::GetDesc() const

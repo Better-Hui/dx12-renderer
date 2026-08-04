@@ -55,6 +55,22 @@ using namespace DirectX;
 
 namespace
 {
+    //Modify Begin:2026-07-30 by BestHui
+    FrameworkDeviceContext CreateFrameworkDeviceContext(Application& application)
+    {
+        FrameworkDeviceContextDesc desc;
+        desc.Device = application.GetDevice();
+        desc.DirectQueue = application.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
+        desc.ComputeQueue = application.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE);
+        desc.CopyQueue = application.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COPY);
+        desc.AllocateDescriptors = [&application](const D3D12_DESCRIPTOR_HEAP_TYPE type, const uint32_t count)
+        {
+            return application.AllocateDescriptors(type, count);
+        };
+        return FrameworkDeviceContext(std::move(desc));
+    }
+    //Modify End
+
     uint32_t ComputeDescriptorArrayCapacity(const size_t resourceCount, const size_t resourceCapacity)
     {
         return static_cast<uint32_t>(std::max<size_t>(
@@ -160,7 +176,10 @@ RaytracingDemo::RaytracingDemo(const std::wstring& name, const int width, const 
     : Base(name, width, height, false)
     , m_Width(width)
     , m_Height(height)
+    , m_FrameworkDeviceContext(CreateFrameworkDeviceContext(Application::Get()))
+    , m_PathTracingPipelines(m_FrameworkDeviceContext)
     , m_SceneResources(Application::Get().GetDevice())
+    , m_Lights(m_FrameworkDeviceContext)
 {
     (void)graphicsSettings;
 
@@ -183,6 +202,17 @@ RaytracingDemo::RaytracingDemo(const std::wstring& name, const int width, const 
         m_PathTracingBackend = PathTracingBackend::ShaderTableDxr;
     }
     std::free(mode);
+
+//Modify Begin:2026-07-30 by BestHui
+    char* softShadows = nullptr;
+    size_t softShadowsLength = 0;
+    _dupenv_s(&softShadows, &softShadowsLength, "RAYTRACING_DEMO_SOFT_SHADOWS");
+    if (softShadows != nullptr)
+    {
+        m_SoftShadowsEnabled = std::strcmp(softShadows, "0") != 0;
+    }
+    std::free(softShadows);
+//Modify End
 
     char* nrdMode = nullptr;
     size_t nrdModeLength = 0;
@@ -362,7 +392,7 @@ void RaytracingDemo::ApplyStressTestSpheresState()
 
 bool RaytracingDemo::LoadContent()
 {
-    Assert(RayTracingShader::IsSupported(), "DirectX Raytracing is not supported by the selected adapter.");
+    Assert(RayTracingShader::IsSupported(m_FrameworkDeviceContext), "DirectX Raytracing is not supported by the selected adapter.");
 
     const auto commandQueue = Application::Get().GetCommandQueue();
     const auto commandList = commandQueue->GetCommandList();
@@ -371,7 +401,7 @@ bool RaytracingDemo::LoadContent()
     LoadSceneContent(*commandList, GetScenePath());
 //Modify End
 
-    m_ImGui = std::make_unique<ImGuiImpl>(*commandList, *PWindow);
+    m_ImGui = std::make_unique<ImGuiImpl>(m_FrameworkDeviceContext, *commandList, *PWindow);
 
     m_LightBillboardMesh = Mesh::CreateVerticalQuad(*commandList);
 //Modify Begin:2026-07-28 by BestHui
@@ -395,6 +425,7 @@ bool RaytracingDemo::LoadContent()
     {
 //Modify End
     m_GBufferShader = std::make_shared<Shader>(
+        m_FrameworkDeviceContext,
         ShaderBlob(L"GBuffer.vs.cso"),
         ShaderBlob(L"GBuffer.ps.cso"),
         [](RasterPipelineStateBuilder& builder)
@@ -409,6 +440,7 @@ bool RaytracingDemo::LoadContent()
     withShaderCreateContext("GBufferTaskMeshShader", [&]()
     {
     m_GBufferTaskMeshShader = std::make_shared<MeshShader>(
+        m_FrameworkDeviceContext,
         ShaderBlob(L"GBuffer.task.as.cso"),
         ShaderBlob(L"GBuffer.task.ms.cso"),
         ShaderBlob(L"GBuffer.meshletindirect.ps.cso"),
@@ -426,6 +458,7 @@ bool RaytracingDemo::LoadContent()
     meshletIndirectLayoutOptions.ShaderStages = PipelineShaderStageFlags::AllGraphics;
     meshletIndirectLayoutOptions.RootConstantBufferNames.push_back("MeshletDrawCBuffer");
     m_GBufferMeshletIndirectShader = std::make_shared<Shader>(
+        m_FrameworkDeviceContext,
         ShaderBlob(L"GBuffer.meshletindirect.vs.cso"),
         ShaderBlob(L"GBuffer.meshletindirect.ps.cso"),
         meshletIndirectLayoutOptions,
@@ -439,6 +472,7 @@ bool RaytracingDemo::LoadContent()
     {
     const ShaderBlob meshletCullShaderBlob(L"MeshletCull.cs.cso");
     m_MeshletCullShader = std::make_shared<ComputeShader>(
+        m_FrameworkDeviceContext,
         meshletCullShaderBlob,
         ComputePipelineDescBuilder::ReflectedDefault(meshletCullShaderBlob).Build());
     m_MeshletDrawCommandSignature = m_GBufferMeshletIndirectShader->CreateIndirectDrawCommandSignature(
@@ -451,6 +485,7 @@ bool RaytracingDemo::LoadContent()
     withShaderCreateContext("DisplayComposite", [&]()
     {
     m_DisplayCompositeShader = std::make_shared<Shader>(
+        m_FrameworkDeviceContext,
         ShaderBlob(L"DisplayComposite.vs.cso"),
         ShaderBlob(L"DisplayComposite.ps.cso"),
         [](RasterPipelineStateBuilder&) {});
@@ -462,6 +497,7 @@ bool RaytracingDemo::LoadContent()
     {
     const ShaderBlob skyboxComputeShader(L"Skybox.cs.cso");
     m_SkyboxComputeShader = std::make_shared<ComputeShader>(
+        m_FrameworkDeviceContext,
         skyboxComputeShader,
         ComputePipelineDescBuilder::ReflectedDefault(skyboxComputeShader).Build());
     });
@@ -470,6 +506,7 @@ bool RaytracingDemo::LoadContent()
     withShaderCreateContext("LightBillboard", [&]()
     {
     m_LightBillboardShader = std::make_shared<Shader>(
+        m_FrameworkDeviceContext,
         ShaderBlob(L"LightBillboard.vs.cso"),
         ShaderBlob(L"LightBillboard.ps.cso"),
         [](RasterPipelineStateBuilder& builder)
@@ -478,7 +515,7 @@ bool RaytracingDemo::LoadContent()
         });
     });
 
-    m_Denoisers.Initialize();
+    m_Denoisers.Initialize(m_FrameworkDeviceContext);
     if (IsDenoiserEnabled())
     {
         m_AccumulationEnabled = false;
@@ -565,7 +602,10 @@ void RaytracingDemo::EnsureRayTracingPipelines()
 {
     const RayTracingSceneResourceLayout layout = BuildRayTracingSceneResourceLayout();
 //Modify Begin:2026-07-27 by BestHui
-    m_PathTracingPipelines.EnsurePipelines(m_PathTracingBackend, layout);
+    m_PathTracingPipelines.EnsurePipelines(
+        m_PathTracingBackend,
+        m_SoftShadowsEnabled ? PathTracingShadowMode::SoftShadows : PathTracingShadowMode::HardShadows,
+        layout);
     if (m_SceneResources.GetRayTracingAccelerationStructure().GetInstanceCount() > 0)
     {
         BindRayTracingShaderResources();
@@ -582,30 +622,6 @@ void RaytracingDemo::BindRayTracingShaderResources()
         m_Lights,
         m_SkyboxTexture);
 //Modify End
-}
-
-RaytracingDemo::CameraConstants RaytracingDemo::BuildCameraConstants() const
-{
-    CameraConstants camera{};
-    camera.InverseView = XMMatrixInverse(nullptr, GetSceneCamera().GetViewMatrix());
-    camera.InverseProjection = XMMatrixInverse(nullptr, GetSceneCamera().GetProjectionMatrix());
-    XMStoreFloat4(&camera.CameraPosition, GetSceneCamera().GetTranslation());
-    camera.Width = static_cast<uint32_t>(m_Width);
-    camera.Height = static_cast<uint32_t>(m_Height);
-    camera.MaxBounces = static_cast<uint32_t>(std::clamp(m_MaxBounces, 0, 5));
-    camera.SamplesPerPixel = 1;
-    m_Lights.FillCameraConstants(camera.DirectionalLightCount, camera.PointLightCount, camera.AreaLightCount, camera.SkyLight);
-    camera.FrameIndex = m_FrameIndex;
-    const bool pathAccumulationEnabled = m_AccumulationEnabled && !IsDenoiserEnabled();
-    camera.AccumulationFrameIndex = pathAccumulationEnabled ? m_AccumulationFrameIndex : 0u;
-    camera.AccumulationEnabled = pathAccumulationEnabled ? 1u : 0u;
-    m_Denoisers.FillCameraConstants(camera.NRDDenoiserMode, camera.NRDReblurHitDistanceParameters);
-//Modify Begin:2026-08-02 by BestHui
-    camera.DenoiserEnabled = static_cast<uint32_t>(m_Denoisers.GetAlgorithm());
-//Modify End
-    camera.DirectLightingEnabled = m_DirectLightingEnabled ? 1u : 0u;
-    camera.IndirectLightingEnabled = m_IndirectLightingEnabled ? 1u : 0u;
-    return camera;
 }
 
 RaytracingDemo::PipelineConstants RaytracingDemo::BuildPipelineConstants() const
@@ -636,6 +652,9 @@ void RaytracingDemo::RebuildRenderGraph()
         m_CudaBloom.ReleaseInteropResource();
 //Modify End
     }
+//Modify Begin:2026-07-30 by BestHui
+    EnsureRayTracingPipelines();
+//Modify End
     m_RenderGraph = RaytracingDemoRenderGraphBuilder::Create(*this);
 //Modify Begin:2026-07-29 by BestHui
     m_RenderGraph->SetGpuTimestampProfiler(m_GpuTimingEnabled ? &m_GpuTimestampProfiler : nullptr);
@@ -774,6 +793,56 @@ void RaytracingDemo::RecordRenderGraphTimingSamples(
     }
 }
 
+//Modify Begin:2026-07-30 by BestHui
+RaytracingDemoPassResources RaytracingDemo::CreatePassResources()
+{
+    return {
+        m_SceneResources,
+        m_Lights,
+        m_PathTracingPipelines,
+        m_Denoisers,
+        m_CudaBloom,
+        m_GBufferShader,
+        m_GBufferMeshletIndirectShader,
+        m_GBufferTaskMeshShader,
+        m_MeshletCullShader,
+        m_MeshletDrawCommandSignature.get(),
+        m_DisplayCompositeShader,
+        m_SkyboxComputeShader,
+        m_SkyboxTexture,
+        m_DisplayBlitMesh,
+        GetSceneCamera(),
+        m_FrameworkDeviceContext.GetDevice(),
+        m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT),
+        m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE)
+    };
+}
+
+RaytracingDemoPassConfig RaytracingDemo::CreatePassConfig() const
+{
+    return {
+        &m_PathTracingBackend,
+        &m_DirectLightingEnabled,
+        &m_IndirectLightingEnabled,
+        &m_AsyncComputeEnabled,
+        &m_UseMeshletGBuffer,
+        &m_UseTaskShaderMeshlets,
+        &m_DebugMeshletClusters,
+        &m_SkyboxEnabled,
+        &m_DebugLightingTextureTarget,
+        &m_DebugTextureTarget,
+        &m_MaxBounces,
+        &m_Width,
+        &m_Height,
+        &m_AccumulationEnabled,
+        &m_FrameIndex,
+        &m_AccumulationFrameIndex,
+        &m_HasPreviousViewProjection,
+        &m_PreviousViewProjection
+    };
+}
+//Modify End
+
 bool RaytracingDemo::DumpRenderGraphTimingHistory()
 {
     if (m_RenderGraphTimingHistory.empty())
@@ -899,18 +968,6 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
 
 //Modify Begin:2026-07-30 by BestHui
     ApplyStressTestSpheresState();
-//Modify End
-
-//Modify Begin:2026-08-03 by BestHui
-    if (m_DebugStressPathTracingBackendSwitch &&
-        m_FrameIndex != 0u &&
-        m_FrameIndex % 30u == 0u)
-    {
-        m_PathTracingBackend = m_PathTracingBackend == PathTracingBackend::InlineRayQuery
-            ? PathTracingBackend::ShaderTableDxr
-            : PathTracingBackend::InlineRayQuery;
-        ResetAccumulation();
-    }
 //Modify End
 
     RenderGraph::RenderMetadata metadata;

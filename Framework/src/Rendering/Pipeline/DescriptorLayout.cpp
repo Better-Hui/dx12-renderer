@@ -2,9 +2,11 @@
 
 //Modify Begin:2026-07-24 by BestHui
 
-#include <DX12Library/Application.h>
 #include <DX12Library/CommandList.h>
 #include <DX12Library/Helpers.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/Core/FrameworkDeviceContext.h>
+//Modify End
 
 #include <algorithm>
 #include <stdexcept>
@@ -182,10 +184,13 @@ void DescriptorLayout::AddDefaultShaderResourceViewTable(
     const UINT descriptorCount,
     const D3D12_SHADER_RESOURCE_VIEW_DESC& srvDesc)
 {
-    auto device = Application::Get().GetDevice();
-    DescriptorAllocation descriptors = Application::Get().AllocateDescriptors(
+//Modify Begin:2026-07-30 by BestHui
+    Assert(m_DeviceContext != nullptr, "Descriptor layout requires a framework device context.");
+    const auto& device = m_DeviceContext->GetDevice();
+    DescriptorAllocation descriptors = m_DeviceContext->AllocateDescriptors(
         D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
         descriptorCount);
+//Modify End
     for (UINT i = 0; i < descriptorCount; ++i)
     {
         device->CreateShaderResourceView(nullptr, &srvDesc, descriptors.GetDescriptorHandle(i));
@@ -212,10 +217,13 @@ void DescriptorLayout::AddDefaultUnorderedAccessViewTable(
     const UINT descriptorCount,
     const D3D12_UNORDERED_ACCESS_VIEW_DESC& uavDesc)
 {
-    auto device = Application::Get().GetDevice();
-    DescriptorAllocation descriptors = Application::Get().AllocateDescriptors(
+//Modify Begin:2026-07-30 by BestHui
+    Assert(m_DeviceContext != nullptr, "Descriptor layout requires a framework device context.");
+    const auto& device = m_DeviceContext->GetDevice();
+    DescriptorAllocation descriptors = m_DeviceContext->AllocateDescriptors(
         D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
         descriptorCount);
+//Modify End
     for (UINT i = 0; i < descriptorCount; ++i)
     {
         device->CreateUnorderedAccessView(nullptr, nullptr, &uavDesc, descriptors.GetDescriptorHandle(i));

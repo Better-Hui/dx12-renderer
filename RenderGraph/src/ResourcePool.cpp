@@ -2,6 +2,7 @@
 
 #include <DX12Library/Buffer.h>
 #include <DX12Library/ByteAddressBuffer.h>
+#include <DX12Library/CommandQueue.h>
 #include <DX12Library/Helpers.h>
 #include <DX12Library/StructuredBuffer.h>
 #include <DX12Library/Texture.h>
@@ -112,6 +113,18 @@ namespace
     }
 }
 
+//Modify Begin:2026-07-30 by BestHui
+RenderGraph::ResourcePool::ResourcePool(
+    std::shared_ptr<CommandQueue> directCommandQueue,
+    std::shared_ptr<CommandQueue> asyncComputeCommandQueue)
+    : m_DirectCommandQueue(std::move(directCommandQueue))
+    , m_AsyncComputeCommandQueue(std::move(asyncComputeCommandQueue))
+{
+    Assert(m_DirectCommandQueue != nullptr, "Resource pool requires a direct command queue.");
+    Assert(m_AsyncComputeCommandQueue != nullptr, "Resource pool requires an async compute command queue.");
+}
+//Modify End
+
 void RenderGraph::ResourcePool::BeginFrame(CommandList& commandList)
 {
     ForEachResource([&commandList, this](const ResourceDescription& desc)
@@ -125,8 +138,9 @@ void RenderGraph::ResourcePool::BeginFrame(CommandList& commandList)
 
     while (!m_DeferredDeletionQueue.empty())
     {
-        if (auto [_, resourceFrameIndex] = m_DeferredDeletionQueue.front();
-            Application::GetFrameCount() > resourceFrameIndex + Window::BUFFER_COUNT)
+//Modify Begin:2026-07-30 by BestHui
+        if (IsRetirementComplete(m_DeferredDeletionQueue.front().FenceValues))
+//Modify End
         {
             m_DeferredDeletionQueue.pop();
         }
@@ -136,6 +150,14 @@ void RenderGraph::ResourcePool::BeginFrame(CommandList& commandList)
         }
     }
 }
+
+//Modify Begin:2026-07-30 by BestHui
+bool RenderGraph::ResourcePool::IsRetirementComplete(const RenderGraphQueueFenceValues& fenceValues) const
+{
+    return (fenceValues.Direct == 0 || m_DirectCommandQueue->IsFenceComplete(fenceValues.Direct)) &&
+        (fenceValues.AsyncCompute == 0 || m_AsyncComputeCommandQueue->IsFenceComplete(fenceValues.AsyncCompute));
+}
+//Modify End
 const Resource& RenderGraph::ResourcePool::GetResource(const ResourceId resourceId) const
 {
     Assert(IsRegistered(resourceId), "Resource is not registered.");
@@ -223,18 +245,52 @@ const RenderGraph::ResourceDescription& RenderGraph::ResourcePool::GetDescriptio
     return m_ResourceDescriptions.find(resourceId)->second;
 }
 
-void RenderGraph::ResourcePool::Clear()
+void RenderGraph::ResourcePool::Clear(
+    const std::map<ResourceId, RenderGraphQueueFenceValues>& resourceRetirements)
 {
-    const auto frameCount = Application::GetFrameCount();
+//Modify Begin:2026-07-30 by BestHui
+    std::map<uint32_t, DeferredDeletionBatch> heapBatches;
+    std::vector<DeferredDeletionBatch> dedicatedBatches;
 
-    ForEachResource([this, frameCount](const ResourceDescription& desc)
+    ForEachResource([this, &resourceRetirements, &heapBatches, &dedicatedBatches](const ResourceDescription& desc)
     {
-        GetResource(desc.m_Id).ForEachResourceRecursive([this, frameCount](const Resource& resource)
+        RenderGraphQueueFenceValues fenceValues;
+        if (const auto retirement = resourceRetirements.find(desc.m_Id); retirement != resourceRetirements.end())
         {
-            m_DeferredDeletionQueue.push(std::make_pair(resource.GetD3D12Resource(), frameCount));
+            fenceValues = retirement->second;
+        }
+
+        DeferredDeletionBatch* deletionBatch = nullptr;
+        if (desc.m_DedicatedResource)
+        {
+            dedicatedBatches.emplace_back();
+            deletionBatch = &dedicatedBatches.back();
+        }
+        else
+        {
+            const auto heapInfo = m_ResourceHeapInfo.find(desc.m_Id);
+            Assert(heapInfo != m_ResourceHeapInfo.end(), "Transient resource has no heap retirement information.");
+            deletionBatch = &heapBatches[heapInfo->second.m_HeapIndex];
+        }
+
+        deletionBatch->FenceValues.Merge(fenceValues);
+        GetResource(desc.m_Id).ForEachResourceRecursive([deletionBatch](const Resource& resource)
+        {
+            deletionBatch->Resources.push_back(resource.GetD3D12Resource());
         });
         return true;
     });
+
+    for (auto& [heapIndex, deletionBatch] : heapBatches)
+    {
+        deletionBatch.Heaps.push_back(m_HeapInfos[heapIndex].m_Heap);
+        m_DeferredDeletionQueue.push(std::move(deletionBatch));
+    }
+    for (DeferredDeletionBatch& deletionBatch : dedicatedBatches)
+    {
+        m_DeferredDeletionQueue.push(std::move(deletionBatch));
+    }
+//Modify End
 
     m_ResourceDescriptions.clear();
     m_HeapInfos.clear();
@@ -267,7 +323,7 @@ void RenderGraph::ResourcePool::InitHeaps(
         {
             m_ResourceLifecycles.insert(std::pair{
                 resourceId,
-                TransientResourceAllocator::ResourceLifecycle{ resourceId, lastPassIndex, lastPassIndex } });
+                TransientResourceAllocator::ResourceLifecycle{ resourceId, lastPassIndex, lastPassIndex, 1u } });
         }
     }
 //Modify End

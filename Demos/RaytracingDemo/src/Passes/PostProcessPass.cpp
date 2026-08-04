@@ -1,7 +1,6 @@
 //Modify Begin:2026-07-28 by BestHui
 #include <RaytracingDemo.h>
 
-#include <DX12Library/Application.h>
 #include <DX12Library/CommandList.h>
 #include <DX12Library/CommandQueue.h>
 #include <Framework/Rendering/Pipeline/CommandContext.h>
@@ -13,7 +12,7 @@
 #include <RenderGraph/RenderPass.h>
 
 std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateCudaBloomPass(
-    RaytracingDemo& demo,
+    const RaytracingDemoPassResources& resources,
     const RenderGraph::ResourceId sceneReadyToken)
 {
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
@@ -27,14 +26,14 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateCu
             { DemoResourceIds::SceneColor, RenderGraph::OutputType::ExternalAccess },
             { DemoResourceIds::CudaBloomFinishedToken, RenderGraph::OutputType::Token },
         },
-        [&demo](const RenderGraph::RenderContext& context)
+        [resources](const RenderGraph::RenderContext& context)
         {
             const auto& sceneColor = context.m_ResourcePool->GetTexture(DemoResourceIds::SceneColor);
-            demo.m_CudaBloom.ExecuteInPlace(
+            resources.CudaBloom.ExecuteInPlace(
                 *sceneColor,
                 context.m_Metadata.m_ScreenWidth,
                 context.m_Metadata.m_ScreenHeight,
-                Application::Get().GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT)->GetD3D12CommandQueue().Get());
+                resources.DirectQueue->GetD3D12CommandQueue().Get());
         });
 }
 

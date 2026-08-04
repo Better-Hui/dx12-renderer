@@ -272,7 +272,16 @@ namespace
     //Modify End
 }
 
-PipelineLayout::PipelineLayout(PipelineLayoutDesc desc)
+//Modify Begin:2026-07-30 by BestHui
+PipelineLayout::PipelineLayout(FrameworkDeviceContext& deviceContext)
+    : m_DescriptorLayout(deviceContext)
+    , m_DeviceContext(&deviceContext)
+{
+}
+
+PipelineLayout::PipelineLayout(FrameworkDeviceContext& deviceContext, PipelineLayoutDesc desc)
+    : PipelineLayout(deviceContext)
+//Modify End
 {
     Reset(std::move(desc));
 }
@@ -669,7 +678,10 @@ const DescriptorAllocation* PipelineLayout::FindDefaultDescriptorTable(const UIN
 
 void PipelineLayout::RebuildDescriptorLayout()
 {
-    m_DescriptorLayout = DescriptorLayout();
+//Modify Begin:2026-07-30 by BestHui
+    Assert(m_DeviceContext != nullptr, "Pipeline layout requires a framework device context.");
+    m_DescriptorLayout = DescriptorLayout(*m_DeviceContext);
+//Modify End
     for (const PipelineDescriptorRangeDesc& range : m_Desc.DescriptorRanges)
     {
         DescriptorBindingInfo binding;

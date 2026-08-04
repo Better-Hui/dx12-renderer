@@ -4,7 +4,9 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <set>
 
+#include "RenderGraphQueueFence.h"
 #include "RenderPass.h"
 
 class CommandList;
@@ -26,13 +28,17 @@ namespace RenderGraph
         bool WasLastWrittenBy(ResourceId resourceId, RenderPassQueue queue) const;
         void WaitForDirectSubmissionOnAsyncCompute(uint64_t fenceValue) const;
         void WaitForAsyncComputeSubmissionOnDirect(uint64_t fenceValue);
-        void MarkPassOutputs(const RenderPass& pass, uint64_t fenceValue);
+        void TrackPassResources(const RenderPass& pass, uint64_t fenceValue);
+        void TrackExternalResource(ResourceId resourceId, RenderPassQueue queue);
+        const std::map<ResourceId, RenderGraphQueueFenceValues>& GetResourceRetirements() const;
 
     private:
         std::shared_ptr<CommandQueue> m_DirectCommandQueue;
         std::shared_ptr<CommandQueue> m_AsyncComputeCommandQueue;
         std::map<ResourceId, RenderPassQueue> m_LastWriterQueues;
         std::map<ResourceId, uint64_t> m_LastWriterFenceValues;
+        std::map<ResourceId, RenderGraphQueueFenceValues> m_ResourceRetirements;
+        std::set<ResourceId> m_PendingDirectResources;
         bool m_AsyncComputeSubmitted = false;
         uint64_t m_LastAsyncComputeFenceValue = 0;
     };

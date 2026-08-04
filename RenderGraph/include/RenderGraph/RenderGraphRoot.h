@@ -4,12 +4,16 @@
 #include <memory>
 #include <vector>
 
-#include <DX12Library/Application.h>
 #include <DX12Library/CommandQueue.h>
 #include <DX12Library/CommandList.h>
 #include <DX12Library/Window.h>
 
 #include "RenderPass.h"
+//Modify Begin:2026-07-30 by BestHui
+#include "RenderGraphCommandExecutor.h"
+#include "RenderGraphExecutionPlan.h"
+#include "RenderGraphProfiler.h"
+//Modify End
 //Modify Begin:2026-07-30 by BestHui
 #include "RenderGraphQueueScheduler.h"
 #include "RenderGraphResourceStateTracker.h"
@@ -20,7 +24,6 @@
 
 class Texture;
 //Modify Begin:2026-07-29 by BestHui
-class GpuTimestampProfiler;
 //Modify End
 
 namespace RenderGraph
@@ -29,6 +32,11 @@ namespace RenderGraph
     {
     public:
         RenderGraphRoot(
+//Modify Begin:2026-07-30 by BestHui
+            Microsoft::WRL::ComPtr<ID3D12Device2> device,
+            std::shared_ptr<CommandQueue> directCommandQueue,
+            std::shared_ptr<CommandQueue> asyncComputeCommandQueue,
+//Modify End
             std::vector<std::unique_ptr<RenderPass>>&& renderPasses,
             std::vector<TextureDescription>&& textures,
             std::vector<BufferDescription>&& buffers,
@@ -40,10 +48,10 @@ namespace RenderGraph
 
         void Execute(const RenderMetadata& renderMetadata);
 //Modify Begin:2026-07-29 by BestHui
-        void SetGpuTimestampProfiler(GpuTimestampProfiler* profiler) { m_GpuTimestampProfiler = profiler; }
+        void SetGpuTimestampProfiler(GpuTimestampProfiler* profiler) { m_Profiler.SetQueueProfiler(RenderPassQueue::Direct, profiler); }
 //Modify End
 //Modify Begin:2026-08-03 by BestHui
-        void SetAsyncComputeGpuTimestampProfiler(GpuTimestampProfiler* profiler) { m_AsyncComputeGpuTimestampProfiler = profiler; }
+        void SetAsyncComputeGpuTimestampProfiler(GpuTimestampProfiler* profiler) { m_Profiler.SetQueueProfiler(RenderPassQueue::AsyncCompute, profiler); }
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
         void SetDebugSerializeAsyncCompute(bool enabled) { m_DebugSerializeAsyncCompute = enabled; }
@@ -73,15 +81,6 @@ namespace RenderGraph
 //Modify Begin:2026-07-29 by BestHui
         void BuildPassResourceStatePlans();
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
-        void PrepareResourcesForRenderPass(
-            CommandList& commandList,
-            const RenderPass& renderPass,
-            uint32_t renderPassIndex,
-            RenderContext& context,
-            bool skipAliasingOutputs = false);
-//Modify End
-
         D3D12_RESOURCE_STATES GetCurrentResourceState(const Resource& resource) const;
         void SetCurrentResourceState(const Resource& resource, D3D12_RESOURCE_STATES state);
         void TransitionBarrier(const Resource& resource, D3D12_RESOURCE_STATES stateAfter);
@@ -91,9 +90,12 @@ namespace RenderGraph
 
         bool IsResourceDefined(ResourceId id) const;
 
+//Modify Begin:2026-07-30 by BestHui
+        Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;
         std::shared_ptr<CommandQueue> m_DirectCommandQueue;
 //Modify Begin:2026-08-03 by BestHui
         std::shared_ptr<CommandQueue> m_AsyncComputeCommandQueue;
+//Modify End
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
         RenderGraphQueueScheduler m_QueueScheduler;
@@ -113,31 +115,12 @@ namespace RenderGraph
 
         std::shared_ptr<ResourcePool> m_ResourcePool;
         std::map<const RenderPass*, RenderTargetInfo> m_RenderTargets;
-//Modify Begin:2026-07-29 by BestHui
-        struct PassResourceTransition
-        {
-            ResourceId Id = 0;
-            D3D12_RESOURCE_STATES StateAfter = D3D12_RESOURCE_STATE_COMMON;
-            bool InsertUavBarrier = false;
-        };
-
-        struct PassResourceStatePlan
-        {
-            std::vector<PassResourceTransition> InputTransitions;
-            std::vector<ResourceId> AliasingOutputs;
-            std::vector<PassResourceTransition> OutputTransitions;
-            std::vector<ResourceId> InitOutputs;
-        };
-
-        std::map<const RenderPass*, PassResourceStatePlan> m_PassResourceStatePlans;
-//Modify End
         std::shared_ptr<RenderTarget> m_GraphOutputRenderTarget;
         RenderGraphResourceStateTracker m_ResourceStateTracker;
-//Modify Begin:2026-07-29 by BestHui
-        GpuTimestampProfiler* m_GpuTimestampProfiler = nullptr;
-//Modify End
-//Modify Begin:2026-08-03 by BestHui
-        GpuTimestampProfiler* m_AsyncComputeGpuTimestampProfiler = nullptr;
+//Modify Begin:2026-07-30 by BestHui
+        std::map<const RenderPass*, PassResourceStatePlan> m_PassResourceStatePlans;
+        RenderGraphProfiler m_Profiler;
+        std::unique_ptr<RenderGraphCommandExecutor> m_CommandExecutor;
 //Modify End
 
         bool m_Dirty = true;

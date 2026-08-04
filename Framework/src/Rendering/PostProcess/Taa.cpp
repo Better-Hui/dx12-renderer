@@ -17,7 +17,7 @@ namespace
 }
 
 //Modify Begin:2026-07-27 by BestHui
-TAA::TAA(CommandList& commandList, DXGI_FORMAT backBufferFormat, uint32_t width, uint32_t height)
+TAA::TAA(FrameworkDeviceContext& deviceContext, CommandList& commandList, DXGI_FORMAT backBufferFormat, uint32_t width, uint32_t height)
 //Modify End
     : m_BlitMesh(Mesh::CreateBlitTriangle(commandList))
     , m_Width(width)
@@ -25,6 +25,7 @@ TAA::TAA(CommandList& commandList, DXGI_FORMAT backBufferFormat, uint32_t width,
 {
 //Modify Begin:2026-07-27 by BestHui
     auto shader = std::make_shared<Shader>(
+        deviceContext,
         ShaderBlob(ShaderBytecode_Blit_VS, sizeof ShaderBytecode_Blit_VS),
         ShaderBlob(ShaderBytecode_TAA_Resolve_PS, sizeof ShaderBytecode_TAA_Resolve_PS)
         );

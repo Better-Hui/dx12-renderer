@@ -66,6 +66,8 @@ Pass input/output declarations drive ordering, resource states, and cross-queue 
 
 Queue submission and last-writer fence tracking live in `RenderGraphQueueScheduler`; barrier ownership lives in `RenderGraphResourceStateTracker`. Native integrations such as NRD can batch `ResourceStateTransition` requests through `RenderContext`, so native barriers and the graph's tracked state stay synchronized.
 
+`RenderGraphRoot` receives its device and queues from the application composition root. Its execution path is split into `RenderGraphCommandExecutor` for pass recording/submission and `RenderGraphProfiler` for optional per-queue GPU timestamps. `RaytracingDemo` follows the same boundary: `RaytracingDemoPassResources` supplies object references and `RaytracingDemoPassConfig` supplies explicit runtime configuration, so pass lambdas do not capture the whole demo or use friend access.
+
 ### Scene import and rendering features
 
 ```cpp
@@ -80,6 +82,7 @@ const Scene& scene = result.SceneData;
 | Base resources | GBuffer-style normal/depth/material data, motion/world-position data, history/display resources, and raster or meshlet GBuffer generation. |
 | Ray tracing | Inline ray-query compute shaders and shader-table DXR. |
 | Lighting | Separate direct and indirect lighting passes followed by composition. |
+| Soft shadows | Precompiled hard/soft shader variants for directional and point lights; area lights retain their sampled emitter surface. |
 | Denoising | Optional NRD or SVGF integration. |
 | Meshlets | Task-shader and compute-indirect GBuffer backends with cluster debugging. |
 | CUDA Bloom | External D3D12/CUDA post process with shared-resource and shared-fence synchronization. |
@@ -138,6 +141,7 @@ The demo loads `Assets/Scenes/DefaultScene.json` by default.
 | `RAYTRACING_DEMO_SCENE` | `Assets\Scenes\DefaultScene.json` | Loads a JSON or Unity scene file. |
 | `RAYTRACING_DEMO_UNITY_SCENE` | `C:\Scenes\CornellBox.unity` | Compatibility variable for a Unity text scene. |
 | `RAYTRACING_DEMO_MODE` | `shader-table` | Starts shader-table DXR; default is inline ray query. |
+| `RAYTRACING_DEMO_SOFT_SHADOWS` | `1` | Selects the precompiled soft-shadow variants for directional and point lights. |
 | `RAYTRACING_DEMO_DENOISER` | `nrd` or `svgf` | Selects a denoiser. |
 | `RAYTRACING_DEMO_ASYNC_COMPUTE` | `1` | Places the eligible inline indirect-lighting pass on the compute queue. |
 | `RAYTRACING_DEMO_ASYNC_CPU_SERIALIZE` | `1` | Debug-only CPU wait after async submission; useful for synchronization diagnosis, not performance measurement. |
@@ -159,12 +163,15 @@ The demo loads `Assets/Scenes/DefaultScene.json` by default.
 - CUDA 12.8 is required at configure time even when CUDA Bloom is disabled at runtime; fully optional CUDA remains build-system work.
 - Async compute is **explicitly assigned per pass**. The graph does not automatically choose queues, split passes, optimize overlap, or schedule a Copy queue.
 - Consecutive async passes are currently submitted per pass rather than batch-scheduled as a larger compute segment.
-- Queue and resource-state tracking are separated from `RenderGraphRoot`, but `RenderGraphRoot::Execute` still owns pass execution and profiler orchestration and remains a refactoring target.
-- Transient-resource lifetime is still planned primarily from pass order rather than complete multi-queue fence retirement; broader async graphs need a queue-aware allocator before aggressive aliasing.
+- `RenderGraphRoot::Execute` is now a thin graph entry point; `RenderGraphCommandExecutor` owns pass recording/submission and `RenderGraphProfiler` owns optional direct/async timestamp lifetimes. Graph build/topology orchestration remains in `RenderGraphRoot`.
+- Transient resources are retired using the actual Direct/Async Compute fence values recorded for the frame. Aliasing is deliberately conservative: resources used by different queues are not aliased until a more general multi-queue allocator is designed.
+- The Framework and RenderGraph no longer query `Application::Get()` for device/queue state. The application composition root injects device, queues, and descriptor allocation; the legacy `DemoMain` startup code remains the only Framework-level application entry dependency.
+- `RaytracingDemoSceneResources` exposes four internal builders for texture/material, geometry, meshlet, and RTAS resources. The facade remains sample-facing while scene mutation updates meshlet/TLAS instances incrementally.
 - Per-queue RenderGraph timestamps are useful for pass duration; PIX Timing Capture is required to inspect cross-queue wall-clock overlap, waits, and GPU bubbles.
 - The Unity importer is static and limited: prefab resolution, nested prefabs, skinned meshes, `LODGroup`, and an asset-database cache are not complete.
 - JSON scene import exists, but the stress-test spheres are still defined by sample C++ rather than scene data. They are enabled by default and can be added or removed incrementally from the runtime UI.
 - Meshlet rendering is an experimental GBuffer backend, not a complete visibility/streaming system or a claim of optimal meshlet performance.
+- Soft shadows currently use a fixed four-sample variant. Directional lights use angular radius, point lights use source radius, and adaptive sampling or quality presets are not implemented yet.
 - DLSS/Streamline is not currently integrated.
 
 ## Documentation and notices

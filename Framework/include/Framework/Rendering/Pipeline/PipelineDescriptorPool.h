@@ -8,6 +8,9 @@
 #include <memory>
 
 class PipelineLayout;
+//Modify Begin:2026-07-30 by BestHui
+class FrameworkDeviceContext;
+//Modify End
 
 struct PipelineDescriptorPoolDesc
 {
@@ -22,7 +25,12 @@ struct PipelineDescriptorPoolDesc
 class PipelineDescriptorPool final
 {
 public:
-    explicit PipelineDescriptorPool(PipelineDescriptorPoolDesc desc = {});
+//Modify Begin:2026-07-30 by BestHui
+    explicit PipelineDescriptorPool(
+        FrameworkDeviceContext& deviceContext,
+        PipelineDescriptorPoolDesc desc = {});
+    FrameworkDeviceContext& GetDeviceContext() const { return *m_DeviceContext; }
+//Modify End
 
     void Reset();
     PipelineDescriptorSet AllocateDescriptorSetValue(
@@ -50,6 +58,9 @@ private:
 //Modify End
 
     PipelineDescriptorPoolDesc m_Desc;
+//Modify Begin:2026-07-30 by BestHui
+    FrameworkDeviceContext* m_DeviceContext = nullptr;
+//Modify End
     uint32_t m_AllocatedDescriptorSetCount = 0;
     uint32_t m_AllocatedResourceDescriptorCount = 0;
     uint32_t m_AllocatedSamplerDescriptorCount = 0;

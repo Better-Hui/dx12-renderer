@@ -5,13 +5,17 @@
 #include <wrl.h>
 
 class RootSignature;
+//Modify Begin:2026-07-30 by BestHui
+class FrameworkDeviceContext;
+//Modify End
 
 class IndirectDrawCommandSignature final
 {
 public:
-    IndirectDrawCommandSignature();
+    explicit IndirectDrawCommandSignature(FrameworkDeviceContext& deviceContext);
 //Modify Begin:2026-07-31 by BestHui
     IndirectDrawCommandSignature(
+        FrameworkDeviceContext& deviceContext,
         const RootSignature& rootSignature,
         UINT rootParameterIndex,
         UINT rootConstantCount,

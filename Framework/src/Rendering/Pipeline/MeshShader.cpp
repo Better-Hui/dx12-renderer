@@ -1,7 +1,9 @@
 #include <Framework/Rendering/Pipeline/MeshShader.h>
 
-#include <DX12Library/Application.h>
 #include <DX12Library/Helpers.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/Core/FrameworkDeviceContext.h>
+//Modify End
 
 #include <algorithm>
 #include <cstring>
@@ -79,9 +81,12 @@ namespace
 }
 
 MeshShader::MeshShader(
+    FrameworkDeviceContext& deviceContext,
     const ShaderBlob& meshShader,
     const ShaderBlob& pixelShader,
     const std::function<void(RasterPipelineStateBuilder&)> buildPipelineState)
+    : m_DeviceContext(deviceContext)
+    , m_DescriptorPool(deviceContext)
 {
     CollectShaderMetadata(meshShader.GetBlob(), &m_MeshShaderMetadata);
     CollectShaderMetadata(pixelShader.GetBlob(), &m_PixelShaderMetadata);
@@ -96,10 +101,13 @@ MeshShader::MeshShader(
 
 //Modify Begin:2026-07-31 by BestHui
 MeshShader::MeshShader(
+    FrameworkDeviceContext& deviceContext,
     const ShaderBlob& amplificationShader,
     const ShaderBlob& meshShader,
     const ShaderBlob& pixelShader,
     const std::function<void(RasterPipelineStateBuilder&)> buildPipelineState)
+    : m_DeviceContext(deviceContext)
+    , m_DescriptorPool(deviceContext)
 {
     CollectShaderMetadata(amplificationShader.GetBlob(), &m_AmplificationShaderMetadata);
     CollectShaderMetadata(meshShader.GetBlob(), &m_MeshShaderMetadata);
@@ -153,6 +161,7 @@ void MeshShader::BuildPipelineLayout()
     const ShaderReflectionMetadata mergedReflection = MergeMeshGraphicsReflection(amplificationReflection, m_MeshShaderMetadata, m_PixelShaderMetadata);
 //Modify End
     m_PipelineLayout = std::make_unique<PipelineLayout>(
+        m_DeviceContext,
         PipelineLayout::CreateDescFromReflection(mergedReflection, layoutOptions));
     m_BindingSet = std::make_unique<PipelineBindingSet>(*m_PipelineLayout);
 }

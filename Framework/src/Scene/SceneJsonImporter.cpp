@@ -436,7 +436,12 @@ namespace
                     DirectX::XMFLOAT3 direction{};
                     DirectX::XMStoreFloat3(&direction, DirectX::XMVector3Rotate(DirectX::XMVectorSet(0, 0, -1, 0), rotation));
                     DirectionalLight light;
-                    light.m_DirectionWs = { direction.x, direction.y, direction.z, 0.0f };
+//Modify Begin:2026-07-30 by BestHui
+                    const float angularRadius = Find(lightObject, "angularRadius") != nullptr
+                        ? ReadNumber(*Find(lightObject, "angularRadius"), "light.angularRadius")
+                        : 0.009f;
+                    light.m_DirectionWs = { direction.x, direction.y, direction.z, std::max(0.0f, angularRadius) };
+//Modify End
                     light.m_Color = { color.x, color.y, color.z, intensity };
                     scene.AddDirectionalLight(light);
                 }
@@ -463,6 +468,12 @@ namespace
                     const float range = Find(lightObject, "range") != nullptr ? ReadNumber(*Find(lightObject, "range"), "light.range") : 20.0f;
                     PointLight light({ position.x, position.y, position.z, 1.0f }, std::max(0.1f, range));
                     light.Color = { color.x, color.y, color.z, intensity };
+//Modify Begin:2026-07-30 by BestHui
+                    if (const JsonValue* sourceRadius = Find(lightObject, "sourceRadius"))
+                    {
+                        light.SourceRadius = std::max(0.0f, ReadNumber(*sourceRadius, "light.sourceRadius"));
+                    }
+//Modify End
                     light.RecalculateAttenuationCoefficients();
                     scene.AddPointLight(light);
                 }

@@ -9,11 +9,21 @@
 #include <DX12Library/CommandList.h>
 #include <DX12Library/Window.h>
 
+//Modify Begin:2026-07-30 by BestHui
+class FrameworkDeviceContext;
+//Modify End
+
 class SharedUploadBuffer
 {
 public:
+    //Modify Begin:2026-07-30 by BestHui
+    explicit SharedUploadBuffer(FrameworkDeviceContext& deviceContext)
+        : m_DeviceContext(deviceContext)
+    {
+    }
+    //Modify End
     // Resets the pointer of the current buffer.
-    void BeginFrame();
+    void BeginFrame(uint64_t frameIndex);
 
     template <typename T>
     void Upload(CommandList& commandList, Resource& destination, const std::vector<T>& data, const uint64_t destinationOffset = 0U)
@@ -48,11 +58,15 @@ private:
 
     BufferInfo& GetBufferInfoForFrame(uint64_t frameCount);
 
-    static uint8_t* SuballocateFromBuffer(BufferInfo& bufferInfo, uint64_t size, uint64_t alignment);
+    uint8_t* SuballocateFromBuffer(BufferInfo& bufferInfo, uint64_t size, uint64_t alignment) const;
 
-    static void EnsureBufferCapacity(BufferInfo& bufferInfo, uint64_t capacity);
+    void EnsureBufferCapacity(BufferInfo& bufferInfo, uint64_t capacity) const;
 
-    static Microsoft::WRL::ComPtr<ID3D12Resource> CreateBuffer(uint64_t capacity);
+    Microsoft::WRL::ComPtr<ID3D12Resource> CreateBuffer(uint64_t capacity) const;
 
+    //Modify Begin:2026-07-30 by BestHui
+    FrameworkDeviceContext& m_DeviceContext;
+    uint64_t m_FrameIndex = 0;
+    //Modify End
     BufferInfo m_BufferInfos[BUFFER_COUNT];
 };

@@ -27,6 +27,8 @@ void RenderGraph::RenderGraphQueueScheduler::BeginFrame()
 
     m_LastWriterQueues.clear();
     m_LastWriterFenceValues.clear();
+    m_ResourceRetirements.clear();
+    m_PendingDirectResources.clear();
     m_AsyncComputeSubmitted = false;
     m_LastAsyncComputeFenceValue = 0;
 }
@@ -39,6 +41,13 @@ uint64_t RenderGraph::RenderGraphQueueScheduler::SubmitDirect(std::shared_ptr<Co
     }
 
     const uint64_t fenceValue = m_DirectCommandQueue->ExecuteCommandList(commandList);
+    for (const ResourceId resourceId : m_PendingDirectResources)
+    {
+        m_ResourceRetirements[resourceId].Direct = (std::max)(
+            m_ResourceRetirements[resourceId].Direct,
+            fenceValue);
+    }
+    m_PendingDirectResources.clear();
     for (const auto& [resourceId, queue] : m_LastWriterQueues)
     {
         if (queue == RenderPassQueue::Direct && m_LastWriterFenceValues[resourceId] == 0)
@@ -127,14 +136,54 @@ void RenderGraph::RenderGraphQueueScheduler::WaitForAsyncComputeSubmissionOnDire
     }
 }
 
-void RenderGraph::RenderGraphQueueScheduler::MarkPassOutputs(
+void RenderGraph::RenderGraphQueueScheduler::TrackPassResources(
     const RenderPass& pass,
     const uint64_t fenceValue)
 {
+    const auto trackResource = [this, &pass, fenceValue](const ResourceId resourceId)
+    {
+        if (pass.GetQueue() == RenderPassQueue::AsyncCompute)
+        {
+            Assert(fenceValue != 0, "Async compute resource usage requires a submitted fence value.");
+            m_ResourceRetirements[resourceId].AsyncCompute = (std::max)(
+                m_ResourceRetirements[resourceId].AsyncCompute,
+                fenceValue);
+        }
+        else
+        {
+            m_PendingDirectResources.insert(resourceId);
+        }
+    };
+
+    for (const Input& input : pass.GetInputs())
+    {
+        trackResource(input.m_Id);
+    }
+
     for (const Output& output : pass.GetOutputs())
     {
+        trackResource(output.m_Id);
         m_LastWriterQueues[output.m_Id] = pass.GetQueue();
         m_LastWriterFenceValues[output.m_Id] = fenceValue;
     }
+}
+
+void RenderGraph::RenderGraphQueueScheduler::TrackExternalResource(
+    const ResourceId resourceId,
+    const RenderPassQueue queue)
+{
+    if (queue == RenderPassQueue::Direct)
+    {
+        m_PendingDirectResources.insert(resourceId);
+        return;
+    }
+
+    Assert(false, "External async compute resource tracking requires an explicit fence value.");
+}
+
+const std::map<RenderGraph::ResourceId, RenderGraph::RenderGraphQueueFenceValues>&
+RenderGraph::RenderGraphQueueScheduler::GetResourceRetirements() const
+{
+    return m_ResourceRetirements;
 }
 //Modify End

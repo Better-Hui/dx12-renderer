@@ -1,7 +1,6 @@
 //Modify Begin:2026-07-31 by BestHui
 #include <Passes/RaytracingDemoPasses.h>
 
-#include <RaytracingDemo.h>
 #include <RenderGraph/RaytracingDemoGraphResources.h>
 
 #include <Framework/Geometry/Mesh.h>
@@ -11,7 +10,7 @@
 #include <RenderGraph/RenderPass.h>
 
 std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDebugTexturePass(
-    RaytracingDemo& demo,
+    const RaytracingDemoPassResources& resources,
     const RenderGraph::ResourceId debugTarget,
     const RenderGraph::ResourceId debugTargetReadyToken)
 {
@@ -28,16 +27,16 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDe
             { DemoResourceIds::SceneColor, OutputType::RenderTarget },
             { DemoResourceIds::DebugOutputFinishedToken, OutputType::Token },
         },
-        [&demo, debugTarget](const RenderContext& context, CommandList& cmd)
+        [resources, debugTarget](const RenderContext& context, CommandList& cmd)
         {
             CommandContext commandContext(cmd);
             commandContext.SetTexture(
-                *demo.m_DisplayCompositeShader,
+                *resources.DisplayCompositeShader,
                 "SceneColor",
                 ShaderResourceView(context.m_ResourcePool->GetTexture(debugTarget)));
-            commandContext.BindPipeline(*demo.m_DisplayCompositeShader);
-            commandContext.BindDescriptorSet(demo.m_DisplayCompositeShader->GetDescriptorSet());
-            demo.m_DisplayBlitMesh->Draw(cmd);
+            commandContext.BindPipeline(*resources.DisplayCompositeShader);
+            commandContext.BindDescriptorSet(resources.DisplayCompositeShader->GetDescriptorSet());
+            resources.DisplayBlitMesh->Draw(cmd);
         });
 }
 //Modify End

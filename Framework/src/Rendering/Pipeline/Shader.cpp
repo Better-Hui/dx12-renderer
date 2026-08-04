@@ -1,9 +1,11 @@
 #include <Framework/Rendering/Pipeline/Shader.h>
 #include <DX12Library/Helpers.h>
 #include <DX12Library/ShaderUtils.h>
-#include <DX12Library/Application.h>
 //Modify Begin:2026-07-31 by BestHui
 #include <Framework/Rendering/Pipeline/IndirectDrawCommandSignature.h>
+//Modify End
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/Core/FrameworkDeviceContext.h>
 //Modify End
 
 //Modify Begin:2026-07-24 by BestHui
@@ -91,21 +93,25 @@ namespace
 
 //Modify Begin:2026-07-27 by BestHui
 Shader::Shader(
+    FrameworkDeviceContext& deviceContext,
     const ShaderBlob& vertexShader,
     const ShaderBlob& pixelShader,
     const std::function<void(RasterPipelineStateBuilder&)> buildPipelineState)
 //Modify Begin:2026-07-31 by BestHui
-    : Shader(vertexShader, pixelShader, CreateDefaultGraphicsLayoutOptions(), buildPipelineState)
+    : Shader(deviceContext, vertexShader, pixelShader, CreateDefaultGraphicsLayoutOptions(), buildPipelineState)
 //Modify End
 {
 }
 
 Shader::Shader(
+    FrameworkDeviceContext& deviceContext,
     const ShaderBlob& vertexShader,
     const ShaderBlob& pixelShader,
     PipelineLayoutReflectionOptions layoutOptions,
     const std::function<void(RasterPipelineStateBuilder&)> buildPipelineState)
-    : m_PipelineLayoutOptions(std::move(layoutOptions))
+    : m_DeviceContext(deviceContext)
+    , m_DescriptorPool(deviceContext)
+    , m_PipelineLayoutOptions(std::move(layoutOptions))
 {
     CollectShaderMetadata(vertexShader.GetBlob(), &m_VertexShaderMetadata);
     CollectShaderMetadata(pixelShader.GetBlob(), &m_PixelShaderMetadata);
@@ -171,6 +177,7 @@ std::unique_ptr<IndirectDrawCommandSignature> Shader::CreateIndirectDrawCommandS
     const PipelineRootConstantDesc* rootConstant = m_PipelineLayout->FindRootConstant(rootConstantBufferName);
     Assert(rootConstant != nullptr, "Root constant buffer was not found in shader pipeline layout.");
     return std::make_unique<IndirectDrawCommandSignature>(
+        m_DeviceContext,
         *m_RootSignature,
         rootConstant->RootParameterIndex,
         static_cast<UINT>((rootConstant->SizeInBytes + 3u) / 4u),
@@ -251,6 +258,7 @@ void Shader::BuildPipelineLayout()
 {
     const ShaderReflectionMetadata mergedReflection = MergeGraphicsReflection(m_VertexShaderMetadata, m_PixelShaderMetadata);
     m_PipelineLayout = std::make_unique<PipelineLayout>(
+        m_DeviceContext,
         PipelineLayout::CreateDescFromReflection(mergedReflection, m_PipelineLayoutOptions));
     m_BindingSet = std::make_unique<PipelineBindingSet>(*m_PipelineLayout);
 }

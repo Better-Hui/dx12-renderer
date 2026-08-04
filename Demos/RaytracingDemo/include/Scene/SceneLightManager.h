@@ -18,18 +18,21 @@
 class CommandList;
 class CommandContext;
 class ComputeShader;
+//Modify Begin:2026-07-30 by BestHui
+class FrameworkDeviceContext;
+//Modify End
 class RayTracingBindingSet;
 
 class SceneLightManager final
 {
 public:
-    SceneLightManager();
+    explicit SceneLightManager(FrameworkDeviceContext& deviceContext);
 
     void CreateDemoLights();
     void CreateFromScene(const Scene& scene);
     void InitializeGpuBuffers(CommandList& commandList);
 //Modify Begin:2026-07-30 by BestHui
-    bool Upload(CommandList& commandList);
+    bool Upload(CommandList& commandList, uint64_t frameIndex);
 //Modify End
     void UpdateDynamicLights(float timeSeconds);
     bool DrawImGui();
@@ -69,6 +72,7 @@ private:
     void MarkAreaLightsDirty();
     void MarkAreaLightsDirty(size_t beginIndex, size_t endIndex);
 
+    FrameworkDeviceContext& m_DeviceContext;
     SkyLightData m_SkyLight = {};
     std::vector<DirectionalLight> m_DirectionalLights;
     std::vector<PointLight> m_PointLights;
@@ -110,6 +114,9 @@ private:
     DirectX::XMFLOAT3 m_NewPointLightColor = { 1.0f, 0.85f, 0.55f };
     float m_NewPointLightIntensity = 18.0f;
     float m_NewPointLightRange = 24.0f;
+//Modify Begin:2026-07-30 by BestHui
+    float m_NewPointLightSourceRadius = 0.25f;
+//Modify End
     float m_RandomPointLightSpawnRadius = 28.0f;
 
     DirectX::XMFLOAT3 m_NewAreaLightPosition = { 0.0f, 4.0f, 0.0f };

@@ -15,6 +15,10 @@
 #include <string>
 #include <vector>
 
+//Modify Begin:2026-07-30 by BestHui
+class FrameworkDeviceContext;
+//Modify End
+
 enum class PipelineDescriptorBindingMode
 {
     RootDescriptor,
@@ -173,8 +177,10 @@ struct PipelineRootSignatureBuildDesc
 class PipelineLayout
 {
 public:
-    PipelineLayout() = default;
-    explicit PipelineLayout(PipelineLayoutDesc desc);
+//Modify Begin:2026-07-30 by BestHui
+    explicit PipelineLayout(FrameworkDeviceContext& deviceContext);
+    PipelineLayout(FrameworkDeviceContext& deviceContext, PipelineLayoutDesc desc);
+//Modify End
 
     static PipelineLayoutDesc CreateDescFromReflection(
         const ShaderReflectionMetadata& reflection,
@@ -183,6 +189,9 @@ public:
     void Reset(PipelineLayoutDesc desc);
 
     const PipelineLayoutDesc& GetDesc() const { return m_Desc; }
+//Modify Begin:2026-07-30 by BestHui
+    FrameworkDeviceContext& GetDeviceContext() const { return *m_DeviceContext; }
+//Modify End
     const std::vector<PipelineDescriptorSetDesc>& GetDescriptorSets() const { return m_Desc.DescriptorSets; }
 //Modify Begin:2026-07-27 by BestHui
     void SetRootSignature(std::shared_ptr<RootSignature> rootSignature);
@@ -225,6 +234,9 @@ private:
 
     PipelineLayoutDesc m_Desc;
     DescriptorLayout m_DescriptorLayout;
+//Modify Begin:2026-07-30 by BestHui
+    FrameworkDeviceContext* m_DeviceContext = nullptr;
+//Modify End
 //Modify Begin:2026-07-27 by BestHui
     std::shared_ptr<RootSignature> m_RootSignature;
 //Modify End

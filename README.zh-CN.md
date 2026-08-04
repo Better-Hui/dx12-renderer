@@ -55,6 +55,8 @@ auto pass = RenderGraph::RenderPass::Create(
 
 当前 queue 提交、last-writer 和跨 queue fence 由 `RenderGraphQueueScheduler` 管理；barrier 与资源当前状态由 `RenderGraphResourceStateTracker` 管理。NRD 这类 native 集成可以通过 `RenderContext` 批量提交 `ResourceStateTransition`，让真实 D3D12 barrier 和 RenderGraph 状态表保持一致。
 
+`RenderGraphRoot` 的 device 和 queue 由应用组合根显式注入。执行路径已经拆为 `RenderGraphCommandExecutor`（pass 录制与提交）和 `RenderGraphProfiler`（可选的 Direct/Async Compute GPU timing）。`RaytracingDemo` 也遵循同一边界：`RaytracingDemoPassResources` 提供 pass 所需对象，`RaytracingDemoPassConfig` 提供显式运行时配置，因此 pass lambda 不再捕获整个 Demo，也不依赖 `friend` 访问私有成员。
+
 ## 你可以从 sample 中看到的功能
 
 | 方向 | 具体内容 |
@@ -62,6 +64,7 @@ auto pass = RenderGraph::RenderPass::Create(
 | GBuffer | 常规 raster GBuffer，以及实验性的 Meshlet GBuffer 路径。 |
 | 光线追踪 | inline ray query compute shader 与 shader-table DXR，可在运行时切换。 |
 | 光照 | direct lighting 和 indirect lighting 分离，再进行 composite。 |
+| 软阴影 | 平行光和点光源使用预编译 Hard/Soft Shader 变体；面积光继续采样真实发光面。 |
 | 降噪 | NRD 与 SVGF 两条可选路径；NRD 的 native 状态变化会回写 RenderGraph。 |
 | Meshlet | task shader 和 compute-indirect 后端、cluster 调试显示，以及实例数据增量更新。 |
 | CUDA 互操作 | 基于 shared resource / shared fence 的 Bloom 后处理。 |
@@ -136,6 +139,7 @@ cmake --build ..\build --config Release --target RaytracingDemo UnitySceneDump
 | `RAYTRACING_DEMO_SCENE` | `Assets\Scenes\DefaultScene.json` | 指定要加载的 JSON 或 Unity 场景。 |
 | `RAYTRACING_DEMO_UNITY_SCENE` | `C:\Scenes\CornellBox.unity` | 兼容旧调用方式的 Unity 场景变量。 |
 | `RAYTRACING_DEMO_MODE` | `shader-table` | 使用 shader-table DXR；默认是 inline ray query。 |
+| `RAYTRACING_DEMO_SOFT_SHADOWS` | `1` | 为平行光和点光源选择预编译软阴影变体。 |
 | `RAYTRACING_DEMO_DENOISER` | `nrd` 或 `svgf` | 选择降噪器。 |
 | `RAYTRACING_DEMO_ASYNC_COMPUTE` | `1` | 将符合条件的 inline indirect-lighting pass 放到 compute queue。 |
 | `RAYTRACING_DEMO_ASYNC_CPU_SERIALIZE` | `1` | 调试用：async 提交后执行 CPU wait；不能用于性能测试。 |
@@ -162,12 +166,15 @@ cmake --build ..\build --config Release --target RaytracingDemo UnitySceneDump
 - CUDA 在运行时可以关闭，但仍是当前构建流程的硬依赖；将它做成真正可选的模块仍需调整 build system。
 - Async Compute 目前采用**显式指定**方式。RenderGraph 不会自动选择 queue、拆分 pass、优化 overlap，也还没有 Copy queue 调度器。
 - 连续的 async pass 目前逐 pass 提交，尚未合并成更大的 compute segment。
-- queue 与资源状态追踪已经从 `RenderGraphRoot` 拆出，但 `RenderGraphRoot::Execute()` 仍同时组织 pass 执行和 profiler 生命周期，还是下一步需要继续拆分的位置。
-- transient resource 的生命周期目前主要按 pass 顺序规划，还不是完整的多 queue fence retirement；在扩展更复杂的 async graph 前，需要先让 allocator 感知 queue/fence。
+- `RenderGraphRoot::Execute()` 现在只是图执行入口；pass 录制/提交由 `RenderGraphCommandExecutor` 负责，Direct/Async Compute 的可选 timestamp 生命周期由 `RenderGraphProfiler` 负责。Root 仍负责图构建和拓扑编排。
+- transient resource 会按本帧实际记录的 Direct/Async Compute fence 做延迟退休。aliasing 仍采取保守策略：不同 queue 使用的资源不会互相 alias，后续再设计更一般的多 queue allocator。
+- Framework 和 RenderGraph 不再通过 `Application::Get()` 反查 device/queue。应用组合根显式注入 device、queue 和 descriptor 分配器；Framework 中剩下的全局入口只位于 `DemoMain` 启动层。
+- `RaytracingDemoSceneResources` 内部已拆成 texture/material、geometry、meshlet、RTAS 四个 builder。facade 仍是 sample 层入口，但压力球等场景修改只增量更新 Meshlet/TLAS instance 数据。
 - RenderGraph timing 分别记录每条 queue 上的 pass 时长；判断跨 queue overlap、wait 和 GPU bubble 时，请使用 PIX Timing Capture。
 - Unity importer 是静态、有限的导入器；prefab / nested prefab、skinned mesh、`LODGroup` 与 asset-database cache 尚未覆盖。
 - JSON 场景已经可用，但压力球仍由 sample C++ 定义，不属于场景数据。它们默认开启，可以通过运行时 UI 走增量 Add/Remove 路径切换。
 - Meshlet 路径是实验性 GBuffer 后端，不是完整的 visibility / streaming 系统，也不代表已达到最优 Meshlet 性能。
+- 软阴影当前使用固定 4 次采样的变体：平行光读取 angular radius，点光源读取 source radius；自适应采样和质量档位尚未实现。
 - 尚未接入 DLSS / Streamline。
 
 ## 进一步阅读与许可证

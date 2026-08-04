@@ -16,6 +16,7 @@
 
 //Modify Begin:2026-07-21 by BestHui
 struct ImGui_ImplDX12_InitInfo;
+class FrameworkDeviceContext;
 //Modify End
 
 class ImGuiImpl final
@@ -23,7 +24,7 @@ class ImGuiImpl final
 public:
     constexpr static DXGI_FORMAT BUFFER_FORMAT = Window::BUFFER_FORMAT;
 
-    ImGuiImpl(CommandList& commandList, const Window& window);
+    ImGuiImpl(FrameworkDeviceContext& deviceContext, CommandList& commandList, const Window& window);
     ~ImGuiImpl();
 
     bool WantsToCaptureMouse() const;
@@ -47,6 +48,7 @@ private:
         D3D12_CPU_DESCRIPTOR_HANDLE cpuDescriptor,
         D3D12_GPU_DESCRIPTOR_HANDLE gpuDescriptor);
 
+    FrameworkDeviceContext& m_DeviceContext;
     UINT m_SrvDescriptorSize = 0;
     std::vector<bool> m_FreeSrvDescriptors;
     //Modify End

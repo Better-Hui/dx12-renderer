@@ -4,8 +4,10 @@
 
 #include "RayTracingShaderInternal.h"
 
-#include <DX12Library/Application.h>
 #include <DX12Library/Helpers.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/Core/FrameworkDeviceContext.h>
+//Modify End
 
 #include <algorithm>
 
@@ -58,7 +60,7 @@ void RayTracingDispatchTables::EnsureBuilt(
     if (tableFindResult == m_PassTables.end())
     {
         BuiltPassTables builtTables;
-        const auto device = Application::Get().GetDevice();
+        const auto& device = m_DeviceContext.GetDevice();
         const std::wstring passName(pass.Name.begin(), pass.Name.end());
 
         const std::wstring rayGenName = L"Ray Generation Shader Table " + passName;

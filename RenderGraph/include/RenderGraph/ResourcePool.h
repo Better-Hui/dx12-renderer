@@ -9,9 +9,8 @@
 #include <d3d12.h>
 #include <wrl.h>
 
-#include <DX12Library/Window.h>
-
 #include "ResourceId.h"
+#include "RenderGraphQueueFence.h"
 #include "TransientResourceAllocator.h"
 #include "DX12Library/CommandList.h"
 
@@ -31,6 +30,11 @@ namespace RenderGraph
     class ResourcePool
     {
     public:
+//Modify Begin:2026-07-30 by BestHui
+        ResourcePool(
+            std::shared_ptr<CommandQueue> directCommandQueue,
+            std::shared_ptr<CommandQueue> asyncComputeCommandQueue);
+//Modify End
         void BeginFrame(CommandList& commandList);
 
         const Resource& GetResource(ResourceId resourceId) const;
@@ -49,7 +53,7 @@ namespace RenderGraph
         bool IsRegistered(ResourceId resourceId) const;
         const ResourceDescription& GetDescription(ResourceId resourceId) const;
 
-        void Clear();
+        void Clear(const std::map<ResourceId, RenderGraphQueueFenceValues>& resourceRetirements = {});
 //Modify Begin:2026-07-28 by BestHui
         void InitHeaps(
             const std::vector<RenderPass*>& renderPasses,
@@ -96,7 +100,20 @@ namespace RenderGraph
         std::map<ResourceId, TransientResourceAllocator::ResourceLifecycle> m_ResourceLifecycles;
 //Modify End
 
-        std::queue<std::pair<Microsoft::WRL::ComPtr<ID3D12Resource>, uint64_t>> m_DeferredDeletionQueue;
+//Modify Begin:2026-07-30 by BestHui
+        struct DeferredDeletionBatch
+        {
+            RenderGraphQueueFenceValues FenceValues;
+            std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> Resources;
+            std::vector<Microsoft::WRL::ComPtr<ID3D12Heap>> Heaps;
+        };
+
+        bool IsRetirementComplete(const RenderGraphQueueFenceValues& fenceValues) const;
+
+        std::shared_ptr<CommandQueue> m_DirectCommandQueue;
+        std::shared_ptr<CommandQueue> m_AsyncComputeCommandQueue;
+        std::queue<DeferredDeletionBatch> m_DeferredDeletionQueue;
+//Modify End
 
         struct ResourceHeapInfo
         {

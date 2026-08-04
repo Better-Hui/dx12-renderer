@@ -15,6 +15,9 @@
 #include <string>
 
 class ShaderBlob;
+//Modify Begin:2026-07-30 by BestHui
+class FrameworkDeviceContext;
+//Modify End
 
 class RayTracingPipelineState
 {
@@ -37,7 +40,10 @@ private:
 class RayTracingPipelineStateBuilder
 {
 public:
-    RayTracingPipelineStateBuilder(const ShaderBlob& shaderLibrary, RayTracingPipelineDesc desc);
+    RayTracingPipelineStateBuilder(
+        FrameworkDeviceContext& deviceContext,
+        const ShaderBlob& shaderLibrary,
+        RayTracingPipelineDesc desc);
 
     std::shared_ptr<RayTracingPipelineState> Build() const;
 //Modify Begin:2026-07-27 by BestHui
@@ -49,6 +55,9 @@ private:
     Microsoft::WRL::ComPtr<ID3D12StateObject> BuildStateObject(const std::shared_ptr<RootSignature>& globalRootSignature) const;
 
     const ShaderBlob& m_ShaderLibrary;
+//Modify Begin:2026-07-30 by BestHui
+    FrameworkDeviceContext& m_DeviceContext;
+//Modify End
     RayTracingPipelineDesc m_Desc;
 };
 //Modify End

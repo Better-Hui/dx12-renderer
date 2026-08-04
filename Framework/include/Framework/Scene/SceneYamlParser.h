@@ -101,6 +101,10 @@ struct UnityLightInfo
     float Intensity = 1.0f;
     float Range = 10.0f;
     float SpotAngle = 30.0f;
+//Modify Begin:2026-07-30 by BestHui
+    float AngularRadius = 0.009f;
+    float SourceRadius = 0.25f;
+//Modify End
     UnityVector3 AreaSize = { 1.0f, 1.0f, 0.0f };
     UnityTransformInfo Transform;
 };

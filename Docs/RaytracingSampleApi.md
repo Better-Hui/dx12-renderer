@@ -102,6 +102,14 @@ The default sample still appends C++ stress-test spheres for renderer load testi
 
 Current importer limits: no full prefab/nested-prefab support, no complete `SkinnedMeshRenderer` or `LODGroup`, no Unity asset-database cache/live sync, and no automatic coordinate-system conversion. `UnitySceneDump` inspects supported scenes without launching the renderer.
 
+## Soft-shadow variants
+
+`PathTracingPipelineController` selects either hard-shadow or soft-shadow precompiled shader artifacts for both inline ray-query compute and shader-table DXR. The runtime toggle changes pipeline variants; the shader does not branch on a soft-shadow boolean.
+
+Directional lights use `DirectionalLightData::DirectionAndAngularRadius.w`. Point lights expose `PointLight::SourceRadius`, uploaded through `PointLightData::Attenuation.w`. Unity scenes can provide `m_ShadowAngle` / `m_ShadowRadius`, and JSON lights can provide `angularRadius` / `sourceRadius`. Area lights already sample their rectangular emitter surface and do not need a separate hard/soft branch.
+
+The current soft variant uses four shadow samples. This is a sample-quality fixed preset rather than an adaptive production solution.
+
 ## Feature notes
 
 - **Ray tracing:** inline ray query is the default path; shader-table DXR uses ray-generation, miss, and hit groups. Both share scene resources.
@@ -114,8 +122,12 @@ Current importer limits: no full prefab/nested-prefab support, no complete `Skin
 - Descriptor sets are not a full NRI-style persistent GPU descriptor-set lifetime model; GPU-visible tables are still staged by the project descriptor-heap machinery.
 - Sampler reflection/binding and root constants/root descriptors are not fully unified.
 - Pipeline cache keys do not yet represent every raster, compute, and DXR state dimension.
+- Soft-shadow quality is currently fixed at four samples; no runtime quality presets or adaptive sampling are available.
 - RenderGraph supports explicit async queue placement but no automatic scheduling or Copy-queue path.
-- `RenderGraphRoot::Execute` still combines pass execution and profiler orchestration even though queue and resource-state ownership have been split into dedicated components.
+- `RenderGraphRoot::Execute` is now a graph entry point. `RenderGraphCommandExecutor` owns pass recording/submission, while `RenderGraphProfiler` owns optional per-queue timestamp lifetime and markers.
+- Transient resources are retired from actual Direct/Async Compute fence values. Aliasing is conservative and only combines lifetimes that are proven to use the same queue; cross-queue aliasing is intentionally disabled.
+- Pass construction uses explicit `RaytracingDemoPassResources` and `RaytracingDemoPassConfig` rather than capturing `RaytracingDemo&` or using friend access.
+- Scene-to-GPU conversion is organized by four builders: texture/material, geometry, meshlet, and RTAS. `RaytracingDemoSceneResources` remains the sample-facing facade.
 - Transient-resource aliasing/lifetime planning is not yet fully queue-fence-aware.
 - DLSS/Streamline is not integrated.
 

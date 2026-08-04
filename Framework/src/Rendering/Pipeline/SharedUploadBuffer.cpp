@@ -3,11 +3,14 @@
 #include <d3dx12.h>
 
 #include <DX12Library/Helpers.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/Core/FrameworkDeviceContext.h>
+//Modify End
 
-void SharedUploadBuffer::BeginFrame()
+void SharedUploadBuffer::BeginFrame(const uint64_t frameIndex)
 {
-    const auto frameCount = Application::GetFrameCount();
-    auto& bufferInfo = GetBufferInfoForFrame(frameCount);
+    m_FrameIndex = frameIndex;
+    auto& bufferInfo = GetBufferInfoForFrame(m_FrameIndex);
     if (bufferInfo.m_Buffer != nullptr)
     {
         bufferInfo.m_DataCur = bufferInfo.m_DataBegin;
@@ -16,8 +19,7 @@ void SharedUploadBuffer::BeginFrame()
 
 void SharedUploadBuffer::Upload(CommandList& commandList, const Resource& destination, const void* pData, const uint64_t sizeInBytes, const uint64_t alignment, const uint64_t destinationOffset)
 {
-    const auto frameCount = Application::GetFrameCount();
-    auto& bufferInfo = GetBufferInfoForFrame(frameCount);
+    auto& bufferInfo = GetBufferInfoForFrame(m_FrameIndex);
     uint8_t* pUploadPtr = SuballocateFromBuffer(bufferInfo, sizeInBytes, alignment);
     memcpy(pUploadPtr, pData, sizeInBytes);
 
@@ -42,7 +44,7 @@ SharedUploadBuffer::BufferInfo& SharedUploadBuffer::GetBufferInfoForFrame(const 
     return m_BufferInfos[frameCount % BUFFER_COUNT];
 }
 
-uint8_t* SharedUploadBuffer::SuballocateFromBuffer(BufferInfo& bufferInfo, const uint64_t size, const uint64_t alignment)
+uint8_t* SharedUploadBuffer::SuballocateFromBuffer(BufferInfo& bufferInfo, const uint64_t size, const uint64_t alignment) const
 {
     const auto currentAlignedOffset = Math::AlignUp(bufferInfo.GetCurrentUsedSize(), alignment);
     const auto newSize = currentAlignedOffset + size;
@@ -51,7 +53,7 @@ uint8_t* SharedUploadBuffer::SuballocateFromBuffer(BufferInfo& bufferInfo, const
     return bufferInfo.m_DataBegin + currentAlignedOffset;
 }
 
-void SharedUploadBuffer::EnsureBufferCapacity(BufferInfo& bufferInfo, const uint64_t capacity)
+void SharedUploadBuffer::EnsureBufferCapacity(BufferInfo& bufferInfo, const uint64_t capacity) const
 {
     if (bufferInfo.m_Buffer == nullptr || bufferInfo.m_Buffer->GetDesc().Width < capacity)
     {
@@ -72,9 +74,9 @@ void SharedUploadBuffer::EnsureBufferCapacity(BufferInfo& bufferInfo, const uint
     }
 }
 
-Microsoft::WRL::ComPtr<ID3D12Resource> SharedUploadBuffer::CreateBuffer(const uint64_t capacity)
+Microsoft::WRL::ComPtr<ID3D12Resource> SharedUploadBuffer::CreateBuffer(const uint64_t capacity) const
 {
-    const auto pDevice = Application::Get().GetDevice();
+    const auto pDevice = m_DeviceContext.GetDevice();
 
     const auto heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
     const auto resourceDesc = CD3DX12_RESOURCE_DESC::Buffer(capacity);

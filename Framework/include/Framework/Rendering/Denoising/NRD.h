@@ -13,6 +13,9 @@
 
 class CommandList;
 class ComputeShader;
+//Modify Begin:2026-07-30 by BestHui
+class FrameworkDeviceContext;
+//Modify End
 class Resource;
 class Texture;
 
@@ -76,7 +79,7 @@ public:
         bool ReblurEnableAntiFirefly = true;
     };
 
-    NRD();
+    explicit NRD(FrameworkDeviceContext& deviceContext);
     ~NRD();
 
     bool IsAvailable() const { return m_Available; }
@@ -171,6 +174,9 @@ private:
         uint32_t height,
         const ResourceTransitionCallback& transitionResource);
 
+    //Modify Begin:2026-07-30 by BestHui
+    FrameworkDeviceContext& m_DeviceContext;
+    //Modify End
     std::unique_ptr<ComputeShader> m_PrepareShader;
     std::unique_ptr<ComputeShader> m_CompositeShader;
     std::unique_ptr<class NRDImpl> m_Impl;

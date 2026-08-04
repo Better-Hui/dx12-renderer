@@ -32,6 +32,9 @@
 //Modify End
 
 class CommandContext;
+//Modify Begin:2026-07-30 by BestHui
+class FrameworkDeviceContext;
+//Modify End
 //Modify Begin:2026-07-31 by BestHui
 class IndirectDrawCommandSignature;
 //Modify End
@@ -41,10 +44,12 @@ class Shader
 public:
 //Modify Begin:2026-07-27 by BestHui
 	explicit Shader(
+		FrameworkDeviceContext& deviceContext,
 		const ShaderBlob& vertexShaderPath,
 		const ShaderBlob& pixelShaderPath,
 		const std::function<void(RasterPipelineStateBuilder&)> buildPipelineState = [](RasterPipelineStateBuilder&) {});
 	explicit Shader(
+		FrameworkDeviceContext& deviceContext,
 		const ShaderBlob& vertexShaderPath,
 		const ShaderBlob& pixelShaderPath,
 		PipelineLayoutReflectionOptions layoutOptions,
@@ -91,6 +96,9 @@ public:
 //Modify End
 
 private:
+//Modify Begin:2026-07-30 by BestHui
+	FrameworkDeviceContext& GetDeviceContext() const { return m_DeviceContext; }
+//Modify End
 //Modify Begin:2026-07-29 by BestHui
 	friend class CommandContext;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> GetPipelineState(const Microsoft::WRL::ComPtr<ID3D12Device2>& device, const RenderTargetState& renderTargetState);
@@ -108,6 +116,7 @@ private:
 	const PipelineDescriptorRangeDesc* FindPipelineBinding(const std::string& variableName, DescriptorBindingKind expectedKind) const;
 //Modify End
 
+	FrameworkDeviceContext& m_DeviceContext;
 	std::shared_ptr<RootSignature> m_RootSignature;
 
 	ShaderMetadata m_VertexShaderMetadata;

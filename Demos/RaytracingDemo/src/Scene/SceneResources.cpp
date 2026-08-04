@@ -28,15 +28,6 @@ using namespace DirectX;
 
 namespace
 {
-    Microsoft::WRL::ComPtr<ID3D12Device5> GetRayTracingDevice(const Microsoft::WRL::ComPtr<ID3D12Device2>& device)
-    {
-        Assert(device != nullptr, "Raytracing demo scene resources require a D3D12 device.");
-
-        Microsoft::WRL::ComPtr<ID3D12Device5> rayTracingDevice;
-        ThrowIfFailed(device.As(&rayTracingDevice));
-        return rayTracingDevice;
-    }
-
     std::string ToLower(std::string value)
     {
         std::transform(value.begin(), value.end(), value.begin(), [](const unsigned char character)
@@ -225,33 +216,19 @@ namespace
 }
 
 RaytracingDemoSceneResources::RaytracingDemoSceneResources(Microsoft::WRL::ComPtr<ID3D12Device2> device)
-    : m_MaterialBuffer(L"Ray Tracing Materials")
-    , m_GeometryBuffer(L"Ray Tracing Geometry Data")
-    , m_BindlessDescriptorHeap(*device.Get())
-    , m_RayTracingAccelerationStructure(GetRayTracingDevice(device))
+    : m_TextureMaterialResources(device)
+    , m_RayTracingResources(std::move(device))
 {
 }
 
 void RaytracingDemoSceneResources::Clear()
 {
-    m_GeometryBuffer = StructuredBuffer(L"Ray Tracing Geometry Data");
-    m_MaterialBuffer = StructuredBuffer(L"Ray Tracing Materials");
-//Modify Begin:2026-07-30 by BestHui
-    m_BindlessDescriptorHeap.Reset();
-//Modify End
-//Modify Begin:2026-07-31 by BestHui
-//Modify Begin:2026-07-30 by BestHui
-    m_MeshletSceneResources.Clear();
-//Modify End
-//Modify End
-    m_SceneGeometries.clear();
-    m_SceneObjects.clear();
-    m_Materials.clear();
-    m_Textures.clear();
+    m_TextureMaterialResources.Clear();
+    m_GeometryResources.Clear();
+    m_MeshletResources.Clear();
+    m_RayTracingResources.Clear();
 //Modify Begin:2026-07-30 by BestHui
     m_StressTestSphereObjects.clear();
-    m_StressTestSphereMeshletInstances.clear();
-    m_StressTestSphereRayTracingInstances.clear();
     m_StressTestSphereObjectStart = 0;
     m_StressTestSpheresEnabled = true;
 //Modify End
@@ -259,22 +236,12 @@ void RaytracingDemoSceneResources::Clear()
 
 uint32_t RaytracingDemoSceneResources::AddTexture(CommandList& commandList, const std::wstring& path, TextureUsageType usage)
 {
-    auto texture = std::make_shared<Texture>();
-    commandList.LoadTextureFromFile(*texture, path, usage);
-//Modify Begin:2026-07-30 by BestHui
-    const uint32_t textureIndex = static_cast<uint32_t>(m_Textures.size());
-    m_BindlessDescriptorHeap.AddShaderResourceView(*texture);
-//Modify End
-    m_Textures.push_back(texture);
-//Modify Begin:2026-07-30 by BestHui
-    return textureIndex;
-//Modify End
+    return m_TextureMaterialResources.AddTexture(commandList, path, usage);
 }
 
 uint32_t RaytracingDemoSceneResources::AddMaterial(const RaytracingDemoMaterialData& material)
 {
-    m_Materials.push_back(material);
-    return static_cast<uint32_t>(m_Materials.size() - 1);
+    return m_TextureMaterialResources.AddMaterial(material);
 }
 
 uint32_t RaytracingDemoSceneResources::AddPbrMaterial(
@@ -293,23 +260,21 @@ uint32_t RaytracingDemoSceneResources::AddPbrMaterial(
     const bool hasRoughnessMap,
     const bool hasAmbientOcclusionMap)
 {
-    RaytracingDemoMaterialData material{};
-    material.Diffuse = diffuse;
-    material.Specular = { 0.04f, 0.04f, 0.04f, 1.0f };
-    material.TilingOffset = tilingOffset;
-    material.DiffuseTextureIndex = diffuseTextureIndex;
-    material.NormalTextureIndex = normalTextureIndex;
-    material.MetallicTextureIndex = metallicTextureIndex;
-    material.RoughnessTextureIndex = roughnessTextureIndex;
-    material.AmbientOcclusionTextureIndex = ambientOcclusionTextureIndex;
-    material.HasDiffuseMap = hasDiffuseMap ? 1u : 0u;
-    material.HasNormalMap = hasNormalMap ? 1u : 0u;
-    material.HasMetallicMap = hasMetallicMap ? 1u : 0u;
-    material.HasRoughnessMap = hasRoughnessMap ? 1u : 0u;
-    material.HasAmbientOcclusionMap = hasAmbientOcclusionMap ? 1u : 0u;
-    material.Metallic = metallic;
-    material.Roughness = roughness;
-    return AddMaterial(material);
+    return m_TextureMaterialResources.AddPbrMaterial(
+        diffuse,
+        tilingOffset,
+        diffuseTextureIndex,
+        normalTextureIndex,
+        metallicTextureIndex,
+        roughnessTextureIndex,
+        ambientOcclusionTextureIndex,
+        metallic,
+        roughness,
+        hasDiffuseMap,
+        hasNormalMap,
+        hasMetallicMap,
+        hasRoughnessMap,
+        hasAmbientOcclusionMap);
 }
 
 uint32_t RaytracingDemoSceneResources::AddDiffuseMaterial(
@@ -319,47 +284,21 @@ uint32_t RaytracingDemoSceneResources::AddDiffuseMaterial(
     const float metallic,
     const float roughness)
 {
-    return AddPbrMaterial(
+    return m_TextureMaterialResources.AddDiffuseMaterial(
         diffuse,
         tilingOffset,
         diffuseTextureIndex,
-        diffuseTextureIndex,
-        diffuseTextureIndex,
-        diffuseTextureIndex,
-        diffuseTextureIndex,
         metallic,
-        roughness,
-        true);
+        roughness);
 }
-
-//Modify Begin:2026-07-30 by BestHui
-std::vector<ShaderResourceView> RaytracingDemoSceneResources::CreateTextureShaderResourceViews() const
-{
-    std::vector<ShaderResourceView> shaderResourceViews;
-    shaderResourceViews.reserve(m_Textures.size());
-    for (const std::shared_ptr<Texture>& texture : m_Textures)
-    {
-        shaderResourceViews.emplace_back(texture);
-    }
-    return shaderResourceViews;
-}
-//Modify End
 
 //Modify Begin:2026-07-30 by BestHui
 void RaytracingDemoSceneResources::TransitionRayTracingShaderResources(
     CommandList& commandList,
     const D3D12_RESOURCE_STATES stateAfter) const
 {
-    for (const std::shared_ptr<Texture>& texture : m_Textures)
-    {
-        commandList.TransitionBarrier(*texture, stateAfter);
-    }
-
-    for (const std::shared_ptr<Mesh>& mesh : m_RayTracingAccelerationStructure.GetMeshes())
-    {
-        commandList.TransitionBarrier(mesh->GetVertexBuffer(), stateAfter);
-        commandList.TransitionBarrier(mesh->GetIndexBuffer(), stateAfter);
-    }
+    m_TextureMaterialResources.TransitionTextures(commandList, stateAfter);
+    m_RayTracingResources.TransitionShaderResources(commandList, stateAfter);
 }
 //Modify End
 
@@ -564,7 +503,7 @@ bool RaytracingDemoSceneResources::LoadScene(
     UploadMeshletBuffers(commandList);
 //Modify End
 
-    return !m_SceneObjects.empty();
+    return !m_GeometryResources.GetObjects().empty();
 }
 
 std::vector<uint32_t> RaytracingDemoSceneResources::LoadSceneMaterials(
@@ -691,9 +630,7 @@ uint32_t RaytracingDemoSceneResources::AddSceneGeometry(
     std::vector<MeshPrototype> prototypes)
 {
     Assert(model != nullptr, "Scene geometry model must not be null.");
-    const uint32_t geometryIndex = static_cast<uint32_t>(m_SceneGeometries.size());
-    m_SceneGeometries.push_back({ model, std::move(prototypes) });
-    return geometryIndex;
+    return m_GeometryResources.AddGeometry(model, std::move(prototypes));
 }
 
 void RaytracingDemoSceneResources::AddSceneObject(
@@ -701,35 +638,18 @@ void RaytracingDemoSceneResources::AddSceneObject(
     const uint32_t geometryIndex,
     const uint32_t materialIndex)
 {
-    Assert(geometryIndex < m_SceneGeometries.size(), "Scene object geometry index is invalid.");
-    m_SceneObjects.push_back({ worldMatrix, geometryIndex, materialIndex });
+    m_GeometryResources.AddObject(worldMatrix, geometryIndex, materialIndex);
 }
 
 //Modify Begin:2026-07-30 by BestHui
 void RaytracingDemoSceneResources::InitializeMeshletSceneResources()
 {
-    std::vector<MeshletSceneGeometrySource> meshletGeometries;
-    meshletGeometries.reserve(m_SceneGeometries.size());
-    for (const RaytracingDemoSceneGeometry& geometry : m_SceneGeometries)
-    {
-        meshletGeometries.push_back({ &geometry.MeshPrototypes });
-    }
-
-    m_MeshletSceneResources.Clear();
-    m_MeshletSceneResources.InitializeGeometries(meshletGeometries);
-    m_StressTestSphereMeshletInstances.clear();
-    for (size_t objectIndex = 0; objectIndex < m_SceneObjects.size(); ++objectIndex)
-    {
-        const RaytracingDemoSceneObject& object = m_SceneObjects[objectIndex];
-        const MeshletSceneInstanceHandle instanceHandle = m_MeshletSceneResources.AddInstance(
-            { object.WorldMatrix, object.GeometryIndex, object.MaterialIndex });
-        if (m_StressTestSpheresEnabled &&
-            !m_StressTestSphereObjects.empty() &&
-            objectIndex >= m_StressTestSphereObjectStart)
-        {
-            m_StressTestSphereMeshletInstances.push_back(instanceHandle);
-        }
-    }
+    m_MeshletResources.Initialize(
+        m_GeometryResources.GetGeometries(),
+        m_GeometryResources.GetObjects(),
+        m_StressTestSphereObjectStart,
+        m_StressTestSphereObjects.size(),
+        m_StressTestSpheresEnabled);
 }
 //Modify End
 
@@ -737,7 +657,7 @@ void RaytracingDemoSceneResources::AddStressTestSpheres(CommandList& commandList
 {
 //Modify Begin:2026-07-30 by BestHui
     m_StressTestSphereObjects.clear();
-    m_StressTestSphereObjectStart = m_SceneObjects.size();
+    m_StressTestSphereObjectStart = m_GeometryResources.GetObjects().size();
 //Modify End
     ModelLoader modelLoader;
     MeshPrototype spherePrototype = CreateStressSpherePrototype(1.0f, 12);
@@ -790,10 +710,7 @@ void RaytracingDemoSceneResources::AddStressTestSpheres(CommandList& commandList
 //Modify Begin:2026-07-30 by BestHui
     if (m_StressTestSpheresEnabled)
     {
-        m_SceneObjects.insert(
-            m_SceneObjects.end(),
-            m_StressTestSphereObjects.begin(),
-            m_StressTestSphereObjects.end());
+        m_GeometryResources.AppendObjects(m_StressTestSphereObjects);
     }
 //Modify End
 }
@@ -809,43 +726,26 @@ bool RaytracingDemoSceneResources::SetStressTestSpheresEnabled(CommandList& comm
     Assert(!m_StressTestSphereObjects.empty(), "Stress test sphere objects have not been initialized.");
     if (enabled)
     {
-        m_StressTestSphereObjectStart = m_SceneObjects.size();
-        m_SceneObjects.insert(
-            m_SceneObjects.end(),
-            m_StressTestSphereObjects.begin(),
-            m_StressTestSphereObjects.end());
-        for (const RaytracingDemoSceneObject& object : m_StressTestSphereObjects)
-        {
-            m_StressTestSphereMeshletInstances.push_back(m_MeshletSceneResources.AddInstance(
-                { object.WorldMatrix, object.GeometryIndex, object.MaterialIndex }));
-            AddRayTracingInstances(
-                m_RayTracingAccelerationStructure,
-                object,
-                &m_StressTestSphereRayTracingInstances);
-        }
+        m_StressTestSphereObjectStart = m_GeometryResources.GetObjects().size();
+        m_GeometryResources.AppendObjects(m_StressTestSphereObjects);
+        m_MeshletResources.AddStressInstances(m_StressTestSphereObjects);
+        m_RayTracingResources.AddStressInstances(
+            m_GeometryResources.GetGeometries(),
+            m_StressTestSphereObjects);
     }
     else
     {
-        for (const MeshletSceneInstanceHandle handle : m_StressTestSphereMeshletInstances)
-        {
-            Assert(m_MeshletSceneResources.RemoveInstance(handle), "Stress test meshlet instance handle is invalid.");
-        }
-        m_StressTestSphereMeshletInstances.clear();
-        for (const RayTracingInstanceHandle handle : m_StressTestSphereRayTracingInstances)
-        {
-            Assert(m_RayTracingAccelerationStructure.RemoveInstance(handle), "Stress test ray tracing instance handle is invalid.");
-        }
-        m_StressTestSphereRayTracingInstances.clear();
+        m_MeshletResources.RemoveStressInstances();
+        m_RayTracingResources.RemoveStressInstances();
 
         const size_t stressTestSphereObjectEnd = m_StressTestSphereObjectStart + m_StressTestSphereObjects.size();
-        Assert(stressTestSphereObjectEnd == m_SceneObjects.size(), "Stress test sphere objects must remain at the end of the scene.");
-        m_SceneObjects.resize(m_StressTestSphereObjectStart);
+        Assert(stressTestSphereObjectEnd == m_GeometryResources.GetObjects().size(), "Stress test sphere objects must remain at the end of the scene.");
+        m_GeometryResources.ResizeObjects(m_StressTestSphereObjectStart);
     }
 
     m_StressTestSpheresEnabled = enabled;
     UploadMeshletBuffers(commandList);
-    m_RayTracingAccelerationStructure.Update(commandList);
-    UploadRayTracingGeometryBuffer(commandList, m_RayTracingAccelerationStructure);
+    m_RayTracingResources.Update(commandList, m_TextureMaterialResources.GetBindlessDescriptorHeap());
     return true;
 }
 //Modify End
@@ -853,7 +753,7 @@ bool RaytracingDemoSceneResources::SetStressTestSpheresEnabled(CommandList& comm
 void RaytracingDemoSceneResources::UploadMeshletBuffers(CommandList& commandList)
 {
 //Modify Begin:2026-07-30 by BestHui
-    m_MeshletSceneResources.Upload(commandList);
+    m_MeshletResources.Upload(commandList);
 //Modify End
 }
 //Modify End
@@ -862,75 +762,15 @@ void RaytracingDemoSceneResources::BuildRayTracingAccelerationStructure(
     CommandList& commandList,
     const RayTracingAccelerationStructureBuildSettings settings)
 {
-    m_RayTracingAccelerationStructure.ClearInstances();
-    m_StressTestSphereRayTracingInstances.clear();
-    for (size_t objectIndex = 0; objectIndex < m_SceneObjects.size(); ++objectIndex)
-    {
-        std::vector<RayTracingInstanceHandle>* instanceHandles =
-            m_StressTestSpheresEnabled &&
-            !m_StressTestSphereObjects.empty() &&
-            objectIndex >= m_StressTestSphereObjectStart
-            ? &m_StressTestSphereRayTracingInstances
-            : nullptr;
-        AddRayTracingInstances(m_RayTracingAccelerationStructure, m_SceneObjects[objectIndex], instanceHandles);
-    }
-    m_RayTracingAccelerationStructure.Build(commandList, settings);
-    UploadRayTracingMaterialBuffer(commandList);
-    UploadRayTracingGeometryBuffer(commandList, m_RayTracingAccelerationStructure);
-}
-
-void RaytracingDemoSceneResources::AddRayTracingInstances(
-    RayTracingAccelerationStructure& accelerationStructure,
-    const RaytracingDemoSceneObject& object,
-    std::vector<RayTracingInstanceHandle>* instanceHandles) const
-{
-    Assert(object.GeometryIndex < m_SceneGeometries.size(), "Scene object geometry index is invalid.");
-    const RaytracingDemoSceneGeometry& geometry = m_SceneGeometries[object.GeometryIndex];
-    for (const std::shared_ptr<Mesh>& mesh : geometry.Model->GetMeshes())
-    {
-        const RayTracingInstanceHandle handle = accelerationStructure.AddInstance({
-            mesh,
-            object.WorldMatrix,
-            object.MaterialIndex
-        });
-        if (instanceHandles != nullptr)
-        {
-            instanceHandles->push_back(handle);
-        }
-    }
-}
-
-void RaytracingDemoSceneResources::UploadRayTracingMaterialBuffer(CommandList& commandList)
-{
-    commandList.CopyStructuredBuffer(m_MaterialBuffer, m_Materials);
-}
-
-void RaytracingDemoSceneResources::UploadRayTracingGeometryBuffer(
-    CommandList& commandList,
-    const RayTracingAccelerationStructure& accelerationStructure)
-{
-//Modify Begin:2026-07-30 by BestHui
-    std::vector<RayTracingGeometryData> geometryData = accelerationStructure.GetGeometryData();
-    const std::vector<std::shared_ptr<Mesh>>& meshes = accelerationStructure.GetMeshes();
-    std::vector<uint32_t> vertexBufferDescriptorIndices(meshes.size());
-    std::vector<uint32_t> indexBufferDescriptorIndices(meshes.size());
-
-    for (uint32_t meshIndex = 0; meshIndex < meshes.size(); ++meshIndex)
-    {
-        const Mesh& mesh = *meshes[meshIndex];
-        vertexBufferDescriptorIndices[meshIndex] = m_BindlessDescriptorHeap.AddShaderResourceView(mesh.GetVertexBuffer());
-        indexBufferDescriptorIndices[meshIndex] = m_BindlessDescriptorHeap.AddShaderResourceView(mesh.GetIndexBuffer());
-    }
-
-    for (RayTracingGeometryData& geometry : geometryData)
-    {
-        Assert(geometry.VertexBufferIndex < vertexBufferDescriptorIndices.size(), "Ray tracing vertex buffer descriptor index is invalid.");
-        Assert(geometry.IndexBufferIndex < indexBufferDescriptorIndices.size(), "Ray tracing index buffer descriptor index is invalid.");
-        geometry.VertexBufferIndex = vertexBufferDescriptorIndices[geometry.VertexBufferIndex];
-        geometry.IndexBufferIndex = indexBufferDescriptorIndices[geometry.IndexBufferIndex];
-    }
-
-    commandList.CopyStructuredBuffer(m_GeometryBuffer, geometryData);
-//Modify End
+    m_TextureMaterialResources.UploadMaterialBuffer(commandList);
+    m_RayTracingResources.Build(
+        commandList,
+        m_GeometryResources.GetGeometries(),
+        m_GeometryResources.GetObjects(),
+        m_StressTestSphereObjectStart,
+        m_StressTestSphereObjects.size(),
+        m_StressTestSpheresEnabled,
+        m_TextureMaterialResources.GetBindlessDescriptorHeap(),
+        settings);
 }
 //Modify End

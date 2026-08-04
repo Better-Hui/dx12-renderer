@@ -1,20 +1,28 @@
 #include <Passes/RaytracingDemoPasses.h>
 
 #include <RenderGraph/RaytracingDemoGraphResources.h>
-#include <RaytracingDemo.h>
 
 #include <DX12Library/CommandList.h>
 #include <Framework/Geometry/Mesh.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/Geometry/Model.h>
+//Modify End
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
 //Modify Begin:2026-07-30 by BestHui
 #include <Framework/Rendering/Texture/UnorderedAccessView.h>
 //Modify End
 #include <RenderGraph/RenderPass.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <Scene/SceneLightManager.h>
+//Modify End
 
 using namespace DirectX;
 
-std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBaseResourcesPass(RaytracingDemo& demo)
+//Modify Begin:2026-07-30 by BestHui
+std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBaseResourcesPass(
+    const RaytracingDemoPassResources& resources,
+    const RaytracingDemoPassConfig& config)
 {
     using namespace RenderGraph;
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
@@ -32,25 +40,30 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
             { DemoResourceIds::DepthBuffer, OutputType::DepthWrite },
             { DemoResourceIds::BaseResourcesFinishedToken, OutputType::Token },
         },
-        [&demo](const RenderContext&, CommandList& cmd)
+        [resources, config](const RenderContext& context, CommandList& cmd)
         {
 //Modify Begin:2026-07-29 by BestHui
 //Modify Begin:2026-07-30 by BestHui
-            if (demo.m_Lights.Upload(cmd))
+            if (resources.Lights.Upload(cmd, context.m_Metadata.m_FrameIndex))
             {
-                demo.BindRayTracingShaderResources();
+                resources.Pipelines.BindRayTracingResources(
+                    resources.Scene.GetRayTracingAccelerationStructure(),
+                    resources.Scene,
+                    resources.Lights,
+                    resources.SkyboxTexture);
             }
 //Modify End
-            demo.m_SceneResources.TransitionRayTracingShaderResources(cmd, D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
+            resources.Scene.TransitionRayTracingShaderResources(cmd, D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
             CommandContext commandContext(cmd);
 //Modify Begin:2026-07-30 by BestHui
-            commandContext.BindBindlessDescriptorHeap(demo.m_SceneResources.GetBindlessDescriptorHeap());
-            MeshletGpuResources meshletResources = demo.m_SceneResources.GetMeshletGpuResources();
-            const bool useMeshletGBuffer = demo.m_UseMeshletGBuffer && meshletResources.IsValid();
-            RaytracingDemo::GBufferDebugConstants debugConstants{};
-            debugConstants.DebugMeshletClusters = (useMeshletGBuffer && demo.m_DebugMeshletClusters) ? 1u : 0u;
+            commandContext.BindBindlessDescriptorHeap(resources.Scene.GetBindlessDescriptorHeap());
+            MeshletGpuResources meshletResources = resources.Scene.GetMeshletGpuResources();
+            const bool useMeshletGBuffer = config.UseMeshletGBuffer != nullptr && *config.UseMeshletGBuffer && meshletResources.IsValid();
+            RaytracingDemoGBufferDebugConstants debugConstants{};
+            debugConstants.DebugMeshletClusters = useMeshletGBuffer &&
+                config.DebugMeshletClusters != nullptr && *config.DebugMeshletClusters ? 1u : 0u;
 //Modify Begin:2026-07-30 by BestHui
-            const std::vector<ShaderResourceView> sceneTextures = demo.m_SceneResources.CreateTextureShaderResourceViews();
+            const std::vector<ShaderResourceView> sceneTextures = resources.Scene.CreateTextureShaderResourceViews();
 //Modify End
             if (useMeshletGBuffer)
             {
@@ -68,7 +81,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
                     uint32_t Padding1 = 0;
                 } cullConstants;
 
-                const Camera::Frustum frustum = demo.GetSceneCamera().GetFrustum();
+                const Camera::Frustum frustum = resources.SceneCamera.GetFrustum();
                 for (uint32_t planeIndex = 0; planeIndex < Camera::Frustum::PLANES_COUNT; ++planeIndex)
                 {
                     const Camera::FrustumPlane& plane = frustum.m_Planes[planeIndex];
@@ -96,17 +109,17 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
                     commandContext.SetStructuredBuffer(shader, "Meshlets", *meshletResources.Meshlets);
                     commandContext.SetStructuredBuffer(shader, "MeshletTransforms", *meshletResources.Transforms);
                     commandContext.SetStructuredBuffer(shader, "MeshletInstances", *meshletResources.Instances);
-                    commandContext.SetStructuredBuffer(shader, "MeshletMaterials", demo.m_SceneResources.GetMaterialBuffer());
+                    commandContext.SetStructuredBuffer(shader, "MeshletMaterials", resources.Scene.GetMaterialBuffer());
                 };
 
-                if (demo.m_UseTaskShaderMeshlets && demo.m_GBufferTaskMeshShader != nullptr)
+                if (config.UseTaskShaderMeshlets != nullptr && *config.UseTaskShaderMeshlets && resources.GBufferTaskMeshShader != nullptr)
                 {
                     constexpr uint32_t MeshletTaskGroupSize = 32;
-                    MeshShader& taskMeshShader = *demo.m_GBufferTaskMeshShader;
+                    MeshShader& taskMeshShader = *resources.GBufferTaskMeshShader;
                     commandContext.BindPipeline(taskMeshShader);
                     bindMeshletDrawResources(taskMeshShader);
                     commandContext.SetConstantBuffer(taskMeshShader, "MeshletCullCBuffer", sizeof(cullConstants), &cullConstants);
-                    const RaytracingDemo::PipelineConstants pipelineConstants = demo.BuildPipelineConstants();
+                    const RaytracingDemoPipelineConstants pipelineConstants = BuildPassPipelineConstants(resources, config);
                     commandContext.SetConstantBuffer(taskMeshShader, "PipelineCBuffer", sizeof(pipelineConstants), &pipelineConstants);
                     commandContext.BindDescriptorSet(taskMeshShader.GetDescriptorSet());
                     commandContext.DispatchMesh((meshletInstanceCount + MeshletTaskGroupSize - 1u) / MeshletTaskGroupSize, 1, 1);
@@ -117,7 +130,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
                 cmd.CopyByteAddressBuffer(meshletIndirectCommands.GetCounterBuffer(), clearCounter);
                 cmd.TransitionBarrier(meshletIndirectCommands.GetCounterBuffer(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-                ComputeShader& cullShader = *demo.m_MeshletCullShader;
+                ComputeShader& cullShader = *resources.MeshletCullShader;
                 commandContext.BindPipeline(cullShader);
 //Modify Begin:2026-07-31 by BestHui
                 commandContext.SetStructuredBuffer(cullShader, "Meshlets", *meshletResources.Meshlets);
@@ -137,52 +150,54 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
                 commandContext.Dispatch((meshletInstanceCount + MeshletCullThreadCount - 1u) / MeshletCullThreadCount, 1, 1);
                 commandContext.InsertDescriptorSetOutputBarriers(cullShader.GetDescriptorSet());
 
-                Shader& indirectShader = *demo.m_GBufferMeshletIndirectShader;
+                Shader& indirectShader = *resources.GBufferMeshletIndirectShader;
                 commandContext.BindPipeline(indirectShader);
 //Modify Begin:2026-07-31 by BestHui
                 bindMeshletDrawResources(indirectShader);
 //Modify End
-                const RaytracingDemo::PipelineConstants pipelineConstants = demo.BuildPipelineConstants();
+                const RaytracingDemoPipelineConstants pipelineConstants = BuildPassPipelineConstants(resources, config);
                 commandContext.SetConstantBuffer(indirectShader, "PipelineCBuffer", sizeof(pipelineConstants), &pipelineConstants);
                 commandContext.BindDescriptorSet(indirectShader.GetDescriptorSet());
                 cmd.SetPrimitiveTopology(Mesh::PRIMITIVE_TOPOLOGY);
                 commandContext.DrawIndirect(
-                    *demo.m_MeshletDrawCommandSignature,
+                    *resources.MeshletDrawCommandSignature,
                     meshletInstanceCount,
                     meshletIndirectCommands);
                 return;
             }
 //Modify End
-            commandContext.BindPipeline(*demo.m_GBufferShader);
+            commandContext.BindPipeline(*resources.GBufferShader);
 //Modify Begin:2026-07-30 by BestHui
-            if (demo.m_GBufferShader->HasShaderResourceView("BindlessTextures"))
+            if (resources.GBufferShader->HasShaderResourceView("BindlessTextures"))
             {
 //Modify Begin:2026-07-31 by BestHui
-                commandContext.SetShaderResourceViews(*demo.m_GBufferShader, "BindlessTextures", sceneTextures);
+                commandContext.SetShaderResourceViews(*resources.GBufferShader, "BindlessTextures", sceneTextures);
 //Modify End
             }
 //Modify End
-            commandContext.SetConstantBuffer(*demo.m_GBufferShader, "GBufferDebugCBuffer", sizeof(debugConstants), &debugConstants);
+            commandContext.SetConstantBuffer(*resources.GBufferShader, "GBufferDebugCBuffer", sizeof(debugConstants), &debugConstants);
 //Modify End
 
-            const XMMATRIX viewProjection = demo.GetSceneCamera().GetViewMatrix() * demo.GetSceneCamera().GetProjectionMatrix();
-            const XMMATRIX previousViewProjection = demo.m_HasPreviousViewProjection ? demo.m_PreviousViewProjection : viewProjection;
-            const auto& sceneObjects = demo.m_SceneResources.GetSceneObjects();
-            const auto& sceneGeometries = demo.m_SceneResources.GetSceneGeometries();
-            const auto& materials = demo.m_SceneResources.GetMaterials();
-            for (const RaytracingDemo::SceneObject& object : sceneObjects)
+            const XMMATRIX viewProjection = resources.SceneCamera.GetViewMatrix() * resources.SceneCamera.GetProjectionMatrix();
+            const XMMATRIX previousViewProjection = config.HasPreviousViewProjection != nullptr && *config.HasPreviousViewProjection && config.PreviousViewProjection != nullptr
+                ? *config.PreviousViewProjection
+                : viewProjection;
+            const auto& sceneObjects = resources.Scene.GetSceneObjects();
+            const auto& sceneGeometries = resources.Scene.GetSceneGeometries();
+            const auto& materials = resources.Scene.GetMaterials();
+            for (const RaytracingDemoSceneObject& object : sceneObjects)
             {
-                const RaytracingDemo::MaterialData& material = materials[object.MaterialIndex];
+                const RaytracingDemoMaterialData& material = materials[object.MaterialIndex];
                 const RaytracingDemoSceneGeometry& geometry = sceneGeometries[object.GeometryIndex];
 
-                RaytracingDemo::ModelConstants modelConstants{};
+                RaytracingDemoModelConstants modelConstants{};
                 modelConstants.Model = object.WorldMatrix;
                 modelConstants.ModelViewProjection = object.WorldMatrix * viewProjection;
                 modelConstants.InverseTransposeModel = XMMatrixTranspose(XMMatrixInverse(nullptr, object.WorldMatrix));
                 modelConstants.PreviousModelViewProjection = object.WorldMatrix * previousViewProjection;
-                commandContext.SetConstantBuffer(*demo.m_GBufferShader, "ModelCBuffer", sizeof(modelConstants), &modelConstants);
+                commandContext.SetConstantBuffer(*resources.GBufferShader, "ModelCBuffer", sizeof(modelConstants), &modelConstants);
 
-                RaytracingDemo::GBufferMaterialConstants materialConstants{};
+                RaytracingDemoGBufferMaterialConstants materialConstants{};
                 materialConstants.Diffuse = material.Diffuse;
                 materialConstants.Specular = material.Specular;
                 materialConstants.TilingOffset = material.TilingOffset;
@@ -200,10 +215,10 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
                 materialConstants.HasMetallicMap = material.HasMetallicMap;
                 materialConstants.HasRoughnessMap = material.HasRoughnessMap;
                 materialConstants.HasAmbientOcclusionMap = material.HasAmbientOcclusionMap;
-                commandContext.SetConstantBuffer(*demo.m_GBufferShader, "MaterialCBuffer", sizeof(materialConstants), &materialConstants);
+                commandContext.SetConstantBuffer(*resources.GBufferShader, "MaterialCBuffer", sizeof(materialConstants), &materialConstants);
 
 //Modify Begin:2026-07-29 by BestHui
-                commandContext.BindDescriptorSet(demo.m_GBufferShader->GetDescriptorSet());
+                commandContext.BindDescriptorSet(resources.GBufferShader->GetDescriptorSet());
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
                 for (const auto& mesh : geometry.Model->GetMeshes())
@@ -215,3 +230,4 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
             }
         });
 }
+//Modify End

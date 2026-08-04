@@ -4,15 +4,14 @@
 #include <functional>
 #include <set>
 #include <queue>
-#include <string>
+//Modify Begin:2026-07-30 by BestHui
+#include <utility>
+//Modify End
 
 #include <d3d12.h>
 #include <d3dx12.h>
 
 #include <DX12Library/Helpers.h>
-//Modify Begin:2026-07-29 by BestHui
-#include <DX12Library/GpuTimestampProfiler.h>
-//Modify End
 #include <DX12Library/StructuredBuffer.h>
 #include <DX12Library/Texture.h>
 
@@ -20,19 +19,6 @@
 
 namespace
 {
-//Modify Begin:2026-07-29 by BestHui
-    std::string NarrowPassName(const std::wstring& passName)
-    {
-        std::string result;
-        result.reserve(passName.size());
-        for (const wchar_t character : passName)
-        {
-            result.push_back(character >= 0 && character < 128 ? static_cast<char>(character) : '?');
-        }
-        return result;
-    }
-//Modify End
-
 //Modify Begin:2026-07-29 by BestHui
     bool TryGetInputTransition(
         const RenderGraph::InputType inputType,
@@ -102,39 +88,6 @@ namespace
             outputType == RenderGraph::OutputType::ExternalAccess ||
             outputType == RenderGraph::OutputType::CopyDestination;
     }
-//Modify End
-
-//Modify Begin:2026-08-03 by BestHui
-    bool IsAsyncComputeInput(const RenderGraph::InputType inputType)
-    {
-        return inputType == RenderGraph::InputType::Token ||
-            inputType == RenderGraph::InputType::ShaderResource ||
-            inputType == RenderGraph::InputType::NonPixelShaderResource ||
-            inputType == RenderGraph::InputType::CopySource ||
-            inputType == RenderGraph::InputType::IndirectArgument;
-    }
-
-    bool IsAsyncComputeOutput(const RenderGraph::OutputType outputType)
-    {
-        return outputType == RenderGraph::OutputType::Token ||
-            outputType == RenderGraph::OutputType::UnorderedAccess ||
-            outputType == RenderGraph::OutputType::CopyDestination;
-    }
-//Modify End
-
-//Modify Begin:2026-08-03 by BestHui
-    D3D12_RESOURCE_STATES GetQueueResourceState(
-        const RenderGraph::RenderPassQueue queue,
-        const D3D12_RESOURCE_STATES state)
-    {
-        if (queue == RenderGraph::RenderPassQueue::AsyncCompute &&
-            state == D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE)
-        {
-            return D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-        }
-        return state;
-    }
-
 //Modify End
 
     bool DirectlyDependsOn(const RenderGraph::RenderPass& pass1, const RenderGraph::RenderPass& pass2)
@@ -330,6 +283,11 @@ namespace
 }
 
 RenderGraph::RenderGraphRoot::RenderGraphRoot(
+//Modify Begin:2026-07-30 by BestHui
+    Microsoft::WRL::ComPtr<ID3D12Device2> device,
+    std::shared_ptr<CommandQueue> directCommandQueue,
+    std::shared_ptr<CommandQueue> asyncComputeCommandQueue,
+//Modify End
     std::vector<std::unique_ptr<RenderPass>>&& renderPasses,
     std::vector<TextureDescription>&& textures,
     std::vector<BufferDescription>&& buffers,
@@ -338,9 +296,12 @@ RenderGraph::RenderGraphRoot::RenderGraphRoot(
     , std::vector<ResourceId> externalOutputs
 //Modify End
 )
-    : m_DirectCommandQueue(Application::Get().GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT))
+//Modify Begin:2026-07-30 by BestHui
+    : m_Device(std::move(device))
+    , m_DirectCommandQueue(std::move(directCommandQueue))
 //Modify Begin:2026-08-03 by BestHui
-    , m_AsyncComputeCommandQueue(Application::Get().GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE))
+    , m_AsyncComputeCommandQueue(std::move(asyncComputeCommandQueue))
+//Modify End
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
     , m_QueueScheduler(m_DirectCommandQueue, m_AsyncComputeCommandQueue)
@@ -352,13 +313,30 @@ RenderGraph::RenderGraphRoot::RenderGraphRoot(
 //Modify Begin:2026-07-28 by BestHui
     , m_ExternalOutputIds(std::move(externalOutputs))
 //Modify End
-    , m_ResourcePool(std::make_shared<ResourcePool>())
+//Modify Begin:2026-07-30 by BestHui
+    , m_ResourcePool(std::make_shared<ResourcePool>(m_DirectCommandQueue, m_AsyncComputeCommandQueue))
+//Modify End
 {
+//Modify Begin:2026-07-30 by BestHui
+    Assert(m_Device != nullptr, "Render graph requires a D3D12 device.");
+    Assert(m_DirectCommandQueue != nullptr, "Render graph requires a direct command queue.");
+    Assert(m_AsyncComputeCommandQueue != nullptr, "Render graph requires an async compute command queue.");
+//Modify End
 //Modify Begin:2026-07-28 by BestHui
     if (std::ranges::find(m_ExternalOutputIds, ResourceIds::GRAPH_OUTPUT) == m_ExternalOutputIds.end())
     {
         m_ExternalOutputIds.push_back(ResourceIds::GRAPH_OUTPUT);
     }
+//Modify End
+
+//Modify Begin:2026-07-30 by BestHui
+    m_CommandExecutor = std::make_unique<RenderGraphCommandExecutor>(
+        m_DirectCommandQueue,
+        m_AsyncComputeCommandQueue,
+        m_ResourcePool,
+        m_QueueScheduler,
+        m_ResourceStateTracker,
+        m_Profiler);
 //Modify End
 
     {
@@ -399,287 +377,14 @@ RenderGraph::RenderGraphRoot::RenderGraphRoot(
 
 void RenderGraph::RenderGraphRoot::Execute(const RenderMetadata& renderMetadata)
 {
+//Modify Begin:2026-07-30 by BestHui
     RebuildIfNecessary(renderMetadata);
-
-//Modify Begin:2026-07-30 by BestHui
-    m_QueueScheduler.BeginFrame();
-//Modify End
-
-//Modify Begin:2026-07-28 by BestHui
-    auto pCommandList = m_DirectCommandQueue->GetCommandList();
-//Modify End
-    Assert(!m_ResourceStateTracker.HasPendingBarriers(), "Pending barriers were left from after the previous frame.");
-//Modify Begin:2026-08-03 by BestHui
-    bool directProfilerFrameStarted = false;
-    bool asyncComputeProfilerFrameStarted = false;
-    const RenderPass* lastAsyncComputePass = nullptr;
-    for (const auto& renderPass : m_RenderPassesBuilt)
-    {
-        if (renderPass->GetQueue() == RenderPassQueue::AsyncCompute)
-        {
-            lastAsyncComputePass = renderPass;
-        }
-    }
-//Modify End
-
-    {
-        PIXScopeCPU(L"Render Graph: Execute");
-
-//Modify Begin:2026-07-29 by BestHui
-        if (m_GpuTimestampProfiler != nullptr && m_GpuTimestampProfiler->IsAvailable())
-        {
-            directProfilerFrameStarted = m_GpuTimestampProfiler->BeginFrame(renderMetadata.m_FrameIndex);
-            if (directProfilerFrameStarted)
-            {
-                m_GpuTimestampProfiler->WriteTimestamp(*pCommandList, "RenderGraph.Begin");
-            }
-        }
-//Modify End
-
-        RenderContext context = {};
-        context.m_ResourcePool = m_ResourcePool;
-        context.m_Metadata = renderMetadata;
-//Modify Begin:2026-07-30 by BestHui
-        context.m_ResourceStateTracker = &m_ResourceStateTracker;
-//Modify End
-
-        uint32_t renderPassIndex = 0;
-        m_ResourcePool->BeginFrame(*pCommandList);
-
-//Modify Begin:2026-08-03 by BestHui
-        const auto flushDirectCommandList = [&]()
-        {
-            return m_QueueScheduler.SubmitDirect(pCommandList);
-        };
-
-        const auto prepareQueueDependency = [&](const RenderPass& pass)
-        {
-            const RenderPassQueue queue = pass.GetQueue();
-//Modify Begin:2026-07-30 by BestHui
-            if (queue == RenderPassQueue::AsyncCompute)
-//Modify End
-            {
-                const auto planIt = m_PassResourceStatePlans.find(&pass);
-                Assert(planIt != m_PassResourceStatePlans.end(), "Render pass resource state plan was not built.");
-
-                if (pCommandList == nullptr)
-                {
-                    pCommandList = m_DirectCommandQueue->GetCommandList();
-                }
-
-                for (const PassResourceTransition& transition : planIt->second.InputTransitions)
-                {
-                    if (!m_QueueScheduler.WasLastWrittenBy(transition.Id, RenderPassQueue::Direct))
-                    {
-                        continue;
-                    }
-
-                    const auto& resource = m_ResourcePool->GetResource(transition.Id);
-                    resource.ForEachResourceRecursive([this, queue, &transition](const Resource& r)
-                    {
-                        TransitionBarrier(r, GetQueueResourceState(queue, transition.StateAfter));
-                    });
-                }
-//Modify Begin:2026-08-03 by BestHui
-//Modify Begin:2026-07-30 by BestHui
-                for (const ResourceId outputId : planIt->second.AliasingOutputs)
-                {
-                    const auto& resource = m_ResourcePool->GetResource(outputId);
-                    resource.ForEachResourceRecursive([this](const Resource& r)
-                    {
-                        AliasingBarrier(r);
-                    });
-                }
-//Modify End
-                for (const PassResourceTransition& transition : planIt->second.OutputTransitions)
-                {
-                    const auto& resource = m_ResourcePool->GetResource(transition.Id);
-                    resource.ForEachResourceRecursive([this, queue, &transition](const Resource& r)
-                    {
-                        TransitionBarrier(r, GetQueueResourceState(queue, transition.StateAfter));
-                    });
-                }
-//Modify End
-                FlushBarriers(*pCommandList);
-//Modify Begin:2026-08-03 by BestHui
-                pass.PrepareAsyncCompute(*pCommandList);
-                if (directProfilerFrameStarted)
-                {
-                    const std::string markerName = "Async Prepare." + NarrowPassName(pass.GetPassName());
-                    m_GpuTimestampProfiler->WriteTimestamp(*pCommandList, markerName.c_str());
-                }
-//Modify End
-                const uint64_t producerFenceValue = flushDirectCommandList();
-                m_QueueScheduler.WaitForDirectSubmissionOnAsyncCompute(producerFenceValue);
-            }
-            else
-            {
-                const uint64_t producerFenceValue = m_QueueScheduler.GetCrossQueueProducerFence(pass);
-                if (producerFenceValue == 0)
-                {
-                    return;
-                }
-                if (directProfilerFrameStarted)
-                {
-                    if (pCommandList == nullptr)
-                    {
-                        pCommandList = m_DirectCommandQueue->GetCommandList();
-                    }
-                    m_GpuTimestampProfiler->WriteTimestamp(*pCommandList, "Async Wait.Begin");
-                }
-                flushDirectCommandList();
-                m_QueueScheduler.WaitForAsyncComputeSubmissionOnDirect(producerFenceValue);
-                if (directProfilerFrameStarted)
-                {
-                    pCommandList = m_DirectCommandQueue->GetCommandList();
-                    m_GpuTimestampProfiler->WriteTimestamp(*pCommandList, "Async Wait.End");
-                }
-            }
-        };
-//Modify End
-
-        for (const auto& pRenderPass : m_RenderPassesBuilt)
-        {
-//Modify Begin:2026-08-03 by BestHui
-            Assert(!pRenderPass->IsExternal() || pRenderPass->GetQueue() == RenderPassQueue::Direct,
-                "External render passes must use the direct queue.");
-            if (pRenderPass->GetQueue() == RenderPassQueue::AsyncCompute)
-            {
-                for (const auto& input : pRenderPass->GetInputs())
-                {
-                    Assert(IsAsyncComputeInput(input.m_Type),
-                        "Async compute render passes only support read-only resource inputs.");
-                }
-                for (const auto& output : pRenderPass->GetOutputs())
-                {
-                    Assert(IsAsyncComputeOutput(output.m_Type),
-                        "Async compute render passes cannot write render targets or depth resources.");
-                }
-                prepareQueueDependency(*pRenderPass);
-                auto computeCommandList = m_AsyncComputeCommandQueue->GetCommandList();
-                if (m_AsyncComputeGpuTimestampProfiler != nullptr && m_AsyncComputeGpuTimestampProfiler->IsAvailable())
-                {
-                    if (!asyncComputeProfilerFrameStarted)
-                    {
-                        asyncComputeProfilerFrameStarted = m_AsyncComputeGpuTimestampProfiler->BeginFrame(renderMetadata.m_FrameIndex);
-                        if (asyncComputeProfilerFrameStarted)
-                        {
-                            m_AsyncComputeGpuTimestampProfiler->WriteTimestamp(*computeCommandList, "RenderGraph.Begin");
-                        }
-                    }
-                }
-                context.m_RenderTargetInfo = {};
-                RenderContext& computeContext = context;
-//Modify Begin:2026-07-30 by BestHui
-                PrepareResourcesForRenderPass(
-                    *computeCommandList,
-                    *pRenderPass,
-                    renderPassIndex,
-                    computeContext,
-                    true);
-//Modify End
-                pRenderPass->Execute(computeContext, *computeCommandList);
-                if (m_AsyncComputeGpuTimestampProfiler != nullptr && m_AsyncComputeGpuTimestampProfiler->IsAvailable())
-                {
-                    const std::string passName = NarrowPassName(pRenderPass->GetPassName());
-                    m_AsyncComputeGpuTimestampProfiler->WriteTimestamp(*computeCommandList, passName.c_str());
-                }
-                const bool isLastAsyncComputePass = pRenderPass == lastAsyncComputePass;
-                if (isLastAsyncComputePass && asyncComputeProfilerFrameStarted)
-                {
-                    m_AsyncComputeGpuTimestampProfiler->WriteTimestamp(*computeCommandList, "RenderGraph.End");
-                    m_AsyncComputeGpuTimestampProfiler->ResolveFrame(*computeCommandList);
-                }
-                const uint64_t computeFenceValue = m_QueueScheduler.SubmitAsyncCompute(
-                    computeCommandList,
-                    m_DebugSerializeAsyncCompute);
-                if (isLastAsyncComputePass && asyncComputeProfilerFrameStarted)
-                {
-                    m_AsyncComputeGpuTimestampProfiler->EndFrame(computeFenceValue);
-                }
-                m_QueueScheduler.MarkPassOutputs(*pRenderPass, computeFenceValue);
-                ++renderPassIndex;
-                continue;
-            }
-//Modify End
-            if (pCommandList == nullptr)
-            {
-                pCommandList = m_DirectCommandQueue->GetCommandList();
-            }
-
-            CommandList& cmd = *pCommandList;
-            context.m_RenderTargetInfo = {};
-//Modify Begin:2026-07-28 by BestHui
-            if (pRenderPass->IsExternal())
-            {
-                {
-                    PIXScope(cmd, pRenderPass->GetPassName().c_str());
-                    PrepareResourcesForRenderPass(cmd, *pRenderPass, renderPassIndex, context);
-//Modify Begin:2026-07-29 by BestHui
-                    if (directProfilerFrameStarted)
-                    {
-                        const std::string passName = "BeforeExternal." + NarrowPassName(pRenderPass->GetPassName());
-                        m_GpuTimestampProfiler->WriteTimestamp(cmd, passName.c_str());
-                    }
-//Modify End
-                }
-                flushDirectCommandList();
-
-                pRenderPass->ExecuteExternal(context);
-
-//Modify Begin:2026-07-29 by BestHui
-                if (directProfilerFrameStarted)
-                {
-                    pCommandList = m_DirectCommandQueue->GetCommandList();
-                    const std::string passName = "AfterExternal." + NarrowPassName(pRenderPass->GetPassName());
-                    m_GpuTimestampProfiler->WriteTimestamp(*pCommandList, passName.c_str());
-//Modify Begin:2026-07-30 by BestHui
-                    flushDirectCommandList();
-//Modify End
-                }
-//Modify End
-            }
-            else
-            {
-                PIXScope(cmd, pRenderPass->GetPassName().c_str());
-                PrepareResourcesForRenderPass(cmd, *pRenderPass, renderPassIndex, context);
-                pRenderPass->Execute(context, cmd);
-//Modify Begin:2026-07-29 by BestHui
-                if (directProfilerFrameStarted)
-                {
-                    const std::string passName = NarrowPassName(pRenderPass->GetPassName());
-                    m_GpuTimestampProfiler->WriteTimestamp(cmd, passName.c_str());
-                }
-//Modify End
-            }
-//Modify Begin:2026-08-03 by BestHui
-            m_QueueScheduler.MarkPassOutputs(*pRenderPass, 0u);
-//Modify End
-//Modify End
-
-            renderPassIndex++;
-        }
-    }
-
-//Modify Begin:2026-08-03 by BestHui
-//Modify Begin:2026-07-29 by BestHui
-    if (directProfilerFrameStarted)
-    {
-//Modify Begin:2026-07-30 by BestHui
-        if (pCommandList == nullptr)
-        {
-            pCommandList = m_DirectCommandQueue->GetCommandList();
-        }
-//Modify End
-        m_GpuTimestampProfiler->WriteTimestamp(*pCommandList, "RenderGraph.End");
-        m_GpuTimestampProfiler->ResolveFrame(*pCommandList);
-        const uint64_t fenceValue = m_QueueScheduler.SubmitDirect(pCommandList);
-        m_GpuTimestampProfiler->EndFrame(fenceValue);
-    }
-    else if (pCommandList != nullptr)
-    {
-        m_QueueScheduler.SubmitDirect(pCommandList);
-    }
+    m_CommandExecutor->Execute(
+        renderMetadata,
+        m_RenderPassesBuilt,
+        m_RenderTargets,
+        m_PassResourceStatePlans,
+        m_DebugSerializeAsyncCompute);
 //Modify End
 }
 
@@ -687,7 +392,9 @@ void RenderGraph::RenderGraphRoot::Present(const std::shared_ptr<Window>& pWindo
 {
     const auto& pTexture = m_ResourcePool->GetTexture(resourceId);
 
-    const auto pCommandList = m_DirectCommandQueue->GetCommandList();
+//Modify Begin:2026-07-30 by BestHui
+    auto pCommandList = m_DirectCommandQueue->GetCommandList();
+//Modify End
 
     {
         PIXScope(*pCommandList, L"Render Graph: Prepare Present");
@@ -704,7 +411,10 @@ void RenderGraph::RenderGraphRoot::Present(const std::shared_ptr<Window>& pWindo
         FlushBarriers(*pCommandList);
     }
 
-    m_DirectCommandQueue->ExecuteCommandList(pCommandList);
+//Modify Begin:2026-07-30 by BestHui
+    m_QueueScheduler.TrackExternalResource(resourceId, RenderPassQueue::Direct);
+    m_QueueScheduler.SubmitDirect(pCommandList);
+//Modify End
     pWindow->Present(*pTexture);
 }
 
@@ -716,7 +426,9 @@ void RenderGraph::RenderGraphRoot::PresentWithOverlay(
 {
     const auto& pTexture = m_ResourcePool->GetTexture(resourceId);
 
-    const auto pCommandList = m_DirectCommandQueue->GetCommandList();
+//Modify Begin:2026-07-30 by BestHui
+    auto pCommandList = m_DirectCommandQueue->GetCommandList();
+//Modify End
     auto& commandList = *pCommandList;
 
     {
@@ -751,7 +463,10 @@ void RenderGraph::RenderGraphRoot::PresentWithOverlay(
         }
     }
 
-    m_DirectCommandQueue->ExecuteCommandList(pCommandList);
+//Modify Begin:2026-07-30 by BestHui
+    m_QueueScheduler.TrackExternalResource(resourceId, RenderPassQueue::Direct);
+    m_QueueScheduler.SubmitDirect(pCommandList);
+//Modify End
     pWindow->Present();
 }
 
@@ -763,7 +478,9 @@ void RenderGraph::RenderGraphRoot::PresentWithOverlayBlit(
 {
     const auto& pTexture = m_ResourcePool->GetTexture(resourceId);
 
-    const auto pCommandList = m_DirectCommandQueue->GetCommandList();
+//Modify Begin:2026-07-30 by BestHui
+    auto pCommandList = m_DirectCommandQueue->GetCommandList();
+//Modify End
     auto& commandList = *pCommandList;
 
     {
@@ -786,7 +503,10 @@ void RenderGraph::RenderGraphRoot::PresentWithOverlayBlit(
         }
     }
 
-    m_DirectCommandQueue->ExecuteCommandList(pCommandList);
+//Modify Begin:2026-07-30 by BestHui
+    m_QueueScheduler.TrackExternalResource(resourceId, RenderPassQueue::Direct);
+    m_QueueScheduler.SubmitDirect(pCommandList);
+//Modify End
     pWindow->Present();
 }
 
@@ -798,13 +518,18 @@ void RenderGraph::RenderGraphRoot::TransitionTexture(
 {
     RebuildIfNecessary(renderMetadata);
 
-    const auto pCommandList = m_DirectCommandQueue->GetCommandList();
+//Modify Begin:2026-07-30 by BestHui
+    auto pCommandList = m_DirectCommandQueue->GetCommandList();
+//Modify End
     const auto& pTexture = m_ResourcePool->GetTexture(resourceId);
 
     TransitionBarrier(*pTexture, stateAfter);
     FlushBarriers(*pCommandList);
 
-    const uint64_t fenceValue = m_DirectCommandQueue->ExecuteCommandList(pCommandList);
+//Modify Begin:2026-07-30 by BestHui
+    m_QueueScheduler.TrackExternalResource(resourceId, RenderPassQueue::Direct);
+    const uint64_t fenceValue = m_QueueScheduler.SubmitDirect(pCommandList);
+//Modify End
     if (waitForCompletion)
     {
         m_DirectCommandQueue->WaitForFenceValue(fenceValue);
@@ -819,7 +544,9 @@ void RenderGraph::RenderGraphRoot::CopyTexture(
 {
     RebuildIfNecessary(renderMetadata);
 
-    const auto pCommandList = m_DirectCommandQueue->GetCommandList();
+//Modify Begin:2026-07-30 by BestHui
+    auto pCommandList = m_DirectCommandQueue->GetCommandList();
+//Modify End
     auto& commandList = *pCommandList;
     const auto& source = m_ResourcePool->GetTexture(sourceId);
     const auto& destination = m_ResourcePool->GetTexture(destinationId);
@@ -830,7 +557,11 @@ void RenderGraph::RenderGraphRoot::CopyTexture(
 
     commandList.CopyResource(*destination, *source);
 
-    const uint64_t fenceValue = m_DirectCommandQueue->ExecuteCommandList(pCommandList);
+//Modify Begin:2026-07-30 by BestHui
+    m_QueueScheduler.TrackExternalResource(sourceId, RenderPassQueue::Direct);
+    m_QueueScheduler.TrackExternalResource(destinationId, RenderPassQueue::Direct);
+    const uint64_t fenceValue = m_QueueScheduler.SubmitDirect(pCommandList);
+//Modify End
     if (waitForCompletion)
     {
         m_DirectCommandQueue->WaitForFenceValue(fenceValue);
@@ -844,7 +575,9 @@ void RenderGraph::RenderGraphRoot::DrawToTexture(
 {
     RebuildIfNecessary(renderMetadata);
 
-    const auto pCommandList = m_DirectCommandQueue->GetCommandList();
+//Modify Begin:2026-07-30 by BestHui
+    auto pCommandList = m_DirectCommandQueue->GetCommandList();
+//Modify End
     auto& commandList = *pCommandList;
     const auto& pTexture = m_ResourcePool->GetTexture(resourceId);
 
@@ -858,7 +591,10 @@ void RenderGraph::RenderGraphRoot::DrawToTexture(
 
     drawCallback(commandList);
 
-    m_DirectCommandQueue->ExecuteCommandList(pCommandList);
+//Modify Begin:2026-07-30 by BestHui
+    m_QueueScheduler.TrackExternalResource(resourceId, RenderPassQueue::Direct);
+    m_QueueScheduler.SubmitDirect(pCommandList);
+//Modify End
 }
 //Modify End
 
@@ -945,8 +681,9 @@ void RenderGraph::RenderGraphRoot::CheckPotentiallyDirtyResources(const RenderMe
 }
 void RenderGraph::RenderGraphRoot::Build(const RenderMetadata& renderMetadata)
 {
-    const auto& application = Application::Get();
-    const auto& pDevice = application.GetDevice();
+//Modify Begin:2026-07-30 by BestHui
+    const auto& pDevice = m_Device;
+//Modify End
 
 //Modify Begin:2026-07-28 by BestHui
     const auto unusedPasses = FindUnusedPasses(m_RenderPassesSorted, m_ExternalOutputIds);
@@ -968,7 +705,9 @@ void RenderGraph::RenderGraphRoot::Build(const RenderMetadata& renderMetadata)
 
     // Register resources
     {
-        m_ResourcePool->Clear();
+//Modify Begin:2026-07-30 by BestHui
+        m_ResourcePool->Clear(m_QueueScheduler.GetResourceRetirements());
+//Modify End
 
         for (const auto& desc : m_TextureDescriptions)
         {
@@ -1099,152 +838,6 @@ D3D12_RESOURCE_STATES RenderGraph::RenderGraphRoot::GetCurrentResourceState(cons
 }
 
 //Modify Begin:2026-07-30 by BestHui
-void RenderGraph::RenderGraphRoot::PrepareResourcesForRenderPass(
-    CommandList& commandList,
-    const RenderPass& renderPass,
-    const uint32_t renderPassIndex,
-    RenderContext& context,
-    const bool skipAliasingOutputs)
-//Modify End
-{
-//Modify Begin:2026-07-29 by BestHui
-    const auto planIt = m_PassResourceStatePlans.find(&renderPass);
-    Assert(planIt != m_PassResourceStatePlans.end(), "Render pass resource state plan was not built.");
-    const PassResourceStatePlan& resourceStatePlan = planIt->second;
-
-    for (const PassResourceTransition& transition : resourceStatePlan.InputTransitions)
-    {
-        const auto& resource = m_ResourcePool->GetResource(transition.Id);
-        resource.ForEachResourceRecursive([this, &renderPass, &transition](const Resource& r)
-        {
-            TransitionBarrier(
-                r,
-                GetQueueResourceState(renderPass.GetQueue(), transition.StateAfter));
-            if (transition.InsertUavBarrier)
-            {
-                UavBarrier(r);
-            }
-        });
-    }
-
-//Modify Begin:2026-07-30 by BestHui
-    if (!skipAliasingOutputs)
-    {
-        for (const ResourceId outputId : resourceStatePlan.AliasingOutputs)
-        {
-            (void)renderPassIndex;
-            const auto& resource = m_ResourcePool->GetResource(outputId);
-            resource.ForEachResourceRecursive([this](const auto& r)
-            {
-                AliasingBarrier(r);
-            });
-        }
-    }
-//Modify End
-//Modify End
-
-    // Render Target barriers
-    const auto& renderTargetFindResult = m_RenderTargets.find(&renderPass);
-    if (renderTargetFindResult != m_RenderTargets.end())
-    {
-        const auto& renderTargetInfo = renderTargetFindResult->second;
-        context.m_RenderTargetInfo = renderTargetInfo;
-
-        const auto& pRenderTarget = renderTargetInfo.m_RenderTarget;
-        const auto& textures = pRenderTarget->GetTextures();
-
-        // Render Target barriers for color attachments
-        for (size_t i = 0; i < 8; ++i)
-        {
-            const auto& pRtTexture = textures[i];
-            if (pRtTexture != nullptr && pRtTexture->IsValid())
-            {
-                TransitionBarrier(*pRtTexture, D3D12_RESOURCE_STATE_RENDER_TARGET);
-            }
-        }
-
-        // Depth-Stencil barriers
-        const auto& pRtDepthStencil = pRenderTarget->GetTexture(DepthStencil);
-        if (pRtDepthStencil != nullptr && pRtDepthStencil->IsValid())
-        {
-            const auto stateAfter = renderTargetInfo.m_ReadonlyDepth ? D3D12_RESOURCE_STATE_DEPTH_READ : D3D12_RESOURCE_STATE_DEPTH_WRITE;
-            TransitionBarrier(*pRtDepthStencil, stateAfter);
-        }
-    }
-
-
-//Modify Begin:2026-07-29 by BestHui
-    for (const PassResourceTransition& transition : resourceStatePlan.OutputTransitions)
-    {
-        const auto& resource = m_ResourcePool->GetResource(transition.Id);
-        resource.ForEachResourceRecursive([this, &transition](const auto& r)
-        {
-            TransitionBarrier(r, transition.StateAfter);
-            if (transition.InsertUavBarrier)
-            {
-                UavBarrier(r);
-            }
-        });
-    }
-//Modify End
-
-    FlushBarriers(commandList);
-
-    // Process init actions
-//Modify Begin:2026-07-29 by BestHui
-    for (const ResourceId outputId : resourceStatePlan.InitOutputs)
-    {
-        (void)renderPassIndex;
-        const auto& description = m_ResourcePool->GetDescription(outputId);
-
-            switch (description.GetInitAction())
-            {
-            case Clear:
-                {
-                    Assert(description.m_ResourceType == ResourceType::Texture, "Only textures support the clear init action.");
-
-                    if (const auto renderPassOutput = std::ranges::find_if(renderPass.GetOutputs(), [outputId](const Output& output) { return output.m_Id == outputId; });
-                        renderPassOutput != renderPass.GetOutputs().end() && renderPassOutput->m_Type == OutputType::RenderTarget)
-                    {
-                        const auto& texture = *m_ResourcePool->GetTexture(outputId);
-                        commandList.ClearTexture(texture, description.GetClearValue());
-                    }
-                    else if (renderPassOutput != renderPass.GetOutputs().end() &&
-                        (renderPassOutput->m_Type == OutputType::DepthRead || renderPassOutput->m_Type == OutputType::DepthWrite))
-                    {
-                        const auto& texture = *m_ResourcePool->GetTexture(outputId);
-                        const auto dsClearValue = description.GetClearValue().GetD3D12ClearValue()->DepthStencil;
-                        commandList.ClearDepthStencilTexture(texture, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, dsClearValue.Depth, dsClearValue.Stencil);
-                    }
-                }
-                break;
-            case CopyDestination:
-                // don't do anything here, the copy in the pass should do the job
-                break;
-            case Discard:
-                {
-                    const auto& resource = m_ResourcePool->GetResource(outputId);
-                    commandList.DiscardResource(resource);
-                }
-                break;
-            default:
-                Assert(false, "Unknown resource init action.");
-                break;
-            }
-    }
-//Modify End
-
-    // Setup the render target
-    if (renderTargetFindResult != m_RenderTargets.end())
-    {
-        const auto& renderTargetInfo = renderTargetFindResult->second;
-        const auto& pRenderTarget = renderTargetInfo.m_RenderTarget;
-
-        commandList.SetRenderTarget(*pRenderTarget);
-        commandList.SetAutomaticViewportAndScissorRect(*pRenderTarget);
-    }
-}
-
 void RenderGraph::RenderGraphRoot::SetCurrentResourceState(const Resource& resource, D3D12_RESOURCE_STATES state)
 {
     m_ResourceStateTracker.SetCurrentResourceState(resource, state);

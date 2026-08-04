@@ -1,7 +1,6 @@
 //Modify Begin:2026-07-27 by BestHui
 #include <Framework/Rendering/Denoising/NRD.h>
 
-#include <DX12Library/Application.h>
 #include <DX12Library/CommandList.h>
 #include <DX12Library/CommandQueue.h>
 #include <DX12Library/Helpers.h>
@@ -10,6 +9,9 @@
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 //Modify End
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/Core/FrameworkDeviceContext.h>
+//Modify End
 #include <Framework/NRDInputAdapter_CS.h>
 #include <Framework/NRDOutputComposite_CS.h>
 #include <Framework/Rendering/Pipeline/ShaderBlob.h>
@@ -282,19 +284,24 @@ namespace
     }
 //Modify End
 
-    std::unique_ptr<ComputeShader> CreateReflectedComputeShader(const void* shaderBytecode, const size_t shaderBytecodeSize)
+    std::unique_ptr<ComputeShader> CreateReflectedComputeShader(
+        FrameworkDeviceContext& deviceContext,
+        const void* shaderBytecode,
+        const size_t shaderBytecodeSize)
     {
         ShaderBlob shader(shaderBytecode, shaderBytecodeSize);
         return std::make_unique<ComputeShader>(
+            deviceContext,
             shader,
             ComputePipelineDescBuilder::ReflectedDefault(shader).Build());
     }
 
 }
 
-NRD::NRD()
-    : m_PrepareShader(CreateReflectedComputeShader(ShaderBytecode_NRDInputAdapter_CS, sizeof ShaderBytecode_NRDInputAdapter_CS))
-    , m_CompositeShader(CreateReflectedComputeShader(ShaderBytecode_NRDOutputComposite_CS, sizeof ShaderBytecode_NRDOutputComposite_CS))
+NRD::NRD(FrameworkDeviceContext& deviceContext)
+    : m_DeviceContext(deviceContext)
+    , m_PrepareShader(CreateReflectedComputeShader(deviceContext, ShaderBytecode_NRDInputAdapter_CS, sizeof ShaderBytecode_NRDInputAdapter_CS))
+    , m_CompositeShader(CreateReflectedComputeShader(deviceContext, ShaderBytecode_NRDOutputComposite_CS, sizeof ShaderBytecode_NRDOutputComposite_CS))
     , m_Impl(std::make_unique<NRDImpl>())
 {
     char* bypass = nullptr;
@@ -326,8 +333,8 @@ bool NRD::EnsureCreated(const uint32_t width, const uint32_t height)
         return true;
     }
 
-    const auto device = Application::Get().GetDevice();
-    const auto queue = Application::Get().GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT)->GetD3D12CommandQueue();
+    const auto device = m_DeviceContext.GetDevice();
+    const auto queue = m_DeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT)->GetD3D12CommandQueue();
     ID3D12CommandQueue* rawQueue = queue.Get();
 
     if (!m_Impl->EnsureDevice(device.Get(), rawQueue))
@@ -338,7 +345,7 @@ bool NRD::EnsureCreated(const uint32_t width, const uint32_t height)
         return false;
     }
 
-    Application::Get().Flush();
+    m_DeviceContext.Flush();
 
     m_Impl->Integration.Destroy();
     m_Impl->DestroyWrappedTextures();

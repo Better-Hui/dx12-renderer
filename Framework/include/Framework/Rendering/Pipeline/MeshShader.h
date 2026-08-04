@@ -18,16 +18,21 @@
 #include <string>
 
 class CommandContext;
+//Modify Begin:2026-07-30 by BestHui
+class FrameworkDeviceContext;
+//Modify End
 
 class MeshShader
 {
 public:
     explicit MeshShader(
+		FrameworkDeviceContext& deviceContext,
         const ShaderBlob& meshShader,
         const ShaderBlob& pixelShader,
         const std::function<void(RasterPipelineStateBuilder&)> buildPipelineState = [](RasterPipelineStateBuilder&) {});
 //Modify Begin:2026-07-31 by BestHui
     explicit MeshShader(
+		FrameworkDeviceContext& deviceContext,
         const ShaderBlob& amplificationShader,
         const ShaderBlob& meshShader,
         const ShaderBlob& pixelShader,
@@ -41,6 +46,9 @@ public:
 
 private:
     friend class CommandContext;
+//Modify Begin:2026-07-30 by BestHui
+    FrameworkDeviceContext& GetDeviceContext() const { return m_DeviceContext; }
+//Modify End
 
     Microsoft::WRL::ComPtr<ID3D12PipelineState> GetPipelineState(const Microsoft::WRL::ComPtr<ID3D12Device2>& device, const RenderTargetState& renderTargetState);
     const RootSignature& GetRootSignature() const { return *m_RootSignature; }
@@ -51,6 +59,7 @@ private:
     void BuildPipelineLayout();
     void BuildReflectedRootSignature();
 
+    FrameworkDeviceContext& m_DeviceContext;
     std::shared_ptr<RootSignature> m_RootSignature;
 //Modify Begin:2026-07-31 by BestHui
     ShaderReflectionMetadata m_AmplificationShaderMetadata;

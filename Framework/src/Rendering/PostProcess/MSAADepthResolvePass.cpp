@@ -12,9 +12,10 @@ namespace
 }
 
 //Modify Begin:2026-07-27 by BestHui
-MSAADepthResolvePass::MSAADepthResolvePass()
+MSAADepthResolvePass::MSAADepthResolvePass(FrameworkDeviceContext& deviceContext)
 //Modify End
     : m_ComputeShader(
+        deviceContext,
         ShaderBlob(ShaderBytecode_MSAADepthResolve_CS, sizeof(ShaderBytecode_MSAADepthResolve_CS)),
         ComputePipelineDescBuilder::ReflectedDefault(ShaderBlob(ShaderBytecode_MSAADepthResolve_CS, sizeof(ShaderBytecode_MSAADepthResolve_CS))).Build())
 {

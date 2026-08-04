@@ -123,6 +123,14 @@ void RaytracingDemo::OnImGui()
         ResetAccumulation();
     }
 //Modify Begin:2026-07-30 by BestHui
+    if (ImGui::Checkbox("Enable Soft Shadows", &m_SoftShadowsEnabled))
+    {
+        EnsureRayTracingPipelines();
+        ResetAccumulation();
+    }
+    ImGui::TextDisabled("Directional and point lights use soft-shadow variants; area lights already sample their surface.");
+//Modify End
+//Modify Begin:2026-07-30 by BestHui
     if (ImGui::Checkbox("Enable Stress Test Spheres (12,288)", &m_StressTestSpheresEnabled))
     {
         m_StressTestSpheresStateDirty = true;
@@ -226,13 +234,6 @@ void RaytracingDemo::OnImGui()
         m_PathTracingBackend = static_cast<PathTracingBackend>(selectedMode);
         ResetAccumulation();
     }
-//Modify Begin:2026-08-03 by BestHui
-    if (ImGui::Checkbox("Debug Stress Toggle DXR / Inline", &m_DebugStressPathTracingBackendSwitch))
-    {
-        ResetAccumulation();
-    }
-//Modify End
-
     const bool bouncesChanged = ImGui::SliderInt("Bounces", &m_MaxBounces, 0, 5);
     const bool fovChanged = ImGui::SliderFloat("FOV", &m_CameraFov, 12.0f, 90.0f, "%.1f");
     const bool rotateSpeedChanged = ImGui::SliderFloat("Mouse Rotate", &m_MouseRotateSpeed, 0.01f, 0.5f, "%.3f");

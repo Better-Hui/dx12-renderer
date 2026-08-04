@@ -1,9 +1,11 @@
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
 #include <DX12Library/Helpers.h>
 #include <DX12Library/ShaderUtils.h>
-#include <DX12Library/Application.h>
 #include <DX12Library/StructuredBuffer.h>
 #include <Framework/Rendering/RayTracing/RayTracingAccelerationStructure.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/Core/FrameworkDeviceContext.h>
+//Modify End
 
 #include <algorithm>
 
@@ -64,9 +66,14 @@ ComputePipelineDesc ComputePipelineDescBuilder::Build() const
     return m_Desc;
 }
 
-ComputeShader::ComputeShader(const ShaderBlob& shader, ComputePipelineDesc desc)
-    : m_Shader(shader.GetBlob())
-    , m_PipelineLayout(std::make_unique<PipelineLayout>())
+ComputeShader::ComputeShader(
+    FrameworkDeviceContext& deviceContext,
+    const ShaderBlob& shader,
+    ComputePipelineDesc desc)
+    : m_DeviceContext(deviceContext)
+    , m_Shader(shader.GetBlob())
+    , m_PipelineLayout(std::make_unique<PipelineLayout>(deviceContext))
+    , m_DescriptorPool(deviceContext)
 {
     CollectShaderMetadata(m_Shader, &m_ShaderMetadata);
     BuildReflectedRootSignature(desc);

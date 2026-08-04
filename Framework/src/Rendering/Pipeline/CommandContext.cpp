@@ -2,11 +2,13 @@
 
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 
-#include <DX12Library/Application.h>
 #include <DX12Library/CommandList.h>
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Resource.h>
 #include <DX12Library/StructuredBuffer.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/Core/FrameworkDeviceContext.h>
+//Modify End
 //Modify Begin:2026-07-30 by BestHui
 #include <Framework/Rendering/Pipeline/BindlessDescriptorHeap.h>
 //Modify End
@@ -195,7 +197,9 @@ void CommandContext::SetPipeline(Shader& shader) const
     m_HasBoundPipeline = true;
     m_BoundRayTracingShader = nullptr;
 
-    const auto device = Application::Get().GetDevice();
+//Modify Begin:2026-07-30 by BestHui
+    const auto& device = shader.GetDeviceContext().GetDevice();
+//Modify End
     const auto& renderTargetState = m_CommandList.GetLastRenderTargetState();
     const auto pipelineState = shader.GetPipelineState(device, renderTargetState);
 
@@ -219,7 +223,9 @@ void CommandContext::SetPipeline(MeshShader& shader) const
     m_HasBoundPipeline = true;
     m_BoundRayTracingShader = nullptr;
 
-    const auto device = Application::Get().GetDevice();
+//Modify Begin:2026-07-30 by BestHui
+    const auto& device = shader.GetDeviceContext().GetDevice();
+//Modify End
     const auto& renderTargetState = m_CommandList.GetLastRenderTargetState();
     const auto pipelineState = shader.GetPipelineState(device, renderTargetState);
 
@@ -242,7 +248,9 @@ void CommandContext::SetPipeline(const ComputeShader& shader) const
     m_HasBoundPipeline = true;
     m_BoundRayTracingShader = nullptr;
 
-    const auto device = Application::Get().GetDevice();
+//Modify Begin:2026-07-30 by BestHui
+    const auto& device = shader.GetDeviceContext().GetDevice();
+//Modify End
     const auto pipelineState = shader.GetPipelineState(device);
 
     if (shader.UsesReflectedRootSignature())

@@ -9,6 +9,9 @@
 
 class CommandList;
 class ComputeShader;
+//Modify Begin:2026-07-30 by BestHui
+class FrameworkDeviceContext;
+//Modify End
 class Texture;
 
 class SVGF
@@ -24,7 +27,7 @@ public:
         float PhiDepth = 1.0f;
     };
 
-    SVGF();
+    explicit SVGF(FrameworkDeviceContext& deviceContext);
     ~SVGF();
 
     Settings& GetSettings() { return m_Settings; }

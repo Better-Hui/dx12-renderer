@@ -11,8 +11,15 @@ set(HEADER_FILES
         include/RenderGraph/RaytracingDemoGraphResources.h
         include/Passes/RaytracingDemoPasses.h
         include/Passes/CudaBloomPass.h
+        # Modify Begin:2026-07-30 by BestHui
+        include/Passes/RaytracingDemoPassResources.h
+        # Modify End
         include/Scene/SceneLightManager.h
         include/Scene/SceneLighting.h
+        # Modify Begin:2026-07-30 by BestHui
+        include/Scene/SceneResourceTypes.h
+        include/Scene/SceneResourceBuilders.h
+        # Modify End
         include/Scene/SceneResources.h
         )
 
@@ -31,15 +38,24 @@ set(SOURCE_FILES
         src/PathTracing/PathTracingPipelineController.cpp
         src/Passes/PathTracingPass.cpp
         src/Passes/CudaBloomPass.cpp
+        # Modify Begin:2026-07-30 by BestHui
+        src/Passes/RaytracingDemoPassResources.cpp
+        # Modify End
         src/Passes/PostProcessPass.cpp
         src/RenderGraph/RaytracingDemoGraphResources.cpp
         src/Passes/SkyboxPass.cpp
         src/Scene/SceneLightManager.cpp
+        # Modify Begin:2026-07-30 by BestHui
+        src/Scene/SceneResourceBuilders.cpp
+        # Modify End
         src/Scene/SceneResources.cpp
         )
 
 set(SHADER_FILES_RAYTRACING
         shaders/PathTracing/PathTracing.rt.hlsl
+        # Modify Begin:2026-07-30 by BestHui
+        shaders/PathTracing/PathTracing.softshadow.rt.hlsl
+        # Modify End
         )
 
 set(SHADERS_HEADER_FILES
@@ -97,6 +113,10 @@ set(SHADER_FILES_COMPUTE
         shaders/GBuffer/MeshletCull.cs.hlsl
         shaders/PathTracing/DirectLighting.cs.hlsl
         shaders/PathTracing/IndirectLighting.cs.hlsl
+        # Modify Begin:2026-07-30 by BestHui
+        shaders/PathTracing/DirectLighting.softshadow.cs.hlsl
+        shaders/PathTracing/IndirectLighting.softshadow.cs.hlsl
+        # Modify End
         shaders/PathTracing/LightingComposite.cs.hlsl
 # Modify Begin:2026-07-28 by BestHui
         shaders/Skybox/Skybox.cs.hlsl
@@ -214,8 +234,12 @@ else()
 endif()
 # Modify End
 
-set(RAYTRACING_SHADER_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/${SHADER_FILES_RAYTRACING}")
+set(RAYTRACING_SHADER_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/shaders/PathTracing/PathTracing.rt.hlsl")
 set(RAYTRACING_SHADER_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/Shaders/PathTracing.rt.cso")
+# Modify Begin:2026-07-30 by BestHui
+set(RAYTRACING_SOFT_SHADOW_SHADER_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/shaders/PathTracing/PathTracing.softshadow.rt.hlsl")
+set(RAYTRACING_SOFT_SHADOW_SHADER_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/Shaders/PathTracing.softshadow.rt.cso")
+# Modify End
 # Modify Begin:2026-07-31 by BestHui
 set(GBUFFER_TASK_SHADER_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/shaders/GBuffer/GBuffer.task.as.hlsl")
 set(GBUFFER_TASK_SHADER_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/Shaders/GBuffer.task.as.cso")
@@ -236,6 +260,9 @@ add_custom_command(TARGET ${TARGET_NAME} PRE_BUILD
 # Modify Begin:2026-07-21 by BestHui
         COMMAND "${DXC_EXECUTABLE}" -T ${RAYTRACING_SHADER_MODEL} -HV 2021 -Fo "${RAYTRACING_SHADER_OUTPUT}" "${RAYTRACING_SHADER_SOURCE}" -I "${CMAKE_SOURCE_DIR}/DXC/include" -I "${CMAKE_SOURCE_DIR}/Shaders" -I "${CMAKE_SOURCE_DIR}/Framework/shaders" -I "${CMAKE_SOURCE_DIR}/External/NRD/Shaders" -I "${CMAKE_CURRENT_SOURCE_DIR}/shaders" -WX
 # Modify End
+# Modify Begin:2026-07-30 by BestHui
+        COMMAND "${DXC_EXECUTABLE}" -T ${RAYTRACING_SHADER_MODEL} -HV 2021 -Fo "${RAYTRACING_SOFT_SHADOW_SHADER_OUTPUT}" "${RAYTRACING_SOFT_SHADOW_SHADER_SOURCE}" -I "${CMAKE_SOURCE_DIR}/DXC/include" -I "${CMAKE_SOURCE_DIR}/Shaders" -I "${CMAKE_SOURCE_DIR}/Framework/shaders" -I "${CMAKE_SOURCE_DIR}/External/NRD/Shaders" -I "${CMAKE_CURRENT_SOURCE_DIR}/shaders" -WX
+# Modify End
 # Modify Begin:2026-07-31 by BestHui
         COMMAND "${DXC_EXECUTABLE}" -E main -T as_6_6 -HV 2021 -Fo "${GBUFFER_TASK_SHADER_OUTPUT}" "${GBUFFER_TASK_SHADER_SOURCE}" -I "${CMAKE_SOURCE_DIR}/Shaders" -I "${CMAKE_SOURCE_DIR}/Framework/shaders" -I "${CMAKE_CURRENT_SOURCE_DIR}/shaders" -WX
         COMMAND "${DXC_EXECUTABLE}" -E main -T ms_6_6 -HV 2021 -Fo "${GBUFFER_TASK_MESH_SHADER_OUTPUT}" "${GBUFFER_TASK_MESH_SHADER_SOURCE}" -I "${CMAKE_SOURCE_DIR}/Shaders" -I "${CMAKE_SOURCE_DIR}/Framework/shaders" -I "${CMAKE_CURRENT_SOURCE_DIR}/shaders" -WX
@@ -249,6 +276,9 @@ add_custom_command(TARGET ${TARGET_NAME} PRE_BUILD
 add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${TARGET_NAME}>/Shaders"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${RAYTRACING_SHADER_OUTPUT}" "$<TARGET_FILE_DIR:${TARGET_NAME}>/Shaders/PathTracing.rt.cso"
+# Modify Begin:2026-07-30 by BestHui
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${RAYTRACING_SOFT_SHADOW_SHADER_OUTPUT}" "$<TARGET_FILE_DIR:${TARGET_NAME}>/Shaders/PathTracing.softshadow.rt.cso"
+# Modify End
 # Modify Begin:2026-07-31 by BestHui
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${GBUFFER_TASK_SHADER_OUTPUT}" "$<TARGET_FILE_DIR:${TARGET_NAME}>/Shaders/GBuffer.task.as.cso"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${GBUFFER_TASK_MESH_SHADER_OUTPUT}" "$<TARGET_FILE_DIR:${TARGET_NAME}>/Shaders/GBuffer.task.ms.cso"

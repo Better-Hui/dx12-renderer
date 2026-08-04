@@ -65,6 +65,7 @@ namespace
 
 RayTracingBindingSet::Impl::Impl(const RayTracingShader& shader)
     : Shader(shader)
+    , DescriptorPool(shader.GetDeviceContext())
     , DescriptorSet(DescriptorPool.AllocateDescriptorSetValue(shader.GetPipelineLayout()))
 {
 }

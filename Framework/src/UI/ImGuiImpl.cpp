@@ -3,11 +3,13 @@
 #include <imgui_impl_dx12.h>
 #include <imgui_impl_win32.h>
 
-#include <DX12Library/Application.h>
 #include <DX12Library/CommandQueue.h>
 #include <DX12Library/Helpers.h>
 
 #include <Framework/Blit_VS.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/Core/FrameworkDeviceContext.h>
+//Modify End
 //Modify Begin:2026-07-29 by BestHui
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 //Modify End
@@ -69,14 +71,16 @@ void ImGuiImpl::FreeSrvDescriptor(
 }
 //Modify End
 
-ImGuiImpl::ImGuiImpl(CommandList& commandList, const Window& window)
+ImGuiImpl::ImGuiImpl(FrameworkDeviceContext& deviceContext, CommandList& commandList, const Window& window)
     //Modify Begin:2026-07-21 by BestHui
-    : m_FreeSrvDescriptors(ImGuiSrvDescriptorCount, true)
+    : m_DeviceContext(deviceContext)
+    , m_FreeSrvDescriptors(ImGuiSrvDescriptorCount, true)
     //Modify End
 {
 //Modify Begin:2026-07-21 by BestHui
 //Modify Begin:2026-07-27 by BestHui
     m_CombineShader = std::make_shared<Shader>(
+        m_DeviceContext,
         ShaderBlob(ShaderBytecode_Blit_VS, sizeof ShaderBytecode_Blit_VS),
         ShaderBlob(ShaderBytecode_ImGuiCombine_PS, sizeof ShaderBytecode_ImGuiCombine_PS),
         [](RasterPipelineStateBuilder& psb)
@@ -89,7 +93,7 @@ ImGuiImpl::ImGuiImpl(CommandList& commandList, const Window& window)
     m_BlitMesh = Mesh::CreateBlitTriangle(commandList);
 //Modify End
 
-    const auto pDevice = Application::Get().GetDevice();
+    const auto pDevice = m_DeviceContext.GetDevice();
 
     {
         D3D12_DESCRIPTOR_HEAP_DESC desc = {};
@@ -129,7 +133,7 @@ ImGuiImpl::ImGuiImpl(CommandList& commandList, const Window& window)
 
     ImGui_ImplWin32_Init(window.GetWindowHandle());
     //Modify Begin:2026-07-21 by BestHui
-    const auto commandQueue = Application::Get().GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT)->GetD3D12CommandQueue();
+    const auto commandQueue = m_DeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT)->GetD3D12CommandQueue();
     ImGui_ImplDX12_InitInfo initInfo = {};
     initInfo.Device = pDevice.Get();
     initInfo.CommandQueue = commandQueue.Get();

@@ -1,7 +1,9 @@
 #pragma once
 
 #include <RenderGraph/RaytracingDemoGraphResources.h>
-#include <RaytracingDemo.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <Passes/RaytracingDemoPassResources.h>
+//Modify End
 
 class CommandList;
 class ComputeShader;
@@ -12,29 +14,30 @@ namespace RenderGraph
     struct RenderContext;
 }
 
-struct RaytracingDemoPassAccess
+struct RaytracingDemoPassBindings
 {
-    static RaytracingDemo::CameraConstants BuildPassCameraConstants(
-        RaytracingDemo& demo,
+    static RaytracingDemoCameraConstants BuildPassCameraConstants(
+        const RaytracingDemoPassResources& resources,
+        const RaytracingDemoPassConfig& config,
         const RenderGraph::RenderContext& context);
 
     static void BindInlinePathTracingInputs(
-        RaytracingDemo& demo,
+        const RaytracingDemoPassResources& resources,
         CommandList& cmd,
         ComputeShader& shader,
         const RaytracingDemoRenderGraph::FrameGBufferResources& gbuffer,
-        const RaytracingDemo::CameraConstants& camera);
+        const RaytracingDemoCameraConstants& camera);
 
     static void BindDxrPathTracingInputs(
-        RaytracingDemo& demo,
+        const RaytracingDemoPassResources& resources,
         RayTracingBindingSet& shader,
         const RaytracingDemoRenderGraph::FrameGBufferResources& gbuffer,
-        const RaytracingDemo::CameraConstants& camera);
+        const RaytracingDemoCameraConstants& camera);
 
     static void BindCompositeInputs(
-        RaytracingDemo& demo,
+        const RaytracingDemoPassResources& resources,
         CommandList& cmd,
         const RenderGraph::RenderContext& context,
         const RaytracingDemoRenderGraph::FrameGBufferResources& gbuffer,
-        const RaytracingDemo::CameraConstants& camera);
+        const RaytracingDemoCameraConstants& camera);
 };

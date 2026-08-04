@@ -79,8 +79,12 @@ namespace RayTracingShaderInternal
 
 struct RayTracingShader::Impl
 {
-    Impl(const ShaderBlob& shaderLibrary, RayTracingPipelineDesc pipelineDesc);
+    Impl(
+        FrameworkDeviceContext& deviceContext,
+        const ShaderBlob& shaderLibrary,
+        RayTracingPipelineDesc pipelineDesc);
 
+    FrameworkDeviceContext& DeviceContext;
     RayTracingPipelineDesc Desc;
     std::shared_ptr<RayTracingPipelineState> PipelineState;
     PipelineLayout Layout;

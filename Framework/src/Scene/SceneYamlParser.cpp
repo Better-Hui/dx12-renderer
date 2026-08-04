@@ -56,6 +56,10 @@ namespace
         float Intensity = 1.0f;
         float Range = 10.0f;
         float SpotAngle = 30.0f;
+//Modify Begin:2026-07-30 by BestHui
+        float AngularRadius = 0.009f;
+        float SourceRadius = 0.25f;
+//Modify End
         UnityVector3 AreaSize = { 1.0f, 1.0f, 0.0f };
     };
 
@@ -503,6 +507,16 @@ namespace
             {
                 light.SpotAngle = ParseFloatAfterColon(trimmed, 30.0f);
             }
+//Modify Begin:2026-07-30 by BestHui
+            else if (IsUnityTopLevelProperty(line, "m_ShadowAngle"))
+            {
+                light.AngularRadius = std::max(0.0f, ParseFloatAfterColon(trimmed, 0.5f)) * 0.017453292519943295f;
+            }
+            else if (IsUnityTopLevelProperty(line, "m_ShadowRadius"))
+            {
+                light.SourceRadius = std::max(0.0f, ParseFloatAfterColon(trimmed, 0.25f));
+            }
+//Modify End
             else if (IsUnityTopLevelProperty(line, "m_AreaSize"))
             {
                 light.AreaSize = ParseVector3(trimmed);
@@ -900,6 +914,10 @@ UnitySceneData SceneYamlParser::ParseFromFile(
         light.Intensity = lightData.Intensity;
         light.Range = lightData.Range;
         light.SpotAngle = lightData.SpotAngle;
+//Modify Begin:2026-07-30 by BestHui
+        light.AngularRadius = lightData.AngularRadius;
+        light.SourceRadius = lightData.SourceRadius;
+//Modify End
         light.AreaSize = lightData.AreaSize;
         if (const auto gameObject = gameObjects.find(light.GameObjectId); gameObject != gameObjects.end())
         {
@@ -1371,7 +1389,9 @@ namespace
             {
                 DirectionalLight light{};
                 const XMFLOAT3 direction = RotateVector(unityLight.Transform.WorldRotation, { 0.0f, 0.0f, -1.0f });
-                light.m_DirectionWs = { direction.x, direction.y, direction.z, 0.0f };
+//Modify Begin:2026-07-30 by BestHui
+                light.m_DirectionWs = { direction.x, direction.y, direction.z, std::max(0.0f, unityLight.AngularRadius) };
+//Modify End
                 light.m_Color = { unityLight.Color.R, unityLight.Color.G, unityLight.Color.B, unityLight.Intensity };
             scene.AddDirectionalLight(light);
             }
@@ -1386,6 +1406,9 @@ namespace
                     },
                     std::max(0.1f, unityLight.Range));
                 light.Color = { unityLight.Color.R, unityLight.Color.G, unityLight.Color.B, unityLight.Intensity };
+//Modify Begin:2026-07-30 by BestHui
+                light.SourceRadius = std::max(0.0f, unityLight.SourceRadius);
+//Modify End
                 light.RecalculateAttenuationCoefficients();
                 scene.AddPointLight(light);
             }

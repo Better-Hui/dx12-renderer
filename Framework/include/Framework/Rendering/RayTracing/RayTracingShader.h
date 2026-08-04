@@ -32,6 +32,9 @@ class StructuredBuffer;
 class Texture;
 class Resource;
 class RayTracingShader;
+//Modify Begin:2026-07-30 by BestHui
+class FrameworkDeviceContext;
+//Modify End
 
 enum class RayTracingShaderBindingType
 {
@@ -192,8 +195,11 @@ private:
 class RayTracingShader
 {
 public:
-    explicit RayTracingShader(const ShaderBlob& shaderLibrary);
-    RayTracingShader(const ShaderBlob& shaderLibrary, RayTracingPipelineDesc desc);
+    RayTracingShader(FrameworkDeviceContext& deviceContext, const ShaderBlob& shaderLibrary);
+    RayTracingShader(
+        FrameworkDeviceContext& deviceContext,
+        const ShaderBlob& shaderLibrary,
+        RayTracingPipelineDesc desc);
     ~RayTracingShader();
 
     RayTracingShader(const RayTracingShader&) = delete;
@@ -201,7 +207,7 @@ public:
     RayTracingShader(RayTracingShader&&) noexcept;
     RayTracingShader& operator=(RayTracingShader&&) noexcept;
 
-    static bool IsSupported();
+    static bool IsSupported(const FrameworkDeviceContext& deviceContext);
     static RayTracingPipelineDesc CreateDefaultPipelineDesc();
 
     const RayTracingPipelineDesc& GetDesc() const;
@@ -215,6 +221,7 @@ public:
 private:
 //Modify Begin:2026-07-29 by BestHui
     friend class CommandContext;
+    FrameworkDeviceContext& GetDeviceContext() const;
     const RayTracingPipelineState& GetPipelineState() const;
     void PrepareDispatch(std::string_view passName) const;
     D3D12_DISPATCH_RAYS_DESC BuildDispatchDesc(std::string_view passName, uint32_t width, uint32_t height, uint32_t depth) const;

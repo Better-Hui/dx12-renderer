@@ -7,10 +7,10 @@
 
 #include <cstring>
 
-void DenoiserController::Initialize()
+void DenoiserController::Initialize(FrameworkDeviceContext& deviceContext)
 {
-    m_NRD = std::make_unique<NRD>();
-    m_SVGF = std::make_unique<SVGF>();
+    m_NRD = std::make_unique<NRD>(deviceContext);
+    m_SVGF = std::make_unique<SVGF>(deviceContext);
     ApplySelection();
 }
 

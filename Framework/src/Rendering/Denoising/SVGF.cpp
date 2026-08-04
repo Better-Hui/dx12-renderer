@@ -7,6 +7,9 @@
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 //Modify End
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/Core/FrameworkDeviceContext.h>
+//Modify End
 #include <Framework/Rendering/Texture/RenderTexture.h>
 #include <Framework/Rendering/Pipeline/ShaderBlob.h>
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
@@ -20,19 +23,23 @@
 
 namespace
 {
-    std::unique_ptr<ComputeShader> CreateReflectedComputeShader(const void* shaderBytecode, const size_t shaderBytecodeSize)
+    std::unique_ptr<ComputeShader> CreateReflectedComputeShader(
+        FrameworkDeviceContext& deviceContext,
+        const void* shaderBytecode,
+        const size_t shaderBytecodeSize)
     {
         const ShaderBlob shader(shaderBytecode, shaderBytecodeSize);
         return std::make_unique<ComputeShader>(
+            deviceContext,
             shader,
             ComputePipelineDescBuilder::ReflectedDefault(shader).Build());
     }
 }
 
-SVGF::SVGF()
-    : m_TemporalShader(CreateReflectedComputeShader(ShaderBytecode_SVGFTemporal_CS, sizeof ShaderBytecode_SVGFTemporal_CS))
-    , m_AtrousShader(CreateReflectedComputeShader(ShaderBytecode_SVGFAtrous_CS, sizeof ShaderBytecode_SVGFAtrous_CS))
-    , m_CompositeShader(CreateReflectedComputeShader(ShaderBytecode_SVGFComposite_CS, sizeof ShaderBytecode_SVGFComposite_CS))
+SVGF::SVGF(FrameworkDeviceContext& deviceContext)
+    : m_TemporalShader(CreateReflectedComputeShader(deviceContext, ShaderBytecode_SVGFTemporal_CS, sizeof ShaderBytecode_SVGFTemporal_CS))
+    , m_AtrousShader(CreateReflectedComputeShader(deviceContext, ShaderBytecode_SVGFAtrous_CS, sizeof ShaderBytecode_SVGFAtrous_CS))
+    , m_CompositeShader(CreateReflectedComputeShader(deviceContext, ShaderBytecode_SVGFComposite_CS, sizeof ShaderBytecode_SVGFComposite_CS))
 {
 }
 

@@ -12,6 +12,9 @@
 #include <vector>
 
 class CommandList;
+//Modify Begin:2026-07-30 by BestHui
+class FrameworkDeviceContext;
+//Modify End
 
 enum class DescriptorBindingKind
 {
@@ -31,6 +34,13 @@ struct DescriptorBindingInfo
 class DescriptorLayout
 {
 public:
+//Modify Begin:2026-07-30 by BestHui
+    DescriptorLayout() = default;
+    explicit DescriptorLayout(FrameworkDeviceContext& deviceContext)
+        : m_DeviceContext(&deviceContext)
+    {
+    }
+//Modify End
     using BindingMap = std::map<std::string, DescriptorBindingInfo>;
 
     static constexpr UINT UnboundedBindCount = 0xffffffffu;
@@ -66,6 +76,9 @@ private:
 
     BindingMap m_Bindings;
     std::vector<DefaultDescriptorTable> m_DefaultDescriptorTables;
+//Modify Begin:2026-07-30 by BestHui
+    FrameworkDeviceContext* m_DeviceContext = nullptr;
+//Modify End
 };
 
 //Modify End

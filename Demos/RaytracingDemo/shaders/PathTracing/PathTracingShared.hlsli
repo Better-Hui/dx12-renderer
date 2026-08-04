@@ -6,6 +6,14 @@
 #include "../../../../External/NRD/Shaders/NRD.hlsli"
 #include "PathTracingRandom.hlsli"
 
+//Modify Begin:2026-07-30 by BestHui
+#ifndef RAYTRACING_DEMO_SOFT_SHADOWS
+#define RAYTRACING_DEMO_SOFT_SHADOWS 0
+#endif
+
+#define RAYTRACING_DEMO_SOFT_SHADOW_SAMPLE_COUNT 4u
+//Modify End
+
 float3 SampleSkybox(float3 direction)
 {
 //Modify Begin:2026-07-30 by BestHui
@@ -64,6 +72,30 @@ bool IsVisibleAlongRay(float3 origin, float3 direction, float tMax)
         RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH);
     return shadowPayload.Hit == 0u;
 }
+
+//Modify Begin:2026-07-30 by BestHui
+float3 SampleDirectionalShadowDirection(float3 axis, float angularRadius, inout uint rngState)
+{
+    float3 tangent;
+    float3 bitangent;
+    BuildOrthonormalBasis(axis, tangent, bitangent);
+    const float clampedRadius = min(max(0.0f, angularRadius), 1.5707963f);
+    const float cosTheta = lerp(1.0f, cos(clampedRadius), Random01(rngState));
+    const float sinTheta = sqrt(max(0.0f, 1.0f - cosTheta * cosTheta));
+    const float phi = 2.0f * PI * Random01(rngState);
+    return normalize(
+        axis * cosTheta +
+        tangent * (cos(phi) * sinTheta) +
+        bitangent * (sin(phi) * sinTheta));
+}
+
+float2 SampleUniformDisk(inout uint rngState)
+{
+    const float radius = sqrt(Random01(rngState));
+    const float phi = 2.0f * PI * Random01(rngState);
+    return float2(cos(phi), sin(phi)) * radius;
+}
+//Modify End
 
 float FresnelPow5(float value)
 {
@@ -220,11 +252,43 @@ bool SamplePbrDirection(SurfaceData surface, float3 viewDirectionWs, inout uint 
     return MaxComponent(sampleWeight) > 0.0f;
 }
 
-float3 EvaluateDirectionalLight(DirectionalLightData light, SurfaceData surface, out float hitDistance)
+//Modify Begin:2026-07-30 by BestHui
+float3 EvaluateDirectionalLight(
+    DirectionalLightData light,
+    SurfaceData surface,
+    inout uint rngState,
+    out float hitDistance)
 {
     hitDistance = 0.0f;
-    float3 lightDirection = normalize(light.DirectionAndAngularRadius.xyz);
-    float nDotL = saturate(dot(surface.NormalWs, lightDirection));
+#if RAYTRACING_DEMO_SOFT_SHADOWS
+    const float3 lightAxis = normalize(light.DirectionAndAngularRadius.xyz);
+    const float3 radiance = light.ColorAndIntensity.rgb * light.ColorAndIntensity.w;
+    float3 lighting = 0.0f;
+    [unroll]
+    for (uint sampleIndex = 0u; sampleIndex < RAYTRACING_DEMO_SOFT_SHADOW_SAMPLE_COUNT; ++sampleIndex)
+    {
+        const float3 lightDirection = SampleDirectionalShadowDirection(
+            lightAxis,
+            light.DirectionAndAngularRadius.w,
+            rngState);
+        const float nDotL = saturate(dot(surface.NormalWs, lightDirection));
+        if (nDotL <= 0.0f)
+        {
+            continue;
+        }
+
+        const float3 rayOrigin = OffsetRayOrigin(surface.PositionWs, surface.PositionError, surface.NormalWs, lightDirection);
+        if (IsVisibleAlongRay(rayOrigin, lightDirection, 10000.0f))
+        {
+            lighting += EvaluatePbrLighting(surface, lightDirection, radiance);
+        }
+    }
+
+    hitDistance = 10000.0f;
+    return lighting / float(RAYTRACING_DEMO_SOFT_SHADOW_SAMPLE_COUNT);
+#else
+    const float3 lightDirection = normalize(light.DirectionAndAngularRadius.xyz);
+    const float nDotL = saturate(dot(surface.NormalWs, lightDirection));
     if (nDotL <= 0.0f)
     {
         return 0.0f;
@@ -237,13 +301,69 @@ float3 EvaluateDirectionalLight(DirectionalLightData light, SurfaceData surface,
     }
 
     hitDistance = 10000.0f;
-    float3 radiance = light.ColorAndIntensity.rgb * light.ColorAndIntensity.w;
+    const float3 radiance = light.ColorAndIntensity.rgb * light.ColorAndIntensity.w;
     return EvaluatePbrLighting(surface, lightDirection, radiance);
+#endif
 }
 
-float3 EvaluatePointLight(PointLightData light, SurfaceData surface, out float hitDistance)
+float3 EvaluatePointLight(
+    PointLightData light,
+    SurfaceData surface,
+    inout uint rngState,
+    out float hitDistance)
 {
     hitDistance = 0.0f;
+#if RAYTRACING_DEMO_SOFT_SHADOWS
+    const float3 toLight = light.PositionAndRange.xyz - surface.PositionWs;
+    const float baseDistanceToLight = length(toLight);
+    if (baseDistanceToLight <= 0.001f || baseDistanceToLight > light.PositionAndRange.w)
+    {
+        return 0.0f;
+    }
+
+    const float3 baseLightDirection = toLight / baseDistanceToLight;
+    float3 tangent;
+    float3 bitangent;
+    BuildOrthonormalBasis(baseLightDirection, tangent, bitangent);
+    const float3 baseRadiance = light.ColorAndIntensity.rgb * light.ColorAndIntensity.w;
+    float3 lighting = 0.0f;
+    [unroll]
+    for (uint sampleIndex = 0u; sampleIndex < RAYTRACING_DEMO_SOFT_SHADOW_SAMPLE_COUNT; ++sampleIndex)
+    {
+        const float2 diskSample = SampleUniformDisk(rngState) * light.Attenuation.w;
+        const float3 samplePosition = light.PositionAndRange.xyz + tangent * diskSample.x + bitangent * diskSample.y;
+        const float3 sampleToLight = samplePosition - surface.PositionWs;
+        const float distanceToLight = length(sampleToLight);
+        if (distanceToLight <= 0.001f || distanceToLight > light.PositionAndRange.w)
+        {
+            continue;
+        }
+
+        const float3 lightDirection = sampleToLight / distanceToLight;
+        const float nDotL = saturate(dot(surface.NormalWs, lightDirection));
+        if (nDotL <= 0.0f)
+        {
+            continue;
+        }
+
+        const float3 rayOrigin = OffsetRayOrigin(surface.PositionWs, surface.PositionError, surface.NormalWs, lightDirection);
+        if (!IsVisibleAlongRay(rayOrigin, lightDirection, distanceToLight))
+        {
+            continue;
+        }
+
+        const float3 attenuationTerms = light.Attenuation.xyz;
+        const float attenuation = rcp(max(
+            0.001f,
+            attenuationTerms.x +
+            attenuationTerms.y * distanceToLight +
+            attenuationTerms.z * distanceToLight * distanceToLight));
+        lighting += EvaluatePbrLighting(surface, lightDirection, baseRadiance * attenuation);
+    }
+
+    hitDistance = baseDistanceToLight;
+    return lighting / float(RAYTRACING_DEMO_SOFT_SHADOW_SAMPLE_COUNT);
+#else
     float3 toLight = light.PositionAndRange.xyz - surface.PositionWs;
     float distanceToLight = length(toLight);
     if (distanceToLight <= 0.001f || distanceToLight > light.PositionAndRange.w)
@@ -271,7 +391,9 @@ float3 EvaluatePointLight(PointLightData light, SurfaceData surface, out float h
         attenuationTerms.x + attenuationTerms.y * distanceToLight + attenuationTerms.z * distanceToLight * distanceToLight));
     float3 radiance = light.ColorAndIntensity.rgb * light.ColorAndIntensity.w * attenuation;
     return EvaluatePbrLighting(surface, lightDirection, radiance);
+#endif
 }
+//Modify End
 
 float3 EvaluateAreaLight(AreaLightData light, SurfaceData surface, inout uint rngState, out float hitDistance)
 {
@@ -324,13 +446,13 @@ float3 EvaluateDirectLighting(SurfaceData surface, inout uint rngState, out floa
     uint lightIndex = min(uint(Random01(rngState) * float(totalLightCount)), totalLightCount - 1u);
     if (lightIndex < directionalLightCount)
     {
-        return EvaluateDirectionalLight(DirectionalLights[lightIndex], surface, nrdDirectHitDistance) * float(totalLightCount);
+        return EvaluateDirectionalLight(DirectionalLights[lightIndex], surface, rngState, nrdDirectHitDistance) * float(totalLightCount);
     }
 
     lightIndex -= directionalLightCount;
     if (lightIndex < pointLightCount)
     {
-        return EvaluatePointLight(PointLights[lightIndex], surface, nrdDirectHitDistance) * float(totalLightCount);
+        return EvaluatePointLight(PointLights[lightIndex], surface, rngState, nrdDirectHitDistance) * float(totalLightCount);
     }
 
     lightIndex -= pointLightCount;

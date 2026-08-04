@@ -3,6 +3,9 @@
 
 #include <DX12Library/Application.h>
 #include <DX12Library/Window.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/Core/FrameworkDeviceContext.h>
+//Modify End
 #include <Framework/Rendering/RayTracing/RayTracingAccelerationStructure.h>
 #include <Framework/Rendering/Pipeline/ShaderBlob.h>
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
@@ -74,11 +77,17 @@ void PathTracingPipelineController::Reset()
     m_DirectRayTracingBindingSet.reset();
     m_RayTracingShader.reset();
     m_ShaderVariants.Clear();
+//Modify Begin:2026-07-30 by BestHui
+    m_ShadowMode = PathTracingShadowMode::HardShadows;
+//Modify End
     m_Layout = {};
 }
 
 void PathTracingPipelineController::EnsurePipelines(
     const PathTracingBackend backend,
+//Modify Begin:2026-07-30 by BestHui
+    const PathTracingShadowMode shadowMode,
+//Modify End
     const RayTracingSceneResourceLayout& layout)
 {
 //Modify Begin:2026-07-27 by BestHui
@@ -86,10 +95,16 @@ void PathTracingPipelineController::EnsurePipelines(
 //Modify End
     const bool layoutChanged = m_Layout != layout;
     const bool backendChanged = m_Backend != backend;
+//Modify Begin:2026-07-30 by BestHui
+    const bool shadowModeChanged = m_ShadowMode != shadowMode;
+//Modify End
     const bool needsDxrPipeline = backend == PathTracingBackend::ShaderTableDxr;
 
     if (!layoutChanged &&
         !backendChanged &&
+//Modify Begin:2026-07-30 by BestHui
+        !shadowModeChanged &&
+//Modify End
         m_InlineDirectLightingShader != nullptr &&
         m_InlineIndirectLightingShader != nullptr &&
         m_LightingCompositeShader != nullptr &&
@@ -102,10 +117,17 @@ void PathTracingPipelineController::EnsurePipelines(
     }
 
     m_Backend = backend;
+//Modify Begin:2026-07-30 by BestHui
+    m_ShadowMode = shadowMode;
+//Modify End
     m_Layout = layout;
 
 //Modify Begin:2026-07-27 by BestHui
-    if (layoutChanged || backendChanged)
+    if (layoutChanged || backendChanged
+//Modify Begin:2026-07-30 by BestHui
+        || shadowModeChanged
+//Modify End
+        )
     {
         RetireCurrentPipelines();
     }
@@ -127,7 +149,12 @@ void PathTracingPipelineController::EnsurePipelines(
 
 void PathTracingPipelineController::CreateDxrPipeline(const RayTracingSceneResourceLayout& layout)
 {
-    const std::shared_ptr<ShaderBlob> pathTracingShader = LoadShader(L"PathTracing.rt.cso", "lib_6_6");
+//Modify Begin:2026-07-30 by BestHui
+    const std::wstring shaderFileName = m_ShadowMode == PathTracingShadowMode::SoftShadows
+        ? L"PathTracing.softshadow.rt.cso"
+        : L"PathTracing.rt.cso";
+    const std::shared_ptr<ShaderBlob> pathTracingShader = LoadShader(shaderFileName, "lib_6_6");
+//Modify End
     const RayTracingPipelineDesc rayTracingDesc = RayTracingPipelineDescBuilder::ReflectedDefault(*pathTracingShader)
         .WithExport(L"DirectLightingRayGen")
         .WithExport(L"IndirectLightingRayGen")
@@ -139,31 +166,41 @@ void PathTracingPipelineController::CreateDxrPipeline(const RayTracingSceneResou
 //Modify End
         .WithPayloadSize(64)
         .Build();
-    m_RayTracingShader = std::make_unique<RayTracingShader>(*pathTracingShader, rayTracingDesc);
+    m_RayTracingShader = std::make_unique<RayTracingShader>(m_DeviceContext, *pathTracingShader, rayTracingDesc);
     m_DirectRayTracingBindingSet = std::make_unique<RayTracingBindingSet>(m_RayTracingShader->CreateBindingSet());
     m_IndirectRayTracingBindingSet = std::make_unique<RayTracingBindingSet>(m_RayTracingShader->CreateBindingSet());
 }
 
 void PathTracingPipelineController::CreateInlinePipelines(const RayTracingSceneResourceLayout& layout)
 {
-    const std::shared_ptr<ShaderBlob> inlineDirectLightingShader = LoadShader(L"DirectLighting.cs.cso", "cs_6_6");
+//Modify Begin:2026-07-30 by BestHui
+    const bool useSoftShadows = m_ShadowMode == PathTracingShadowMode::SoftShadows;
+    const std::shared_ptr<ShaderBlob> inlineDirectLightingShader = LoadShader(
+        useSoftShadows ? L"DirectLighting.softshadow.cs.cso" : L"DirectLighting.cs.cso",
+        "cs_6_6");
+//Modify End
     const ComputePipelineDesc inlineDirectLightingDesc = ComputePipelineDescBuilder::ReflectedDefault(*inlineDirectLightingShader)
 //Modify Begin:2026-07-30 by BestHui
         .WithDirectlyIndexedResourceHeap()
 //Modify End
         .Build();
-    m_InlineDirectLightingShader = std::make_unique<ComputeShader>(*inlineDirectLightingShader, inlineDirectLightingDesc);
+    m_InlineDirectLightingShader = std::make_unique<ComputeShader>(m_DeviceContext, *inlineDirectLightingShader, inlineDirectLightingDesc);
 
-    const std::shared_ptr<ShaderBlob> inlineIndirectLightingShader = LoadShader(L"IndirectLighting.cs.cso", "cs_6_6");
+    //Modify Begin:2026-07-30 by BestHui
+    const std::shared_ptr<ShaderBlob> inlineIndirectLightingShader = LoadShader(
+        useSoftShadows ? L"IndirectLighting.softshadow.cs.cso" : L"IndirectLighting.cs.cso",
+        "cs_6_6");
+    //Modify End
     const ComputePipelineDesc inlineIndirectLightingDesc = ComputePipelineDescBuilder::ReflectedDefault(*inlineIndirectLightingShader)
 //Modify Begin:2026-07-30 by BestHui
         .WithDirectlyIndexedResourceHeap()
 //Modify End
         .Build();
-    m_InlineIndirectLightingShader = std::make_unique<ComputeShader>(*inlineIndirectLightingShader, inlineIndirectLightingDesc);
+    m_InlineIndirectLightingShader = std::make_unique<ComputeShader>(m_DeviceContext, *inlineIndirectLightingShader, inlineIndirectLightingDesc);
 
     const std::shared_ptr<ShaderBlob> lightingCompositeShader = LoadShader(L"LightingComposite.cs.cso", "cs_6_6");
     m_LightingCompositeShader = std::make_unique<ComputeShader>(
+        m_DeviceContext,
         *lightingCompositeShader,
         ComputePipelineDescBuilder::ReflectedDefault(*lightingCompositeShader).Build());
 }

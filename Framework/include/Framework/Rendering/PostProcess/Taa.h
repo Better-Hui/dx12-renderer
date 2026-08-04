@@ -9,13 +9,16 @@
 #include <Framework/Scene/Material.h>
 
 class CommandList;
+//Modify Begin:2026-07-30 by BestHui
+class FrameworkDeviceContext;
+//Modify End
 class Mesh;
 
 class TAA
 {
 public:
 //Modify Begin:2026-07-27 by BestHui
-    explicit TAA(CommandList& commandList, DXGI_FORMAT backBufferFormat, uint32_t width, uint32_t height);
+    explicit TAA(FrameworkDeviceContext& deviceContext, CommandList& commandList, DXGI_FORMAT backBufferFormat, uint32_t width, uint32_t height);
 //Modify End
 
     [[nodiscard]] DirectX::XMFLOAT2 ComputeJitterOffset() const;

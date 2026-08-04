@@ -7,15 +7,36 @@ using namespace RenderGraph;
 
 namespace
 {
-    TransientResourceAllocator::ResourceLifecycle& GetOrAdd(std::map<ResourceId, TransientResourceAllocator::ResourceLifecycle>& map, const ResourceId& id, const uint32_t passIndex)
+//Modify Begin:2026-07-30 by BestHui
+    constexpr uint8_t DirectQueueMask = 1u << 0u;
+    constexpr uint8_t AsyncComputeQueueMask = 1u << 1u;
+
+    uint8_t GetQueueMask(const RenderPassQueue queue)
+    {
+        return queue == RenderPassQueue::AsyncCompute ? AsyncComputeQueueMask : DirectQueueMask;
+    }
+
+    bool HasSingleQueue(const uint8_t queueMask)
+    {
+        return queueMask == DirectQueueMask || queueMask == AsyncComputeQueueMask;
+    }
+
+    TransientResourceAllocator::ResourceLifecycle& GetOrAdd(
+        std::map<ResourceId, TransientResourceAllocator::ResourceLifecycle>& map,
+        const ResourceId& id,
+        const uint32_t passIndex,
+        const uint8_t queueMask)
     {
         if (!map.contains(id))
         {
-            map.insert(std::pair{ id, TransientResourceAllocator::ResourceLifecycle{ id, passIndex, passIndex } });
+            map.insert(std::pair{ id, TransientResourceAllocator::ResourceLifecycle{ id, passIndex, passIndex, queueMask } });
         }
+
+        map[id].m_QueueMask |= queueMask;
 
         return map[id];
     }
+//Modify End
 
     bool IntersectHelper(const TransientResourceAllocator::ResourceLifecycle& l, const TransientResourceAllocator::ResourceLifecycle& r)
     {
@@ -30,6 +51,17 @@ bool TransientResourceAllocator::ResourceLifecycle::Intersect(const ResourceLife
     return IntersectHelper(lifecycle1, lifecycle2) || IntersectHelper(lifecycle2, lifecycle1);
 }
 
+//Modify Begin:2026-07-30 by BestHui
+bool TransientResourceAllocator::ResourceLifecycle::CanAlias(
+    const ResourceLifecycle& lifecycle1,
+    const ResourceLifecycle& lifecycle2)
+{
+    return HasSingleQueue(lifecycle1.m_QueueMask) &&
+        lifecycle1.m_QueueMask == lifecycle2.m_QueueMask &&
+        !Intersect(lifecycle1, lifecycle2);
+}
+//Modify End
+
 //Modify Begin:2026-07-28 by BestHui
 std::map<ResourceId, TransientResourceAllocator::ResourceLifecycle> TransientResourceAllocator::GetResourceLifecycles(
     const std::vector<RenderPass*>& renderPasses,
@@ -41,16 +73,19 @@ std::map<ResourceId, TransientResourceAllocator::ResourceLifecycle> TransientRes
     for (uint32_t passIndex = 0; passIndex < renderPasses.size(); ++passIndex)
     {
         const auto& pass = *renderPasses[passIndex];
+//Modify Begin:2026-07-30 by BestHui
+        const uint8_t queueMask = GetQueueMask(pass.GetQueue());
+//Modify End
 
         for (const auto& output : pass.GetOutputs())
         {
-            auto& lifecycle = GetOrAdd(lifecycles, output.m_Id, passIndex);
+            auto& lifecycle = GetOrAdd(lifecycles, output.m_Id, passIndex, queueMask);
             lifecycle.m_EndPassIndex = passIndex;
         }
 
         for (const auto& input : pass.GetInputs())
         {
-            auto& lifecycle = GetOrAdd(lifecycles, input.m_Id, passIndex);
+            auto& lifecycle = GetOrAdd(lifecycles, input.m_Id, passIndex, queueMask);
             Assert(lifecycle.m_BeginPassIndex != passIndex, "A resource's first usage cannot be as an input.");
 
             lifecycle.m_EndPassIndex = passIndex;
@@ -64,7 +99,7 @@ std::map<ResourceId, TransientResourceAllocator::ResourceLifecycle> TransientRes
             : static_cast<uint32_t>(renderPasses.size()) - 1u;
         for (const ResourceId externalOutputId : externalOutputIds)
         {
-            auto& lifecycle = GetOrAdd(lifecycles, externalOutputId, lastPassIndex);
+            auto& lifecycle = GetOrAdd(lifecycles, externalOutputId, lastPassIndex, DirectQueueMask);
             lifecycle.m_EndPassIndex = lastPassIndex;
         }
     }
@@ -105,7 +140,7 @@ std::vector<TransientResourceAllocator::HeapInfo> TransientResourceAllocator::Cr
     {
         compacting = false;
 
-        for (uint32_t expandingIndex = 0; expandingIndex < heaps.size() - 1; ++expandingIndex)
+        for (uint32_t expandingIndex = 0; expandingIndex + 1 < heaps.size(); ++expandingIndex)
         {
             auto& expandingHeap = heaps[expandingIndex];
             uint32_t theBiggestFittingHeapIndex = -1;
@@ -125,7 +160,7 @@ std::vector<TransientResourceAllocator::HeapInfo> TransientResourceAllocator::Cr
 
                     for (const auto& expandingLifecycle : expandingHeap.m_ResourceLifecycles)
                     {
-                        if (ResourceLifecycle::Intersect(expandingLifecycle, otherLifecycle))
+                        if (!ResourceLifecycle::CanAlias(expandingLifecycle, otherLifecycle))
                         {
                             intersect = true;
                             break;
@@ -151,7 +186,7 @@ std::vector<TransientResourceAllocator::HeapInfo> TransientResourceAllocator::Cr
 
                     for (const auto& resourceLifecycle : expandingHeap.m_ResourceLifecycles)
                     {
-                        Assert(!ResourceLifecycle::Intersect(resourceLifecycle, otherLifecycle), "Some of the existing lifecycles intersect the newly added one.");
+                        Assert(ResourceLifecycle::CanAlias(resourceLifecycle, otherLifecycle), "Some of the existing lifecycles cannot safely alias the newly added one.");
                     }
 
                     expandingHeap.m_ResourceLifecycles.push_back(otherLifecycle);

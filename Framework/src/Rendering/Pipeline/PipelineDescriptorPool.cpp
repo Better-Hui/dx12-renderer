@@ -1,8 +1,10 @@
 //Modify Begin:2026-07-27 by BestHui
 #include <Framework/Rendering/Pipeline/PipelineDescriptorPool.h>
 
-#include <DX12Library/Application.h>
 #include <DX12Library/Helpers.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/Core/FrameworkDeviceContext.h>
+//Modify End
 #include <Framework/Rendering/Pipeline/PipelineLayout.h>
 
 #include <algorithm>
@@ -17,8 +19,11 @@ namespace
 //Modify End
 }
 
-PipelineDescriptorPool::PipelineDescriptorPool(PipelineDescriptorPoolDesc desc)
+PipelineDescriptorPool::PipelineDescriptorPool(
+    FrameworkDeviceContext& deviceContext,
+    PipelineDescriptorPoolDesc desc)
     : m_Desc(desc)
+    , m_DeviceContext(&deviceContext)
 {
 }
 
@@ -68,7 +73,9 @@ PipelineDescriptorSet PipelineDescriptorPool::AllocateDescriptorSetValue(
         resourceDescriptorCount,
         samplerDescriptorCount);
 //Modify End
-    auto device = Application::Get().GetDevice();
+//Modify Begin:2026-07-30 by BestHui
+    const auto& device = m_DeviceContext->GetDevice();
+//Modify End
 //Modify Begin:2026-07-29 by BestHui
     uint32_t nextResourceDescriptorOffset = resourceDescriptorOffset;
 //Modify End
@@ -165,9 +172,11 @@ PipelineDescriptorTableAllocation PipelineDescriptorPool::AllocateResourceDescri
 //Modify Begin:2026-08-03 by BestHui
     allocation.Revision = GNextDescriptorTableRevision.fetch_add(1u);
 //Modify End
-    allocation.CpuDescriptors = Application::Get().AllocateDescriptors(
+//Modify Begin:2026-07-30 by BestHui
+    allocation.CpuDescriptors = m_DeviceContext->AllocateDescriptors(
         D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
         descriptorCount);
+//Modify End
     return allocation;
 }
 

@@ -34,6 +34,9 @@
 
 class CommandContext;
 class StructuredBuffer;
+//Modify Begin:2026-07-30 by BestHui
+class FrameworkDeviceContext;
+//Modify End
 
 //Modify Begin:2026-07-23 by BestHui
 struct ComputePipelineDesc
@@ -75,7 +78,7 @@ private:
 class ComputeShader
 {
 public:
-    ComputeShader(const ShaderBlob& shader, ComputePipelineDesc desc);
+    ComputeShader(FrameworkDeviceContext& deviceContext, const ShaderBlob& shader, ComputePipelineDesc desc);
 
     bool HasConstantBuffer(const std::string& variableName) const;
     bool HasShaderResourceView(const std::string& variableName) const;
@@ -110,6 +113,9 @@ public:
 
 
 private:
+//Modify Begin:2026-07-30 by BestHui
+    FrameworkDeviceContext& GetDeviceContext() const { return m_DeviceContext; }
+//Modify End
     //Modify Begin:2026-07-23 by BestHui
 //Modify Begin:2026-07-29 by BestHui
     friend class CommandContext;
@@ -124,6 +130,7 @@ private:
     void BuildReflectedRootSignature(const ComputePipelineDesc& desc);
     const DescriptorBindingInfo& GetReflectedBinding(const std::string& variableName, DescriptorBindingKind expectedKind) const;
 
+    FrameworkDeviceContext& m_DeviceContext;
     std::shared_ptr<RootSignature> m_RootSignature;
     ComputePipelineStateBuilder m_PipelineStateBuilder;
     Microsoft::WRL::ComPtr<ID3DBlob> m_Shader;

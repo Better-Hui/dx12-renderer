@@ -11,6 +11,9 @@
 #include <memory>
 
 class CommandList;
+//Modify Begin:2026-07-30 by BestHui
+class FrameworkDeviceContext;
+//Modify End
 
 class DenoiserController final
 {
@@ -22,7 +25,7 @@ public:
         SVGF = 2,
     };
 
-    void Initialize();
+    void Initialize(FrameworkDeviceContext& deviceContext);
     void Shutdown();
 
     void SetAlgorithm(Algorithm algorithm);

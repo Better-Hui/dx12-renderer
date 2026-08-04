@@ -3,7 +3,6 @@
 
 #include <PathTracing/PathTracingSceneBindings.h>
 #include <RenderGraph/RaytracingDemoGraphResources.h>
-#include <RaytracingDemo.h>
 
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
@@ -12,7 +11,10 @@
 
 using namespace DirectX;
 
-std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateSkyboxPass(RaytracingDemo& demo, const RenderGraph::ResourceId sceneReadyToken)
+std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateSkyboxPass(
+    const RaytracingDemoPassResources& resources,
+    const RaytracingDemoPassConfig& config,
+    const RenderGraph::ResourceId sceneReadyToken)
 {
     using namespace RenderGraph;
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
@@ -31,11 +33,11 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateSk
 //Modify End
             { DemoResourceIds::SkyboxFinishedToken, OutputType::Token },
         },
-        [&demo](const RenderContext& context, CommandList& cmd)
+        [resources, config](const RenderContext& context, CommandList& cmd)
         {
 //Modify Begin:2026-07-28 by BestHui
-            ComputeShader& skyboxShader = *demo.m_SkyboxComputeShader;
-            const RaytracingDemo::CameraConstants camera = RaytracingDemoPassAccess::BuildPassCameraConstants(demo, context);
+            ComputeShader& skyboxShader = *resources.SkyboxComputeShader;
+            const RaytracingDemoCameraConstants camera = RaytracingDemoPassBindings::BuildPassCameraConstants(resources, config, context);
             CommandContext commandContext(cmd);
 
             commandContext.SetConstantBuffer(skyboxShader, "CameraConstants", sizeof(camera), &camera);
@@ -43,7 +45,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateSk
 //Modify Begin:2026-07-30 by BestHui
             if (skyboxShader.HasShaderResourceView("SkyboxTexture"))
             {
-                commandContext.SetTexture(skyboxShader, "SkyboxTexture", ShaderResourceView::TextureCube(demo.m_SkyboxTexture));
+                commandContext.SetTexture(skyboxShader, "SkyboxTexture", ShaderResourceView::TextureCube(resources.SkyboxTexture));
             }
 //Modify End
             commandContext.SetUnorderedAccessView(skyboxShader, "SceneColor", UnorderedAccessView(context.m_ResourcePool->GetTexture(DemoResourceIds::SceneColor)));

@@ -36,6 +36,9 @@ struct PointLight
 	float LinearAttenuation = 0.22f;
 	float QuadraticAttenuation = 0.2f;
 	float Range = 20.0f;
+	//Modify Begin:2026-07-30 by BestHui
+	float SourceRadius = 0.25f;
+	//Modify End
 
 	void RecalculateAttenuationCoefficients();
 

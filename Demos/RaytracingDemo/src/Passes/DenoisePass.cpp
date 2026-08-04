@@ -1,11 +1,12 @@
 #include <Passes/RaytracingDemoPasses.h>
 
 #include <RenderGraph/RaytracingDemoGraphResources.h>
-#include <RaytracingDemo.h>
-
 #include <RenderGraph/RenderPass.h>
 
-std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDenoisePass(RaytracingDemo& demo)
+//Modify Begin:2026-07-30 by BestHui
+std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDenoisePass(
+    const RaytracingDemoPassResources& resources,
+    const RaytracingDemoPassConfig&)
 {
     using namespace RenderGraph;
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
@@ -34,7 +35,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDe
             { DemoResourceIds::SceneColor, OutputType::UnorderedAccess },
             { DemoResourceIds::DenoiseFinishedToken, OutputType::Token },
         },
-        [&demo](const RenderContext& context, CommandList& cmd)
+        [resources](const RenderContext& context, CommandList& cmd)
         {
             const RaytracingDemoRenderGraph::FrameGBufferResources gbuffer = RaytracingDemoRenderGraph::GetFrameGBufferResources(context);
             const RaytracingDemoRenderGraph::LightingResources lighting = RaytracingDemoRenderGraph::GetLightingResources(context);
@@ -43,8 +44,8 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDe
 
             const RaytracingDemoRenderGraph::NRDResources nrd = RaytracingDemoRenderGraph::GetNRDResources(context);
             const NRD::FrameMatrices frameMatrices = {
-                demo.GetSceneCamera().GetViewMatrix(),
-                demo.GetSceneCamera().GetProjectionMatrix(),
+                resources.SceneCamera.GetViewMatrix(),
+                resources.SceneCamera.GetProjectionMatrix(),
             };
 
 //Modify Begin:2026-07-30 by BestHui
@@ -57,7 +58,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDe
                 };
 //Modify End
 
-            demo.GetDenoisers().Execute(
+            resources.Denoisers.Execute(
                 cmd,
                 frameMatrices,
                 gbuffer,
@@ -68,3 +69,4 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDe
                 transitionResource);
         });
 }
+//Modify End

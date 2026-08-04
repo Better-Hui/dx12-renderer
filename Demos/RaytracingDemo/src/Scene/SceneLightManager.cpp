@@ -6,6 +6,9 @@
 
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/Core/FrameworkDeviceContext.h>
+//Modify End
 #include <Framework/Rendering/RayTracing/RayTracingShader.h>
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
 
@@ -150,8 +153,9 @@ namespace
 //Modify End
 }
 
-SceneLightManager::SceneLightManager()
-    : m_DirectionalLightBuffer(L"Ray Tracing Directional Lights")
+SceneLightManager::SceneLightManager(FrameworkDeviceContext& deviceContext)
+    : m_DeviceContext(deviceContext)
+    , m_DirectionalLightBuffer(L"Ray Tracing Directional Lights")
     , m_PointLightBuffer(L"Ray Tracing Point Lights")
     , m_AreaLightBuffer(L"Ray Tracing Area Lights")
 {
@@ -293,7 +297,7 @@ void SceneLightManager::CreateFromScene(const Scene& scene)
 
 void SceneLightManager::InitializeGpuBuffers(CommandList& commandList)
 {
-    m_UploadBuffer = std::make_unique<SharedUploadBuffer>();
+    m_UploadBuffer = std::make_unique<SharedUploadBuffer>(m_DeviceContext);
 //Modify Begin:2026-07-30 by BestHui
     m_DirectionalLightBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_DirectionalLightGpuData.size());
     m_PointLightBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_PointLightGpuData.size());
@@ -305,7 +309,7 @@ void SceneLightManager::InitializeGpuBuffers(CommandList& commandList)
 }
 
 //Modify Begin:2026-07-30 by BestHui
-bool SceneLightManager::Upload(CommandList& commandList)
+bool SceneLightManager::Upload(CommandList& commandList, const uint64_t frameIndex)
 //Modify End
 {
     Assert(m_UploadBuffer != nullptr, "Light upload buffer is not initialized.");
@@ -330,7 +334,7 @@ bool SceneLightManager::Upload(CommandList& commandList)
         m_AreaLightDirtyEnd = 0;
     }
 
-    m_UploadBuffer->BeginFrame();
+    m_UploadBuffer->BeginFrame(frameIndex);
     if (m_DirectionalLightDirtyBegin < m_DirectionalLightDirtyEnd)
     {
         UploadGpuLightRange(commandList, *m_UploadBuffer, m_DirectionalLightBuffer, m_DirectionalLightGpuData, m_DirectionalLightDirtyBegin, m_DirectionalLightDirtyEnd);
@@ -504,6 +508,9 @@ bool SceneLightManager::DrawImGui()
                     pointChanged |= ImGui::ColorEdit3("Color", &light.Color.x);
                     pointChanged |= ImGui::SliderFloat("Intensity", &light.Color.w, 0.0f, 150.0f, "%.1f");
                     pointChanged |= ImGui::SliderFloat("Range", &light.Range, 0.1f, 200.0f, "%.1f");
+//Modify Begin:2026-07-30 by BestHui
+                    pointChanged |= ImGui::SliderFloat("Source Radius", &light.SourceRadius, 0.0f, 10.0f, "%.3f");
+//Modify End
                     bool animated = isAnimated;
                     if (ImGui::Checkbox("Animated", &animated))
                     {
@@ -532,6 +539,9 @@ bool SceneLightManager::DrawImGui()
                         light.Color.z = std::max(0.0f, light.Color.z);
                         light.Color.w = std::max(0.0f, light.Color.w);
                         light.Range = std::max(0.1f, light.Range);
+//Modify Begin:2026-07-30 by BestHui
+                        light.SourceRadius = std::max(0.0f, light.SourceRadius);
+//Modify End
                         light.RecalculateAttenuationCoefficients();
                         UpdatePointLightGpuData(i);
                         MarkPointLightsDirty(i, i + 1);
@@ -547,6 +557,9 @@ bool SceneLightManager::DrawImGui()
         ImGui::ColorEdit3("Point Color", &m_NewPointLightColor.x);
         ImGui::SliderFloat("Point Intensity", &m_NewPointLightIntensity, 0.0f, 100.0f, "%.1f");
         ImGui::SliderFloat("Point Range", &m_NewPointLightRange, 0.1f, 100.0f, "%.1f");
+//Modify Begin:2026-07-30 by BestHui
+        ImGui::SliderFloat("Point Source Radius", &m_NewPointLightSourceRadius, 0.0f, 10.0f, "%.3f");
+//Modify End
         ImGui::SliderFloat("Random Spawn Radius", &m_RandomPointLightSpawnRadius, 1.0f, 80.0f, "%.1f");
         if (ImGui::Button("Add Point Light At Origin"))
         {
@@ -703,6 +716,9 @@ void SceneLightManager::AddPointLightAtOrigin()
         std::max(0.0f, m_NewPointLightColor.z),
         std::max(0.0f, m_NewPointLightIntensity)
     };
+//Modify Begin:2026-07-30 by BestHui
+    light.SourceRadius = std::max(0.0f, m_NewPointLightSourceRadius);
+//Modify End
     light.RecalculateAttenuationCoefficients();
 
     const size_t lightIndex = m_PointLights.size();
@@ -744,6 +760,9 @@ void SceneLightManager::AddRandomPointLightInUpperHemisphere()
         colorDistribution(rng),
         intensityDistribution(rng)
     };
+//Modify Begin:2026-07-30 by BestHui
+    light.SourceRadius = std::max(0.0f, m_NewPointLightSourceRadius);
+//Modify End
     light.RecalculateAttenuationCoefficients();
 
     const float orbitRadius = std::max(1.0f, std::sqrt(position.x * position.x + position.z * position.z));
@@ -852,7 +871,9 @@ void SceneLightManager::BuildGpuData()
         PointLightData gpuLight{};
         gpuLight.PositionAndRange = { light.PositionWs.x, light.PositionWs.y, light.PositionWs.z, light.Range };
         gpuLight.ColorAndIntensity = light.Color;
-        gpuLight.Attenuation = { light.ConstantAttenuation, light.LinearAttenuation, light.QuadraticAttenuation, 0.0f };
+//Modify Begin:2026-07-30 by BestHui
+        gpuLight.Attenuation = { light.ConstantAttenuation, light.LinearAttenuation, light.QuadraticAttenuation, light.SourceRadius };
+//Modify End
         m_PointLightGpuData.push_back(gpuLight);
     }
 
@@ -879,7 +900,9 @@ void SceneLightManager::UpdatePointLightGpuData(const size_t lightIndex)
     PointLightData& gpuLight = m_PointLightGpuData[lightIndex];
     gpuLight.PositionAndRange = { light.PositionWs.x, light.PositionWs.y, light.PositionWs.z, light.Range };
     gpuLight.ColorAndIntensity = light.Color;
-    gpuLight.Attenuation = { light.ConstantAttenuation, light.LinearAttenuation, light.QuadraticAttenuation, 0.0f };
+//Modify Begin:2026-07-30 by BestHui
+    gpuLight.Attenuation = { light.ConstantAttenuation, light.LinearAttenuation, light.QuadraticAttenuation, light.SourceRadius };
+//Modify End
 }
 
 void SceneLightManager::MarkDirectionalLightsDirty()
