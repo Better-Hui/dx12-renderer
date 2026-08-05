@@ -97,7 +97,12 @@ private:
     void RetireCurrentPipelines();
     void ReleaseExpiredRetiredPipelines();
 //Modify End
-    std::shared_ptr<ShaderBlob> LoadShader(std::wstring compiledFileName, std::string targetProfile);
+    std::shared_ptr<ShaderBlob> LoadShader(
+        std::wstring compiledFileName,
+        std::wstring sourceFileName,
+        std::string targetProfile,
+        std::vector<ShaderVariantDefine> defines = {},
+        std::string entryPoint = "main");
     void CreateInlinePipelines(const RayTracingSceneResourceLayout& layout);
     void CreateDxrPipeline(const RayTracingSceneResourceLayout& layout);
 

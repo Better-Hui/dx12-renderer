@@ -141,7 +141,10 @@ The demo loads `Assets/Scenes/DefaultScene.json` by default.
 | `RAYTRACING_DEMO_SCENE` | `Assets\Scenes\DefaultScene.json` | Loads a JSON or Unity scene file. |
 | `RAYTRACING_DEMO_UNITY_SCENE` | `C:\Scenes\CornellBox.unity` | Compatibility variable for a Unity text scene. |
 | `RAYTRACING_DEMO_MODE` | `shader-table` | Starts shader-table DXR; default is inline ray query. |
-| `RAYTRACING_DEMO_SOFT_SHADOWS` | `1` | Selects the precompiled soft-shadow variants for directional and point lights. |
+| `RAYTRACING_DEMO_SOFT_SHADOWS` | `1` | Selects the soft-shadow variants for directional and point lights. |
+| `DX12_RENDERER_SHADER_COMPILE` | `auto`, `off`, or `force` | Controls startup shader compilation; `auto` is the default. |
+| `DX12_RENDERER_SHADER_SOURCE_ROOT` | `C:\work\dx12-renderer` | Overrides source-root discovery for startup compilation. |
+| `DX12_RENDERER_SHADER_CACHE_ROOT` | `D:\ShaderCache` | Overrides the generated shader-cache directory. |
 | `RAYTRACING_DEMO_DENOISER` | `nrd` or `svgf` | Selects a denoiser. |
 | `RAYTRACING_DEMO_ASYNC_COMPUTE` | `1` | Places the eligible inline indirect-lighting pass on the compute queue. |
 | `RAYTRACING_DEMO_ASYNC_CPU_SERIALIZE` | `1` | Debug-only CPU wait after async submission; useful for synchronization diagnosis, not performance measurement. |
@@ -149,6 +152,20 @@ The demo loads `Assets/Scenes/DefaultScene.json` by default.
 | `RAYTRACING_DEMO_MESHLET_GBUFFER` | `1` | Enables the meshlet GBuffer backend. |
 | `RAYTRACING_DEMO_MESHLET_BACKEND` | `indirect` | Selects compute-indirect meshlet rendering; otherwise task shaders are used. |
 | `RAYTRACING_DEMO_MESHLET_DEBUG` | `1` | Enables meshlet-cluster debug visualization. |
+
+## Startup shader compilation and variants
+
+`RaytracingDemo` now requests its graphics, compute, mesh/task, and DXR shaders through the Framework `ShaderVariantManager`. This is a **startup-time** workflow, not runtime hot reload: edit an `.hlsl` or referenced `.hlsli`, launch the demo again, and the affected requested variants compile before their pipelines are created.
+
+- In `auto` mode, the manager locates the development source root from `DX12_RENDERER_SHADER_SOURCE_ROOT`, the nearby `CMakeCache.txt`, or the current working tree.
+- It recursively fingerprints the root source, resolved `#include` files, target profile, entry point, `Defines`, include directories, compiler arguments, and the local `dxcompiler.dll` identity.
+- Cache entries are written beside the executable by default: `Saved/ShaderCache/<variant>.<fingerprint>.cso` plus a readable `.meta` dependency record.
+- A matching fingerprint loads bytecode directly from disk. A changed source/include/define/profile compiles a new entry through in-process DXC.
+- `off` disables source compilation and uses the packaged `Shaders/*.cso` fallback. If source is available and DXC reports an error, startup fails with DXC diagnostics instead of silently running stale bytecode.
+
+Variants are **explicitly declared, automatically compiled, and automatically cached**. The system intentionally does not enumerate every theoretical `#define` combination: that would produce an unbounded permutation explosion. For example, `PathTracingPipelineController` declares Hard and `RAYTRACING_DEMO_SOFT_SHADOWS=1` variants from the same source file; no soft-shadow wrapper source is needed by the runtime path.
+
+The startup compiler currently covers the shaders directly owned by `RaytracingDemo`. Framework shaders embedded as generated headers and legacy demos still use their existing build-time compilation paths.
 
 `UnitySceneDump` inspects a supported scene without launching the renderer:
 
@@ -172,6 +189,7 @@ The demo loads `Assets/Scenes/DefaultScene.json` by default.
 - JSON scene import exists, but the stress-test spheres are still defined by sample C++ rather than scene data. They are enabled by default and can be added or removed incrementally from the runtime UI.
 - Meshlet rendering is an experimental GBuffer backend, not a complete visibility/streaming system or a claim of optimal meshlet performance.
 - Soft shadows currently use a fixed four-sample variant. Directional lights use angular radius, point lights use source radius, and adaptive sampling or quality presets are not implemented yet.
+- Shader variants compile only during startup/pipeline creation. Runtime source hot reload, background compilation, and a project-wide variant manifest are not implemented.
 - DLSS/Streamline is not currently integrated.
 
 ## Documentation and notices

@@ -139,7 +139,10 @@ cmake --build ..\build --config Release --target RaytracingDemo UnitySceneDump
 | `RAYTRACING_DEMO_SCENE` | `Assets\Scenes\DefaultScene.json` | 指定要加载的 JSON 或 Unity 场景。 |
 | `RAYTRACING_DEMO_UNITY_SCENE` | `C:\Scenes\CornellBox.unity` | 兼容旧调用方式的 Unity 场景变量。 |
 | `RAYTRACING_DEMO_MODE` | `shader-table` | 使用 shader-table DXR；默认是 inline ray query。 |
-| `RAYTRACING_DEMO_SOFT_SHADOWS` | `1` | 为平行光和点光源选择预编译软阴影变体。 |
+| `RAYTRACING_DEMO_SOFT_SHADOWS` | `1` | 为平行光和点光源选择软阴影变体。 |
+| `DX12_RENDERER_SHADER_COMPILE` | `auto`、`off` 或 `force` | 控制启动期 Shader 编译，默认是 `auto`。 |
+| `DX12_RENDERER_SHADER_SOURCE_ROOT` | `C:\work\dx12-renderer` | 覆盖启动期 Shader 源码根目录的自动发现结果。 |
+| `DX12_RENDERER_SHADER_CACHE_ROOT` | `D:\ShaderCache` | 覆盖生成 Shader Cache 的目录。 |
 | `RAYTRACING_DEMO_DENOISER` | `nrd` 或 `svgf` | 选择降噪器。 |
 | `RAYTRACING_DEMO_ASYNC_COMPUTE` | `1` | 将符合条件的 inline indirect-lighting pass 放到 compute queue。 |
 | `RAYTRACING_DEMO_ASYNC_CPU_SERIALIZE` | `1` | 调试用：async 提交后执行 CPU wait；不能用于性能测试。 |
@@ -147,6 +150,20 @@ cmake --build ..\build --config Release --target RaytracingDemo UnitySceneDump
 | `RAYTRACING_DEMO_MESHLET_GBUFFER` | `1` | 开启 Meshlet GBuffer。 |
 | `RAYTRACING_DEMO_MESHLET_BACKEND` | `indirect` | Meshlet GBuffer 使用 compute-indirect；不设置时使用 task shader。 |
 | `RAYTRACING_DEMO_MESHLET_DEBUG` | `1` | 开启 Meshlet cluster 调试显示。 |
+
+## 启动期 Shader 编译与变体
+
+`RaytracingDemo` 现在通过 Framework 的 `ShaderVariantManager` 请求自身的 Raster、Compute、Task/Mesh 和 DXR Shader。这是**启动期编译**，不是运行中的 Shader 热更新：修改某个 `.hlsl`，或它引用的 `.hlsli`，重新启动 demo 后，相关变体会在创建 pipeline 前自动编译。
+
+- `auto` 模式下，系统依次尝试 `DX12_RENDERER_SHADER_SOURCE_ROOT`、构建目录附近的 `CMakeCache.txt`、当前工作目录来定位源码根目录。
+- 指纹会递归覆盖根源码、可解析的 `#include`、target profile、entry point、`Defines`、include 目录、编译参数和本机 `dxcompiler.dll` 标识。
+- 默认缓存路径是 exe 同级的 `Saved/ShaderCache`。每个条目包含 `<variant>.<fingerprint>.cso`，以及便于排查依赖关系的 `.meta` 文件。
+- 指纹没有变化时直接读取缓存；源码、include、宏定义或 profile 发生变化时，系统通过进程内 DXC 新编译一个条目。
+- `off` 会关闭源码编译，只读取随程序带来的 `Shaders/*.cso`。如果源码可用但 DXC 编译失败，启动会带着 DXC 诊断信息失败，而不是悄悄继续使用旧字节码。
+
+这里的“自动管理变体”是：**变体由代码显式声明，系统自动编译和缓存**；不是枚举所有理论上的 `#define` 组合。后者会带来不可控的排列组合爆炸。当前 `PathTracingPipelineController` 就从同一份 Shader 源码声明 Hard 与 `RAYTRACING_DEMO_SOFT_SHADOWS=1` 两个变体，运行时不再依赖软阴影 wrapper 文件。
+
+目前启动期编译已经覆盖 `RaytracingDemo` 直接拥有的 Shader。Framework 中生成到 C++ header 的 Shader，以及旧 demo，仍维持原有的构建期编译方式。
 
 ## 目录导航
 
@@ -175,6 +192,7 @@ cmake --build ..\build --config Release --target RaytracingDemo UnitySceneDump
 - JSON 场景已经可用，但压力球仍由 sample C++ 定义，不属于场景数据。它们默认开启，可以通过运行时 UI 走增量 Add/Remove 路径切换。
 - Meshlet 路径是实验性 GBuffer 后端，不是完整的 visibility / streaming 系统，也不代表已达到最优 Meshlet 性能。
 - 软阴影当前使用固定 4 次采样的变体：平行光读取 angular radius，点光源读取 source radius；自适应采样和质量档位尚未实现。
+- Shader 变体只在启动期或创建 pipeline 时编译；运行期源码热更新、后台编译和项目级 variant manifest 还没有实现。
 - 尚未接入 DLSS / Streamline。
 
 ## 进一步阅读与许可证

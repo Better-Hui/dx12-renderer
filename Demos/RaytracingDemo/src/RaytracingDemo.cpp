@@ -390,6 +390,23 @@ void RaytracingDemo::ApplyStressTestSpheresState()
 }
 //Modify End
 
+//Modify Begin:2026-07-30 by BestHui
+std::shared_ptr<ShaderBlob> RaytracingDemo::LoadShaderVariant(
+    std::wstring compiledFileName,
+    std::wstring sourceFileName,
+    std::string targetProfile,
+    std::vector<ShaderVariantDefine> defines)
+{
+    ShaderVariantDesc desc;
+    desc.CompiledFileName = std::move(compiledFileName);
+    desc.SourceFileName = std::move(sourceFileName);
+    desc.TargetProfile = std::move(targetProfile);
+    desc.Defines = std::move(defines);
+    desc.DebugName = "RaytracingDemo";
+    return m_ShaderVariants.GetOrCompile(desc);
+}
+//Modify End
+
 bool RaytracingDemo::LoadContent()
 {
     Assert(RayTracingShader::IsSupported(m_FrameworkDeviceContext), "DirectX Raytracing is not supported by the selected adapter.");
@@ -424,10 +441,18 @@ bool RaytracingDemo::LoadContent()
     withShaderCreateContext("GBuffer", [&]()
     {
 //Modify End
+    const auto vertexShader = LoadShaderVariant(
+        L"GBuffer.vs.cso",
+        L"Demos/RaytracingDemo/shaders/GBuffer/GBuffer.vs.hlsl",
+        "vs_6_6");
+    const auto pixelShader = LoadShaderVariant(
+        L"GBuffer.ps.cso",
+        L"Demos/RaytracingDemo/shaders/GBuffer/GBuffer.ps.hlsl",
+        "ps_6_6");
     m_GBufferShader = std::make_shared<Shader>(
         m_FrameworkDeviceContext,
-        ShaderBlob(L"GBuffer.vs.cso"),
-        ShaderBlob(L"GBuffer.ps.cso"),
+        *vertexShader,
+        *pixelShader,
         [](RasterPipelineStateBuilder& builder)
         {
             builder.WithNoCull();
@@ -439,11 +464,23 @@ bool RaytracingDemo::LoadContent()
 //Modify Begin:2026-07-31 by BestHui
     withShaderCreateContext("GBufferTaskMeshShader", [&]()
     {
+    const auto amplificationShader = LoadShaderVariant(
+        L"GBuffer.task.as.cso",
+        L"Demos/RaytracingDemo/shaders/GBuffer/GBuffer.task.as.hlsl",
+        "as_6_6");
+    const auto meshShader = LoadShaderVariant(
+        L"GBuffer.task.ms.cso",
+        L"Demos/RaytracingDemo/shaders/GBuffer/GBuffer.task.ms.hlsl",
+        "ms_6_6");
+    const auto pixelShader = LoadShaderVariant(
+        L"GBuffer.meshletindirect.ps.cso",
+        L"Demos/RaytracingDemo/shaders/GBuffer/GBuffer.meshletindirect.ps.hlsl",
+        "ps_6_6");
     m_GBufferTaskMeshShader = std::make_shared<MeshShader>(
         m_FrameworkDeviceContext,
-        ShaderBlob(L"GBuffer.task.as.cso"),
-        ShaderBlob(L"GBuffer.task.ms.cso"),
-        ShaderBlob(L"GBuffer.meshletindirect.ps.cso"),
+        *amplificationShader,
+        *meshShader,
+        *pixelShader,
         [](RasterPipelineStateBuilder& builder)
         {
             builder.WithNoCull();
@@ -453,14 +490,22 @@ bool RaytracingDemo::LoadContent()
 
     withShaderCreateContext("GBufferMeshletIndirect", [&]()
     {
+    const auto vertexShader = LoadShaderVariant(
+        L"GBuffer.meshletindirect.vs.cso",
+        L"Demos/RaytracingDemo/shaders/GBuffer/GBuffer.meshletindirect.vs.hlsl",
+        "vs_6_6");
+    const auto pixelShader = LoadShaderVariant(
+        L"GBuffer.meshletindirect.ps.cso",
+        L"Demos/RaytracingDemo/shaders/GBuffer/GBuffer.meshletindirect.ps.hlsl",
+        "ps_6_6");
     PipelineLayoutReflectionOptions meshletIndirectLayoutOptions;
     meshletIndirectLayoutOptions.MaxDescriptorCount = 4096u;
     meshletIndirectLayoutOptions.ShaderStages = PipelineShaderStageFlags::AllGraphics;
     meshletIndirectLayoutOptions.RootConstantBufferNames.push_back("MeshletDrawCBuffer");
     m_GBufferMeshletIndirectShader = std::make_shared<Shader>(
         m_FrameworkDeviceContext,
-        ShaderBlob(L"GBuffer.meshletindirect.vs.cso"),
-        ShaderBlob(L"GBuffer.meshletindirect.ps.cso"),
+        *vertexShader,
+        *pixelShader,
         meshletIndirectLayoutOptions,
         [](RasterPipelineStateBuilder& builder)
         {
@@ -470,11 +515,14 @@ bool RaytracingDemo::LoadContent()
 
     withShaderCreateContext("MeshletCull", [&]()
     {
-    const ShaderBlob meshletCullShaderBlob(L"MeshletCull.cs.cso");
+    const auto meshletCullShaderBlob = LoadShaderVariant(
+        L"MeshletCull.cs.cso",
+        L"Demos/RaytracingDemo/shaders/GBuffer/MeshletCull.cs.hlsl",
+        "cs_6_6");
     m_MeshletCullShader = std::make_shared<ComputeShader>(
         m_FrameworkDeviceContext,
-        meshletCullShaderBlob,
-        ComputePipelineDescBuilder::ReflectedDefault(meshletCullShaderBlob).Build());
+        *meshletCullShaderBlob,
+        ComputePipelineDescBuilder::ReflectedDefault(*meshletCullShaderBlob).Build());
     m_MeshletDrawCommandSignature = m_GBufferMeshletIndirectShader->CreateIndirectDrawCommandSignature(
         "MeshletDrawCBuffer",
         sizeof(MeshletIndirectCommand));
@@ -484,10 +532,18 @@ bool RaytracingDemo::LoadContent()
 //Modify Begin:2026-07-28 by BestHui
     withShaderCreateContext("DisplayComposite", [&]()
     {
+    const auto vertexShader = LoadShaderVariant(
+        L"DisplayComposite.vs.cso",
+        L"Demos/RaytracingDemo/shaders/PostProcessing/DisplayComposite.vs.hlsl",
+        "vs_6_6");
+    const auto pixelShader = LoadShaderVariant(
+        L"DisplayComposite.ps.cso",
+        L"Demos/RaytracingDemo/shaders/PostProcessing/DisplayComposite.ps.hlsl",
+        "ps_6_6");
     m_DisplayCompositeShader = std::make_shared<Shader>(
         m_FrameworkDeviceContext,
-        ShaderBlob(L"DisplayComposite.vs.cso"),
-        ShaderBlob(L"DisplayComposite.ps.cso"),
+        *vertexShader,
+        *pixelShader,
         [](RasterPipelineStateBuilder&) {});
     });
 //Modify End
@@ -495,20 +551,31 @@ bool RaytracingDemo::LoadContent()
 //Modify Begin:2026-07-28 by BestHui
     withShaderCreateContext("SkyboxCompute", [&]()
     {
-    const ShaderBlob skyboxComputeShader(L"Skybox.cs.cso");
+    const auto skyboxComputeShader = LoadShaderVariant(
+        L"Skybox.cs.cso",
+        L"Demos/RaytracingDemo/shaders/Skybox/Skybox.cs.hlsl",
+        "cs_6_6");
     m_SkyboxComputeShader = std::make_shared<ComputeShader>(
         m_FrameworkDeviceContext,
-        skyboxComputeShader,
-        ComputePipelineDescBuilder::ReflectedDefault(skyboxComputeShader).Build());
+        *skyboxComputeShader,
+        ComputePipelineDescBuilder::ReflectedDefault(*skyboxComputeShader).Build());
     });
 //Modify End
 
     withShaderCreateContext("LightBillboard", [&]()
     {
+    const auto vertexShader = LoadShaderVariant(
+        L"LightBillboard.vs.cso",
+        L"Demos/RaytracingDemo/shaders/LightBillboard/LightBillboard.vs.hlsl",
+        "vs_6_6");
+    const auto pixelShader = LoadShaderVariant(
+        L"LightBillboard.ps.cso",
+        L"Demos/RaytracingDemo/shaders/LightBillboard/LightBillboard.ps.hlsl",
+        "ps_6_6");
     m_LightBillboardShader = std::make_shared<Shader>(
         m_FrameworkDeviceContext,
-        ShaderBlob(L"LightBillboard.vs.cso"),
-        ShaderBlob(L"LightBillboard.ps.cso"),
+        *vertexShader,
+        *pixelShader,
         [](RasterPipelineStateBuilder& builder)
         {
             builder.WithAlphaBlend().WithDepthTestNoWrite().WithNoCull();

@@ -20,6 +20,9 @@
 #include <Framework/Rendering/RayTracing/RayTracingShader.h>
 #include <Framework/Scene/Scene.h>
 #include <Framework/Rendering/Pipeline/Shader.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/Rendering/Pipeline/ShaderVariant.h>
+//Modify End
 
 #include <RenderGraph/RenderGraphRoot.h>
 #include <Scene/SceneLightManager.h>
@@ -106,6 +109,13 @@ private:
     RayTracingSceneResourceLayout BuildRayTracingSceneResourceLayout() const;
     void EnsureRayTracingPipelines();
     void BindRayTracingShaderResources();
+//Modify Begin:2026-07-30 by BestHui
+    std::shared_ptr<ShaderBlob> LoadShaderVariant(
+        std::wstring compiledFileName,
+        std::wstring sourceFileName,
+        std::string targetProfile,
+        std::vector<ShaderVariantDefine> defines = {});
+//Modify End
     PipelineConstants BuildPipelineConstants() const;
 //Modify Begin:2026-07-28 by BestHui
     void RebuildRenderGraph();
@@ -162,6 +172,9 @@ private:
 //Modify End
 //Modify Begin:2026-07-27 by BestHui
     FrameworkDeviceContext m_FrameworkDeviceContext;
+//Modify Begin:2026-07-30 by BestHui
+    ShaderVariantManager m_ShaderVariants;
+//Modify End
     PathTracingPipelineController m_PathTracingPipelines;
 //Modify End
     DenoiserController m_Denoisers;

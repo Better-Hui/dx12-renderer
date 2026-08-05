@@ -16,13 +16,19 @@
 
 std::shared_ptr<ShaderBlob> PathTracingPipelineController::LoadShader(
     std::wstring compiledFileName,
-    std::string targetProfile)
+    std::wstring sourceFileName,
+    std::string targetProfile,
+    std::vector<ShaderVariantDefine> defines,
+    std::string entryPoint)
 {
     ShaderVariantDesc desc;
     desc.CompiledFileName = std::move(compiledFileName);
+    desc.SourceFileName = std::move(sourceFileName);
+    desc.EntryPoint = std::move(entryPoint);
     desc.TargetProfile = std::move(targetProfile);
-    desc.HotReloadKey = "RaytracingDemo";
-    return m_ShaderVariants.LoadCompiledVariant(desc);
+    desc.Defines = std::move(defines);
+    desc.DebugName = "RaytracingDemo";
+    return m_ShaderVariants.GetOrCompile(desc);
 }
 
 //Modify Begin:2026-07-27 by BestHui
@@ -150,10 +156,24 @@ void PathTracingPipelineController::EnsurePipelines(
 void PathTracingPipelineController::CreateDxrPipeline(const RayTracingSceneResourceLayout& layout)
 {
 //Modify Begin:2026-07-30 by BestHui
-    const std::wstring shaderFileName = m_ShadowMode == PathTracingShadowMode::SoftShadows
+    const bool useSoftShadows = m_ShadowMode == PathTracingShadowMode::SoftShadows;
+    const std::wstring shaderFileName = useSoftShadows
         ? L"PathTracing.softshadow.rt.cso"
         : L"PathTracing.rt.cso";
-    const std::shared_ptr<ShaderBlob> pathTracingShader = LoadShader(shaderFileName, "lib_6_6");
+    const std::vector<ShaderVariantDefine> defines = useSoftShadows
+        ? std::vector<ShaderVariantDefine>{ { "RAYTRACING_DEMO_SOFT_SHADOWS", "1" } }
+        : std::vector<ShaderVariantDefine>{};
+#if defined(DX12_RENDERER_ENABLE_SM610_LINALG)
+    constexpr const char* targetProfile = "lib_6_10";
+#else
+    constexpr const char* targetProfile = "lib_6_6";
+#endif
+    const std::shared_ptr<ShaderBlob> pathTracingShader = LoadShader(
+        shaderFileName,
+        L"Demos/RaytracingDemo/shaders/PathTracing/PathTracing.rt.hlsl",
+        targetProfile,
+        defines,
+        "");
 //Modify End
     const RayTracingPipelineDesc rayTracingDesc = RayTracingPipelineDescBuilder::ReflectedDefault(*pathTracingShader)
         .WithExport(L"DirectLightingRayGen")
@@ -175,9 +195,14 @@ void PathTracingPipelineController::CreateInlinePipelines(const RayTracingSceneR
 {
 //Modify Begin:2026-07-30 by BestHui
     const bool useSoftShadows = m_ShadowMode == PathTracingShadowMode::SoftShadows;
+    const std::vector<ShaderVariantDefine> shadowDefines = useSoftShadows
+        ? std::vector<ShaderVariantDefine>{ { "RAYTRACING_DEMO_SOFT_SHADOWS", "1" } }
+        : std::vector<ShaderVariantDefine>{};
     const std::shared_ptr<ShaderBlob> inlineDirectLightingShader = LoadShader(
         useSoftShadows ? L"DirectLighting.softshadow.cs.cso" : L"DirectLighting.cs.cso",
-        "cs_6_6");
+        L"Demos/RaytracingDemo/shaders/PathTracing/DirectLighting.cs.hlsl",
+        "cs_6_6",
+        shadowDefines);
 //Modify End
     const ComputePipelineDesc inlineDirectLightingDesc = ComputePipelineDescBuilder::ReflectedDefault(*inlineDirectLightingShader)
 //Modify Begin:2026-07-30 by BestHui
@@ -189,7 +214,9 @@ void PathTracingPipelineController::CreateInlinePipelines(const RayTracingSceneR
     //Modify Begin:2026-07-30 by BestHui
     const std::shared_ptr<ShaderBlob> inlineIndirectLightingShader = LoadShader(
         useSoftShadows ? L"IndirectLighting.softshadow.cs.cso" : L"IndirectLighting.cs.cso",
-        "cs_6_6");
+        L"Demos/RaytracingDemo/shaders/PathTracing/IndirectLighting.cs.hlsl",
+        "cs_6_6",
+        shadowDefines);
     //Modify End
     const ComputePipelineDesc inlineIndirectLightingDesc = ComputePipelineDescBuilder::ReflectedDefault(*inlineIndirectLightingShader)
 //Modify Begin:2026-07-30 by BestHui
@@ -198,7 +225,10 @@ void PathTracingPipelineController::CreateInlinePipelines(const RayTracingSceneR
         .Build();
     m_InlineIndirectLightingShader = std::make_unique<ComputeShader>(m_DeviceContext, *inlineIndirectLightingShader, inlineIndirectLightingDesc);
 
-    const std::shared_ptr<ShaderBlob> lightingCompositeShader = LoadShader(L"LightingComposite.cs.cso", "cs_6_6");
+    const std::shared_ptr<ShaderBlob> lightingCompositeShader = LoadShader(
+        L"LightingComposite.cs.cso",
+        L"Demos/RaytracingDemo/shaders/PathTracing/LightingComposite.cs.hlsl",
+        "cs_6_6");
     m_LightingCompositeShader = std::make_unique<ComputeShader>(
         m_DeviceContext,
         *lightingCompositeShader,
