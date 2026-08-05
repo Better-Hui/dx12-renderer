@@ -110,13 +110,26 @@ namespace
         }
         std::free(scenePath);
 
-        const std::filesystem::path defaultScene = "Assets/Scenes/DefaultScene.json";
-        if (std::filesystem::exists(defaultScene))
+        constexpr const char* DefaultSponzaRelativePath =
+            "Assets/Scenes/Sponza.unity";
+        std::filesystem::path searchDirectory = std::filesystem::current_path();
+        while (!searchDirectory.empty())
         {
-            return defaultScene;
+            const std::filesystem::path defaultScene = searchDirectory / DefaultSponzaRelativePath;
+            if (std::filesystem::exists(defaultScene))
+            {
+                return defaultScene;
+            }
+
+            const std::filesystem::path parentDirectory = searchDirectory.parent_path();
+            if (parentDirectory == searchDirectory)
+            {
+                break;
+            }
+            searchDirectory = parentDirectory;
         }
 
-        throw std::runtime_error("Default JSON scene file does not exist. Set RAYTRACING_DEMO_SCENE to a .json or .unity file.");
+        throw std::runtime_error("Default Sponza scene file does not exist. Set RAYTRACING_DEMO_SCENE to a .json or .unity file.");
     }
 //Modify End
 
@@ -328,6 +341,12 @@ void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::files
 {
     const SceneImportResult sceneImport = SceneImporter::ImportFromFile(scenePath);
     m_Scene = sceneImport.SceneData;
+    std::filesystem::path runtimeStatePath = scenePath;
+    runtimeStatePath += ".runtime.json";
+    if (std::filesystem::exists(runtimeStatePath))
+    {
+        SceneImporter::ApplyJsonRuntimeState(runtimeStatePath, m_Scene);
+    }
     const SceneCamera& sceneCamera = m_Scene.GetCamera();
 
     if (!m_SceneResources.LoadScene(commandList, m_Scene, m_StressTestSpheresEnabled))
@@ -351,7 +370,7 @@ void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::files
     m_Scene.SetSkybox(sceneSkybox);
 
     m_Lights.CreateFromScene(m_Scene);
-    m_SkyboxEnabled = true;
+    m_SkyboxEnabled = !skyboxTexturePath.empty() && std::filesystem::exists(skyboxTexturePath);
     m_HasSceneCamera = sceneCamera.RuntimeCamera != nullptr;
 
     ApplySceneCamera(GetSceneCamera(), sceneCamera, m_Width, m_Height);
@@ -361,9 +380,15 @@ void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::files
         m_CameraController.Yaw,
         m_CameraController.Pitch);
     m_CameraFov = sceneCamera.FieldOfView;
+    m_CameraNearClipPlane = sceneCamera.NearClipPlane;
+    m_CameraFarClipPlane = sceneCamera.FarClipPlane;
 
-    m_SkyboxTexture = std::make_shared<Texture>();
-    commandList.LoadTextureFromFile(*m_SkyboxTexture, skyboxTexturePath.wstring(), TextureUsageType::Albedo);
+    m_SkyboxTexture.reset();
+    if (m_SkyboxEnabled)
+    {
+        m_SkyboxTexture = std::make_shared<Texture>();
+        commandList.LoadTextureFromFile(*m_SkyboxTexture, skyboxTexturePath.wstring(), TextureUsageType::Albedo);
+    }
 }
 //Modify End
 
@@ -559,6 +584,15 @@ bool RaytracingDemo::LoadContent()
         m_FrameworkDeviceContext,
         *skyboxComputeShader,
         ComputePipelineDescBuilder::ReflectedDefault(*skyboxComputeShader).Build());
+
+    const auto equirectangularSkyboxComputeShader = LoadShaderVariant(
+        L"SkyboxEquirectangular.cs.cso",
+        L"Demos/RaytracingDemo/shaders/Skybox/SkyboxEquirectangular.cs.hlsl",
+        "cs_6_6");
+    m_SkyboxEquirectangularComputeShader = std::make_shared<ComputeShader>(
+        m_FrameworkDeviceContext,
+        *equirectangularSkyboxComputeShader,
+        ComputePipelineDescBuilder::ReflectedDefault(*equirectangularSkyboxComputeShader).Build());
     });
 //Modify End
 
@@ -621,6 +655,7 @@ void RaytracingDemo::UnloadContent()
     m_LightBillboardShader.reset();
 //Modify Begin:2026-07-28 by BestHui
     m_SkyboxComputeShader.reset();
+    m_SkyboxEquirectangularComputeShader.reset();
     m_DisplayCompositeShader.reset();
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
@@ -776,9 +811,15 @@ void RaytracingDemo::EnsureRenderGraphTopology()
 }
 //Modify End
 
-void RaytracingDemo::ResetAccumulation(bool resetDenoiserHistory)
+void RaytracingDemo::ResetAccumulation(bool resetDenoiserHistory, bool resetReSTIRDIHistory)
 {
     m_AccumulationFrameIndex = 0;
+//Modify Begin:2026-08-05 by BestHui
+    if (resetReSTIRDIHistory)
+    {
+        m_ReSTIRDIHistoryValid = false;
+    }
+//Modify End
     if (resetDenoiserHistory)
     {
         m_Denoisers.ResetHistory();
@@ -803,9 +844,24 @@ void RaytracingDemo::SaveCurrentCameraToUnityScene()
         throw std::runtime_error("Saving camera with a parent transform is not supported yet.");
     }
 
-    m_Scene.UpdateCamera(GetSceneCamera(), m_CameraFov);
+    m_Scene.UpdateCamera(GetSceneCamera(), m_CameraFov, m_CameraNearClipPlane, m_CameraFarClipPlane);
     SceneImporter::WriteCameraToSourceFile(m_Scene.GetSourcePath(), m_Scene.GetCamera());
     m_CameraSaveStatus = "Camera saved to Unity scene.";
+}
+
+void RaytracingDemo::SaveCurrentScene()
+{
+    if (!m_HasSceneCamera || m_Scene.GetSourcePath().empty())
+    {
+        throw std::runtime_error("No source scene camera is loaded.");
+    }
+
+    m_Scene.UpdateCamera(GetSceneCamera(), m_CameraFov, m_CameraNearClipPlane, m_CameraFarClipPlane);
+    m_Lights.ApplyToScene(m_Scene);
+    std::filesystem::path runtimeStatePath = m_Scene.GetSourcePath();
+    runtimeStatePath += ".runtime.json";
+    SceneImporter::WriteJsonRuntimeState(runtimeStatePath, m_Scene);
+    m_CameraSaveStatus = "Runtime scene state saved to " + runtimeStatePath.filename().string() + ".";
 }
 //Modify End
 //Modify End
@@ -867,6 +923,9 @@ RaytracingDemoPassResources RaytracingDemo::CreatePassResources()
         m_SceneResources,
         m_Lights,
         m_PathTracingPipelines,
+//Modify Begin:2026-08-05 by BestHui
+        m_DirectLightingReSTIRDI,
+//Modify End
         m_Denoisers,
         m_CudaBloom,
         m_GBufferShader,
@@ -876,6 +935,7 @@ RaytracingDemoPassResources RaytracingDemo::CreatePassResources()
         m_MeshletDrawCommandSignature.get(),
         m_DisplayCompositeShader,
         m_SkyboxComputeShader,
+        m_SkyboxEquirectangularComputeShader,
         m_SkyboxTexture,
         m_DisplayBlitMesh,
         GetSceneCamera(),
@@ -889,6 +949,10 @@ RaytracingDemoPassConfig RaytracingDemo::CreatePassConfig() const
 {
     return {
         &m_PathTracingBackend,
+//Modify Begin:2026-08-05 by BestHui
+        &m_DirectLightingTechnique,
+        &m_IndirectLightingTechnique,
+//Modify End
         &m_DirectLightingEnabled,
         &m_IndirectLightingEnabled,
         &m_AsyncComputeEnabled,
@@ -904,6 +968,9 @@ RaytracingDemoPassConfig RaytracingDemo::CreatePassConfig() const
         &m_AccumulationEnabled,
         &m_FrameIndex,
         &m_AccumulationFrameIndex,
+//Modify Begin:2026-08-05 by BestHui
+        &m_ReSTIRDIHistoryValid,
+//Modify End
         &m_HasPreviousViewProjection,
         &m_PreviousViewProjection
     };
@@ -1092,7 +1159,14 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
 //Modify End
 
     ++m_FrameIndex;
-    if (m_AccumulationEnabled && !IsDenoiserEnabled())
+    const bool directLightingUsesPathTracing =
+        !m_DirectLightingEnabled ||
+        m_DirectLightingTechnique == RaytracingDemoLightingTechnique::PathTracing;
+    const bool indirectLightingUsesPathTracing =
+        !m_IndirectLightingEnabled ||
+        m_IndirectLightingTechnique == RaytracingDemoLightingTechnique::PathTracing;
+    const bool originalPathTracingEnabled = directLightingUsesPathTracing && indirectLightingUsesPathTracing;
+    if (m_AccumulationEnabled && !IsDenoiserEnabled() && originalPathTracingEnabled)
     {
         ++m_AccumulationFrameIndex;
     }
@@ -1100,6 +1174,13 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     {
         m_AccumulationFrameIndex = 0;
     }
+
+//Modify Begin:2026-08-05 by BestHui
+    m_ReSTIRDIHistoryValid =
+        m_PathTracingBackend == PathTracingBackend::InlineRayQuery &&
+        m_DirectLightingEnabled &&
+        m_DirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRDI;
+//Modify End
 
     m_PreviousViewProjection = GetSceneCamera().GetViewMatrix() * GetSceneCamera().GetProjectionMatrix();
     m_HasPreviousViewProjection = true;

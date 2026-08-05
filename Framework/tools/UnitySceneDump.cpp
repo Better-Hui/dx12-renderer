@@ -17,6 +17,8 @@ namespace
         {
         case SceneMeshKind::BuiltinPlane:
             return "BuiltinPlane";
+        case SceneMeshKind::BuiltinCube:
+            return "BuiltinCube";
         case SceneMeshKind::ExternalMesh:
             return "ExternalMesh";
         default:

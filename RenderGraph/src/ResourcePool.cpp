@@ -310,7 +310,7 @@ void RenderGraph::ResourcePool::InitHeaps(
 //Modify End
 {
 //Modify Begin:2026-07-28 by BestHui
-    const auto lifecycles = TransientResourceAllocator::GetResourceLifecycles(renderPasses, externalOutputIds);
+    const auto lifecycles = TransientResourceAllocator::GetResourceLifecycles(renderPasses, m_ResourceDescriptions, externalOutputIds);
 //Modify End
 //Modify Begin:2026-07-28 by BestHui
     m_ResourceLifecycles = lifecycles;

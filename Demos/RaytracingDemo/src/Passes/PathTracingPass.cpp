@@ -72,7 +72,9 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
         },
         [resources, config, backend](const RenderContext& context, CommandList& cmd)
         {
-            if (config.DirectLightingEnabled == nullptr || !*config.DirectLightingEnabled)
+            if (config.DirectLightingEnabled == nullptr || !*config.DirectLightingEnabled ||
+                config.DirectLightingTechnique == nullptr ||
+                *config.DirectLightingTechnique != RaytracingDemoLightingTechnique::PathTracing)
             {
                 return;
             }
@@ -157,7 +159,9 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
         },
         [resources, config, backend, queue](const RenderContext& context, CommandList& cmd)
         {
-            if (config.IndirectLightingEnabled == nullptr || !*config.IndirectLightingEnabled)
+            if (config.IndirectLightingEnabled == nullptr || !*config.IndirectLightingEnabled ||
+                config.IndirectLightingTechnique == nullptr ||
+                *config.IndirectLightingTechnique != RaytracingDemoLightingTechnique::PathTracing)
             {
                 return;
             }
@@ -246,6 +250,9 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateLi
         L"Lighting Composite",
         {
             { DemoResourceIds::DirectLightingFinishedToken, InputType::Token },
+//Modify Begin:2026-08-05 by BestHui
+            { DemoResourceIds::ReSTIRDIShadeFinishedToken, InputType::Token },
+//Modify End
             { DemoResourceIds::IndirectLightingFinishedToken, InputType::Token },
             { DemoResourceIds::DirectLighting, InputType::ShaderResource },
             { DemoResourceIds::IndirectLighting, InputType::ShaderResource },

@@ -103,7 +103,7 @@ bool DenoiserController::DrawImGui()
         ImGui::Text("NRD unavailable");
     }
 
-    if (IsNRDEnabled() && m_NRD != nullptr && ImGui::CollapsingHeader("NRD Settings", ImGuiTreeNodeFlags_DefaultOpen))
+    if (IsNRDEnabled() && m_NRD != nullptr && ImGui::CollapsingHeader("NRD Settings"))
     {
         NRD::Settings& nrdSettings = m_NRD->GetSettings();
         bool nrdChanged = false;
@@ -177,7 +177,7 @@ bool DenoiserController::DrawImGui()
         }
     }
 
-    if (IsSVGFEnabled() && m_SVGF != nullptr && ImGui::CollapsingHeader("SVGF Settings", ImGuiTreeNodeFlags_DefaultOpen))
+    if (IsSVGFEnabled() && m_SVGF != nullptr && ImGui::CollapsingHeader("SVGF Settings"))
     {
         SVGF::Settings& svgfSettings = m_SVGF->GetSettings();
         bool svgfChanged = false;

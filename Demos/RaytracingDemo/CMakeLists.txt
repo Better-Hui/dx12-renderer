@@ -37,6 +37,9 @@ set(SOURCE_FILES
         src/PathTracing/PathTracingSceneBindings.cpp
         src/PathTracing/PathTracingPipelineController.cpp
         src/Passes/PathTracingPass.cpp
+        # Modify Begin:2026-08-05 by BestHui
+        src/Passes/ReSTIRDIPasses.cpp
+        # Modify End
         src/Passes/CudaBloomPass.cpp
         # Modify Begin:2026-07-30 by BestHui
         src/Passes/RaytracingDemoPassResources.cpp
@@ -109,9 +112,20 @@ set(SHADER_FILES_PIXEL
         )
 # Modify End
 
+set(RESTIR_DI_SHADER_FILES
+        ../../Framework/shaders/ReSTIRDI/ReSTIRDI.RIS.cs.hlsl
+        ../../Framework/shaders/ReSTIRDI/ReSTIRDI.Temporal.cs.hlsl
+        ../../Framework/shaders/ReSTIRDI/ReSTIRDI.Boiling.cs.hlsl
+        ../../Framework/shaders/ReSTIRDI/ReSTIRDI.Spatial.cs.hlsl
+        ../../Framework/shaders/ReSTIRDI/ReSTIRDI.Shade.cs.hlsl
+        )
+
 set(SHADER_FILES_COMPUTE
         shaders/GBuffer/MeshletCull.cs.hlsl
         shaders/PathTracing/DirectLighting.cs.hlsl
+        # Modify Begin:2026-08-05 by BestHui
+        ${RESTIR_DI_SHADER_FILES}
+        # Modify End
         shaders/PathTracing/IndirectLighting.cs.hlsl
         # Modify Begin:2026-07-30 by BestHui
         shaders/PathTracing/DirectLighting.softshadow.cs.hlsl
@@ -137,7 +151,7 @@ include(${CMAKE_SOURCE_DIR}/CMakeIncludes/DemoBase.cmake)
 # Modify Begin:2026-07-27 by BestHui
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/include" PREFIX "include" FILES ${HEADER_FILES})
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "src" FILES ${SOURCE_FILES})
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/shaders" PREFIX "shaders" FILES
+set(DEMO_SHADER_FILES
         ${SHADER_FILES_RAYTRACING}
         ${SHADERS_HEADER_FILES}
         ${SHADER_FILES_MESH}
@@ -146,6 +160,9 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/shaders" PREFIX "shaders" FILES
         ${SHADER_FILES_COMPUTE}
         ${CUDA_SHADER_FILES}
         )
+list(REMOVE_ITEM DEMO_SHADER_FILES ${RESTIR_DI_SHADER_FILES})
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/shaders" PREFIX "shaders" FILES ${DEMO_SHADER_FILES})
+source_group(TREE "${CMAKE_SOURCE_DIR}/Framework/shaders/ReSTIRDI" PREFIX "Framework\\ReSTIRDI" FILES ${RESTIR_DI_SHADER_FILES})
 # Modify End
 
 set_source_files_properties(${SHADER_FILES_RAYTRACING} PROPERTIES HEADER_FILE_ONLY TRUE)

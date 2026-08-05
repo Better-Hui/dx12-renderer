@@ -21,6 +21,9 @@ namespace RenderGraph
         Clear,
         Discard,
         CopyDestination,
+//Modify Begin:2026-08-05 by BestHui
+        Preserve,
+//Modify End
     };
 
     struct TextureDescription

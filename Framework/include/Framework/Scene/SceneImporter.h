@@ -38,6 +38,12 @@ public:
     static SceneImportResult ImportJsonFromFile(
         const std::filesystem::path& scenePath,
         const SceneImportOptions& options = {});
+    static void ApplyJsonRuntimeState(
+        const std::filesystem::path& statePath,
+        Scene& scene);
+    static void WriteJsonRuntimeState(
+        const std::filesystem::path& statePath,
+        const Scene& scene);
 //Modify End
 
     static void WriteCameraToSourceFile(

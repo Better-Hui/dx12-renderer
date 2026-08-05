@@ -19,6 +19,21 @@ namespace RaytracingDemoRenderGraph
             { ResourceIds::GBufferPosition, renderWidthExpression, renderHeightExpression, GBUFFER_POSITION_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Clear },
             { ResourceIds::MotionVector, renderWidthExpression, renderHeightExpression, MOTION_VECTOR_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Clear },
             { ResourceIds::DirectLighting, renderWidthExpression, renderHeightExpression, LIGHTING_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Discard },
+//Modify Begin:2026-08-05 by BestHui
+            { ResourceIds::ReSTIRDIReservoirA, renderWidthExpression, renderHeightExpression, RESTIR_DI_RESERVOIR_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Preserve, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_HEAP_FLAG_NONE, true },
+            { ResourceIds::ReSTIRDIReservoirB, renderWidthExpression, renderHeightExpression, RESTIR_DI_RESERVOIR_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Preserve, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_HEAP_FLAG_NONE, true },
+            { ResourceIds::ReSTIRDIHistoryPositionA, renderWidthExpression, renderHeightExpression, RESTIR_DI_HISTORY_POSITION_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Preserve, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_HEAP_FLAG_NONE, true },
+            { ResourceIds::ReSTIRDIHistoryPositionB, renderWidthExpression, renderHeightExpression, RESTIR_DI_HISTORY_POSITION_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Preserve, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_HEAP_FLAG_NONE, true },
+            { ResourceIds::ReSTIRDIHistoryNormalRoughnessA, renderWidthExpression, renderHeightExpression, RESTIR_DI_HISTORY_SHADING_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Preserve, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_HEAP_FLAG_NONE, true },
+            { ResourceIds::ReSTIRDIHistoryNormalRoughnessB, renderWidthExpression, renderHeightExpression, RESTIR_DI_HISTORY_SHADING_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Preserve, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_HEAP_FLAG_NONE, true },
+            { ResourceIds::ReSTIRDIHistoryDiffuseMetallicA, renderWidthExpression, renderHeightExpression, RESTIR_DI_HISTORY_SHADING_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Preserve, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_HEAP_FLAG_NONE, true },
+            { ResourceIds::ReSTIRDIHistoryDiffuseMetallicB, renderWidthExpression, renderHeightExpression, RESTIR_DI_HISTORY_SHADING_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Preserve, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_HEAP_FLAG_NONE, true },
+            { ResourceIds::ReSTIRDIHistorySpecularOcclusionA, renderWidthExpression, renderHeightExpression, RESTIR_DI_HISTORY_SHADING_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Preserve, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_HEAP_FLAG_NONE, true },
+            { ResourceIds::ReSTIRDIHistorySpecularOcclusionB, renderWidthExpression, renderHeightExpression, RESTIR_DI_HISTORY_SHADING_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Preserve, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_HEAP_FLAG_NONE, true },
+            { ResourceIds::ReSTIRDIRISReservoir, renderWidthExpression, renderHeightExpression, RESTIR_DI_RESERVOIR_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Discard },
+            { ResourceIds::ReSTIRDIBoilingReservoir, renderWidthExpression, renderHeightExpression, RESTIR_DI_RESERVOIR_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Discard },
+            { ResourceIds::ReSTIRDISpatialReservoir, renderWidthExpression, renderHeightExpression, RESTIR_DI_RESERVOIR_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Discard },
+//Modify End
 //Modify Begin:2026-07-30 by BestHui
             { ResourceIds::IndirectLighting, renderWidthExpression, renderHeightExpression, LIGHTING_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Discard, D3D12_RESOURCE_FLAG_NONE, D3D12_HEAP_FLAG_NONE, true },
 //Modify End
@@ -44,6 +59,11 @@ namespace RaytracingDemoRenderGraph
             { ResourceIds::BaseResourcesFinishedToken },
             { ResourceIds::SkyboxFinishedToken },
             { ResourceIds::DirectLightingFinishedToken },
+            { ResourceIds::ReSTIRDIRISFinishedToken },
+            { ResourceIds::ReSTIRDITemporalFinishedToken },
+            { ResourceIds::ReSTIRDIBoilingFinishedToken },
+            { ResourceIds::ReSTIRDISpatialFinishedToken },
+            { ResourceIds::ReSTIRDIShadeFinishedToken },
             { ResourceIds::IndirectLightingFinishedToken },
             { ResourceIds::RayTracingFinishedToken },
             { ResourceIds::DenoiseFinishedToken },
@@ -78,6 +98,27 @@ namespace RaytracingDemoRenderGraph
             context.m_ResourcePool->GetTexture(ResourceIds::SceneColor),
         };
     }
+
+//Modify Begin:2026-08-05 by BestHui
+    ReSTIRDIResources GetReSTIRDIResources(const RenderGraph::RenderContext& context)
+    {
+        return {
+            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDIReservoirA),
+            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDIReservoirB),
+            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDIHistoryPositionA),
+            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDIHistoryPositionB),
+            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDIHistoryNormalRoughnessA),
+            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDIHistoryNormalRoughnessB),
+            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDIHistoryDiffuseMetallicA),
+            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDIHistoryDiffuseMetallicB),
+            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDIHistorySpecularOcclusionA),
+            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDIHistorySpecularOcclusionB),
+            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDIRISReservoir),
+            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDIBoilingReservoir),
+            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDISpatialReservoir),
+        };
+    }
+//Modify End
 
     NRDResources GetNRDResources(const RenderGraph::RenderContext& context)
     {

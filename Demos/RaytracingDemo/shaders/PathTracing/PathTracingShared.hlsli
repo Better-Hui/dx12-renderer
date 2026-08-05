@@ -140,7 +140,7 @@ float3 EvaluatePbrLighting(SurfaceData surface, float3 lightDirectionWs, float3 
     const float metallic = saturate(surface.Metallic);
     const float nDotL = saturate(dot(normalWs, lightDirectionWs));
     const float nDotV = saturate(dot(normalWs, viewDirectionWs));
-    if (nDotL <= 0.0f || nDotV <= 0.0f)
+    if (nDotL <= 0.0f)
     {
         return 0.0f;
     }
@@ -458,6 +458,151 @@ float3 EvaluateDirectLighting(SurfaceData surface, inout uint rngState, out floa
     lightIndex -= pointLightCount;
     return EvaluateAreaLight(AreaLights[lightIndex], surface, rngState, nrdDirectHitDistance) * float(totalLightCount);
 }
+
+//Modify Begin:2026-08-05 by BestHui
+#if defined(RAYTRACING_DEMO_RESTIR_DI)
+struct ReSTIRDIDirectLightSample
+{
+    float3 DirectionWs;
+    float3 UnshadowedContribution;
+    float Distance;
+    bool Valid;
+};
+
+uint GetReSTIRDILightCount()
+{
+    return Camera_DirectionalLightCount + Camera_PointLightCount + Camera_AreaLightCount;
+}
+
+ReSTIRDIDirectLightSample SampleReSTIRDIDirectLight(
+    const uint lightIndex,
+    const SurfaceData surface,
+    const uint sampleSeed)
+{
+    ReSTIRDIDirectLightSample sample;
+    sample.DirectionWs = 0.0f;
+    sample.UnshadowedContribution = 0.0f;
+    sample.Distance = 0.0f;
+    sample.Valid = false;
+
+    uint index = lightIndex;
+    if (index < Camera_DirectionalLightCount)
+    {
+        const DirectionalLightData light = DirectionalLights[index];
+#if RAYTRACING_DEMO_SOFT_SHADOWS
+        uint sampleRandomState = sampleSeed;
+        sample.DirectionWs = SampleDirectionalShadowDirection(
+            normalize(light.DirectionAndAngularRadius.xyz),
+            light.DirectionAndAngularRadius.w,
+            sampleRandomState);
+#else
+        sample.DirectionWs = normalize(light.DirectionAndAngularRadius.xyz);
+#endif
+        sample.Distance = 10000.0f;
+        sample.UnshadowedContribution = EvaluatePbrLighting(
+            surface,
+            sample.DirectionWs,
+            light.ColorAndIntensity.rgb * light.ColorAndIntensity.w);
+        sample.Valid = MaxComponent(sample.UnshadowedContribution) > 0.0f;
+        return sample;
+    }
+
+    index -= Camera_DirectionalLightCount;
+    if (index < Camera_PointLightCount)
+    {
+        const PointLightData light = PointLights[index];
+#if RAYTRACING_DEMO_SOFT_SHADOWS
+        const float3 toLightCenter = light.PositionAndRange.xyz - surface.PositionWs;
+        const float centerDistance = length(toLightCenter);
+        if (centerDistance <= 0.001f || centerDistance > light.PositionAndRange.w)
+        {
+            return sample;
+        }
+
+        float3 tangent;
+        float3 bitangent;
+        BuildOrthonormalBasis(toLightCenter / centerDistance, tangent, bitangent);
+        uint sampleRandomState = sampleSeed;
+        const float2 diskSample = SampleUniformDisk(sampleRandomState) * light.Attenuation.w;
+        const float3 samplePosition = light.PositionAndRange.xyz + tangent * diskSample.x + bitangent * diskSample.y;
+        const float3 toLight = samplePosition - surface.PositionWs;
+#else
+        const float3 toLight = light.PositionAndRange.xyz - surface.PositionWs;
+#endif
+        const float distanceToLight = length(toLight);
+        if (distanceToLight <= 0.001f || distanceToLight > light.PositionAndRange.w)
+        {
+            return sample;
+        }
+
+        sample.DirectionWs = toLight / distanceToLight;
+        sample.Distance = distanceToLight;
+        const float3 attenuationTerms = light.Attenuation.xyz;
+        const float attenuation = rcp(max(
+            0.001f,
+            attenuationTerms.x + attenuationTerms.y * distanceToLight + attenuationTerms.z * distanceToLight * distanceToLight));
+        sample.UnshadowedContribution = EvaluatePbrLighting(
+            surface,
+            sample.DirectionWs,
+            light.ColorAndIntensity.rgb * light.ColorAndIntensity.w * attenuation);
+        sample.Valid = MaxComponent(sample.UnshadowedContribution) > 0.0f;
+        return sample;
+    }
+
+    index -= Camera_PointLightCount;
+    if (index >= Camera_AreaLightCount)
+    {
+        return sample;
+    }
+
+    const AreaLightData light = AreaLights[index];
+    uint sampleRandomState = sampleSeed;
+    const float2 sampleUv = float2(Random01(sampleRandomState), Random01(sampleRandomState)) * 2.0f - 1.0f;
+    const float3 samplePosition = light.PositionAndRange.xyz +
+        light.AxisUAndExtent.xyz * (sampleUv.x * light.AxisUAndExtent.w) +
+        light.AxisVAndExtent.xyz * (sampleUv.y * light.AxisVAndExtent.w);
+    const float3 toLight = samplePosition - surface.PositionWs;
+    const float distanceToLight = length(toLight);
+    if (distanceToLight <= 0.001f || distanceToLight > light.PositionAndRange.w)
+    {
+        return sample;
+    }
+
+    sample.DirectionWs = toLight / distanceToLight;
+    sample.Distance = distanceToLight;
+    const float lightFacing = saturate(dot(-sample.DirectionWs, normalize(light.NormalAndType.xyz)));
+    if (lightFacing <= 0.0f)
+    {
+        return sample;
+    }
+
+    const float area = max(0.0001f, 4.0f * light.AxisUAndExtent.w * light.AxisVAndExtent.w);
+    const float3 radiance = light.ColorAndIntensity.rgb * light.ColorAndIntensity.w * area * lightFacing /
+        max(0.001f, distanceToLight * distanceToLight);
+    sample.UnshadowedContribution = EvaluatePbrLighting(surface, sample.DirectionWs, radiance);
+    sample.Valid = MaxComponent(sample.UnshadowedContribution) > 0.0f;
+    return sample;
+}
+
+bool IsReSTIRDIDirectLightSampleVisible(
+    const SurfaceData surface,
+    const ReSTIRDIDirectLightSample sample)
+{
+    if (!sample.Valid)
+    {
+        return false;
+    }
+
+    const float3 rayOrigin = OffsetRayOrigin(
+        surface.PositionWs,
+        surface.PositionError,
+        surface.NormalWs,
+        sample.DirectionWs);
+    return IsVisibleAlongRay(rayOrigin, sample.DirectionWs, sample.Distance);
+}
+
+#endif
+//Modify End
 
 float3 TraceIndirectLighting(SurfaceData surface, inout uint rngState, out float nrdDiffuseHitDistance)
 {

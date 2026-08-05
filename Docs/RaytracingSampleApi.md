@@ -47,6 +47,33 @@ Base Resources
 -> Present
 ```
 
+When the Direct Lighting UI selects ReSTIR DI on the inline ray-query backend, the direct-light branch becomes:
+
+```text
+Base Resources
+-> ReSTIR DI RIS
+-> ReSTIR DI Temporal Reuse (optional)
+-> ReSTIR DI Spatial Reuse (optional)
+-> ReSTIR DI Shade / final visibility ray
+-> Lighting Composite
+```
+
+The four passes remain declared in the graph so their resources and dependencies are visible to profiling. Disabled reuse stages forward the reservoir without adding candidates.
+
+### ReSTIR DI direct lighting
+
+`Framework/Rendering/Lighting/ReSTIRDI.h` owns renderer-neutral settings and frame constants; the sample owns its graph passes and direct-light sampling policy. `ReSTIRDISettings` exposes candidate count, temporal reuse, spatial reuse, and spatial-neighbor count.
+
+The current sample intentionally has a narrow scope:
+
+- RIS selects from the finite directional, point, and area-light list with a uniform light PMF.
+- Temporal reuse reprojects through the motion-vector texture; spatial reuse selects screen-space neighbors.
+- RIS, temporal reuse, and spatial reuse evaluate only unshadowed target functions. They do not trace visibility rays.
+- The Shade pass traces one visibility ray for the selected sample and writes `DirectLighting`.
+- The path is inline-ray-query only. Shader-table DXR continues to use the normal direct-lighting path.
+
+This is useful for demonstrating reservoir resource history and pass decomposition, but it is not a replacement for RTXDI: it has no light presampling, emissive-mesh support, visibility reuse, disocclusion validation, bias correction, or soft-shadow integration. Reuse-related noise is expected with this deliberately simplified policy.
+
 ### Explicit async compute
 
 ```cpp
@@ -94,7 +121,7 @@ PIX is the authority for cross-queue wall-clock overlap; CSV is the lightweight 
 
 ## Scene workflow
 
-`SceneImporter::ImportFromFile` selects the parser from extension: `.unity` for Unity text scenes and `.json` for JSON scenes. The default demo scene is `Assets/Scenes/DefaultScene.json`.
+`SceneImporter::ImportFromFile` selects the parser from extension: `.unity` for Unity text scenes and `.json` for JSON scenes. The default demo scene is `Assets/Scenes/Sponza.unity`; its model, textures, and Unity `.meta` files are repository-local under `Assets/Models/Sponza`.
 
 `RaytracingDemoSceneResources::LoadScene` adapts a `Scene` into textures, materials, geometry, meshlet buffers, and RTAS. A fallback PBR-like material is used when an imported object lacks a supported material.
 

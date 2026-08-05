@@ -19,6 +19,7 @@ public:
 
     bool HasBinding(std::string_view name) const;
     bool HasBinding(std::string_view name, DescriptorBindingKind expectedKind) const;
+    bool HasBinding(DescriptorBindingKind expectedKind) const;
     const PipelineDescriptorRangeDesc* FindRange(std::string_view name, DescriptorBindingKind expectedKind) const;
     const PipelineDescriptorRangeDesc& GetRange(std::string_view name, DescriptorBindingKind expectedKind) const;
     const PipelineDescriptorRangeDesc& GetFirstRange(DescriptorBindingKind expectedKind) const;

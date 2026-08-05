@@ -15,6 +15,7 @@
 #include <wrl.h>
 
 #include <cstdint>
+#include <unordered_map>
 #include <memory>
 #include <span>
 #include <string>
@@ -64,10 +65,13 @@ public:
     const BindlessDescriptorHeap& GetBindlessDescriptorHeap() const { return m_BindlessDescriptorHeap; }
 
 private:
+    std::wstring BuildTextureCacheKey(const std::wstring& path, TextureUsageType usage) const;
+
     StructuredBuffer m_MaterialBuffer;
     BindlessDescriptorHeap m_BindlessDescriptorHeap;
     std::vector<RaytracingDemoMaterialData> m_Materials;
     std::vector<std::shared_ptr<Texture>> m_Textures;
+    std::unordered_map<std::wstring, uint32_t> m_TextureIndices;
 };
 
 class SceneGeometryResources final

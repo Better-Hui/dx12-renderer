@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <sstream>
@@ -247,6 +248,16 @@ namespace
         return { ReadNumber(array[0], context), ReadNumber(array[1], context), ReadNumber(array[2], context) };
     }
 
+    DirectX::XMFLOAT4 ReadFloat4(const JsonValue& value, const std::string_view context)
+    {
+        const JsonValue::Array& array = value.AsArray(context);
+        if (array.size() != 4) throw std::runtime_error(std::string(context) + " must contain four values.");
+        return {
+            ReadNumber(array[0], context), ReadNumber(array[1], context),
+            ReadNumber(array[2], context), ReadNumber(array[3], context)
+        };
+    }
+
     DirectX::XMFLOAT4 ReadColor(const JsonValue& value, const std::string_view context)
     {
         const JsonValue::Array& array = value.AsArray(context);
@@ -282,15 +293,24 @@ namespace
         const JsonValue::Object& transform = transformValue->AsObject("transform");
         DirectX::XMFLOAT3 position{};
         DirectX::XMFLOAT3 scale = { 1.0f, 1.0f, 1.0f };
-        DirectX::XMFLOAT3 rotationDegrees{};
+        DirectX::XMVECTOR rotation = DirectX::XMQuaternionIdentity();
         if (const JsonValue* value = Find(transform, "position")) position = ReadFloat3(*value, "transform.position");
         if (const JsonValue* value = Find(transform, "scale")) scale = ReadFloat3(*value, "transform.scale");
-        if (const JsonValue* value = Find(transform, "rotationEulerDegrees")) rotationDegrees = ReadFloat3(*value, "transform.rotationEulerDegrees");
-        return DirectX::XMMatrixScaling(scale.x, scale.y, scale.z) *
-            DirectX::XMMatrixRotationRollPitchYaw(
+        if (const JsonValue* value = Find(transform, "rotationQuaternion"))
+        {
+            const DirectX::XMFLOAT4 quaternion = ReadFloat4(*value, "transform.rotationQuaternion");
+            rotation = DirectX::XMQuaternionNormalize(DirectX::XMLoadFloat4(&quaternion));
+        }
+        else if (const JsonValue* value = Find(transform, "rotationEulerDegrees"))
+        {
+            const DirectX::XMFLOAT3 rotationDegrees = ReadFloat3(*value, "transform.rotationEulerDegrees");
+            rotation = DirectX::XMQuaternionRotationRollPitchYaw(
                 DirectX::XMConvertToRadians(rotationDegrees.x),
                 DirectX::XMConvertToRadians(rotationDegrees.y),
-                DirectX::XMConvertToRadians(rotationDegrees.z)) *
+                DirectX::XMConvertToRadians(rotationDegrees.z));
+        }
+        return DirectX::XMMatrixScaling(scale.x, scale.y, scale.z) *
+            DirectX::XMMatrixRotationQuaternion(rotation) *
             DirectX::XMMatrixTranslation(position.x, position.y, position.z);
     }
 
@@ -308,6 +328,11 @@ namespace
         const JsonValue* transformValue = Find(gameObject, "transform");
         if (transformValue == nullptr) return DirectX::XMQuaternionIdentity();
         const JsonValue::Object& transform = transformValue->AsObject("transform");
+        if (const JsonValue* rotation = Find(transform, "rotationQuaternion"))
+        {
+            const DirectX::XMFLOAT4 quaternion = ReadFloat4(*rotation, "transform.rotationQuaternion");
+            return DirectX::XMQuaternionNormalize(DirectX::XMLoadFloat4(&quaternion));
+        }
         const JsonValue* rotation = Find(transform, "rotationEulerDegrees");
         if (rotation == nullptr) return DirectX::XMQuaternionIdentity();
         const DirectX::XMFLOAT3 degrees = ReadFloat3(*rotation, "transform.rotationEulerDegrees");
@@ -434,7 +459,15 @@ namespace
                 if (type == "directional")
                 {
                     DirectX::XMFLOAT3 direction{};
-                    DirectX::XMStoreFloat3(&direction, DirectX::XMVector3Rotate(DirectX::XMVectorSet(0, 0, -1, 0), rotation));
+                    if (const JsonValue* directionValue = Find(lightObject, "direction"))
+                    {
+                        direction = ReadFloat3(*directionValue, "light.direction");
+                    }
+                    else
+                    {
+                        DirectX::XMStoreFloat3(&direction, DirectX::XMVector3Rotate(DirectX::XMVectorSet(0, 0, -1, 0), rotation));
+                    }
+                    DirectX::XMStoreFloat3(&direction, DirectX::XMVector3Normalize(DirectX::XMLoadFloat3(&direction)));
                     DirectionalLight light;
 //Modify Begin:2026-07-30 by BestHui
                     const float angularRadius = Find(lightObject, "angularRadius") != nullptr
@@ -452,9 +485,19 @@ namespace
                     DirectX::XMFLOAT3 normal{};
                     DirectX::XMFLOAT3 axisU{};
                     DirectX::XMFLOAT3 axisV{};
-                    DirectX::XMStoreFloat3(&normal, DirectX::XMVector3Normalize(DirectX::XMVector3Rotate(DirectX::XMVectorSet(0, 0, 1, 0), rotation)));
-                    DirectX::XMStoreFloat3(&axisU, DirectX::XMVector3Normalize(DirectX::XMVector3Rotate(DirectX::XMVectorSet(1, 0, 0, 0), rotation)));
-                    DirectX::XMStoreFloat3(&axisV, DirectX::XMVector3Normalize(DirectX::XMVector3Rotate(DirectX::XMVectorSet(0, 1, 0, 0), rotation)));
+                    if (const JsonValue* normalValue = Find(lightObject, "normal");
+                        normalValue != nullptr && Find(lightObject, "axisU") != nullptr && Find(lightObject, "axisV") != nullptr)
+                    {
+                        normal = ReadFloat3(*normalValue, "light.normal");
+                        axisU = ReadFloat3(*Find(lightObject, "axisU"), "light.axisU");
+                        axisV = ReadFloat3(*Find(lightObject, "axisV"), "light.axisV");
+                    }
+                    else
+                    {
+                        DirectX::XMStoreFloat3(&normal, DirectX::XMVector3Normalize(DirectX::XMVector3Rotate(DirectX::XMVectorSet(0, 0, 1, 0), rotation)));
+                        DirectX::XMStoreFloat3(&axisU, DirectX::XMVector3Normalize(DirectX::XMVector3Rotate(DirectX::XMVectorSet(1, 0, 0, 0), rotation)));
+                        DirectX::XMStoreFloat3(&axisV, DirectX::XMVector3Normalize(DirectX::XMVector3Rotate(DirectX::XMVectorSet(0, 1, 0, 0), rotation)));
+                    }
                     light.PositionWs = { position.x, position.y, position.z, 1.0f };
                     light.NormalWs = { normal.x, normal.y, normal.z, 0.0f };
                     light.AxisUWsAndExtent = { axisU.x, axisU.y, axisU.z, areaSize.x * 0.5f };
@@ -534,5 +577,188 @@ SceneImportResult SceneImporter::ImportJsonFromFile(
         ", pointLights=" + std::to_string(result.SceneData.GetPointLights().size()) +
         ", areaLights=" + std::to_string(result.SceneData.GetAreaLights().size()));
     return result;
+}
+
+void SceneImporter::ApplyJsonRuntimeState(
+    const std::filesystem::path& statePath,
+    Scene& scene)
+{
+    std::ifstream input(statePath, std::ios::binary);
+    if (!input)
+    {
+        throw std::runtime_error("Unable to open JSON runtime state: " + statePath.string());
+    }
+    JsonValue rootValue = JsonParser(std::string(
+        std::istreambuf_iterator<char>(input),
+        std::istreambuf_iterator<char>())).Parse();
+    const JsonValue::Object& root = rootValue.AsObject("runtime state");
+
+    if (const JsonValue* cameraValue = Find(root, "camera"))
+    {
+        const JsonValue::Object& cameraObject = cameraValue->AsObject("camera");
+        SceneCamera camera = scene.GetCamera();
+        if (const JsonValue* position = Find(cameraObject, "position"))
+        {
+            const DirectX::XMFLOAT3 value = ReadFloat3(*position, "camera.position");
+            camera.RuntimeCamera->SetTranslation(DirectX::XMLoadFloat3(&value));
+        }
+        if (const JsonValue* rotation = Find(cameraObject, "rotationQuaternion"))
+        {
+            const DirectX::XMFLOAT4 value = ReadFloat4(*rotation, "camera.rotationQuaternion");
+            camera.RuntimeCamera->SetRotation(DirectX::XMQuaternionNormalize(DirectX::XMLoadFloat4(&value)));
+        }
+        if (const JsonValue* fieldOfView = Find(cameraObject, "fieldOfView")) camera.FieldOfView = ReadNumber(*fieldOfView, "camera.fieldOfView");
+        if (const JsonValue* nearClip = Find(cameraObject, "nearClipPlane")) camera.NearClipPlane = ReadNumber(*nearClip, "camera.nearClipPlane");
+        if (const JsonValue* farClip = Find(cameraObject, "farClipPlane")) camera.FarClipPlane = ReadNumber(*farClip, "camera.farClipPlane");
+        scene.SetCamera(camera);
+    }
+
+    if (const JsonValue* skyboxValue = Find(root, "skybox"))
+    {
+        SceneSkybox skybox = scene.GetSkybox();
+        const JsonValue::Object& skyboxObject = skyboxValue->AsObject("skybox");
+        if (const JsonValue* ambient = Find(skyboxObject, "ambientColorAndIntensity"))
+        {
+            skybox.AmbientColorAndIntensity = ReadFloat4(*ambient, "skybox.ambientColorAndIntensity");
+        }
+        scene.SetSkybox(skybox);
+    }
+
+    if (const JsonValue* lightsValue = Find(root, "directionalLights"))
+    {
+        std::vector<DirectionalLight> lights;
+        for (const JsonValue& value : lightsValue->AsArray("directionalLights"))
+        {
+            const JsonValue::Object& object = value.AsObject("directionalLight");
+            DirectionalLight light{};
+            light.m_DirectionWs = ReadFloat4(*Find(object, "directionAndAngularRadius"), "directionalLight.directionAndAngularRadius");
+            light.m_Color = ReadFloat4(*Find(object, "colorAndIntensity"), "directionalLight.colorAndIntensity");
+            lights.push_back(light);
+        }
+        scene.SetDirectionalLights(std::move(lights));
+    }
+
+    if (const JsonValue* lightsValue = Find(root, "pointLights"))
+    {
+        std::vector<PointLight> lights;
+        for (const JsonValue& value : lightsValue->AsArray("pointLights"))
+        {
+            const JsonValue::Object& object = value.AsObject("pointLight");
+            const DirectX::XMFLOAT4 position = ReadFloat4(*Find(object, "positionAndRange"), "pointLight.positionAndRange");
+            PointLight light(position, std::max(0.1f, position.w));
+            light.Color = ReadFloat4(*Find(object, "colorAndIntensity"), "pointLight.colorAndIntensity");
+            light.SourceRadius = std::max(0.0f, ReadNumber(*Find(object, "sourceRadius"), "pointLight.sourceRadius"));
+            light.RecalculateAttenuationCoefficients();
+            lights.push_back(light);
+        }
+        scene.SetPointLights(std::move(lights));
+    }
+
+    if (const JsonValue* lightsValue = Find(root, "areaLights"))
+    {
+        std::vector<AreaLight> lights;
+        for (const JsonValue& value : lightsValue->AsArray("areaLights"))
+        {
+            const JsonValue::Object& object = value.AsObject("areaLight");
+            AreaLight light{};
+            light.PositionWs = ReadFloat4(*Find(object, "positionAndRange"), "areaLight.positionAndRange");
+            light.NormalWs = ReadFloat4(*Find(object, "normalAndType"), "areaLight.normalAndType");
+            light.AxisUWsAndExtent = ReadFloat4(*Find(object, "axisUAndExtent"), "areaLight.axisUAndExtent");
+            light.AxisVWsAndExtent = ReadFloat4(*Find(object, "axisVAndExtent"), "areaLight.axisVAndExtent");
+            light.Color = ReadFloat4(*Find(object, "colorAndIntensity"), "areaLight.colorAndIntensity");
+            light.Range = light.PositionWs.w;
+            lights.push_back(light);
+        }
+        scene.SetAreaLights(std::move(lights));
+    }
+}
+
+void SceneImporter::WriteJsonRuntimeState(
+    const std::filesystem::path& statePath,
+    const Scene& scene)
+{
+    std::ofstream output(statePath, std::ios::trunc);
+    if (!output)
+    {
+        throw std::runtime_error("Unable to open JSON runtime state for writing: " + statePath.string());
+    }
+    output << std::fixed << std::setprecision(6);
+    const auto writeFloat3 = [&output](const DirectX::XMFLOAT3& value)
+    {
+        output << '[' << value.x << ", " << value.y << ", " << value.z << ']';
+    };
+    const auto writeFloat4 = [&output](const DirectX::XMFLOAT4& value)
+    {
+        output << '[' << value.x << ", " << value.y << ", " << value.z << ", " << value.w << ']';
+    };
+
+    const SceneCamera& camera = scene.GetCamera();
+    DirectX::XMFLOAT3 cameraPosition{};
+    DirectX::XMFLOAT4 cameraRotation{};
+    DirectX::XMStoreFloat3(&cameraPosition, camera.RuntimeCamera->GetTranslation());
+    DirectX::XMStoreFloat4(&cameraRotation, camera.RuntimeCamera->GetRotation());
+    output << "{\n  \"version\": 1,\n  \"camera\": { \"position\": ";
+    writeFloat3(cameraPosition);
+    output << ", \"rotationQuaternion\": ";
+    writeFloat4(cameraRotation);
+    output << ", \"fieldOfView\": " << camera.FieldOfView
+        << ", \"nearClipPlane\": " << camera.NearClipPlane
+        << ", \"farClipPlane\": " << camera.FarClipPlane << " },\n";
+    output << "  \"skybox\": { \"ambientColorAndIntensity\": ";
+    writeFloat4(scene.GetSkybox().AmbientColorAndIntensity);
+    output << " },\n";
+
+    const auto writeArrayStart = [&output](const char* name)
+    {
+        output << "  \"" << name << "\": [";
+    };
+    writeArrayStart("directionalLights");
+    for (size_t index = 0; index < scene.GetDirectionalLights().size(); ++index)
+    {
+        if (index != 0) output << ',';
+        const DirectionalLight& light = scene.GetDirectionalLights()[index];
+        output << "\n    { \"directionAndAngularRadius\": ";
+        writeFloat4(light.m_DirectionWs);
+        output << ", \"colorAndIntensity\": ";
+        writeFloat4(light.m_Color);
+        output << " }";
+    }
+    output << "\n  ],\n";
+
+    writeArrayStart("pointLights");
+    for (size_t index = 0; index < scene.GetPointLights().size(); ++index)
+    {
+        if (index != 0) output << ',';
+        const PointLight& light = scene.GetPointLights()[index];
+        output << "\n    { \"positionAndRange\": ";
+        writeFloat4({ light.PositionWs.x, light.PositionWs.y, light.PositionWs.z, light.Range });
+        output << ", \"colorAndIntensity\": ";
+        writeFloat4(light.Color);
+        output << ", \"sourceRadius\": " << light.SourceRadius << " }";
+    }
+    output << "\n  ],\n";
+
+    writeArrayStart("areaLights");
+    for (size_t index = 0; index < scene.GetAreaLights().size(); ++index)
+    {
+        if (index != 0) output << ',';
+        const AreaLight& light = scene.GetAreaLights()[index];
+        output << "\n    { \"positionAndRange\": ";
+        writeFloat4({ light.PositionWs.x, light.PositionWs.y, light.PositionWs.z, light.Range });
+        output << ", \"normalAndType\": ";
+        writeFloat4(light.NormalWs);
+        output << ", \"axisUAndExtent\": ";
+        writeFloat4(light.AxisUWsAndExtent);
+        output << ", \"axisVAndExtent\": ";
+        writeFloat4(light.AxisVWsAndExtent);
+        output << ", \"colorAndIntensity\": ";
+        writeFloat4(light.Color);
+        output << " }";
+    }
+    output << "\n  ]\n}\n";
+    if (!output)
+    {
+        throw std::runtime_error("Failed while writing JSON runtime state: " + statePath.string());
+    }
 }
 //Modify End

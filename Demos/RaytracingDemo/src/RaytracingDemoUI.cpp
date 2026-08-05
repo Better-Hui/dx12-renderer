@@ -14,6 +14,21 @@ void RaytracingDemo::OnImGui()
     ImGui::Text("Resolution: %d x %d", m_Width, m_Height);
     ImGui::Text("Frame: %u", m_FrameIndex);
     ImGui::Text("Accumulation: %u", m_AccumulationFrameIndex);
+    if (ImGui::Button("Save Scene"))
+    {
+        try
+        {
+            SaveCurrentScene();
+        }
+        catch (const std::exception& exception)
+        {
+            m_CameraSaveStatus = std::string("Save failed: ") + exception.what();
+        }
+    }
+    if (!m_CameraSaveStatus.empty())
+    {
+        ImGui::TextWrapped("%s", m_CameraSaveStatus.c_str());
+    }
 //Modify Begin:2026-07-29 by BestHui
     if (m_GpuTimestampProfiler.IsAvailable())
     {
@@ -114,14 +129,65 @@ void RaytracingDemo::OnImGui()
     {
         ResetAccumulation();
     }
-    if (ImGui::Checkbox("Enable Direct Lighting", &m_DirectLightingEnabled))
+//Modify Begin:2026-08-05 by BestHui
+    const char* directLightingTechniqueNames[] = { "None", "PathTracing", "ReSTIR DI" };
+    int directLightingTechnique = static_cast<int>(m_DirectLightingTechnique);
+    if (ImGui::Combo("Direct Lighting", &directLightingTechnique, directLightingTechniqueNames, IM_ARRAYSIZE(directLightingTechniqueNames)))
     {
+        m_DirectLightingTechnique = static_cast<RaytracingDemoLightingTechnique>(directLightingTechnique);
         ResetAccumulation();
     }
-    if (ImGui::Checkbox("Enable Indirect Lighting", &m_IndirectLightingEnabled))
+    if (m_DirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRDI &&
+        m_PathTracingBackend != PathTracingBackend::InlineRayQuery)
     {
+        ImGui::TextDisabled("ReSTIR DI currently requires Inline Ray Query.");
+    }
+    else if (m_DirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRDI)
+    {
+        ReSTIRDISettings restirSettings = m_DirectLightingReSTIRDI.GetSettings();
+        int candidateCount = static_cast<int>(restirSettings.CandidateCount);
+        int spatialNeighborCount = static_cast<int>(restirSettings.SpatialNeighborCount);
+        int temporalMaxHistoryLength = static_cast<int>(restirSettings.TemporalMaxHistoryLength);
+        bool settingsChanged = false;
+        settingsChanged |= ImGui::SliderInt("RIS Candidates", &candidateCount, 1, 32);
+        settingsChanged |= ImGui::Checkbox("RIS Visibility", &restirSettings.EnableCandidateVisibility);
+        settingsChanged |= ImGui::Checkbox("Enable Temporal Reuse", &restirSettings.EnableTemporalResampling);
+        settingsChanged |= ImGui::SliderInt("Temporal Max History", &temporalMaxHistoryLength, 1, 64);
+        if (restirSettings.EnableTemporalResampling)
+        {
+            settingsChanged |= ImGui::Checkbox("Temporal Visibility", &restirSettings.EnableTemporalVisibility);
+        }
+        settingsChanged |= ImGui::Checkbox("Enable Boiling Filter", &restirSettings.EnableBoilingFilter);
+        settingsChanged |= ImGui::SliderFloat("Boiling Filter Strength", &restirSettings.BoilingFilterStrength, 0.01f, 1.0f);
+        settingsChanged |= ImGui::Checkbox("Enable Spatial Reuse", &restirSettings.EnableSpatialResampling);
+        if (restirSettings.EnableSpatialResampling)
+        {
+            settingsChanged |= ImGui::Checkbox("Spatial Visibility", &restirSettings.EnableSpatialVisibility);
+            settingsChanged |= ImGui::SliderInt("Spatial Neighbors", &spatialNeighborCount, 1, 16);
+            settingsChanged |= ImGui::SliderFloat("Spatial Radius (pixels)", &restirSettings.SpatialSamplingRadius, 1.0f, 64.0f);
+            settingsChanged |= ImGui::SliderFloat("Spatial Normal Threshold", &restirSettings.SpatialNormalSimilarityThreshold, -1.0f, 1.0f);
+            settingsChanged |= ImGui::SliderFloat("Spatial Depth Threshold", &restirSettings.DepthSimilarityThreshold, 0.0f, 1.0f);
+            settingsChanged |= ImGui::SliderFloat("Spatial Material Threshold", &restirSettings.MaterialSimilarityThreshold, 0.0f, 2.0f);
+        }
+        settingsChanged |= ImGui::Checkbox("Final Visibility", &restirSettings.EnableFinalVisibility);
+        ImGui::TextDisabled("Each enabled visibility stage traces inline shadow rays only for its selected candidates.");
+        if (settingsChanged)
+        {
+            restirSettings.CandidateCount = static_cast<uint32_t>(candidateCount);
+            restirSettings.SpatialNeighborCount = static_cast<uint32_t>(spatialNeighborCount);
+            restirSettings.TemporalMaxHistoryLength = static_cast<uint32_t>(temporalMaxHistoryLength);
+            m_DirectLightingReSTIRDI.SetSettings(restirSettings);
+            ResetAccumulation();
+        }
+    }
+    const char* indirectLightingTechniqueNames[] = { "None", "PathTracing" };
+    int indirectLightingTechnique = static_cast<int>(m_IndirectLightingTechnique);
+    if (ImGui::Combo("Indirect Lighting", &indirectLightingTechnique, indirectLightingTechniqueNames, IM_ARRAYSIZE(indirectLightingTechniqueNames)))
+    {
+        m_IndirectLightingTechnique = static_cast<RaytracingDemoLightingTechnique>(indirectLightingTechnique);
         ResetAccumulation();
     }
+//Modify End
 //Modify Begin:2026-07-30 by BestHui
     if (ImGui::Checkbox("Enable Soft Shadows", &m_SoftShadowsEnabled))
     {
@@ -235,28 +301,27 @@ void RaytracingDemo::OnImGui()
         ResetAccumulation();
     }
     const bool bouncesChanged = ImGui::SliderInt("Bounces", &m_MaxBounces, 0, 5);
-    const bool fovChanged = ImGui::SliderFloat("FOV", &m_CameraFov, 12.0f, 90.0f, "%.1f");
-    const bool rotateSpeedChanged = ImGui::SliderFloat("Mouse Rotate", &m_MouseRotateSpeed, 0.01f, 0.5f, "%.3f");
-    const bool panSpeedChanged = ImGui::SliderFloat("Mouse Pan", &m_MousePanSpeed, 0.005f, 0.25f, "%.3f");
-    const bool dollySpeedChanged = ImGui::SliderFloat("Mouse Dolly", &m_MouseDollySpeed, 0.005f, 0.25f, "%.3f");
-    const bool wheelSpeedChanged = ImGui::SliderFloat("Wheel Dolly", &m_MouseWheelDollySpeed, 0.05f, 5.0f, "%.2f");
-//Modify Begin:2026-07-30 by BestHui
-//Modify Begin:2026-08-03 by BestHui
-    if (m_Scene.GetSourcePath().extension() == ".unity" && ImGui::Button("Save Camera To Unity Scene"))
-//Modify End
+//Modify Begin:2026-08-05 by BestHui
+    bool fovChanged = false;
+    bool nearClipChanged = false;
+    bool farClipChanged = false;
+    bool rotateSpeedChanged = false;
+    bool panSpeedChanged = false;
+    bool dollySpeedChanged = false;
+    bool wheelSpeedChanged = false;
+    if (ImGui::CollapsingHeader("Camera"))
     {
-        try
+        fovChanged = ImGui::SliderFloat("FOV", &m_CameraFov, 12.0f, 90.0f, "%.1f");
+        nearClipChanged = ImGui::DragFloat("Near Clip", &m_CameraNearClipPlane, 0.01f, 0.001f, 100.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        if (m_CameraFarClipPlane <= m_CameraNearClipPlane)
         {
-            SaveCurrentCameraToUnityScene();
+            m_CameraFarClipPlane = m_CameraNearClipPlane + 0.001f;
         }
-        catch (const std::exception& exception)
-        {
-            m_CameraSaveStatus = std::string("Save failed: ") + exception.what();
-        }
-    }
-    if (!m_CameraSaveStatus.empty())
-    {
-        ImGui::TextWrapped("%s", m_CameraSaveStatus.c_str());
+        farClipChanged = ImGui::DragFloat("Far Clip", &m_CameraFarClipPlane, 1.0f, m_CameraNearClipPlane + 0.001f, 100000.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
+        rotateSpeedChanged = ImGui::SliderFloat("Mouse Rotate", &m_MouseRotateSpeed, 0.01f, 0.5f, "%.3f");
+        panSpeedChanged = ImGui::SliderFloat("Mouse Pan", &m_MousePanSpeed, 0.005f, 0.25f, "%.3f");
+        dollySpeedChanged = ImGui::SliderFloat("Mouse Dolly", &m_MouseDollySpeed, 0.005f, 0.25f, "%.3f");
+        wheelSpeedChanged = ImGui::SliderFloat("Wheel Dolly", &m_MouseWheelDollySpeed, 0.05f, 5.0f, "%.2f");
     }
 //Modify End
 
@@ -264,10 +329,10 @@ void RaytracingDemo::OnImGui()
     {
         ResetAccumulation();
     }
-    if (fovChanged)
+    if (fovChanged || nearClipChanged || farClipChanged)
     {
         const float aspectRatio = static_cast<float>(m_Width) / static_cast<float>(m_Height);
-        GetSceneCamera().SetProjection(m_CameraFov, aspectRatio, 0.1f, 1000.0f);
+        GetSceneCamera().SetProjection(m_CameraFov, aspectRatio, m_CameraNearClipPlane, m_CameraFarClipPlane);
         ResetAccumulation();
     }
     if (rotateSpeedChanged || panSpeedChanged || dollySpeedChanged || wheelSpeedChanged)

@@ -230,7 +230,7 @@ void RaytracingDemoSceneResources::Clear()
 //Modify Begin:2026-07-30 by BestHui
     m_StressTestSphereObjects.clear();
     m_StressTestSphereObjectStart = 0;
-    m_StressTestSpheresEnabled = true;
+    m_StressTestSpheresEnabled = false;
 //Modify End
 }
 
@@ -515,7 +515,9 @@ std::vector<uint32_t> RaytracingDemoSceneResources::LoadSceneMaterials(
         const SceneTextureBinding& binding,
         const TextureUsageType usage) -> uint32_t
         {
-            if (!binding.AssetPath.empty() && std::filesystem::exists(binding.AssetPath))
+            if (!binding.AssetPath.empty() &&
+                std::filesystem::exists(binding.AssetPath) &&
+                ToLower(binding.AssetPath.extension().string()) != ".exr")
             {
                 return AddTexture(commandList, ToWidePath(binding.AssetPath), usage);
             }

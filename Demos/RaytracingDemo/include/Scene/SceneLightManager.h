@@ -49,6 +49,7 @@ public:
         SkyLightData& skyLight) const;
 
     bool IsPointLightAnimationEnabled() const { return m_AnimatePointLights; }
+    void ApplyToScene(Scene& scene) const;
 //Modify Begin:2026-07-30 by BestHui
     const std::vector<DirectionalLight>& GetDirectionalLights() const { return m_DirectionalLights; }
 //Modify End
@@ -125,6 +126,9 @@ private:
     DirectX::XMFLOAT3 m_NewAreaLightColor = { 1.0f, 0.85f, 0.55f };
     float m_NewAreaLightIntensity = 8.0f;
     float m_NewAreaLightRange = 35.0f;
+    bool m_DirectionalLightsEnabled = true;
+    bool m_PointLightsEnabled = true;
+    bool m_AreaLightsEnabled = true;
     bool m_AnimatePointLights = false;
 };
 //Modify End

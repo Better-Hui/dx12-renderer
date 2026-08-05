@@ -50,6 +50,13 @@ void PathTracingPipelineController::RetireCurrentPipelines()
     retired.DirectRayTracingBindingSet = std::move(m_DirectRayTracingBindingSet);
     retired.IndirectRayTracingBindingSet = std::move(m_IndirectRayTracingBindingSet);
     retired.InlineDirectLightingShader = std::move(m_InlineDirectLightingShader);
+//Modify Begin:2026-08-05 by BestHui
+    retired.InlineReSTIRDIRISShader = std::move(m_InlineReSTIRDIRISShader);
+    retired.InlineReSTIRDITemporalShader = std::move(m_InlineReSTIRDITemporalShader);
+    retired.InlineReSTIRDIBoilingShader = std::move(m_InlineReSTIRDIBoilingShader);
+    retired.InlineReSTIRDISpatialShader = std::move(m_InlineReSTIRDISpatialShader);
+    retired.InlineReSTIRDIShadeShader = std::move(m_InlineReSTIRDIShadeShader);
+//Modify End
     retired.InlineIndirectLightingShader = std::move(m_InlineIndirectLightingShader);
     retired.LightingCompositeShader = std::move(m_LightingCompositeShader);
     m_RetiredPipelines.push_back(std::move(retired));
@@ -78,6 +85,13 @@ void PathTracingPipelineController::Reset()
 //Modify End
     m_LightingCompositeShader.reset();
     m_InlineIndirectLightingShader.reset();
+//Modify Begin:2026-08-05 by BestHui
+    m_InlineReSTIRDIRISShader.reset();
+    m_InlineReSTIRDITemporalShader.reset();
+    m_InlineReSTIRDIBoilingShader.reset();
+    m_InlineReSTIRDISpatialShader.reset();
+    m_InlineReSTIRDIShadeShader.reset();
+//Modify End
     m_InlineDirectLightingShader.reset();
     m_IndirectRayTracingBindingSet.reset();
     m_DirectRayTracingBindingSet.reset();
@@ -112,6 +126,13 @@ void PathTracingPipelineController::EnsurePipelines(
         !shadowModeChanged &&
 //Modify End
         m_InlineDirectLightingShader != nullptr &&
+//Modify Begin:2026-08-05 by BestHui
+        m_InlineReSTIRDIRISShader != nullptr &&
+        m_InlineReSTIRDITemporalShader != nullptr &&
+        m_InlineReSTIRDIBoilingShader != nullptr &&
+        m_InlineReSTIRDISpatialShader != nullptr &&
+        m_InlineReSTIRDIShadeShader != nullptr &&
+//Modify End
         m_InlineIndirectLightingShader != nullptr &&
         m_LightingCompositeShader != nullptr &&
         (!needsDxrPipeline ||
@@ -211,6 +232,40 @@ void PathTracingPipelineController::CreateInlinePipelines(const RayTracingSceneR
         .Build();
     m_InlineDirectLightingShader = std::make_unique<ComputeShader>(m_DeviceContext, *inlineDirectLightingShader, inlineDirectLightingDesc);
 
+//Modify Begin:2026-08-05 by BestHui
+    const auto createReSTIRDIShader = [this, useSoftShadows, &shadowDefines](
+        const std::wstring& compiledFileName,
+        const std::wstring& sourceFileName)
+    {
+        const std::shared_ptr<ShaderBlob> shaderBlob = LoadShader(
+            useSoftShadows ? compiledFileName + L".softshadow" : compiledFileName,
+            sourceFileName,
+            "cs_6_6",
+            shadowDefines);
+        return std::make_unique<ComputeShader>(
+            m_DeviceContext,
+            *shaderBlob,
+            ComputePipelineDescBuilder::ReflectedDefault(*shaderBlob)
+                .WithDirectlyIndexedResourceHeap()
+                .Build());
+    };
+    m_InlineReSTIRDIRISShader = createReSTIRDIShader(
+        L"ReSTIRDI.RIS.cs.cso",
+        L"Framework/shaders/ReSTIRDI/ReSTIRDI.RIS.cs.hlsl");
+    m_InlineReSTIRDITemporalShader = createReSTIRDIShader(
+        L"ReSTIRDI.Temporal.cs.cso",
+        L"Framework/shaders/ReSTIRDI/ReSTIRDI.Temporal.cs.hlsl");
+    m_InlineReSTIRDIBoilingShader = createReSTIRDIShader(
+        L"ReSTIRDI.Boiling.cs.cso",
+        L"Framework/shaders/ReSTIRDI/ReSTIRDI.Boiling.cs.hlsl");
+    m_InlineReSTIRDISpatialShader = createReSTIRDIShader(
+        L"ReSTIRDI.Spatial.cs.cso",
+        L"Framework/shaders/ReSTIRDI/ReSTIRDI.Spatial.cs.hlsl");
+    m_InlineReSTIRDIShadeShader = createReSTIRDIShader(
+        L"ReSTIRDI.Shade.cs.cso",
+        L"Framework/shaders/ReSTIRDI/ReSTIRDI.Shade.cs.hlsl");
+//Modify End
+
     //Modify Begin:2026-07-30 by BestHui
     const std::shared_ptr<ShaderBlob> inlineIndirectLightingShader = LoadShader(
         useSoftShadows ? L"IndirectLighting.softshadow.cs.cso" : L"IndirectLighting.cs.cso",
@@ -275,6 +330,33 @@ ComputeShader& PathTracingPipelineController::GetInlineDirectLightingShader() co
 {
     return *m_InlineDirectLightingShader;
 }
+
+//Modify Begin:2026-08-05 by BestHui
+ComputeShader& PathTracingPipelineController::GetInlineReSTIRDIRISShader() const
+{
+    return *m_InlineReSTIRDIRISShader;
+}
+
+ComputeShader& PathTracingPipelineController::GetInlineReSTIRDITemporalShader() const
+{
+    return *m_InlineReSTIRDITemporalShader;
+}
+
+ComputeShader& PathTracingPipelineController::GetInlineReSTIRDIBoilingShader() const
+{
+    return *m_InlineReSTIRDIBoilingShader;
+}
+
+ComputeShader& PathTracingPipelineController::GetInlineReSTIRDISpatialShader() const
+{
+    return *m_InlineReSTIRDISpatialShader;
+}
+
+ComputeShader& PathTracingPipelineController::GetInlineReSTIRDIShadeShader() const
+{
+    return *m_InlineReSTIRDIShadeShader;
+}
+//Modify End
 
 ComputeShader& PathTracingPipelineController::GetInlineIndirectLightingShader() const
 {

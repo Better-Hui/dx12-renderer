@@ -241,12 +241,43 @@ ComPtr<ID3D12Resource> RayTracingAccelerationStructure::CreateUploadBuffer(
     return resource;
 }
 
+D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO RayTracingAccelerationStructure::GetBottomLevelPrebuildInfo(
+    const Mesh& mesh,
+    const D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags) const
+{
+    const VertexBuffer& vertexBuffer = mesh.GetVertexBuffer();
+    const IndexBuffer& indexBuffer = mesh.GetIndexBuffer();
+
+    D3D12_RAYTRACING_GEOMETRY_DESC geometryDesc = {};
+    geometryDesc.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
+    geometryDesc.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
+    geometryDesc.Triangles.VertexBuffer.StartAddress = vertexBuffer.GetD3D12Resource()->GetGPUVirtualAddress();
+    geometryDesc.Triangles.VertexBuffer.StrideInBytes = vertexBuffer.GetVertexStride();
+    geometryDesc.Triangles.VertexCount = static_cast<UINT>(vertexBuffer.GetNumVertices());
+    geometryDesc.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
+    geometryDesc.Triangles.IndexBuffer = indexBuffer.GetD3D12Resource()->GetGPUVirtualAddress();
+    geometryDesc.Triangles.IndexCount = static_cast<UINT>(indexBuffer.GetNumIndices());
+    geometryDesc.Triangles.IndexFormat = indexBuffer.GetIndexFormat();
+
+    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
+    inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
+    inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+    inputs.Flags = buildFlags;
+    inputs.NumDescs = 1;
+    inputs.pGeometryDescs = &geometryDesc;
+
+    D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo = {};
+    m_Device->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &prebuildInfo);
+    Assert(prebuildInfo.ResultDataMaxSizeInBytes > 0, "Invalid BLAS prebuild info.");
+    return prebuildInfo;
+}
+
 RayTracingAccelerationStructure::BottomLevelAccelerationStructure RayTracingAccelerationStructure::BuildBottomLevelAccelerationStructure(
     CommandList& commandList,
     const std::shared_ptr<Mesh>& mesh,
-    const D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags) const
+    const D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags,
+    const ComPtr<ID3D12Resource>& scratch) const
 {
-    const auto& device = m_Device;
     const VertexBuffer& vertexBuffer = mesh->GetVertexBuffer();
     const IndexBuffer& indexBuffer = mesh->GetIndexBuffer();
 
@@ -271,22 +302,17 @@ RayTracingAccelerationStructure::BottomLevelAccelerationStructure RayTracingAcce
     inputs.NumDescs = 1;
     inputs.pGeometryDescs = &geometryDesc;
 
-    D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo = {};
-    device->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &prebuildInfo);
-    Assert(prebuildInfo.ResultDataMaxSizeInBytes > 0, "Invalid BLAS prebuild info.");
+    const D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo =
+        GetBottomLevelPrebuildInfo(*mesh, buildFlags);
+    Assert(scratch != nullptr, "BLAS scratch buffer must not be null.");
+    Assert(
+        scratch->GetDesc().Width >= prebuildInfo.ScratchDataSizeInBytes,
+        "BLAS scratch buffer is smaller than the required prebuild size.");
 
     auto result = CreateAccelerationStructureBuffer(
         prebuildInfo.ResultDataMaxSizeInBytes,
         D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
         L"Ray Tracing Bottom Level Acceleration Structure");
-    auto scratch = CreateAccelerationStructureBuffer(
-        prebuildInfo.ScratchDataSizeInBytes,
-        D3D12_RESOURCE_STATE_COMMON,
-        L"Ray Tracing BLAS Scratch");
-
-    const D3D12_RESOURCE_BARRIER scratchBarrier =
-        CD3DX12_RESOURCE_BARRIER::Transition(scratch.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    commandList.GetGraphicsCommandList()->ResourceBarrier(1, &scratchBarrier);
 
     D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
     buildDesc.Inputs = inputs;
@@ -296,7 +322,8 @@ RayTracingAccelerationStructure::BottomLevelAccelerationStructure RayTracingAcce
     commandList.BuildRaytracingAccelerationStructure(buildDesc);
     const auto uavBarrier = CD3DX12_RESOURCE_BARRIER::UAV(result.Get());
     commandList.GetGraphicsCommandList()->ResourceBarrier(1, &uavBarrier);
-    commandList.TrackObject(scratch);
+    const auto scratchUavBarrier = CD3DX12_RESOURCE_BARRIER::UAV(scratch.Get());
+    commandList.GetGraphicsCommandList()->ResourceBarrier(1, &scratchUavBarrier);
 
     return { mesh, result };
 }
@@ -304,6 +331,7 @@ RayTracingAccelerationStructure::BottomLevelAccelerationStructure RayTracingAcce
 std::map<const Mesh*, uint32_t> RayTracingAccelerationStructure::BuildBottomLevelAccelerationStructures(CommandList& commandList)
 {
     std::map<const Mesh*, uint32_t> meshToBlasIndex = CreateMeshToBlasIndex();
+    std::map<const Mesh*, std::shared_ptr<Mesh>> meshesToBuild;
 
     for (const RayTracingInstanceDesc& instance : m_Instances)
     {
@@ -312,11 +340,35 @@ std::map<const Mesh*, uint32_t> RayTracingAccelerationStructure::BuildBottomLeve
             continue;
         }
 
+        meshesToBuild.emplace(instance.Mesh.get(), instance.Mesh);
+    }
+
+    uint64_t scratchBufferSize = 0;
+    for (const auto& [meshPointer, mesh] : meshesToBuild)
+    {
+        static_cast<void>(meshPointer);
+        scratchBufferSize = (std::max)(
+            scratchBufferSize,
+            GetBottomLevelPrebuildInfo(*mesh, m_LastBuildSettings.BottomLevelFlags).ScratchDataSizeInBytes);
+    }
+
+    ComPtr<ID3D12Resource> scratch;
+    if (scratchBufferSize > 0)
+    {
+        scratch = CreateAccelerationStructureBuffer(
+            scratchBufferSize,
+            D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+            L"Ray Tracing BLAS Scratch");
+        commandList.TrackObject(scratch);
+    }
+
+    for (const auto& [meshPointer, mesh] : meshesToBuild)
+    {
         const uint32_t meshIndex = static_cast<uint32_t>(m_BottomLevelAccelerationStructures.size());
-        meshToBlasIndex.emplace(instance.Mesh.get(), meshIndex);
+        meshToBlasIndex.emplace(meshPointer, meshIndex);
         m_BottomLevelAccelerationStructures.push_back(
-            BuildBottomLevelAccelerationStructure(commandList, instance.Mesh, m_LastBuildSettings.BottomLevelFlags));
-        m_Meshes.push_back(instance.Mesh);
+            BuildBottomLevelAccelerationStructure(commandList, mesh, m_LastBuildSettings.BottomLevelFlags, scratch));
+        m_Meshes.push_back(mesh);
     }
 
     return meshToBlasIndex;

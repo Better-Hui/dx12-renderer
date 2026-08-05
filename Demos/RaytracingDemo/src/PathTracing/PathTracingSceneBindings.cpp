@@ -48,6 +48,12 @@ void RaytracingDemoPassBindings::BindInlinePathTracingInputs(
     {
         commandContext.SetShaderResourceView(shader, "DepthTexture", ShaderResourceView::DepthAsFloat(gbuffer.Depth));
     }
+//Modify Begin:2026-08-05 by BestHui
+    if (shader.HasShaderResourceView("MotionVectorTexture"))
+    {
+        commandContext.SetShaderResourceView(shader, "MotionVectorTexture", ShaderResourceView(gbuffer.MotionVector));
+    }
+//Modify End
     if (shader.HasShaderResourceView("Skybox"))
     {
         commandContext.SetShaderResourceView(shader, "Skybox", ShaderResourceView::TextureCube(resources.SkyboxTexture));

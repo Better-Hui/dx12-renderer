@@ -477,6 +477,11 @@ void CommandContext::SetUnorderedAccessView(const ComputeShader& shader, const s
 
 void CommandContext::SetAccelerationStructure(const ComputeShader& shader, const RayTracingAccelerationStructure& accelerationStructure) const
 {
+    if (!shader.m_BindingSet->HasBinding(DescriptorBindingKind::AccelerationStructure))
+    {
+        return;
+    }
+
     const PipelineDescriptorRangeDesc& accelerationStructureBinding = shader.m_BindingSet->GetFirstRange(DescriptorBindingKind::AccelerationStructure);
     SetAccelerationStructure(shader, accelerationStructureBinding.Name, accelerationStructure);
 }

@@ -7,6 +7,10 @@
 #include <Framework/Geometry/Mesh.h>
 #include <Framework/Geometry/Model.h>
 
+#include <algorithm>
+#include <cwctype>
+#include <filesystem>
+#include <system_error>
 #include <utility>
 
 namespace
@@ -33,6 +37,7 @@ void SceneTextureMaterialResources::Clear()
     m_BindlessDescriptorHeap.Reset();
     m_Materials.clear();
     m_Textures.clear();
+    m_TextureIndices.clear();
 }
 
 uint32_t SceneTextureMaterialResources::AddTexture(
@@ -40,12 +45,38 @@ uint32_t SceneTextureMaterialResources::AddTexture(
     const std::wstring& path,
     const TextureUsageType usage)
 {
+    const std::wstring cacheKey = BuildTextureCacheKey(path, usage);
+    if (const auto existing = m_TextureIndices.find(cacheKey); existing != m_TextureIndices.end())
+    {
+        return existing->second;
+    }
+
     auto texture = std::make_shared<Texture>();
     commandList.LoadTextureFromFile(*texture, path, usage);
-    const uint32_t textureIndex = static_cast<uint32_t>(m_Textures.size());
-    m_BindlessDescriptorHeap.AddShaderResourceView(*texture);
+    const uint32_t textureIndex = m_BindlessDescriptorHeap.AddShaderResourceView(*texture);
     m_Textures.push_back(texture);
+    m_TextureIndices.emplace(cacheKey, textureIndex);
     return textureIndex;
+}
+
+std::wstring SceneTextureMaterialResources::BuildTextureCacheKey(
+    const std::wstring& path,
+    const TextureUsageType usage) const
+{
+    std::error_code errorCode;
+    std::filesystem::path normalizedPath = std::filesystem::weakly_canonical(std::filesystem::path(path), errorCode);
+    if (errorCode)
+    {
+        normalizedPath = std::filesystem::path(path).lexically_normal();
+    }
+
+    std::wstring key = normalizedPath.native();
+    std::transform(
+        key.begin(),
+        key.end(),
+        key.begin(),
+        [](const wchar_t character) { return static_cast<wchar_t>(std::towlower(character)); });
+    return std::to_wstring(static_cast<uint32_t>(usage)) + L":" + key;
 }
 
 uint32_t SceneTextureMaterialResources::AddMaterial(const RaytracingDemoMaterialData& material)

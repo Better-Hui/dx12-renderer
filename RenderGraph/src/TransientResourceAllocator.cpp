@@ -65,6 +65,7 @@ bool TransientResourceAllocator::ResourceLifecycle::CanAlias(
 //Modify Begin:2026-07-28 by BestHui
 std::map<ResourceId, TransientResourceAllocator::ResourceLifecycle> TransientResourceAllocator::GetResourceLifecycles(
     const std::vector<RenderPass*>& renderPasses,
+    const std::map<ResourceId, ResourceDescription>& resourceDescriptions,
     const std::vector<ResourceId>& externalOutputIds)
 //Modify End
 {
@@ -86,7 +87,13 @@ std::map<ResourceId, TransientResourceAllocator::ResourceLifecycle> TransientRes
         for (const auto& input : pass.GetInputs())
         {
             auto& lifecycle = GetOrAdd(lifecycles, input.m_Id, passIndex, queueMask);
-            Assert(lifecycle.m_BeginPassIndex != passIndex, "A resource's first usage cannot be as an input.");
+            const auto resourceDescription = resourceDescriptions.find(input.m_Id);
+            const bool isPersistentHistory = resourceDescription != resourceDescriptions.end() &&
+                resourceDescription->second.m_DedicatedResource &&
+                resourceDescription->second.m_TextureDescription.m_InitAction == ResourceInitAction::Preserve;
+            Assert(
+                lifecycle.m_BeginPassIndex != passIndex || isPersistentHistory,
+                "A transient resource's first usage cannot be as an input.");
 
             lifecycle.m_EndPassIndex = passIndex;
         }

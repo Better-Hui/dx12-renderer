@@ -163,6 +163,10 @@ target_link_libraries(${TARGET_NAME} PUBLIC assimp::assimp)
 find_package(directxtex CONFIG REQUIRED)
 target_link_libraries(${TARGET_NAME} PUBLIC Microsoft::DirectXTex)
 
+# OpenEXR
+find_package(OpenEXR CONFIG REQUIRED)
+target_link_libraries(${TARGET_NAME} PUBLIC OpenEXR::OpenEXR)
+
 # DirectXMesh
 find_package(directxmesh CONFIG REQUIRED)
 target_link_libraries(${TARGET_NAME} PUBLIC Microsoft::DirectXMesh)

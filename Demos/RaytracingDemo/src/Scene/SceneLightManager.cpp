@@ -388,18 +388,18 @@ bool SceneLightManager::DrawImGui()
 {
     bool changed = false;
 
-    if (ImGui::CollapsingHeader("Light Counts", ImGuiTreeNodeFlags_DefaultOpen))
+    if (ImGui::CollapsingHeader("Light Counts"))
     {
         ImGui::Text("Directional: %zu", m_DirectionalLights.size());
         ImGui::Text("Point: %zu", m_PointLights.size());
         ImGui::Text("Area: %zu", m_AreaLights.size());
     }
 
-    if (ImGui::CollapsingHeader("Sky Light", ImGuiTreeNodeFlags_DefaultOpen))
+    if (ImGui::CollapsingHeader("Sky Light"))
     {
         bool skyChanged = false;
-        skyChanged |= ImGui::ColorEdit3("Sky Color", &m_SkyLightColor.x);
-        skyChanged |= ImGui::SliderFloat("Sky Intensity", &m_SkyLightIntensity, 0.0f, 5.0f, "%.3f");
+        skyChanged |= ImGui::InputFloat3("Sky Color", &m_SkyLightColor.x, "%.3f");
+        skyChanged |= ImGui::InputFloat("Sky Intensity", &m_SkyLightIntensity, 0.1f, 1.0f, "%.3f");
         if (skyChanged)
         {
             m_SkyLight.ColorAndIntensity = {
@@ -416,6 +416,10 @@ bool SceneLightManager::DrawImGui()
     if (ImGui::CollapsingHeader("Directional Lights"))
 //Modify End
     {
+        if (ImGui::Checkbox("Enable Directional Lights", &m_DirectionalLightsEnabled))
+        {
+            changed = true;
+        }
 //Modify Begin:2026-08-03 by BestHui
         if (ImGui::TreeNodeEx("Directional Light List"))
 //Modify End
@@ -423,8 +427,10 @@ bool SceneLightManager::DrawImGui()
             for (size_t i = 0; i < m_DirectionalLights.size(); ++i)
             {
                 ImGui::PushID(static_cast<int>(i));
-                const DirectionalLight& light = m_DirectionalLights[i];
-                ImGui::Text(
+                DirectionalLight& light = m_DirectionalLights[i];
+                const bool open = ImGui::TreeNodeEx(
+                    "DirectionalLight",
+                    ImGuiTreeNodeFlags_None,
                     "#%zu Dir(%.2f, %.2f, %.2f) Intensity %.2f",
                     i,
                     light.m_DirectionWs.x,
@@ -439,15 +445,38 @@ bool SceneLightManager::DrawImGui()
                     ImGui::PopID();
                     break;
                 }
+                if (open)
+                {
+                    bool lightChanged = false;
+                    XMFLOAT3 direction = { light.m_DirectionWs.x, light.m_DirectionWs.y, light.m_DirectionWs.z };
+                    lightChanged |= ImGui::InputFloat3("Direction", &direction.x, "%.4f");
+                    lightChanged |= ImGui::InputFloat3("Color", &light.m_Color.x, "%.3f");
+                    lightChanged |= ImGui::InputFloat("Intensity", &light.m_Color.w, 0.1f, 1.0f, "%.3f");
+                    lightChanged |= ImGui::InputFloat("Angular Radius", &light.m_DirectionWs.w, 0.001f, 0.01f, "%.5f");
+                    if (lightChanged)
+                    {
+                        direction = NormalizeVector(direction);
+                        light.m_DirectionWs = { direction.x, direction.y, direction.z, std::max(0.0f, light.m_DirectionWs.w) };
+                        light.m_Color.x = std::max(0.0f, light.m_Color.x);
+                        light.m_Color.y = std::max(0.0f, light.m_Color.y);
+                        light.m_Color.z = std::max(0.0f, light.m_Color.z);
+                        light.m_Color.w = std::max(0.0f, light.m_Color.w);
+                        m_DirectionalLightGpuData[i].DirectionAndAngularRadius = light.m_DirectionWs;
+                        m_DirectionalLightGpuData[i].ColorAndIntensity = light.m_Color;
+                        MarkDirectionalLightsDirty(i, i + 1);
+                        changed = true;
+                    }
+                    ImGui::TreePop();
+                }
                 ImGui::PopID();
             }
             ImGui::TreePop();
         }
 
-        ImGui::DragFloat3("Direction", &m_NewDirectionalLightDirection.x, 0.01f, -1.0f, 1.0f, "%.3f");
-        ImGui::ColorEdit3("Directional Color", &m_NewDirectionalLightColor.x);
-        ImGui::SliderFloat("Directional Intensity", &m_NewDirectionalLightIntensity, 0.0f, 20.0f, "%.2f");
-        ImGui::SliderFloat("Angular Radius", &m_NewDirectionalLightAngularRadius, 0.0f, 0.25f, "%.4f");
+        ImGui::InputFloat3("Direction", &m_NewDirectionalLightDirection.x, "%.4f");
+        ImGui::InputFloat3("Directional Color", &m_NewDirectionalLightColor.x, "%.3f");
+        ImGui::InputFloat("Directional Intensity", &m_NewDirectionalLightIntensity, 0.1f, 1.0f, "%.3f");
+        ImGui::InputFloat("Angular Radius", &m_NewDirectionalLightAngularRadius, 0.001f, 0.01f, "%.5f");
         if (ImGui::Button("Add Directional Light"))
         {
             AddDirectionalLight();
@@ -459,6 +488,10 @@ bool SceneLightManager::DrawImGui()
     if (ImGui::CollapsingHeader("Point Lights"))
 //Modify End
     {
+        if (ImGui::Checkbox("Enable Point Lights", &m_PointLightsEnabled))
+        {
+            changed = true;
+        }
         if (ImGui::Checkbox("Animate Point Lights", &m_AnimatePointLights))
         {
             changed = true;
@@ -504,12 +537,12 @@ bool SceneLightManager::DrawImGui()
                     bool pointChanged = false;
                     bool positionChanged = false;
                     XMFLOAT3 position = { light.PositionWs.x, light.PositionWs.y, light.PositionWs.z };
-                    positionChanged |= ImGui::DragFloat3("Position", &position.x, 0.05f, -200.0f, 200.0f, "%.2f");
-                    pointChanged |= ImGui::ColorEdit3("Color", &light.Color.x);
-                    pointChanged |= ImGui::SliderFloat("Intensity", &light.Color.w, 0.0f, 150.0f, "%.1f");
-                    pointChanged |= ImGui::SliderFloat("Range", &light.Range, 0.1f, 200.0f, "%.1f");
+                    positionChanged |= ImGui::InputFloat3("Position", &position.x, "%.3f");
+                    pointChanged |= ImGui::InputFloat3("Color", &light.Color.x, "%.3f");
+                    pointChanged |= ImGui::InputFloat("Intensity", &light.Color.w, 0.1f, 1.0f, "%.3f");
+                    pointChanged |= ImGui::InputFloat("Range", &light.Range, 0.1f, 1.0f, "%.3f");
 //Modify Begin:2026-07-30 by BestHui
-                    pointChanged |= ImGui::SliderFloat("Source Radius", &light.SourceRadius, 0.0f, 10.0f, "%.3f");
+                    pointChanged |= ImGui::InputFloat("Source Radius", &light.SourceRadius, 0.01f, 0.1f, "%.4f");
 //Modify End
                     bool animated = isAnimated;
                     if (ImGui::Checkbox("Animated", &animated))
@@ -554,11 +587,11 @@ bool SceneLightManager::DrawImGui()
             }
             ImGui::TreePop();
         }
-        ImGui::ColorEdit3("Point Color", &m_NewPointLightColor.x);
-        ImGui::SliderFloat("Point Intensity", &m_NewPointLightIntensity, 0.0f, 100.0f, "%.1f");
-        ImGui::SliderFloat("Point Range", &m_NewPointLightRange, 0.1f, 100.0f, "%.1f");
+        ImGui::InputFloat3("Point Color", &m_NewPointLightColor.x, "%.3f");
+        ImGui::InputFloat("Point Intensity", &m_NewPointLightIntensity, 0.1f, 1.0f, "%.3f");
+        ImGui::InputFloat("Point Range", &m_NewPointLightRange, 0.1f, 1.0f, "%.3f");
 //Modify Begin:2026-07-30 by BestHui
-        ImGui::SliderFloat("Point Source Radius", &m_NewPointLightSourceRadius, 0.0f, 10.0f, "%.3f");
+        ImGui::InputFloat("Point Source Radius", &m_NewPointLightSourceRadius, 0.01f, 0.1f, "%.4f");
 //Modify End
         ImGui::SliderFloat("Random Spawn Radius", &m_RandomPointLightSpawnRadius, 1.0f, 80.0f, "%.1f");
         if (ImGui::Button("Add Point Light At Origin"))
@@ -578,6 +611,10 @@ bool SceneLightManager::DrawImGui()
     if (ImGui::CollapsingHeader("Area Lights"))
 //Modify End
     {
+        if (ImGui::Checkbox("Enable Area Lights", &m_AreaLightsEnabled))
+        {
+            changed = true;
+        }
 //Modify Begin:2026-08-03 by BestHui
         if (ImGui::TreeNodeEx("Area Light List"))
 //Modify End
@@ -585,8 +622,10 @@ bool SceneLightManager::DrawImGui()
             for (size_t i = 0; i < m_AreaLights.size(); ++i)
             {
                 ImGui::PushID(static_cast<int>(i));
-                const AreaLightData& light = m_AreaLights[i];
-                ImGui::Text(
+                AreaLightData& light = m_AreaLights[i];
+                const bool open = ImGui::TreeNodeEx(
+                    "AreaLight",
+                    ImGuiTreeNodeFlags_None,
                     "#%zu Pos(%.2f, %.2f, %.2f) Size(%.2f, %.2f) Intensity %.2f",
                     i,
                     light.PositionAndRange.x,
@@ -603,17 +642,50 @@ bool SceneLightManager::DrawImGui()
                     ImGui::PopID();
                     break;
                 }
+                if (open)
+                {
+                    bool lightChanged = false;
+                    bool normalChanged = false;
+                    XMFLOAT3 position = { light.PositionAndRange.x, light.PositionAndRange.y, light.PositionAndRange.z };
+                    XMFLOAT3 normal = { light.NormalAndType.x, light.NormalAndType.y, light.NormalAndType.z };
+                    XMFLOAT2 size = { light.AxisUAndExtent.w * 2.0f, light.AxisVAndExtent.w * 2.0f };
+                    lightChanged |= ImGui::InputFloat3("Position", &position.x, "%.3f");
+                    normalChanged |= ImGui::InputFloat3("Normal", &normal.x, "%.4f");
+                    lightChanged |= ImGui::InputFloat2("Size", &size.x, "%.3f");
+                    lightChanged |= ImGui::InputFloat("Range", &light.PositionAndRange.w, 0.1f, 1.0f, "%.3f");
+                    lightChanged |= ImGui::InputFloat3("Color", &light.ColorAndIntensity.x, "%.3f");
+                    lightChanged |= ImGui::InputFloat("Intensity", &light.ColorAndIntensity.w, 0.1f, 1.0f, "%.3f");
+                    if (lightChanged || normalChanged)
+                    {
+                        normal = NormalizeVector(normal);
+                        XMFLOAT3 axisU{};
+                        XMFLOAT3 axisV{};
+                        BuildAreaLightAxes(normal, axisU, axisV);
+                        light.PositionAndRange = { position.x, position.y, position.z, std::max(0.1f, light.PositionAndRange.w) };
+                        light.NormalAndType = { normal.x, normal.y, normal.z, light.NormalAndType.w };
+                        light.AxisUAndExtent = { axisU.x, axisU.y, axisU.z, std::max(0.1f, size.x) * 0.5f };
+                        light.AxisVAndExtent = { axisV.x, axisV.y, axisV.z, std::max(0.1f, size.y) * 0.5f };
+                        light.ColorAndIntensity.x = std::max(0.0f, light.ColorAndIntensity.x);
+                        light.ColorAndIntensity.y = std::max(0.0f, light.ColorAndIntensity.y);
+                        light.ColorAndIntensity.z = std::max(0.0f, light.ColorAndIntensity.z);
+                        light.ColorAndIntensity.w = std::max(0.0f, light.ColorAndIntensity.w);
+                        m_AreaLightGpuData[i] = light;
+                        MarkAreaLightsDirty(i, i + 1);
+                        changed = true;
+                    }
+                    ImGui::TreePop();
+                }
                 ImGui::PopID();
             }
             ImGui::TreePop();
         }
 
-        ImGui::DragFloat3("Area Position", &m_NewAreaLightPosition.x, 0.1f, -100.0f, 100.0f, "%.2f");
-        ImGui::DragFloat3("Area Normal", &m_NewAreaLightNormal.x, 0.01f, -1.0f, 1.0f, "%.3f");
-        ImGui::DragFloat2("Area Size", &m_NewAreaLightSize.x, 0.1f, 0.1f, 50.0f, "%.2f");
-        ImGui::ColorEdit3("Area Color", &m_NewAreaLightColor.x);
-        ImGui::SliderFloat("Area Intensity", &m_NewAreaLightIntensity, 0.0f, 100.0f, "%.1f");
-        ImGui::SliderFloat("Area Range", &m_NewAreaLightRange, 0.1f, 200.0f, "%.1f");
+        ImGui::InputFloat3("Area Position", &m_NewAreaLightPosition.x, "%.3f");
+        ImGui::InputFloat3("Area Normal", &m_NewAreaLightNormal.x, "%.4f");
+        ImGui::InputFloat2("Area Size", &m_NewAreaLightSize.x, "%.3f");
+        ImGui::InputFloat3("Area Color", &m_NewAreaLightColor.x, "%.3f");
+        ImGui::InputFloat("Area Intensity", &m_NewAreaLightIntensity, 0.1f, 1.0f, "%.3f");
+        ImGui::InputFloat("Area Range", &m_NewAreaLightRange, 0.1f, 1.0f, "%.3f");
         if (ImGui::Button("Add Area Light"))
         {
             AddAreaLight();
@@ -621,6 +693,30 @@ bool SceneLightManager::DrawImGui()
         }
     }
     return changed;
+}
+
+void SceneLightManager::ApplyToScene(Scene& scene) const
+{
+    std::vector<AreaLight> areaLights;
+    areaLights.reserve(m_AreaLights.size());
+    for (const AreaLightData& sourceLight : m_AreaLights)
+    {
+        AreaLight light{};
+        light.PositionWs = sourceLight.PositionAndRange;
+        light.NormalWs = sourceLight.NormalAndType;
+        light.AxisUWsAndExtent = sourceLight.AxisUAndExtent;
+        light.AxisVWsAndExtent = sourceLight.AxisVAndExtent;
+        light.Color = sourceLight.ColorAndIntensity;
+        light.Range = sourceLight.PositionAndRange.w;
+        areaLights.push_back(light);
+    }
+
+    SceneSkybox skybox = scene.GetSkybox();
+    skybox.AmbientColorAndIntensity = m_SkyLight.ColorAndIntensity;
+    scene.SetSkybox(skybox);
+    scene.SetDirectionalLights(m_DirectionalLights);
+    scene.SetPointLights(m_PointLights);
+    scene.SetAreaLights(std::move(areaLights));
 }
 
 void SceneLightManager::BindComputeResources(CommandContext& commandContext, ComputeShader& shader)
@@ -674,9 +770,9 @@ void SceneLightManager::FillCameraConstants(
     uint32_t& areaLightCount,
     SkyLightData& skyLight) const
 {
-    directionalLightCount = static_cast<uint32_t>(m_DirectionalLightGpuData.size());
-    pointLightCount = static_cast<uint32_t>(m_PointLightGpuData.size());
-    areaLightCount = static_cast<uint32_t>(m_AreaLightGpuData.size());
+    directionalLightCount = m_DirectionalLightsEnabled ? static_cast<uint32_t>(m_DirectionalLightGpuData.size()) : 0u;
+    pointLightCount = m_PointLightsEnabled ? static_cast<uint32_t>(m_PointLightGpuData.size()) : 0u;
+    areaLightCount = m_AreaLightsEnabled ? static_cast<uint32_t>(m_AreaLightGpuData.size()) : 0u;
     skyLight = m_SkyLight;
 }
 

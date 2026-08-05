@@ -75,13 +75,34 @@ void Scene::AddAreaLight(const AreaLight& light)
     m_AreaLights.push_back(light);
 }
 
-void Scene::UpdateCamera(const Camera& camera, const float fieldOfView)
+void Scene::SetDirectionalLights(std::vector<DirectionalLight> lights)
+{
+    m_DirectionalLights = std::move(lights);
+}
+
+void Scene::SetPointLights(std::vector<PointLight> lights)
+{
+    m_PointLights = std::move(lights);
+}
+
+void Scene::SetAreaLights(std::vector<AreaLight> lights)
+{
+    m_AreaLights = std::move(lights);
+}
+
+void Scene::UpdateCamera(
+    const Camera& camera,
+    const float fieldOfView,
+    const float nearClipPlane,
+    const float farClipPlane)
 {
     Camera& runtimeCamera = GetRuntimeCamera();
     runtimeCamera.SetTranslation(camera.GetTranslation());
     runtimeCamera.SetRotation(camera.GetRotation());
     runtimeCamera.SetFov(fieldOfView);
     m_Camera.FieldOfView = fieldOfView;
+    m_Camera.NearClipPlane = nearClipPlane;
+    m_Camera.FarClipPlane = farClipPlane;
     XMStoreFloat3(&m_Camera.SourceBinding.LocalPosition, camera.GetTranslation());
     XMStoreFloat4(&m_Camera.SourceBinding.LocalRotation, camera.GetRotation());
 }

@@ -35,8 +35,16 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateSk
         },
         [resources, config](const RenderContext& context, CommandList& cmd)
         {
+            if (config.SkyboxEnabled == nullptr || !*config.SkyboxEnabled)
+            {
+                return;
+            }
 //Modify Begin:2026-07-28 by BestHui
-            ComputeShader& skyboxShader = *resources.SkyboxComputeShader;
+            const bool isEquirectangular =
+                resources.SkyboxTexture->GetD3D12ResourceDesc().DepthOrArraySize == 1u;
+            ComputeShader& skyboxShader = isEquirectangular
+                ? *resources.SkyboxEquirectangularComputeShader
+                : *resources.SkyboxComputeShader;
             const RaytracingDemoCameraConstants camera = RaytracingDemoPassBindings::BuildPassCameraConstants(resources, config, context);
             CommandContext commandContext(cmd);
 
@@ -45,7 +53,12 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateSk
 //Modify Begin:2026-07-30 by BestHui
             if (skyboxShader.HasShaderResourceView("SkyboxTexture"))
             {
-                commandContext.SetTexture(skyboxShader, "SkyboxTexture", ShaderResourceView::TextureCube(resources.SkyboxTexture));
+                commandContext.SetTexture(
+                    skyboxShader,
+                    "SkyboxTexture",
+                    isEquirectangular
+                        ? ShaderResourceView(resources.SkyboxTexture)
+                        : ShaderResourceView::TextureCube(resources.SkyboxTexture));
             }
 //Modify End
             commandContext.SetUnorderedAccessView(skyboxShader, "SceneColor", UnorderedAccessView(context.m_ResourcePool->GetTexture(DemoResourceIds::SceneColor)));

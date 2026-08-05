@@ -18,6 +18,7 @@ The upstream renderer remains the foundation. This fork adds framework and sampl
 | RenderGraph | Logical resources, compiled resource-state plans, centralized resource-state tracking, native/external state handoff, per-queue GPU timestamps/CSV export, and explicit Direct/Async Compute queue synchronization. |
 | RaytracingDemo | The maintained integration sample. It demonstrates this repository's framework APIs rather than treating raw D3D12 calls as normal sample-facing code. |
 | Ray tracing | Runtime-selectable inline ray-query and shader-table DXR paths sharing the same scene/resource model. |
+| ReSTIR DI | Inline ray-query direct-lighting sample with RIS, optional temporal reuse, optional spatial reuse, and final-shading visibility. |
 | Scene workflow | Shared `Scene` data, Unity/JSON import, and incremental runtime instance add/remove used by the stress-scene controls. |
 | Meshlets | Meshlet generation/GPU resources, task-shader and compute-indirect GBuffer backends, and incremental instance-buffer updates. |
 | Denoising and interop | NRD/SVGF sample paths, RenderGraph-aware NRD resource-state handoff, and CUDA Bloom using D3D12 shared resources with external fence/semaphore synchronization. |
@@ -134,24 +135,9 @@ cmake --build ..\build --config Release --target RaytracingDemo UnitySceneDump
 & ..\build\bin\Release\RaytracingDemo.exe
 ```
 
-The demo loads `Assets/Scenes/DefaultScene.json` by default.
+The demo loads the repository-local Unity YAML scene `Assets/Scenes/Sponza.unity` by default. The required Sponza model, textures, and Unity `.meta` files are included under `Assets/Models/Sponza`. JSON scenes remain supported for compatibility; use Unity text-serialized `.unity` scenes for new scene content when possible.
 
-| Variable | Example | Effect |
-| --- | --- | --- |
-| `RAYTRACING_DEMO_SCENE` | `Assets\Scenes\DefaultScene.json` | Loads a JSON or Unity scene file. |
-| `RAYTRACING_DEMO_UNITY_SCENE` | `C:\Scenes\CornellBox.unity` | Compatibility variable for a Unity text scene. |
-| `RAYTRACING_DEMO_MODE` | `shader-table` | Starts shader-table DXR; default is inline ray query. |
-| `RAYTRACING_DEMO_SOFT_SHADOWS` | `1` | Selects the soft-shadow variants for directional and point lights. |
-| `DX12_RENDERER_SHADER_COMPILE` | `auto`, `off`, or `force` | Controls startup shader compilation; `auto` is the default. |
-| `DX12_RENDERER_SHADER_SOURCE_ROOT` | `C:\work\dx12-renderer` | Overrides source-root discovery for startup compilation. |
-| `DX12_RENDERER_SHADER_CACHE_ROOT` | `D:\ShaderCache` | Overrides the generated shader-cache directory. |
-| `RAYTRACING_DEMO_DENOISER` | `nrd` or `svgf` | Selects a denoiser. |
-| `RAYTRACING_DEMO_ASYNC_COMPUTE` | `1` | Places the eligible inline indirect-lighting pass on the compute queue. |
-| `RAYTRACING_DEMO_ASYNC_CPU_SERIALIZE` | `1` | Debug-only CPU wait after async submission; useful for synchronization diagnosis, not performance measurement. |
-| `RAYTRACING_DEMO_CUDA_BLOOM` | `1` | Enables CUDA Bloom. |
-| `RAYTRACING_DEMO_MESHLET_GBUFFER` | `1` | Enables the meshlet GBuffer backend. |
-| `RAYTRACING_DEMO_MESHLET_BACKEND` | `indirect` | Selects compute-indirect meshlet rendering; otherwise task shaders are used. |
-| `RAYTRACING_DEMO_MESHLET_DEBUG` | `1` | Enables meshlet-cluster debug visualization. |
+`Save Scene` writes camera, skybox, and light edits into a sibling `.runtime.json` state file. That state is reapplied for either JSON or Unity YAML scenes at the next launch, without mutating the source scene.
 
 ## Startup shader compilation and variants
 
@@ -188,6 +174,8 @@ The startup compiler currently covers the shaders directly owned by `RaytracingD
 - The Unity importer is static and limited: prefab resolution, nested prefabs, skinned meshes, `LODGroup`, and an asset-database cache are not complete.
 - JSON scene import exists, but the stress-test spheres are still defined by sample C++ rather than scene data. They are enabled by default and can be added or removed incrementally from the runtime UI.
 - Meshlet rendering is an experimental GBuffer backend, not a complete visibility/streaming system or a claim of optimal meshlet performance.
+- ReSTIR DI is currently an inline-ray-query direct-lighting sample. It uses uniform light selection, RIS, optional temporal reuse, and optional spatial reuse, but does not use light presampling or emissive geometry. Temporal/spatial reuse deliberately performs no visibility test; the final shading pass traces one shadow ray, so disocclusions and reuse can produce visible noise.
+- ReSTIR DI currently uses hard-shadow direct-light sampling. It does not yet use the directional/point-light soft-shadow variants and falls back to standard direct lighting in shader-table DXR mode.
 - Soft shadows currently use a fixed four-sample variant. Directional lights use angular radius, point lights use source radius, and adaptive sampling or quality presets are not implemented yet.
 - Shader variants compile only during startup/pipeline creation. Runtime source hot reload, background compilation, and a project-wide variant manifest are not implemented.
 - DLSS/Streamline is not currently integrated.

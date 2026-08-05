@@ -38,7 +38,7 @@ void RaytracingDemo::OnUpdate(UpdateEventArgs& e)
         m_CameraController.Down != 0.0f;
     if (movedByKeyboard)
     {
-        ResetAccumulation(false);
+        ResetAccumulation(false, false);
     }
 
     const XMVECTOR cameraTranslate = XMVectorSet(
@@ -158,7 +158,7 @@ void RaytracingDemo::OnMouseMoved(MouseMotionEventArgs& e)
         {
             m_CameraController.Pitch = ClampCameraValue(m_CameraController.Pitch + e.RelY * m_MouseRotateSpeed, -90.0f, 90.0f);
             m_CameraController.Yaw += e.RelX * m_MouseRotateSpeed;
-            ResetAccumulation(false);
+            ResetAccumulation(false, false);
         }
         return;
     }
@@ -173,7 +173,7 @@ void RaytracingDemo::OnMouseMoved(MouseMotionEventArgs& e)
                 0.0f,
                 0.0f);
             GetSceneCamera().Translate(cameraPan, Space::Local);
-            ResetAccumulation(false);
+            ResetAccumulation(false, false);
         }
         return;
     }
@@ -188,7 +188,7 @@ void RaytracingDemo::OnMouseMoved(MouseMotionEventArgs& e)
                 static_cast<float>(e.RelX) * m_MouseDollySpeed,
                 0.0f);
             GetSceneCamera().Translate(cameraForward, Space::Local);
-            ResetAccumulation(false);
+            ResetAccumulation(false, false);
         }
     }
 }
@@ -209,7 +209,7 @@ void RaytracingDemo::OnMouseWheel(MouseWheelEventArgs& e)
             e.WheelDelta * m_MouseWheelDollySpeed,
             0.0f);
         GetSceneCamera().Translate(cameraForward, Space::Local);
-        ResetAccumulation(false);
+        ResetAccumulation(false, false);
     }
 }
 
@@ -229,7 +229,7 @@ void RaytracingDemo::OnResize(ResizeEventArgs& e)
     m_HasPreviousViewProjection = false;
 
     const float aspectRatio = static_cast<float>(m_Width) / static_cast<float>(m_Height);
-    GetSceneCamera().SetProjection(m_CameraFov, aspectRatio, 0.1f, 1000.0f);
+    GetSceneCamera().SetProjection(m_CameraFov, aspectRatio, m_CameraNearClipPlane, m_CameraFarClipPlane);
 
     if (m_RenderGraph != nullptr)
     {

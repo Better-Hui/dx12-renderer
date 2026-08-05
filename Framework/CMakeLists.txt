@@ -35,6 +35,10 @@ set(SHADERS_HEADER_FILES
 # Modify Begin:2026-07-31 by BestHui
         "shaders/Meshlet/MeshletCommon.hlsli"
 # Modify End
+# Modify Begin:2026-08-05 by BestHui
+        "shaders/ReSTIRDI/ReSTIRDI.hlsli"
+        "shaders/ReSTIRDI/ReSTIRDIBoilingFilter.hlsli"
+# Modify End
         )
 # Modify End
 

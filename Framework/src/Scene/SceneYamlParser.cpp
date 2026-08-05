@@ -851,7 +851,7 @@ UnitySceneData SceneYamlParser::ParseFromFile(
         transform = ResolveWorldTransform(transform, transformsByFileId, resolving);
     }
 
-    std::set<std::string> materialGuids;
+    std::unordered_map<std::string, UnityAssetReference> materialReferences;
     for (const auto& [gameObjectId, gameObject] : gameObjects)
     {
         UnitySceneObject object;
@@ -876,7 +876,9 @@ UnitySceneData SceneYamlParser::ParseFromFile(
                 ResolveAssetReference(materialReference, guidToAssetPath);
                 if (!materialReference.Guid.empty())
                 {
-                    materialGuids.insert(materialReference.Guid);
+                    materialReferences.insert_or_assign(
+                        materialReference.Guid + ":" + std::to_string(materialReference.FileId),
+                        materialReference);
                 }
             }
         }
@@ -945,12 +947,15 @@ UnitySceneData SceneYamlParser::ParseFromFile(
             scene.HasSkyboxMaterial = true;
         }
 //Modify End
-        for (const std::string& materialGuid : materialGuids)
+        for (const auto& [materialKey, materialReference] : materialReferences)
         {
-            UnityAssetReference reference;
-            reference.Guid = materialGuid;
-            ResolveAssetReference(reference, guidToAssetPath);
-            UnityMaterialInfo material = ParseMaterialAsset(reference);
+            static_cast<void>(materialKey);
+            if (materialReference.AssetPath.extension() == ".obj")
+            {
+                continue;
+            }
+
+            UnityMaterialInfo material = ParseMaterialAsset(materialReference);
             ResolveAssetReference(material.Shader, guidToAssetPath);
             ResolveTextureBinding(material.BaseMap, guidToAssetPath);
             ResolveTextureBinding(material.MainTex, guidToAssetPath);
@@ -1088,6 +1093,7 @@ using namespace DirectX;
 namespace
 {
     constexpr const char* UnityBuiltinMeshGuid = "0000000000000000e000000000000000";
+    constexpr int64_t UnityBuiltinCubeFileId = 10202;
     constexpr int64_t UnityBuiltinPlaneFileId = 10209;
 
     bool IsRenderableObject(const UnitySceneObject& object)
@@ -1118,6 +1124,150 @@ namespace
             return static_cast<char>(std::tolower(character));
         });
         return value;
+    }
+
+    std::string MakeAssetReferenceKey(const UnityAssetReference& reference)
+    {
+        return reference.Guid + ":" + std::to_string(reference.FileId);
+    }
+
+    bool StartsWithText(const std::string& value, const char* prefix)
+    {
+        return value.rfind(prefix, 0) == 0;
+    }
+
+    std::filesystem::path ParseObjTexturePath(
+        const std::filesystem::path& materialPath,
+        std::string texturePath)
+    {
+        std::replace(texturePath.begin(), texturePath.end(), '\\', '/');
+        return materialPath.parent_path() / ImportTrim(std::move(texturePath));
+    }
+
+    struct ObjMaterialLibrary
+    {
+        std::unordered_map<std::string, std::string> GroupMaterialNames;
+        std::unordered_map<std::string, SceneMaterial> Materials;
+    };
+
+    ObjMaterialLibrary LoadObjMaterialLibrary(const std::filesystem::path& meshPath)
+    {
+        ObjMaterialLibrary result;
+        std::filesystem::path materialPath = meshPath;
+        materialPath.replace_extension(".mtl");
+
+        std::ifstream meshFile(meshPath);
+        std::string currentGroup;
+        std::string line;
+        while (std::getline(meshFile, line))
+        {
+            const std::string trimmed = ImportTrim(line);
+            if (StartsWithText(trimmed, "mtllib "))
+            {
+                materialPath = meshPath.parent_path() / ImportTrim(trimmed.substr(7));
+            }
+            else if (StartsWithText(trimmed, "g ") || StartsWithText(trimmed, "o "))
+            {
+                currentGroup = ImportTrim(trimmed.substr(2));
+            }
+            else if (!currentGroup.empty() && StartsWithText(trimmed, "usemtl "))
+            {
+                result.GroupMaterialNames.insert_or_assign(
+                    ToLower(currentGroup),
+                    ImportTrim(trimmed.substr(7)));
+            }
+        }
+
+        std::ifstream materialFile(materialPath);
+        SceneMaterial* material = nullptr;
+        while (std::getline(materialFile, line))
+        {
+            const std::string trimmed = ImportTrim(line);
+            if (StartsWithText(trimmed, "newmtl "))
+            {
+                SceneMaterial newMaterial;
+                newMaterial.Name = ImportTrim(trimmed.substr(7));
+                newMaterial.SourceId = meshPath.string() + "#" + newMaterial.Name;
+                newMaterial.IsPbrMaterial = true;
+                const std::string materialKey = ToLower(newMaterial.Name);
+                result.Materials.insert_or_assign(materialKey, std::move(newMaterial));
+                material = &result.Materials.at(materialKey);
+                continue;
+            }
+
+            if (material == nullptr)
+            {
+                continue;
+            }
+
+            std::istringstream values(trimmed);
+            std::string property;
+            values >> property;
+            if (property == "Kd" || property == "Ks")
+            {
+                DirectX::XMFLOAT4 color = property == "Kd" ? material->BaseColor : material->SpecColor;
+                values >> color.x >> color.y >> color.z;
+                if (property == "Kd")
+                {
+                    material->BaseColor = color;
+                }
+                else
+                {
+                    material->SpecColor = color;
+                }
+            }
+            else if (property == "Ns")
+            {
+                float shininess = 0.0f;
+                values >> shininess;
+                material->Roughness = std::sqrt(2.0f / std::max(2.0f, shininess + 2.0f));
+            }
+            else if (property == "map_Kd")
+            {
+                std::string texturePath;
+                std::getline(values, texturePath);
+                material->BaseMap.AssetPath = ParseObjTexturePath(materialPath, texturePath);
+            }
+            else if (property == "map_bump" || property == "bump" || property == "norm")
+            {
+                std::string texturePath;
+                std::getline(values, texturePath);
+                material->NormalMap.AssetPath = ParseObjTexturePath(materialPath, texturePath);
+            }
+        }
+
+        return result;
+    }
+
+    std::optional<SceneMaterial> ResolveObjEmbeddedMaterial(
+        const UnitySceneObject& object,
+        const std::string& submeshName,
+        std::unordered_map<std::string, ObjMaterialLibrary>& libraries)
+    {
+        if (object.Materials.empty() ||
+            ToLower(object.Materials.front().AssetPath.extension().string()) != ".obj")
+        {
+            return std::nullopt;
+        }
+
+        const std::filesystem::path& meshPath = object.Materials.front().AssetPath;
+        const std::string libraryKey = meshPath.string();
+        auto libraryIterator = libraries.find(libraryKey);
+        if (libraryIterator == libraries.end())
+        {
+            libraryIterator = libraries.emplace(libraryKey, LoadObjMaterialLibrary(meshPath)).first;
+        }
+
+        const auto groupMaterial = libraryIterator->second.GroupMaterialNames.find(ToLower(submeshName));
+        if (groupMaterial == libraryIterator->second.GroupMaterialNames.end())
+        {
+            return std::nullopt;
+        }
+
+        const auto material = libraryIterator->second.Materials.find(ToLower(groupMaterial->second));
+        return material != libraryIterator->second.Materials.end()
+            ? std::optional<SceneMaterial>(material->second)
+            : std::nullopt;
     }
 
     XMFLOAT3 ToFloat3(const UnityVector3& value)
@@ -1279,6 +1429,38 @@ namespace
         }
 
         return result;
+    }
+
+    float LoadModelImportScale(const std::filesystem::path& meshPath)
+    {
+        std::ifstream file(meshPath.wstring() + L".meta");
+        if (!file.is_open())
+        {
+            return 1.0f;
+        }
+
+        bool inMeshesSection = false;
+        std::string line;
+        while (std::getline(file, line))
+        {
+            const std::string trimmed = ImportTrim(line);
+            if (trimmed == "meshes:")
+            {
+                inMeshesSection = true;
+                continue;
+            }
+            if (inMeshesSection && !line.empty() && line.front() != ' ')
+            {
+                break;
+            }
+            if (inMeshesSection && StartsWith(trimmed, "globalScale:"))
+            {
+                const float scale = ParseFloatAfterColon(trimmed, 1.0f);
+                return std::isfinite(scale) && scale > 0.0f ? scale : 1.0f;
+            }
+        }
+
+        return 1.0f;
     }
 
     void AddSceneMeshNameHints(
@@ -1453,6 +1635,7 @@ namespace
             }
 
             SceneMaterial material = ConvertMaterial(unityMaterial);
+            material.SourceId = MakeAssetReferenceKey(unityMaterial.Reference);
             if (!material.IsPbrMaterial)
             {
                 material.BaseColor = { 0.8f, 0.8f, 0.8f, 1.0f };
@@ -1467,9 +1650,14 @@ namespace
         }
     }
 
-    void ConvertObjects(const UnitySceneData& unityScene, Scene& scene, const std::unordered_map<std::string, uint32_t>& materialBySourceId)
+    void ConvertObjects(
+        const UnitySceneData& unityScene,
+        Scene& scene,
+        std::unordered_map<std::string, uint32_t>& materialBySourceId)
     {
         std::unordered_map<std::string, std::unordered_map<int64_t, std::string>> fileIdNameCache;
+        std::unordered_map<std::string, ObjMaterialLibrary> objMaterialLibraries;
+        std::unordered_map<std::string, float> modelImportScaleCache;
 
         for (const UnitySceneObject& unityObject : unityScene.Objects)
         {
@@ -1483,7 +1671,7 @@ namespace
             object.WorldMatrix = BuildWorldMatrix(unityObject.Transform);
             if (!unityObject.Materials.empty())
             {
-                const auto material = materialBySourceId.find(unityObject.Materials.front().Guid);
+                const auto material = materialBySourceId.find(MakeAssetReferenceKey(unityObject.Materials.front()));
                 object.MaterialIndex = material != materialBySourceId.end() ? material->second : 0;
             }
 
@@ -1492,6 +1680,11 @@ namespace
                 if (unityObject.Mesh.FileId == UnityBuiltinPlaneFileId)
                 {
                     object.Mesh.Kind = SceneMeshKind::BuiltinPlane;
+                    scene.AddObject(std::move(object));
+                }
+                else if (unityObject.Mesh.FileId == UnityBuiltinCubeFileId)
+                {
+                    object.Mesh.Kind = SceneMeshKind::BuiltinCube;
                     scene.AddObject(std::move(object));
                 }
                 continue;
@@ -1505,6 +1698,28 @@ namespace
             object.Mesh.Kind = SceneMeshKind::ExternalMesh;
             object.Mesh.AssetPath = unityObject.Mesh.AssetPath;
             object.Mesh.SubmeshName = ResolveSubmeshName(unityScene, unityObject, fileIdNameCache);
+            const std::string meshPath = object.Mesh.AssetPath.string();
+            const auto [scaleIterator, inserted] = modelImportScaleCache.try_emplace(meshPath, 1.0f);
+            if (inserted)
+            {
+                scaleIterator->second = LoadModelImportScale(object.Mesh.AssetPath);
+            }
+            const float importScale = scaleIterator->second;
+            object.WorldMatrix = XMMatrixScaling(importScale, importScale, importScale) * object.WorldMatrix;
+            if (const std::optional<SceneMaterial> embeddedMaterial =
+                ResolveObjEmbeddedMaterial(unityObject, object.Mesh.SubmeshName, objMaterialLibraries))
+            {
+                const auto material = materialBySourceId.find(embeddedMaterial->SourceId);
+                if (material != materialBySourceId.end())
+                {
+                    object.MaterialIndex = material->second;
+                }
+                else
+                {
+                    object.MaterialIndex = scene.AddMaterial(*embeddedMaterial);
+                    materialBySourceId.emplace(embeddedMaterial->SourceId, object.MaterialIndex);
+                }
+            }
             scene.AddObject(std::move(object));
         }
     }

@@ -122,7 +122,7 @@ private:
     void EnsureRenderGraphTopology();
     void PresentDisplayOutput();
 //Modify End
-    void ResetAccumulation(bool resetDenoiserHistory = true);
+    void ResetAccumulation(bool resetDenoiserHistory = true, bool resetReSTIRDIHistory = true);
     bool IsDenoiserEnabled() const { return m_Denoisers.IsEnabled(); }
     Camera& GetSceneCamera() { return m_Scene.GetRuntimeCamera(); }
     const Camera& GetSceneCamera() const { return m_Scene.GetRuntimeCamera(); }
@@ -139,6 +139,7 @@ private:
 //Modify Begin:2026-07-30 by BestHui
     void ApplyStressTestSpheresState();
 //Modify End
+    void SaveCurrentScene();
     void SaveCurrentCameraToUnityScene();
 //Modify End
 //Modify Begin:2026-08-03 by BestHui
@@ -225,6 +226,7 @@ private:
 //Modify End
 //Modify Begin:2026-07-28 by BestHui
     std::shared_ptr<ComputeShader> m_SkyboxComputeShader;
+    std::shared_ptr<ComputeShader> m_SkyboxEquirectangularComputeShader;
 //Modify End
     std::shared_ptr<Shader> m_LightBillboardShader;
     std::shared_ptr<Texture> m_SkyboxTexture;
@@ -235,8 +237,14 @@ private:
     uint32_t m_AccumulationFrameIndex = 0;
     int m_MaxBounces = 1;
     bool m_AccumulationEnabled = true;
+//Modify Begin:2026-08-05 by BestHui
+    RaytracingDemoLightingTechnique m_DirectLightingTechnique = RaytracingDemoLightingTechnique::ReSTIRDI;
+    RaytracingDemoLightingTechnique m_IndirectLightingTechnique = RaytracingDemoLightingTechnique::None;
+    ReSTIRDI m_DirectLightingReSTIRDI;
+    bool m_ReSTIRDIHistoryValid = false;
+//Modify End
     bool m_DirectLightingEnabled = true;
-    bool m_IndirectLightingEnabled = true;
+    bool m_IndirectLightingEnabled = false;
 //Modify Begin:2026-08-03 by BestHui
     bool m_AsyncComputeEnabled = false;
 //Modify Begin:2026-07-30 by BestHui
@@ -247,11 +255,11 @@ private:
     bool m_SoftShadowsEnabled = false;
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
-    bool m_StressTestSpheresEnabled = true;
+    bool m_StressTestSpheresEnabled = false;
     bool m_StressTestSpheresStateDirty = false;
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
-    bool m_UseMeshletGBuffer = false;
+    bool m_UseMeshletGBuffer = true;
     bool m_DebugMeshletClusters = false;
 //Modify Begin:2026-07-31 by BestHui
     bool m_UseTaskShaderMeshlets = true;
@@ -262,6 +270,8 @@ private:
 //Modify End
     bool m_HasPreviousViewProjection = false;
     float m_CameraFov = 45.0f;
+    float m_CameraNearClipPlane = 0.1f;
+    float m_CameraFarClipPlane = 1000.0f;
     float m_MouseRotateSpeed = 0.1f;
     float m_MousePanSpeed = 0.04f;
     float m_MouseDollySpeed = 0.04f;

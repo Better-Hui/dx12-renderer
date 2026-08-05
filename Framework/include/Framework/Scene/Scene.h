@@ -110,8 +110,11 @@ public:
     void AddDirectionalLight(const DirectionalLight& light);
     void AddPointLight(const PointLight& light);
     void AddAreaLight(const AreaLight& light);
+    void SetDirectionalLights(std::vector<DirectionalLight> lights);
+    void SetPointLights(std::vector<PointLight> lights);
+    void SetAreaLights(std::vector<AreaLight> lights);
 
-    void UpdateCamera(const Camera& camera, float fieldOfView);
+    void UpdateCamera(const Camera& camera, float fieldOfView, float nearClipPlane, float farClipPlane);
 
     const std::filesystem::path& GetSourcePath() const;
     const std::filesystem::path& GetProjectRoot() const;

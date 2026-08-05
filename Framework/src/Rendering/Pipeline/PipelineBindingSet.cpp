@@ -30,6 +30,18 @@ bool PipelineBindingSet::HasBinding(std::string_view name, const DescriptorBindi
     return FindRange(name, expectedKind) != nullptr;
 }
 
+bool PipelineBindingSet::HasBinding(const DescriptorBindingKind expectedKind) const
+{
+    const auto& ranges = GetLayout().GetDesc().DescriptorRanges;
+    return std::any_of(
+        ranges.begin(),
+        ranges.end(),
+        [expectedKind](const PipelineDescriptorRangeDesc& range)
+        {
+            return range.Kind == expectedKind;
+        });
+}
+
 const PipelineDescriptorRangeDesc* PipelineBindingSet::FindRange(
     std::string_view name,
     const DescriptorBindingKind expectedKind) const

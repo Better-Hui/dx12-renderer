@@ -16,6 +16,7 @@
 #include "VertexBuffer.h"
 
 #include <DirectXTex.h>
+#include <OpenEXR/ImfRgbaFile.h>
 
 #include <d3d12.h>
 
@@ -298,7 +299,16 @@ void CommandList::CopyIndexBuffer(IndexBuffer& indexBuffer, const size_t numIndi
 void CommandList::CopyByteAddressBuffer(ByteAddressBuffer& byteAddressBuffer, const size_t bufferSize,
     const void* bufferData)
 {
-    CopyBuffer(byteAddressBuffer, 1, bufferSize, bufferData, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+    const size_t alignedBufferSize = Math::AlignUp(bufferSize, 4);
+    if (alignedBufferSize == bufferSize)
+    {
+        CopyBuffer(byteAddressBuffer, 1, bufferSize, bufferData, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+        return;
+    }
+
+    std::vector<uint8_t> paddedBuffer(alignedBufferSize, 0);
+    std::memcpy(paddedBuffer.data(), bufferData, bufferSize);
+    CopyBuffer(byteAddressBuffer, 1, alignedBufferSize, paddedBuffer.data(), D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 }
 
 void CommandList::CopyStructuredBuffer(StructuredBuffer& structuredBuffer, size_t numElements, size_t elementSize, const void* bufferData)
@@ -313,6 +323,35 @@ void CommandList::SetPrimitiveTopology(const D3D_PRIMITIVE_TOPOLOGY primitiveTop
 
 namespace
 {
+    DirectX::ScratchImage LoadOpenEXRImage(const fs::path& filePath, DirectX::TexMetadata* pMetadata)
+    {
+        using namespace OPENEXR_IMF_NAMESPACE;
+
+        RgbaInputFile input(filePath.string().c_str());
+        const IMATH_NAMESPACE::Box2i& dataWindow = input.dataWindow();
+        const int width = dataWindow.max.x - dataWindow.min.x + 1;
+        const int height = dataWindow.max.y - dataWindow.min.y + 1;
+        Assert(width > 0 && height > 0, "OpenEXR image has an invalid data window.");
+
+        std::vector<Rgba> pixels(static_cast<size_t>(width) * static_cast<size_t>(height));
+        input.setFrameBuffer(ComputeBasePointer(pixels.data(), dataWindow), 1u, static_cast<size_t>(width));
+        input.readPixels(dataWindow.min.y, dataWindow.max.y);
+
+        DirectX::ScratchImage scratchImage;
+        ThrowIfFailed(scratchImage.Initialize2D(DXGI_FORMAT_R16G16B16A16_FLOAT, width, height, 1u, 1u));
+        const DirectX::Image* image = scratchImage.GetImage(0u, 0u, 0u);
+        for (int row = 0; row < height; ++row)
+        {
+            std::memcpy(
+                image->pixels + static_cast<size_t>(row) * image->rowPitch,
+                pixels.data() + static_cast<size_t>(row) * static_cast<size_t>(width),
+                static_cast<size_t>(width) * sizeof(Rgba));
+        }
+
+        *pMetadata = scratchImage.GetMetadata();
+        return scratchImage;
+    }
+
     DirectX::ScratchImage LoadScratchImage(const fs::path& filePath, DirectX::TexMetadata* pMetadata,
         const bool builtInMipMapGeneration = true)
     {
@@ -325,6 +364,10 @@ namespace
         else if (filePath.extension() == ".hdr")
         {
             ThrowIfFailed(LoadFromHDRFile(filePath.c_str(), pMetadata, scratchImage));
+        }
+        else if (filePath.extension() == ".exr")
+        {
+            scratchImage = LoadOpenEXRImage(filePath, pMetadata);
         }
         else if (filePath.extension() == ".tga")
         {

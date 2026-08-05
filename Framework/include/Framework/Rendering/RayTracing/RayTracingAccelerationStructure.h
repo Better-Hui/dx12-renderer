@@ -91,10 +91,15 @@ private:
         uint64_t size,
         const wchar_t* name) const;
 
+    D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO GetBottomLevelPrebuildInfo(
+        const Mesh& mesh,
+        D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags) const;
+
     BottomLevelAccelerationStructure BuildBottomLevelAccelerationStructure(
         CommandList& commandList,
         const std::shared_ptr<Mesh>& mesh,
-        D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags) const;
+        D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags,
+        const Microsoft::WRL::ComPtr<ID3D12Resource>& scratch) const;
 
     std::map<const Mesh*, uint32_t> BuildBottomLevelAccelerationStructures(CommandList& commandList);
     std::map<const Mesh*, uint32_t> CreateMeshToBlasIndex() const;

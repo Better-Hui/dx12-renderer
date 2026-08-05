@@ -113,6 +113,8 @@ XMVECTOR Camera::GetTranslation() const
 void Camera::SetRotation(FXMVECTOR qRotation)
 {
     PData->QRotation = qRotation;
+    ViewDirty = true;
+    InverseViewDirty = true;
 }
 
 XMVECTOR Camera::GetRotation() const

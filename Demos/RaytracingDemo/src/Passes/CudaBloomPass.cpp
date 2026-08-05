@@ -54,7 +54,7 @@ void CudaBloomPass::ReleaseInteropResource()
 bool CudaBloomPass::DrawImGui()
 {
     bool changed = false;
-    if (ImGui::CollapsingHeader("CUDA Bloom", ImGuiTreeNodeFlags_DefaultOpen))
+    if (ImGui::CollapsingHeader("CUDA Bloom"))
     {
         changed |= ImGui::Checkbox("Enable CUDA Bloom", &m_Enabled);
         changed |= ImGui::SliderFloat("Bloom Threshold", &m_Threshold, 0.0f, 5.0f, "%.2f");

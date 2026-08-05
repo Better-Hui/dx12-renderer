@@ -8,6 +8,7 @@
 
 #include <Framework/Geometry/Mesh.h>
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
+#include <Framework/Rendering/Lighting/ReSTIRDI.h>
 #include <Framework/Rendering/Pipeline/MeshShader.h>
 #include <Framework/Rendering/Pipeline/Shader.h>
 #include <Framework/Rendering/RayTracing/RayTracingShader.h>
@@ -51,7 +52,9 @@ struct RaytracingDemoCameraConstants
     DirectX::XMFLOAT4 NRDReblurHitDistanceParameters = { 3.0f, 0.1f, 20.0f, 0.0f };
     uint32_t DirectLightingEnabled = 1;
     uint32_t IndirectLightingEnabled = 1;
-    uint32_t Padding1 = 0;
+//Modify Begin:2026-08-05 by BestHui
+    uint32_t ReSTIRDIHistoryValid = 0;
+//Modify End
     uint32_t Padding2 = 0;
     SkyLightData SkyLight = {};
 };
@@ -117,6 +120,9 @@ struct RaytracingDemoPassResources
     RaytracingDemoSceneResources& Scene;
     SceneLightManager& Lights;
     PathTracingPipelineController& Pipelines;
+//Modify Begin:2026-08-05 by BestHui
+    ReSTIRDI& DirectLightingReSTIRDI;
+//Modify End
     DenoiserController& Denoisers;
     CudaBloomPass& CudaBloom;
     std::shared_ptr<Shader> GBufferShader;
@@ -126,6 +132,7 @@ struct RaytracingDemoPassResources
     IndirectDrawCommandSignature* MeshletDrawCommandSignature = nullptr;
     std::shared_ptr<Shader> DisplayCompositeShader;
     std::shared_ptr<ComputeShader> SkyboxComputeShader;
+    std::shared_ptr<ComputeShader> SkyboxEquirectangularComputeShader;
     std::shared_ptr<Texture> SkyboxTexture;
     std::shared_ptr<Mesh> DisplayBlitMesh;
     Camera& SceneCamera;
@@ -136,9 +143,22 @@ struct RaytracingDemoPassResources
 //Modify End
 };
 
+//Modify Begin:2026-08-05 by BestHui
+enum class RaytracingDemoLightingTechnique : uint32_t
+{
+    None = 0,
+    PathTracing = 1,
+    ReSTIRDI = 2,
+};
+//Modify End
+
 struct RaytracingDemoPassConfig
 {
     const PathTracingBackend* Backend = nullptr;
+//Modify Begin:2026-08-05 by BestHui
+    const RaytracingDemoLightingTechnique* DirectLightingTechnique = nullptr;
+    const RaytracingDemoLightingTechnique* IndirectLightingTechnique = nullptr;
+//Modify End
     const bool* DirectLightingEnabled = nullptr;
     const bool* IndirectLightingEnabled = nullptr;
     const bool* AsyncComputeEnabled = nullptr;
@@ -154,6 +174,9 @@ struct RaytracingDemoPassConfig
     const bool* AccumulationEnabled = nullptr;
     const uint32_t* FrameIndex = nullptr;
     const uint32_t* AccumulationFrameIndex = nullptr;
+//Modify Begin:2026-08-05 by BestHui
+    const bool* ReSTIRDIHistoryValid = nullptr;
+//Modify End
     const bool* HasPreviousViewProjection = nullptr;
     const DirectX::XMMATRIX* PreviousViewProjection = nullptr;
 };

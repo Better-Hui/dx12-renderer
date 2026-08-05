@@ -1,0 +1,4 @@
+# Preserve imported Unity and Wavefront asset text exactly as authored.
+Assets/Models/Sponza/** -whitespace
+Assets/Models/Sponza.meta -whitespace
+Assets/Scenes/Sponza.unity* -whitespace

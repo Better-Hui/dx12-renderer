@@ -438,6 +438,10 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareResourcesForRenderPass(
         case Discard:
             commandList.DiscardResource(m_ResourcePool->GetResource(outputId));
             break;
+//Modify Begin:2026-08-05 by BestHui
+        case Preserve:
+            break;
+//Modify End
         default:
             Assert(false, "Unknown resource init action.");
             break;

@@ -25,7 +25,9 @@ cbuffer CameraConstants : register(b0, space0)
     float4 Camera_NRDReblurHitDistanceParameters;
     uint Camera_DirectLightingEnabled;
     uint Camera_IndirectLightingEnabled;
-    uint Camera_Padding1;
+//Modify Begin:2026-08-05 by BestHui
+    uint Camera_ReSTIRDIHistoryValid;
+//Modify End
     uint Camera_Padding2;
     SkyLightData Camera_SkyLight;
 };
