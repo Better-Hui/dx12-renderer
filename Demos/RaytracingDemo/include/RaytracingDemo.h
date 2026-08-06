@@ -18,7 +18,7 @@
 #include <Framework/Rendering/Pipeline/MeshShader.h>
 //Modify End
 #include <Framework/Rendering/RayTracing/RayTracingShader.h>
-#include <FrameworkRenderFeatures/Lighting/ReSTIRDIPass.h>
+#include <Framework/Rendering/Lighting/ReSTIRDIPass.h>
 #include <Framework/Scene/Scene.h>
 #include <Framework/Rendering/Pipeline/Shader.h>
 //Modify Begin:2026-07-30 by BestHui
@@ -185,7 +185,7 @@ private:
 //Modify End
     PathTracingPipelineController m_PathTracingPipelines;
 //Modify Begin:2026-07-30 by BestHui
-    FrameworkRenderFeatures::ReSTIRDIPass m_DirectLightingReSTIRDIPass;
+    ReSTIRDIPass m_DirectLightingReSTIRDIPass;
 //Modify End
 //Modify End
     DenoiserController m_Denoisers;

@@ -247,7 +247,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateLi
         {
             { DemoResourceIds::DirectLightingFinishedToken, InputType::Token },
 //Modify Begin:2026-08-05 by BestHui
-            { DemoResourceIds::ReSTIRDIShadeFinishedToken, InputType::Token },
+            { DemoResourceIds::ReSTIRDIFinishedToken, InputType::Token },
 //Modify End
             { DemoResourceIds::IndirectLightingFinishedToken, InputType::Token },
             { DemoResourceIds::DirectLighting, InputType::ShaderResource },

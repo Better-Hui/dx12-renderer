@@ -3,7 +3,6 @@
 
 #include <RenderGraph/RaytracingDemoGraphResources.h>
 #include <Passes/RaytracingDemoPasses.h>
-#include <PathTracing/RaytracingDemoReSTIRDI.h>
 #include <RaytracingDemo.h>
 #include <RenderGraph/RenderPass.h>
 
@@ -22,11 +21,7 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateBaseResourcesPass(resources, config));
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateIndirectLightingPass(resources, config));
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDirectLightingPass(resources, config));
-//Modify Begin:2026-07-30 by BestHui
-    resources.DirectLightingReSTIRDIPass.AddPasses(
-        renderPasses,
-        RaytracingDemoReSTIRDI::CreatePassInputs(resources, config));
-//Modify End
+    renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateReSTIRDIPass(resources, config));
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateLightingCompositePass(resources, config));
 //Modify Begin:2026-07-28 by BestHui
     RenderGraph::ResourceId sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::RayTracingFinishedToken;

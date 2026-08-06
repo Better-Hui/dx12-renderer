@@ -1,0 +1,84 @@
+#include <Passes/RaytracingDemoPasses.h>
+
+//Modify Begin:2026-07-30 by BestHui
+#include <PathTracing/PathTracingSceneBindings.h>
+#include <RenderGraph/RaytracingDemoGraphResources.h>
+
+#include <DX12Library/CommandList.h>
+#include <Framework/Rendering/Pipeline/CommandContext.h>
+#include <RenderGraph/RenderContext.h>
+#include <RenderGraph/RenderPass.h>
+
+namespace
+{
+    using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
+
+    bool UsesReSTIRDI(const RaytracingDemoPassConfig& config)
+    {
+        return config.FrameState->Backend == PathTracingBackend::InlineRayQuery &&
+            config.FrameState->DirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRDI;
+    }
+}
+
+std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateReSTIRDIPass(
+    const RaytracingDemoPassResources& resources,
+    const RaytracingDemoPassConfig& config)
+{
+    using namespace RenderGraph;
+    return RenderPass::Create(
+        L"ReSTIR DI",
+        {
+            { DemoResourceIds::BaseResourcesFinishedToken, InputType::Token },
+            { DemoResourceIds::GBufferAlbedoOcclusion, InputType::NonPixelShaderResource },
+            { DemoResourceIds::GBufferSpecularSmoothness, InputType::NonPixelShaderResource },
+            { DemoResourceIds::GBufferNormal, InputType::NonPixelShaderResource },
+            { DemoResourceIds::GBufferEmissionMetallic, InputType::NonPixelShaderResource },
+            { DemoResourceIds::GBufferPosition, InputType::NonPixelShaderResource },
+            { DemoResourceIds::MotionVector, InputType::NonPixelShaderResource },
+            { DemoResourceIds::DepthBuffer, InputType::NonPixelShaderResource },
+        },
+        {
+            { DemoResourceIds::DirectLighting, OutputType::UnorderedAccess },
+            { DemoResourceIds::ReSTIRDIFinishedToken, OutputType::Token },
+        },
+        [resources, config](const RenderContext& context, CommandList& commandList)
+        {
+            if (!UsesReSTIRDI(config))
+            {
+                return;
+            }
+
+            const RaytracingDemoRenderGraph::FrameGBufferResources gbuffer =
+                RaytracingDemoRenderGraph::GetFrameGBufferResources(context);
+            const RaytracingDemoCameraConstants camera =
+                RaytracingDemoPassBindings::BuildPassCameraConstants(resources, config, context);
+
+            ReSTIRDIExecutionInputs inputs;
+            inputs.FrameState.Enabled = true;
+            inputs.FrameState.UseSoftShadowVariant =
+                resources.Pipelines.GetShadowMode() == PathTracingShadowMode::SoftShadows;
+            inputs.FrameState.Width = config.FrameState->Width;
+            inputs.FrameState.Height = config.FrameState->Height;
+            inputs.FrameState.FrameIndex = config.FrameState->FrameIndex;
+            inputs.FrameState.Constants = resources.DirectLightingReSTIRDI.GetFrameConstants(
+                config.FrameState->ReSTIRDIHistoryValid);
+            inputs.DirectLighting = context.GetTexture(DemoResourceIds::DirectLighting);
+            inputs.MotionVector = gbuffer.MotionVector;
+            inputs.BindSceneInputs = [resources, gbuffer, camera](CommandList& bindCommandList, ComputeShader& shader)
+            {
+                RaytracingDemoPassBindings::BindInlinePathTracingInputs(
+                    resources,
+                    bindCommandList,
+                    shader,
+                    gbuffer,
+                    camera);
+                resources.Scene.TransitionRayTracingShaderResources(
+                    bindCommandList,
+                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+                CommandContext(bindCommandList).BindBindlessDescriptorHeap(
+                    resources.Scene.GetBindlessDescriptorHeap());
+            };
+            resources.DirectLightingReSTIRDIPass.Execute(commandList, inputs);
+        });
+}
+//Modify End

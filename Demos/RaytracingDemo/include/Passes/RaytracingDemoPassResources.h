@@ -9,7 +9,7 @@
 #include <Framework/Geometry/Mesh.h>
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
 #include <Framework/Rendering/Lighting/ReSTIRDI.h>
-#include <FrameworkRenderFeatures/Lighting/ReSTIRDIPass.h>
+#include <Framework/Rendering/Lighting/ReSTIRDIPass.h>
 #include <Framework/Rendering/Pipeline/MeshShader.h>
 #include <Framework/Rendering/Pipeline/Shader.h>
 #include <Framework/Rendering/RayTracing/RayTracingShader.h>
@@ -127,7 +127,7 @@ struct RaytracingDemoPassResources
 //Modify Begin:2026-08-05 by BestHui
     ReSTIRDI& DirectLightingReSTIRDI;
 //Modify Begin:2026-07-30 by BestHui
-    FrameworkRenderFeatures::ReSTIRDIPass& DirectLightingReSTIRDIPass;
+    ReSTIRDIPass& DirectLightingReSTIRDIPass;
 //Modify End
 //Modify End
     DenoiserController& Denoisers;
