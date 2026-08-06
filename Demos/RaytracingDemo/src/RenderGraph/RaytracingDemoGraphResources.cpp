@@ -46,7 +46,6 @@ namespace RaytracingDemoRenderGraph
             { ResourceIds::BaseResourcesFinishedToken },
             { ResourceIds::SkyboxFinishedToken },
             { ResourceIds::DirectLightingFinishedToken },
-            { ResourceIds::ReSTIRDIFinishedToken },
             { ResourceIds::IndirectLightingFinishedToken },
             { ResourceIds::RayTracingFinishedToken },
             { ResourceIds::DenoiseFinishedToken },

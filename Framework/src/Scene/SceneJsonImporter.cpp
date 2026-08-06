@@ -624,6 +624,27 @@ void SceneImporter::ApplyJsonRuntimeState(
         scene.SetSkybox(skybox);
     }
 
+//Modify Begin:2026-08-06 by BestHui
+    if (const JsonValue* lightGroupsValue = Find(root, "lightGroups"))
+    {
+        const JsonValue::Object& lightGroups = lightGroupsValue->AsObject("lightGroups");
+        SceneLightGroupSettings settings = scene.GetLightGroupSettings();
+        if (const JsonValue* directionalEnabled = Find(lightGroups, "directionalEnabled"))
+        {
+            settings.DirectionalLightsEnabled = ReadBool(*directionalEnabled, "lightGroups.directionalEnabled");
+        }
+        if (const JsonValue* pointEnabled = Find(lightGroups, "pointEnabled"))
+        {
+            settings.PointLightsEnabled = ReadBool(*pointEnabled, "lightGroups.pointEnabled");
+        }
+        if (const JsonValue* areaEnabled = Find(lightGroups, "areaEnabled"))
+        {
+            settings.AreaLightsEnabled = ReadBool(*areaEnabled, "lightGroups.areaEnabled");
+        }
+        scene.SetLightGroupSettings(settings);
+    }
+//Modify End
+
     if (const JsonValue* lightsValue = Find(root, "directionalLights"))
     {
         std::vector<DirectionalLight> lights;
@@ -707,6 +728,15 @@ void SceneImporter::WriteJsonRuntimeState(
     output << "  \"skybox\": { \"ambientColorAndIntensity\": ";
     writeFloat4(scene.GetSkybox().AmbientColorAndIntensity);
     output << " },\n";
+
+//Modify Begin:2026-08-06 by BestHui
+    const SceneLightGroupSettings& lightGroups = scene.GetLightGroupSettings();
+    output << "  \"lightGroups\": { \"directionalEnabled\": "
+        << (lightGroups.DirectionalLightsEnabled ? "true" : "false")
+        << ", \"pointEnabled\": " << (lightGroups.PointLightsEnabled ? "true" : "false")
+        << ", \"areaEnabled\": " << (lightGroups.AreaLightsEnabled ? "true" : "false")
+        << " },\n";
+//Modify End
 
     const auto writeArrayStart = [&output](const char* name)
     {

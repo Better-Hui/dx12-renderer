@@ -38,6 +38,9 @@
 //Modify Begin:2026-08-03 by BestHui
 #include <deque>
 //Modify End
+//Modify Begin:2026-07-30 by BestHui
+#include <chrono>
+//Modify End
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -71,6 +74,12 @@ protected:
     void OnKeyPressed(KeyEventArgs& e) override;
     void OnKeyReleased(KeyEventArgs& e) override;
     void OnMouseMoved(MouseMotionEventArgs& e) override;
+//Modify Begin:2026-07-30 by BestHui
+    void OnMouseButtonPressed(MouseButtonEventArgs& e) override;
+//Modify End
+//Modify Begin:2026-08-06 by BestHui
+    void OnMouseButtonReleased(MouseButtonEventArgs& e) override;
+//Modify End
     void OnMouseWheel(MouseWheelEventArgs& e) override;
     void OnResize(ResizeEventArgs& e) override;
 
@@ -109,6 +118,9 @@ private:
 
     RayTracingSceneResourceLayout BuildRayTracingSceneResourceLayout() const;
     void EnsureRayTracingPipelines();
+//Modify Begin:2026-07-30 by BestHui
+    void PrewarmRuntimeShadowVariants();
+//Modify End
     void BindRayTracingShaderResources();
 //Modify Begin:2026-07-30 by BestHui
     std::shared_ptr<ShaderBlob> LoadShaderVariant(
@@ -143,6 +155,12 @@ private:
 //Modify Begin:2026-07-30 by BestHui
     void ApplyStressTestSpheresState();
 //Modify End
+//Modify Begin:2026-07-30 by BestHui
+    void ResetCameraToInitialSceneState();
+    void InitializeRuntimeAutomation();
+    void UpdateRuntimeAutomation(double totalTime);
+    void AppendRuntimeAutomationLog(const std::string& message) const;
+//Modify End
     void SaveCurrentScene();
     void SaveCurrentCameraToUnityScene();
 //Modify End
@@ -166,6 +184,9 @@ private:
 //Modify Begin:2026-08-03 by BestHui
     bool m_RenderGraphAsyncComputeEnabled = false;
     PathTracingBackend m_RenderGraphPathTracingBackend = PathTracingBackend::InlineRayQuery;
+//Modify Begin:2026-08-06 by BestHui
+    RaytracingDemoLightingTechnique m_RenderGraphDirectLightingTechnique = RaytracingDemoLightingTechnique::None;
+//Modify End
 //Modify Begin:2026-07-30 by BestHui
     int m_RenderGraphLightingDebugTextureTarget = 0;
 //Modify End
@@ -237,6 +258,9 @@ private:
 //Modify Begin:2026-07-28 by BestHui
     std::shared_ptr<ComputeShader> m_SkyboxComputeShader;
     std::shared_ptr<ComputeShader> m_SkyboxEquirectangularComputeShader;
+//Modify Begin:2026-08-06 by BestHui
+    std::shared_ptr<ComputeShader> m_SkyboxCubemapStripComputeShader;
+//Modify End
 //Modify End
     std::shared_ptr<Shader> m_LightBillboardShader;
     std::shared_ptr<Texture> m_SkyboxTexture;
@@ -265,6 +289,49 @@ private:
 //Modify Begin:2026-07-30 by BestHui
     bool m_StressTestSpheresEnabled = false;
     bool m_StressTestSpheresStateDirty = false;
+//Modify End
+//Modify Begin:2026-07-30 by BestHui
+    DirectX::XMFLOAT3 m_InitialSceneCameraTranslation = { 0.0f, 0.0f, 0.0f };
+    DirectX::XMFLOAT4 m_InitialSceneCameraRotation = { 0.0f, 0.0f, 0.0f, 1.0f };
+    float m_InitialSceneCameraYaw = 0.0f;
+    float m_InitialSceneCameraPitch = 0.0f;
+    bool m_HasInitialSceneCameraState = false;
+//Modify Begin:2026-08-06 by BestHui
+    bool m_LeftMouseDragSincePress = false;
+    bool m_LastLeftClickWasClick = false;
+    bool m_LeftMouseNativeDoubleClick = false;
+    int m_LeftMousePressX = 0;
+    int m_LeftMousePressY = 0;
+//Modify End
+
+    enum class RuntimeAutomationAction
+    {
+        SoftShadows,
+        StressSpheres,
+        MeshletGBuffer,
+        MeshletTaskShader,
+        DirectLighting,
+        IndirectLighting,
+        AsyncCompute,
+        Skybox,
+        Accumulation,
+    };
+
+    struct RuntimeAutomationStep
+    {
+        RuntimeAutomationAction Action = RuntimeAutomationAction::SoftShadows;
+        uint32_t Value = 0;
+        std::string Name;
+    };
+
+    std::vector<RuntimeAutomationStep> m_RuntimeAutomationSteps;
+    std::filesystem::path m_RuntimeAutomationLogPath;
+    size_t m_RuntimeAutomationStepIndex = 0;
+    double m_RuntimeAutomationLastStepTime = 0.0;
+    double m_RuntimeAutomationStepIntervalSeconds = 1.0;
+    bool m_RuntimeAutomationEnabled = false;
+    bool m_RuntimeAutomationQuitOnComplete = false;
+    bool m_RuntimeAutomationCompleted = false;
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
     bool m_UseMeshletGBuffer = true;

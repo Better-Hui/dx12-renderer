@@ -12,12 +12,6 @@
 namespace
 {
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
-
-    bool UsesReSTIRDI(const RaytracingDemoPassConfig& config)
-    {
-        return config.FrameState->Backend == PathTracingBackend::InlineRayQuery &&
-            config.FrameState->DirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRDI;
-    }
 }
 
 std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateReSTIRDIPass(
@@ -39,15 +33,12 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
         },
         {
             { DemoResourceIds::DirectLighting, OutputType::UnorderedAccess },
-            { DemoResourceIds::ReSTIRDIFinishedToken, OutputType::Token },
+//Modify Begin:2026-08-06 by BestHui
+            { DemoResourceIds::DirectLightingFinishedToken, OutputType::Token },
+//Modify End
         },
         [resources, config](const RenderContext& context, CommandList& commandList)
         {
-            if (!UsesReSTIRDI(config))
-            {
-                return;
-            }
-
             const RaytracingDemoRenderGraph::FrameGBufferResources gbuffer =
                 RaytracingDemoRenderGraph::GetFrameGBufferResources(context);
             const RaytracingDemoCameraConstants camera =
@@ -57,6 +48,10 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
             inputs.FrameState.Enabled = true;
             inputs.FrameState.UseSoftShadowVariant =
                 resources.Pipelines.GetShadowMode() == PathTracingShadowMode::SoftShadows;
+//Modify Begin:2026-08-06 by BestHui
+            inputs.FrameState.EnvironmentProjectionVariant =
+                static_cast<uint32_t>(resources.Pipelines.GetLayout().EnvironmentProjection);
+//Modify End
             inputs.FrameState.Width = config.FrameState->Width;
             inputs.FrameState.Height = config.FrameState->Height;
             inputs.FrameState.FrameIndex = config.FrameState->FrameIndex;

@@ -70,7 +70,9 @@ void RaytracingDemo::DrawLightBillboards(CommandList& cmd)
             light.PositionWs.x,
             light.PositionWs.y,
             light.PositionWs.z,
-            std::clamp(light.Range * 0.055f, 0.85f, 2.0f)
+//Modify Begin:2026-08-06 by BestHui
+            std::clamp(light.Range * 0.006f, 0.075f, 0.18f)
+//Modify End
         };
         constants.ColorAndAlpha = {
             light.Color.x,

@@ -5,6 +5,9 @@
 #include "../Common/RayOffset.hlsli"
 #include "../../../../External/NRD/Shaders/NRD.hlsli"
 #include "PathTracingRandom.hlsli"
+//Modify Begin:2026-08-06 by BestHui
+#include <Common/EnvironmentTexture.hlsli>
+//Modify End
 
 //Modify Begin:2026-07-30 by BestHui
 #ifndef RAYTRACING_DEMO_SOFT_SHADOWS
@@ -16,8 +19,20 @@
 
 float3 SampleSkybox(float3 direction)
 {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-08-06 by BestHui
+#if RAYTRACING_DEMO_ENVIRONMENT_PROJECTION == 1
+    const float2 uv = float2(
+        atan2(direction.z, direction.x) / (2.0f * PI) + 0.5f,
+        acos(clamp(direction.y, -1.0f, 1.0f)) / PI);
+    return Skybox.SampleLevel(LinearWrapSampler, uv, 0.0f).rgb *
+#elif RAYTRACING_DEMO_ENVIRONMENT_PROJECTION == 2
+    return Skybox.SampleLevel(
+        LinearWrapSampler,
+        FrameworkDirectionToHorizontalCubemapStripUv(direction),
+        0.0f).rgb *
+#else
     return Skybox.SampleLevel(LinearWrapSampler, direction, 0.0f).rgb *
+#endif
         Camera_SkyLight.ColorAndIntensity.rgb *
         Camera_SkyLight.ColorAndIntensity.w;
 //Modify End
@@ -395,25 +410,95 @@ float3 EvaluatePointLight(
 }
 //Modify End
 
+//Modify Begin:2026-08-06 by BestHui
+struct AreaLightSample
+{
+    float3 PositionWs;
+    float3 NormalWs;
+    float3 Emission;
+    float Area;
+    float MaxDistance;
+    bool Valid;
+};
+
+AreaLightSample SampleAreaLight(AreaLightData light, float2 sampleUv)
+{
+    AreaLightSample sample;
+    sample.PositionWs = 0.0f;
+    sample.NormalWs = 0.0f;
+    sample.Emission = 0.0f;
+    sample.Area = 0.0f;
+    sample.MaxDistance = 0.0f;
+    sample.Valid = false;
+
+    if (light.NormalAndType.w == AreaLightType_EmissiveTriangle)
+    {
+        const float sqrtU = sqrt(saturate(sampleUv.x));
+        const float3 barycentrics = float3(
+            1.0f - sqrtU,
+            sqrtU * saturate(sampleUv.y),
+            sqrtU * (1.0f - saturate(sampleUv.y)));
+        const float3 position0 = light.PositionAndRange.xyz;
+        const float3 position1 = light.AxisUAndExtent.xyz;
+        const float3 position2 = light.AxisVAndExtent.xyz;
+        const float3 triangleCross = cross(position1 - position0, position2 - position0);
+        const float doubleArea = length(triangleCross);
+        if (doubleArea <= 1.0e-8f)
+        {
+            return sample;
+        }
+
+        const uint materialIndex = uint(round(light.EmissiveUv2AndMaterialIndex.z));
+        const MaterialData material = Materials[materialIndex];
+        const float2 uv = light.EmissiveUv0Uv1.xy * barycentrics.x +
+            light.EmissiveUv0Uv1.zw * barycentrics.y +
+            light.EmissiveUv2AndMaterialIndex.xy * barycentrics.z;
+        const float3 emissionMap = material.HasEmissionMap != 0u
+            ? SampleBindlessTexture2DLevel(material.EmissionTextureIndex, LinearWrapSampler, uv, 0.0f).rgb
+            : 1.0f;
+        sample.PositionWs = position0 * barycentrics.x + position1 * barycentrics.y + position2 * barycentrics.z;
+        sample.NormalWs = triangleCross / doubleArea;
+        sample.Emission = material.Emission.rgb * emissionMap;
+        sample.Area = 0.5f * doubleArea;
+        sample.MaxDistance = 10000.0f;
+        sample.Valid = MaxComponent(sample.Emission) > 0.0f;
+        return sample;
+    }
+
+    const float2 rectangleUv = sampleUv * 2.0f - 1.0f;
+    sample.PositionWs = light.PositionAndRange.xyz +
+        light.AxisUAndExtent.xyz * light.AxisUAndExtent.w * rectangleUv.x +
+        light.AxisVAndExtent.xyz * light.AxisVAndExtent.w * rectangleUv.y;
+    sample.NormalWs = normalize(light.NormalAndType.xyz);
+    sample.Emission = light.ColorAndIntensity.rgb * light.ColorAndIntensity.w;
+    sample.Area = max(0.0001f, 4.0f * light.AxisUAndExtent.w * light.AxisVAndExtent.w);
+    sample.MaxDistance = light.PositionAndRange.w;
+    sample.Valid = MaxComponent(sample.Emission) > 0.0f;
+    return sample;
+}
+//Modify End
+
 float3 EvaluateAreaLight(AreaLightData light, SurfaceData surface, inout uint rngState, out float hitDistance)
 {
     hitDistance = 0.0f;
-    float2 sampleUv = float2(Random01(rngState), Random01(rngState)) * 2.0f - 1.0f;
-    float3 samplePosition =
-        light.PositionAndRange.xyz +
-        light.AxisUAndExtent.xyz * light.AxisUAndExtent.w * sampleUv.x +
-        light.AxisVAndExtent.xyz * light.AxisVAndExtent.w * sampleUv.y;
+//Modify Begin:2026-08-06 by BestHui
+    const AreaLightSample lightSample = SampleAreaLight(light, float2(Random01(rngState), Random01(rngState)));
+    if (!lightSample.Valid)
+    {
+        return 0.0f;
+    }
+//Modify End
 
-    float3 toLight = samplePosition - surface.PositionWs;
+    float3 toLight = lightSample.PositionWs - surface.PositionWs;
     float distanceToLight = length(toLight);
-    if (distanceToLight <= 0.001f || distanceToLight > light.PositionAndRange.w)
+    if (distanceToLight <= 0.001f || distanceToLight > lightSample.MaxDistance)
     {
         return 0.0f;
     }
 
     float3 lightDirection = toLight / distanceToLight;
     float nDotL = saturate(dot(surface.NormalWs, lightDirection));
-    float lightFacing = saturate(dot(normalize(light.NormalAndType.xyz), -lightDirection));
+    float lightFacing = saturate(dot(lightSample.NormalWs, -lightDirection));
     if (nDotL <= 0.0f || lightFacing <= 0.0f)
     {
         return 0.0f;
@@ -426,37 +511,78 @@ float3 EvaluateAreaLight(AreaLightData light, SurfaceData surface, inout uint rn
     }
 
     hitDistance = distanceToLight;
-    float area = max(0.0001f, 4.0f * light.AxisUAndExtent.w * light.AxisVAndExtent.w);
-    float3 radiance = light.ColorAndIntensity.rgb * light.ColorAndIntensity.w * area * lightFacing / max(0.001f, distanceToLight * distanceToLight);
+//Modify Begin:2026-08-06 by BestHui
+    float3 radiance = lightSample.Emission * lightSample.Area * lightFacing / max(0.001f, distanceToLight * distanceToLight);
+//Modify End
     return EvaluatePbrLighting(surface, lightDirection, radiance);
 }
+
+//Modify Begin:2026-08-06 by BestHui
+bool SampleDirectLightIndex(
+    const float selectionRandom,
+    out uint lightIndex,
+    out float inverseSourcePdf)
+{
+    const uint totalLightCount =
+        Camera_DirectionalLightCount +
+        Camera_PointLightCount +
+        Camera_AreaLightCount;
+    if (totalLightCount == 0u)
+    {
+        lightIndex = 0u;
+        inverseSourcePdf = 0.0f;
+        return false;
+    }
+
+    const float target = min(saturate(selectionRandom), 0.99999994f);
+    uint low = 0u;
+    uint high = totalLightCount - 1u;
+    [loop]
+    while (low < high)
+    {
+        const uint middle = low + (high - low) / 2u;
+        if (target <= DirectLightCdf[middle])
+        {
+            high = middle;
+        }
+        else
+        {
+            low = middle + 1u;
+        }
+    }
+
+    lightIndex = low;
+    const float previousCdf = lightIndex == 0u ? 0.0f : DirectLightCdf[lightIndex - 1u];
+    inverseSourcePdf = rcp(max(1.0e-6f, DirectLightCdf[lightIndex] - previousCdf));
+    return true;
+}
+//Modify End
 
 float3 EvaluateDirectLighting(SurfaceData surface, inout uint rngState, out float nrdDirectHitDistance)
 {
     nrdDirectHitDistance = 0.0f;
-    uint directionalLightCount = Camera_DirectionalLightCount;
-    uint pointLightCount = Camera_PointLightCount;
-    uint areaLightCount = Camera_AreaLightCount;
-    uint totalLightCount = directionalLightCount + pointLightCount + areaLightCount;
-    if (totalLightCount == 0u)
+//Modify Begin:2026-08-06 by BestHui
+    uint lightIndex;
+    float inverseSourcePdf;
+    if (!SampleDirectLightIndex(Random01(rngState), lightIndex, inverseSourcePdf))
     {
         return 0.0f;
     }
+//Modify End
 
-    uint lightIndex = min(uint(Random01(rngState) * float(totalLightCount)), totalLightCount - 1u);
-    if (lightIndex < directionalLightCount)
+    if (lightIndex < Camera_DirectionalLightCount)
     {
-        return EvaluateDirectionalLight(DirectionalLights[lightIndex], surface, rngState, nrdDirectHitDistance) * float(totalLightCount);
+        return EvaluateDirectionalLight(DirectionalLights[lightIndex], surface, rngState, nrdDirectHitDistance) * inverseSourcePdf;
     }
 
-    lightIndex -= directionalLightCount;
-    if (lightIndex < pointLightCount)
+    lightIndex -= Camera_DirectionalLightCount;
+    if (lightIndex < Camera_PointLightCount)
     {
-        return EvaluatePointLight(PointLights[lightIndex], surface, rngState, nrdDirectHitDistance) * float(totalLightCount);
+        return EvaluatePointLight(PointLights[lightIndex], surface, rngState, nrdDirectHitDistance) * inverseSourcePdf;
     }
 
-    lightIndex -= pointLightCount;
-    return EvaluateAreaLight(AreaLights[lightIndex], surface, rngState, nrdDirectHitDistance) * float(totalLightCount);
+    lightIndex -= Camera_PointLightCount;
+    return EvaluateAreaLight(AreaLights[lightIndex], surface, rngState, nrdDirectHitDistance) * inverseSourcePdf;
 }
 
 //Modify Begin:2026-08-05 by BestHui
@@ -473,6 +599,16 @@ uint GetReSTIRDILightCount()
 {
     return Camera_DirectionalLightCount + Camera_PointLightCount + Camera_AreaLightCount;
 }
+
+//Modify Begin:2026-08-06 by BestHui
+bool SampleReSTIRDIDirectLightIndex(
+    const float selectionRandom,
+    out uint lightIndex,
+    out float inverseSourcePdf)
+{
+    return SampleDirectLightIndex(selectionRandom, lightIndex, inverseSourcePdf);
+}
+//Modify End
 
 ReSTIRDIDirectLightSample SampleReSTIRDIDirectLight(
     const uint lightIndex,
@@ -556,29 +692,31 @@ ReSTIRDIDirectLightSample SampleReSTIRDIDirectLight(
         return sample;
     }
 
-    const AreaLightData light = AreaLights[index];
-    const float2 areaUv = sampleUv * 2.0f - 1.0f;
-    const float3 samplePosition = light.PositionAndRange.xyz +
-        light.AxisUAndExtent.xyz * (areaUv.x * light.AxisUAndExtent.w) +
-        light.AxisVAndExtent.xyz * (areaUv.y * light.AxisVAndExtent.w);
-    const float3 toLight = samplePosition - surface.PositionWs;
+//Modify Begin:2026-08-06 by BestHui
+    const AreaLightSample areaSample = SampleAreaLight(AreaLights[index], sampleUv);
+    if (!areaSample.Valid)
+    {
+        return sample;
+    }
+
+    const float3 toLight = areaSample.PositionWs - surface.PositionWs;
     const float distanceToLight = length(toLight);
-    if (distanceToLight <= 0.001f || distanceToLight > light.PositionAndRange.w)
+    if (distanceToLight <= 0.001f || distanceToLight > areaSample.MaxDistance)
     {
         return sample;
     }
 
     sample.DirectionWs = toLight / distanceToLight;
     sample.Distance = distanceToLight;
-    const float lightFacing = saturate(dot(-sample.DirectionWs, normalize(light.NormalAndType.xyz)));
+    const float lightFacing = saturate(dot(-sample.DirectionWs, areaSample.NormalWs));
     if (lightFacing <= 0.0f)
     {
         return sample;
     }
 
-    const float area = max(0.0001f, 4.0f * light.AxisUAndExtent.w * light.AxisVAndExtent.w);
-    const float3 radiance = light.ColorAndIntensity.rgb * light.ColorAndIntensity.w * area * lightFacing /
+    const float3 radiance = areaSample.Emission * areaSample.Area * lightFacing /
         max(0.001f, distanceToLight * distanceToLight);
+//Modify End
     sample.UnshadowedContribution = EvaluatePbrLighting(surface, sample.DirectionWs, radiance);
     sample.Valid = MaxComponent(sample.UnshadowedContribution) > 0.0f;
     return sample;
@@ -639,6 +777,9 @@ float3 TraceIndirectLighting(SurfaceData surface, inout uint rngState, out float
             nrdDiffuseHitDistance = max(0.0f, payload.HitT);
         }
 
+//Modify Begin:2026-08-06 by BestHui
+        radiance += throughput * payload.Emission;
+//Modify End
         float3 positionWs = origin + direction * payload.HitT;
         SurfaceData hitSurface;
         hitSurface.Diffuse = saturate(payload.BaseColor);

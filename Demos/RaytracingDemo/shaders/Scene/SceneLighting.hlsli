@@ -26,6 +26,15 @@ struct AreaLightData
     float4 AxisUAndExtent;
     float4 AxisVAndExtent;
     float4 ColorAndIntensity;
+//Modify Begin:2026-08-06 by BestHui
+    float4 EmissiveUv0Uv1;
+    float4 EmissiveUv2AndMaterialIndex;
+//Modify End
 };
+
+//Modify Begin:2026-08-06 by BestHui
+static const float AreaLightType_Rectangle = 0.0f;
+static const float AreaLightType_EmissiveTriangle = 1.0f;
+//Modify End
 
 #endif

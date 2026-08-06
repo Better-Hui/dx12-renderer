@@ -64,21 +64,24 @@ ReSTIRDIPass::ReSTIRDIPass(
 
 ReSTIRDIPass::~ReSTIRDIPass() = default;
 
-void ReSTIRDIPass::EnsurePipelines(const bool useSoftShadowVariant)
+void ReSTIRDIPass::EnsurePipelines(
+    const bool useSoftShadowVariant,
+    const uint32_t environmentProjectionVariant)
 {
-    std::unique_ptr<PipelineSet>& pipelines = useSoftShadowVariant
-        ? m_SoftShadowPipelines
-        : m_HardShadowPipelines;
+//Modify Begin:2026-08-06 by BestHui
+    std::unique_ptr<PipelineSet>& pipelines = m_Pipelines[
+        GetPipelineVariantIndex(useSoftShadowVariant, environmentProjectionVariant)];
+//Modify End
     if (pipelines != nullptr)
     {
         return;
     }
 
     pipelines = std::make_unique<PipelineSet>();
-    pipelines->RIS = CreateComputeShader(L"ReSTIRDI.RIS.cs.cso", m_ShaderSources.RIS, useSoftShadowVariant);
-    pipelines->Temporal = CreateComputeShader(L"ReSTIRDI.Temporal.cs.cso", m_ShaderSources.Temporal, useSoftShadowVariant);
-    pipelines->Spatial = CreateComputeShader(L"ReSTIRDI.Spatial.cs.cso", m_ShaderSources.Spatial, useSoftShadowVariant);
-    pipelines->Shade = CreateComputeShader(L"ReSTIRDI.Shade.cs.cso", m_ShaderSources.Shade, useSoftShadowVariant);
+    pipelines->RIS = CreateComputeShader(L"ReSTIRDI.RIS.cs.cso", m_ShaderSources.RIS, useSoftShadowVariant, environmentProjectionVariant);
+    pipelines->Temporal = CreateComputeShader(L"ReSTIRDI.Temporal.cs.cso", m_ShaderSources.Temporal, useSoftShadowVariant, environmentProjectionVariant);
+    pipelines->Spatial = CreateComputeShader(L"ReSTIRDI.Spatial.cs.cso", m_ShaderSources.Spatial, useSoftShadowVariant, environmentProjectionVariant);
+    pipelines->Shade = CreateComputeShader(L"ReSTIRDI.Shade.cs.cso", m_ShaderSources.Shade, useSoftShadowVariant, environmentProjectionVariant);
 }
 
 void ReSTIRDIPass::Execute(
@@ -94,7 +97,9 @@ void ReSTIRDIPass::Execute(
     Assert(inputs.DirectLighting != nullptr, "ReSTIR DI requires a direct lighting output.");
     Assert(inputs.MotionVector != nullptr, "ReSTIR DI requires motion vectors.");
 
-    PipelineSet& pipelines = GetPipelines(inputs.FrameState.UseSoftShadowVariant);
+    PipelineSet& pipelines = GetPipelines(
+        inputs.FrameState.UseSoftShadowVariant,
+        inputs.FrameState.EnvironmentProjectionVariant);
     EnsureResources(inputs.FrameState.Width, inputs.FrameState.Height);
 
     ExecuteInitialSampling(commandList, inputs, pipelines);
@@ -244,12 +249,27 @@ void ReSTIRDIPass::ExecuteFinalShading(
     commandContext.Dispatch(Math::DivideByMultiple(inputs.FrameState.Width, 8u), Math::DivideByMultiple(inputs.FrameState.Height, 8u), 1u);
 }
 
-ReSTIRDIPass::PipelineSet& ReSTIRDIPass::GetPipelines(const bool useSoftShadowVariant)
+size_t ReSTIRDIPass::GetPipelineVariantIndex(
+    const bool useSoftShadowVariant,
+    const uint32_t environmentProjectionVariant)
 {
-    EnsurePipelines(useSoftShadowVariant);
-    PipelineSet* pipelines = useSoftShadowVariant
-        ? m_SoftShadowPipelines.get()
-        : m_HardShadowPipelines.get();
+//Modify Begin:2026-08-06 by BestHui
+    Assert(
+        environmentProjectionVariant < EnvironmentProjectionVariantCount,
+        "Unsupported ReSTIR DI environment projection variant.");
+    return static_cast<size_t>(environmentProjectionVariant * 2u + (useSoftShadowVariant ? 1u : 0u));
+//Modify End
+}
+
+ReSTIRDIPass::PipelineSet& ReSTIRDIPass::GetPipelines(
+    const bool useSoftShadowVariant,
+    const uint32_t environmentProjectionVariant)
+{
+    EnsurePipelines(useSoftShadowVariant, environmentProjectionVariant);
+//Modify Begin:2026-08-06 by BestHui
+    PipelineSet* pipelines = m_Pipelines[
+        GetPipelineVariantIndex(useSoftShadowVariant, environmentProjectionVariant)].get();
+//Modify End
     Assert(pipelines != nullptr, "ReSTIR DI pipeline creation failed.");
     return *pipelines;
 }
@@ -257,7 +277,8 @@ ReSTIRDIPass::PipelineSet& ReSTIRDIPass::GetPipelines(const bool useSoftShadowVa
 std::unique_ptr<ComputeShader> ReSTIRDIPass::CreateComputeShader(
     const std::wstring& compiledFileName,
     const std::wstring& sourceFileName,
-    const bool useSoftShadowVariant)
+    const bool useSoftShadowVariant,
+    const uint32_t environmentProjectionVariant)
 {
     ShaderVariantDesc shaderDesc;
     shaderDesc.CompiledFileName = useSoftShadowVariant
@@ -270,6 +291,19 @@ std::unique_ptr<ComputeShader> ReSTIRDIPass::CreateComputeShader(
     {
         shaderDesc.Defines = m_ShaderSources.SoftShadowDefines;
     }
+//Modify Begin:2026-08-06 by BestHui
+    if (environmentProjectionVariant != 0u)
+    {
+        Assert(
+            !m_ShaderSources.EnvironmentProjectionDefineName.empty(),
+            "ReSTIR DI environment projection variants require a define name.");
+        shaderDesc.CompiledFileName += L".environment" + std::to_wstring(environmentProjectionVariant);
+        shaderDesc.Defines.push_back({
+            m_ShaderSources.EnvironmentProjectionDefineName,
+            std::to_string(environmentProjectionVariant)
+        });
+    }
+//Modify End
 
     const std::shared_ptr<ShaderBlob> shaderBlob = m_ShaderVariants.GetOrCompile(shaderDesc);
     return std::make_unique<ComputeShader>(

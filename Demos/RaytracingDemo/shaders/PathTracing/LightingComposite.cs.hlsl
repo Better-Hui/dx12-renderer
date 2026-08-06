@@ -104,6 +104,10 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     float3 directLighting = 0.0f;
     float3 indirectLightingColor = 0.0f;
 //Modify Begin:2026-08-06 by BestHui
+    const float3 emission = GBufferTextures[GBuffer_EmissionMetallic].Load(int3(pixel, 0)).rgb;
+    sampleColor += emission;
+//Modify End
+//Modify Begin:2026-08-06 by BestHui
     if (Camera_DirectLightingActive != 0u)
     {
         const float4 directLightingSample = DirectLightingTexture.Load(int3(pixel, 0));

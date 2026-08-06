@@ -20,8 +20,25 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
     std::vector<std::unique_ptr<RenderGraph::RenderPass>> renderPasses;
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateBaseResourcesPass(resources, config));
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateIndirectLightingPass(resources, config));
-    renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDirectLightingPass(resources, config));
-    renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateReSTIRDIPass(resources, config));
+//Modify Begin:2026-08-06 by BestHui
+    switch (frameState.DirectLightingTechnique)
+    {
+    case RaytracingDemoLightingTechnique::PathTracing:
+        renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDirectLightingPass(resources, config));
+        break;
+    case RaytracingDemoLightingTechnique::ReSTIRDI:
+        if (frameState.Backend == PathTracingBackend::InlineRayQuery)
+        {
+            renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateReSTIRDIPass(resources, config));
+            break;
+        }
+        [[fallthrough]];
+    case RaytracingDemoLightingTechnique::None:
+    default:
+        renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDisabledDirectLightingPass());
+        break;
+    }
+//Modify End
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateLightingCompositePass(resources, config));
 //Modify Begin:2026-07-28 by BestHui
     RenderGraph::ResourceId sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::RayTracingFinishedToken;

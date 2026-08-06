@@ -68,7 +68,9 @@ Application::Application(HINSTANCE hInst, const ExternalD3D12Context* externalCo
     WNDCLASSEXW wndClass = { 0 };
 
     wndClass.cbSize = sizeof(WNDCLASSEX);
-    wndClass.style = CS_HREDRAW | CS_VREDRAW;
+//Modify Begin:2026-07-30 by BestHui
+    wndClass.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
+//Modify End
     wndClass.lpfnWndProc = &WndProc;
     wndClass.hInstance = m_hInstance;
     wndClass.hCursor = LoadCursor(nullptr, IDC_ARROW);
@@ -714,8 +716,17 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
             }
             break;
         case WM_LBUTTONDOWN:
+//Modify Begin:2026-07-30 by BestHui
+        case WM_LBUTTONDBLCLK:
+//Modify End
         case WM_RBUTTONDOWN:
+//Modify Begin:2026-07-30 by BestHui
+        case WM_RBUTTONDBLCLK:
+//Modify End
         case WM_MBUTTONDOWN:
+//Modify Begin:2026-07-30 by BestHui
+        case WM_MBUTTONDBLCLK:
+//Modify End
             {
                 bool lButton = (wParam & MK_LBUTTON) != 0;
                 bool rButton = (wParam & MK_RBUTTON) != 0;
@@ -726,8 +737,14 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
                 int x = static_cast<short>(LOWORD(lParam));
                 int y = static_cast<short>(HIWORD(lParam));
 
+//Modify Begin:2026-08-06 by BestHui
+                const bool doubleClick =
+                    message == WM_LBUTTONDBLCLK ||
+                    message == WM_RBUTTONDBLCLK ||
+                    message == WM_MBUTTONDBLCLK;
                 MouseButtonEventArgs mouseButtonEventArgs(DecodeMouseButton(message), MouseButtonEventArgs::Pressed,
-                    lButton, mButton, rButton, control, shift, x, y);
+                    lButton, mButton, rButton, control, shift, x, y, doubleClick);
+//Modify End
                 pWindow->OnMouseButtonPressed(mouseButtonEventArgs);
             }
             break;

@@ -140,6 +140,9 @@ struct RaytracingDemoPassResources
     std::shared_ptr<Shader> DisplayCompositeShader;
     std::shared_ptr<ComputeShader> SkyboxComputeShader;
     std::shared_ptr<ComputeShader> SkyboxEquirectangularComputeShader;
+//Modify Begin:2026-08-06 by BestHui
+    std::shared_ptr<ComputeShader> SkyboxCubemapStripComputeShader;
+//Modify End
     std::shared_ptr<Texture> SkyboxTexture;
     std::shared_ptr<Mesh> DisplayBlitMesh;
     Camera& SceneCamera;

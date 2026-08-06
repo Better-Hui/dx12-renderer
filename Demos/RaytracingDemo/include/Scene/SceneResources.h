@@ -2,6 +2,7 @@
 #pragma once
 
 #include <Scene/SceneResourceBuilders.h>
+#include <Scene/SceneLighting.h>
 #include <Framework/Scene/Scene.h>
 
 #include <DirectXMath.h>
@@ -9,6 +10,7 @@
 #include <wrl.h>
 
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
@@ -34,6 +36,9 @@ public:
     const std::vector<RaytracingDemoSceneObject>& GetSceneObjects() const { return m_GeometryResources.GetObjects(); }
     const std::vector<RaytracingDemoSceneGeometry>& GetSceneGeometries() const { return m_GeometryResources.GetGeometries(); }
     const std::vector<RaytracingDemoMaterialData>& GetMaterials() const { return m_TextureMaterialResources.GetMaterials(); }
+//Modify Begin:2026-08-06 by BestHui
+    std::vector<AreaLightData> CollectEmissiveMeshLights() const;
+//Modify End
     const std::vector<std::shared_ptr<Texture>>& GetTextures() const { return m_TextureMaterialResources.GetTextures(); }
     std::vector<ShaderResourceView> CreateTextureShaderResourceViews() const { return m_TextureMaterialResources.CreateTextureShaderResourceViews(); }
     const StructuredBuffer& GetMaterialBuffer() const { return m_TextureMaterialResources.GetMaterialBuffer(); }
@@ -102,6 +107,9 @@ private:
 //Modify Begin:2026-07-30 by BestHui
     std::vector<RaytracingDemoSceneObject> m_StressTestSphereObjects;
     size_t m_StressTestSphereObjectStart = 0;
+//Modify Begin:2026-07-30 by BestHui
+    uint32_t m_StressTestSphereMaterialIndex = (std::numeric_limits<uint32_t>::max)();
+//Modify End
     bool m_StressTestSpheresEnabled = true;
 //Modify End
 };

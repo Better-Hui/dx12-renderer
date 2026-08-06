@@ -56,7 +56,7 @@ void RaytracingDemoPassBindings::BindInlinePathTracingInputs(
 //Modify End
     if (shader.HasShaderResourceView("Skybox"))
     {
-        commandContext.SetShaderResourceView(shader, "Skybox", ShaderResourceView::TextureCube(resources.SkyboxTexture));
+        commandContext.SetShaderResourceView(shader, "Skybox", ShaderResourceView::EnvironmentTexture(resources.SkyboxTexture));
     }
     if (shader.HasShaderResourceView("Materials"))
     {

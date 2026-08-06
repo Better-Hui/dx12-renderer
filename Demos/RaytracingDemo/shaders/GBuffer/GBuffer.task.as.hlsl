@@ -2,7 +2,9 @@
 #include <ShaderLibrary/Common/RootSignature.hlsli>
 #include <Meshlet/MeshletCommon.hlsli>
 
-cbuffer MeshletCullCBuffer : register(b0)
+//Modify Begin:2026-07-30 by BestHui
+cbuffer MeshletCullCBuffer : register(b1, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE)
+//Modify End
 {
     float4 MeshletCull_FrustumPlanes[6];
     uint MeshletCull_InstanceCount;

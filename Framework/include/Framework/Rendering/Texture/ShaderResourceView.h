@@ -4,9 +4,71 @@
 #include <DX12Library/Resource.h>
 
 #include <memory>
+#include <stdexcept>
+
+//Modify Begin:2026-08-06 by BestHui
+enum class EnvironmentTextureProjection : uint32_t
+{
+    Cubemap = 0u,
+    Equirectangular = 1u,
+    CubemapHorizontalStrip = 2u,
+};
+//Modify End
 
 struct ShaderResourceView
 {
+//Modify Begin:2026-07-30 by BestHui
+    static EnvironmentTextureProjection GetEnvironmentTextureProjection(const Resource& resource)
+    {
+        const D3D12_RESOURCE_DESC resourceDesc = resource.GetD3D12ResourceDesc();
+        if (resourceDesc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D)
+        {
+            throw std::invalid_argument("Environment texture must be a Texture2D resource.");
+        }
+
+        if (resourceDesc.DepthOrArraySize >= 6u && resourceDesc.DepthOrArraySize % 6u == 0u)
+        {
+            return EnvironmentTextureProjection::Cubemap;
+        }
+
+        if (resourceDesc.DepthOrArraySize != 1u)
+        {
+            throw std::invalid_argument("Environment texture array must contain one image or complete cubemap faces.");
+        }
+
+        const uint64_t width = resourceDesc.Width;
+        const uint64_t height = resourceDesc.Height;
+        if (width == height * 2u)
+        {
+            return EnvironmentTextureProjection::Equirectangular;
+        }
+        if (width == height * 6u)
+        {
+            return EnvironmentTextureProjection::CubemapHorizontalStrip;
+        }
+
+        throw std::invalid_argument("Unsupported 2D environment texture layout. Expected a 2:1 equirectangular image or a 6:1 cubemap strip.");
+    }
+
+    static bool IsEquirectangularEnvironment(const Resource& resource)
+    {
+        return GetEnvironmentTextureProjection(resource) == EnvironmentTextureProjection::Equirectangular;
+    }
+
+    static ShaderResourceView EnvironmentTexture(const std::shared_ptr<Resource>& resource)
+    {
+        if (resource == nullptr)
+        {
+            throw std::invalid_argument("Environment texture must not be null.");
+        }
+        if (GetEnvironmentTextureProjection(*resource) == EnvironmentTextureProjection::Cubemap)
+        {
+            return TextureCube(resource);
+        }
+        return ShaderResourceView(resource);
+    }
+//Modify End
+
     //Modify Begin:2026-07-23 by BestHui
     static ShaderResourceView TextureCube(const std::shared_ptr<Resource>& resource)
     {
@@ -24,7 +86,7 @@ struct ShaderResourceView
         desc.Format = resource.GetD3D12ResourceDesc().Format;
         desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
-        desc.TextureCube.MipLevels = 1;
+        desc.TextureCube.MipLevels = resource.GetD3D12ResourceDesc().MipLevels;
         desc.TextureCube.MostDetailedMip = 0;
         desc.TextureCube.ResourceMinLODClamp = 0.0f;
         return desc;

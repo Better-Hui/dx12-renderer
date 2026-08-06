@@ -5,6 +5,12 @@
 #define RAYTRACING_DEMO_INLINE_BACKEND 0
 #endif
 
+//Modify Begin:2026-08-06 by BestHui
+#if !defined(RAYTRACING_DEMO_ENVIRONMENT_PROJECTION)
+#define RAYTRACING_DEMO_ENVIRONMENT_PROJECTION 0
+#endif
+//Modify End
+
 #include "../GBuffer/GBufferLayout.hlsli"
 #include <Bindless/BindlessResources.hlsli>
 #include "SceneCamera.hlsli"
@@ -27,6 +33,9 @@
 #define RAYTRACING_DEMO_DIRECTIONAL_LIGHTS_REGISTER register(t9, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE)
 #define RAYTRACING_DEMO_POINT_LIGHTS_REGISTER register(t10, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE)
 #define RAYTRACING_DEMO_AREA_LIGHTS_REGISTER register(t11, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE)
+//Modify Begin:2026-08-06 by BestHui
+#define RAYTRACING_DEMO_DIRECT_LIGHT_CDF_REGISTER register(t12, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE)
+//Modify End
 #define RAYTRACING_DEMO_DIRECT_LIGHTING_REGISTER register(u0)
 #define RAYTRACING_DEMO_INDIRECT_LIGHTING_REGISTER register(u1)
 #define RAYTRACING_DEMO_LINEAR_SAMPLER_REGISTER register(s1)
@@ -42,6 +51,9 @@
 #define RAYTRACING_DEMO_DIRECTIONAL_LIGHTS_REGISTER register(t3, space0)
 #define RAYTRACING_DEMO_POINT_LIGHTS_REGISTER register(t4, space0)
 #define RAYTRACING_DEMO_AREA_LIGHTS_REGISTER register(t5, space0)
+//Modify Begin:2026-08-06 by BestHui
+#define RAYTRACING_DEMO_DIRECT_LIGHT_CDF_REGISTER register(t6, space0)
+//Modify End
 #define RAYTRACING_DEMO_DIRECT_LIGHTING_REGISTER register(u0, space0)
 #define RAYTRACING_DEMO_INDIRECT_LIGHTING_REGISTER register(u1, space0)
 #define RAYTRACING_DEMO_LINEAR_SAMPLER_REGISTER register(s0)
@@ -55,12 +67,21 @@ Texture2D<float4> GBufferTextures
     : RAYTRACING_DEMO_GBUFFER_REGISTER;
 
 Texture2D<float> DepthTexture : RAYTRACING_DEMO_DEPTH_REGISTER;
+//Modify Begin:2026-08-06 by BestHui
+#if RAYTRACING_DEMO_ENVIRONMENT_PROJECTION != 0
+Texture2D Skybox : RAYTRACING_DEMO_SKYBOX_REGISTER;
+#else
 TextureCube Skybox : RAYTRACING_DEMO_SKYBOX_REGISTER;
+#endif
+//Modify End
 StructuredBuffer<MaterialData> Materials : RAYTRACING_DEMO_MATERIALS_REGISTER;
 StructuredBuffer<GeometryData> Geometries : RAYTRACING_DEMO_GEOMETRIES_REGISTER;
 StructuredBuffer<DirectionalLightData> DirectionalLights : RAYTRACING_DEMO_DIRECTIONAL_LIGHTS_REGISTER;
 StructuredBuffer<PointLightData> PointLights : RAYTRACING_DEMO_POINT_LIGHTS_REGISTER;
 StructuredBuffer<AreaLightData> AreaLights : RAYTRACING_DEMO_AREA_LIGHTS_REGISTER;
+//Modify Begin:2026-08-06 by BestHui
+StructuredBuffer<float> DirectLightCdf : RAYTRACING_DEMO_DIRECT_LIGHT_CDF_REGISTER;
+//Modify End
 
 RWTexture2D<float4> DirectLighting : RAYTRACING_DEMO_DIRECT_LIGHTING_REGISTER;
 RWTexture2D<float4> IndirectLighting : RAYTRACING_DEMO_INDIRECT_LIGHTING_REGISTER;

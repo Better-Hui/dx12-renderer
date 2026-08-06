@@ -72,11 +72,6 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
         },
         [resources, config, backend](const RenderContext& context, CommandList& cmd)
         {
-            if (config.FrameState->DirectLightingTechnique != RaytracingDemoLightingTechnique::PathTracing)
-            {
-                return;
-            }
-
             const RaytracingDemoRenderGraph::FrameGBufferResources gbuffer = RaytracingDemoRenderGraph::GetFrameGBufferResources(context);
             const RaytracingDemoCameraConstants camera = RaytracingDemoPassBindings::BuildPassCameraConstants(resources, config, context);
 
@@ -121,6 +116,23 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
             }
         });
 }
+
+//Modify Begin:2026-08-06 by BestHui
+std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDisabledDirectLightingPass()
+{
+    using namespace RenderGraph;
+    return RenderPass::Create(
+        L"Direct Lighting Disabled",
+        {},
+        {
+            { DemoResourceIds::DirectLighting, OutputType::UnorderedAccess },
+            { DemoResourceIds::DirectLightingFinishedToken, OutputType::Token },
+        },
+        [](const RenderContext&, CommandList&)
+        {
+        });
+}
+//Modify End
 
 std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIndirectLightingPass(
     const RaytracingDemoPassResources& resources,
@@ -246,9 +258,6 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateLi
         L"Lighting Composite",
         {
             { DemoResourceIds::DirectLightingFinishedToken, InputType::Token },
-//Modify Begin:2026-08-05 by BestHui
-            { DemoResourceIds::ReSTIRDIFinishedToken, InputType::Token },
-//Modify End
             { DemoResourceIds::IndirectLightingFinishedToken, InputType::Token },
             { DemoResourceIds::DirectLighting, InputType::ShaderResource },
             { DemoResourceIds::IndirectLighting, InputType::ShaderResource },

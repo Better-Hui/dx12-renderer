@@ -14,6 +14,39 @@
 
 #include <algorithm>
 
+namespace
+{
+//Modify Begin:2026-08-06 by BestHui
+    std::wstring GetEnvironmentProjectionShaderSuffix(const EnvironmentTextureProjection projection)
+    {
+        switch (projection)
+        {
+        case EnvironmentTextureProjection::Cubemap:
+            return L"";
+        case EnvironmentTextureProjection::Equirectangular:
+            return L".equirect";
+        case EnvironmentTextureProjection::CubemapHorizontalStrip:
+            return L".cubestrip";
+        default:
+            throw std::invalid_argument("Unsupported environment texture projection.");
+        }
+    }
+
+    void AddEnvironmentProjectionDefine(
+        std::vector<ShaderVariantDefine>& defines,
+        const EnvironmentTextureProjection projection)
+    {
+        if (projection != EnvironmentTextureProjection::Cubemap)
+        {
+            defines.push_back({
+                "RAYTRACING_DEMO_ENVIRONMENT_PROJECTION",
+                std::to_string(static_cast<uint32_t>(projection))
+            });
+        }
+    }
+//Modify End
+}
+
 std::shared_ptr<ShaderBlob> PathTracingPipelineController::LoadShader(
     std::wstring compiledFileName,
     std::wstring sourceFileName,
@@ -157,12 +190,18 @@ void PathTracingPipelineController::CreateDxrPipeline(const RayTracingSceneResou
 {
 //Modify Begin:2026-07-30 by BestHui
     const bool useSoftShadows = m_ShadowMode == PathTracingShadowMode::SoftShadows;
-    const std::wstring shaderFileName = useSoftShadows
-        ? L"PathTracing.softshadow.rt.cso"
-        : L"PathTracing.rt.cso";
-    const std::vector<ShaderVariantDefine> defines = useSoftShadows
-        ? std::vector<ShaderVariantDefine>{ { "RAYTRACING_DEMO_SOFT_SHADOWS", "1" } }
-        : std::vector<ShaderVariantDefine>{};
+    std::wstring shaderFileName = L"PathTracing" + GetEnvironmentProjectionShaderSuffix(layout.EnvironmentProjection);
+    if (useSoftShadows)
+    {
+        shaderFileName += L".softshadow";
+    }
+    shaderFileName += L".rt.cso";
+    std::vector<ShaderVariantDefine> defines;
+    AddEnvironmentProjectionDefine(defines, layout.EnvironmentProjection);
+    if (useSoftShadows)
+    {
+        defines.push_back({ "RAYTRACING_DEMO_SOFT_SHADOWS", "1" });
+    }
 #if defined(DX12_RENDERER_ENABLE_SM610_LINALG)
     constexpr const char* targetProfile = "lib_6_10";
 #else
@@ -184,7 +223,9 @@ void PathTracingPipelineController::CreateDxrPipeline(const RayTracingSceneResou
         .WithRayGenerationPass("DirectLightingRayGen", L"DirectLightingRayGen", { L"Miss" }, { L"HitGroup", L"VisibilityHitGroup" })
         .WithRayGenerationPass("IndirectLightingRayGen", L"IndirectLightingRayGen", { L"Miss" }, { L"HitGroup", L"VisibilityHitGroup" })
 //Modify End
-        .WithPayloadSize(64)
+//Modify Begin:2026-08-06 by BestHui
+        .WithPayloadSize(80)
+//Modify End
         .Build();
     m_RayTracingShader = std::make_unique<RayTracingShader>(m_DeviceContext, *pathTracingShader, rayTracingDesc);
     m_DirectRayTracingBindingSet = std::make_unique<RayTracingBindingSet>(m_RayTracingShader->CreateBindingSet());
@@ -195,14 +236,29 @@ void PathTracingPipelineController::CreateInlinePipelines(const RayTracingSceneR
 {
 //Modify Begin:2026-07-30 by BestHui
     const bool useSoftShadows = m_ShadowMode == PathTracingShadowMode::SoftShadows;
-    const std::vector<ShaderVariantDefine> shadowDefines = useSoftShadows
-        ? std::vector<ShaderVariantDefine>{ { "RAYTRACING_DEMO_SOFT_SHADOWS", "1" } }
-        : std::vector<ShaderVariantDefine>{};
+    std::vector<ShaderVariantDefine> shaderDefines;
+    AddEnvironmentProjectionDefine(shaderDefines, layout.EnvironmentProjection);
+    if (useSoftShadows)
+    {
+        shaderDefines.push_back({ "RAYTRACING_DEMO_SOFT_SHADOWS", "1" });
+    }
+    std::wstring directLightingShaderFileName = L"DirectLighting";
+    std::wstring indirectLightingShaderFileName = L"IndirectLighting";
+    const std::wstring environmentProjectionSuffix = GetEnvironmentProjectionShaderSuffix(layout.EnvironmentProjection);
+    directLightingShaderFileName += environmentProjectionSuffix;
+    indirectLightingShaderFileName += environmentProjectionSuffix;
+    if (useSoftShadows)
+    {
+        directLightingShaderFileName += L".softshadow";
+        indirectLightingShaderFileName += L".softshadow";
+    }
+    directLightingShaderFileName += L".cs.cso";
+    indirectLightingShaderFileName += L".cs.cso";
     const std::shared_ptr<ShaderBlob> inlineDirectLightingShader = LoadShader(
-        useSoftShadows ? L"DirectLighting.softshadow.cs.cso" : L"DirectLighting.cs.cso",
+        std::move(directLightingShaderFileName),
         L"Demos/RaytracingDemo/shaders/PathTracing/DirectLighting.cs.hlsl",
         "cs_6_6",
-        shadowDefines);
+        shaderDefines);
 //Modify End
     const ComputePipelineDesc inlineDirectLightingDesc = ComputePipelineDescBuilder::ReflectedDefault(*inlineDirectLightingShader)
 //Modify Begin:2026-07-30 by BestHui
@@ -213,10 +269,10 @@ void PathTracingPipelineController::CreateInlinePipelines(const RayTracingSceneR
 
     //Modify Begin:2026-07-30 by BestHui
     const std::shared_ptr<ShaderBlob> inlineIndirectLightingShader = LoadShader(
-        useSoftShadows ? L"IndirectLighting.softshadow.cs.cso" : L"IndirectLighting.cs.cso",
+        std::move(indirectLightingShaderFileName),
         L"Demos/RaytracingDemo/shaders/PathTracing/IndirectLighting.cs.hlsl",
         "cs_6_6",
-        shadowDefines);
+        shaderDefines);
     //Modify End
     const ComputePipelineDesc inlineIndirectLightingDesc = ComputePipelineDescBuilder::ReflectedDefault(*inlineIndirectLightingShader)
 //Modify Begin:2026-07-30 by BestHui
@@ -263,7 +319,7 @@ void PathTracingPipelineController::BindRayTracingResources(
         lights.BindRayTracingResources(bindingSet);
         if (bindingSet.HasBinding("Skybox"))
         {
-            bindingSet.SetTexture("Skybox", ShaderResourceView::TextureCube(skyboxTexture));
+            bindingSet.SetTexture("Skybox", ShaderResourceView::EnvironmentTexture(skyboxTexture));
         }
     };
 

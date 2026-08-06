@@ -30,6 +30,9 @@ public:
 
     void CreateDemoLights();
     void CreateFromScene(const Scene& scene);
+//Modify Begin:2026-08-06 by BestHui
+    void SetEmissiveMeshLights(std::vector<AreaLightData> lights);
+//Modify End
     void InitializeGpuBuffers(CommandList& commandList);
 //Modify Begin:2026-07-30 by BestHui
     bool Upload(CommandList& commandList, uint64_t frameIndex);
@@ -56,6 +59,9 @@ public:
     size_t GetPointLightCount() const { return m_PointLights.size(); }
     const std::vector<PointLight>& GetPointLights() const { return m_PointLights; }
     const std::vector<AreaLightData>& GetAreaLights() const { return m_AreaLights; }
+//Modify Begin:2026-08-06 by BestHui
+    size_t GetEmissiveMeshLightCount() const { return m_EmissiveMeshLights.size(); }
+//Modify End
 
 private:
     void AddDirectionalLight();
@@ -66,6 +72,11 @@ private:
     void RemovePointLight(size_t lightIndex);
     void RemoveAreaLight(size_t lightIndex);
     void BuildGpuData();
+//Modify Begin:2026-08-06 by BestHui
+    void RebuildAreaLightGpuData();
+    void RebuildDirectLightSamplingCdf();
+    void MarkDirectLightSamplingDirty();
+//Modify End
     void UpdatePointLightGpuData(size_t lightIndex);
     void MarkDirectionalLightsDirty();
     void MarkDirectionalLightsDirty(size_t beginIndex, size_t endIndex);
@@ -78,6 +89,9 @@ private:
     std::vector<DirectionalLight> m_DirectionalLights;
     std::vector<PointLight> m_PointLights;
     std::vector<AreaLightData> m_AreaLights;
+//Modify Begin:2026-08-06 by BestHui
+    std::vector<AreaLightData> m_EmissiveMeshLights;
+//Modify End
     std::vector<DirectionalLightData> m_DirectionalLightGpuData;
     std::vector<PointLightData> m_PointLightGpuData;
     std::vector<AreaLightData> m_AreaLightGpuData;
@@ -85,17 +99,28 @@ private:
     StructuredBuffer m_DirectionalLightBuffer;
     StructuredBuffer m_PointLightBuffer;
     StructuredBuffer m_AreaLightBuffer;
+//Modify Begin:2026-08-06 by BestHui
+    StructuredBuffer m_DirectLightCdfBuffer;
+//Modify End
     std::unique_ptr<SharedUploadBuffer> m_UploadBuffer;
 
     size_t m_DirectionalLightBufferCapacity = 0;
     size_t m_PointLightBufferCapacity = 0;
     size_t m_AreaLightBufferCapacity = 0;
+//Modify Begin:2026-08-06 by BestHui
+    size_t m_DirectLightCdfBufferCapacity = 0;
+//Modify End
     size_t m_DirectionalLightDirtyBegin = 0;
     size_t m_DirectionalLightDirtyEnd = 0;
     size_t m_PointLightDirtyBegin = 0;
     size_t m_PointLightDirtyEnd = 0;
     size_t m_AreaLightDirtyBegin = 0;
     size_t m_AreaLightDirtyEnd = 0;
+//Modify Begin:2026-08-06 by BestHui
+    size_t m_DirectLightCdfDirtyBegin = 0;
+    size_t m_DirectLightCdfDirtyEnd = 0;
+    std::vector<float> m_DirectLightCdfGpuData;
+//Modify End
 
     std::vector<float> m_PointLightBaseY;
     std::vector<float> m_PointLightPhase;

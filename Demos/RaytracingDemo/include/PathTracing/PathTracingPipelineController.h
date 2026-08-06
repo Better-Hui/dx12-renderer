@@ -4,6 +4,7 @@
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
 #include <Framework/Rendering/RayTracing/RayTracingShader.h>
 #include <Framework/Rendering/Pipeline/ShaderVariant.h>
+#include <Framework/Rendering/Texture/ShaderResourceView.h>
 
 #include <cstdint>
 #include <deque>
@@ -37,11 +38,15 @@ struct RayTracingSceneResourceLayout
 
     uint32_t TextureDescriptorCapacity = MinDescriptorArrayCapacity;
     uint32_t GeometryDescriptorCapacity = MinDescriptorArrayCapacity;
+//Modify Begin:2026-08-06 by BestHui
+    EnvironmentTextureProjection EnvironmentProjection = EnvironmentTextureProjection::Cubemap;
+//Modify End
 
     bool operator!=(const RayTracingSceneResourceLayout& other) const
     {
         return TextureDescriptorCapacity != other.TextureDescriptorCapacity ||
-            GeometryDescriptorCapacity != other.GeometryDescriptorCapacity;
+            GeometryDescriptorCapacity != other.GeometryDescriptorCapacity ||
+            EnvironmentProjection != other.EnvironmentProjection;
     }
 };
 

@@ -20,6 +20,9 @@ namespace
 void RaytracingDemo::OnUpdate(UpdateEventArgs& e)
 {
     Base::OnUpdate(e);
+//Modify Begin:2026-07-30 by BestHui
+    UpdateRuntimeAutomation(e.TotalTime);
+//Modify End
     m_DeltaTime = static_cast<float>(e.ElapsedTime);
     if (m_Lights.IsPointLightAnimationEnabled())
     {
@@ -156,6 +159,9 @@ void RaytracingDemo::OnMouseMoved(MouseMotionEventArgs& e)
     {
         if (e.RelX != 0 || e.RelY != 0)
         {
+//Modify Begin:2026-08-06 by BestHui
+            m_LeftMouseDragSincePress = true;
+//Modify End
             m_CameraController.Pitch = ClampCameraValue(m_CameraController.Pitch + e.RelY * m_MouseRotateSpeed, -90.0f, 90.0f);
             m_CameraController.Yaw += e.RelX * m_MouseRotateSpeed;
             ResetAccumulation(false, false);
@@ -192,6 +198,60 @@ void RaytracingDemo::OnMouseMoved(MouseMotionEventArgs& e)
         }
     }
 }
+
+//Modify Begin:2026-07-30 by BestHui
+void RaytracingDemo::OnMouseButtonPressed(MouseButtonEventArgs& e)
+{
+    if (m_ImGui != nullptr && m_ImGui->WantsToCaptureMouse())
+    {
+        return;
+    }
+
+    Base::OnMouseButtonPressed(e);
+    if (e.Button != MouseButtonEventArgs::Left)
+    {
+        return;
+    }
+
+//Modify Begin:2026-08-06 by BestHui
+    m_LeftMouseDragSincePress = false;
+    m_LeftMouseNativeDoubleClick = e.DoubleClick;
+    m_LeftMousePressX = e.X;
+    m_LeftMousePressY = e.Y;
+//Modify End
+}
+//Modify End
+
+//Modify Begin:2026-08-06 by BestHui
+void RaytracingDemo::OnMouseButtonReleased(MouseButtonEventArgs& e)
+{
+    if (m_ImGui != nullptr && m_ImGui->WantsToCaptureMouse())
+    {
+        return;
+    }
+
+    Base::OnMouseButtonReleased(e);
+    if (e.Button != MouseButtonEventArgs::Left)
+    {
+        return;
+    }
+
+    constexpr int DoubleClickDragThreshold = 3;
+    const int deltaX = e.X - m_LeftMousePressX;
+    const int deltaY = e.Y - m_LeftMousePressY;
+    const bool isClick =
+        !m_LeftMouseDragSincePress &&
+        deltaX * deltaX + deltaY * deltaY <= DoubleClickDragThreshold * DoubleClickDragThreshold;
+    if (m_LeftMouseNativeDoubleClick && m_LastLeftClickWasClick && isClick)
+    {
+        ResetCameraToInitialSceneState();
+    }
+
+    m_LastLeftClickWasClick = isClick;
+    m_LeftMouseDragSincePress = false;
+    m_LeftMouseNativeDoubleClick = false;
+}
+//Modify End
 
 void RaytracingDemo::OnMouseWheel(MouseWheelEventArgs& e)
 {

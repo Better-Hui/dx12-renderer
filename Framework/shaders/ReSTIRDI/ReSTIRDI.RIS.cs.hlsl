@@ -39,12 +39,21 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
                 candidateSalt ^ 0x02e5be93u).x;
             const float lightSelectionRandom = (lightSelectionNoise.x + float(candidateIndex)) /
                 float(ReSTIRDI_CandidateCount);
-            const uint lightIndex = min(uint(lightSelectionRandom * float(lightCount)), lightCount - 1u);
+//Modify End
+//Modify Begin:2026-08-06 by BestHui
+            uint lightIndex;
+            float inverseSourcePdf;
+            if (!ReSTIRDI_SampleLightIndex(lightSelectionRandom, lightIndex, inverseSourcePdf))
+            {
+                continue;
+            }
             const float2 sampleUv = sampleNoise;
 //Modify End
             const ReSTIRDI_LightSample sample = ReSTIRDI_SampleLight(lightIndex, surface, sampleUv);
             const float targetPdf = sample.Valid ? max(0.0f, ReSTIRDI_Luminance(sample.UnshadowedContribution)) : 0.0f;
-            ReSTIRDIStreamSample(reservoir, lightIndex, sampleUv, targetPdf, float(lightCount), reservoirRandom);
+//Modify Begin:2026-08-06 by BestHui
+            ReSTIRDIStreamSample(reservoir, lightIndex, sampleUv, targetPdf, inverseSourcePdf, reservoirRandom);
+//Modify End
         }
 
         ReSTIRDIFinalizeResampling(reservoir, 1.0f, float(ReSTIRDI_CandidateCount));

@@ -150,6 +150,24 @@ namespace
             values.erase(values.begin() + static_cast<std::ptrdiff_t>(index));
         }
     }
+
+//Modify Begin:2026-08-06 by BestHui
+    bool AreEqual(const XMFLOAT4& left, const XMFLOAT4& right)
+    {
+        return XMVector4Equal(XMLoadFloat4(&left), XMLoadFloat4(&right));
+    }
+
+    bool AreEqual(const AreaLightData& left, const AreaLightData& right)
+    {
+        return AreEqual(left.PositionAndRange, right.PositionAndRange) &&
+            AreEqual(left.NormalAndType, right.NormalAndType) &&
+            AreEqual(left.AxisUAndExtent, right.AxisUAndExtent) &&
+            AreEqual(left.AxisVAndExtent, right.AxisVAndExtent) &&
+            AreEqual(left.ColorAndIntensity, right.ColorAndIntensity) &&
+            AreEqual(left.EmissiveUv0Uv1, right.EmissiveUv0Uv1) &&
+            AreEqual(left.EmissiveUv2AndMaterialIndex, right.EmissiveUv2AndMaterialIndex);
+    }
+//Modify End
 //Modify End
 }
 
@@ -158,6 +176,9 @@ SceneLightManager::SceneLightManager(FrameworkDeviceContext& deviceContext)
     , m_DirectionalLightBuffer(L"Ray Tracing Directional Lights")
     , m_PointLightBuffer(L"Ray Tracing Point Lights")
     , m_AreaLightBuffer(L"Ray Tracing Area Lights")
+//Modify Begin:2026-08-06 by BestHui
+    , m_DirectLightCdfBuffer(L"Ray Tracing Direct Light CDF")
+//Modify End
 {
 }
 
@@ -166,6 +187,9 @@ void SceneLightManager::CreateDemoLights()
     m_DirectionalLights.clear();
     m_PointLights.clear();
     m_AreaLights.clear();
+//Modify Begin:2026-08-06 by BestHui
+    m_EmissiveMeshLights.clear();
+//Modify End
     m_PointLightBaseY.clear();
     m_PointLightPhase.clear();
     m_PointLightOrbitRadius.clear();
@@ -242,12 +266,22 @@ void SceneLightManager::CreateFromScene(const Scene& scene)
     m_DirectionalLights.clear();
     m_PointLights.clear();
     m_AreaLights.clear();
+//Modify Begin:2026-08-06 by BestHui
+    m_EmissiveMeshLights.clear();
+//Modify End
     m_PointLightBaseY.clear();
     m_PointLightPhase.clear();
     m_PointLightOrbitRadius.clear();
     m_PointLightOrbitSpeed.clear();
     m_PointLightOrbitCenter.clear();
     m_PointLightAnimated.clear();
+
+//Modify Begin:2026-08-06 by BestHui
+    const SceneLightGroupSettings& lightGroups = scene.GetLightGroupSettings();
+    m_DirectionalLightsEnabled = lightGroups.DirectionalLightsEnabled;
+    m_PointLightsEnabled = lightGroups.PointLightsEnabled;
+    m_AreaLightsEnabled = lightGroups.AreaLightsEnabled;
+//Modify End
 
 //Modify Begin:2026-07-30 by BestHui
     m_SkyLight.ColorAndIntensity = scene.GetSkybox().AmbientColorAndIntensity;
@@ -295,6 +329,45 @@ void SceneLightManager::CreateFromScene(const Scene& scene)
     MarkAreaLightsDirty();
 }
 
+//Modify Begin:2026-08-06 by BestHui
+void SceneLightManager::SetEmissiveMeshLights(std::vector<AreaLightData> lights)
+{
+    const size_t oldLightCount = m_EmissiveMeshLights.size();
+    const size_t newLightCount = lights.size();
+    const size_t commonLightCount = std::min(oldLightCount, newLightCount);
+    size_t firstChangedLight = 0;
+    while (firstChangedLight < commonLightCount &&
+        AreEqual(m_EmissiveMeshLights[firstChangedLight], lights[firstChangedLight]))
+    {
+        ++firstChangedLight;
+    }
+
+    if (firstChangedLight == oldLightCount && firstChangedLight == newLightCount)
+    {
+        return;
+    }
+
+    size_t changedLightEnd = newLightCount;
+    if (oldLightCount == newLightCount)
+    {
+        while (changedLightEnd > firstChangedLight &&
+            AreEqual(m_EmissiveMeshLights[changedLightEnd - 1], lights[changedLightEnd - 1]))
+        {
+            --changedLightEnd;
+        }
+    }
+
+    m_EmissiveMeshLights = std::move(lights);
+    RebuildAreaLightGpuData();
+    const size_t dirtyBegin = m_AreaLights.size() + firstChangedLight;
+    const size_t dirtyEnd = oldLightCount == newLightCount
+        ? m_AreaLights.size() + changedLightEnd
+        : m_AreaLightGpuData.size();
+    MarkDirtyRange(dirtyBegin, dirtyEnd, m_AreaLightDirtyBegin, m_AreaLightDirtyEnd);
+    MarkDirectLightSamplingDirty();
+}
+//Modify End
+
 void SceneLightManager::InitializeGpuBuffers(CommandList& commandList)
 {
     m_UploadBuffer = std::make_unique<SharedUploadBuffer>(m_DeviceContext);
@@ -302,10 +375,16 @@ void SceneLightManager::InitializeGpuBuffers(CommandList& commandList)
     m_DirectionalLightBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_DirectionalLightGpuData.size());
     m_PointLightBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_PointLightGpuData.size());
     m_AreaLightBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_AreaLightGpuData.size());
+//Modify Begin:2026-08-06 by BestHui
+    m_DirectLightCdfBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_DirectLightCdfGpuData.size());
+//Modify End
 //Modify End
     commandList.CopyStructuredBuffer(m_DirectionalLightBuffer, CreateBufferCapacityData<DirectionalLightData>(m_DirectionalLightBufferCapacity));
     commandList.CopyStructuredBuffer(m_PointLightBuffer, CreateBufferCapacityData<PointLightData>(m_PointLightBufferCapacity));
     commandList.CopyStructuredBuffer(m_AreaLightBuffer, CreateBufferCapacityData<AreaLightData>(m_AreaLightBufferCapacity));
+//Modify Begin:2026-08-06 by BestHui
+    commandList.CopyStructuredBuffer(m_DirectLightCdfBuffer, CreateBufferCapacityData<float>(m_DirectLightCdfBufferCapacity));
+//Modify End
 }
 
 //Modify Begin:2026-07-30 by BestHui
@@ -317,6 +396,9 @@ bool SceneLightManager::Upload(CommandList& commandList, const uint64_t frameInd
     const bool directionalLightsRecreated = EnsureStructuredBufferCapacity(commandList, m_DirectionalLightBuffer, m_DirectionalLightBufferCapacity, m_DirectionalLightGpuData);
     const bool pointLightsRecreated = EnsureStructuredBufferCapacity(commandList, m_PointLightBuffer, m_PointLightBufferCapacity, m_PointLightGpuData);
     const bool areaLightsRecreated = EnsureStructuredBufferCapacity(commandList, m_AreaLightBuffer, m_AreaLightBufferCapacity, m_AreaLightGpuData);
+//Modify Begin:2026-08-06 by BestHui
+    const bool directLightCdfRecreated = EnsureStructuredBufferCapacity(commandList, m_DirectLightCdfBuffer, m_DirectLightCdfBufferCapacity, m_DirectLightCdfGpuData);
+//Modify End
 
     if (directionalLightsRecreated)
     {
@@ -333,6 +415,13 @@ bool SceneLightManager::Upload(CommandList& commandList, const uint64_t frameInd
         m_AreaLightDirtyBegin = 0;
         m_AreaLightDirtyEnd = 0;
     }
+//Modify Begin:2026-08-06 by BestHui
+    if (directLightCdfRecreated)
+    {
+        m_DirectLightCdfDirtyBegin = 0;
+        m_DirectLightCdfDirtyEnd = 0;
+    }
+//Modify End
 
     m_UploadBuffer->BeginFrame(frameIndex);
     if (m_DirectionalLightDirtyBegin < m_DirectionalLightDirtyEnd)
@@ -355,8 +444,18 @@ bool SceneLightManager::Upload(CommandList& commandList, const uint64_t frameInd
         m_AreaLightDirtyBegin = 0;
         m_AreaLightDirtyEnd = 0;
     }
+//Modify Begin:2026-08-06 by BestHui
+    if (m_DirectLightCdfDirtyBegin < m_DirectLightCdfDirtyEnd)
+    {
+        UploadGpuLightRange(commandList, *m_UploadBuffer, m_DirectLightCdfBuffer, m_DirectLightCdfGpuData, m_DirectLightCdfDirtyBegin, m_DirectLightCdfDirtyEnd);
+        m_DirectLightCdfDirtyBegin = 0;
+        m_DirectLightCdfDirtyEnd = 0;
+    }
+//Modify End
 //Modify Begin:2026-07-30 by BestHui
-    return directionalLightsRecreated || pointLightsRecreated || areaLightsRecreated;
+//Modify Begin:2026-08-06 by BestHui
+    return directionalLightsRecreated || pointLightsRecreated || areaLightsRecreated || directLightCdfRecreated;
+//Modify End
 //Modify End
 }
 
@@ -381,7 +480,13 @@ void SceneLightManager::UpdateDynamicLights(const float timeSeconds)
         UpdatePointLightGpuData(i);
     }
 
-    MarkPointLightsDirty(0, std::min(pointLightCount, m_PointLightGpuData.size()));
+//Modify Begin:2026-08-06 by BestHui
+    MarkDirtyRange(
+        0,
+        std::min(pointLightCount, m_PointLightGpuData.size()),
+        m_PointLightDirtyBegin,
+        m_PointLightDirtyEnd);
+//Modify End
 }
 
 bool SceneLightManager::DrawImGui()
@@ -393,6 +498,9 @@ bool SceneLightManager::DrawImGui()
         ImGui::Text("Directional: %zu", m_DirectionalLights.size());
         ImGui::Text("Point: %zu", m_PointLights.size());
         ImGui::Text("Area: %zu", m_AreaLights.size());
+//Modify Begin:2026-08-06 by BestHui
+        ImGui::Text("Emissive Mesh Triangles: %zu", m_EmissiveMeshLights.size());
+//Modify End
     }
 
     if (ImGui::CollapsingHeader("Sky Light"))
@@ -476,7 +584,9 @@ bool SceneLightManager::DrawImGui()
             }
         }
 
-        if (ImGui::CollapsingHeader("Add Directional Light"))
+//Modify Begin:2026-07-30 by BestHui
+        ImGui::PushID("NewDirectionalLight");
+        if (ImGui::CollapsingHeader("New Directional Light"))
         {
 //Modify Begin:2026-07-30 by BestHui
             ImGui::DragFloat3("Direction", &m_NewDirectionalLightDirection.x, 0.01f, 0.0f, 0.0f, "%.4f");
@@ -490,6 +600,8 @@ bool SceneLightManager::DrawImGui()
             }
 //Modify End
         }
+        ImGui::PopID();
+//Modify End
     }
 
 //Modify Begin:2026-08-03 by BestHui
@@ -587,7 +699,9 @@ bool SceneLightManager::DrawImGui()
                 ImGui::PopID();
             }
         }
-        if (ImGui::CollapsingHeader("Add Point Light"))
+//Modify Begin:2026-07-30 by BestHui
+        ImGui::PushID("NewPointLight");
+        if (ImGui::CollapsingHeader("New Point Light"))
         {
 //Modify Begin:2026-07-30 by BestHui
             ImGui::DragFloat3("Point Color", &m_NewPointLightColor.x, 0.01f, 0.0f, 0.0f, "%.3f");
@@ -608,6 +722,8 @@ bool SceneLightManager::DrawImGui()
             }
 //Modify End
         }
+        ImGui::PopID();
+//Modify End
     }
 
 //Modify Begin:2026-08-03 by BestHui
@@ -684,7 +800,9 @@ bool SceneLightManager::DrawImGui()
             }
         }
 
-        if (ImGui::CollapsingHeader("Add Area Light"))
+//Modify Begin:2026-07-30 by BestHui
+        ImGui::PushID("NewAreaLight");
+        if (ImGui::CollapsingHeader("New Area Light"))
         {
 //Modify Begin:2026-07-30 by BestHui
             ImGui::DragFloat3("Area Position", &m_NewAreaLightPosition.x, 0.1f, 0.0f, 0.0f, "%.3f");
@@ -700,6 +818,8 @@ bool SceneLightManager::DrawImGui()
             }
 //Modify End
         }
+        ImGui::PopID();
+//Modify End
     }
     return changed;
 }
@@ -723,6 +843,13 @@ void SceneLightManager::ApplyToScene(Scene& scene) const
     SceneSkybox skybox = scene.GetSkybox();
     skybox.AmbientColorAndIntensity = m_SkyLight.ColorAndIntensity;
     scene.SetSkybox(skybox);
+//Modify Begin:2026-08-06 by BestHui
+    scene.SetLightGroupSettings({
+        m_DirectionalLightsEnabled,
+        m_PointLightsEnabled,
+        m_AreaLightsEnabled
+    });
+//Modify End
     scene.SetDirectionalLights(m_DirectionalLights);
     scene.SetPointLights(m_PointLights);
     scene.SetAreaLights(std::move(areaLights));
@@ -744,6 +871,12 @@ void SceneLightManager::BindComputeResources(CommandContext& commandContext, Com
     {
         commandContext.SetShaderResource(shader, "AreaLights", 0u, m_AreaLightBuffer);
     }
+//Modify Begin:2026-08-06 by BestHui
+    if (shader.HasShaderResourceView("DirectLightCdf"))
+    {
+        commandContext.SetShaderResource(shader, "DirectLightCdf", 0u, m_DirectLightCdfBuffer);
+    }
+//Modify End
 }
 
 //Modify Begin:2026-08-03 by BestHui
@@ -752,6 +885,9 @@ void SceneLightManager::PrepareAsyncComputeResources(CommandList& commandList) c
     commandList.TransitionBarrier(m_DirectionalLightBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     commandList.TransitionBarrier(m_PointLightBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     commandList.TransitionBarrier(m_AreaLightBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+//Modify Begin:2026-08-06 by BestHui
+    commandList.TransitionBarrier(m_DirectLightCdfBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+//Modify End
 }
 //Modify End
 
@@ -770,6 +906,12 @@ void SceneLightManager::BindRayTracingResources(RayTracingBindingSet& bindingSet
     {
         bindingSet.SetBuffer("AreaLights", m_AreaLightBuffer);
     }
+//Modify Begin:2026-08-06 by BestHui
+    if (bindingSet.HasBinding("DirectLightCdf"))
+    {
+        bindingSet.SetBuffer("DirectLightCdf", m_DirectLightCdfBuffer);
+    }
+//Modify End
 //Modify End
 }
 
@@ -909,8 +1051,10 @@ void SceneLightManager::AddAreaLight()
 
     const size_t lightIndex = m_AreaLights.size();
     m_AreaLights.push_back(areaLight);
-    m_AreaLightGpuData.push_back(areaLight);
-    MarkAreaLightsDirty(lightIndex, lightIndex + 1);
+//Modify Begin:2026-08-06 by BestHui
+    RebuildAreaLightGpuData();
+    MarkAreaLightsDirty(lightIndex, m_AreaLightGpuData.size());
+//Modify End
 }
 
 void SceneLightManager::RemoveDirectionalLight(const size_t lightIndex)
@@ -951,8 +1095,10 @@ void SceneLightManager::RemoveAreaLight(const size_t lightIndex)
     }
 
     EraseAt(m_AreaLights, lightIndex);
-    EraseAt(m_AreaLightGpuData, lightIndex);
+//Modify Begin:2026-08-06 by BestHui
+    RebuildAreaLightGpuData();
     MarkAreaLightsDirty(lightIndex, m_AreaLightGpuData.size());
+//Modify End
 }
 
 void SceneLightManager::BuildGpuData()
@@ -982,12 +1128,86 @@ void SceneLightManager::BuildGpuData()
         m_PointLightGpuData.push_back(gpuLight);
     }
 
-    m_AreaLightGpuData.reserve(m_AreaLights.size());
-    for (const AreaLightData& light : m_AreaLights)
+//Modify Begin:2026-08-06 by BestHui
+    RebuildAreaLightGpuData();
+//Modify End
+}
+
+//Modify Begin:2026-08-06 by BestHui
+void SceneLightManager::RebuildAreaLightGpuData()
+{
+    m_AreaLightGpuData = m_AreaLights;
+    m_AreaLightGpuData.insert(
+        m_AreaLightGpuData.end(),
+        m_EmissiveMeshLights.begin(),
+        m_EmissiveMeshLights.end());
+}
+//Modify End
+
+//Modify Begin:2026-08-06 by BestHui
+void SceneLightManager::RebuildDirectLightSamplingCdf()
+{
+    constexpr float minimumWeight = 1.0e-4f;
+    m_DirectLightCdfGpuData.clear();
+    m_DirectLightCdfGpuData.reserve(
+        m_DirectionalLightGpuData.size() +
+        m_PointLightGpuData.size() +
+        m_AreaLightGpuData.size());
+
+    float totalWeight = 0.0f;
+    const auto appendWeight = [this, &totalWeight](const float weight)
     {
-        m_AreaLightGpuData.push_back(light);
+        totalWeight += std::max(minimumWeight, weight);
+        m_DirectLightCdfGpuData.push_back(totalWeight);
+    };
+
+    for (const DirectionalLightData& light : m_DirectionalLightGpuData)
+    {
+        appendWeight(
+            (light.ColorAndIntensity.x * 0.2126f +
+             light.ColorAndIntensity.y * 0.7152f +
+             light.ColorAndIntensity.z * 0.0722f) *
+            light.ColorAndIntensity.w);
+    }
+    for (const PointLightData& light : m_PointLightGpuData)
+    {
+        appendWeight(
+            (light.ColorAndIntensity.x * 0.2126f +
+             light.ColorAndIntensity.y * 0.7152f +
+             light.ColorAndIntensity.z * 0.0722f) *
+            light.ColorAndIntensity.w);
+    }
+    for (const AreaLightData& light : m_AreaLightGpuData)
+    {
+        const float luminance =
+            light.ColorAndIntensity.x * 0.2126f +
+            light.ColorAndIntensity.y * 0.7152f +
+            light.ColorAndIntensity.z * 0.0722f;
+        const float area = light.NormalAndType.w > 0.5f
+            ? std::max(0.0f, light.PositionAndRange.w)
+            : std::max(0.0f, 4.0f * light.AxisUAndExtent.w * light.AxisVAndExtent.w);
+        appendWeight(luminance * light.ColorAndIntensity.w * area);
+    }
+
+    if (totalWeight > 0.0f)
+    {
+        for (float& value : m_DirectLightCdfGpuData)
+        {
+            value /= totalWeight;
+        }
     }
 }
+
+void SceneLightManager::MarkDirectLightSamplingDirty()
+{
+    RebuildDirectLightSamplingCdf();
+    MarkDirtyRange(
+        0,
+        m_DirectLightCdfGpuData.size(),
+        m_DirectLightCdfDirtyBegin,
+        m_DirectLightCdfDirtyEnd);
+}
+//Modify End
 
 void SceneLightManager::UpdatePointLightGpuData(const size_t lightIndex)
 {
@@ -1018,11 +1238,17 @@ void SceneLightManager::MarkDirectionalLightsDirty()
 void SceneLightManager::MarkDirectionalLightsDirty(const size_t beginIndex, const size_t endIndex)
 {
     MarkDirtyRange(beginIndex, endIndex, m_DirectionalLightDirtyBegin, m_DirectionalLightDirtyEnd);
+//Modify Begin:2026-08-06 by BestHui
+    MarkDirectLightSamplingDirty();
+//Modify End
 }
 
 void SceneLightManager::MarkPointLightsDirty(const size_t beginIndex, const size_t endIndex)
 {
     MarkDirtyRange(beginIndex, endIndex, m_PointLightDirtyBegin, m_PointLightDirtyEnd);
+//Modify Begin:2026-08-06 by BestHui
+    MarkDirectLightSamplingDirty();
+//Modify End
 }
 
 void SceneLightManager::MarkAreaLightsDirty()
@@ -1033,5 +1259,8 @@ void SceneLightManager::MarkAreaLightsDirty()
 void SceneLightManager::MarkAreaLightsDirty(const size_t beginIndex, const size_t endIndex)
 {
     MarkDirtyRange(beginIndex, endIndex, m_AreaLightDirtyBegin, m_AreaLightDirtyEnd);
+//Modify Begin:2026-08-06 by BestHui
+    MarkDirectLightSamplingDirty();
+//Modify End
 }
 //Modify End

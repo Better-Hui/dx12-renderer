@@ -2,11 +2,13 @@
 #ifndef FRAMEWORK_RESTIR_DI_SCENE_CONTRACT_HLSLI
 #define FRAMEWORK_RESTIR_DI_SCENE_CONTRACT_HLSLI
 
+//Modify Begin:2026-08-06 by BestHui
 #if !defined(FRAMEWORK_RESTIR_DI_SCENE_ADAPTER) || \
     !defined(ReSTIRDI_Surface) || \
     !defined(ReSTIRDI_LightSample) || \
     !defined(ReSTIRDI_LoadSurface) || \
     !defined(ReSTIRDI_GetLightCount) || \
+    !defined(ReSTIRDI_SampleLightIndex) || \
     !defined(ReSTIRDI_SampleLight) || \
     !defined(ReSTIRDI_TestVisibility) || \
     !defined(ReSTIRDI_Luminance) || \
@@ -18,6 +20,7 @@
     !defined(ReSTIRDI_CameraPosition)
 #error "ReSTIR DI stages require a scene adapter that provides surface, light, visibility, random, and camera contracts."
 #endif
+//Modify End
 
 #endif
 //Modify End

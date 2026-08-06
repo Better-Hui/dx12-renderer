@@ -200,6 +200,9 @@ RaytracingDemo::RaytracingDemo(const std::wstring& name, const int width, const 
             L"Demos/RaytracingDemo/shaders/ReSTIRDI/ReSTIRDI.Spatial.cs.hlsl",
             L"Demos/RaytracingDemo/shaders/ReSTIRDI/ReSTIRDI.Shade.cs.hlsl",
             { { "RAYTRACING_DEMO_SOFT_SHADOWS", "1" } },
+//Modify Begin:2026-08-06 by BestHui
+            "RAYTRACING_DEMO_ENVIRONMENT_PROJECTION",
+//Modify End
         })
 //Modify End
     , m_SceneResources(Application::Get().GetDevice())
@@ -362,6 +365,9 @@ void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::files
     m_Scene.SetSkybox(sceneSkybox);
 
     m_Lights.CreateFromScene(m_Scene);
+//Modify Begin:2026-08-06 by BestHui
+    m_Lights.SetEmissiveMeshLights(m_SceneResources.CollectEmissiveMeshLights());
+//Modify End
     m_SkyboxEnabled = !skyboxTexturePath.empty() && std::filesystem::exists(skyboxTexturePath);
     m_HasSceneCamera = sceneCamera.RuntimeCamera != nullptr;
 
@@ -374,6 +380,13 @@ void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::files
     m_CameraFov = sceneCamera.FieldOfView;
     m_CameraNearClipPlane = sceneCamera.NearClipPlane;
     m_CameraFarClipPlane = sceneCamera.FarClipPlane;
+//Modify Begin:2026-07-30 by BestHui
+    XMStoreFloat3(&m_InitialSceneCameraTranslation, GetSceneCamera().GetTranslation());
+    XMStoreFloat4(&m_InitialSceneCameraRotation, GetSceneCamera().GetRotation());
+    m_InitialSceneCameraYaw = m_CameraController.Yaw;
+    m_InitialSceneCameraPitch = m_CameraController.Pitch;
+    m_HasInitialSceneCameraState = true;
+//Modify End
 
     m_SkyboxTexture.reset();
     if (m_SkyboxEnabled)
@@ -385,6 +398,188 @@ void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::files
 //Modify End
 
 //Modify Begin:2026-07-30 by BestHui
+void RaytracingDemo::ResetCameraToInitialSceneState()
+{
+    if (!m_HasInitialSceneCameraState)
+    {
+        return;
+    }
+
+    GetSceneCamera().SetTranslation(XMLoadFloat3(&m_InitialSceneCameraTranslation));
+    GetSceneCamera().SetRotation(XMLoadFloat4(&m_InitialSceneCameraRotation));
+    m_CameraController.Yaw = m_InitialSceneCameraYaw;
+    m_CameraController.Pitch = m_InitialSceneCameraPitch;
+    m_HasPreviousViewProjection = false;
+    ResetAccumulation();
+}
+
+void RaytracingDemo::AppendRuntimeAutomationLog(const std::string& message) const
+{
+    if (m_RuntimeAutomationLogPath.empty())
+    {
+        return;
+    }
+
+    std::ofstream log(m_RuntimeAutomationLogPath, std::ios::app);
+    if (log.is_open())
+    {
+        log << message << '\n';
+    }
+}
+
+void RaytracingDemo::InitializeRuntimeAutomation()
+{
+    char* automationMode = nullptr;
+    size_t automationModeLength = 0;
+    _dupenv_s(&automationMode, &automationModeLength, "RAYTRACING_DEMO_AUTOTEST");
+    const std::string mode = automationMode != nullptr ? automationMode : "";
+    std::free(automationMode);
+    if (mode.empty() || mode == "0" || mode == "off")
+    {
+        return;
+    }
+
+    m_RuntimeAutomationLogPath = std::filesystem::current_path() / "Saved" / "RuntimeAutomation.log";
+    std::filesystem::create_directories(m_RuntimeAutomationLogPath.parent_path());
+    std::ofstream(m_RuntimeAutomationLogPath, std::ios::trunc) << "Runtime automation started." << '\n';
+
+    char* stepMilliseconds = nullptr;
+    size_t stepMillisecondsLength = 0;
+    _dupenv_s(&stepMilliseconds, &stepMillisecondsLength, "RAYTRACING_DEMO_AUTOTEST_STEP_MS");
+    if (stepMilliseconds != nullptr)
+    {
+        const double milliseconds = std::strtod(stepMilliseconds, nullptr);
+        if (milliseconds > 0.0)
+        {
+            m_RuntimeAutomationStepIntervalSeconds = milliseconds / 1000.0;
+        }
+    }
+    std::free(stepMilliseconds);
+
+    char* quitOnComplete = nullptr;
+    size_t quitOnCompleteLength = 0;
+    _dupenv_s(&quitOnComplete, &quitOnCompleteLength, "RAYTRACING_DEMO_AUTOTEST_QUIT");
+    m_RuntimeAutomationQuitOnComplete = quitOnComplete != nullptr && std::strcmp(quitOnComplete, "0") != 0;
+    std::free(quitOnComplete);
+
+    const auto addStep = [this](const RuntimeAutomationAction action, const uint32_t value, std::string name)
+    {
+        m_RuntimeAutomationSteps.push_back({ action, value, std::move(name) });
+    };
+
+    if (mode == "core")
+    {
+        addStep(RuntimeAutomationAction::SoftShadows, 0u, "soft=0");
+        addStep(RuntimeAutomationAction::SoftShadows, 1u, "soft=1");
+        addStep(RuntimeAutomationAction::StressSpheres, 1u, "stress=1");
+        addStep(RuntimeAutomationAction::StressSpheres, 0u, "stress=0");
+        addStep(RuntimeAutomationAction::StressSpheres, 1u, "stress=1");
+        addStep(RuntimeAutomationAction::StressSpheres, 0u, "stress=0");
+        addStep(RuntimeAutomationAction::MeshletGBuffer, 0u, "meshlet=0");
+        addStep(RuntimeAutomationAction::MeshletGBuffer, 1u, "meshlet=1");
+        addStep(RuntimeAutomationAction::MeshletTaskShader, 0u, "meshletbackend=indirect");
+        addStep(RuntimeAutomationAction::MeshletTaskShader, 1u, "meshletbackend=task");
+        addStep(RuntimeAutomationAction::DirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::PathTracing), "direct=pathtracing");
+        addStep(RuntimeAutomationAction::IndirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::PathTracing), "indirect=pathtracing");
+        addStep(RuntimeAutomationAction::AsyncCompute, 1u, "async=1");
+        addStep(RuntimeAutomationAction::AsyncCompute, 0u, "async=0");
+        addStep(RuntimeAutomationAction::IndirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::None), "indirect=none");
+        addStep(RuntimeAutomationAction::DirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::ReSTIRDI), "direct=restirdi");
+        addStep(RuntimeAutomationAction::Skybox, 0u, "skybox=0");
+        addStep(RuntimeAutomationAction::Skybox, 1u, "skybox=1");
+        addStep(RuntimeAutomationAction::Accumulation, 0u, "accumulation=0");
+        addStep(RuntimeAutomationAction::Accumulation, 1u, "accumulation=1");
+    }
+    else if (mode == "stress")
+    {
+        addStep(RuntimeAutomationAction::StressSpheres, 1u, "stress=1");
+        addStep(RuntimeAutomationAction::StressSpheres, 0u, "stress=0");
+        addStep(RuntimeAutomationAction::StressSpheres, 1u, "stress=1");
+        addStep(RuntimeAutomationAction::StressSpheres, 0u, "stress=0");
+    }
+    else
+    {
+        throw std::runtime_error("RAYTRACING_DEMO_AUTOTEST must be 'core' or 'stress'.");
+    }
+
+    m_RuntimeAutomationEnabled = !m_RuntimeAutomationSteps.empty();
+    m_RuntimeAutomationLastStepTime = -m_RuntimeAutomationStepIntervalSeconds;
+    AppendRuntimeAutomationLog("Mode=" + mode + ", step interval=" + std::to_string(m_RuntimeAutomationStepIntervalSeconds) + " seconds.");
+}
+
+void RaytracingDemo::UpdateRuntimeAutomation(const double totalTime)
+{
+    if (!m_RuntimeAutomationEnabled || m_RuntimeAutomationCompleted ||
+        totalTime - m_RuntimeAutomationLastStepTime < m_RuntimeAutomationStepIntervalSeconds)
+    {
+        return;
+    }
+
+    if (m_RuntimeAutomationStepIndex >= m_RuntimeAutomationSteps.size())
+    {
+        m_RuntimeAutomationCompleted = true;
+        AppendRuntimeAutomationLog("Runtime automation completed.");
+        if (m_RuntimeAutomationQuitOnComplete)
+        {
+            Application::Get().Quit(0);
+        }
+        return;
+    }
+
+    const RuntimeAutomationStep& step = m_RuntimeAutomationSteps[m_RuntimeAutomationStepIndex++];
+    const bool enabled = step.Value != 0u;
+    switch (step.Action)
+    {
+    case RuntimeAutomationAction::SoftShadows:
+        m_SoftShadowsEnabled = enabled;
+        EnsureRayTracingPipelines();
+        BindRayTracingShaderResources();
+        ResetAccumulation();
+        break;
+    case RuntimeAutomationAction::StressSpheres:
+        m_StressTestSpheresEnabled = enabled;
+        m_StressTestSpheresStateDirty = true;
+        break;
+    case RuntimeAutomationAction::MeshletGBuffer:
+        m_UseMeshletGBuffer = enabled;
+        ResetAccumulation();
+        break;
+    case RuntimeAutomationAction::MeshletTaskShader:
+        m_UseTaskShaderMeshlets = enabled;
+        m_UseMeshletGBuffer = true;
+        ResetAccumulation();
+        break;
+    case RuntimeAutomationAction::DirectLighting:
+        m_DirectLightingTechnique = static_cast<RaytracingDemoLightingTechnique>(step.Value);
+        ResetAccumulation();
+        break;
+    case RuntimeAutomationAction::IndirectLighting:
+        m_IndirectLightingTechnique = static_cast<RaytracingDemoLightingTechnique>(step.Value);
+        ResetAccumulation();
+        break;
+    case RuntimeAutomationAction::AsyncCompute:
+        if (m_PathTracingBackend == PathTracingBackend::InlineRayQuery)
+        {
+            m_AsyncComputeEnabled = enabled;
+            ResetAccumulation();
+        }
+        break;
+    case RuntimeAutomationAction::Skybox:
+        m_SkyboxEnabled = enabled;
+        ResetAccumulation();
+        break;
+    case RuntimeAutomationAction::Accumulation:
+        m_AccumulationEnabled = enabled;
+        ResetAccumulation();
+        break;
+    }
+
+    m_RuntimeAutomationLastStepTime = totalTime;
+    AppendRuntimeAutomationLog("Applied " + step.Name + ".");
+}
+//Modify End
+
+//Modify Begin:2026-07-30 by BestHui
 void RaytracingDemo::ApplyStressTestSpheresState()
 {
     if (!m_StressTestSpheresStateDirty)
@@ -392,13 +587,27 @@ void RaytracingDemo::ApplyStressTestSpheresState()
         return;
     }
 
+    if (m_SceneResources.AreStressTestSpheresEnabled() == m_StressTestSpheresEnabled)
+    {
+        m_StressTestSpheresStateDirty = false;
+        return;
+    }
+
+    AppendRuntimeAutomationLog("Stress resource update begin: enabled=" + std::to_string(m_StressTestSpheresEnabled));
+    Application::Get().Flush();
+    AppendRuntimeAutomationLog("Stress resource update: queues flushed.");
     const auto commandQueue = Application::Get().GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
     const auto commandList = commandQueue->GetCommandList();
     if (m_SceneResources.SetStressTestSpheresEnabled(*commandList, m_StressTestSpheresEnabled))
     {
+        AppendRuntimeAutomationLog("Stress resource update: scene resources updated.");
+        const uint64_t fenceValue = commandQueue->ExecuteCommandList(commandList);
+        commandQueue->WaitForFenceValue(fenceValue);
+        AppendRuntimeAutomationLog("Stress resource update: GPU update completed.");
         EnsureRayTracingPipelines();
+        BindRayTracingShaderResources();
+        AppendRuntimeAutomationLog("Stress resource update: ray tracing resources rebound.");
 
-        commandQueue->ExecuteCommandList(commandList);
         ClearRenderGraphTimingHistory();
         ResetAccumulation();
     }
@@ -585,6 +794,17 @@ bool RaytracingDemo::LoadContent()
         m_FrameworkDeviceContext,
         *equirectangularSkyboxComputeShader,
         ComputePipelineDescBuilder::ReflectedDefault(*equirectangularSkyboxComputeShader).Build());
+
+//Modify Begin:2026-08-06 by BestHui
+    const auto cubemapStripSkyboxComputeShader = LoadShaderVariant(
+        L"SkyboxCubemapStrip.cs.cso",
+        L"Demos/RaytracingDemo/shaders/Skybox/SkyboxCubemapStrip.cs.hlsl",
+        "cs_6_6");
+    m_SkyboxCubemapStripComputeShader = std::make_shared<ComputeShader>(
+        m_FrameworkDeviceContext,
+        *cubemapStripSkyboxComputeShader,
+        ComputePipelineDescBuilder::ReflectedDefault(*cubemapStripSkyboxComputeShader).Build());
+//Modify End
     });
 //Modify End
 
@@ -616,6 +836,9 @@ bool RaytracingDemo::LoadContent()
 //Modify Begin:2026-07-27 by BestHui
     EnsureRayTracingPipelines();
 //Modify End
+//Modify Begin:2026-08-06 by BestHui
+    PrewarmRuntimeShadowVariants();
+//Modify End
     BindRayTracingShaderResources();
 
 //Modify Begin:2026-07-28 by BestHui
@@ -630,6 +853,9 @@ bool RaytracingDemo::LoadContent()
 
     const uint64_t fenceValue = commandQueue->ExecuteCommandList(commandList);
     commandQueue->WaitForFenceValue(fenceValue);
+//Modify Begin:2026-07-30 by BestHui
+    InitializeRuntimeAutomation();
+//Modify End
     return true;
 }
 
@@ -643,6 +869,9 @@ void RaytracingDemo::UnloadContent()
 //Modify Begin:2026-07-28 by BestHui
     m_SkyboxComputeShader.reset();
     m_SkyboxEquirectangularComputeShader.reset();
+//Modify Begin:2026-08-06 by BestHui
+    m_SkyboxCubemapStripComputeShader.reset();
+//Modify End
     m_DisplayCompositeShader.reset();
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
@@ -684,6 +913,11 @@ RayTracingSceneResourceLayout RaytracingDemo::BuildRayTracingSceneResourceLayout
     RayTracingSceneResourceLayout layout;
     layout.TextureDescriptorCapacity = ComputeDescriptorArrayCapacity(m_SceneResources.GetTextureCount(), m_SceneResources.GetTextureCapacity());
     layout.GeometryDescriptorCapacity = ComputeDescriptorArrayCapacity(rayTracingMeshes.size(), rayTracingMeshes.capacity());
+//Modify Begin:2026-08-06 by BestHui
+    layout.EnvironmentProjection = m_SkyboxTexture != nullptr
+        ? ShaderResourceView::GetEnvironmentTextureProjection(*m_SkyboxTexture)
+        : EnvironmentTextureProjection::Cubemap;
+//Modify End
     return layout;
 }
 
@@ -696,7 +930,9 @@ void RaytracingDemo::EnsureRayTracingPipelines()
         m_SoftShadowsEnabled ? PathTracingShadowMode::SoftShadows : PathTracingShadowMode::HardShadows,
         layout);
 //Modify Begin:2026-07-30 by BestHui
-    m_DirectLightingReSTIRDIPass.EnsurePipelines(m_SoftShadowsEnabled);
+    m_DirectLightingReSTIRDIPass.EnsurePipelines(
+        m_SoftShadowsEnabled,
+        static_cast<uint32_t>(layout.EnvironmentProjection));
 //Modify End
     if (m_SceneResources.GetRayTracingAccelerationStructure().GetInstanceCount() > 0)
     {
@@ -704,6 +940,29 @@ void RaytracingDemo::EnsureRayTracingPipelines()
     }
 //Modify End
 }
+
+//Modify Begin:2026-07-30 by BestHui
+void RaytracingDemo::PrewarmRuntimeShadowVariants()
+{
+    const RayTracingSceneResourceLayout layout = BuildRayTracingSceneResourceLayout();
+    const PathTracingShadowMode currentShadowMode = m_SoftShadowsEnabled
+        ? PathTracingShadowMode::SoftShadows
+        : PathTracingShadowMode::HardShadows;
+    const PathTracingShadowMode alternateShadowMode = currentShadowMode == PathTracingShadowMode::SoftShadows
+        ? PathTracingShadowMode::HardShadows
+        : PathTracingShadowMode::SoftShadows;
+
+    m_PathTracingPipelines.EnsurePipelines(m_PathTracingBackend, alternateShadowMode, layout);
+    m_DirectLightingReSTIRDIPass.EnsurePipelines(
+        alternateShadowMode == PathTracingShadowMode::SoftShadows,
+        static_cast<uint32_t>(layout.EnvironmentProjection));
+    m_PathTracingPipelines.EnsurePipelines(m_PathTracingBackend, currentShadowMode, layout);
+    m_DirectLightingReSTIRDIPass.EnsurePipelines(
+        currentShadowMode == PathTracingShadowMode::SoftShadows,
+        static_cast<uint32_t>(layout.EnvironmentProjection));
+    BindRayTracingShaderResources();
+}
+//Modify End
 
 void RaytracingDemo::BindRayTracingShaderResources()
 {
@@ -766,6 +1025,9 @@ void RaytracingDemo::RebuildRenderGraph()
 //Modify Begin:2026-08-03 by BestHui
     m_RenderGraphAsyncComputeEnabled = m_AsyncComputeEnabled;
     m_RenderGraphPathTracingBackend = m_PathTracingBackend;
+//Modify Begin:2026-08-06 by BestHui
+    m_RenderGraphDirectLightingTechnique = m_DirectLightingTechnique;
+//Modify End
 //Modify Begin:2026-07-30 by BestHui
     m_RenderGraphLightingDebugTextureTarget = m_DebugLightingTextureTarget;
 //Modify End
@@ -786,6 +1048,9 @@ void RaytracingDemo::EnsureRenderGraphTopology()
 //Modify Begin:2026-08-03 by BestHui
         || m_RenderGraphAsyncComputeEnabled != m_AsyncComputeEnabled
         || m_RenderGraphPathTracingBackend != m_PathTracingBackend
+//Modify Begin:2026-08-06 by BestHui
+        || m_RenderGraphDirectLightingTechnique != m_DirectLightingTechnique
+//Modify End
 //Modify Begin:2026-07-30 by BestHui
         || m_RenderGraphLightingDebugTextureTarget != m_DebugLightingTextureTarget
 //Modify End
@@ -932,6 +1197,9 @@ RaytracingDemoPassResources RaytracingDemo::CreatePassResources()
         m_DisplayCompositeShader,
         m_SkyboxComputeShader,
         m_SkyboxEquirectangularComputeShader,
+//Modify Begin:2026-08-06 by BestHui
+        m_SkyboxCubemapStripComputeShader,
+//Modify End
         m_SkyboxTexture,
         m_DisplayBlitMesh,
         GetSceneCamera(),

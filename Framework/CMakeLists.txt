@@ -33,6 +33,7 @@ set(SHADER_FILES_COMPUTE
 set(SHADERS_HEADER_FILES
 # Modify Begin:2026-08-06 by BestHui
         "shaders/Common/Noise.hlsli"
+        "shaders/Common/EnvironmentTexture.hlsli"
         "shaders/Bindless/BindlessResources.hlsli"
 # Modify End
         "shaders/SVGF/SVGFCommon.hlsli"

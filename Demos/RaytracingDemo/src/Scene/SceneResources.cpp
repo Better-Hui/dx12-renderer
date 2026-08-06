@@ -234,6 +234,9 @@ void RaytracingDemoSceneResources::Clear()
 //Modify Begin:2026-07-30 by BestHui
     m_StressTestSphereObjects.clear();
     m_StressTestSphereObjectStart = 0;
+//Modify Begin:2026-07-30 by BestHui
+    m_StressTestSphereMaterialIndex = (std::numeric_limits<uint32_t>::max)();
+//Modify End
     m_StressTestSpheresEnabled = false;
 //Modify End
 }
@@ -309,6 +312,111 @@ void RaytracingDemoSceneResources::TransitionRayTracingShaderResources(
 {
     m_TextureMaterialResources.TransitionTextures(commandList, stateAfter);
     m_RayTracingResources.TransitionShaderResources(commandList, stateAfter);
+}
+//Modify End
+
+//Modify Begin:2026-08-06 by BestHui
+std::vector<AreaLightData> RaytracingDemoSceneResources::CollectEmissiveMeshLights() const
+{
+    constexpr float emissionThreshold = 1.0e-4f;
+    constexpr float triangleAreaThreshold = 1.0e-8f;
+
+    const std::vector<RaytracingDemoMaterialData>& materials = m_TextureMaterialResources.GetMaterials();
+    const std::vector<RaytracingDemoSceneGeometry>& geometries = m_GeometryResources.GetGeometries();
+    const std::vector<RaytracingDemoSceneObject>& objects = m_GeometryResources.GetObjects();
+    std::vector<AreaLightData> emissiveLights;
+
+    for (const RaytracingDemoSceneObject& object : objects)
+    {
+//Modify Begin:2026-07-30 by BestHui
+        if (object.MaterialIndex == m_StressTestSphereMaterialIndex)
+        {
+            continue;
+        }
+//Modify End
+        if (object.MaterialIndex >= materials.size() || object.GeometryIndex >= geometries.size())
+        {
+            continue;
+        }
+
+        const RaytracingDemoMaterialData& material = materials[object.MaterialIndex];
+        const float emissionLuminance = std::fmax(
+            material.Emission.x,
+            std::fmax(material.Emission.y, material.Emission.z));
+        if (emissionLuminance <= emissionThreshold && material.HasEmissionMap == 0u)
+        {
+            continue;
+        }
+
+        const RaytracingDemoSceneGeometry& geometry = geometries[object.GeometryIndex];
+        for (const MeshPrototype& prototype : geometry.MeshPrototypes)
+        {
+            for (size_t index = 0; index + 2 < prototype.m_Indices.size(); index += 3)
+            {
+                const VertexAttributes& vertex0 = prototype.m_Vertices[prototype.m_Indices[index + 0]];
+                const VertexAttributes& vertex1 = prototype.m_Vertices[prototype.m_Indices[index + 1]];
+                const VertexAttributes& vertex2 = prototype.m_Vertices[prototype.m_Indices[index + 2]];
+
+                const XMVECTOR position0 = XMVector3TransformCoord(
+                    XMVectorSet(vertex0.Position.x, vertex0.Position.y, vertex0.Position.z, 1.0f),
+                    object.WorldMatrix);
+                const XMVECTOR position1 = XMVector3TransformCoord(
+                    XMVectorSet(vertex1.Position.x, vertex1.Position.y, vertex1.Position.z, 1.0f),
+                    object.WorldMatrix);
+                const XMVECTOR position2 = XMVector3TransformCoord(
+                    XMVectorSet(vertex2.Position.x, vertex2.Position.y, vertex2.Position.z, 1.0f),
+                    object.WorldMatrix);
+                const XMVECTOR cross = XMVector3Cross(
+                    XMVectorSubtract(position1, position0),
+                    XMVectorSubtract(position2, position0));
+                const float doubleArea = XMVectorGetX(XMVector3Length(cross));
+                if (doubleArea <= triangleAreaThreshold * 2.0f)
+                {
+                    continue;
+                }
+
+                XMFLOAT3 position0Float{};
+                XMFLOAT3 position1Float{};
+                XMFLOAT3 position2Float{};
+                XMFLOAT3 normal{};
+                XMStoreFloat3(&position0Float, position0);
+                XMStoreFloat3(&position1Float, position1);
+                XMStoreFloat3(&position2Float, position2);
+                XMStoreFloat3(&normal, XMVector3Normalize(cross));
+
+                AreaLightData light{};
+                light.PositionAndRange = {
+                    position0Float.x,
+                    position0Float.y,
+                    position0Float.z,
+                    0.5f * doubleArea
+                };
+                light.NormalAndType = { normal.x, normal.y, normal.z, 1.0f };
+                light.AxisUAndExtent = { position1Float.x, position1Float.y, position1Float.z, 0.0f };
+                light.AxisVAndExtent = { position2Float.x, position2Float.y, position2Float.z, 0.0f };
+                light.ColorAndIntensity = material.Emission;
+                if (material.HasEmissionMap != 0u && emissionLuminance <= emissionThreshold)
+                {
+                    light.ColorAndIntensity = { 1.0f, 1.0f, 1.0f, 1.0f };
+                }
+                light.EmissiveUv0Uv1 = {
+                    vertex0.Uv.x,
+                    vertex0.Uv.y,
+                    vertex1.Uv.x,
+                    vertex1.Uv.y
+                };
+                light.EmissiveUv2AndMaterialIndex = {
+                    vertex2.Uv.x,
+                    vertex2.Uv.y,
+                    static_cast<float>(object.MaterialIndex),
+                    0.0f
+                };
+                emissiveLights.push_back(light);
+            }
+        }
+    }
+
+    return emissiveLights;
 }
 //Modify End
 
@@ -694,12 +802,34 @@ void RaytracingDemoSceneResources::AddStressTestSpheres(CommandList& commandList
     auto sphereModel = modelLoader.Load(commandList, std::vector<MeshPrototype>{ spherePrototype });
     const uint32_t sphereGeometryIndex = AddSceneGeometry(sphereModel, std::vector<MeshPrototype>{ spherePrototype });
 
-    const uint32_t sphereMaterial = AddDiffuseMaterial(
-        { 1.0f, 0.48f, 0.18f, 1.0f },
+//Modify Begin:2026-07-30 by BestHui
+    constexpr XMFLOAT4 StressSphereBaseColor = { 1.0f, 0.48f, 0.18f, 1.0f };
+    constexpr float StressSphereEmissionIntensity = 6.0f;
+    m_StressTestSphereMaterialIndex = AddPbrMaterial(
+        StressSphereBaseColor,
         { 1.0f, 1.0f, 0.0f, 0.0f },
         whiteTextureIndex,
+        whiteTextureIndex,
+        whiteTextureIndex,
+        whiteTextureIndex,
+        whiteTextureIndex,
         0.0f,
-        0.38f);
+        0.38f,
+        true,
+        false,
+        false,
+        false,
+        false,
+        {
+            StressSphereBaseColor.x * StressSphereEmissionIntensity,
+            StressSphereBaseColor.y * StressSphereEmissionIntensity,
+            StressSphereBaseColor.z * StressSphereEmissionIntensity,
+            1.0f
+        },
+        whiteTextureIndex,
+        false);
+    const uint32_t sphereMaterial = m_StressTestSphereMaterialIndex;
+//Modify End
 
     constexpr uint32_t Columns = 64;
     constexpr uint32_t Rows = 24;

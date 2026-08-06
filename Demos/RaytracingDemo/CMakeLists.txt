@@ -145,6 +145,7 @@ set(SHADER_FILES_COMPUTE
         shaders/PathTracing/LightingComposite.cs.hlsl
 # Modify Begin:2026-07-28 by BestHui
         shaders/Skybox/Skybox.cs.hlsl
+        shaders/Skybox/SkyboxCubemapStrip.cs.hlsl
 # Modify End
         )
 

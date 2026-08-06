@@ -22,6 +22,9 @@ RayPayload TraceScene(float3 origin, float3 direction, float tMax, uint flags)
     payload.Metallic = 0.0f;
     payload.Roughness = 1.0f;
     payload.AmbientOcclusion = 1.0f;
+//Modify Begin:2026-08-06 by BestHui
+    payload.Emission = 0.0f;
+//Modify End
     payload.Padding0 = 0u;
 
 //Modify Begin:2026-07-27 by BestHui

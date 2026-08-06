@@ -25,6 +25,9 @@ RayPayload MakeMissPayload(float3 rayDirection)
     payload.Metallic = 0.0f;
     payload.Roughness = 1.0f;
     payload.AmbientOcclusion = 1.0f;
+//Modify Begin:2026-08-06 by BestHui
+    payload.Emission = 0.0f;
+//Modify End
     payload.Padding0 = 0u;
     return payload;
 }
@@ -111,6 +114,11 @@ RayPayload MakeTrianglePayload(
 //Modify End
     }
 
+//Modify Begin:2026-08-06 by BestHui
+    const float3 emissionMap = material.HasEmissionMap != 0u
+        ? SampleBindlessTexture2DLevel(material.EmissionTextureIndex, LinearWrapSampler, uv, 0.0f).rgb
+        : 1.0f;
+//Modify End
     RayPayload payload;
     payload.Hit = 1u;
     payload.HitT = hitT;
@@ -120,6 +128,9 @@ RayPayload MakeTrianglePayload(
     payload.Metallic = saturate(metallic);
     payload.Roughness = saturate(roughness);
     payload.AmbientOcclusion = saturate(ambientOcclusion);
+//Modify Begin:2026-08-06 by BestHui
+    payload.Emission = material.Emission.rgb * emissionMap;
+//Modify End
     payload.Padding0 = 0u;
     return payload;
 }
