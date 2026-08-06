@@ -16,19 +16,19 @@ RWTexture2D<float4> ReSTIRDICurrentSpecularOcclusion : register(u8);
 void main(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
     const uint2 pixel = dispatchThreadId.xy;
-    if (pixel.x >= Camera_Width || pixel.y >= Camera_Height)
+    if (pixel.x >= ReSTIRDI_ScreenWidth || pixel.y >= ReSTIRDI_ScreenHeight)
     {
         return;
     }
 
-    const SurfaceData surface = LoadGBufferSurface(pixel);
+    const ReSTIRDI_Surface surface = ReSTIRDI_LoadSurface(pixel);
     ReSTIRDIReservoir reservoir = ReSTIRDIUnpackReservoir(
         ReSTIRDIFinalReservoir.Load(int3(pixel, 0)), ReSTIRDIFinalReservoirState.Load(int3(pixel, 0)));
     float3 lighting = 0.0f;
     float hitDistance = 0.0f;
-    if (surface.Valid && ReSTIRDIIsValid(reservoir) && ReSTIRDIGetLightIndex(reservoir) < GetReSTIRDILightCount())
+    if (surface.Valid && ReSTIRDIIsValid(reservoir) && ReSTIRDIGetLightIndex(reservoir) < ReSTIRDI_GetLightCount())
     {
-        const ReSTIRDIDirectLightSample selectedSample = SampleReSTIRDIDirectLight(
+        const ReSTIRDI_LightSample selectedSample = ReSTIRDI_SampleLight(
             ReSTIRDIGetLightIndex(reservoir), surface, ReSTIRDIGetSampleUv(reservoir));
         if (selectedSample.Valid)
         {
@@ -45,7 +45,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
 
             if (ReSTIRDI_FinalVisibilityEnabled != 0u && !reusedVisibility)
             {
-                visibility = IsReSTIRDIDirectLightSampleVisible(surface, selectedSample) ? 1.0f : 0.0f;
+                visibility = ReSTIRDI_TestVisibility(surface, selectedSample) ? 1.0f : 0.0f;
                 ReSTIRDIStoreVisibility(
                     reservoir,
                     visibility,
@@ -69,7 +69,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     ReSTIRDICurrentReservoir[pixel] = ReSTIRDIPackReservoirCore(reservoir);
     ReSTIRDICurrentReservoirState[pixel] = ReSTIRDIPackReservoirState(reservoir);
     ReSTIRDICurrentPosition[pixel] = surface.Valid
-        ? float4(surface.PositionWs, length(surface.PositionWs - Camera_Position.xyz))
+        ? float4(surface.PositionWs, length(surface.PositionWs - ReSTIRDI_CameraPosition.xyz))
         : 0.0f;
     ReSTIRDICurrentNormalRoughness[pixel] = surface.Valid
         ? float4(normalize(surface.NormalWs), surface.Roughness)

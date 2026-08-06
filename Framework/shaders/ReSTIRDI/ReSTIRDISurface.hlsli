@@ -2,8 +2,8 @@
 #define FRAMEWORK_RESTIR_DI_SURFACE_HLSLI
 
 bool ReSTIRDIHaveSimilarMaterials(
-    const SurfaceData receiver,
-    const SurfaceData source,
+    const ReSTIRDI_Surface receiver,
+    const ReSTIRDI_Surface source,
     const float threshold)
 {
     const float diffuseScale = max(0.05f, max(length(receiver.Diffuse), length(source.Diffuse)));
@@ -17,9 +17,9 @@ bool ReSTIRDIHaveSimilarMaterials(
 }
 
 bool ReSTIRDIHaveCompatibleSurfaces(
-    const SurfaceData receiver,
+    const ReSTIRDI_Surface receiver,
     const float receiverDepth,
-    const SurfaceData source,
+    const ReSTIRDI_Surface source,
     const float sourceDepth,
     const float normalThreshold,
     const float depthThreshold,

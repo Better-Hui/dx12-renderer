@@ -7,6 +7,26 @@
 
 #include "RenderGraphResourceStateTracker.h"
 
+//Modify Begin:2026-07-30 by BestHui
+const std::shared_ptr<Texture>& RenderGraph::RenderContext::GetTexture(const ResourceId resourceId) const
+{
+    Assert(m_ResourcePool != nullptr, "Render context has no resource pool.");
+    return m_ResourcePool->GetTexture(resourceId);
+}
+
+const std::shared_ptr<Buffer>& RenderGraph::RenderContext::GetBuffer(const ResourceId resourceId) const
+{
+    Assert(m_ResourcePool != nullptr, "Render context has no resource pool.");
+    return m_ResourcePool->GetBuffer(resourceId);
+}
+
+const Resource& RenderGraph::RenderContext::GetResource(const ResourceId resourceId) const
+{
+    Assert(m_ResourcePool != nullptr, "Render context has no resource pool.");
+    return m_ResourcePool->GetResource(resourceId);
+}
+//Modify End
+
 void RenderGraph::RenderContext::TransitionResource(
     CommandList& commandList,
     const Resource& resource,

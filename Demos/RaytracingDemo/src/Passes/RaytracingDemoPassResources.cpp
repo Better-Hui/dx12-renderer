@@ -18,33 +18,32 @@ RaytracingDemoCameraConstants BuildPassCameraConstants(
     const RaytracingDemoPassConfig& config,
     const RenderGraph::RenderContext& context)
 {
+//Modify Begin:2026-07-30 by BestHui
+    const RaytracingDemoFrameState& frameState = *config.FrameState;
+//Modify End
     RaytracingDemoCameraConstants camera{};
     camera.InverseView = XMMatrixInverse(nullptr, resources.SceneCamera.GetViewMatrix());
     camera.InverseProjection = XMMatrixInverse(nullptr, resources.SceneCamera.GetProjectionMatrix());
     XMStoreFloat4(&camera.CameraPosition, resources.SceneCamera.GetTranslation());
     camera.Width = context.m_Metadata.m_ScreenWidth;
     camera.Height = context.m_Metadata.m_ScreenHeight;
-    camera.MaxBounces = static_cast<uint32_t>(std::clamp(config.MaxBounces != nullptr ? *config.MaxBounces : 0, 0, 5));
+    camera.MaxBounces = static_cast<uint32_t>(std::clamp(frameState.MaxBounces, 0, 5));
     resources.Lights.FillCameraConstants(
         camera.DirectionalLightCount,
         camera.PointLightCount,
         camera.AreaLightCount,
         camera.SkyLight);
-    camera.FrameIndex = config.FrameIndex != nullptr ? *config.FrameIndex : static_cast<uint32_t>(context.m_Metadata.m_FrameIndex);
-    const RaytracingDemoLightingTechnique directLightingTechnique = config.DirectLightingTechnique != nullptr
-        ? *config.DirectLightingTechnique
-        : RaytracingDemoLightingTechnique::PathTracing;
-    const RaytracingDemoLightingTechnique indirectLightingTechnique = config.IndirectLightingTechnique != nullptr
-        ? *config.IndirectLightingTechnique
-        : RaytracingDemoLightingTechnique::PathTracing;
+    camera.FrameIndex = frameState.FrameIndex;
+    const RaytracingDemoLightingTechnique directLightingTechnique = frameState.DirectLightingTechnique;
+    const RaytracingDemoLightingTechnique indirectLightingTechnique = frameState.IndirectLightingTechnique;
 //Modify Begin:2026-08-06 by BestHui
-    const PathTracingBackend backend = config.Backend != nullptr ? *config.Backend : PathTracingBackend::InlineRayQuery;
+    const PathTracingBackend backend = frameState.Backend;
     const bool restirDIEnabled =
         directLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRDI &&
         backend == PathTracingBackend::InlineRayQuery;
-    const bool accumulationEnabled = config.AccumulationEnabled != nullptr && *config.AccumulationEnabled;
+    const bool accumulationEnabled = frameState.AccumulationEnabled;
 //Modify End
-    camera.AccumulationFrameIndex = accumulationEnabled && config.AccumulationFrameIndex != nullptr ? *config.AccumulationFrameIndex : 0u;
+    camera.AccumulationFrameIndex = accumulationEnabled ? frameState.AccumulationFrameIndex : 0u;
     camera.AccumulationEnabled = accumulationEnabled ? 1u : 0u;
     resources.Denoisers.FillCameraConstants(camera.NRDDenoiserMode, camera.NRDReblurHitDistanceParameters);
     camera.DenoiserEnabled = static_cast<uint32_t>(resources.Denoisers.GetAlgorithm());
@@ -53,7 +52,7 @@ RaytracingDemoCameraConstants BuildPassCameraConstants(
         (directLightingTechnique == RaytracingDemoLightingTechnique::PathTracing || directLightingUsesReSTIRDI) ? 1u : 0u;
     camera.IndirectLightingActive = indirectLightingTechnique == RaytracingDemoLightingTechnique::PathTracing ? 1u : 0u;
 //Modify Begin:2026-08-05 by BestHui
-    camera.ReSTIRDIHistoryValid = config.ReSTIRDIHistoryValid != nullptr && *config.ReSTIRDIHistoryValid ? 1u : 0u;
+    camera.ReSTIRDIHistoryValid = frameState.ReSTIRDIHistoryValid ? 1u : 0u;
 //Modify End
     return camera;
 }
@@ -62,6 +61,9 @@ RaytracingDemoPipelineConstants BuildPassPipelineConstants(
     const RaytracingDemoPassResources& resources,
     const RaytracingDemoPassConfig& config)
 {
+//Modify Begin:2026-07-30 by BestHui
+    const RaytracingDemoFrameState& frameState = *config.FrameState;
+//Modify End
     RaytracingDemoPipelineConstants pipeline{};
     pipeline.View = resources.SceneCamera.GetViewMatrix();
     pipeline.Projection = resources.SceneCamera.GetProjectionMatrix();
@@ -70,14 +72,14 @@ RaytracingDemoPipelineConstants BuildPassPipelineConstants(
     pipeline.InverseView = XMMatrixInverse(nullptr, pipeline.View);
     pipeline.InverseProjection = XMMatrixInverse(nullptr, pipeline.Projection);
     pipeline.ScreenResolution = {
-        static_cast<float>(config.Width != nullptr ? *config.Width : 1),
-        static_cast<float>(config.Height != nullptr ? *config.Height : 1)
+        static_cast<float>(frameState.Width),
+        static_cast<float>(frameState.Height)
     };
     pipeline.ScreenTexelSize = { 1.0f / pipeline.ScreenResolution.x, 1.0f / pipeline.ScreenResolution.y };
-    pipeline.PreviousViewProjection = config.HasPreviousViewProjection != nullptr && *config.HasPreviousViewProjection && config.PreviousViewProjection != nullptr
-        ? *config.PreviousViewProjection
+    pipeline.PreviousViewProjection = frameState.HasPreviousViewProjection
+        ? frameState.PreviousViewProjection
         : pipeline.ViewProjection;
-    pipeline.DebugMeshletClusters = config.DebugMeshletClusters != nullptr && *config.DebugMeshletClusters ? 1u : 0u;
+    pipeline.DebugMeshletClusters = frameState.DebugMeshletClusters ? 1u : 0u;
     return pipeline;
 }
 //Modify End

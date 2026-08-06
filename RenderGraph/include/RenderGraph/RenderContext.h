@@ -18,15 +18,19 @@ namespace RenderGraph
 {
 //Modify Begin:2026-07-30 by BestHui
     class RenderGraphResourceStateTracker;
+    class RenderGraphCommandExecutor;
 //Modify End
 
     struct RenderContext
     {
-        std::shared_ptr<ResourcePool> m_ResourcePool = nullptr;
         RenderMetadata m_Metadata = {};
         RenderTargetInfo m_RenderTargetInfo = {};
 //Modify Begin:2026-07-30 by BestHui
         RenderGraphResourceStateTracker* m_ResourceStateTracker = nullptr;
+
+        const std::shared_ptr<Texture>& GetTexture(ResourceId resourceId) const;
+        const std::shared_ptr<Buffer>& GetBuffer(ResourceId resourceId) const;
+        const Resource& GetResource(ResourceId resourceId) const;
 
         void TransitionResource(
             CommandList& commandList,
@@ -37,5 +41,10 @@ namespace RenderGraph
             CommandList& commandList,
             std::span<const ResourceStateTransition> transitions) const;
 //Modify End
+
+    private:
+        friend class RenderGraphCommandExecutor;
+
+        std::shared_ptr<ResourcePool> m_ResourcePool = nullptr;
     };
 }

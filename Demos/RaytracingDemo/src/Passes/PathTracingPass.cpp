@@ -50,7 +50,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
     const RaytracingDemoPassConfig& config)
 {
     using namespace RenderGraph;
-    const PathTracingBackend backend = config.Backend != nullptr ? *config.Backend : resources.Pipelines.GetBackend();
+    const PathTracingBackend backend = config.FrameState->Backend;
     const InputType gbufferInputType = backend == PathTracingBackend::InlineRayQuery
         ? InputType::NonPixelShaderResource
         : InputType::ShaderResource;
@@ -72,8 +72,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
         },
         [resources, config, backend](const RenderContext& context, CommandList& cmd)
         {
-            if (config.DirectLightingTechnique == nullptr ||
-                *config.DirectLightingTechnique != RaytracingDemoLightingTechnique::PathTracing)
+            if (config.FrameState->DirectLightingTechnique != RaytracingDemoLightingTechnique::PathTracing)
             {
                 return;
             }
@@ -90,7 +89,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
                     cmd,
                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
                 CommandContext commandContext(cmd);
-                commandContext.SetUnorderedAccessView(directLightingShader, "DirectLighting", UnorderedAccessView(context.m_ResourcePool->GetTexture(DemoResourceIds::DirectLighting)));
+                commandContext.SetUnorderedAccessView(directLightingShader, "DirectLighting", UnorderedAccessView(context.GetTexture(DemoResourceIds::DirectLighting)));
 //Modify Begin:2026-07-30 by BestHui
                 commandContext.BindBindlessDescriptorHeap(resources.Scene.GetBindlessDescriptorHeap());
 //Modify End
@@ -105,7 +104,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
                     cmd,
                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
                 RayTracingBindingSet& directBindingSet = resources.Pipelines.GetDirectRayTracingBindingSet();
-                directBindingSet.SetUnorderedAccessView("DirectLighting", UnorderedAccessView(context.m_ResourcePool->GetTexture(DemoResourceIds::DirectLighting)));
+                directBindingSet.SetUnorderedAccessView("DirectLighting", UnorderedAccessView(context.GetTexture(DemoResourceIds::DirectLighting)));
                 RaytracingDemoPassBindings::BindDxrPathTracingInputs(resources, directBindingSet, gbuffer, camera);
 //Modify Begin:2026-07-27 by BestHui
                 DispatchDxrLightingPass(
@@ -129,9 +128,9 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
 {
     using namespace RenderGraph;
 //Modify Begin:2026-08-03 by BestHui
-    const PathTracingBackend backend = config.Backend != nullptr ? *config.Backend : resources.Pipelines.GetBackend();
+    const PathTracingBackend backend = config.FrameState->Backend;
     const RenderPassQueue queue =
-        config.AsyncComputeEnabled != nullptr && *config.AsyncComputeEnabled && backend == PathTracingBackend::InlineRayQuery
+        config.FrameState->AsyncComputeEnabled && backend == PathTracingBackend::InlineRayQuery
             ? RenderPassQueue::AsyncCompute
             : RenderPassQueue::Direct;
     const InputType gbufferInputType = backend == PathTracingBackend::InlineRayQuery
@@ -158,8 +157,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
         },
         [resources, config, backend, queue](const RenderContext& context, CommandList& cmd)
         {
-            if (config.IndirectLightingTechnique == nullptr ||
-                *config.IndirectLightingTechnique != RaytracingDemoLightingTechnique::PathTracing)
+            if (config.FrameState->IndirectLightingTechnique != RaytracingDemoLightingTechnique::PathTracing)
             {
                 return;
             }
@@ -179,7 +177,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
                         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
                 }
                 CommandContext commandContext(cmd);
-                commandContext.SetUnorderedAccessView(indirectLightingShader, "IndirectLighting", UnorderedAccessView(context.m_ResourcePool->GetTexture(DemoResourceIds::IndirectLighting)));
+                commandContext.SetUnorderedAccessView(indirectLightingShader, "IndirectLighting", UnorderedAccessView(context.GetTexture(DemoResourceIds::IndirectLighting)));
 //Modify Begin:2026-07-30 by BestHui
                 commandContext.BindBindlessDescriptorHeap(resources.Scene.GetBindlessDescriptorHeap());
 //Modify End
@@ -194,7 +192,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
                     cmd,
                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
                 RayTracingBindingSet& indirectBindingSet = resources.Pipelines.GetIndirectRayTracingBindingSet();
-                indirectBindingSet.SetUnorderedAccessView("IndirectLighting", UnorderedAccessView(context.m_ResourcePool->GetTexture(DemoResourceIds::IndirectLighting)));
+                indirectBindingSet.SetUnorderedAccessView("IndirectLighting", UnorderedAccessView(context.GetTexture(DemoResourceIds::IndirectLighting)));
                 RaytracingDemoPassBindings::BindDxrPathTracingInputs(resources, indirectBindingSet, gbuffer, camera);
 //Modify Begin:2026-07-27 by BestHui
                 DispatchDxrLightingPass(

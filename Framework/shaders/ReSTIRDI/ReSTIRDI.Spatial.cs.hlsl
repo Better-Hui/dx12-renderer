@@ -30,22 +30,22 @@ static const float2 ReSTIRDISpatialOffsets[32] =
     float2(0.970f, 0.580f), float2(-0.820f, -0.880f)
 };
 
-float ReSTIRDIGetTargetPdf(const ReSTIRDIReservoir reservoir, const SurfaceData surface)
+float ReSTIRDIGetTargetPdf(const ReSTIRDIReservoir reservoir, const ReSTIRDI_Surface surface)
 {
-    if (!ReSTIRDIIsValid(reservoir) || ReSTIRDIGetLightIndex(reservoir) >= GetReSTIRDILightCount())
+    if (!ReSTIRDIIsValid(reservoir) || ReSTIRDIGetLightIndex(reservoir) >= ReSTIRDI_GetLightCount())
     {
         return 0.0f;
     }
 
-    const ReSTIRDIDirectLightSample sample = SampleReSTIRDIDirectLight(
+    const ReSTIRDI_LightSample sample = ReSTIRDI_SampleLight(
         ReSTIRDIGetLightIndex(reservoir), surface, ReSTIRDIGetSampleUv(reservoir));
-    return sample.Valid ? max(0.0f, Luminance(sample.UnshadowedContribution)) : 0.0f;
+    return sample.Valid ? max(0.0f, ReSTIRDI_Luminance(sample.UnshadowedContribution)) : 0.0f;
 }
 
 bool ReSTIRDIHaveCompatibleSpatialSurfaces(
-    const SurfaceData centerSurface,
+    const ReSTIRDI_Surface centerSurface,
     const float centerDepth,
-    const SurfaceData neighborSurface,
+    const ReSTIRDI_Surface neighborSurface,
     const float neighborDepth)
 {
     if (!neighborSurface.Valid || !ReSTIRDIIsSurfaceCompatible(
@@ -69,16 +69,16 @@ int2 ReSTIRDIGetSpatialNeighborPixel(const uint2 pixel, const uint sampleIndex)
     return clamp(
         int2(pixel) + offset,
         int2(0, 0),
-        int2(int(Camera_Width) - 1, int(Camera_Height) - 1));
+        int2(int(ReSTIRDI_ScreenWidth) - 1, int(ReSTIRDI_ScreenHeight) - 1));
 }
 
 bool ReSTIRDIStreamNeighborWithPairwiseMis(
     inout ReSTIRDIReservoir state,
     const float randomSample,
     const ReSTIRDIReservoir neighborReservoir,
-    const SurfaceData neighborSurface,
+    const ReSTIRDI_Surface neighborSurface,
     const ReSTIRDIReservoir canonicalReservoir,
-    const SurfaceData canonicalSurface,
+    const ReSTIRDI_Surface canonicalSurface,
     const uint neighborCount)
 {
     const float neighborWeightAtCanonical = ReSTIRDIGetTargetPdf(neighborReservoir, canonicalSurface);
@@ -111,22 +111,22 @@ bool ReSTIRDIStreamNeighborWithPairwiseMis(
 
 ReSTIRDIReservoir ReSTIRDIPairwiseSpatialResampling(
     const uint2 pixel,
-    const SurfaceData centerSurface,
+    const ReSTIRDI_Surface centerSurface,
     const ReSTIRDIReservoir centerReservoir,
     inout uint rngState,
     const uint neighborCount)
 {
     ReSTIRDIReservoir result = ReSTIRDIEmptyReservoir();
     uint validSpatialSampleCount = 0u;
-    const uint offsetStart = uint(Random01(rngState) * 32.0f) & 31u;
-    const float centerDepth = length(centerSurface.PositionWs - Camera_Position.xyz);
+    const uint offsetStart = uint(ReSTIRDI_Random01(rngState) * 32.0f) & 31u;
+    const float centerDepth = length(centerSurface.PositionWs - ReSTIRDI_CameraPosition.xyz);
     [loop]
     for (uint neighborIndex = 0u; neighborIndex < neighborCount; ++neighborIndex)
     {
         const uint offsetIndex = (offsetStart + neighborIndex) & 31u;
         const int2 neighborPixel = ReSTIRDIGetSpatialNeighborPixel(pixel, offsetIndex);
-        const SurfaceData neighborSurface = LoadGBufferSurface(uint2(neighborPixel));
-        const float neighborDepth = length(neighborSurface.PositionWs - Camera_Position.xyz);
+        const ReSTIRDI_Surface neighborSurface = ReSTIRDI_LoadSurface(uint2(neighborPixel));
+        const float neighborDepth = length(neighborSurface.PositionWs - ReSTIRDI_CameraPosition.xyz);
         if (!ReSTIRDIHaveCompatibleSpatialSurfaces(centerSurface, centerDepth, neighborSurface, neighborDepth))
         {
             continue;
@@ -149,7 +149,7 @@ ReSTIRDIReservoir ReSTIRDIPairwiseSpatialResampling(
         {
             ReSTIRDIStreamNeighborWithPairwiseMis(
                 result,
-                Random01(rngState),
+                ReSTIRDI_Random01(rngState),
                 neighborReservoir,
                 neighborSurface,
                 centerReservoir,
@@ -162,7 +162,7 @@ ReSTIRDIReservoir ReSTIRDIPairwiseSpatialResampling(
     ReSTIRDIInternalSimpleResample(
         result,
         centerReservoir,
-        Random01(rngState),
+        ReSTIRDI_Random01(rngState),
         centerReservoir.SelectedTargetPdf,
         centerReservoir.WeightSum * result.CanonicalWeight,
         centerReservoir.M);
@@ -172,7 +172,7 @@ ReSTIRDIReservoir ReSTIRDIPairwiseSpatialResampling(
 
 ReSTIRDIReservoir ReSTIRDIStandardSpatialResampling(
     const uint2 pixel,
-    const SurfaceData centerSurface,
+    const ReSTIRDI_Surface centerSurface,
     const ReSTIRDIReservoir centerReservoir,
     inout uint rngState,
     const uint neighborCount)
@@ -183,17 +183,17 @@ ReSTIRDIReservoir ReSTIRDIStandardSpatialResampling(
     uint selectedLightIndex = ReSTIRDIIsValid(centerReservoir)
         ? ReSTIRDIGetLightIndex(centerReservoir)
         : ReSTIRDILightIndexMask;
-    const uint offsetStart = uint(Random01(rngState) * 32.0f) & 31u;
+    const uint offsetStart = uint(ReSTIRDI_Random01(rngState) * 32.0f) & 31u;
     uint validNeighborMask = 0u;
-    const float centerDepth = length(centerSurface.PositionWs - Camera_Position.xyz);
+    const float centerDepth = length(centerSurface.PositionWs - ReSTIRDI_CameraPosition.xyz);
 
     [loop]
     for (uint neighborIndex = 0u; neighborIndex < neighborCount; ++neighborIndex)
     {
         const uint offsetIndex = (offsetStart + neighborIndex) & 31u;
         const int2 neighborPixel = ReSTIRDIGetSpatialNeighborPixel(pixel, offsetIndex);
-        const SurfaceData neighborSurface = LoadGBufferSurface(uint2(neighborPixel));
-        const float neighborDepth = length(neighborSurface.PositionWs - Camera_Position.xyz);
+        const ReSTIRDI_Surface neighborSurface = ReSTIRDI_LoadSurface(uint2(neighborPixel));
+        const float neighborDepth = length(neighborSurface.PositionWs - ReSTIRDI_CameraPosition.xyz);
         if (!ReSTIRDIHaveCompatibleSpatialSurfaces(centerSurface, centerDepth, neighborSurface, neighborDepth))
         {
             continue;
@@ -213,7 +213,7 @@ ReSTIRDIReservoir ReSTIRDIStandardSpatialResampling(
         }
 
         const float neighborTargetPdf = ReSTIRDIGetTargetPdf(neighborReservoir, centerSurface);
-        if (ReSTIRDICombineReservoirs(result, neighborReservoir, Random01(rngState), neighborTargetPdf))
+        if (ReSTIRDICombineReservoirs(result, neighborReservoir, ReSTIRDI_Random01(rngState), neighborTargetPdf))
         {
             selectedNeighbor = neighborIndex;
             selectedLightIndex = ReSTIRDIIsValid(neighborReservoir)
@@ -245,22 +245,22 @@ ReSTIRDIReservoir ReSTIRDIStandardSpatialResampling(
 
         const uint offsetIndex = (offsetStart + normalizationNeighborIndex) & 31u;
         const int2 neighborPixel = ReSTIRDIGetSpatialNeighborPixel(pixel, offsetIndex);
-        const SurfaceData neighborSurface = LoadGBufferSurface(uint2(neighborPixel));
+        const ReSTIRDI_Surface neighborSurface = ReSTIRDI_LoadSurface(uint2(neighborPixel));
         ReSTIRDIReservoir neighborReservoir = ReSTIRDIUnpackReservoir(
             ReSTIRDITemporalReservoir.Load(int3(neighborPixel, 0)),
             ReSTIRDITemporalReservoirState.Load(int3(neighborPixel, 0)));
         float targetPdfAtNeighbor = 0.0f;
-        if (selectedLightIndex < GetReSTIRDILightCount())
+        if (selectedLightIndex < ReSTIRDI_GetLightCount())
         {
-            const ReSTIRDIDirectLightSample selectedSampleAtNeighbor = SampleReSTIRDIDirectLight(
+            const ReSTIRDI_LightSample selectedSampleAtNeighbor = ReSTIRDI_SampleLight(
                 selectedLightIndex,
                 neighborSurface,
                 ReSTIRDIGetSampleUv(result));
             targetPdfAtNeighbor = selectedSampleAtNeighbor.Valid
-                ? max(0.0f, Luminance(selectedSampleAtNeighbor.UnshadowedContribution))
+                ? max(0.0f, ReSTIRDI_Luminance(selectedSampleAtNeighbor.UnshadowedContribution))
                 : 0.0f;
             if (ReSTIRDI_SpatialBiasCorrectionMode == 3u && targetPdfAtNeighbor > 0.0f &&
-                !IsReSTIRDIDirectLightSampleVisible(neighborSurface, selectedSampleAtNeighbor))
+                !ReSTIRDI_TestVisibility(neighborSurface, selectedSampleAtNeighbor))
             {
                 targetPdfAtNeighbor = 0.0f;
             }
@@ -281,7 +281,7 @@ ReSTIRDIReservoir ReSTIRDIStandardSpatialResampling(
 void main(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
     const uint2 pixel = dispatchThreadId.xy;
-    if (pixel.x >= Camera_Width || pixel.y >= Camera_Height)
+    if (pixel.x >= ReSTIRDI_ScreenWidth || pixel.y >= ReSTIRDI_ScreenHeight)
     {
         return;
     }
@@ -289,10 +289,10 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     const ReSTIRDIReservoir temporalReservoir = ReSTIRDIUnpackReservoir(
         ReSTIRDITemporalReservoir.Load(int3(pixel, 0)), ReSTIRDITemporalReservoirState.Load(int3(pixel, 0)));
     ReSTIRDIReservoir result = temporalReservoir;
-    const SurfaceData surface = LoadGBufferSurface(pixel);
+    const ReSTIRDI_Surface surface = ReSTIRDI_LoadSurface(pixel);
     if (surface.Valid && ReSTIRDI_SpatialResamplingEnabled != 0u && ReSTIRDI_SpatialNeighborCount > 0u)
     {
-        uint rngState = InitializeRandomState(pixel, Camera_Width, Camera_FrameIndex, 0x7a3d1f0bu);
+        uint rngState = ReSTIRDI_InitializeRandomState(pixel, ReSTIRDI_ScreenWidth, ReSTIRDI_FrameIndex, 0x7a3d1f0bu);
         uint neighborCount = ReSTIRDI_SpatialNeighborCount;
         if (temporalReservoir.M < float(ReSTIRDI_SpatialTargetHistoryLength))
         {

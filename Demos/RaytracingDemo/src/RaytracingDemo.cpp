@@ -191,6 +191,17 @@ RaytracingDemo::RaytracingDemo(const std::wstring& name, const int width, const 
     , m_Height(height)
     , m_FrameworkDeviceContext(CreateFrameworkDeviceContext(Application::Get()))
     , m_PathTracingPipelines(m_FrameworkDeviceContext)
+//Modify Begin:2026-07-30 by BestHui
+    , m_DirectLightingReSTIRDIPass(
+        m_FrameworkDeviceContext,
+        {
+            L"Demos/RaytracingDemo/shaders/ReSTIRDI/ReSTIRDI.RIS.cs.hlsl",
+            L"Demos/RaytracingDemo/shaders/ReSTIRDI/ReSTIRDI.Temporal.cs.hlsl",
+            L"Demos/RaytracingDemo/shaders/ReSTIRDI/ReSTIRDI.Spatial.cs.hlsl",
+            L"Demos/RaytracingDemo/shaders/ReSTIRDI/ReSTIRDI.Shade.cs.hlsl",
+            { { "RAYTRACING_DEMO_SOFT_SHADOWS", "1" } },
+        })
+//Modify End
     , m_SceneResources(Application::Get().GetDevice())
     , m_Lights(m_FrameworkDeviceContext)
 {
@@ -684,6 +695,9 @@ void RaytracingDemo::EnsureRayTracingPipelines()
         m_PathTracingBackend,
         m_SoftShadowsEnabled ? PathTracingShadowMode::SoftShadows : PathTracingShadowMode::HardShadows,
         layout);
+//Modify Begin:2026-07-30 by BestHui
+    m_DirectLightingReSTIRDIPass.EnsurePipelines(m_SoftShadowsEnabled);
+//Modify End
     if (m_SceneResources.GetRayTracingAccelerationStructure().GetInstanceCount() > 0)
     {
         BindRayTracingShaderResources();
@@ -723,6 +737,9 @@ RaytracingDemo::PipelineConstants RaytracingDemo::BuildPipelineConstants() const
 //Modify Begin:2026-07-28 by BestHui
 void RaytracingDemo::RebuildRenderGraph()
 {
+//Modify Begin:2026-07-30 by BestHui
+    UpdateRenderGraphFrameState();
+//Modify End
     if (m_RenderGraph != nullptr)
     {
         Application::Get().Flush();
@@ -901,6 +918,9 @@ RaytracingDemoPassResources RaytracingDemo::CreatePassResources()
         m_PathTracingPipelines,
 //Modify Begin:2026-08-05 by BestHui
         m_DirectLightingReSTIRDI,
+//Modify Begin:2026-07-30 by BestHui
+        m_DirectLightingReSTIRDIPass,
+//Modify End
 //Modify End
         m_Denoisers,
         m_CudaBloom,
@@ -924,30 +944,34 @@ RaytracingDemoPassResources RaytracingDemo::CreatePassResources()
 RaytracingDemoPassConfig RaytracingDemo::CreatePassConfig() const
 {
     return {
-        &m_PathTracingBackend,
-//Modify Begin:2026-08-05 by BestHui
-        &m_DirectLightingTechnique,
-        &m_IndirectLightingTechnique,
-//Modify End
-        &m_AsyncComputeEnabled,
-        &m_UseMeshletGBuffer,
-        &m_UseTaskShaderMeshlets,
-        &m_DebugMeshletClusters,
-        &m_SkyboxEnabled,
-        &m_DebugLightingTextureTarget,
-        &m_DebugTextureTarget,
-        &m_MaxBounces,
-        &m_Width,
-        &m_Height,
-        &m_AccumulationEnabled,
-        &m_FrameIndex,
-        &m_AccumulationFrameIndex,
-//Modify Begin:2026-08-05 by BestHui
-        &m_ReSTIRDIHistoryValid,
-//Modify End
-        &m_HasPreviousViewProjection,
-        &m_PreviousViewProjection
+        m_RenderGraphFrameState,
     };
+}
+//Modify End
+
+//Modify Begin:2026-07-30 by BestHui
+void RaytracingDemo::UpdateRenderGraphFrameState()
+{
+    RaytracingDemoFrameState& state = *m_RenderGraphFrameState;
+    state.Backend = m_PathTracingBackend;
+    state.DirectLightingTechnique = m_DirectLightingTechnique;
+    state.IndirectLightingTechnique = m_IndirectLightingTechnique;
+    state.AsyncComputeEnabled = m_AsyncComputeEnabled;
+    state.UseMeshletGBuffer = m_UseMeshletGBuffer;
+    state.UseTaskShaderMeshlets = m_UseTaskShaderMeshlets;
+    state.DebugMeshletClusters = m_DebugMeshletClusters;
+    state.SkyboxEnabled = m_SkyboxEnabled;
+    state.DebugLightingTextureTarget = m_DebugLightingTextureTarget;
+    state.DebugTextureTarget = m_DebugTextureTarget;
+    state.MaxBounces = m_MaxBounces;
+    state.Width = static_cast<uint32_t>(m_Width);
+    state.Height = static_cast<uint32_t>(m_Height);
+    state.AccumulationEnabled = m_AccumulationEnabled;
+    state.FrameIndex = m_FrameIndex;
+    state.AccumulationFrameIndex = m_AccumulationFrameIndex;
+    state.ReSTIRDIHistoryValid = m_ReSTIRDIHistoryValid;
+    state.HasPreviousViewProjection = m_HasPreviousViewProjection;
+    state.PreviousViewProjection = m_PreviousViewProjection;
 }
 //Modify End
 
@@ -1085,6 +1109,9 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     metadata.m_Time = e.TotalTime;
 
 //Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-30 by BestHui
+    UpdateRenderGraphFrameState();
+//Modify End
     EnsureRenderGraphTopology();
 //Modify End
 //Modify Begin:2026-07-29 by BestHui

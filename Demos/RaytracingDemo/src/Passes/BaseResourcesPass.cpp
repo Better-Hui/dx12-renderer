@@ -42,6 +42,9 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
         },
         [resources, config](const RenderContext& context, CommandList& cmd)
         {
+//Modify Begin:2026-07-30 by BestHui
+            const RaytracingDemoFrameState& frameState = *config.FrameState;
+//Modify End
 //Modify Begin:2026-07-29 by BestHui
 //Modify Begin:2026-07-30 by BestHui
             if (resources.Lights.Upload(cmd, context.m_Metadata.m_FrameIndex))
@@ -58,10 +61,10 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
 //Modify Begin:2026-07-30 by BestHui
             commandContext.BindBindlessDescriptorHeap(resources.Scene.GetBindlessDescriptorHeap());
             MeshletGpuResources meshletResources = resources.Scene.GetMeshletGpuResources();
-            const bool useMeshletGBuffer = config.UseMeshletGBuffer != nullptr && *config.UseMeshletGBuffer && meshletResources.IsValid();
+            const bool useMeshletGBuffer = frameState.UseMeshletGBuffer && meshletResources.IsValid();
             RaytracingDemoGBufferDebugConstants debugConstants{};
             debugConstants.DebugMeshletClusters = useMeshletGBuffer &&
-                config.DebugMeshletClusters != nullptr && *config.DebugMeshletClusters ? 1u : 0u;
+                frameState.DebugMeshletClusters ? 1u : 0u;
 //Modify Begin:2026-07-30 by BestHui
             const std::vector<ShaderResourceView> sceneTextures = resources.Scene.CreateTextureShaderResourceViews();
 //Modify End
@@ -112,7 +115,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
                     commandContext.SetStructuredBuffer(shader, "MeshletMaterials", resources.Scene.GetMaterialBuffer());
                 };
 
-                if (config.UseTaskShaderMeshlets != nullptr && *config.UseTaskShaderMeshlets && resources.GBufferTaskMeshShader != nullptr)
+                if (frameState.UseTaskShaderMeshlets && resources.GBufferTaskMeshShader != nullptr)
                 {
                     constexpr uint32_t MeshletTaskGroupSize = 32;
                     MeshShader& taskMeshShader = *resources.GBufferTaskMeshShader;
@@ -179,8 +182,8 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
 //Modify End
 
             const XMMATRIX viewProjection = resources.SceneCamera.GetViewMatrix() * resources.SceneCamera.GetProjectionMatrix();
-            const XMMATRIX previousViewProjection = config.HasPreviousViewProjection != nullptr && *config.HasPreviousViewProjection && config.PreviousViewProjection != nullptr
-                ? *config.PreviousViewProjection
+            const XMMATRIX previousViewProjection = frameState.HasPreviousViewProjection
+                ? frameState.PreviousViewProjection
                 : viewProjection;
             const auto& sceneObjects = resources.Scene.GetSceneObjects();
             const auto& sceneGeometries = resources.Scene.GetSceneGeometries();

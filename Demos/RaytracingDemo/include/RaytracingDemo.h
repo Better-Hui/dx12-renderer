@@ -18,6 +18,7 @@
 #include <Framework/Rendering/Pipeline/MeshShader.h>
 //Modify End
 #include <Framework/Rendering/RayTracing/RayTracingShader.h>
+#include <FrameworkRenderFeatures/Lighting/ReSTIRDIPass.h>
 #include <Framework/Scene/Scene.h>
 #include <Framework/Rendering/Pipeline/Shader.h>
 //Modify Begin:2026-07-30 by BestHui
@@ -120,6 +121,9 @@ private:
 //Modify Begin:2026-07-28 by BestHui
     void RebuildRenderGraph();
     void EnsureRenderGraphTopology();
+//Modify Begin:2026-07-30 by BestHui
+    void UpdateRenderGraphFrameState();
+//Modify End
     void PresentDisplayOutput();
 //Modify End
     void ResetAccumulation(bool resetDenoiserHistory = true, bool resetReSTIRDIHistory = true);
@@ -153,6 +157,9 @@ private:
     void OnImGui();
 
     std::unique_ptr<RenderGraph::RenderGraphRoot> m_RenderGraph;
+//Modify Begin:2026-07-30 by BestHui
+    std::shared_ptr<RaytracingDemoFrameState> m_RenderGraphFrameState = std::make_shared<RaytracingDemoFrameState>();
+//Modify End
 //Modify Begin:2026-07-28 by BestHui
     bool m_RenderGraphDenoiserEnabled = false;
     bool m_RenderGraphCudaBloomEnabled = false;
@@ -177,6 +184,9 @@ private:
     ShaderVariantManager m_ShaderVariants;
 //Modify End
     PathTracingPipelineController m_PathTracingPipelines;
+//Modify Begin:2026-07-30 by BestHui
+    FrameworkRenderFeatures::ReSTIRDIPass m_DirectLightingReSTIRDIPass;
+//Modify End
 //Modify End
     DenoiserController m_Denoisers;
 //Modify Begin:2026-07-27 by BestHui

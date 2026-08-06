@@ -8,6 +8,9 @@ set(HEADER_FILES
         include/RenderGraph/RaytracingDemoRenderGraphBuilder.h
         include/PathTracing/PathTracingSceneBindings.h
         include/PathTracing/PathTracingPipelineController.h
+        # Modify Begin:2026-07-30 by BestHui
+        include/PathTracing/RaytracingDemoReSTIRDI.h
+        # Modify End
         include/RenderGraph/RaytracingDemoGraphResources.h
         include/Passes/RaytracingDemoPasses.h
         include/Passes/CudaBloomPass.h
@@ -36,10 +39,10 @@ set(SOURCE_FILES
         src/Overlay/RaytracingDemoOverlay.cpp
         src/PathTracing/PathTracingSceneBindings.cpp
         src/PathTracing/PathTracingPipelineController.cpp
-        src/Passes/PathTracingPass.cpp
-        # Modify Begin:2026-08-05 by BestHui
-        src/Passes/ReSTIRDIPasses.cpp
+        # Modify Begin:2026-07-30 by BestHui
+        src/PathTracing/RaytracingDemoReSTIRDI.cpp
         # Modify End
+        src/Passes/PathTracingPass.cpp
         src/Passes/CudaBloomPass.cpp
         # Modify Begin:2026-07-30 by BestHui
         src/Passes/RaytracingDemoPassResources.cpp
@@ -189,6 +192,9 @@ set_source_files_properties(${SHADER_FILES_MESH} PROPERTIES HEADER_FILE_ONLY TRU
 target_link_libraries(${TARGET_NAME}
         PUBLIC Framework
         PUBLIC RenderGraph
+# Modify Begin:2026-07-30 by BestHui
+        PUBLIC FrameworkRenderFeatures
+# Modify End
         )
 
 # Modify Begin:2026-07-27 by BestHui

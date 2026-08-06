@@ -83,25 +83,25 @@ namespace RaytracingDemoRenderGraph
     FrameGBufferResources GetFrameGBufferResources(const RenderGraph::RenderContext& context)
     {
         return {
-            context.m_ResourcePool->GetTexture(ResourceIds::GBufferAlbedoOcclusion),
-            context.m_ResourcePool->GetTexture(ResourceIds::GBufferSpecularSmoothness),
-            context.m_ResourcePool->GetTexture(ResourceIds::GBufferNormal),
-            context.m_ResourcePool->GetTexture(ResourceIds::GBufferEmissionMetallic),
-            context.m_ResourcePool->GetTexture(ResourceIds::GBufferPosition),
-            context.m_ResourcePool->GetTexture(ResourceIds::MotionVector),
-            context.m_ResourcePool->GetTexture(ResourceIds::DepthBuffer),
+            context.GetTexture(ResourceIds::GBufferAlbedoOcclusion),
+            context.GetTexture(ResourceIds::GBufferSpecularSmoothness),
+            context.GetTexture(ResourceIds::GBufferNormal),
+            context.GetTexture(ResourceIds::GBufferEmissionMetallic),
+            context.GetTexture(ResourceIds::GBufferPosition),
+            context.GetTexture(ResourceIds::MotionVector),
+            context.GetTexture(ResourceIds::DepthBuffer),
         };
     }
 
     LightingResources GetLightingResources(const RenderGraph::RenderContext& context)
     {
         return {
-            context.m_ResourcePool->GetTexture(ResourceIds::DirectLighting),
-            context.m_ResourcePool->GetTexture(ResourceIds::IndirectLighting),
-            context.m_ResourcePool->GetTexture(ResourceIds::HistoryColor),
-            context.m_ResourcePool->GetTexture(ResourceIds::NoisyRadiance),
-            context.m_ResourcePool->GetTexture(ResourceIds::NRDNoisyRadiance),
-            context.m_ResourcePool->GetTexture(ResourceIds::SceneColor),
+            context.GetTexture(ResourceIds::DirectLighting),
+            context.GetTexture(ResourceIds::IndirectLighting),
+            context.GetTexture(ResourceIds::HistoryColor),
+            context.GetTexture(ResourceIds::NoisyRadiance),
+            context.GetTexture(ResourceIds::NRDNoisyRadiance),
+            context.GetTexture(ResourceIds::SceneColor),
         };
     }
 
@@ -109,24 +109,24 @@ namespace RaytracingDemoRenderGraph
     ReSTIRDIResources GetReSTIRDIResources(const RenderGraph::RenderContext& context)
     {
         return {
-            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDIReservoirA),
-            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDIReservoirB),
-            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDIReservoirAState),
-            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDIReservoirBState),
-            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDIHistoryPositionA),
-            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDIHistoryPositionB),
-            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDIHistoryNormalRoughnessA),
-            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDIHistoryNormalRoughnessB),
-            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDIHistoryDiffuseMetallicA),
-            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDIHistoryDiffuseMetallicB),
-            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDIHistorySpecularOcclusionA),
-            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDIHistorySpecularOcclusionB),
-            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDIRISReservoir),
-            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDIRISReservoirState),
-            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDITemporalReservoir),
-            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDITemporalReservoirState),
-            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDISpatialReservoir),
-            context.m_ResourcePool->GetTexture(ResourceIds::ReSTIRDISpatialReservoirState),
+            context.GetTexture(ResourceIds::ReSTIRDIReservoirA),
+            context.GetTexture(ResourceIds::ReSTIRDIReservoirB),
+            context.GetTexture(ResourceIds::ReSTIRDIReservoirAState),
+            context.GetTexture(ResourceIds::ReSTIRDIReservoirBState),
+            context.GetTexture(ResourceIds::ReSTIRDIHistoryPositionA),
+            context.GetTexture(ResourceIds::ReSTIRDIHistoryPositionB),
+            context.GetTexture(ResourceIds::ReSTIRDIHistoryNormalRoughnessA),
+            context.GetTexture(ResourceIds::ReSTIRDIHistoryNormalRoughnessB),
+            context.GetTexture(ResourceIds::ReSTIRDIHistoryDiffuseMetallicA),
+            context.GetTexture(ResourceIds::ReSTIRDIHistoryDiffuseMetallicB),
+            context.GetTexture(ResourceIds::ReSTIRDIHistorySpecularOcclusionA),
+            context.GetTexture(ResourceIds::ReSTIRDIHistorySpecularOcclusionB),
+            context.GetTexture(ResourceIds::ReSTIRDIRISReservoir),
+            context.GetTexture(ResourceIds::ReSTIRDIRISReservoirState),
+            context.GetTexture(ResourceIds::ReSTIRDITemporalReservoir),
+            context.GetTexture(ResourceIds::ReSTIRDITemporalReservoirState),
+            context.GetTexture(ResourceIds::ReSTIRDISpatialReservoir),
+            context.GetTexture(ResourceIds::ReSTIRDISpatialReservoirState),
         };
     }
 //Modify End
@@ -134,10 +134,10 @@ namespace RaytracingDemoRenderGraph
     NRDResources GetNRDResources(const RenderGraph::RenderContext& context)
     {
         return {
-            context.m_ResourcePool->GetTexture(ResourceIds::NRDNormalRoughness),
-            context.m_ResourcePool->GetTexture(ResourceIds::NRDViewZ),
-            context.m_ResourcePool->GetTexture(ResourceIds::NRDMotion),
-            context.m_ResourcePool->GetTexture(ResourceIds::NRDDenoisedRadiance),
+            context.GetTexture(ResourceIds::NRDNormalRoughness),
+            context.GetTexture(ResourceIds::NRDViewZ),
+            context.GetTexture(ResourceIds::NRDMotion),
+            context.GetTexture(ResourceIds::NRDDenoisedRadiance),
         };
     }
 }

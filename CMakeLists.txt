@@ -33,6 +33,9 @@ add_subdirectory(DX12Library)
 # Modify End
 add_subdirectory(Framework)
 add_subdirectory(RenderGraph)
+# Modify Begin:2026-07-30 by BestHui
+add_subdirectory(FrameworkRenderFeatures)
+# Modify End
 
 # Demos
 # Modify Begin:2026-07-29 by BestHui

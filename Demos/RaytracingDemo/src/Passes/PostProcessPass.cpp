@@ -28,7 +28,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateCu
         },
         [resources](const RenderGraph::RenderContext& context)
         {
-            const auto& sceneColor = context.m_ResourcePool->GetTexture(DemoResourceIds::SceneColor);
+            const auto& sceneColor = context.GetTexture(DemoResourceIds::SceneColor);
             resources.CudaBloom.ExecuteInPlace(
                 *sceneColor,
                 context.m_Metadata.m_ScreenWidth,

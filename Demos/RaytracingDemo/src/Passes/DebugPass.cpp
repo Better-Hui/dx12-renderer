@@ -33,7 +33,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDe
             commandContext.SetTexture(
                 *resources.DisplayCompositeShader,
                 "SceneColor",
-                ShaderResourceView(context.m_ResourcePool->GetTexture(debugTarget)));
+                ShaderResourceView(context.GetTexture(debugTarget)));
             commandContext.BindPipeline(*resources.DisplayCompositeShader);
             commandContext.BindDescriptorSet(resources.DisplayCompositeShader->GetDescriptorSet());
             resources.DisplayBlitMesh->Draw(cmd);

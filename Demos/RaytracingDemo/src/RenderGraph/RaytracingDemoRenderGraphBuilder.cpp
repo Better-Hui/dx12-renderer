@@ -3,6 +3,7 @@
 
 #include <RenderGraph/RaytracingDemoGraphResources.h>
 #include <Passes/RaytracingDemoPasses.h>
+#include <PathTracing/RaytracingDemoReSTIRDI.h>
 #include <RaytracingDemo.h>
 #include <RenderGraph/RenderPass.h>
 
@@ -14,27 +15,26 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
     const RaytracingDemoPassResources resources = demo.CreatePassResources();
     const RaytracingDemoPassConfig config = demo.CreatePassConfig();
 //Modify End
+//Modify Begin:2026-07-30 by BestHui
+    const RaytracingDemoFrameState& frameState = *config.FrameState;
+//Modify End
     std::vector<std::unique_ptr<RenderGraph::RenderPass>> renderPasses;
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateBaseResourcesPass(resources, config));
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateIndirectLightingPass(resources, config));
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDirectLightingPass(resources, config));
-//Modify Begin:2026-08-05 by BestHui
-    renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateReSTIRDIRISPass(resources, config));
-    renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateReSTIRDITemporalPass(resources, config));
-    renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateReSTIRDISpatialPass(resources, config));
-    renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateReSTIRDIShadePass(resources, config));
+//Modify Begin:2026-07-30 by BestHui
+    resources.DirectLightingReSTIRDIPass.AddPasses(
+        renderPasses,
+        RaytracingDemoReSTIRDI::CreatePassInputs(resources, config));
 //Modify End
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateLightingCompositePass(resources, config));
 //Modify Begin:2026-07-28 by BestHui
     RenderGraph::ResourceId sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::RayTracingFinishedToken;
 //Modify Begin:2026-07-31 by BestHui
-    if (config.UseMeshletGBuffer != nullptr && *config.UseMeshletGBuffer &&
-        config.DebugMeshletClusters != nullptr && *config.DebugMeshletClusters)
+    if (frameState.UseMeshletGBuffer && frameState.DebugMeshletClusters)
     {
         RenderGraph::ResourceId debugTarget = RaytracingDemoRenderGraph::ResourceIds::GBufferAlbedoOcclusion;
-        const int debugTextureTarget = config.DebugTextureTarget != nullptr
-            ? *config.DebugTextureTarget
-            : 0;
+        const int debugTextureTarget = frameState.DebugTextureTarget;
         switch (debugTextureTarget)
         {
         case 1:
@@ -67,9 +67,7 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
         }
 
         RenderGraph::ResourceId debugTarget = 0;
-        const int debugLightingTextureTarget = config.DebugLightingTextureTarget != nullptr
-            ? *config.DebugLightingTextureTarget
-            : 0;
+        const int debugLightingTextureTarget = frameState.DebugLightingTextureTarget;
         switch (debugLightingTextureTarget)
         {
         case 1:
@@ -98,7 +96,7 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
         }
 //Modify End
     }
-    if (config.SkyboxEnabled != nullptr && *config.SkyboxEnabled)
+    if (frameState.SkyboxEnabled)
     {
         renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateSkyboxPass(resources, config, sceneReadyToken));
         sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::SkyboxFinishedToken;

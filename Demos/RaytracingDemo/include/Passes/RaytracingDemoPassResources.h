@@ -9,6 +9,7 @@
 #include <Framework/Geometry/Mesh.h>
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
 #include <Framework/Rendering/Lighting/ReSTIRDI.h>
+#include <FrameworkRenderFeatures/Lighting/ReSTIRDIPass.h>
 #include <Framework/Rendering/Pipeline/MeshShader.h>
 #include <Framework/Rendering/Pipeline/Shader.h>
 #include <Framework/Rendering/RayTracing/RayTracingShader.h>
@@ -125,6 +126,9 @@ struct RaytracingDemoPassResources
     PathTracingPipelineController& Pipelines;
 //Modify Begin:2026-08-05 by BestHui
     ReSTIRDI& DirectLightingReSTIRDI;
+//Modify Begin:2026-07-30 by BestHui
+    FrameworkRenderFeatures::ReSTIRDIPass& DirectLightingReSTIRDIPass;
+//Modify End
 //Modify End
     DenoiserController& Denoisers;
     CudaBloomPass& CudaBloom;
@@ -155,31 +159,32 @@ enum class RaytracingDemoLightingTechnique : uint32_t
 };
 //Modify End
 
+struct RaytracingDemoFrameState
+{
+    PathTracingBackend Backend = PathTracingBackend::InlineRayQuery;
+    RaytracingDemoLightingTechnique DirectLightingTechnique = RaytracingDemoLightingTechnique::None;
+    RaytracingDemoLightingTechnique IndirectLightingTechnique = RaytracingDemoLightingTechnique::None;
+    bool AsyncComputeEnabled = false;
+    bool UseMeshletGBuffer = false;
+    bool UseTaskShaderMeshlets = false;
+    bool DebugMeshletClusters = false;
+    bool SkyboxEnabled = false;
+    int DebugLightingTextureTarget = 0;
+    int DebugTextureTarget = 0;
+    int MaxBounces = 1;
+    uint32_t Width = 1;
+    uint32_t Height = 1;
+    bool AccumulationEnabled = false;
+    uint32_t FrameIndex = 0;
+    uint32_t AccumulationFrameIndex = 0;
+    bool ReSTIRDIHistoryValid = false;
+    bool HasPreviousViewProjection = false;
+    DirectX::XMMATRIX PreviousViewProjection = DirectX::XMMatrixIdentity();
+};
+
 struct RaytracingDemoPassConfig
 {
-    const PathTracingBackend* Backend = nullptr;
-//Modify Begin:2026-08-05 by BestHui
-    const RaytracingDemoLightingTechnique* DirectLightingTechnique = nullptr;
-    const RaytracingDemoLightingTechnique* IndirectLightingTechnique = nullptr;
-//Modify End
-    const bool* AsyncComputeEnabled = nullptr;
-    const bool* UseMeshletGBuffer = nullptr;
-    const bool* UseTaskShaderMeshlets = nullptr;
-    const bool* DebugMeshletClusters = nullptr;
-    const bool* SkyboxEnabled = nullptr;
-    const int* DebugLightingTextureTarget = nullptr;
-    const int* DebugTextureTarget = nullptr;
-    const int* MaxBounces = nullptr;
-    const int* Width = nullptr;
-    const int* Height = nullptr;
-    const bool* AccumulationEnabled = nullptr;
-    const uint32_t* FrameIndex = nullptr;
-    const uint32_t* AccumulationFrameIndex = nullptr;
-//Modify Begin:2026-08-05 by BestHui
-    const bool* ReSTIRDIHistoryValid = nullptr;
-//Modify End
-    const bool* HasPreviousViewProjection = nullptr;
-    const DirectX::XMMATRIX* PreviousViewProjection = nullptr;
+    std::shared_ptr<RaytracingDemoFrameState> FrameState;
 };
 
 RaytracingDemoCameraConstants BuildPassCameraConstants(
