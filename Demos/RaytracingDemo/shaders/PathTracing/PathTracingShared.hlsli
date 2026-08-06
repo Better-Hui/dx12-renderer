@@ -460,7 +460,7 @@ float3 EvaluateDirectLighting(SurfaceData surface, inout uint rngState, out floa
 }
 
 //Modify Begin:2026-08-05 by BestHui
-#if defined(RAYTRACING_DEMO_RESTIR_DI)
+#if defined(FRAMEWORK_RESTIR_DI_SCENE_ADAPTER)
 struct ReSTIRDIDirectLightSample
 {
     float3 DirectionWs;

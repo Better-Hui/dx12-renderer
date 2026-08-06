@@ -1,7 +1,5 @@
 //Modify Begin:2026-07-30 by BestHui
-#define RAYTRACING_DEMO_RESTIR_DI 1
-
-#include "../../../Demos/RaytracingDemo/shaders/PathTracing/PathTracing.rayquery.hlsli"
+#include "ReSTIRDISceneContract.hlsli"
 #include "ReSTIRDI/ReSTIRDI.hlsli"
 #include "ReSTIRDI/ReSTIRDIConstants.hlsli"
 
@@ -13,8 +11,6 @@ RWTexture2D<float4> ReSTIRDICurrentPosition : register(u5);
 RWTexture2D<float4> ReSTIRDICurrentNormalRoughness : register(u6);
 RWTexture2D<float4> ReSTIRDICurrentDiffuseMetallic : register(u7);
 RWTexture2D<float4> ReSTIRDICurrentSpecularOcclusion : register(u8);
-
-#include "../../../Demos/RaytracingDemo/shaders/PathTracing/PathTracingShared.hlsli"
 
 [numthreads(8, 8, 1)]
 void main(uint3 dispatchThreadId : SV_DispatchThreadID)

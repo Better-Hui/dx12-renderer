@@ -398,8 +398,10 @@ bool SceneLightManager::DrawImGui()
     if (ImGui::CollapsingHeader("Sky Light"))
     {
         bool skyChanged = false;
-        skyChanged |= ImGui::InputFloat3("Sky Color", &m_SkyLightColor.x, "%.3f");
-        skyChanged |= ImGui::InputFloat("Sky Intensity", &m_SkyLightIntensity, 0.1f, 1.0f, "%.3f");
+//Modify Begin:2026-07-30 by BestHui
+        skyChanged |= ImGui::DragFloat3("Sky Color", &m_SkyLightColor.x, 0.01f, 0.0f, 0.0f, "%.3f");
+        skyChanged |= ImGui::DragFloat("Sky Intensity", &m_SkyLightIntensity, 0.1f, 0.0f, 0.0f, "%.3f");
+//Modify End
         if (skyChanged)
         {
             m_SkyLight.ColorAndIntensity = {
@@ -421,7 +423,7 @@ bool SceneLightManager::DrawImGui()
             changed = true;
         }
 //Modify Begin:2026-08-03 by BestHui
-        if (ImGui::TreeNodeEx("Directional Light List"))
+        if (ImGui::CollapsingHeader("Directional Light List"))
 //Modify End
         {
             for (size_t i = 0; i < m_DirectionalLights.size(); ++i)
@@ -449,10 +451,12 @@ bool SceneLightManager::DrawImGui()
                 {
                     bool lightChanged = false;
                     XMFLOAT3 direction = { light.m_DirectionWs.x, light.m_DirectionWs.y, light.m_DirectionWs.z };
-                    lightChanged |= ImGui::InputFloat3("Direction", &direction.x, "%.4f");
-                    lightChanged |= ImGui::InputFloat3("Color", &light.m_Color.x, "%.3f");
-                    lightChanged |= ImGui::InputFloat("Intensity", &light.m_Color.w, 0.1f, 1.0f, "%.3f");
-                    lightChanged |= ImGui::InputFloat("Angular Radius", &light.m_DirectionWs.w, 0.001f, 0.01f, "%.5f");
+//Modify Begin:2026-07-30 by BestHui
+                    lightChanged |= ImGui::DragFloat3("Direction", &direction.x, 0.01f, 0.0f, 0.0f, "%.4f");
+                    lightChanged |= ImGui::DragFloat3("Color", &light.m_Color.x, 0.01f, 0.0f, 0.0f, "%.3f");
+                    lightChanged |= ImGui::DragFloat("Intensity", &light.m_Color.w, 0.1f, 0.0f, 0.0f, "%.3f");
+                    lightChanged |= ImGui::DragFloat("Angular Radius", &light.m_DirectionWs.w, 0.001f, 0.0f, 0.0f, "%.5f");
+//Modify End
                     if (lightChanged)
                     {
                         direction = NormalizeVector(direction);
@@ -470,17 +474,21 @@ bool SceneLightManager::DrawImGui()
                 }
                 ImGui::PopID();
             }
-            ImGui::TreePop();
         }
 
-        ImGui::InputFloat3("Direction", &m_NewDirectionalLightDirection.x, "%.4f");
-        ImGui::InputFloat3("Directional Color", &m_NewDirectionalLightColor.x, "%.3f");
-        ImGui::InputFloat("Directional Intensity", &m_NewDirectionalLightIntensity, 0.1f, 1.0f, "%.3f");
-        ImGui::InputFloat("Angular Radius", &m_NewDirectionalLightAngularRadius, 0.001f, 0.01f, "%.5f");
-        if (ImGui::Button("Add Directional Light"))
+        if (ImGui::CollapsingHeader("Add Directional Light"))
         {
-            AddDirectionalLight();
-            changed = true;
+//Modify Begin:2026-07-30 by BestHui
+            ImGui::DragFloat3("Direction", &m_NewDirectionalLightDirection.x, 0.01f, 0.0f, 0.0f, "%.4f");
+            ImGui::DragFloat3("Directional Color", &m_NewDirectionalLightColor.x, 0.01f, 0.0f, 0.0f, "%.3f");
+            ImGui::DragFloat("Directional Intensity", &m_NewDirectionalLightIntensity, 0.1f, 0.0f, 0.0f, "%.3f");
+            ImGui::DragFloat("Angular Radius", &m_NewDirectionalLightAngularRadius, 0.001f, 0.0f, 0.0f, "%.5f");
+            if (ImGui::Button("Add Directional Light"))
+            {
+                AddDirectionalLight();
+                changed = true;
+            }
+//Modify End
         }
     }
 
@@ -496,12 +504,8 @@ bool SceneLightManager::DrawImGui()
         {
             changed = true;
         }
-        if (!m_PointLights.empty())
-        {
-            ImGui::Text("PointLight[0].Y: %.2f", m_PointLights.front().PositionWs.y);
-        }
 //Modify Begin:2026-08-03 by BestHui
-        if (ImGui::TreeNodeEx("Point Light List"))
+        if (ImGui::CollapsingHeader("Point Light List"))
 //Modify End
         {
             for (size_t i = 0; i < m_PointLights.size(); ++i)
@@ -510,39 +514,36 @@ bool SceneLightManager::DrawImGui()
 //Modify Begin:2026-07-30 by BestHui
                 PointLight& light = m_PointLights[i];
                 const bool isAnimated = i < m_PointLightAnimated.size() && m_PointLightAnimated[i] != 0;
-                ImGui::ColorButton("Color", ImVec4(light.Color.x, light.Color.y, light.Color.z, 1.0f), ImGuiColorEditFlags_NoTooltip, ImVec2(14.0f, 14.0f));
-                ImGui::SameLine();
+//Modify Begin:2026-08-06 by BestHui
                 const bool open = ImGui::TreeNodeEx(
                     "PointLight",
-//Modify Begin:2026-08-03 by BestHui
                     ImGuiTreeNodeFlags_None,
-//Modify End
-                    "Point Light #%zu  %s  Pos(%.2f, %.2f, %.2f)  I %.1f",
+                    "#%zu %s I %.1f",
                     i,
                     isAnimated ? "Animated" : "Static",
-                    light.PositionWs.x,
-                    light.PositionWs.y,
-                    light.PositionWs.z,
                     light.Color.w);
                 ImGui::SameLine();
-                if (ImGui::SmallButton("Delete Point Light"))
+                if (ImGui::SmallButton("X"))
                 {
                     RemovePointLight(i);
                     changed = true;
                     ImGui::PopID();
                     break;
                 }
+//Modify End
                 if (open)
                 {
                     bool pointChanged = false;
                     bool positionChanged = false;
                     XMFLOAT3 position = { light.PositionWs.x, light.PositionWs.y, light.PositionWs.z };
-                    positionChanged |= ImGui::InputFloat3("Position", &position.x, "%.3f");
-                    pointChanged |= ImGui::InputFloat3("Color", &light.Color.x, "%.3f");
-                    pointChanged |= ImGui::InputFloat("Intensity", &light.Color.w, 0.1f, 1.0f, "%.3f");
-                    pointChanged |= ImGui::InputFloat("Range", &light.Range, 0.1f, 1.0f, "%.3f");
 //Modify Begin:2026-07-30 by BestHui
-                    pointChanged |= ImGui::InputFloat("Source Radius", &light.SourceRadius, 0.01f, 0.1f, "%.4f");
+                    positionChanged |= ImGui::DragFloat3("Position", &position.x, 0.1f, 0.0f, 0.0f, "%.3f");
+                    pointChanged |= ImGui::DragFloat3("Color", &light.Color.x, 0.01f, 0.0f, 0.0f, "%.3f");
+                    pointChanged |= ImGui::DragFloat("Intensity", &light.Color.w, 0.1f, 0.0f, 0.0f, "%.3f");
+                    pointChanged |= ImGui::DragFloat("Range", &light.Range, 0.1f, 0.0f, 0.0f, "%.3f");
+//Modify Begin:2026-07-30 by BestHui
+                    pointChanged |= ImGui::DragFloat("Source Radius", &light.SourceRadius, 0.01f, 0.0f, 0.0f, "%.4f");
+//Modify End
 //Modify End
                     bool animated = isAnimated;
                     if (ImGui::Checkbox("Animated", &animated))
@@ -585,25 +586,27 @@ bool SceneLightManager::DrawImGui()
 //Modify End
                 ImGui::PopID();
             }
-            ImGui::TreePop();
         }
-        ImGui::InputFloat3("Point Color", &m_NewPointLightColor.x, "%.3f");
-        ImGui::InputFloat("Point Intensity", &m_NewPointLightIntensity, 0.1f, 1.0f, "%.3f");
-        ImGui::InputFloat("Point Range", &m_NewPointLightRange, 0.1f, 1.0f, "%.3f");
+        if (ImGui::CollapsingHeader("Add Point Light"))
+        {
 //Modify Begin:2026-07-30 by BestHui
-        ImGui::InputFloat("Point Source Radius", &m_NewPointLightSourceRadius, 0.01f, 0.1f, "%.4f");
+            ImGui::DragFloat3("Point Color", &m_NewPointLightColor.x, 0.01f, 0.0f, 0.0f, "%.3f");
+            ImGui::DragFloat("Point Intensity", &m_NewPointLightIntensity, 0.1f, 0.0f, 0.0f, "%.3f");
+            ImGui::DragFloat("Point Range", &m_NewPointLightRange, 0.1f, 0.0f, 0.0f, "%.3f");
+            ImGui::DragFloat("Point Source Radius", &m_NewPointLightSourceRadius, 0.01f, 0.0f, 0.0f, "%.4f");
+            ImGui::DragFloat("Random Spawn Radius", &m_RandomPointLightSpawnRadius, 0.1f, 1.0f, 80.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
+            if (ImGui::Button("Add At Origin"))
+            {
+                AddPointLightAtOrigin();
+                changed = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Add Random"))
+            {
+                AddRandomPointLightInUpperHemisphere();
+                changed = true;
+            }
 //Modify End
-        ImGui::SliderFloat("Random Spawn Radius", &m_RandomPointLightSpawnRadius, 1.0f, 80.0f, "%.1f");
-        if (ImGui::Button("Add Point Light At Origin"))
-        {
-            AddPointLightAtOrigin();
-            changed = true;
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Add Random Point Light"))
-        {
-            AddRandomPointLightInUpperHemisphere();
-            changed = true;
         }
     }
 
@@ -616,7 +619,7 @@ bool SceneLightManager::DrawImGui()
             changed = true;
         }
 //Modify Begin:2026-08-03 by BestHui
-        if (ImGui::TreeNodeEx("Area Light List"))
+        if (ImGui::CollapsingHeader("Area Light List"))
 //Modify End
         {
             for (size_t i = 0; i < m_AreaLights.size(); ++i)
@@ -649,12 +652,14 @@ bool SceneLightManager::DrawImGui()
                     XMFLOAT3 position = { light.PositionAndRange.x, light.PositionAndRange.y, light.PositionAndRange.z };
                     XMFLOAT3 normal = { light.NormalAndType.x, light.NormalAndType.y, light.NormalAndType.z };
                     XMFLOAT2 size = { light.AxisUAndExtent.w * 2.0f, light.AxisVAndExtent.w * 2.0f };
-                    lightChanged |= ImGui::InputFloat3("Position", &position.x, "%.3f");
-                    normalChanged |= ImGui::InputFloat3("Normal", &normal.x, "%.4f");
-                    lightChanged |= ImGui::InputFloat2("Size", &size.x, "%.3f");
-                    lightChanged |= ImGui::InputFloat("Range", &light.PositionAndRange.w, 0.1f, 1.0f, "%.3f");
-                    lightChanged |= ImGui::InputFloat3("Color", &light.ColorAndIntensity.x, "%.3f");
-                    lightChanged |= ImGui::InputFloat("Intensity", &light.ColorAndIntensity.w, 0.1f, 1.0f, "%.3f");
+//Modify Begin:2026-07-30 by BestHui
+                    lightChanged |= ImGui::DragFloat3("Position", &position.x, 0.1f, 0.0f, 0.0f, "%.3f");
+                    normalChanged |= ImGui::DragFloat3("Normal", &normal.x, 0.01f, 0.0f, 0.0f, "%.4f");
+                    lightChanged |= ImGui::DragFloat2("Size", &size.x, 0.1f, 0.0f, 0.0f, "%.3f");
+                    lightChanged |= ImGui::DragFloat("Range", &light.PositionAndRange.w, 0.1f, 0.0f, 0.0f, "%.3f");
+                    lightChanged |= ImGui::DragFloat3("Color", &light.ColorAndIntensity.x, 0.01f, 0.0f, 0.0f, "%.3f");
+                    lightChanged |= ImGui::DragFloat("Intensity", &light.ColorAndIntensity.w, 0.1f, 0.0f, 0.0f, "%.3f");
+//Modify End
                     if (lightChanged || normalChanged)
                     {
                         normal = NormalizeVector(normal);
@@ -677,19 +682,23 @@ bool SceneLightManager::DrawImGui()
                 }
                 ImGui::PopID();
             }
-            ImGui::TreePop();
         }
 
-        ImGui::InputFloat3("Area Position", &m_NewAreaLightPosition.x, "%.3f");
-        ImGui::InputFloat3("Area Normal", &m_NewAreaLightNormal.x, "%.4f");
-        ImGui::InputFloat2("Area Size", &m_NewAreaLightSize.x, "%.3f");
-        ImGui::InputFloat3("Area Color", &m_NewAreaLightColor.x, "%.3f");
-        ImGui::InputFloat("Area Intensity", &m_NewAreaLightIntensity, 0.1f, 1.0f, "%.3f");
-        ImGui::InputFloat("Area Range", &m_NewAreaLightRange, 0.1f, 1.0f, "%.3f");
-        if (ImGui::Button("Add Area Light"))
+        if (ImGui::CollapsingHeader("Add Area Light"))
         {
-            AddAreaLight();
-            changed = true;
+//Modify Begin:2026-07-30 by BestHui
+            ImGui::DragFloat3("Area Position", &m_NewAreaLightPosition.x, 0.1f, 0.0f, 0.0f, "%.3f");
+            ImGui::DragFloat3("Area Normal", &m_NewAreaLightNormal.x, 0.01f, 0.0f, 0.0f, "%.4f");
+            ImGui::DragFloat2("Area Size", &m_NewAreaLightSize.x, 0.1f, 0.0f, 0.0f, "%.3f");
+            ImGui::DragFloat3("Area Color", &m_NewAreaLightColor.x, 0.01f, 0.0f, 0.0f, "%.3f");
+            ImGui::DragFloat("Area Intensity", &m_NewAreaLightIntensity, 0.1f, 0.0f, 0.0f, "%.3f");
+            ImGui::DragFloat("Area Range", &m_NewAreaLightRange, 0.1f, 0.0f, 0.0f, "%.3f");
+            if (ImGui::Button("Add Area Light"))
+            {
+                AddAreaLight();
+                changed = true;
+            }
+//Modify End
         }
     }
     return changed;

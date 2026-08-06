@@ -531,7 +531,6 @@ ShaderVariantManagerConfig ShaderVariantManager::CreateDefaultConfig()
         AddUniquePath(config.IncludeDirectories, config.SourceRoot / "Shaders");
         AddUniquePath(config.IncludeDirectories, config.SourceRoot / "Framework" / "shaders");
         AddUniquePath(config.IncludeDirectories, config.SourceRoot / "External" / "NRD" / "Shaders");
-        AddUniquePath(config.IncludeDirectories, config.SourceRoot / "Demos" / "RaytracingDemo" / "shaders");
     }
 
     std::wstring compilationMode = GetEnvironmentValue(L"DX12_RENDERER_SHADER_COMPILE");

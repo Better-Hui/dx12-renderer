@@ -37,30 +37,21 @@ RaytracingDemoCameraConstants BuildPassCameraConstants(
     const RaytracingDemoLightingTechnique indirectLightingTechnique = config.IndirectLightingTechnique != nullptr
         ? *config.IndirectLightingTechnique
         : RaytracingDemoLightingTechnique::PathTracing;
-    const bool denoiserEnabled = resources.Denoisers.IsEnabled();
-    const bool directLightingUsesPathTracing =
-        (config.DirectLightingEnabled == nullptr || !*config.DirectLightingEnabled) ||
-        directLightingTechnique == RaytracingDemoLightingTechnique::PathTracing;
-    const bool indirectLightingUsesPathTracing =
-        (config.IndirectLightingEnabled == nullptr || !*config.IndirectLightingEnabled) ||
-        indirectLightingTechnique == RaytracingDemoLightingTechnique::PathTracing;
-    const bool originalPathTracingEnabled = directLightingUsesPathTracing && indirectLightingUsesPathTracing;
-    const bool pathAccumulationEnabled =
-        config.AccumulationEnabled != nullptr &&
-        *config.AccumulationEnabled &&
-        !denoiserEnabled &&
-        originalPathTracingEnabled;
-    camera.AccumulationFrameIndex = pathAccumulationEnabled && config.AccumulationFrameIndex != nullptr ? *config.AccumulationFrameIndex : 0u;
-    camera.AccumulationEnabled = pathAccumulationEnabled ? 1u : 0u;
+//Modify Begin:2026-08-06 by BestHui
+    const PathTracingBackend backend = config.Backend != nullptr ? *config.Backend : PathTracingBackend::InlineRayQuery;
+    const bool restirDIEnabled =
+        directLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRDI &&
+        backend == PathTracingBackend::InlineRayQuery;
+    const bool accumulationEnabled = config.AccumulationEnabled != nullptr && *config.AccumulationEnabled;
+//Modify End
+    camera.AccumulationFrameIndex = accumulationEnabled && config.AccumulationFrameIndex != nullptr ? *config.AccumulationFrameIndex : 0u;
+    camera.AccumulationEnabled = accumulationEnabled ? 1u : 0u;
     resources.Denoisers.FillCameraConstants(camera.NRDDenoiserMode, camera.NRDReblurHitDistanceParameters);
     camera.DenoiserEnabled = static_cast<uint32_t>(resources.Denoisers.GetAlgorithm());
-    const PathTracingBackend backend = config.Backend != nullptr ? *config.Backend : PathTracingBackend::InlineRayQuery;
-    const bool directLightingUsesReSTIRDI = directLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRDI &&
-        backend == PathTracingBackend::InlineRayQuery;
-    camera.DirectLightingEnabled = config.DirectLightingEnabled != nullptr && *config.DirectLightingEnabled &&
+    const bool directLightingUsesReSTIRDI = restirDIEnabled;
+    camera.DirectLightingActive =
         (directLightingTechnique == RaytracingDemoLightingTechnique::PathTracing || directLightingUsesReSTIRDI) ? 1u : 0u;
-    camera.IndirectLightingEnabled = config.IndirectLightingEnabled != nullptr && *config.IndirectLightingEnabled &&
-        indirectLightingTechnique == RaytracingDemoLightingTechnique::PathTracing ? 1u : 0u;
+    camera.IndirectLightingActive = indirectLightingTechnique == RaytracingDemoLightingTechnique::PathTracing ? 1u : 0u;
 //Modify Begin:2026-08-05 by BestHui
     camera.ReSTIRDIHistoryValid = config.ReSTIRDIHistoryValid != nullptr && *config.ReSTIRDIHistoryValid ? 1u : 0u;
 //Modify End

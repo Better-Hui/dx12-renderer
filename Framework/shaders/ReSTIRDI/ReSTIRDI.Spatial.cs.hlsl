@@ -1,7 +1,5 @@
 //Modify Begin:2026-07-30 by BestHui
-#define RAYTRACING_DEMO_RESTIR_DI 1
-
-#include "../../../Demos/RaytracingDemo/shaders/PathTracing/PathTracing.rayquery.hlsli"
+#include "ReSTIRDISceneContract.hlsli"
 #include "ReSTIRDI/ReSTIRDI.hlsli"
 #include "ReSTIRDI/ReSTIRDIConstants.hlsli"
 
@@ -10,7 +8,6 @@ Texture2D<uint4> ReSTIRDITemporalReservoirState : register(t13, COMMON_ROOT_SIGN
 RWTexture2D<uint4> ReSTIRDISpatialReservoir : register(u2);
 RWTexture2D<uint4> ReSTIRDISpatialReservoirState : register(u3);
 
-#include "../../../Demos/RaytracingDemo/shaders/PathTracing/PathTracingShared.hlsli"
 #include "ReSTIRDI/ReSTIRDISurface.hlsli"
 
 static const float2 ReSTIRDISpatialOffsets[32] =

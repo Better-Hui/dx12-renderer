@@ -243,8 +243,6 @@ private:
     ReSTIRDI m_DirectLightingReSTIRDI;
     bool m_ReSTIRDIHistoryValid = false;
 //Modify End
-    bool m_DirectLightingEnabled = true;
-    bool m_IndirectLightingEnabled = false;
 //Modify Begin:2026-08-03 by BestHui
     bool m_AsyncComputeEnabled = false;
 //Modify Begin:2026-07-30 by BestHui

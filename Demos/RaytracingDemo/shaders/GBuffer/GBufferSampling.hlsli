@@ -10,6 +10,23 @@ float3 DecodeNormal(float3 encoded)
     return normalize(encoded * 2.0f - 1.0f);
 }
 
+//Modify Begin:2026-08-06 by BestHui
+float3 ProjectShadingNormalToViewHemisphere(float3 normalWs, float3 positionWs)
+{
+    const float3 viewVectorWs = Camera_Position.xyz - positionWs;
+    const float viewLengthSquared = dot(viewVectorWs, viewVectorWs);
+    if (viewLengthSquared <= 0.00000001f)
+    {
+        return normalWs;
+    }
+
+    const float3 viewDirectionWs = viewVectorWs * rsqrt(viewLengthSquared);
+    const float normalViewDot = dot(normalWs, viewDirectionWs);
+    const float correction = max(0.0f, 0.01f - normalViewDot);
+    return normalize(normalWs + viewDirectionWs * correction);
+}
+//Modify End
+
 SurfaceData LoadGBufferSurface(uint2 pixel)
 {
     SurfaceData surface;
@@ -37,9 +54,11 @@ SurfaceData LoadGBufferSurface(uint2 pixel)
 
     surface.Diffuse = saturate(albedoOcclusion.rgb);
     surface.Specular = saturate(specularSmoothness.rgb);
-    surface.NormalWs = DecodeNormal(normal.xyz);
     surface.Roughness = 1.0f - saturate(specularSmoothness.a);
     surface.PositionWs = position.xyz;
+//Modify Begin:2026-08-06 by BestHui
+    surface.NormalWs = ProjectShadingNormalToViewHemisphere(DecodeNormal(normal.xyz), surface.PositionWs);
+//Modify End
     surface.PositionError = ComputePositionError(surface.PositionWs);
     surface.Metallic = saturate(emissionMetallic.a);
     surface.AmbientOcclusion = saturate(albedoOcclusion.a);

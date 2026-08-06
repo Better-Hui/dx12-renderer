@@ -248,16 +248,16 @@ void PathTracingPipelineController::CreateInlinePipelines(const RayTracingSceneR
     };
     m_InlineReSTIRDIRISShader = createReSTIRDIShader(
         L"ReSTIRDI.RIS.cs.cso",
-        L"Framework/shaders/ReSTIRDI/ReSTIRDI.RIS.cs.hlsl");
+        L"Demos/RaytracingDemo/shaders/ReSTIRDI/ReSTIRDI.RIS.cs.hlsl");
     m_InlineReSTIRDITemporalShader = createReSTIRDIShader(
         L"ReSTIRDI.Temporal.cs.cso",
-        L"Framework/shaders/ReSTIRDI/ReSTIRDI.Temporal.cs.hlsl");
+        L"Demos/RaytracingDemo/shaders/ReSTIRDI/ReSTIRDI.Temporal.cs.hlsl");
     m_InlineReSTIRDISpatialShader = createReSTIRDIShader(
         L"ReSTIRDI.Spatial.cs.cso",
-        L"Framework/shaders/ReSTIRDI/ReSTIRDI.Spatial.cs.hlsl");
+        L"Demos/RaytracingDemo/shaders/ReSTIRDI/ReSTIRDI.Spatial.cs.hlsl");
     m_InlineReSTIRDIShadeShader = createReSTIRDIShader(
         L"ReSTIRDI.Shade.cs.cso",
-        L"Framework/shaders/ReSTIRDI/ReSTIRDI.Shade.cs.hlsl");
+        L"Demos/RaytracingDemo/shaders/ReSTIRDI/ReSTIRDI.Shade.cs.hlsl");
 //Modify End
 
     //Modify Begin:2026-07-30 by BestHui

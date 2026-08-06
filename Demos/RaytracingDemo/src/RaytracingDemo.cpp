@@ -245,25 +245,6 @@ RaytracingDemo::RaytracingDemo(const std::wstring& name, const int width, const 
     }
     std::free(denoiserMode);
 
-//Modify Begin:2026-07-27 by BestHui
-    char* directLighting = nullptr;
-    size_t directLightingLength = 0;
-    _dupenv_s(&directLighting, &directLightingLength, "RAYTRACING_DEMO_DIRECT");
-    if (directLighting != nullptr)
-    {
-        m_DirectLightingEnabled = std::strcmp(directLighting, "0") != 0;
-    }
-    std::free(directLighting);
-
-    char* indirectLighting = nullptr;
-    size_t indirectLightingLength = 0;
-    _dupenv_s(&indirectLighting, &indirectLightingLength, "RAYTRACING_DEMO_INDIRECT");
-    if (indirectLighting != nullptr)
-    {
-        m_IndirectLightingEnabled = std::strcmp(indirectLighting, "0") != 0;
-    }
-    std::free(indirectLighting);
-
 //Modify Begin:2026-07-30 by BestHui
     char* asyncCompute = nullptr;
     size_t asyncComputeLength = 0;
@@ -617,11 +598,6 @@ bool RaytracingDemo::LoadContent()
     });
 
     m_Denoisers.Initialize(m_FrameworkDeviceContext);
-    if (IsDenoiserEnabled())
-    {
-        m_AccumulationEnabled = false;
-    }
-
     RayTracingAccelerationStructureBuildSettings accelerationStructureSettings{};
     accelerationStructureSettings.AllowUpdate = true;
     m_SceneResources.BuildRayTracingAccelerationStructure(*commandList, accelerationStructureSettings);
@@ -953,8 +929,6 @@ RaytracingDemoPassConfig RaytracingDemo::CreatePassConfig() const
         &m_DirectLightingTechnique,
         &m_IndirectLightingTechnique,
 //Modify End
-        &m_DirectLightingEnabled,
-        &m_IndirectLightingEnabled,
         &m_AsyncComputeEnabled,
         &m_UseMeshletGBuffer,
         &m_UseTaskShaderMeshlets,
@@ -1159,14 +1133,8 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
 //Modify End
 
     ++m_FrameIndex;
-    const bool directLightingUsesPathTracing =
-        !m_DirectLightingEnabled ||
-        m_DirectLightingTechnique == RaytracingDemoLightingTechnique::PathTracing;
-    const bool indirectLightingUsesPathTracing =
-        !m_IndirectLightingEnabled ||
-        m_IndirectLightingTechnique == RaytracingDemoLightingTechnique::PathTracing;
-    const bool originalPathTracingEnabled = directLightingUsesPathTracing && indirectLightingUsesPathTracing;
-    if (m_AccumulationEnabled && !IsDenoiserEnabled() && originalPathTracingEnabled)
+//Modify Begin:2026-08-06 by BestHui
+    if (m_AccumulationEnabled)
     {
         ++m_AccumulationFrameIndex;
     }
@@ -1174,11 +1142,9 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     {
         m_AccumulationFrameIndex = 0;
     }
-
 //Modify Begin:2026-08-05 by BestHui
     m_ReSTIRDIHistoryValid =
         m_PathTracingBackend == PathTracingBackend::InlineRayQuery &&
-        m_DirectLightingEnabled &&
         m_DirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRDI;
 //Modify End
 

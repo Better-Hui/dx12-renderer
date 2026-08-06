@@ -50,8 +50,10 @@ struct RaytracingDemoCameraConstants
     uint32_t NRDDenoiserMode = 0;
     uint32_t DenoiserEnabled = 0;
     DirectX::XMFLOAT4 NRDReblurHitDistanceParameters = { 3.0f, 0.1f, 20.0f, 0.0f };
-    uint32_t DirectLightingEnabled = 1;
-    uint32_t IndirectLightingEnabled = 1;
+//Modify Begin:2026-08-06 by BestHui
+    uint32_t DirectLightingActive = 1;
+    uint32_t IndirectLightingActive = 1;
+//Modify End
 //Modify Begin:2026-08-05 by BestHui
     uint32_t ReSTIRDIHistoryValid = 0;
 //Modify End
@@ -160,8 +162,6 @@ struct RaytracingDemoPassConfig
     const RaytracingDemoLightingTechnique* DirectLightingTechnique = nullptr;
     const RaytracingDemoLightingTechnique* IndirectLightingTechnique = nullptr;
 //Modify End
-    const bool* DirectLightingEnabled = nullptr;
-    const bool* IndirectLightingEnabled = nullptr;
     const bool* AsyncComputeEnabled = nullptr;
     const bool* UseMeshletGBuffer = nullptr;
     const bool* UseTaskShaderMeshlets = nullptr;

@@ -33,6 +33,7 @@ set(SHADER_FILES_COMPUTE
 set(SHADERS_HEADER_FILES
 # Modify Begin:2026-08-06 by BestHui
         "shaders/Common/Noise.hlsli"
+        "shaders/Bindless/BindlessResources.hlsli"
 # Modify End
         "shaders/SVGF/SVGFCommon.hlsli"
 # Modify Begin:2026-07-31 by BestHui
@@ -44,6 +45,9 @@ set(SHADERS_HEADER_FILES
 # Modify Begin:2026-07-30 by BestHui
         "shaders/ReSTIRDI/ReSTIRDIConstants.hlsli"
 # Modify End
+        # Modify Begin:2026-08-06 by BestHui
+        "shaders/ReSTIRDI/ReSTIRDISceneContract.hlsli"
+        # Modify End
         )
 # Modify End
 

@@ -1,6 +1,6 @@
 #include <ShaderLibrary/Common/RootSignature.hlsli>
-//Modify Begin:2026-07-30 by BestHui
-#include "../Scene/SceneBindless.hlsli"
+//Modify Begin:2026-08-06 by BestHui
+#include <Bindless/BindlessResources.hlsli>
 //Modify End
 
 struct PixelShaderInput

@@ -114,6 +114,9 @@ ImGuiImpl::ImGuiImpl(FrameworkDeviceContext& deviceContext, CommandList& command
     ImGuiIO& io = ImGui::GetIO();
     (void) io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+//Modify Begin:2026-07-30 by BestHui
+    io.ConfigDragClickToInputText = true;
+//Modify End
     //io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
 
     ImGui::StyleColorsDark();

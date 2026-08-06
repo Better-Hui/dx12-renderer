@@ -125,11 +125,10 @@ void RaytracingDemo::OnImGui()
     }
 //Modify End
 
-    if (ImGui::Checkbox("Enable Accumulation", &m_AccumulationEnabled))
-    {
-        ResetAccumulation();
-    }
 //Modify Begin:2026-08-05 by BestHui
+//Modify Begin:2026-07-30 by BestHui
+    if (ImGui::CollapsingHeader("Lighting Algorithms"))
+    {
     const char* directLightingTechniqueNames[] = { "None", "PathTracing", "ReSTIR DI" };
     int directLightingTechnique = static_cast<int>(m_DirectLightingTechnique);
     if (ImGui::Combo("Direct Lighting", &directLightingTechnique, directLightingTechniqueNames, IM_ARRAYSIZE(directLightingTechniqueNames)))
@@ -158,8 +157,10 @@ void RaytracingDemo::OnImGui()
         {
             if (ImGui::CollapsingHeader("Initial Sampling"))
             {
-                settingsChanged |= ImGui::InputInt("Local Light Samples", &candidateCount);
-                settingsChanged |= ImGui::Checkbox("Enable Initial Visibility", &restirSettings.EnableInitialVisibility);
+//Modify Begin:2026-08-06 by BestHui
+                settingsChanged |= ImGui::Checkbox("RIS Initial Visibility", &restirSettings.EnableInitialVisibility);
+//Modify End
+                settingsChanged |= ImGui::DragInt("Local Light Samples", &candidateCount, 1.0f, 1, 64);
             }
 
             if (ImGui::CollapsingHeader("Temporal Resampling"))
@@ -167,11 +168,21 @@ void RaytracingDemo::OnImGui()
                 settingsChanged |= ImGui::Checkbox("Enable Temporal Resampling", &restirSettings.EnableTemporalResampling);
                 if (restirSettings.EnableTemporalResampling)
                 {
+//Modify Begin:2026-08-06 by BestHui
+                    bool temporalRayTracedBiasCorrection = temporalBiasCorrection == static_cast<int>(ReSTIRDITemporalBiasCorrectionMode::RayTraced);
+                    if (ImGui::Checkbox("Temporal Ray-Traced Bias Correction", &temporalRayTracedBiasCorrection))
+                    {
+                        temporalBiasCorrection = static_cast<int>(temporalRayTracedBiasCorrection
+                            ? ReSTIRDITemporalBiasCorrectionMode::RayTraced
+                            : ReSTIRDITemporalBiasCorrectionMode::Basic);
+                        settingsChanged = true;
+                    }
                     settingsChanged |= ImGui::Combo(
                         "Temporal Bias Correction",
                         &temporalBiasCorrection,
                         "Off\0Basic\0Ray Traced\0");
-                    settingsChanged |= ImGui::InputInt("Temporal Max History Length", &temporalMaxHistoryLength);
+//Modify End
+                    settingsChanged |= ImGui::DragInt("Temporal Max History Length", &temporalMaxHistoryLength, 1.0f, 1, 64);
                     settingsChanged |= ImGui::Checkbox("Enable Permutation Sampling", &restirSettings.EnableTemporalPermutationSampling);
                     settingsChanged |= ImGui::SliderFloat(
                         "Temporal Normal Threshold",
@@ -200,17 +211,33 @@ void RaytracingDemo::OnImGui()
                 settingsChanged |= ImGui::Checkbox("Enable Spatial Resampling", &restirSettings.EnableSpatialResampling);
                 if (restirSettings.EnableSpatialResampling)
                 {
+//Modify Begin:2026-08-06 by BestHui
+                    bool spatialRayTracedBiasCorrection = spatialBiasCorrection == static_cast<int>(ReSTIRDISpatialBiasCorrectionMode::RayTraced);
+                    if (ImGui::Checkbox("Spatial Ray-Traced Bias Correction", &spatialRayTracedBiasCorrection))
+                    {
+                        spatialBiasCorrection = static_cast<int>(spatialRayTracedBiasCorrection
+                            ? ReSTIRDISpatialBiasCorrectionMode::RayTraced
+                            : ReSTIRDISpatialBiasCorrectionMode::Basic);
+                        settingsChanged = true;
+                    }
                     settingsChanged |= ImGui::Combo(
                         "Spatial Bias Correction",
                         &spatialBiasCorrection,
                         "Off\0Basic\0Pairwise\0Ray Traced\0");
-                    settingsChanged |= ImGui::InputInt("Spatial Samples", &spatialNeighborCount);
-                    settingsChanged |= ImGui::InputInt(
+//Modify End
+                    settingsChanged |= ImGui::DragInt("Spatial Samples", &spatialNeighborCount, 1.0f, 1, 32);
+                    settingsChanged |= ImGui::DragInt(
                         "Spatial Disocclusion Boost Samples",
-                        &spatialDisocclusionBoostSampleCount);
-                    settingsChanged |= ImGui::InputInt(
+                        &spatialDisocclusionBoostSampleCount,
+                        1.0f,
+                        1,
+                        32);
+                    settingsChanged |= ImGui::DragInt(
                         "Spatial Target History Length",
-                        &spatialTargetHistoryLength);
+                        &spatialTargetHistoryLength,
+                        1.0f,
+                        0,
+                        64);
                     settingsChanged |= ImGui::SliderFloat(
                         "Spatial Sampling Radius",
                         &restirSettings.SpatialSamplingRadius,
@@ -245,7 +272,9 @@ void RaytracingDemo::OnImGui()
 
             if (ImGui::CollapsingHeader("Final Shading"))
             {
-                settingsChanged |= ImGui::Checkbox("Enable Final Visibility", &restirSettings.EnableFinalVisibility);
+//Modify Begin:2026-08-06 by BestHui
+                settingsChanged |= ImGui::Checkbox("Final Shading Visibility", &restirSettings.EnableFinalVisibility);
+//Modify End
                 settingsChanged |= ImGui::Checkbox(
                     "Discard Invisible Samples",
                     &restirSettings.EnableTemporalVisibilityShortcut);
@@ -254,7 +283,7 @@ void RaytracingDemo::OnImGui()
                     &restirSettings.ReuseFinalVisibility);
                 if (restirSettings.ReuseFinalVisibility)
                 {
-                    settingsChanged |= ImGui::InputInt("Final Visibility Max Age", &finalVisibilityMaxAge);
+                    settingsChanged |= ImGui::DragInt("Final Visibility Max Age", &finalVisibilityMaxAge, 1.0f, 0, 16);
                     settingsChanged |= ImGui::SliderFloat(
                         "Final Visibility Max Distance",
                         &restirSettings.FinalVisibilityMaxDistance,
@@ -286,8 +315,16 @@ void RaytracingDemo::OnImGui()
         m_IndirectLightingTechnique = static_cast<RaytracingDemoLightingTechnique>(indirectLightingTechnique);
         ResetAccumulation();
     }
+    }
+//Modify End
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
+    if (ImGui::CollapsingHeader("Runtime Options"))
+    {
+    if (ImGui::Checkbox("Enable Accumulation", &m_AccumulationEnabled))
+    {
+        ResetAccumulation();
+    }
     if (ImGui::Checkbox("Enable Soft Shadows", &m_SoftShadowsEnabled))
     {
         EnsureRayTracingPipelines();
@@ -373,15 +410,23 @@ void RaytracingDemo::OnImGui()
     }
 //Modify End
 //Modify End
-    if (m_Denoisers.DrawImGui())
-    {
-        if (IsDenoiserEnabled())
-        {
-            m_AccumulationEnabled = false;
-        }
-        ResetAccumulation();
     }
-    if (m_Lights.DrawImGui())
+//Modify End
+
+//Modify Begin:2026-07-30 by BestHui
+    if (ImGui::CollapsingHeader("Lights"))
+    {
+        if (m_Lights.DrawImGui())
+        {
+            ResetAccumulation();
+        }
+    }
+//Modify End
+
+//Modify Begin:2026-07-30 by BestHui
+    if (ImGui::CollapsingHeader("Post-Processing"))
+    {
+    if (m_Denoisers.DrawImGui())
     {
         ResetAccumulation();
     }
@@ -389,6 +434,8 @@ void RaytracingDemo::OnImGui()
     if (m_CudaBloom.DrawImGui())
     {
         ResetAccumulation(false);
+    }
+//Modify End
     }
 //Modify End
 

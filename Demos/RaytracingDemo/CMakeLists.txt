@@ -75,8 +75,8 @@ set(SHADERS_HEADER_FILES
         shaders/PathTracing/PathTracingShared.hlsli
         shaders/PathTracing/PathTracingSurface.hlsli
         shaders/Scene/SceneCamera.hlsli
-        # Modify Begin:2026-07-30 by BestHui
-        shaders/Scene/SceneBindless.hlsli
+        # Modify Begin:2026-08-06 by BestHui
+        shaders/Scene/SceneGeometryBindless.hlsli
         # Modify End
         shaders/Scene/SceneGeometry.hlsli
         shaders/Scene/SceneResources.hlsli
@@ -112,14 +112,26 @@ set(SHADER_FILES_PIXEL
         )
 # Modify End
 
-set(RESTIR_DI_SHADER_FILES
-        # Modify Begin:2026-07-30 by BestHui
+set(RESTIR_DI_CORE_SHADER_FILES
         ../../Framework/shaders/ReSTIRDI/ReSTIRDI.RIS.cs.hlsl
         ../../Framework/shaders/ReSTIRDI/ReSTIRDI.Temporal.cs.hlsl
         ../../Framework/shaders/ReSTIRDI/ReSTIRDI.Spatial.cs.hlsl
         ../../Framework/shaders/ReSTIRDI/ReSTIRDI.Shade.cs.hlsl
-        # Modify End
         )
+
+# Modify Begin:2026-08-06 by BestHui
+set(RESTIR_DI_SHADER_FILES
+        shaders/ReSTIRDI/ReSTIRDI.RIS.cs.hlsl
+        shaders/ReSTIRDI/ReSTIRDI.Temporal.cs.hlsl
+        shaders/ReSTIRDI/ReSTIRDI.Spatial.cs.hlsl
+        shaders/ReSTIRDI/ReSTIRDI.Shade.cs.hlsl
+        )
+list(APPEND SHADERS_HEADER_FILES
+        ${RESTIR_DI_CORE_SHADER_FILES}
+        shaders/ReSTIRDI/ReSTIRDISceneAdapter.hlsli
+        )
+set_source_files_properties(${RESTIR_DI_CORE_SHADER_FILES} PROPERTIES HEADER_FILE_ONLY TRUE)
+# Modify End
 
 set(SHADER_FILES_COMPUTE
         shaders/GBuffer/MeshletCull.cs.hlsl
@@ -161,9 +173,9 @@ set(DEMO_SHADER_FILES
         ${SHADER_FILES_COMPUTE}
         ${CUDA_SHADER_FILES}
         )
-list(REMOVE_ITEM DEMO_SHADER_FILES ${RESTIR_DI_SHADER_FILES})
+list(REMOVE_ITEM DEMO_SHADER_FILES ${RESTIR_DI_CORE_SHADER_FILES})
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/shaders" PREFIX "shaders" FILES ${DEMO_SHADER_FILES})
-source_group(TREE "${CMAKE_SOURCE_DIR}/Framework/shaders/ReSTIRDI" PREFIX "Framework\\ReSTIRDI" FILES ${RESTIR_DI_SHADER_FILES})
+source_group(TREE "${CMAKE_SOURCE_DIR}/Framework/shaders/ReSTIRDI" PREFIX "Framework\\ReSTIRDI" FILES ${RESTIR_DI_CORE_SHADER_FILES})
 # Modify End
 
 set_source_files_properties(${SHADER_FILES_RAYTRACING} PROPERTIES HEADER_FILE_ONLY TRUE)

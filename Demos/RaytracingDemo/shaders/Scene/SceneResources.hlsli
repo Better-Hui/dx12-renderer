@@ -6,9 +6,9 @@
 #endif
 
 #include "../GBuffer/GBufferLayout.hlsli"
-#include "SceneBindless.hlsli"
+#include <Bindless/BindlessResources.hlsli>
 #include "SceneCamera.hlsli"
-#include "SceneGeometry.hlsli"
+#include "SceneGeometryBindless.hlsli"
 #include "SceneLighting.hlsli"
 
 #if RAYTRACING_DEMO_INLINE_BACKEND

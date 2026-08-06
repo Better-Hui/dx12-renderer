@@ -23,8 +23,10 @@ cbuffer CameraConstants : register(b0, space0)
     uint Camera_DenoiserEnabled;
 //Modify End
     float4 Camera_NRDReblurHitDistanceParameters;
-    uint Camera_DirectLightingEnabled;
-    uint Camera_IndirectLightingEnabled;
+//Modify Begin:2026-08-06 by BestHui
+    uint Camera_DirectLightingActive;
+    uint Camera_IndirectLightingActive;
+//Modify End
 //Modify Begin:2026-08-05 by BestHui
     uint Camera_ReSTIRDIHistoryValid;
 //Modify End

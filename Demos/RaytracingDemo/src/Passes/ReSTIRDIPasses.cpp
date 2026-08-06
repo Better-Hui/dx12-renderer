@@ -18,12 +18,12 @@ namespace
 
     bool UsesReSTIRDI(const RaytracingDemoPassConfig& config)
     {
+//Modify Begin:2026-08-06 by BestHui
         return config.Backend != nullptr &&
             *config.Backend == PathTracingBackend::InlineRayQuery &&
-            config.DirectLightingEnabled != nullptr &&
-            *config.DirectLightingEnabled &&
             config.DirectLightingTechnique != nullptr &&
             *config.DirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRDI;
+//Modify End
     }
 
     void BindReSTIRDIConstants(

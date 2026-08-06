@@ -72,8 +72,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
         },
         [resources, config, backend](const RenderContext& context, CommandList& cmd)
         {
-            if (config.DirectLightingEnabled == nullptr || !*config.DirectLightingEnabled ||
-                config.DirectLightingTechnique == nullptr ||
+            if (config.DirectLightingTechnique == nullptr ||
                 *config.DirectLightingTechnique != RaytracingDemoLightingTechnique::PathTracing)
             {
                 return;
@@ -159,8 +158,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
         },
         [resources, config, backend, queue](const RenderContext& context, CommandList& cmd)
         {
-            if (config.IndirectLightingEnabled == nullptr || !*config.IndirectLightingEnabled ||
-                config.IndirectLightingTechnique == nullptr ||
+            if (config.IndirectLightingTechnique == nullptr ||
                 *config.IndirectLightingTechnique != RaytracingDemoLightingTechnique::PathTracing)
             {
                 return;

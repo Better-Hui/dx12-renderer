@@ -103,20 +103,22 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     float indirectHitDistance = 0.0f;
     float3 directLighting = 0.0f;
     float3 indirectLightingColor = 0.0f;
-    if (Camera_DirectLightingEnabled != 0u)
+//Modify Begin:2026-08-06 by BestHui
+    if (Camera_DirectLightingActive != 0u)
     {
         const float4 directLightingSample = DirectLightingTexture.Load(int3(pixel, 0));
         directLighting = directLightingSample.rgb;
         directHitDistance = directLightingSample.a;
         sampleColor += directLighting;
     }
-    if (Camera_IndirectLightingEnabled != 0u)
+    if (Camera_IndirectLightingActive != 0u)
     {
         const float4 indirectLighting = IndirectLightingTexture.Load(int3(pixel, 0));
         indirectLightingColor = indirectLighting.rgb;
         indirectHitDistance = indirectLighting.a;
         sampleColor += indirectLightingColor;
     }
+//Modify End
 
     const float directLuminance = dot(max(directLighting, 0.0f), float3(0.2126f, 0.7152f, 0.0722f));
     const float indirectLuminance = dot(max(indirectLightingColor, 0.0f), float3(0.2126f, 0.7152f, 0.0722f));
