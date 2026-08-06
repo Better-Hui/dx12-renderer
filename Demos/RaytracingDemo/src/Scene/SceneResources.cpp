@@ -78,22 +78,26 @@ namespace
         const uint32_t normalTextureIndex,
         const uint32_t metallicTextureIndex,
         const uint32_t roughnessTextureIndex,
-        const uint32_t ambientOcclusionTextureIndex)
+        const uint32_t ambientOcclusionTextureIndex,
+        const uint32_t emissionTextureIndex)
     {
         RaytracingDemoMaterialData output{};
         output.Diffuse = material.BaseColor;
         output.Specular = material.SpecColor;
+        output.Emission = material.EmissionColor;
         output.TilingOffset = material.BaseMap.ScaleOffset;
         output.DiffuseTextureIndex = diffuseTextureIndex;
         output.NormalTextureIndex = normalTextureIndex;
         output.MetallicTextureIndex = metallicTextureIndex;
         output.RoughnessTextureIndex = roughnessTextureIndex;
         output.AmbientOcclusionTextureIndex = ambientOcclusionTextureIndex;
+        output.EmissionTextureIndex = emissionTextureIndex;
         output.HasDiffuseMap = material.BaseMap.IsValid() ? 1u : 0u;
         output.HasNormalMap = material.NormalMap.IsValid() ? 1u : 0u;
         output.HasMetallicMap = material.MetallicGlossMap.IsValid() ? 1u : 0u;
         output.HasRoughnessMap = material.MetallicGlossMap.IsValid() ? 1u : 0u;
         output.HasAmbientOcclusionMap = material.OcclusionMap.IsValid() ? 1u : 0u;
+        output.HasEmissionMap = material.EmissionMap.IsValid() ? 1u : 0u;
         output.Metallic = material.Metallic;
         output.Roughness = std::clamp(material.Roughness, 0.02f, 1.0f);
         return output;
@@ -258,7 +262,10 @@ uint32_t RaytracingDemoSceneResources::AddPbrMaterial(
     const bool hasNormalMap,
     const bool hasMetallicMap,
     const bool hasRoughnessMap,
-    const bool hasAmbientOcclusionMap)
+    const bool hasAmbientOcclusionMap,
+    const XMFLOAT4& emission,
+    const uint32_t emissionTextureIndex,
+    const bool hasEmissionMap)
 {
     return m_TextureMaterialResources.AddPbrMaterial(
         diffuse,
@@ -274,7 +281,10 @@ uint32_t RaytracingDemoSceneResources::AddPbrMaterial(
         hasNormalMap,
         hasMetallicMap,
         hasRoughnessMap,
-        hasAmbientOcclusionMap);
+        hasAmbientOcclusionMap,
+        emission,
+        emissionTextureIndex,
+        hasEmissionMap);
 }
 
 uint32_t RaytracingDemoSceneResources::AddDiffuseMaterial(
@@ -539,6 +549,7 @@ std::vector<uint32_t> RaytracingDemoSceneResources::LoadSceneMaterials(
         const uint32_t metallicTexture = addTextureOrFallback(sceneMaterial.MetallicGlossMap, TextureUsageType::Other);
         const uint32_t roughnessTexture = addTextureOrFallback(sceneMaterial.MetallicGlossMap, TextureUsageType::Other);
         const uint32_t occlusionTexture = addTextureOrFallback(sceneMaterial.OcclusionMap, TextureUsageType::Other);
+        const uint32_t emissionTexture = addTextureOrFallback(sceneMaterial.EmissionMap, TextureUsageType::Albedo);
 
         materialIndexMap.push_back(
             AddMaterial(MakeSceneMaterial(
@@ -547,7 +558,8 @@ std::vector<uint32_t> RaytracingDemoSceneResources::LoadSceneMaterials(
                 normalTexture,
                 metallicTexture,
                 roughnessTexture,
-                occlusionTexture)));
+                occlusionTexture,
+                emissionTexture)));
     }
 
     return materialIndexMap;

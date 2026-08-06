@@ -34,6 +34,7 @@ cbuffer MaterialCBuffer : register(b2)
 {
     float4 Diffuse;
     float4 Specular;
+    float4 Emission;
     float4 TilingOffset;
 //Modify Begin:2026-07-30 by BestHui
     uint DiffuseTextureIndex;
@@ -41,6 +42,7 @@ cbuffer MaterialCBuffer : register(b2)
     uint MetallicTextureIndex;
     uint RoughnessTextureIndex;
     uint AmbientOcclusionTextureIndex;
+    uint EmissionTextureIndex;
 //Modify End
     float Metallic;
     float Roughness;
@@ -49,12 +51,9 @@ cbuffer MaterialCBuffer : register(b2)
     uint HasMetallicMap;
     uint HasRoughnessMap;
     uint HasAmbientOcclusionMap;
-//Modify Begin:2026-07-30 by BestHui
-    uint PaddingDescriptor0;
-//Modify End
+    uint HasEmissionMap;
     uint Padding0;
     uint Padding1;
-    uint Padding2;
 };
 
 //Modify Begin:2026-07-30 by BestHui
@@ -162,7 +161,12 @@ PixelShaderOutput main(PixelShaderInput IN)
 //Modify End
     OUT.SpecularSmoothness = float4(specularColor, 1.0f - roughness);
     OUT.Normal = float4(EncodeNormal(normalWs), 1.0f);
-    OUT.EmissionMetallic = float4(0.0f, 0.0f, 0.0f, metallic);
+//Modify Begin:2026-07-30 by BestHui
+    const float3 emission = Emission.rgb * (HasEmissionMap != 0u
+        ? SampleBindlessTexture2D(EmissionTextureIndex, g_Common_LinearWrapSampler, uv).rgb
+        : 1.0f);
+    OUT.EmissionMetallic = float4(emission, metallic);
+//Modify End
     OUT.Position = float4(IN.PositionWs, 1.0f);
     if (IN.CurrentPositionCs.w <= 0.0001f || IN.PreviousPositionCs.w <= 0.0001f)
     {

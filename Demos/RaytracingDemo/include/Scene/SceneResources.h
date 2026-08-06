@@ -70,7 +70,10 @@ private:
         bool hasNormalMap = false,
         bool hasMetallicMap = false,
         bool hasRoughnessMap = false,
-        bool hasAmbientOcclusionMap = false);
+        bool hasAmbientOcclusionMap = false,
+        const DirectX::XMFLOAT4& emission = { 0.0f, 0.0f, 0.0f, 1.0f },
+        uint32_t emissionTextureIndex = 0,
+        bool hasEmissionMap = false);
     uint32_t AddDiffuseMaterial(
         const DirectX::XMFLOAT4& diffuse,
         const DirectX::XMFLOAT4& tilingOffset,

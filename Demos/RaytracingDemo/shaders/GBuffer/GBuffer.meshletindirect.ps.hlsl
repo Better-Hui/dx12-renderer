@@ -109,7 +109,12 @@ PixelShaderOutput main(PixelShaderInput IN)
     OUT.AlbedoOcclusion = float4(outputBaseColor, ambientOcclusion);
     OUT.SpecularSmoothness = float4(specularColor, 1.0f - roughness);
     OUT.Normal = float4(EncodeNormal(normalWs), 1.0f);
-    OUT.EmissionMetallic = float4(0.0f, 0.0f, 0.0f, metallic);
+//Modify Begin:2026-07-30 by BestHui
+    const float3 emission = material.Emission.rgb * (material.HasEmissionMap != 0u
+        ? SampleBindlessTexture2D(material.EmissionTextureIndex, g_Common_LinearWrapSampler, uv).rgb
+        : 1.0f);
+    OUT.EmissionMetallic = float4(emission, metallic);
+//Modify End
     OUT.Position = float4(IN.PositionWs, 1.0f);
     if (IN.CurrentPositionCs.w <= 0.0001f || IN.PreviousPositionCs.w <= 0.0001f)
     {

@@ -72,10 +72,9 @@ public:
     //Modify End
     ComputeShader& GetInlineDirectLightingShader() const;
 //Modify Begin:2026-08-05 by BestHui
-    ComputeShader& GetInlineReSTIRDIRISShader() const;
-    ComputeShader& GetInlineReSTIRDITemporalShader() const;
-    ComputeShader& GetInlineReSTIRDIBoilingShader() const;
-    ComputeShader& GetInlineReSTIRDISpatialShader() const;
+        ComputeShader& GetInlineReSTIRDIRISShader() const;
+        ComputeShader& GetInlineReSTIRDITemporalShader() const;
+        ComputeShader& GetInlineReSTIRDISpatialShader() const;
     ComputeShader& GetInlineReSTIRDIShadeShader() const;
 //Modify End
     ComputeShader& GetInlineIndirectLightingShader() const;
@@ -100,7 +99,6 @@ private:
 //Modify Begin:2026-08-05 by BestHui
         std::unique_ptr<ComputeShader> InlineReSTIRDIRISShader;
         std::unique_ptr<ComputeShader> InlineReSTIRDITemporalShader;
-        std::unique_ptr<ComputeShader> InlineReSTIRDIBoilingShader;
         std::unique_ptr<ComputeShader> InlineReSTIRDISpatialShader;
         std::unique_ptr<ComputeShader> InlineReSTIRDIShadeShader;
 //Modify End
@@ -134,7 +132,6 @@ private:
 //Modify Begin:2026-08-05 by BestHui
     std::unique_ptr<ComputeShader> m_InlineReSTIRDIRISShader;
     std::unique_ptr<ComputeShader> m_InlineReSTIRDITemporalShader;
-    std::unique_ptr<ComputeShader> m_InlineReSTIRDIBoilingShader;
     std::unique_ptr<ComputeShader> m_InlineReSTIRDISpatialShader;
     std::unique_ptr<ComputeShader> m_InlineReSTIRDIShadeShader;
 //Modify End

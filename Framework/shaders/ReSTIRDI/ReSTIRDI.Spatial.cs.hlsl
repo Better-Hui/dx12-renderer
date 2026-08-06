@@ -1,58 +1,283 @@
-//Modify Begin:2026-08-05 by BestHui
+//Modify Begin:2026-07-30 by BestHui
 #define RAYTRACING_DEMO_RESTIR_DI 1
 
 #include "../../../Demos/RaytracingDemo/shaders/PathTracing/PathTracing.rayquery.hlsli"
 #include "ReSTIRDI/ReSTIRDI.hlsli"
+#include "ReSTIRDI/ReSTIRDIConstants.hlsli"
 
 Texture2D<uint4> ReSTIRDITemporalReservoir : register(t12, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
+Texture2D<uint4> ReSTIRDITemporalReservoirState : register(t13, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
 RWTexture2D<uint4> ReSTIRDISpatialReservoir : register(u2);
-
-cbuffer ReSTIRDIConstants : register(b1)
-{
-    uint ReSTIRDI_CandidateCount;
-    uint ReSTIRDI_TemporalResamplingEnabled;
-    uint ReSTIRDI_SpatialNeighborCount;
-    uint ReSTIRDI_HistoryValid;
-    uint ReSTIRDI_BoilingFilterEnabled;
-    uint ReSTIRDI_VisibilityTestMask;
-    uint ReSTIRDI_TemporalMaxHistoryLength;
-    float ReSTIRDI_BoilingFilterStrength;
-    float ReSTIRDI_SpatialSamplingRadius;
-    float ReSTIRDI_TemporalNormalSimilarityThreshold;
-    float ReSTIRDI_SpatialNormalSimilarityThreshold;
-    float ReSTIRDI_DepthSimilarityThreshold;
-    float ReSTIRDI_MaterialSimilarityThreshold;
-    float ReSTIRDI_Padding0;
-    float ReSTIRDI_Padding1;
-};
+RWTexture2D<uint4> ReSTIRDISpatialReservoirState : register(u3);
 
 #include "../../../Demos/RaytracingDemo/shaders/PathTracing/PathTracingShared.hlsli"
 #include "ReSTIRDI/ReSTIRDISurface.hlsli"
 
-static const float2 ReSTIRDISpatialOffsets[16] =
+static const float2 ReSTIRDISpatialOffsets[32] =
 {
-    float2(0.0f, -0.45f), float2(0.55f, 0.15f),
-    float2(-0.50f, 0.20f), float2(0.20f, 0.65f),
-    float2(-0.15f, -0.80f), float2(0.80f, -0.35f),
-    float2(-0.75f, -0.45f), float2(0.55f, 0.65f),
-    float2(-0.60f, 0.70f), float2(0.90f, 0.20f),
-    float2(-0.90f, 0.10f), float2(0.25f, -0.95f),
-    float2(-0.25f, 0.35f), float2(0.10f, 0.90f),
-    float2(-0.45f, -0.10f), float2(0.45f, -0.60f)
+    float2(0.000f, -0.450f), float2(0.550f, 0.150f),
+    float2(-0.500f, 0.200f), float2(0.200f, 0.650f),
+    float2(-0.150f, -0.800f), float2(0.800f, -0.350f),
+    float2(-0.750f, -0.450f), float2(0.550f, 0.650f),
+    float2(-0.600f, 0.700f), float2(0.900f, 0.200f),
+    float2(-0.900f, 0.100f), float2(0.250f, -0.950f),
+    float2(-0.250f, 0.350f), float2(0.100f, 0.900f),
+    float2(-0.450f, -0.100f), float2(0.450f, -0.600f),
+    float2(0.050f, -0.150f), float2(-0.300f, -0.550f),
+    float2(0.680f, -0.720f), float2(-0.920f, 0.520f),
+    float2(0.730f, 0.940f), float2(-0.050f, 0.520f),
+    float2(0.360f, -0.920f), float2(-0.700f, -0.170f),
+    float2(0.940f, -0.020f), float2(-0.620f, 0.940f),
+    float2(0.150f, 0.120f), float2(-0.100f, -0.320f),
+    float2(0.310f, 0.430f), float2(-0.430f, 0.040f),
+    float2(0.970f, 0.580f), float2(-0.820f, -0.880f)
 };
 
 float ReSTIRDIGetTargetPdf(const ReSTIRDIReservoir reservoir, const SurfaceData surface)
 {
-    if (!ReSTIRDIIsValid(reservoir) || reservoir.LightIndex >= GetReSTIRDILightCount())
+    if (!ReSTIRDIIsValid(reservoir) || ReSTIRDIGetLightIndex(reservoir) >= GetReSTIRDILightCount())
     {
         return 0.0f;
     }
 
     const ReSTIRDIDirectLightSample sample = SampleReSTIRDIDirectLight(
-        reservoir.LightIndex,
-        surface,
-        reservoir.SampleSeed);
-    return max(0.0f, Luminance(sample.UnshadowedContribution));
+        ReSTIRDIGetLightIndex(reservoir), surface, ReSTIRDIGetSampleUv(reservoir));
+    return sample.Valid ? max(0.0f, Luminance(sample.UnshadowedContribution)) : 0.0f;
+}
+
+bool ReSTIRDIHaveCompatibleSpatialSurfaces(
+    const SurfaceData centerSurface,
+    const float centerDepth,
+    const SurfaceData neighborSurface,
+    const float neighborDepth)
+{
+    if (!neighborSurface.Valid || !ReSTIRDIIsSurfaceCompatible(
+        centerSurface.NormalWs,
+        centerDepth,
+        neighborSurface.NormalWs,
+        neighborDepth,
+        ReSTIRDI_SpatialNormalSimilarityThreshold,
+        ReSTIRDI_SpatialDepthSimilarityThreshold))
+    {
+        return false;
+    }
+
+    return ReSTIRDI_SpatialMaterialSimilarityTestEnabled == 0u ||
+        ReSTIRDIHaveSimilarMaterials(centerSurface, neighborSurface, ReSTIRDI_SpatialMaterialSimilarityThreshold);
+}
+
+int2 ReSTIRDIGetSpatialNeighborPixel(const uint2 pixel, const uint sampleIndex)
+{
+    const int2 offset = int2(ReSTIRDISpatialOffsets[sampleIndex & 31u] * ReSTIRDI_SpatialSamplingRadius);
+    return clamp(
+        int2(pixel) + offset,
+        int2(0, 0),
+        int2(int(Camera_Width) - 1, int(Camera_Height) - 1));
+}
+
+bool ReSTIRDIStreamNeighborWithPairwiseMis(
+    inout ReSTIRDIReservoir state,
+    const float randomSample,
+    const ReSTIRDIReservoir neighborReservoir,
+    const SurfaceData neighborSurface,
+    const ReSTIRDIReservoir canonicalReservoir,
+    const SurfaceData canonicalSurface,
+    const uint neighborCount)
+{
+    const float neighborWeightAtCanonical = ReSTIRDIGetTargetPdf(neighborReservoir, canonicalSurface);
+    const float canonicalWeightAtNeighbor = ReSTIRDIGetTargetPdf(canonicalReservoir, neighborSurface);
+    const float neighborWeightAtNeighbor = ReSTIRDIGetTargetPdf(neighborReservoir, neighborSurface);
+    const float canonicalWeightAtCanonical = ReSTIRDIGetTargetPdf(canonicalReservoir, canonicalSurface);
+    const float firstMisWeight = ReSTIRDIPairwiseMisWeight(
+        neighborWeightAtNeighbor,
+        neighborWeightAtCanonical,
+        neighborReservoir.M * float(neighborCount),
+        canonicalReservoir.M);
+    const float secondMisWeight = ReSTIRDIPairwiseMisWeight(
+        canonicalWeightAtNeighbor,
+        canonicalWeightAtCanonical,
+        neighborReservoir.M * float(neighborCount),
+        canonicalReservoir.M);
+    const float effectiveM = neighborReservoir.M * min(
+        ReSTIRDIPairwiseMFactor(neighborWeightAtNeighbor, neighborWeightAtCanonical),
+        ReSTIRDIPairwiseMFactor(canonicalWeightAtNeighbor, canonicalWeightAtCanonical));
+
+    state.CanonicalWeight += 1.0f - secondMisWeight;
+    return ReSTIRDIInternalSimpleResample(
+        state,
+        neighborReservoir,
+        randomSample,
+        neighborWeightAtCanonical,
+        neighborReservoir.WeightSum * firstMisWeight,
+        effectiveM);
+}
+
+ReSTIRDIReservoir ReSTIRDIPairwiseSpatialResampling(
+    const uint2 pixel,
+    const SurfaceData centerSurface,
+    const ReSTIRDIReservoir centerReservoir,
+    inout uint rngState,
+    const uint neighborCount)
+{
+    ReSTIRDIReservoir result = ReSTIRDIEmptyReservoir();
+    uint validSpatialSampleCount = 0u;
+    const uint offsetStart = uint(Random01(rngState) * 32.0f) & 31u;
+    const float centerDepth = length(centerSurface.PositionWs - Camera_Position.xyz);
+    [loop]
+    for (uint neighborIndex = 0u; neighborIndex < neighborCount; ++neighborIndex)
+    {
+        const uint offsetIndex = (offsetStart + neighborIndex) & 31u;
+        const int2 neighborPixel = ReSTIRDIGetSpatialNeighborPixel(pixel, offsetIndex);
+        const SurfaceData neighborSurface = LoadGBufferSurface(uint2(neighborPixel));
+        const float neighborDepth = length(neighborSurface.PositionWs - Camera_Position.xyz);
+        if (!ReSTIRDIHaveCompatibleSpatialSurfaces(centerSurface, centerDepth, neighborSurface, neighborDepth))
+        {
+            continue;
+        }
+
+        ReSTIRDIReservoir neighborReservoir = ReSTIRDIUnpackReservoir(
+            ReSTIRDITemporalReservoir.Load(int3(neighborPixel, 0)),
+            ReSTIRDITemporalReservoirState.Load(int3(neighborPixel, 0)));
+        if (ReSTIRDIIsValid(neighborReservoir) &&
+            ReSTIRDI_SpatialDiscountNaiveSamples != 0u &&
+            neighborReservoir.M <= ReSTIRDINaiveSamplingMThreshold)
+        {
+            continue;
+        }
+
+        const int2 spatialOffset = int2(ReSTIRDISpatialOffsets[offsetIndex] * ReSTIRDI_SpatialSamplingRadius);
+        neighborReservoir.SpatialDistance += spatialOffset;
+        ++validSpatialSampleCount;
+        if (neighborReservoir.M > 0.0f)
+        {
+            ReSTIRDIStreamNeighborWithPairwiseMis(
+                result,
+                Random01(rngState),
+                neighborReservoir,
+                neighborSurface,
+                centerReservoir,
+                centerSurface,
+                neighborCount);
+        }
+    }
+
+    result.CanonicalWeight = validSpatialSampleCount == 0u ? 1.0f : result.CanonicalWeight;
+    ReSTIRDIInternalSimpleResample(
+        result,
+        centerReservoir,
+        Random01(rngState),
+        centerReservoir.SelectedTargetPdf,
+        centerReservoir.WeightSum * result.CanonicalWeight,
+        centerReservoir.M);
+    ReSTIRDIFinalizeResampling(result, 1.0f, float(max(1u, validSpatialSampleCount)));
+    return result;
+}
+
+ReSTIRDIReservoir ReSTIRDIStandardSpatialResampling(
+    const uint2 pixel,
+    const SurfaceData centerSurface,
+    const ReSTIRDIReservoir centerReservoir,
+    inout uint rngState,
+    const uint neighborCount)
+{
+    ReSTIRDIReservoir result = ReSTIRDIEmptyReservoir();
+    ReSTIRDICombineReservoirs(result, centerReservoir, 0.5f, centerReservoir.SelectedTargetPdf);
+    uint selectedNeighbor = 0xffffffffu;
+    uint selectedLightIndex = ReSTIRDIIsValid(centerReservoir)
+        ? ReSTIRDIGetLightIndex(centerReservoir)
+        : ReSTIRDILightIndexMask;
+    const uint offsetStart = uint(Random01(rngState) * 32.0f) & 31u;
+    uint validNeighborMask = 0u;
+    const float centerDepth = length(centerSurface.PositionWs - Camera_Position.xyz);
+
+    [loop]
+    for (uint neighborIndex = 0u; neighborIndex < neighborCount; ++neighborIndex)
+    {
+        const uint offsetIndex = (offsetStart + neighborIndex) & 31u;
+        const int2 neighborPixel = ReSTIRDIGetSpatialNeighborPixel(pixel, offsetIndex);
+        const SurfaceData neighborSurface = LoadGBufferSurface(uint2(neighborPixel));
+        const float neighborDepth = length(neighborSurface.PositionWs - Camera_Position.xyz);
+        if (!ReSTIRDIHaveCompatibleSpatialSurfaces(centerSurface, centerDepth, neighborSurface, neighborDepth))
+        {
+            continue;
+        }
+
+        validNeighborMask |= 1u << neighborIndex;
+        ReSTIRDIReservoir neighborReservoir = ReSTIRDIUnpackReservoir(
+            ReSTIRDITemporalReservoir.Load(int3(neighborPixel, 0)),
+            ReSTIRDITemporalReservoirState.Load(int3(neighborPixel, 0)));
+        const int2 spatialOffset = int2(ReSTIRDISpatialOffsets[offsetIndex] * ReSTIRDI_SpatialSamplingRadius);
+        neighborReservoir.SpatialDistance += spatialOffset;
+        if (ReSTIRDIIsValid(neighborReservoir) &&
+            ReSTIRDI_SpatialDiscountNaiveSamples != 0u &&
+            neighborReservoir.M <= ReSTIRDINaiveSamplingMThreshold)
+        {
+            continue;
+        }
+
+        const float neighborTargetPdf = ReSTIRDIGetTargetPdf(neighborReservoir, centerSurface);
+        if (ReSTIRDICombineReservoirs(result, neighborReservoir, Random01(rngState), neighborTargetPdf))
+        {
+            selectedNeighbor = neighborIndex;
+            selectedLightIndex = ReSTIRDIIsValid(neighborReservoir)
+                ? ReSTIRDIGetLightIndex(neighborReservoir)
+                : ReSTIRDILightIndexMask;
+        }
+    }
+
+    if (!ReSTIRDIIsValid(result))
+    {
+        return result;
+    }
+
+    if (ReSTIRDI_SpatialBiasCorrectionMode == 0u)
+    {
+        ReSTIRDIFinalizeResampling(result, 1.0f, result.M);
+        return result;
+    }
+
+    float normalizationNumerator = result.SelectedTargetPdf;
+    float normalizationDenominator = result.SelectedTargetPdf * centerReservoir.M;
+    [loop]
+    for (uint normalizationNeighborIndex = 0u; normalizationNeighborIndex < neighborCount; ++normalizationNeighborIndex)
+    {
+        if ((validNeighborMask & (1u << normalizationNeighborIndex)) == 0u)
+        {
+            continue;
+        }
+
+        const uint offsetIndex = (offsetStart + normalizationNeighborIndex) & 31u;
+        const int2 neighborPixel = ReSTIRDIGetSpatialNeighborPixel(pixel, offsetIndex);
+        const SurfaceData neighborSurface = LoadGBufferSurface(uint2(neighborPixel));
+        ReSTIRDIReservoir neighborReservoir = ReSTIRDIUnpackReservoir(
+            ReSTIRDITemporalReservoir.Load(int3(neighborPixel, 0)),
+            ReSTIRDITemporalReservoirState.Load(int3(neighborPixel, 0)));
+        float targetPdfAtNeighbor = 0.0f;
+        if (selectedLightIndex < GetReSTIRDILightCount())
+        {
+            const ReSTIRDIDirectLightSample selectedSampleAtNeighbor = SampleReSTIRDIDirectLight(
+                selectedLightIndex,
+                neighborSurface,
+                ReSTIRDIGetSampleUv(result));
+            targetPdfAtNeighbor = selectedSampleAtNeighbor.Valid
+                ? max(0.0f, Luminance(selectedSampleAtNeighbor.UnshadowedContribution))
+                : 0.0f;
+            if (ReSTIRDI_SpatialBiasCorrectionMode == 3u && targetPdfAtNeighbor > 0.0f &&
+                !IsReSTIRDIDirectLightSampleVisible(neighborSurface, selectedSampleAtNeighbor))
+            {
+                targetPdfAtNeighbor = 0.0f;
+            }
+        }
+
+        if (selectedNeighbor == normalizationNeighborIndex)
+        {
+            normalizationNumerator = targetPdfAtNeighbor;
+        }
+        normalizationDenominator += targetPdfAtNeighbor * neighborReservoir.M;
+    }
+
+    ReSTIRDIFinalizeResampling(result, normalizationNumerator, normalizationDenominator);
+    return result;
 }
 
 [numthreads(8, 8, 1)]
@@ -64,104 +289,30 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
-    const ReSTIRDIReservoir centerReservoir = ReSTIRDIUnpackReservoir(ReSTIRDITemporalReservoir.Load(int3(pixel, 0)));
-    ReSTIRDIReservoir reservoir = ReSTIRDIEmptyReservoir();
+    const ReSTIRDIReservoir temporalReservoir = ReSTIRDIUnpackReservoir(
+        ReSTIRDITemporalReservoir.Load(int3(pixel, 0)), ReSTIRDITemporalReservoirState.Load(int3(pixel, 0)));
+    ReSTIRDIReservoir result = temporalReservoir;
     const SurfaceData surface = LoadGBufferSurface(pixel);
-    const uint totalLightCount = GetReSTIRDILightCount();
-    if (surface.Valid && totalLightCount != 0u)
+    if (surface.Valid && ReSTIRDI_SpatialResamplingEnabled != 0u && ReSTIRDI_SpatialNeighborCount > 0u)
     {
         uint rngState = InitializeRandomState(pixel, Camera_Width, Camera_FrameIndex, 0x7a3d1f0bu);
-        int selectedNeighborIndex = -1;
-        uint validNeighborMask = 0u;
-        uint validNeighborCount = 0u;
-        const uint neighborOffsetStart = uint(Random01(rngState) * 16.0f) & 15u;
-        if (ReSTIRDIIsValid(centerReservoir) && centerReservoir.LightIndex < totalLightCount)
+        uint neighborCount = ReSTIRDI_SpatialNeighborCount;
+        if (temporalReservoir.M < float(ReSTIRDI_SpatialTargetHistoryLength))
         {
-            ReSTIRDICombineReservoirs(
-                reservoir,
-                centerReservoir,
-                centerReservoir.SelectedTargetPdf,
-                0.5f);
+            neighborCount = max(neighborCount, ReSTIRDI_SpatialDisocclusionBoostSampleCount);
         }
-
-        [loop]
-        for (uint neighborIndex = 0u; neighborIndex < ReSTIRDI_SpatialNeighborCount; ++neighborIndex)
+        neighborCount = min(neighborCount, 32u);
+        if (ReSTIRDI_SpatialBiasCorrectionMode == 2u && ReSTIRDIIsValid(temporalReservoir))
         {
-            const uint offsetIndex = (neighborOffsetStart + neighborIndex) & 15u;
-            const int2 offset = int2(ReSTIRDISpatialOffsets[offsetIndex] * ReSTIRDI_SpatialSamplingRadius);
-            const int2 neighborPixel = clamp(
-                int2(pixel) + offset,
-                int2(0, 0),
-                int2(int(Camera_Width) - 1, int(Camera_Height) - 1));
-            const ReSTIRDIReservoir neighbor = ReSTIRDIUnpackReservoir(ReSTIRDITemporalReservoir.Load(int3(neighborPixel, 0)));
-            const SurfaceData neighborSurface = LoadGBufferSurface(uint2(neighborPixel));
-            const float receiverDepth = length(surface.PositionWs - Camera_Position.xyz);
-            const float neighborDepth = length(neighborSurface.PositionWs - Camera_Position.xyz);
-            const bool surfacesCompatible = ReSTIRDIHaveCompatibleSurfaces(
-                surface,
-                receiverDepth,
-                neighborSurface,
-                neighborDepth,
-                ReSTIRDI_SpatialNormalSimilarityThreshold,
-                ReSTIRDI_DepthSimilarityThreshold,
-                ReSTIRDI_MaterialSimilarityThreshold);
-            if (surfacesCompatible && ReSTIRDIIsValid(neighbor) && neighbor.LightIndex < totalLightCount)
-            {
-                const ReSTIRDIDirectLightSample neighborSample = SampleReSTIRDIDirectLight(
-                    neighbor.LightIndex,
-                    surface,
-                    neighbor.SampleSeed);
-                const bool visible = !ReSTIRDIShouldTestVisibility(
-                    ReSTIRDI_VisibilityTestMask,
-                    ReSTIRDIVisibilityStageSpatial) ||
-                    IsReSTIRDIDirectLightSampleVisible(surface, neighborSample);
-                if (visible)
-                {
-                    ++validNeighborCount;
-                    validNeighborMask |= 1u << neighborIndex;
-                    const float targetPdfAtCenter = max(0.0f, Luminance(neighborSample.UnshadowedContribution));
-                    if (ReSTIRDICombineReservoirs(
-                        reservoir,
-                        neighbor,
-                        targetPdfAtCenter,
-                        Random01(rngState)))
-                    {
-                        selectedNeighborIndex = int(neighborIndex);
-                    }
-                }
-            }
+            result = ReSTIRDIPairwiseSpatialResampling(pixel, surface, temporalReservoir, rngState, neighborCount);
         }
-
-        if (ReSTIRDIIsValid(reservoir))
+        else
         {
-            float normalizationNumerator = reservoir.SelectedTargetPdf;
-            float normalizationDenominator = reservoir.SelectedTargetPdf * centerReservoir.M;
-            [loop]
-            for (uint neighborIndex = 0u; neighborIndex < ReSTIRDI_SpatialNeighborCount; ++neighborIndex)
-            {
-                if ((validNeighborMask & (1u << neighborIndex)) == 0u)
-                {
-                    continue;
-                }
-
-                const uint offsetIndex = (neighborOffsetStart + neighborIndex) & 15u;
-                const int2 offset = int2(ReSTIRDISpatialOffsets[offsetIndex] * ReSTIRDI_SpatialSamplingRadius);
-                const int2 neighborPixel = clamp(
-                    int2(pixel) + offset,
-                    int2(0, 0),
-                    int2(int(Camera_Width) - 1, int(Camera_Height) - 1));
-                const ReSTIRDIReservoir neighbor = ReSTIRDIUnpackReservoir(ReSTIRDITemporalReservoir.Load(int3(neighborPixel, 0)));
-                const SurfaceData neighborSurface = LoadGBufferSurface(uint2(neighborPixel));
-                const float targetPdfAtNeighbor = ReSTIRDIGetTargetPdf(reservoir, neighborSurface);
-                if (selectedNeighborIndex == int(neighborIndex))
-                {
-                    normalizationNumerator = targetPdfAtNeighbor;
-                }
-                normalizationDenominator += targetPdfAtNeighbor * neighbor.M;
-            }
-            ReSTIRDIFinalizeResampling(reservoir, normalizationNumerator, normalizationDenominator);
+            result = ReSTIRDIStandardSpatialResampling(pixel, surface, temporalReservoir, rngState, neighborCount);
         }
     }
-    ReSTIRDISpatialReservoir[pixel] = ReSTIRDIPackReservoir(reservoir);
+
+    ReSTIRDISpatialReservoir[pixel] = ReSTIRDIPackReservoirCore(result);
+    ReSTIRDISpatialReservoirState[pixel] = ReSTIRDIPackReservoirState(result);
 }
 //Modify End

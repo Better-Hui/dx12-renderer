@@ -113,11 +113,12 @@ set(SHADER_FILES_PIXEL
 # Modify End
 
 set(RESTIR_DI_SHADER_FILES
+        # Modify Begin:2026-07-30 by BestHui
         ../../Framework/shaders/ReSTIRDI/ReSTIRDI.RIS.cs.hlsl
         ../../Framework/shaders/ReSTIRDI/ReSTIRDI.Temporal.cs.hlsl
-        ../../Framework/shaders/ReSTIRDI/ReSTIRDI.Boiling.cs.hlsl
         ../../Framework/shaders/ReSTIRDI/ReSTIRDI.Spatial.cs.hlsl
         ../../Framework/shaders/ReSTIRDI/ReSTIRDI.Shade.cs.hlsl
+        # Modify End
         )
 
 set(SHADER_FILES_COMPUTE

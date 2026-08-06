@@ -39,9 +39,6 @@ namespace RaytracingDemoPasses
         static std::unique_ptr<RenderGraph::RenderPass> CreateReSTIRDITemporalPass(
             const RaytracingDemoPassResources& resources,
             const RaytracingDemoPassConfig& config);
-        static std::unique_ptr<RenderGraph::RenderPass> CreateReSTIRDIBoilingPass(
-            const RaytracingDemoPassResources& resources,
-            const RaytracingDemoPassConfig& config);
         static std::unique_ptr<RenderGraph::RenderPass> CreateReSTIRDISpatialPass(
             const RaytracingDemoPassResources& resources,
             const RaytracingDemoPassConfig& config);

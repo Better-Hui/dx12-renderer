@@ -99,7 +99,10 @@ uint32_t SceneTextureMaterialResources::AddPbrMaterial(
     const bool hasNormalMap,
     const bool hasMetallicMap,
     const bool hasRoughnessMap,
-    const bool hasAmbientOcclusionMap)
+    const bool hasAmbientOcclusionMap,
+    const DirectX::XMFLOAT4& emission,
+    const uint32_t emissionTextureIndex,
+    const bool hasEmissionMap)
 {
     RaytracingDemoMaterialData material{};
     material.Diffuse = diffuse;
@@ -110,11 +113,14 @@ uint32_t SceneTextureMaterialResources::AddPbrMaterial(
     material.MetallicTextureIndex = metallicTextureIndex;
     material.RoughnessTextureIndex = roughnessTextureIndex;
     material.AmbientOcclusionTextureIndex = ambientOcclusionTextureIndex;
+    material.Emission = emission;
+    material.EmissionTextureIndex = emissionTextureIndex;
     material.HasDiffuseMap = hasDiffuseMap ? 1u : 0u;
     material.HasNormalMap = hasNormalMap ? 1u : 0u;
     material.HasMetallicMap = hasMetallicMap ? 1u : 0u;
     material.HasRoughnessMap = hasRoughnessMap ? 1u : 0u;
     material.HasAmbientOcclusionMap = hasAmbientOcclusionMap ? 1u : 0u;
+    material.HasEmissionMap = hasEmissionMap ? 1u : 0u;
     material.Metallic = metallic;
     material.Roughness = roughness;
     return AddMaterial(material);
@@ -135,9 +141,8 @@ uint32_t SceneTextureMaterialResources::AddDiffuseMaterial(
         diffuseTextureIndex,
         diffuseTextureIndex,
         diffuseTextureIndex,
-        metallic,
-        roughness,
-        true);
+        metallic, roughness, true, false, false, false, false,
+        { 0.0f, 0.0f, 0.0f, 1.0f }, diffuseTextureIndex, false);
 }
 
 void SceneTextureMaterialResources::UploadMaterialBuffer(CommandList& commandList)

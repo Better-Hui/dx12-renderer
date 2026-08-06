@@ -477,7 +477,7 @@ uint GetReSTIRDILightCount()
 ReSTIRDIDirectLightSample SampleReSTIRDIDirectLight(
     const uint lightIndex,
     const SurfaceData surface,
-    const uint sampleSeed)
+    const float2 sampleUv)
 {
     ReSTIRDIDirectLightSample sample;
     sample.DirectionWs = 0.0f;
@@ -490,7 +490,7 @@ ReSTIRDIDirectLightSample SampleReSTIRDIDirectLight(
     {
         const DirectionalLightData light = DirectionalLights[index];
 #if RAYTRACING_DEMO_SOFT_SHADOWS
-        uint sampleRandomState = sampleSeed;
+        uint sampleRandomState = asuint(sampleUv.x * 65535.0f) ^ (asuint(sampleUv.y * 65535.0f) << 16u);
         sample.DirectionWs = SampleDirectionalShadowDirection(
             normalize(light.DirectionAndAngularRadius.xyz),
             light.DirectionAndAngularRadius.w,
@@ -522,8 +522,9 @@ ReSTIRDIDirectLightSample SampleReSTIRDIDirectLight(
         float3 tangent;
         float3 bitangent;
         BuildOrthonormalBasis(toLightCenter / centerDistance, tangent, bitangent);
-        uint sampleRandomState = sampleSeed;
-        const float2 diskSample = SampleUniformDisk(sampleRandomState) * light.Attenuation.w;
+        const float radius = sqrt(saturate(sampleUv.x)) * light.Attenuation.w;
+        const float angle = sampleUv.y * 6.28318530718f;
+        const float2 diskSample = radius * float2(cos(angle), sin(angle));
         const float3 samplePosition = light.PositionAndRange.xyz + tangent * diskSample.x + bitangent * diskSample.y;
         const float3 toLight = samplePosition - surface.PositionWs;
 #else
@@ -556,11 +557,10 @@ ReSTIRDIDirectLightSample SampleReSTIRDIDirectLight(
     }
 
     const AreaLightData light = AreaLights[index];
-    uint sampleRandomState = sampleSeed;
-    const float2 sampleUv = float2(Random01(sampleRandomState), Random01(sampleRandomState)) * 2.0f - 1.0f;
+    const float2 areaUv = sampleUv * 2.0f - 1.0f;
     const float3 samplePosition = light.PositionAndRange.xyz +
-        light.AxisUAndExtent.xyz * (sampleUv.x * light.AxisUAndExtent.w) +
-        light.AxisVAndExtent.xyz * (sampleUv.y * light.AxisVAndExtent.w);
+        light.AxisUAndExtent.xyz * (areaUv.x * light.AxisUAndExtent.w) +
+        light.AxisVAndExtent.xyz * (areaUv.y * light.AxisVAndExtent.w);
     const float3 toLight = samplePosition - surface.PositionWs;
     const float distanceToLight = length(toLight);
     if (distanceToLight <= 0.001f || distanceToLight > light.PositionAndRange.w)

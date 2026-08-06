@@ -2,6 +2,9 @@
 #define RAYTRACING_DEMO_PATH_TRACING_RANDOM_HLSLI
 
 #include "../Common/PathTracingConstants.hlsli"
+//Modify Begin:2026-08-06 by BestHui
+#include <Common/Noise.hlsli>
+//Modify End
 
 uint Hash(uint value)
 {
@@ -32,13 +35,16 @@ float HashToFloat(uint value)
 
 float InterleavedGradientNoise(float2 pixel)
 {
-    return frac(52.9829189f * frac(dot(pixel, float2(0.06711056f, 0.00583715f))));
+//Modify Begin:2026-08-06 by BestHui
+    return FrameworkInterleavedGradientNoise(pixel);
+//Modify End
 }
 
 float AnimatedInterleavedGradientNoise(uint2 pixel, uint frameIndex)
 {
-    const float temporalOffset = float(frameIndex & 63u) * 5.588238f;
-    return InterleavedGradientNoise(float2(pixel) + temporalOffset);
+//Modify Begin:2026-08-06 by BestHui
+    return FrameworkAnimatedInterleavedGradientNoise(pixel, frameIndex);
+//Modify End
 }
 
 uint InitializeRandomState(uint2 pixel, uint width, uint frameIndex, uint salt)
@@ -48,7 +54,10 @@ uint InitializeRandomState(uint2 pixel, uint width, uint frameIndex, uint salt)
     const uint xHash = Hash(pixel.x * 0x8da6b343u);
     const uint yHash = Hash(pixel.y * 0xd8163841u);
     const uint frameHash = Hash(frameIndex * 0xcb1ab31fu);
-    return Hash(xHash ^ yHash ^ Hash(pixelIndex) ^ frameHash ^ salt);
+//Modify Begin:2026-08-06 by BestHui
+    const float2 noise = FrameworkInterleavedGradientNoise2D(pixel, frameIndex, salt);
+    return Hash(xHash ^ yHash ^ Hash(pixelIndex) ^ frameHash ^ salt ^ asuint(noise.x) ^ asuint(noise.y));
+//Modify End
 //Modify End
 }
 

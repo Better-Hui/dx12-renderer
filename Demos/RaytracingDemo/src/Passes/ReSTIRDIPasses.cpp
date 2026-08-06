@@ -86,6 +86,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
         },
         {
             { DemoResourceIds::ReSTIRDIRISReservoir, OutputType::UnorderedAccess },
+            { DemoResourceIds::ReSTIRDIRISReservoirState, OutputType::UnorderedAccess },
             { DemoResourceIds::ReSTIRDIRISFinishedToken, OutputType::Token },
         },
         [resources, config](const RenderContext& context, CommandList& commandList)
@@ -100,6 +101,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
             const RaytracingDemoCameraConstants camera = GetCameraConstants(resources, config, context);
             CommandContext commandContext(commandList);
             commandContext.SetUnorderedAccessView(shader, "ReSTIRDIRISReservoir", UnorderedAccessView(context.m_ResourcePool->GetTexture(DemoResourceIds::ReSTIRDIRISReservoir)));
+            commandContext.SetUnorderedAccessView(shader, "ReSTIRDIRISReservoirState", UnorderedAccessView(context.m_ResourcePool->GetTexture(DemoResourceIds::ReSTIRDIRISReservoirState)));
             DispatchReSTIRDI(commandContext, shader, camera);
         });
 }
@@ -113,6 +115,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
         L"ReSTIR DI Temporal",
         {
             { DemoResourceIds::ReSTIRDIRISReservoir, InputType::NonPixelShaderResource },
+            { DemoResourceIds::ReSTIRDIRISReservoirState, InputType::NonPixelShaderResource },
             { DemoResourceIds::MotionVector, InputType::NonPixelShaderResource },
             { DemoResourceIds::GBufferAlbedoOcclusion, InputType::NonPixelShaderResource },
             { DemoResourceIds::GBufferSpecularSmoothness, InputType::NonPixelShaderResource },
@@ -120,29 +123,11 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
             { DemoResourceIds::GBufferEmissionMetallic, InputType::NonPixelShaderResource },
             { DemoResourceIds::GBufferPosition, InputType::NonPixelShaderResource },
             { DemoResourceIds::DepthBuffer, InputType::NonPixelShaderResource },
-            { DemoResourceIds::ReSTIRDIReservoirA, InputType::UnorderedAccess },
-            { DemoResourceIds::ReSTIRDIReservoirB, InputType::UnorderedAccess },
-            { DemoResourceIds::ReSTIRDIHistoryPositionA, InputType::UnorderedAccess },
-            { DemoResourceIds::ReSTIRDIHistoryPositionB, InputType::UnorderedAccess },
-            { DemoResourceIds::ReSTIRDIHistoryNormalRoughnessA, InputType::UnorderedAccess },
-            { DemoResourceIds::ReSTIRDIHistoryNormalRoughnessB, InputType::UnorderedAccess },
-            { DemoResourceIds::ReSTIRDIHistoryDiffuseMetallicA, InputType::UnorderedAccess },
-            { DemoResourceIds::ReSTIRDIHistoryDiffuseMetallicB, InputType::UnorderedAccess },
-            { DemoResourceIds::ReSTIRDIHistorySpecularOcclusionA, InputType::UnorderedAccess },
-            { DemoResourceIds::ReSTIRDIHistorySpecularOcclusionB, InputType::UnorderedAccess },
             { DemoResourceIds::ReSTIRDIRISFinishedToken, InputType::Token },
         },
         {
-            { DemoResourceIds::ReSTIRDIReservoirA, OutputType::UnorderedAccess },
-            { DemoResourceIds::ReSTIRDIReservoirB, OutputType::UnorderedAccess },
-            { DemoResourceIds::ReSTIRDIHistoryPositionA, OutputType::UnorderedAccess },
-            { DemoResourceIds::ReSTIRDIHistoryPositionB, OutputType::UnorderedAccess },
-            { DemoResourceIds::ReSTIRDIHistoryNormalRoughnessA, OutputType::UnorderedAccess },
-            { DemoResourceIds::ReSTIRDIHistoryNormalRoughnessB, OutputType::UnorderedAccess },
-            { DemoResourceIds::ReSTIRDIHistoryDiffuseMetallicA, OutputType::UnorderedAccess },
-            { DemoResourceIds::ReSTIRDIHistoryDiffuseMetallicB, OutputType::UnorderedAccess },
-            { DemoResourceIds::ReSTIRDIHistorySpecularOcclusionA, OutputType::UnorderedAccess },
-            { DemoResourceIds::ReSTIRDIHistorySpecularOcclusionB, OutputType::UnorderedAccess },
+            { DemoResourceIds::ReSTIRDITemporalReservoir, OutputType::UnorderedAccess },
+            { DemoResourceIds::ReSTIRDITemporalReservoirState, OutputType::UnorderedAccess },
             { DemoResourceIds::ReSTIRDITemporalFinishedToken, OutputType::Token },
         },
         [resources, config](const RenderContext& context, CommandList& commandList)
@@ -159,16 +144,16 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
             const bool writeReservoirA = (camera.FrameIndex & 1u) == 0u;
             CommandContext commandContext(commandList);
             commandContext.SetShaderResourceView(shader, "ReSTIRDIRISReservoir", ShaderResourceView(reservoirResources.RISReservoir));
-            commandContext.SetUnorderedAccessView(shader, "ReSTIRDIHistoryReservoir", UnorderedAccessView(writeReservoirA ? reservoirResources.ReservoirB : reservoirResources.ReservoirA));
-            commandContext.SetUnorderedAccessView(shader, "ReSTIRDICurrentReservoir", UnorderedAccessView(writeReservoirA ? reservoirResources.ReservoirA : reservoirResources.ReservoirB));
-            commandContext.SetUnorderedAccessView(shader, "ReSTIRDIHistoryPosition", UnorderedAccessView(writeReservoirA ? reservoirResources.HistoryPositionB : reservoirResources.HistoryPositionA));
-            commandContext.SetUnorderedAccessView(shader, "ReSTIRDICurrentPosition", UnorderedAccessView(writeReservoirA ? reservoirResources.HistoryPositionA : reservoirResources.HistoryPositionB));
-            commandContext.SetUnorderedAccessView(shader, "ReSTIRDIHistoryNormalRoughness", UnorderedAccessView(writeReservoirA ? reservoirResources.HistoryNormalRoughnessB : reservoirResources.HistoryNormalRoughnessA));
-            commandContext.SetUnorderedAccessView(shader, "ReSTIRDICurrentNormalRoughness", UnorderedAccessView(writeReservoirA ? reservoirResources.HistoryNormalRoughnessA : reservoirResources.HistoryNormalRoughnessB));
-            commandContext.SetUnorderedAccessView(shader, "ReSTIRDIHistoryDiffuseMetallic", UnorderedAccessView(writeReservoirA ? reservoirResources.HistoryDiffuseMetallicB : reservoirResources.HistoryDiffuseMetallicA));
-            commandContext.SetUnorderedAccessView(shader, "ReSTIRDICurrentDiffuseMetallic", UnorderedAccessView(writeReservoirA ? reservoirResources.HistoryDiffuseMetallicA : reservoirResources.HistoryDiffuseMetallicB));
-            commandContext.SetUnorderedAccessView(shader, "ReSTIRDIHistorySpecularOcclusion", UnorderedAccessView(writeReservoirA ? reservoirResources.HistorySpecularOcclusionB : reservoirResources.HistorySpecularOcclusionA));
-            commandContext.SetUnorderedAccessView(shader, "ReSTIRDICurrentSpecularOcclusion", UnorderedAccessView(writeReservoirA ? reservoirResources.HistorySpecularOcclusionA : reservoirResources.HistorySpecularOcclusionB));
+            commandContext.SetShaderResourceView(shader, "ReSTIRDIRISReservoirState", ShaderResourceView(reservoirResources.RISReservoirState));
+            commandContext.SetShaderResourceView(shader, "MotionVectorTexture", ShaderResourceView(RaytracingDemoRenderGraph::GetFrameGBufferResources(context).MotionVector));
+            commandContext.SetShaderResourceView(shader, "ReSTIRDIHistoryReservoir", ShaderResourceView(writeReservoirA ? reservoirResources.ReservoirB : reservoirResources.ReservoirA));
+            commandContext.SetShaderResourceView(shader, "ReSTIRDIHistoryReservoirState", ShaderResourceView(writeReservoirA ? reservoirResources.ReservoirBState : reservoirResources.ReservoirAState));
+            commandContext.SetShaderResourceView(shader, "ReSTIRDIHistoryPosition", ShaderResourceView(writeReservoirA ? reservoirResources.HistoryPositionB : reservoirResources.HistoryPositionA));
+            commandContext.SetShaderResourceView(shader, "ReSTIRDIHistoryNormalRoughness", ShaderResourceView(writeReservoirA ? reservoirResources.HistoryNormalRoughnessB : reservoirResources.HistoryNormalRoughnessA));
+            commandContext.SetShaderResourceView(shader, "ReSTIRDIHistoryDiffuseMetallic", ShaderResourceView(writeReservoirA ? reservoirResources.HistoryDiffuseMetallicB : reservoirResources.HistoryDiffuseMetallicA));
+            commandContext.SetShaderResourceView(shader, "ReSTIRDIHistorySpecularOcclusion", ShaderResourceView(writeReservoirA ? reservoirResources.HistorySpecularOcclusionB : reservoirResources.HistorySpecularOcclusionA));
+            commandContext.SetUnorderedAccessView(shader, "ReSTIRDITemporalReservoir", UnorderedAccessView(reservoirResources.TemporalReservoir));
+            commandContext.SetUnorderedAccessView(shader, "ReSTIRDITemporalReservoirState", UnorderedAccessView(reservoirResources.TemporalReservoirState));
             DispatchReSTIRDI(commandContext, shader, camera);
         });
 }
@@ -181,17 +166,19 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
     return RenderPass::Create(
         L"ReSTIR DI Spatial",
         {
-            { DemoResourceIds::ReSTIRDIBoilingReservoir, InputType::NonPixelShaderResource },
+            { DemoResourceIds::ReSTIRDITemporalReservoir, InputType::NonPixelShaderResource },
+            { DemoResourceIds::ReSTIRDITemporalReservoirState, InputType::NonPixelShaderResource },
             { DemoResourceIds::GBufferAlbedoOcclusion, InputType::NonPixelShaderResource },
             { DemoResourceIds::GBufferSpecularSmoothness, InputType::NonPixelShaderResource },
             { DemoResourceIds::GBufferNormal, InputType::NonPixelShaderResource },
             { DemoResourceIds::GBufferEmissionMetallic, InputType::NonPixelShaderResource },
             { DemoResourceIds::GBufferPosition, InputType::NonPixelShaderResource },
             { DemoResourceIds::DepthBuffer, InputType::NonPixelShaderResource },
-            { DemoResourceIds::ReSTIRDIBoilingFinishedToken, InputType::Token },
+            { DemoResourceIds::ReSTIRDITemporalFinishedToken, InputType::Token },
         },
         {
             { DemoResourceIds::ReSTIRDISpatialReservoir, OutputType::UnorderedAccess },
+            { DemoResourceIds::ReSTIRDISpatialReservoirState, OutputType::UnorderedAccess },
             { DemoResourceIds::ReSTIRDISpatialFinishedToken, OutputType::Token },
         },
         [resources, config](const RenderContext& context, CommandList& commandList)
@@ -209,58 +196,10 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
             commandContext.SetShaderResourceView(
                 shader,
                 "ReSTIRDITemporalReservoir",
-                ShaderResourceView(reservoirResources.BoilingReservoir));
+                ShaderResourceView(reservoirResources.TemporalReservoir));
+            commandContext.SetShaderResourceView(shader, "ReSTIRDITemporalReservoirState", ShaderResourceView(reservoirResources.TemporalReservoirState));
             commandContext.SetUnorderedAccessView(shader, "ReSTIRDISpatialReservoir", UnorderedAccessView(reservoirResources.SpatialReservoir));
-            DispatchReSTIRDI(commandContext, shader, camera);
-        });
-}
-
-std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateReSTIRDIBoilingPass(
-    const RaytracingDemoPassResources& resources,
-    const RaytracingDemoPassConfig& config)
-{
-    using namespace RenderGraph;
-    return RenderPass::Create(
-        L"ReSTIR DI Boiling Filter",
-        {
-            { DemoResourceIds::ReSTIRDIReservoirA, InputType::NonPixelShaderResource },
-            { DemoResourceIds::ReSTIRDIReservoirB, InputType::NonPixelShaderResource },
-            { DemoResourceIds::ReSTIRDITemporalFinishedToken, InputType::Token },
-        },
-        {
-            { DemoResourceIds::ReSTIRDIBoilingReservoir, OutputType::UnorderedAccess },
-            { DemoResourceIds::ReSTIRDIBoilingFinishedToken, OutputType::Token },
-        },
-        [resources, config](const RenderContext& context, CommandList& commandList)
-        {
-            if (!UsesReSTIRDI(config))
-            {
-                return;
-            }
-
-            ComputeShader& shader = resources.Pipelines.GetInlineReSTIRDIBoilingShader();
-            const RaytracingDemoCameraConstants camera = GetCameraConstants(resources, config, context);
-            const RaytracingDemoRenderGraph::ReSTIRDIResources reservoirResources = RaytracingDemoRenderGraph::GetReSTIRDIResources(context);
-            CommandContext commandContext(commandList);
-            if (shader.HasConstantBuffer("CameraConstants"))
-            {
-                commandContext.SetConstantBuffer(shader, "CameraConstants", sizeof(camera), &camera);
-            }
-            if (shader.HasConstantBuffer("ReSTIRDIConstants"))
-            {
-                BindReSTIRDIConstants(commandContext, shader, resources, camera);
-            }
-            if (shader.HasShaderResourceView("ReSTIRDIInputReservoir"))
-            {
-                commandContext.SetShaderResourceView(
-                    shader,
-                    "ReSTIRDIInputReservoir",
-                    ShaderResourceView((camera.FrameIndex & 1u) == 0u ? reservoirResources.ReservoirA : reservoirResources.ReservoirB));
-            }
-            if (shader.HasUnorderedAccessView("ReSTIRDIBoilingReservoir"))
-            {
-                commandContext.SetUnorderedAccessView(shader, "ReSTIRDIBoilingReservoir", UnorderedAccessView(reservoirResources.BoilingReservoir));
-            }
+            commandContext.SetUnorderedAccessView(shader, "ReSTIRDISpatialReservoirState", UnorderedAccessView(reservoirResources.SpatialReservoirState));
             DispatchReSTIRDI(commandContext, shader, camera);
         });
 }
@@ -274,6 +213,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
         L"ReSTIR DI Shade",
         {
             { DemoResourceIds::ReSTIRDISpatialReservoir, InputType::NonPixelShaderResource },
+            { DemoResourceIds::ReSTIRDISpatialReservoirState, InputType::NonPixelShaderResource },
             { DemoResourceIds::GBufferAlbedoOcclusion, InputType::NonPixelShaderResource },
             { DemoResourceIds::GBufferSpecularSmoothness, InputType::NonPixelShaderResource },
             { DemoResourceIds::GBufferNormal, InputType::NonPixelShaderResource },
@@ -284,6 +224,18 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
         },
         {
             { DemoResourceIds::DirectLighting, OutputType::UnorderedAccess },
+            { DemoResourceIds::ReSTIRDIReservoirA, OutputType::UnorderedAccess },
+            { DemoResourceIds::ReSTIRDIReservoirB, OutputType::UnorderedAccess },
+            { DemoResourceIds::ReSTIRDIReservoirAState, OutputType::UnorderedAccess },
+            { DemoResourceIds::ReSTIRDIReservoirBState, OutputType::UnorderedAccess },
+            { DemoResourceIds::ReSTIRDIHistoryPositionA, OutputType::UnorderedAccess },
+            { DemoResourceIds::ReSTIRDIHistoryPositionB, OutputType::UnorderedAccess },
+            { DemoResourceIds::ReSTIRDIHistoryNormalRoughnessA, OutputType::UnorderedAccess },
+            { DemoResourceIds::ReSTIRDIHistoryNormalRoughnessB, OutputType::UnorderedAccess },
+            { DemoResourceIds::ReSTIRDIHistoryDiffuseMetallicA, OutputType::UnorderedAccess },
+            { DemoResourceIds::ReSTIRDIHistoryDiffuseMetallicB, OutputType::UnorderedAccess },
+            { DemoResourceIds::ReSTIRDIHistorySpecularOcclusionA, OutputType::UnorderedAccess },
+            { DemoResourceIds::ReSTIRDIHistorySpecularOcclusionB, OutputType::UnorderedAccess },
             { DemoResourceIds::ReSTIRDIShadeFinishedToken, OutputType::Token },
         },
         [resources, config](const RenderContext& context, CommandList& commandList)
@@ -303,7 +255,15 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
             commandContext.BindBindlessDescriptorHeap(resources.Scene.GetBindlessDescriptorHeap());
             BindReSTIRDIConstants(commandContext, shader, resources, camera);
             commandContext.SetShaderResourceView(shader, "ReSTIRDIFinalReservoir", ShaderResourceView(reservoirResources.SpatialReservoir));
+            commandContext.SetShaderResourceView(shader, "ReSTIRDIFinalReservoirState", ShaderResourceView(reservoirResources.SpatialReservoirState));
             commandContext.SetUnorderedAccessView(shader, "DirectLighting", UnorderedAccessView(context.m_ResourcePool->GetTexture(DemoResourceIds::DirectLighting)));
+            const bool writeReservoirA = (camera.FrameIndex & 1u) == 0u;
+            commandContext.SetUnorderedAccessView(shader, "ReSTIRDICurrentReservoir", UnorderedAccessView(writeReservoirA ? reservoirResources.ReservoirA : reservoirResources.ReservoirB));
+            commandContext.SetUnorderedAccessView(shader, "ReSTIRDICurrentReservoirState", UnorderedAccessView(writeReservoirA ? reservoirResources.ReservoirAState : reservoirResources.ReservoirBState));
+            commandContext.SetUnorderedAccessView(shader, "ReSTIRDICurrentPosition", UnorderedAccessView(writeReservoirA ? reservoirResources.HistoryPositionA : reservoirResources.HistoryPositionB));
+            commandContext.SetUnorderedAccessView(shader, "ReSTIRDICurrentNormalRoughness", UnorderedAccessView(writeReservoirA ? reservoirResources.HistoryNormalRoughnessA : reservoirResources.HistoryNormalRoughnessB));
+            commandContext.SetUnorderedAccessView(shader, "ReSTIRDICurrentDiffuseMetallic", UnorderedAccessView(writeReservoirA ? reservoirResources.HistoryDiffuseMetallicA : reservoirResources.HistoryDiffuseMetallicB));
+            commandContext.SetUnorderedAccessView(shader, "ReSTIRDICurrentSpecularOcclusion", UnorderedAccessView(writeReservoirA ? reservoirResources.HistorySpecularOcclusionA : reservoirResources.HistorySpecularOcclusionB));
             DispatchReSTIRDI(commandContext, shader, camera);
         });
 }

@@ -48,6 +48,8 @@ namespace RaytracingDemoRenderGraph
 //Modify Begin:2026-08-05 by BestHui
         static inline const RenderGraph::ResourceId ReSTIRDIReservoirA = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ReSTIRDIReservoirA");
         static inline const RenderGraph::ResourceId ReSTIRDIReservoirB = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ReSTIRDIReservoirB");
+        static inline const RenderGraph::ResourceId ReSTIRDIReservoirAState = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ReSTIRDIReservoirAState");
+        static inline const RenderGraph::ResourceId ReSTIRDIReservoirBState = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ReSTIRDIReservoirBState");
         static inline const RenderGraph::ResourceId ReSTIRDIHistoryPositionA = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ReSTIRDIHistoryPositionA");
         static inline const RenderGraph::ResourceId ReSTIRDIHistoryPositionB = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ReSTIRDIHistoryPositionB");
         static inline const RenderGraph::ResourceId ReSTIRDIHistoryNormalRoughnessA = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ReSTIRDIHistoryNormalRoughnessA");
@@ -57,8 +59,11 @@ namespace RaytracingDemoRenderGraph
         static inline const RenderGraph::ResourceId ReSTIRDIHistorySpecularOcclusionA = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ReSTIRDIHistorySpecularOcclusionA");
         static inline const RenderGraph::ResourceId ReSTIRDIHistorySpecularOcclusionB = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ReSTIRDIHistorySpecularOcclusionB");
         static inline const RenderGraph::ResourceId ReSTIRDIRISReservoir = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ReSTIRDIRISReservoir");
-        static inline const RenderGraph::ResourceId ReSTIRDIBoilingReservoir = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ReSTIRDIBoilingReservoir");
+        static inline const RenderGraph::ResourceId ReSTIRDIRISReservoirState = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ReSTIRDIRISReservoirState");
+        static inline const RenderGraph::ResourceId ReSTIRDITemporalReservoir = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ReSTIRDITemporalReservoir");
+        static inline const RenderGraph::ResourceId ReSTIRDITemporalReservoirState = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ReSTIRDITemporalReservoirState");
         static inline const RenderGraph::ResourceId ReSTIRDISpatialReservoir = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ReSTIRDISpatialReservoir");
+        static inline const RenderGraph::ResourceId ReSTIRDISpatialReservoirState = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ReSTIRDISpatialReservoirState");
 //Modify End
         static inline const RenderGraph::ResourceId IndirectLighting = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.IndirectLighting");
         static inline const RenderGraph::ResourceId SceneColor = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.SceneColor");
@@ -76,7 +81,6 @@ namespace RaytracingDemoRenderGraph
         static inline const RenderGraph::ResourceId DirectLightingFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DirectLightingFinished");
         static inline const RenderGraph::ResourceId ReSTIRDIRISFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ReSTIRDIRISFinished");
         static inline const RenderGraph::ResourceId ReSTIRDITemporalFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ReSTIRDITemporalFinished");
-        static inline const RenderGraph::ResourceId ReSTIRDIBoilingFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ReSTIRDIBoilingFinished");
         static inline const RenderGraph::ResourceId ReSTIRDISpatialFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ReSTIRDISpatialFinished");
         static inline const RenderGraph::ResourceId ReSTIRDIShadeFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ReSTIRDIShadeFinished");
         static inline const RenderGraph::ResourceId IndirectLightingFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.IndirectLightingFinished");
@@ -114,6 +118,8 @@ namespace RaytracingDemoRenderGraph
     {
         std::shared_ptr<Texture> ReservoirA;
         std::shared_ptr<Texture> ReservoirB;
+        std::shared_ptr<Texture> ReservoirAState;
+        std::shared_ptr<Texture> ReservoirBState;
         std::shared_ptr<Texture> HistoryPositionA;
         std::shared_ptr<Texture> HistoryPositionB;
         std::shared_ptr<Texture> HistoryNormalRoughnessA;
@@ -123,8 +129,11 @@ namespace RaytracingDemoRenderGraph
         std::shared_ptr<Texture> HistorySpecularOcclusionA;
         std::shared_ptr<Texture> HistorySpecularOcclusionB;
         std::shared_ptr<Texture> RISReservoir;
-        std::shared_ptr<Texture> BoilingReservoir;
+        std::shared_ptr<Texture> RISReservoirState;
+        std::shared_ptr<Texture> TemporalReservoir;
+        std::shared_ptr<Texture> TemporalReservoirState;
         std::shared_ptr<Texture> SpatialReservoir;
+        std::shared_ptr<Texture> SpatialReservoirState;
     };
 //Modify End
 

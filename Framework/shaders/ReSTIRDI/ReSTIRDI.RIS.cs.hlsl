@@ -1,29 +1,12 @@
-//Modify Begin:2026-08-05 by BestHui
+//Modify Begin:2026-07-30 by BestHui
 #define RAYTRACING_DEMO_RESTIR_DI 1
 
 #include "../../../Demos/RaytracingDemo/shaders/PathTracing/PathTracing.rayquery.hlsli"
 #include "ReSTIRDI/ReSTIRDI.hlsli"
+#include "ReSTIRDI/ReSTIRDIConstants.hlsli"
 
 RWTexture2D<uint4> ReSTIRDIRISReservoir : register(u2);
-
-cbuffer ReSTIRDIConstants : register(b1)
-{
-    uint ReSTIRDI_CandidateCount;
-    uint ReSTIRDI_TemporalResamplingEnabled;
-    uint ReSTIRDI_SpatialNeighborCount;
-    uint ReSTIRDI_HistoryValid;
-    uint ReSTIRDI_BoilingFilterEnabled;
-    uint ReSTIRDI_VisibilityTestMask;
-    uint ReSTIRDI_TemporalMaxHistoryLength;
-    float ReSTIRDI_BoilingFilterStrength;
-    float ReSTIRDI_SpatialSamplingRadius;
-    float ReSTIRDI_TemporalNormalSimilarityThreshold;
-    float ReSTIRDI_SpatialNormalSimilarityThreshold;
-    float ReSTIRDI_DepthSimilarityThreshold;
-    float ReSTIRDI_MaterialSimilarityThreshold;
-    float ReSTIRDI_Padding0;
-    float ReSTIRDI_Padding1;
-};
+RWTexture2D<uint4> ReSTIRDIRISReservoirState : register(u3);
 
 #include "../../../Demos/RaytracingDemo/shaders/PathTracing/PathTracingShared.hlsli"
 
@@ -36,37 +19,45 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
-    const SurfaceData surface = LoadGBufferSurface(pixel);
     ReSTIRDIReservoir reservoir = ReSTIRDIEmptyReservoir();
-    if (surface.Valid)
+    const SurfaceData surface = LoadGBufferSurface(pixel);
+    const uint lightCount = GetReSTIRDILightCount();
+    if (surface.Valid && lightCount != 0u)
     {
-        const uint totalLightCount = GetReSTIRDILightCount();
         uint rngState = InitializeRandomState(pixel, Camera_Width, Camera_FrameIndex, 0x4d3a2b1cu);
         [loop]
-        for (uint candidateIndex = 0u; candidateIndex < ReSTIRDI_CandidateCount && totalLightCount != 0u; ++candidateIndex)
+        for (uint candidateIndex = 0u; candidateIndex < ReSTIRDI_CandidateCount; ++candidateIndex)
         {
-            const uint lightIndex = min(uint(Random01(rngState) * float(totalLightCount)), totalLightCount - 1u);
-            const uint sampleSeed = rngState & 0x0000ffffu;
-            const ReSTIRDIDirectLightSample sample = SampleReSTIRDIDirectLight(lightIndex, surface, sampleSeed);
-            const bool visible = !ReSTIRDIShouldTestVisibility(
-                ReSTIRDI_VisibilityTestMask,
-                ReSTIRDIVisibilityStageCandidate) ||
-                IsReSTIRDIDirectLightSampleVisible(surface, sample);
-            const float targetPdf = visible ? max(0.0f, Luminance(sample.UnshadowedContribution)) : 0.0f;
-            ReSTIRDIStreamSample(
-                reservoir,
-                lightIndex,
-                sampleSeed,
-                targetPdf * float(totalLightCount),
-                targetPdf,
-                1.0f,
-                0u,
-                Random01(rngState));
+//Modify Begin:2026-08-06 by BestHui
+            const float2 candidateNoise = FrameworkInterleavedGradientNoise2D(
+                pixel,
+                Camera_FrameIndex,
+                0x4d3a2b1cu + candidateIndex * 0x9e3779b9u);
+            const float lightSelectionRandom = (candidateNoise.x + float(candidateIndex)) /
+                float(ReSTIRDI_CandidateCount);
+            const uint lightIndex = min(uint(lightSelectionRandom * float(lightCount)), lightCount - 1u);
+            const float2 sampleUv = candidateNoise;
+//Modify End
+            const ReSTIRDIDirectLightSample sample = SampleReSTIRDIDirectLight(lightIndex, surface, sampleUv);
+            const float targetPdf = sample.Valid ? max(0.0f, Luminance(sample.UnshadowedContribution)) : 0.0f;
+            ReSTIRDIStreamSample(reservoir, lightIndex, sampleUv, targetPdf, float(lightCount), Random01(rngState));
         }
-        ReSTIRDIFinalizeResampling(reservoir);
+
+        ReSTIRDIFinalizeResampling(reservoir, 1.0f, float(ReSTIRDI_CandidateCount));
         reservoir.M = 1.0f;
+
+        if (ReSTIRDI_InitialVisibilityEnabled != 0u && ReSTIRDIIsValid(reservoir))
+        {
+            const ReSTIRDIDirectLightSample selectedSample = SampleReSTIRDIDirectLight(
+                ReSTIRDIGetLightIndex(reservoir), surface, ReSTIRDIGetSampleUv(reservoir));
+            if (!IsReSTIRDIDirectLightSampleVisible(surface, selectedSample))
+            {
+                ReSTIRDIStoreVisibility(reservoir, 0.0f, true);
+            }
+        }
     }
 
-    ReSTIRDIRISReservoir[pixel] = ReSTIRDIPackReservoir(reservoir);
+    ReSTIRDIRISReservoir[pixel] = ReSTIRDIPackReservoirCore(reservoir);
+    ReSTIRDIRISReservoirState[pixel] = ReSTIRDIPackReservoirState(reservoir);
 }
 //Modify End

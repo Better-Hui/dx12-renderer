@@ -147,35 +147,134 @@ void RaytracingDemo::OnImGui()
         ReSTIRDISettings restirSettings = m_DirectLightingReSTIRDI.GetSettings();
         int candidateCount = static_cast<int>(restirSettings.CandidateCount);
         int spatialNeighborCount = static_cast<int>(restirSettings.SpatialNeighborCount);
+        int spatialDisocclusionBoostSampleCount = static_cast<int>(restirSettings.SpatialDisocclusionBoostSampleCount);
+        int spatialTargetHistoryLength = static_cast<int>(restirSettings.SpatialTargetHistoryLength);
         int temporalMaxHistoryLength = static_cast<int>(restirSettings.TemporalMaxHistoryLength);
+        int finalVisibilityMaxAge = static_cast<int>(restirSettings.FinalVisibilityMaxAge);
+        int temporalBiasCorrection = static_cast<int>(restirSettings.TemporalBiasCorrection);
+        int spatialBiasCorrection = static_cast<int>(restirSettings.SpatialBiasCorrection);
         bool settingsChanged = false;
-        settingsChanged |= ImGui::SliderInt("RIS Candidates", &candidateCount, 1, 32);
-        settingsChanged |= ImGui::Checkbox("RIS Visibility", &restirSettings.EnableCandidateVisibility);
-        settingsChanged |= ImGui::Checkbox("Enable Temporal Reuse", &restirSettings.EnableTemporalResampling);
-        settingsChanged |= ImGui::SliderInt("Temporal Max History", &temporalMaxHistoryLength, 1, 64);
-        if (restirSettings.EnableTemporalResampling)
+        if (ImGui::CollapsingHeader("ReSTIR DI Settings"))
         {
-            settingsChanged |= ImGui::Checkbox("Temporal Visibility", &restirSettings.EnableTemporalVisibility);
+            if (ImGui::CollapsingHeader("Initial Sampling"))
+            {
+                settingsChanged |= ImGui::InputInt("Local Light Samples", &candidateCount);
+                settingsChanged |= ImGui::Checkbox("Enable Initial Visibility", &restirSettings.EnableInitialVisibility);
+            }
+
+            if (ImGui::CollapsingHeader("Temporal Resampling"))
+            {
+                settingsChanged |= ImGui::Checkbox("Enable Temporal Resampling", &restirSettings.EnableTemporalResampling);
+                if (restirSettings.EnableTemporalResampling)
+                {
+                    settingsChanged |= ImGui::Combo(
+                        "Temporal Bias Correction",
+                        &temporalBiasCorrection,
+                        "Off\0Basic\0Ray Traced\0");
+                    settingsChanged |= ImGui::InputInt("Temporal Max History Length", &temporalMaxHistoryLength);
+                    settingsChanged |= ImGui::Checkbox("Enable Permutation Sampling", &restirSettings.EnableTemporalPermutationSampling);
+                    settingsChanged |= ImGui::SliderFloat(
+                        "Temporal Normal Threshold",
+                        &restirSettings.TemporalNormalSimilarityThreshold,
+                        -1.0f,
+                        1.0f);
+                    settingsChanged |= ImGui::SliderFloat(
+                        "Temporal Depth Threshold",
+                        &restirSettings.TemporalDepthSimilarityThreshold,
+                        0.0f,
+                        1.0f);
+                }
+                settingsChanged |= ImGui::Checkbox("Enable Boiling Filter", &restirSettings.EnableBoilingFilter);
+                if (restirSettings.EnableBoilingFilter)
+                {
+                    settingsChanged |= ImGui::SliderFloat(
+                        "Boiling Filter Strength",
+                        &restirSettings.BoilingFilterStrength,
+                        0.01f,
+                        1.0f);
+                }
+            }
+
+            if (ImGui::CollapsingHeader("Spatial Resampling"))
+            {
+                settingsChanged |= ImGui::Checkbox("Enable Spatial Resampling", &restirSettings.EnableSpatialResampling);
+                if (restirSettings.EnableSpatialResampling)
+                {
+                    settingsChanged |= ImGui::Combo(
+                        "Spatial Bias Correction",
+                        &spatialBiasCorrection,
+                        "Off\0Basic\0Pairwise\0Ray Traced\0");
+                    settingsChanged |= ImGui::InputInt("Spatial Samples", &spatialNeighborCount);
+                    settingsChanged |= ImGui::InputInt(
+                        "Spatial Disocclusion Boost Samples",
+                        &spatialDisocclusionBoostSampleCount);
+                    settingsChanged |= ImGui::InputInt(
+                        "Spatial Target History Length",
+                        &spatialTargetHistoryLength);
+                    settingsChanged |= ImGui::SliderFloat(
+                        "Spatial Sampling Radius",
+                        &restirSettings.SpatialSamplingRadius,
+                        1.0f,
+                        64.0f);
+                    settingsChanged |= ImGui::SliderFloat(
+                        "Spatial Normal Threshold",
+                        &restirSettings.SpatialNormalSimilarityThreshold,
+                        -1.0f,
+                        1.0f);
+                    settingsChanged |= ImGui::SliderFloat(
+                        "Spatial Depth Threshold",
+                        &restirSettings.SpatialDepthSimilarityThreshold,
+                        0.0f,
+                        1.0f);
+                    settingsChanged |= ImGui::Checkbox(
+                        "Enable Spatial Material Similarity Test",
+                        &restirSettings.EnableSpatialMaterialSimilarityTest);
+                    if (restirSettings.EnableSpatialMaterialSimilarityTest)
+                    {
+                        settingsChanged |= ImGui::SliderFloat(
+                            "Spatial Material Threshold",
+                            &restirSettings.SpatialMaterialSimilarityThreshold,
+                            0.0f,
+                            2.0f);
+                    }
+                    settingsChanged |= ImGui::Checkbox(
+                        "Discount Naive Spatial Samples",
+                        &restirSettings.DiscountNaiveSpatialSamples);
+                }
+            }
+
+            if (ImGui::CollapsingHeader("Final Shading"))
+            {
+                settingsChanged |= ImGui::Checkbox("Enable Final Visibility", &restirSettings.EnableFinalVisibility);
+                settingsChanged |= ImGui::Checkbox(
+                    "Discard Invisible Samples",
+                    &restirSettings.EnableTemporalVisibilityShortcut);
+                settingsChanged |= ImGui::Checkbox(
+                    "Reuse Final Visibility",
+                    &restirSettings.ReuseFinalVisibility);
+                if (restirSettings.ReuseFinalVisibility)
+                {
+                    settingsChanged |= ImGui::InputInt("Final Visibility Max Age", &finalVisibilityMaxAge);
+                    settingsChanged |= ImGui::SliderFloat(
+                        "Final Visibility Max Distance",
+                        &restirSettings.FinalVisibilityMaxDistance,
+                        0.0f,
+                        127.0f);
+                }
+            }
         }
-        settingsChanged |= ImGui::Checkbox("Enable Boiling Filter", &restirSettings.EnableBoilingFilter);
-        settingsChanged |= ImGui::SliderFloat("Boiling Filter Strength", &restirSettings.BoilingFilterStrength, 0.01f, 1.0f);
-        settingsChanged |= ImGui::Checkbox("Enable Spatial Reuse", &restirSettings.EnableSpatialResampling);
-        if (restirSettings.EnableSpatialResampling)
-        {
-            settingsChanged |= ImGui::Checkbox("Spatial Visibility", &restirSettings.EnableSpatialVisibility);
-            settingsChanged |= ImGui::SliderInt("Spatial Neighbors", &spatialNeighborCount, 1, 16);
-            settingsChanged |= ImGui::SliderFloat("Spatial Radius (pixels)", &restirSettings.SpatialSamplingRadius, 1.0f, 64.0f);
-            settingsChanged |= ImGui::SliderFloat("Spatial Normal Threshold", &restirSettings.SpatialNormalSimilarityThreshold, -1.0f, 1.0f);
-            settingsChanged |= ImGui::SliderFloat("Spatial Depth Threshold", &restirSettings.DepthSimilarityThreshold, 0.0f, 1.0f);
-            settingsChanged |= ImGui::SliderFloat("Spatial Material Threshold", &restirSettings.MaterialSimilarityThreshold, 0.0f, 2.0f);
-        }
-        settingsChanged |= ImGui::Checkbox("Final Visibility", &restirSettings.EnableFinalVisibility);
-        ImGui::TextDisabled("Each enabled visibility stage traces inline shadow rays only for its selected candidates.");
         if (settingsChanged)
         {
-            restirSettings.CandidateCount = static_cast<uint32_t>(candidateCount);
-            restirSettings.SpatialNeighborCount = static_cast<uint32_t>(spatialNeighborCount);
-            restirSettings.TemporalMaxHistoryLength = static_cast<uint32_t>(temporalMaxHistoryLength);
+            restirSettings.CandidateCount = static_cast<uint32_t>(candidateCount < 1 ? 1 : candidateCount);
+            restirSettings.TemporalBiasCorrection = static_cast<ReSTIRDITemporalBiasCorrectionMode>(temporalBiasCorrection);
+            restirSettings.TemporalMaxHistoryLength = static_cast<uint32_t>(temporalMaxHistoryLength < 1 ? 1 : temporalMaxHistoryLength);
+            restirSettings.SpatialBiasCorrection = static_cast<ReSTIRDISpatialBiasCorrectionMode>(spatialBiasCorrection);
+            restirSettings.SpatialNeighborCount = static_cast<uint32_t>(spatialNeighborCount < 1 ? 1 : spatialNeighborCount);
+            restirSettings.SpatialDisocclusionBoostSampleCount = static_cast<uint32_t>(
+                spatialDisocclusionBoostSampleCount < 1 ? 1 : spatialDisocclusionBoostSampleCount);
+            restirSettings.SpatialTargetHistoryLength = static_cast<uint32_t>(
+                spatialTargetHistoryLength < 0 ? 0 : spatialTargetHistoryLength);
+            restirSettings.FinalVisibilityMaxAge = static_cast<uint32_t>(finalVisibilityMaxAge < 0 ? 0 : finalVisibilityMaxAge);
             m_DirectLightingReSTIRDI.SetSettings(restirSettings);
             ResetAccumulation();
         }

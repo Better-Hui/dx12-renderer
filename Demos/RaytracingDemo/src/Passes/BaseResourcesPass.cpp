@@ -200,6 +200,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
                 RaytracingDemoGBufferMaterialConstants materialConstants{};
                 materialConstants.Diffuse = material.Diffuse;
                 materialConstants.Specular = material.Specular;
+                materialConstants.Emission = material.Emission;
                 materialConstants.TilingOffset = material.TilingOffset;
 //Modify Begin:2026-07-30 by BestHui
                 materialConstants.DiffuseTextureIndex = material.DiffuseTextureIndex;
@@ -207,6 +208,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
                 materialConstants.MetallicTextureIndex = material.MetallicTextureIndex;
                 materialConstants.RoughnessTextureIndex = material.RoughnessTextureIndex;
                 materialConstants.AmbientOcclusionTextureIndex = material.AmbientOcclusionTextureIndex;
+                materialConstants.EmissionTextureIndex = material.EmissionTextureIndex;
 //Modify End
                 materialConstants.Metallic = material.Metallic;
                 materialConstants.Roughness = material.Roughness;
@@ -215,6 +217,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
                 materialConstants.HasMetallicMap = material.HasMetallicMap;
                 materialConstants.HasRoughnessMap = material.HasRoughnessMap;
                 materialConstants.HasAmbientOcclusionMap = material.HasAmbientOcclusionMap;
+                materialConstants.HasEmissionMap = material.HasEmissionMap;
                 commandContext.SetConstantBuffer(*resources.GBufferShader, "MaterialCBuffer", sizeof(materialConstants), &materialConstants);
 
 //Modify Begin:2026-07-29 by BestHui

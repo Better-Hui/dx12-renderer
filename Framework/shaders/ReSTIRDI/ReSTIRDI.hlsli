@@ -1,26 +1,39 @@
 #ifndef FRAMEWORK_RESTIR_DI_HLSLI
 #define FRAMEWORK_RESTIR_DI_HLSLI
 
-//Modify Begin:2026-08-05 by BestHui
+//Modify Begin:2026-07-30 by BestHui
 struct ReSTIRDIReservoir
 {
-    uint LightIndex;
-    uint SampleSeed;
+    uint LightData;
+    uint UvData;
     float WeightSum;
     float SelectedTargetPdf;
     float M;
+    uint PackedVisibility;
+    int2 SpatialDistance;
     uint Age;
     float CanonicalWeight;
 };
 
+static const uint ReSTIRDILightValidBit = 0x80000000u;
+static const uint ReSTIRDILightIndexMask = 0x7fffffffu;
+static const uint ReSTIRDIVisibilityMask = 0x0003ffffu;
+static const uint ReSTIRDIVisibilityChannelMask = 0x3fu;
+static const uint ReSTIRDIVisibilityChannelShift = 6u;
+static const uint ReSTIRDIMShift = 18u;
+static const uint ReSTIRDIMaxM = 0x3fffu;
+static const float ReSTIRDINaiveSamplingMThreshold = 1.0f;
+
 ReSTIRDIReservoir ReSTIRDIEmptyReservoir()
 {
     ReSTIRDIReservoir reservoir;
-    reservoir.LightIndex = 0u;
-    reservoir.SampleSeed = 0u;
+    reservoir.LightData = 0u;
+    reservoir.UvData = 0u;
     reservoir.WeightSum = 0.0f;
     reservoir.SelectedTargetPdf = 0.0f;
     reservoir.M = 0.0f;
+    reservoir.PackedVisibility = 0u;
+    reservoir.SpatialDistance = int2(0, 0);
     reservoir.Age = 0u;
     reservoir.CanonicalWeight = 0.0f;
     return reservoir;
@@ -28,74 +41,110 @@ ReSTIRDIReservoir ReSTIRDIEmptyReservoir()
 
 bool ReSTIRDIIsValid(const ReSTIRDIReservoir reservoir)
 {
-    return reservoir.M > 0.0f && reservoir.WeightSum > 0.0f && reservoir.SelectedTargetPdf > 0.0f;
+    return reservoir.LightData != 0u;
 }
 
-static const uint ReSTIRDIVisibilityStageCandidate = 1u << 0u;
-static const uint ReSTIRDIVisibilityStageTemporal = 1u << 1u;
-static const uint ReSTIRDIVisibilityStageSpatial = 1u << 2u;
-static const uint ReSTIRDIVisibilityStageFinal = 1u << 3u;
-
-bool ReSTIRDIShouldTestVisibility(const uint visibilityTestMask, const uint stage)
+uint ReSTIRDIGetLightIndex(const ReSTIRDIReservoir reservoir)
 {
-    return (visibilityTestMask & stage) != 0u;
+    return reservoir.LightData & ReSTIRDILightIndexMask;
+}
+
+float2 ReSTIRDIGetSampleUv(const ReSTIRDIReservoir reservoir)
+{
+    return float2(reservoir.UvData & 0xffffu, reservoir.UvData >> 16u) / 65535.0f;
+}
+
+uint ReSTIRDIEncodeSampleUv(const float2 uv)
+{
+    const uint2 encoded = uint2(saturate(uv) * 65535.0f);
+    return encoded.x | (encoded.y << 16u);
+}
+
+void ReSTIRDIStoreVisibility(inout ReSTIRDIReservoir reservoir, const float visibility, const bool discardIfInvisible)
+{
+    const uint encoded = uint(saturate(visibility) * float(ReSTIRDIVisibilityChannelMask));
+    reservoir.PackedVisibility = encoded |
+        (encoded << ReSTIRDIVisibilityChannelShift) |
+        (encoded << (ReSTIRDIVisibilityChannelShift * 2u));
+    reservoir.SpatialDistance = int2(0, 0);
+    reservoir.Age = 0u;
+    if (discardIfInvisible && encoded == 0u)
+    {
+        reservoir.LightData = 0u;
+        reservoir.WeightSum = 0.0f;
+    }
+}
+
+bool ReSTIRDIGetReusedVisibility(const ReSTIRDIReservoir reservoir, const uint maxAge, const float maxDistance, out float visibility)
+{
+    if (reservoir.Age > 0u && reservoir.Age <= maxAge && length(float2(reservoir.SpatialDistance)) < maxDistance)
+    {
+        visibility = float(reservoir.PackedVisibility & ReSTIRDIVisibilityChannelMask) / float(ReSTIRDIVisibilityChannelMask);
+        return true;
+    }
+
+    visibility = 0.0f;
+    return false;
 }
 
 bool ReSTIRDIStreamSample(
     inout ReSTIRDIReservoir reservoir,
     const uint lightIndex,
-    const uint sampleSeed,
-    const float candidateWeight,
+    const float2 sampleUv,
     const float candidateTargetPdf,
-    const float candidateM,
-    const uint candidateAge,
+    const float inverseSourcePdf,
     const float randomSample)
 {
-    reservoir.M = min(1048575.0f, reservoir.M + candidateM);
-    if (candidateWeight <= 0.0f || candidateTargetPdf <= 0.0f)
+    const float candidateWeight = candidateTargetPdf * inverseSourcePdf;
+    reservoir.M += 1.0f;
+    reservoir.WeightSum += candidateWeight;
+    const bool selectSample = randomSample * reservoir.WeightSum < candidateWeight;
+    if (selectSample)
     {
-        return false;
-    }
-
-    const float combinedWeight = reservoir.WeightSum + candidateWeight;
-    if (randomSample * combinedWeight < candidateWeight)
-    {
-        reservoir.LightIndex = lightIndex;
-        reservoir.SampleSeed = sampleSeed;
+        reservoir.LightData = lightIndex | ReSTIRDILightValidBit;
+        reservoir.UvData = ReSTIRDIEncodeSampleUv(sampleUv);
         reservoir.SelectedTargetPdf = candidateTargetPdf;
-        reservoir.Age = candidateAge;
     }
+    return selectSample;
+}
 
-    reservoir.WeightSum = combinedWeight;
-    return randomSample * combinedWeight < candidateWeight;
+bool ReSTIRDIInternalSimpleResample(
+    inout ReSTIRDIReservoir reservoir,
+    const ReSTIRDIReservoir sourceReservoir,
+    const float randomSample,
+    const float targetPdfAtReceiver,
+    const float sampleNormalization,
+    const float sampleM)
+{
+    const float candidateWeight = targetPdfAtReceiver * sampleNormalization;
+    reservoir.M += sampleM;
+    reservoir.WeightSum += candidateWeight;
+    const bool selectSample = randomSample * reservoir.WeightSum < candidateWeight;
+    if (selectSample)
+    {
+        reservoir.LightData = sourceReservoir.LightData;
+        reservoir.UvData = sourceReservoir.UvData;
+        reservoir.SelectedTargetPdf = targetPdfAtReceiver;
+        reservoir.PackedVisibility = sourceReservoir.PackedVisibility;
+        reservoir.SpatialDistance = sourceReservoir.SpatialDistance;
+        reservoir.Age = sourceReservoir.Age;
+    }
+    return selectSample;
 }
 
 bool ReSTIRDICombineReservoirs(
     inout ReSTIRDIReservoir reservoir,
     const ReSTIRDIReservoir sourceReservoir,
-    const float targetPdfAtReceiver,
-    const float randomSample)
+    const float randomSample,
+    const float targetPdfAtReceiver)
 {
-    if (sourceReservoir.M <= 0.0f)
-    {
-        return false;
-    }
-
-    if (!ReSTIRDIIsValid(sourceReservoir) || targetPdfAtReceiver <= 0.0f)
-    {
-        reservoir.M = min(1048575.0f, reservoir.M + sourceReservoir.M);
-        return false;
-    }
-
-    return ReSTIRDIStreamSample(
+    return ReSTIRDIInternalSimpleResample(
         reservoir,
-        sourceReservoir.LightIndex,
-        sourceReservoir.SampleSeed,
-        sourceReservoir.WeightSum * sourceReservoir.M * targetPdfAtReceiver,
+        sourceReservoir,
+        randomSample,
         targetPdfAtReceiver,
-        sourceReservoir.M,
-        sourceReservoir.Age,
-        randomSample);
+        sourceReservoir.WeightSum * sourceReservoir.M,
+        sourceReservoir.M);
 }
 
 void ReSTIRDIFinalizeResampling(inout ReSTIRDIReservoir reservoir)
@@ -132,34 +181,59 @@ bool ReSTIRDIIsSurfaceCompatible(
 {
     const float depthDifference = abs(receiverDepth - sourceDepth);
     const float normalizedDepthThreshold = depthThreshold * max(receiverDepth, sourceDepth);
-    return dot(receiverNormal, sourceNormal) >= normalThreshold &&
-        depthDifference <= normalizedDepthThreshold;
+    return dot(receiverNormal, sourceNormal) >= normalThreshold && depthDifference <= normalizedDepthThreshold;
 }
 
-float ReSTIRDIClampHistoryM(const ReSTIRDIReservoir reservoir, const uint maxHistoryLength)
+float ReSTIRDIPairwiseMFactor(const float q0, const float q1)
 {
-    return min(reservoir.M, max(1.0f, float(maxHistoryLength)));
+    return q0 <= 0.0f ? 1.0f : clamp(pow(min(q1 / q0, 1.0f), 8.0f), 0.0f, 1.0f);
 }
 
-uint4 ReSTIRDIPackReservoir(const ReSTIRDIReservoir reservoir)
+float ReSTIRDIPairwiseMisWeight(const float w0, const float w1, const float m0, const float m1)
+{
+    const float denominator = m0 * w0 + m1 * w1;
+    return denominator <= 0.0f ? 0.0f : max(0.0f, m0 * w0) / denominator;
+}
+
+uint4 ReSTIRDIPackReservoirCore(const ReSTIRDIReservoir reservoir)
 {
     return uint4(
-        (reservoir.LightIndex & 0x0000ffffu) | ((reservoir.SampleSeed & 0x0000ffffu) << 16u),
-        asuint(reservoir.WeightSum),
+        reservoir.LightData,
+        reservoir.UvData,
         asuint(reservoir.SelectedTargetPdf),
-        asuint(reservoir.M));
+        asuint(reservoir.WeightSum));
 }
 
-ReSTIRDIReservoir ReSTIRDIUnpackReservoir(const uint4 packedReservoir)
+uint4 ReSTIRDIPackReservoirState(const ReSTIRDIReservoir reservoir)
+{
+    const int2 distance = clamp(reservoir.SpatialDistance, int2(-127, -127), int2(127, 127));
+    const uint distanceAge = (uint(distance.x) & 0xffu) |
+        ((uint(distance.y) & 0xffu) << 8u) |
+        (min(reservoir.Age, 255u) << 16u);
+    return uint4(
+        reservoir.PackedVisibility | (min(uint(max(reservoir.M, 0.0f)), ReSTIRDIMaxM) << ReSTIRDIMShift),
+        distanceAge,
+        0u,
+        0u);
+}
+
+ReSTIRDIReservoir ReSTIRDIUnpackReservoir(const uint4 packedCore, const uint4 packedState)
 {
     ReSTIRDIReservoir reservoir;
-    reservoir.LightIndex = packedReservoir.x & 0x0000ffffu;
-    reservoir.SampleSeed = packedReservoir.x >> 16u;
-    reservoir.WeightSum = asfloat(packedReservoir.y);
-    reservoir.SelectedTargetPdf = asfloat(packedReservoir.z);
-    reservoir.M = asfloat(packedReservoir.w);
-    reservoir.Age = 0u;
+    reservoir.LightData = packedCore.x;
+    reservoir.UvData = packedCore.y;
+    reservoir.SelectedTargetPdf = asfloat(packedCore.z);
+    reservoir.WeightSum = asfloat(packedCore.w);
+    reservoir.M = float((packedState.x >> ReSTIRDIMShift) & ReSTIRDIMaxM);
+    reservoir.PackedVisibility = packedState.x & ReSTIRDIVisibilityMask;
+    reservoir.SpatialDistance.x = int(packedState.y << 24u) >> 24;
+    reservoir.SpatialDistance.y = int(packedState.y << 16u) >> 24;
+    reservoir.Age = (packedState.y >> 16u) & 0xffu;
     reservoir.CanonicalWeight = 0.0f;
+    if (!isfinite(reservoir.WeightSum) || !isfinite(reservoir.SelectedTargetPdf))
+    {
+        return ReSTIRDIEmptyReservoir();
+    }
     return reservoir;
 }
 //Modify End

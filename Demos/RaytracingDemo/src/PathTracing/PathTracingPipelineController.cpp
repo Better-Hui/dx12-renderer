@@ -53,7 +53,6 @@ void PathTracingPipelineController::RetireCurrentPipelines()
 //Modify Begin:2026-08-05 by BestHui
     retired.InlineReSTIRDIRISShader = std::move(m_InlineReSTIRDIRISShader);
     retired.InlineReSTIRDITemporalShader = std::move(m_InlineReSTIRDITemporalShader);
-    retired.InlineReSTIRDIBoilingShader = std::move(m_InlineReSTIRDIBoilingShader);
     retired.InlineReSTIRDISpatialShader = std::move(m_InlineReSTIRDISpatialShader);
     retired.InlineReSTIRDIShadeShader = std::move(m_InlineReSTIRDIShadeShader);
 //Modify End
@@ -88,7 +87,6 @@ void PathTracingPipelineController::Reset()
 //Modify Begin:2026-08-05 by BestHui
     m_InlineReSTIRDIRISShader.reset();
     m_InlineReSTIRDITemporalShader.reset();
-    m_InlineReSTIRDIBoilingShader.reset();
     m_InlineReSTIRDISpatialShader.reset();
     m_InlineReSTIRDIShadeShader.reset();
 //Modify End
@@ -129,7 +127,6 @@ void PathTracingPipelineController::EnsurePipelines(
 //Modify Begin:2026-08-05 by BestHui
         m_InlineReSTIRDIRISShader != nullptr &&
         m_InlineReSTIRDITemporalShader != nullptr &&
-        m_InlineReSTIRDIBoilingShader != nullptr &&
         m_InlineReSTIRDISpatialShader != nullptr &&
         m_InlineReSTIRDIShadeShader != nullptr &&
 //Modify End
@@ -255,9 +252,6 @@ void PathTracingPipelineController::CreateInlinePipelines(const RayTracingSceneR
     m_InlineReSTIRDITemporalShader = createReSTIRDIShader(
         L"ReSTIRDI.Temporal.cs.cso",
         L"Framework/shaders/ReSTIRDI/ReSTIRDI.Temporal.cs.hlsl");
-    m_InlineReSTIRDIBoilingShader = createReSTIRDIShader(
-        L"ReSTIRDI.Boiling.cs.cso",
-        L"Framework/shaders/ReSTIRDI/ReSTIRDI.Boiling.cs.hlsl");
     m_InlineReSTIRDISpatialShader = createReSTIRDIShader(
         L"ReSTIRDI.Spatial.cs.cso",
         L"Framework/shaders/ReSTIRDI/ReSTIRDI.Spatial.cs.hlsl");
@@ -340,11 +334,6 @@ ComputeShader& PathTracingPipelineController::GetInlineReSTIRDIRISShader() const
 ComputeShader& PathTracingPipelineController::GetInlineReSTIRDITemporalShader() const
 {
     return *m_InlineReSTIRDITemporalShader;
-}
-
-ComputeShader& PathTracingPipelineController::GetInlineReSTIRDIBoilingShader() const
-{
-    return *m_InlineReSTIRDIBoilingShader;
 }
 
 ComputeShader& PathTracingPipelineController::GetInlineReSTIRDISpatialShader() const

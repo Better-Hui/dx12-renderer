@@ -21,7 +21,6 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
 //Modify Begin:2026-08-05 by BestHui
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateReSTIRDIRISPass(resources, config));
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateReSTIRDITemporalPass(resources, config));
-    renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateReSTIRDIBoilingPass(resources, config));
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateReSTIRDISpatialPass(resources, config));
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateReSTIRDIShadePass(resources, config));
 //Modify End

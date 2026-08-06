@@ -1,66 +1,42 @@
-//Modify Begin:2026-08-05 by BestHui
+//Modify Begin:2026-07-30 by BestHui
 #define RAYTRACING_DEMO_RESTIR_DI 1
 
 #include "../../../Demos/RaytracingDemo/shaders/PathTracing/PathTracing.rayquery.hlsli"
 #include "ReSTIRDI/ReSTIRDI.hlsli"
+#include "ReSTIRDI/ReSTIRDIConstants.hlsli"
 
 Texture2D<uint4> ReSTIRDIRISReservoir : register(t12, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
-Texture2D<float2> MotionVectorTexture : register(t13, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
-RWTexture2D<uint4> ReSTIRDIHistoryReservoir : register(u2);
-RWTexture2D<uint4> ReSTIRDICurrentReservoir : register(u3);
-RWTexture2D<float4> ReSTIRDIHistoryPosition : register(u4);
-RWTexture2D<float4> ReSTIRDICurrentPosition : register(u5);
-RWTexture2D<float4> ReSTIRDIHistoryNormalRoughness : register(u6);
-RWTexture2D<float4> ReSTIRDICurrentNormalRoughness : register(u7);
-RWTexture2D<float4> ReSTIRDIHistoryDiffuseMetallic : register(u8);
-RWTexture2D<float4> ReSTIRDICurrentDiffuseMetallic : register(u9);
-RWTexture2D<float4> ReSTIRDIHistorySpecularOcclusion : register(u10);
-RWTexture2D<float4> ReSTIRDICurrentSpecularOcclusion : register(u11);
-
-cbuffer ReSTIRDIConstants : register(b1)
-{
-    uint ReSTIRDI_CandidateCount;
-    uint ReSTIRDI_TemporalResamplingEnabled;
-    uint ReSTIRDI_SpatialNeighborCount;
-    uint ReSTIRDI_HistoryValid;
-    uint ReSTIRDI_BoilingFilterEnabled;
-    uint ReSTIRDI_VisibilityTestMask;
-    uint ReSTIRDI_TemporalMaxHistoryLength;
-    float ReSTIRDI_BoilingFilterStrength;
-    float ReSTIRDI_SpatialSamplingRadius;
-    float ReSTIRDI_TemporalNormalSimilarityThreshold;
-    float ReSTIRDI_SpatialNormalSimilarityThreshold;
-    float ReSTIRDI_DepthSimilarityThreshold;
-    float ReSTIRDI_MaterialSimilarityThreshold;
-    float ReSTIRDI_Padding0;
-    float ReSTIRDI_Padding1;
-};
+Texture2D<uint4> ReSTIRDIRISReservoirState : register(t13, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
+Texture2D<float2> MotionVectorTexture : register(t14, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
+Texture2D<uint4> ReSTIRDIHistoryReservoir : register(t15, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
+Texture2D<uint4> ReSTIRDIHistoryReservoirState : register(t16, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
+Texture2D<float4> ReSTIRDIHistoryPosition : register(t17, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
+Texture2D<float4> ReSTIRDIHistoryNormalRoughness : register(t18, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
+Texture2D<float4> ReSTIRDIHistoryDiffuseMetallic : register(t19, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
+Texture2D<float4> ReSTIRDIHistorySpecularOcclusion : register(t20, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
+RWTexture2D<uint4> ReSTIRDITemporalReservoir : register(u2);
+RWTexture2D<uint4> ReSTIRDITemporalReservoirState : register(u3);
 
 #include "../../../Demos/RaytracingDemo/shaders/PathTracing/PathTracingShared.hlsli"
 #include "ReSTIRDI/ReSTIRDISurface.hlsli"
 
+static const uint ReSTIRDIBoilingFilterGroupSize = 8u;
+static const uint ReSTIRDIBoilingFilterSharedWaveCount = 2u;
+groupshared float ReSTIRDIBoilingFilterWeights[ReSTIRDIBoilingFilterSharedWaveCount];
+groupshared uint ReSTIRDIBoilingFilterCounts[ReSTIRDIBoilingFilterSharedWaveCount];
+
 SurfaceData LoadReSTIRDIHistorySurface(const uint2 pixel)
 {
-    SurfaceData surface;
-    surface.Diffuse = 0.0f;
-    surface.Specular = 0.0f;
-    surface.PositionWs = 0.0f;
-    surface.NormalWs = float3(0.0f, 1.0f, 0.0f);
-    surface.PositionError = 0.0f;
-    surface.Metallic = 0.0f;
-    surface.Roughness = 1.0f;
-    surface.AmbientOcclusion = 1.0f;
-    surface.Valid = false;
-
-    const float4 positionAndDepth = ReSTIRDIHistoryPosition[pixel];
+    SurfaceData surface = (SurfaceData)0;
+    const float4 positionAndDepth = ReSTIRDIHistoryPosition.Load(int3(pixel, 0));
     if (positionAndDepth.w <= 0.0f)
     {
         return surface;
     }
 
-    const float4 normalRoughness = ReSTIRDIHistoryNormalRoughness[pixel];
-    const float4 diffuseMetallic = ReSTIRDIHistoryDiffuseMetallic[pixel];
-    const float4 specularOcclusion = ReSTIRDIHistorySpecularOcclusion[pixel];
+    const float4 normalRoughness = ReSTIRDIHistoryNormalRoughness.Load(int3(pixel, 0));
+    const float4 diffuseMetallic = ReSTIRDIHistoryDiffuseMetallic.Load(int3(pixel, 0));
+    const float4 specularOcclusion = ReSTIRDIHistorySpecularOcclusion.Load(int3(pixel, 0));
     surface.PositionWs = positionAndDepth.xyz;
     surface.PositionError = ComputePositionError(surface.PositionWs);
     surface.NormalWs = normalize(normalRoughness.xyz);
@@ -73,128 +49,191 @@ SurfaceData LoadReSTIRDIHistorySurface(const uint2 pixel)
     return surface;
 }
 
-void StoreReSTIRDIHistorySurface(const uint2 pixel, const SurfaceData surface, const float depth)
+void ApplyReSTIRDIBoilingFilter(const uint2 localIndex, inout ReSTIRDIReservoir reservoir)
 {
-    ReSTIRDICurrentPosition[pixel] = surface.Valid ? float4(surface.PositionWs, depth) : 0.0f;
-    ReSTIRDICurrentNormalRoughness[pixel] = surface.Valid ? float4(normalize(surface.NormalWs), surface.Roughness) : 0.0f;
-    ReSTIRDICurrentDiffuseMetallic[pixel] = surface.Valid ? float4(surface.Diffuse, surface.Metallic) : 0.0f;
-    ReSTIRDICurrentSpecularOcclusion[pixel] = surface.Valid ? float4(surface.Specular, surface.AmbientOcclusion) : 0.0f;
-}
-
-[numthreads(8, 8, 1)]
-void main(uint3 dispatchThreadId : SV_DispatchThreadID)
-{
-    const uint2 pixel = dispatchThreadId.xy;
-    if (pixel.x >= Camera_Width || pixel.y >= Camera_Height)
+    if (ReSTIRDI_BoilingFilterEnabled == 0u)
     {
         return;
     }
 
-    const ReSTIRDIReservoir currentReservoir = ReSTIRDIUnpackReservoir(ReSTIRDIRISReservoir.Load(int3(pixel, 0)));
-    ReSTIRDIReservoir reservoir = ReSTIRDIEmptyReservoir();
-    const SurfaceData surface = LoadGBufferSurface(pixel);
-    const uint totalLightCount = GetReSTIRDILightCount();
-    const float receiverDepth = surface.Valid ? length(surface.PositionWs - Camera_Position.xyz) : 0.0f;
-    bool selectedHistorySample = false;
-    float historyM = 0.0f;
-    SurfaceData historySurface;
-    historySurface.Valid = false;
-    if (surface.Valid && ReSTIRDIIsValid(currentReservoir))
+    const uint linearIndex = localIndex.x + localIndex.y * ReSTIRDIBoilingFilterGroupSize;
+    float waveWeight = WaveActiveSum(reservoir.WeightSum);
+    uint waveCount = WaveActiveCountBits(reservoir.WeightSum > 0.0f);
+    const uint waveIndex = linearIndex / WaveGetLaneCount();
+    if (WaveIsFirstLane())
     {
-        ReSTIRDICombineReservoirs(
-            reservoir,
-            currentReservoir,
-            currentReservoir.SelectedTargetPdf,
-            0.5f);
+        ReSTIRDIBoilingFilterWeights[waveIndex] = waveWeight;
+        ReSTIRDIBoilingFilterCounts[waveIndex] = waveCount;
     }
-    if (surface.Valid && ReSTIRDI_TemporalResamplingEnabled != 0u && ReSTIRDI_HistoryValid != 0u && totalLightCount != 0u)
+
+    GroupMemoryBarrierWithGroupSync();
+
+    const uint reductionLaneCount = (ReSTIRDIBoilingFilterGroupSize * ReSTIRDIBoilingFilterGroupSize + WaveGetLaneCount() - 1u) / WaveGetLaneCount();
+    if (linearIndex < reductionLaneCount)
     {
-        uint rngState = InitializeRandomState(pixel, Camera_Width, Camera_FrameIndex, 0x0f16c4a3u);
-        const float2 motionVector = MotionVectorTexture.Load(int3(pixel, 0));
-        const float2 reprojectedPosition =
-            float2(pixel) +
-            motionVector * float2(Camera_Width, Camera_Height) +
-            float2(Random01(rngState), Random01(rngState)) -
-            0.5f;
-        const int2 reprojectedPixel = int2(round(reprojectedPosition));
-        [unroll]
-        for (uint searchIndex = 0u; searchIndex < 9u; ++searchIndex)
+        waveWeight = ReSTIRDIBoilingFilterWeights[linearIndex];
+        waveCount = ReSTIRDIBoilingFilterCounts[linearIndex];
+        waveWeight = WaveActiveSum(waveWeight);
+        waveCount = WaveActiveSum(waveCount);
+        if (linearIndex == 0u)
         {
-            const int2 searchOffset = searchIndex == 0u
-                ? int2(0, 0)
-                : int2(
-                    int((Random01(rngState) - 0.5f) * 4.0f),
-                    int((Random01(rngState) - 0.5f) * 4.0f));
-            const int2 historyPixel = reprojectedPixel + searchOffset;
-            if (!all(historyPixel >= 0) || historyPixel.x >= int(Camera_Width) || historyPixel.y >= int(Camera_Height))
-            {
-                continue;
-            }
+            ReSTIRDIBoilingFilterWeights[0] = waveCount > 0u ? waveWeight / float(waveCount) : 0.0f;
+        }
+    }
 
-            ReSTIRDIReservoir history = ReSTIRDIUnpackReservoir(ReSTIRDIHistoryReservoir[historyPixel]);
-            historySurface = LoadReSTIRDIHistorySurface(historyPixel);
-            const bool surfacesCompatible = ReSTIRDIHaveCompatibleSurfaces(
-                surface,
-                receiverDepth,
-                historySurface,
-                ReSTIRDIHistoryPosition[historyPixel].w,
-                ReSTIRDI_TemporalNormalSimilarityThreshold,
-                ReSTIRDI_DepthSimilarityThreshold,
-                ReSTIRDI_MaterialSimilarityThreshold);
-            if (!surfacesCompatible)
-            {
-                continue;
-            }
+    GroupMemoryBarrierWithGroupSync();
 
-            if (ReSTIRDIIsValid(history) && history.LightIndex < totalLightCount)
+    const float thresholdMultiplier = 10.0f / clamp(ReSTIRDI_BoilingFilterStrength, 0.000001f, 1.0f) - 9.0f;
+    if (reservoir.WeightSum > ReSTIRDIBoilingFilterWeights[0] * thresholdMultiplier)
+    {
+        reservoir = ReSTIRDIEmptyReservoir();
+    }
+}
+
+int2 ApplyReSTIRDIPermutationSampling(const int2 pixel)
+{
+    const uint uniformRandomNumber = Camera_FrameIndex * 747796405u + 2891336453u;
+    const int2 offset = int2(uniformRandomNumber & 3u, (uniformRandomNumber >> 2u) & 3u);
+    int2 permutedPixel = pixel + offset;
+    permutedPixel.x ^= 3;
+    permutedPixel.y ^= 3;
+    return permutedPixel - offset;
+}
+
+[numthreads(8, 8, 1)]
+void main(uint3 dispatchThreadId : SV_DispatchThreadID, uint3 groupThreadId : SV_GroupThreadID)
+{
+    const uint2 pixel = dispatchThreadId.xy;
+    const bool pixelInBounds = pixel.x < Camera_Width && pixel.y < Camera_Height;
+    ReSTIRDIReservoir result = ReSTIRDIEmptyReservoir();
+
+    if (pixelInBounds)
+    {
+        const SurfaceData surface = LoadGBufferSurface(pixel);
+        const ReSTIRDIReservoir current = ReSTIRDIUnpackReservoir(
+            ReSTIRDIRISReservoir.Load(int3(pixel, 0)), ReSTIRDIRISReservoirState.Load(int3(pixel, 0)));
+        if (surface.Valid)
+        {
+            ReSTIRDICombineReservoirs(result, current, 0.5f, current.SelectedTargetPdf);
+            if (ReSTIRDI_TemporalResamplingEnabled != 0u && ReSTIRDI_HistoryValid != 0u)
             {
-                history.M = min(
-                    history.M,
-                    float(ReSTIRDI_TemporalMaxHistoryLength) * max(1.0f, currentReservoir.M));
-                const ReSTIRDIDirectLightSample historySample = SampleReSTIRDIDirectLight(history.LightIndex, surface, history.SampleSeed);
-                const bool visible = !ReSTIRDIShouldTestVisibility(
-                    ReSTIRDI_VisibilityTestMask,
-                    ReSTIRDIVisibilityStageTemporal) ||
-                    IsReSTIRDIDirectLightSampleVisible(surface, historySample);
-                if (visible)
+                uint rngState = InitializeRandomState(pixel, Camera_Width, Camera_FrameIndex, 0x0f16c4a3u);
+                float2 motion = MotionVectorTexture.Load(int3(pixel, 0)) * float2(Camera_Width, Camera_Height);
+                if (ReSTIRDI_TemporalPermutationSamplingEnabled == 0u)
                 {
-                    historyM = history.M;
-                    const float targetPdf = max(0.0f, Luminance(historySample.UnshadowedContribution));
-                    selectedHistorySample = ReSTIRDICombineReservoirs(
-                        reservoir,
-                        history,
-                        targetPdf,
-                        Random01(rngState));
+                    motion += float2(Random01(rngState), Random01(rngState)) - 0.5f;
+                }
+
+                const int2 reprojectedPixel = int2(round(float2(pixel) + motion));
+                const float receiverDepth = length(surface.PositionWs - Camera_Position.xyz);
+                ReSTIRDIReservoir history = ReSTIRDIEmptyReservoir();
+                SurfaceData historySurface = (SurfaceData)0;
+                int2 selectedPixel = int2(-1, -1);
+                [unroll]
+                for (uint searchIndex = 0u; searchIndex < 9u; ++searchIndex)
+                {
+                    const int2 offset = searchIndex == 0u
+                        ? int2(0, 0)
+                        : int2(int((Random01(rngState) - 0.5f) * 4.0f), int((Random01(rngState) - 0.5f) * 4.0f));
+                    int2 candidatePixel = reprojectedPixel + offset;
+                    if (ReSTIRDI_TemporalPermutationSamplingEnabled != 0u && searchIndex == 0u)
+                    {
+                        candidatePixel = ApplyReSTIRDIPermutationSampling(candidatePixel);
+                    }
+                    if (any(candidatePixel < 0) || candidatePixel.x >= int(Camera_Width) || candidatePixel.y >= int(Camera_Height))
+                    {
+                        continue;
+                    }
+
+                    const SurfaceData candidateSurface = LoadReSTIRDIHistorySurface(uint2(candidatePixel));
+                    const float candidateDepth = ReSTIRDIHistoryPosition.Load(int3(candidatePixel, 0)).w;
+                    if (!candidateSurface.Valid || !ReSTIRDIIsSurfaceCompatible(
+                        surface.NormalWs,
+                        receiverDepth,
+                        candidateSurface.NormalWs,
+                        candidateDepth,
+                        ReSTIRDI_TemporalNormalSimilarityThreshold,
+                        ReSTIRDI_TemporalDepthSimilarityThreshold))
+                    {
+                        continue;
+                    }
+
+                    history = ReSTIRDIUnpackReservoir(
+                        ReSTIRDIHistoryReservoir.Load(int3(candidatePixel, 0)),
+                        ReSTIRDIHistoryReservoirState.Load(int3(candidatePixel, 0)));
+                    historySurface = candidateSurface;
+                    selectedPixel = candidatePixel;
+                    break;
+                }
+
+                const uint currentLightIndex = ReSTIRDIIsValid(current) ? ReSTIRDIGetLightIndex(current) : ReSTIRDILightIndexMask;
+                uint selectedLightPreviousIndex = currentLightIndex;
+                bool selectedPreviousSample = false;
+                float previousM = 0.0f;
+                if (selectedPixel.x >= 0)
+                {
+                    history.M = min(history.M, float(ReSTIRDI_TemporalMaxHistoryLength) * max(1.0f, current.M));
+                    history.SpatialDistance += selectedPixel - reprojectedPixel;
+                    history.Age = min(history.Age + 1u, 255u);
+                    previousM = history.M;
+
+                    float historyTargetPdf = 0.0f;
+                    if (ReSTIRDIIsValid(history) && ReSTIRDIGetLightIndex(history) < GetReSTIRDILightCount())
+                    {
+                        const ReSTIRDIDirectLightSample sample = SampleReSTIRDIDirectLight(
+                            ReSTIRDIGetLightIndex(history), surface, ReSTIRDIGetSampleUv(history));
+                        historyTargetPdf = sample.Valid ? max(0.0f, Luminance(sample.UnshadowedContribution)) : 0.0f;
+                    }
+
+                    selectedPreviousSample = ReSTIRDICombineReservoirs(
+                        result, history, Random01(rngState), historyTargetPdf);
+                    if (selectedPreviousSample && ReSTIRDIIsValid(history))
+                    {
+                        selectedLightPreviousIndex = ReSTIRDIGetLightIndex(history);
+                    }
+                }
+
+                if (ReSTIRDI_TemporalBiasCorrectionMode != 0u && ReSTIRDIIsValid(result))
+                {
+                    float normalizationNumerator = result.SelectedTargetPdf;
+                    float normalizationDenominator = result.SelectedTargetPdf * current.M;
+                    if (selectedPixel.x >= 0 && previousM > 0.0f && selectedLightPreviousIndex < GetReSTIRDILightCount())
+                    {
+                        const ReSTIRDIDirectLightSample selectedSampleAtHistory = SampleReSTIRDIDirectLight(
+                            selectedLightPreviousIndex,
+                            historySurface,
+                            ReSTIRDIGetSampleUv(result));
+                        float temporalTargetPdf = selectedSampleAtHistory.Valid
+                            ? max(0.0f, Luminance(selectedSampleAtHistory.UnshadowedContribution))
+                            : 0.0f;
+                        if (ReSTIRDI_TemporalBiasCorrectionMode == 2u && temporalTargetPdf > 0.0f &&
+                            (!selectedPreviousSample || ReSTIRDI_TemporalVisibilityShortcutEnabled == 0u) &&
+                            !IsReSTIRDIDirectLightSampleVisible(historySurface, selectedSampleAtHistory))
+                        {
+                            temporalTargetPdf = 0.0f;
+                        }
+                        normalizationNumerator = selectedPreviousSample ? temporalTargetPdf : normalizationNumerator;
+                        normalizationDenominator += temporalTargetPdf * previousM;
+                    }
+                    ReSTIRDIFinalizeResampling(result, normalizationNumerator, normalizationDenominator);
+                }
+                else
+                {
+                    ReSTIRDIFinalizeResampling(result, 1.0f, result.M);
                 }
             }
-            break;
+            else
+            {
+                ReSTIRDIFinalizeResampling(result, 1.0f, result.M);
+            }
         }
     }
 
-    if (ReSTIRDIIsValid(reservoir))
+    ApplyReSTIRDIBoilingFilter(groupThreadId.xy, result);
+    if (pixelInBounds)
     {
-        const ReSTIRDIDirectLightSample selectedAtCurrent = SampleReSTIRDIDirectLight(
-            reservoir.LightIndex,
-            surface,
-            reservoir.SampleSeed);
-        float normalizationNumerator = reservoir.SelectedTargetPdf;
-        float normalizationDenominator = reservoir.SelectedTargetPdf * currentReservoir.M;
-        if (historyM > 0.0f && historySurface.Valid)
-        {
-            const ReSTIRDIDirectLightSample selectedAtHistory = SampleReSTIRDIDirectLight(
-                reservoir.LightIndex,
-                historySurface,
-                reservoir.SampleSeed);
-            const float historyTargetPdf = max(0.0f, Luminance(selectedAtHistory.UnshadowedContribution));
-            if (selectedHistorySample)
-            {
-                normalizationNumerator = historyTargetPdf;
-            }
-            normalizationDenominator += historyTargetPdf * historyM;
-        }
-        ReSTIRDIFinalizeResampling(reservoir, normalizationNumerator, normalizationDenominator);
+        ReSTIRDITemporalReservoir[pixel] = ReSTIRDIPackReservoirCore(result);
+        ReSTIRDITemporalReservoirState[pixel] = ReSTIRDIPackReservoirState(result);
     }
-    ReSTIRDICurrentReservoir[pixel] = ReSTIRDIPackReservoir(reservoir);
-    StoreReSTIRDIHistorySurface(pixel, surface, receiverDepth);
 }
 //Modify End

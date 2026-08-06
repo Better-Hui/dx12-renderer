@@ -14,17 +14,20 @@ struct MaterialData
 {
     float4 Diffuse;
     float4 Specular;
+    float4 Emission;
     float4 TilingOffset;
     uint DiffuseTextureIndex;
     uint NormalTextureIndex;
     uint MetallicTextureIndex;
     uint RoughnessTextureIndex;
     uint AmbientOcclusionTextureIndex;
+    uint EmissionTextureIndex;
     uint HasDiffuseMap;
     uint HasNormalMap;
     uint HasMetallicMap;
     uint HasRoughnessMap;
     uint HasAmbientOcclusionMap;
+    uint HasEmissionMap;
     float Metallic;
     float Roughness;
     uint Padding0;
