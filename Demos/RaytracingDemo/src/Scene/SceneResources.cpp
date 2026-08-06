@@ -521,18 +521,26 @@ std::vector<uint32_t> RaytracingDemoSceneResources::LoadSceneMaterials(
     const Scene& scene,
     const uint32_t whiteTexture)
 {
+//Modify Begin:2026-07-30 by BestHui
+    struct LoadedTexture
+    {
+        uint32_t DescriptorIndex = 0u;
+        bool Loaded = false;
+    };
+
     const auto addTextureOrFallback = [this, &commandList, whiteTexture](
         const SceneTextureBinding& binding,
-        const TextureUsageType usage) -> uint32_t
+        const TextureUsageType usage) -> LoadedTexture
         {
             if (!binding.AssetPath.empty() &&
                 std::filesystem::exists(binding.AssetPath) &&
                 ToLower(binding.AssetPath.extension().string()) != ".exr")
             {
-                return AddTexture(commandList, ToWidePath(binding.AssetPath), usage);
+                return { AddTexture(commandList, ToWidePath(binding.AssetPath), usage), true };
             }
-            return whiteTexture;
+            return { whiteTexture, false };
         };
+//Modify End
 
     std::vector<uint32_t> materialIndexMap;
     materialIndexMap.reserve(scene.GetMaterials().size());
@@ -544,22 +552,30 @@ std::vector<uint32_t> RaytracingDemoSceneResources::LoadSceneMaterials(
             continue;
         }
 
-        const uint32_t diffuseTexture = addTextureOrFallback(sceneMaterial.BaseMap, TextureUsageType::Albedo);
-        const uint32_t normalTexture = addTextureOrFallback(sceneMaterial.NormalMap, TextureUsageType::Normalmap);
-        const uint32_t metallicTexture = addTextureOrFallback(sceneMaterial.MetallicGlossMap, TextureUsageType::Other);
-        const uint32_t roughnessTexture = addTextureOrFallback(sceneMaterial.MetallicGlossMap, TextureUsageType::Other);
-        const uint32_t occlusionTexture = addTextureOrFallback(sceneMaterial.OcclusionMap, TextureUsageType::Other);
-        const uint32_t emissionTexture = addTextureOrFallback(sceneMaterial.EmissionMap, TextureUsageType::Albedo);
+//Modify Begin:2026-07-30 by BestHui
+        const LoadedTexture diffuseTexture = addTextureOrFallback(sceneMaterial.BaseMap, TextureUsageType::Albedo);
+        const LoadedTexture normalTexture = addTextureOrFallback(sceneMaterial.NormalMap, TextureUsageType::Normalmap);
+        const LoadedTexture metallicTexture = addTextureOrFallback(sceneMaterial.MetallicGlossMap, TextureUsageType::Other);
+        const LoadedTexture roughnessTexture = addTextureOrFallback(sceneMaterial.MetallicGlossMap, TextureUsageType::Other);
+        const LoadedTexture occlusionTexture = addTextureOrFallback(sceneMaterial.OcclusionMap, TextureUsageType::Other);
+        const LoadedTexture emissionTexture = addTextureOrFallback(sceneMaterial.EmissionMap, TextureUsageType::Albedo);
 
-        materialIndexMap.push_back(
-            AddMaterial(MakeSceneMaterial(
-                sceneMaterial,
-                diffuseTexture,
-                normalTexture,
-                metallicTexture,
-                roughnessTexture,
-                occlusionTexture,
-                emissionTexture)));
+        RaytracingDemoMaterialData material = MakeSceneMaterial(
+            sceneMaterial,
+            diffuseTexture.DescriptorIndex,
+            normalTexture.DescriptorIndex,
+            metallicTexture.DescriptorIndex,
+            roughnessTexture.DescriptorIndex,
+            occlusionTexture.DescriptorIndex,
+            emissionTexture.DescriptorIndex);
+        material.HasDiffuseMap = diffuseTexture.Loaded ? 1u : 0u;
+        material.HasNormalMap = normalTexture.Loaded ? 1u : 0u;
+        material.HasMetallicMap = metallicTexture.Loaded ? 1u : 0u;
+        material.HasRoughnessMap = roughnessTexture.Loaded ? 1u : 0u;
+        material.HasAmbientOcclusionMap = occlusionTexture.Loaded ? 1u : 0u;
+        material.HasEmissionMap = emissionTexture.Loaded ? 1u : 0u;
+        materialIndexMap.push_back(AddMaterial(material));
+//Modify End
     }
 
     return materialIndexMap;
