@@ -28,8 +28,4 @@ struct AreaLightData
     DirectX::XMFLOAT4 AxisUAndExtent = { 1.0f, 0.0f, 0.0f, 0.5f };
     DirectX::XMFLOAT4 AxisVAndExtent = { 0.0f, 0.0f, 1.0f, 0.5f };
     DirectX::XMFLOAT4 ColorAndIntensity = { 1.0f, 1.0f, 1.0f, 1.0f };
-//Modify Begin:2026-08-06 by BestHui
-    DirectX::XMFLOAT4 EmissiveUv0Uv1 = { 0.0f, 0.0f, 1.0f, 0.0f };
-    DirectX::XMFLOAT4 EmissiveUv2AndMaterialIndex = { 0.0f, 1.0f, 0.0f, 0.0f };
-//Modify End
 };

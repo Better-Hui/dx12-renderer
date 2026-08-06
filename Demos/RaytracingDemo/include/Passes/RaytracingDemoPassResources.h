@@ -44,7 +44,7 @@ struct RaytracingDemoCameraConstants
     uint32_t SamplesPerPixel = 1;
     uint32_t DirectionalLightCount = 0;
     uint32_t PointLightCount = 0;
-    uint32_t AreaLightCount = 0;
+    uint32_t SurfaceEmitterCount = 0;
     uint32_t FrameIndex = 0;
     uint32_t AccumulationFrameIndex = 0;
     uint32_t AccumulationEnabled = 1;

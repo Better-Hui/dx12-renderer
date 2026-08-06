@@ -152,20 +152,80 @@ namespace
     }
 
 //Modify Begin:2026-08-06 by BestHui
-    bool AreEqual(const XMFLOAT4& left, const XMFLOAT4& right)
+    SurfaceEmitterTriangleData CreateSurfaceEmitterTriangle(
+        const XMFLOAT3& position0,
+        const XMFLOAT3& position1,
+        const XMFLOAT3& position2,
+        const XMFLOAT2& uv0,
+        const XMFLOAT2& uv1,
+        const XMFLOAT2& uv2)
     {
-        return XMVector4Equal(XMLoadFloat4(&left), XMLoadFloat4(&right));
+        SurfaceEmitterTriangleData triangle{};
+        triangle.Position0 = { position0.x, position0.y, position0.z, 0.0f };
+        triangle.Position1 = { position1.x, position1.y, position1.z, 0.0f };
+        triangle.Position2 = { position2.x, position2.y, position2.z, 0.0f };
+        triangle.Uv0Uv1 = { uv0.x, uv0.y, uv1.x, uv1.y };
+        triangle.Uv2AndPadding = { uv2.x, uv2.y, 0.0f, 0.0f };
+        return triangle;
     }
 
-    bool AreEqual(const AreaLightData& left, const AreaLightData& right)
+    SurfaceEmitterInstanceData CreateRectangleSurfaceEmitterInstance(
+        const AreaLightData& light,
+        const uint32_t geometryIndex)
     {
-        return AreEqual(left.PositionAndRange, right.PositionAndRange) &&
-            AreEqual(left.NormalAndType, right.NormalAndType) &&
-            AreEqual(left.AxisUAndExtent, right.AxisUAndExtent) &&
-            AreEqual(left.AxisVAndExtent, right.AxisVAndExtent) &&
-            AreEqual(left.ColorAndIntensity, right.ColorAndIntensity) &&
-            AreEqual(left.EmissiveUv0Uv1, right.EmissiveUv0Uv1) &&
-            AreEqual(left.EmissiveUv2AndMaterialIndex, right.EmissiveUv2AndMaterialIndex);
+        SurfaceEmitterInstanceData instance{};
+        instance.OriginAndRange = light.PositionAndRange;
+        instance.AxisX = {
+            light.AxisUAndExtent.x * light.AxisUAndExtent.w,
+            light.AxisUAndExtent.y * light.AxisUAndExtent.w,
+            light.AxisUAndExtent.z * light.AxisUAndExtent.w,
+            0.0f
+        };
+        instance.AxisY = {
+            light.AxisVAndExtent.x * light.AxisVAndExtent.w,
+            light.AxisVAndExtent.y * light.AxisVAndExtent.w,
+            light.AxisVAndExtent.z * light.AxisVAndExtent.w,
+            0.0f
+        };
+        instance.AxisZ = { light.NormalAndType.x, light.NormalAndType.y, light.NormalAndType.z, 0.0f };
+        instance.EmissionAndIntensity = light.ColorAndIntensity;
+        instance.GeometryIndex = geometryIndex;
+        instance.MaterialIndex = SurfaceEmitterInvalidMaterialIndex;
+        return instance;
+    }
+
+    XMVECTOR TransformSurfaceEmitterVector(const SurfaceEmitterInstanceData& instance, const XMVECTOR localVector)
+    {
+        return XMVectorAdd(
+            XMVectorAdd(
+                XMVectorScale(XMLoadFloat4(&instance.AxisX), XMVectorGetX(localVector)),
+                XMVectorScale(XMLoadFloat4(&instance.AxisY), XMVectorGetY(localVector))),
+            XMVectorScale(XMLoadFloat4(&instance.AxisZ), XMVectorGetZ(localVector)));
+    }
+
+    float GetSurfaceEmitterWorldArea(
+        const SurfaceEmitterInstanceData& instance,
+        const SurfaceEmitterGeometryData& geometry,
+        const std::vector<SurfaceEmitterTriangleData>& triangles)
+    {
+        const size_t triangleBegin = geometry.TriangleOffset;
+        const size_t triangleEnd = triangleBegin + geometry.TriangleCount;
+        if (triangleBegin >= triangles.size() || triangleEnd > triangles.size())
+        {
+            return 0.0f;
+        }
+
+        float totalArea = 0.0f;
+        for (size_t triangleIndex = triangleBegin; triangleIndex < triangleEnd; ++triangleIndex)
+        {
+            const SurfaceEmitterTriangleData& triangle = triangles[triangleIndex];
+            const XMVECTOR edge0 = XMVectorSubtract(XMLoadFloat4(&triangle.Position1), XMLoadFloat4(&triangle.Position0));
+            const XMVECTOR edge1 = XMVectorSubtract(XMLoadFloat4(&triangle.Position2), XMLoadFloat4(&triangle.Position0));
+            const XMVECTOR worldEdge0 = TransformSurfaceEmitterVector(instance, edge0);
+            const XMVECTOR worldEdge1 = TransformSurfaceEmitterVector(instance, edge1);
+            totalArea += 0.5f * XMVectorGetX(XMVector3Length(XMVector3Cross(worldEdge0, worldEdge1)));
+        }
+        return totalArea;
     }
 //Modify End
 //Modify End
@@ -175,7 +235,10 @@ SceneLightManager::SceneLightManager(FrameworkDeviceContext& deviceContext)
     : m_DeviceContext(deviceContext)
     , m_DirectionalLightBuffer(L"Ray Tracing Directional Lights")
     , m_PointLightBuffer(L"Ray Tracing Point Lights")
-    , m_AreaLightBuffer(L"Ray Tracing Area Lights")
+    , m_SurfaceEmitterGeometryBuffer(L"Surface Emitter Geometries")
+    , m_SurfaceEmitterTriangleBuffer(L"Surface Emitter Triangles")
+    , m_SurfaceEmitterTriangleCdfBuffer(L"Surface Emitter Triangle CDF")
+    , m_SurfaceEmitterInstanceBuffer(L"Surface Emitter Instances")
 //Modify Begin:2026-08-06 by BestHui
     , m_DirectLightCdfBuffer(L"Ray Tracing Direct Light CDF")
 //Modify End
@@ -188,7 +251,7 @@ void SceneLightManager::CreateDemoLights()
     m_PointLights.clear();
     m_AreaLights.clear();
 //Modify Begin:2026-08-06 by BestHui
-    m_EmissiveMeshLights.clear();
+    m_MeshSurfaceEmitterData = {};
 //Modify End
     m_PointLightBaseY.clear();
     m_PointLightPhase.clear();
@@ -258,7 +321,10 @@ void SceneLightManager::CreateDemoLights()
     BuildGpuData();
     MarkDirectionalLightsDirty();
     MarkPointLightsDirty(0, m_PointLightGpuData.size());
-    MarkAreaLightsDirty();
+    MarkDirtyRange(0, m_SurfaceEmitterGeometryGpuData.size(), m_SurfaceEmitterGeometryDirtyBegin, m_SurfaceEmitterGeometryDirtyEnd);
+    MarkDirtyRange(0, m_SurfaceEmitterTriangleGpuData.size(), m_SurfaceEmitterTriangleDirtyBegin, m_SurfaceEmitterTriangleDirtyEnd);
+    MarkDirtyRange(0, m_SurfaceEmitterTriangleCdfGpuData.size(), m_SurfaceEmitterTriangleCdfDirtyBegin, m_SurfaceEmitterTriangleCdfDirtyEnd);
+    MarkDirtyRange(0, m_SurfaceEmitterInstanceGpuData.size(), m_SurfaceEmitterInstanceDirtyBegin, m_SurfaceEmitterInstanceDirtyEnd);
 }
 
 void SceneLightManager::CreateFromScene(const Scene& scene)
@@ -267,7 +333,7 @@ void SceneLightManager::CreateFromScene(const Scene& scene)
     m_PointLights.clear();
     m_AreaLights.clear();
 //Modify Begin:2026-08-06 by BestHui
-    m_EmissiveMeshLights.clear();
+    m_MeshSurfaceEmitterData = {};
 //Modify End
     m_PointLightBaseY.clear();
     m_PointLightPhase.clear();
@@ -326,44 +392,21 @@ void SceneLightManager::CreateFromScene(const Scene& scene)
     BuildGpuData();
     MarkDirectionalLightsDirty();
     MarkPointLightsDirty(0, m_PointLightGpuData.size());
-    MarkAreaLightsDirty();
+    MarkDirtyRange(0, m_SurfaceEmitterGeometryGpuData.size(), m_SurfaceEmitterGeometryDirtyBegin, m_SurfaceEmitterGeometryDirtyEnd);
+    MarkDirtyRange(0, m_SurfaceEmitterTriangleGpuData.size(), m_SurfaceEmitterTriangleDirtyBegin, m_SurfaceEmitterTriangleDirtyEnd);
+    MarkDirtyRange(0, m_SurfaceEmitterTriangleCdfGpuData.size(), m_SurfaceEmitterTriangleCdfDirtyBegin, m_SurfaceEmitterTriangleCdfDirtyEnd);
+    MarkDirtyRange(0, m_SurfaceEmitterInstanceGpuData.size(), m_SurfaceEmitterInstanceDirtyBegin, m_SurfaceEmitterInstanceDirtyEnd);
 }
 
 //Modify Begin:2026-08-06 by BestHui
-void SceneLightManager::SetEmissiveMeshLights(std::vector<AreaLightData> lights)
+void SceneLightManager::SetEmissiveMeshSurfaceEmitters(SurfaceEmitterSceneData emitterData)
 {
-    const size_t oldLightCount = m_EmissiveMeshLights.size();
-    const size_t newLightCount = lights.size();
-    const size_t commonLightCount = std::min(oldLightCount, newLightCount);
-    size_t firstChangedLight = 0;
-    while (firstChangedLight < commonLightCount &&
-        AreEqual(m_EmissiveMeshLights[firstChangedLight], lights[firstChangedLight]))
-    {
-        ++firstChangedLight;
-    }
-
-    if (firstChangedLight == oldLightCount && firstChangedLight == newLightCount)
-    {
-        return;
-    }
-
-    size_t changedLightEnd = newLightCount;
-    if (oldLightCount == newLightCount)
-    {
-        while (changedLightEnd > firstChangedLight &&
-            AreEqual(m_EmissiveMeshLights[changedLightEnd - 1], lights[changedLightEnd - 1]))
-        {
-            --changedLightEnd;
-        }
-    }
-
-    m_EmissiveMeshLights = std::move(lights);
-    RebuildAreaLightGpuData();
-    const size_t dirtyBegin = m_AreaLights.size() + firstChangedLight;
-    const size_t dirtyEnd = oldLightCount == newLightCount
-        ? m_AreaLights.size() + changedLightEnd
-        : m_AreaLightGpuData.size();
-    MarkDirtyRange(dirtyBegin, dirtyEnd, m_AreaLightDirtyBegin, m_AreaLightDirtyEnd);
+    m_MeshSurfaceEmitterData = std::move(emitterData);
+    RebuildSurfaceEmitterGpuData();
+    MarkDirtyRange(0, m_SurfaceEmitterGeometryGpuData.size(), m_SurfaceEmitterGeometryDirtyBegin, m_SurfaceEmitterGeometryDirtyEnd);
+    MarkDirtyRange(0, m_SurfaceEmitterTriangleGpuData.size(), m_SurfaceEmitterTriangleDirtyBegin, m_SurfaceEmitterTriangleDirtyEnd);
+    MarkDirtyRange(0, m_SurfaceEmitterTriangleCdfGpuData.size(), m_SurfaceEmitterTriangleCdfDirtyBegin, m_SurfaceEmitterTriangleCdfDirtyEnd);
+    MarkDirtyRange(0, m_SurfaceEmitterInstanceGpuData.size(), m_SurfaceEmitterInstanceDirtyBegin, m_SurfaceEmitterInstanceDirtyEnd);
     MarkDirectLightSamplingDirty();
 }
 //Modify End
@@ -374,14 +417,20 @@ void SceneLightManager::InitializeGpuBuffers(CommandList& commandList)
 //Modify Begin:2026-07-30 by BestHui
     m_DirectionalLightBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_DirectionalLightGpuData.size());
     m_PointLightBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_PointLightGpuData.size());
-    m_AreaLightBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_AreaLightGpuData.size());
+    m_SurfaceEmitterGeometryBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_SurfaceEmitterGeometryGpuData.size());
+    m_SurfaceEmitterTriangleBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_SurfaceEmitterTriangleGpuData.size());
+    m_SurfaceEmitterTriangleCdfBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_SurfaceEmitterTriangleCdfGpuData.size());
+    m_SurfaceEmitterInstanceBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_SurfaceEmitterInstanceGpuData.size());
 //Modify Begin:2026-08-06 by BestHui
     m_DirectLightCdfBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_DirectLightCdfGpuData.size());
 //Modify End
 //Modify End
     commandList.CopyStructuredBuffer(m_DirectionalLightBuffer, CreateBufferCapacityData<DirectionalLightData>(m_DirectionalLightBufferCapacity));
     commandList.CopyStructuredBuffer(m_PointLightBuffer, CreateBufferCapacityData<PointLightData>(m_PointLightBufferCapacity));
-    commandList.CopyStructuredBuffer(m_AreaLightBuffer, CreateBufferCapacityData<AreaLightData>(m_AreaLightBufferCapacity));
+    commandList.CopyStructuredBuffer(m_SurfaceEmitterGeometryBuffer, CreateBufferCapacityData<SurfaceEmitterGeometryData>(m_SurfaceEmitterGeometryBufferCapacity));
+    commandList.CopyStructuredBuffer(m_SurfaceEmitterTriangleBuffer, CreateBufferCapacityData<SurfaceEmitterTriangleData>(m_SurfaceEmitterTriangleBufferCapacity));
+    commandList.CopyStructuredBuffer(m_SurfaceEmitterTriangleCdfBuffer, CreateBufferCapacityData<float>(m_SurfaceEmitterTriangleCdfBufferCapacity));
+    commandList.CopyStructuredBuffer(m_SurfaceEmitterInstanceBuffer, CreateBufferCapacityData<SurfaceEmitterInstanceData>(m_SurfaceEmitterInstanceBufferCapacity));
 //Modify Begin:2026-08-06 by BestHui
     commandList.CopyStructuredBuffer(m_DirectLightCdfBuffer, CreateBufferCapacityData<float>(m_DirectLightCdfBufferCapacity));
 //Modify End
@@ -395,7 +444,10 @@ bool SceneLightManager::Upload(CommandList& commandList, const uint64_t frameInd
 
     const bool directionalLightsRecreated = EnsureStructuredBufferCapacity(commandList, m_DirectionalLightBuffer, m_DirectionalLightBufferCapacity, m_DirectionalLightGpuData);
     const bool pointLightsRecreated = EnsureStructuredBufferCapacity(commandList, m_PointLightBuffer, m_PointLightBufferCapacity, m_PointLightGpuData);
-    const bool areaLightsRecreated = EnsureStructuredBufferCapacity(commandList, m_AreaLightBuffer, m_AreaLightBufferCapacity, m_AreaLightGpuData);
+    const bool surfaceEmitterGeometriesRecreated = EnsureStructuredBufferCapacity(commandList, m_SurfaceEmitterGeometryBuffer, m_SurfaceEmitterGeometryBufferCapacity, m_SurfaceEmitterGeometryGpuData);
+    const bool surfaceEmitterTrianglesRecreated = EnsureStructuredBufferCapacity(commandList, m_SurfaceEmitterTriangleBuffer, m_SurfaceEmitterTriangleBufferCapacity, m_SurfaceEmitterTriangleGpuData);
+    const bool surfaceEmitterTriangleCdfRecreated = EnsureStructuredBufferCapacity(commandList, m_SurfaceEmitterTriangleCdfBuffer, m_SurfaceEmitterTriangleCdfBufferCapacity, m_SurfaceEmitterTriangleCdfGpuData);
+    const bool surfaceEmitterInstancesRecreated = EnsureStructuredBufferCapacity(commandList, m_SurfaceEmitterInstanceBuffer, m_SurfaceEmitterInstanceBufferCapacity, m_SurfaceEmitterInstanceGpuData);
 //Modify Begin:2026-08-06 by BestHui
     const bool directLightCdfRecreated = EnsureStructuredBufferCapacity(commandList, m_DirectLightCdfBuffer, m_DirectLightCdfBufferCapacity, m_DirectLightCdfGpuData);
 //Modify End
@@ -410,10 +462,25 @@ bool SceneLightManager::Upload(CommandList& commandList, const uint64_t frameInd
         m_PointLightDirtyBegin = 0;
         m_PointLightDirtyEnd = 0;
     }
-    if (areaLightsRecreated)
+    if (surfaceEmitterGeometriesRecreated)
     {
-        m_AreaLightDirtyBegin = 0;
-        m_AreaLightDirtyEnd = 0;
+        m_SurfaceEmitterGeometryDirtyBegin = 0;
+        m_SurfaceEmitterGeometryDirtyEnd = 0;
+    }
+    if (surfaceEmitterTrianglesRecreated)
+    {
+        m_SurfaceEmitterTriangleDirtyBegin = 0;
+        m_SurfaceEmitterTriangleDirtyEnd = 0;
+    }
+    if (surfaceEmitterTriangleCdfRecreated)
+    {
+        m_SurfaceEmitterTriangleCdfDirtyBegin = 0;
+        m_SurfaceEmitterTriangleCdfDirtyEnd = 0;
+    }
+    if (surfaceEmitterInstancesRecreated)
+    {
+        m_SurfaceEmitterInstanceDirtyBegin = 0;
+        m_SurfaceEmitterInstanceDirtyEnd = 0;
     }
 //Modify Begin:2026-08-06 by BestHui
     if (directLightCdfRecreated)
@@ -438,11 +505,29 @@ bool SceneLightManager::Upload(CommandList& commandList, const uint64_t frameInd
         m_PointLightDirtyEnd = 0;
     }
 
-    if (m_AreaLightDirtyBegin < m_AreaLightDirtyEnd)
+    if (m_SurfaceEmitterGeometryDirtyBegin < m_SurfaceEmitterGeometryDirtyEnd)
     {
-        UploadGpuLightRange(commandList, *m_UploadBuffer, m_AreaLightBuffer, m_AreaLightGpuData, m_AreaLightDirtyBegin, m_AreaLightDirtyEnd);
-        m_AreaLightDirtyBegin = 0;
-        m_AreaLightDirtyEnd = 0;
+        UploadGpuLightRange(commandList, *m_UploadBuffer, m_SurfaceEmitterGeometryBuffer, m_SurfaceEmitterGeometryGpuData, m_SurfaceEmitterGeometryDirtyBegin, m_SurfaceEmitterGeometryDirtyEnd);
+        m_SurfaceEmitterGeometryDirtyBegin = 0;
+        m_SurfaceEmitterGeometryDirtyEnd = 0;
+    }
+    if (m_SurfaceEmitterTriangleDirtyBegin < m_SurfaceEmitterTriangleDirtyEnd)
+    {
+        UploadGpuLightRange(commandList, *m_UploadBuffer, m_SurfaceEmitterTriangleBuffer, m_SurfaceEmitterTriangleGpuData, m_SurfaceEmitterTriangleDirtyBegin, m_SurfaceEmitterTriangleDirtyEnd);
+        m_SurfaceEmitterTriangleDirtyBegin = 0;
+        m_SurfaceEmitterTriangleDirtyEnd = 0;
+    }
+    if (m_SurfaceEmitterTriangleCdfDirtyBegin < m_SurfaceEmitterTriangleCdfDirtyEnd)
+    {
+        UploadGpuLightRange(commandList, *m_UploadBuffer, m_SurfaceEmitterTriangleCdfBuffer, m_SurfaceEmitterTriangleCdfGpuData, m_SurfaceEmitterTriangleCdfDirtyBegin, m_SurfaceEmitterTriangleCdfDirtyEnd);
+        m_SurfaceEmitterTriangleCdfDirtyBegin = 0;
+        m_SurfaceEmitterTriangleCdfDirtyEnd = 0;
+    }
+    if (m_SurfaceEmitterInstanceDirtyBegin < m_SurfaceEmitterInstanceDirtyEnd)
+    {
+        UploadGpuLightRange(commandList, *m_UploadBuffer, m_SurfaceEmitterInstanceBuffer, m_SurfaceEmitterInstanceGpuData, m_SurfaceEmitterInstanceDirtyBegin, m_SurfaceEmitterInstanceDirtyEnd);
+        m_SurfaceEmitterInstanceDirtyBegin = 0;
+        m_SurfaceEmitterInstanceDirtyEnd = 0;
     }
 //Modify Begin:2026-08-06 by BestHui
     if (m_DirectLightCdfDirtyBegin < m_DirectLightCdfDirtyEnd)
@@ -454,7 +539,9 @@ bool SceneLightManager::Upload(CommandList& commandList, const uint64_t frameInd
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
 //Modify Begin:2026-08-06 by BestHui
-    return directionalLightsRecreated || pointLightsRecreated || areaLightsRecreated || directLightCdfRecreated;
+    return directionalLightsRecreated || pointLightsRecreated ||
+        surfaceEmitterGeometriesRecreated || surfaceEmitterTrianglesRecreated ||
+        surfaceEmitterTriangleCdfRecreated || surfaceEmitterInstancesRecreated || directLightCdfRecreated;
 //Modify End
 //Modify End
 }
@@ -499,7 +586,7 @@ bool SceneLightManager::DrawImGui()
         ImGui::Text("Point: %zu", m_PointLights.size());
         ImGui::Text("Area: %zu", m_AreaLights.size());
 //Modify Begin:2026-08-06 by BestHui
-        ImGui::Text("Emissive Mesh Triangles: %zu", m_EmissiveMeshLights.size());
+        ImGui::Text("Mesh Surface Emitters: %zu", m_MeshSurfaceEmitterData.Instances.size());
 //Modify End
     }
 
@@ -528,6 +615,7 @@ bool SceneLightManager::DrawImGui()
     {
         if (ImGui::Checkbox("Enable Directional Lights", &m_DirectionalLightsEnabled))
         {
+            MarkDirectLightSamplingDirty();
             changed = true;
         }
 //Modify Begin:2026-08-03 by BestHui
@@ -610,6 +698,7 @@ bool SceneLightManager::DrawImGui()
     {
         if (ImGui::Checkbox("Enable Point Lights", &m_PointLightsEnabled))
         {
+            MarkDirectLightSamplingDirty();
             changed = true;
         }
         if (ImGui::Checkbox("Animate Point Lights", &m_AnimatePointLights))
@@ -732,6 +821,7 @@ bool SceneLightManager::DrawImGui()
     {
         if (ImGui::Checkbox("Enable Area Lights", &m_AreaLightsEnabled))
         {
+            MarkDirectLightSamplingDirty();
             changed = true;
         }
 //Modify Begin:2026-08-03 by BestHui
@@ -790,8 +880,7 @@ bool SceneLightManager::DrawImGui()
                         light.ColorAndIntensity.y = std::max(0.0f, light.ColorAndIntensity.y);
                         light.ColorAndIntensity.z = std::max(0.0f, light.ColorAndIntensity.z);
                         light.ColorAndIntensity.w = std::max(0.0f, light.ColorAndIntensity.w);
-                        m_AreaLightGpuData[i] = light;
-                        MarkAreaLightsDirty(i, i + 1);
+                        UpdateAreaLightSurfaceEmitter(i);
                         changed = true;
                     }
                     ImGui::TreePop();
@@ -867,9 +956,21 @@ void SceneLightManager::BindComputeResources(CommandContext& commandContext, Com
         commandContext.SetShaderResource(shader, "PointLights", 0u, m_PointLightBuffer);
     }
 
-    if (shader.HasShaderResourceView("AreaLights"))
+    if (shader.HasShaderResourceView("SurfaceEmitterGeometries"))
     {
-        commandContext.SetShaderResource(shader, "AreaLights", 0u, m_AreaLightBuffer);
+        commandContext.SetShaderResource(shader, "SurfaceEmitterGeometries", 0u, m_SurfaceEmitterGeometryBuffer);
+    }
+    if (shader.HasShaderResourceView("SurfaceEmitterInstances"))
+    {
+        commandContext.SetShaderResource(shader, "SurfaceEmitterInstances", 0u, m_SurfaceEmitterInstanceBuffer);
+    }
+    if (shader.HasShaderResourceView("SurfaceEmitterTriangles"))
+    {
+        commandContext.SetShaderResource(shader, "SurfaceEmitterTriangles", 0u, m_SurfaceEmitterTriangleBuffer);
+    }
+    if (shader.HasShaderResourceView("SurfaceEmitterTriangleCdf"))
+    {
+        commandContext.SetShaderResource(shader, "SurfaceEmitterTriangleCdf", 0u, m_SurfaceEmitterTriangleCdfBuffer);
     }
 //Modify Begin:2026-08-06 by BestHui
     if (shader.HasShaderResourceView("DirectLightCdf"))
@@ -884,7 +985,10 @@ void SceneLightManager::PrepareAsyncComputeResources(CommandList& commandList) c
 {
     commandList.TransitionBarrier(m_DirectionalLightBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     commandList.TransitionBarrier(m_PointLightBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    commandList.TransitionBarrier(m_AreaLightBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    commandList.TransitionBarrier(m_SurfaceEmitterGeometryBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    commandList.TransitionBarrier(m_SurfaceEmitterInstanceBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    commandList.TransitionBarrier(m_SurfaceEmitterTriangleBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    commandList.TransitionBarrier(m_SurfaceEmitterTriangleCdfBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 //Modify Begin:2026-08-06 by BestHui
     commandList.TransitionBarrier(m_DirectLightCdfBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 //Modify End
@@ -902,9 +1006,21 @@ void SceneLightManager::BindRayTracingResources(RayTracingBindingSet& bindingSet
     {
         bindingSet.SetBuffer("PointLights", m_PointLightBuffer);
     }
-    if (bindingSet.HasBinding("AreaLights"))
+    if (bindingSet.HasBinding("SurfaceEmitterGeometries"))
     {
-        bindingSet.SetBuffer("AreaLights", m_AreaLightBuffer);
+        bindingSet.SetBuffer("SurfaceEmitterGeometries", m_SurfaceEmitterGeometryBuffer);
+    }
+    if (bindingSet.HasBinding("SurfaceEmitterInstances"))
+    {
+        bindingSet.SetBuffer("SurfaceEmitterInstances", m_SurfaceEmitterInstanceBuffer);
+    }
+    if (bindingSet.HasBinding("SurfaceEmitterTriangles"))
+    {
+        bindingSet.SetBuffer("SurfaceEmitterTriangles", m_SurfaceEmitterTriangleBuffer);
+    }
+    if (bindingSet.HasBinding("SurfaceEmitterTriangleCdf"))
+    {
+        bindingSet.SetBuffer("SurfaceEmitterTriangleCdf", m_SurfaceEmitterTriangleCdfBuffer);
     }
 //Modify Begin:2026-08-06 by BestHui
     if (bindingSet.HasBinding("DirectLightCdf"))
@@ -918,12 +1034,12 @@ void SceneLightManager::BindRayTracingResources(RayTracingBindingSet& bindingSet
 void SceneLightManager::FillCameraConstants(
     uint32_t& directionalLightCount,
     uint32_t& pointLightCount,
-    uint32_t& areaLightCount,
+    uint32_t& surfaceEmitterCount,
     SkyLightData& skyLight) const
 {
-    directionalLightCount = m_DirectionalLightsEnabled ? static_cast<uint32_t>(m_DirectionalLightGpuData.size()) : 0u;
-    pointLightCount = m_PointLightsEnabled ? static_cast<uint32_t>(m_PointLightGpuData.size()) : 0u;
-    areaLightCount = m_AreaLightsEnabled ? static_cast<uint32_t>(m_AreaLightGpuData.size()) : 0u;
+    directionalLightCount = static_cast<uint32_t>(m_DirectionalLightGpuData.size());
+    pointLightCount = static_cast<uint32_t>(m_PointLightGpuData.size());
+    surfaceEmitterCount = static_cast<uint32_t>(m_SurfaceEmitterInstanceGpuData.size());
     skyLight = m_SkyLight;
 }
 
@@ -1052,8 +1168,12 @@ void SceneLightManager::AddAreaLight()
     const size_t lightIndex = m_AreaLights.size();
     m_AreaLights.push_back(areaLight);
 //Modify Begin:2026-08-06 by BestHui
-    RebuildAreaLightGpuData();
-    MarkAreaLightsDirty(lightIndex, m_AreaLightGpuData.size());
+    RebuildSurfaceEmitterGpuData();
+    MarkDirtyRange(0, m_SurfaceEmitterGeometryGpuData.size(), m_SurfaceEmitterGeometryDirtyBegin, m_SurfaceEmitterGeometryDirtyEnd);
+    MarkDirtyRange(0, m_SurfaceEmitterTriangleGpuData.size(), m_SurfaceEmitterTriangleDirtyBegin, m_SurfaceEmitterTriangleDirtyEnd);
+    MarkDirtyRange(0, m_SurfaceEmitterTriangleCdfGpuData.size(), m_SurfaceEmitterTriangleCdfDirtyBegin, m_SurfaceEmitterTriangleCdfDirtyEnd);
+    MarkDirtyRange(lightIndex + m_RectangleSurfaceEmitterOffset, m_SurfaceEmitterInstanceGpuData.size(), m_SurfaceEmitterInstanceDirtyBegin, m_SurfaceEmitterInstanceDirtyEnd);
+    MarkDirectLightSamplingDirty();
 //Modify End
 }
 
@@ -1096,8 +1216,12 @@ void SceneLightManager::RemoveAreaLight(const size_t lightIndex)
 
     EraseAt(m_AreaLights, lightIndex);
 //Modify Begin:2026-08-06 by BestHui
-    RebuildAreaLightGpuData();
-    MarkAreaLightsDirty(lightIndex, m_AreaLightGpuData.size());
+    RebuildSurfaceEmitterGpuData();
+    MarkDirtyRange(0, m_SurfaceEmitterGeometryGpuData.size(), m_SurfaceEmitterGeometryDirtyBegin, m_SurfaceEmitterGeometryDirtyEnd);
+    MarkDirtyRange(0, m_SurfaceEmitterTriangleGpuData.size(), m_SurfaceEmitterTriangleDirtyBegin, m_SurfaceEmitterTriangleDirtyEnd);
+    MarkDirtyRange(0, m_SurfaceEmitterTriangleCdfGpuData.size(), m_SurfaceEmitterTriangleCdfDirtyBegin, m_SurfaceEmitterTriangleCdfDirtyEnd);
+    MarkDirtyRange(lightIndex + m_RectangleSurfaceEmitterOffset, m_SurfaceEmitterInstanceGpuData.size(), m_SurfaceEmitterInstanceDirtyBegin, m_SurfaceEmitterInstanceDirtyEnd);
+    MarkDirectLightSamplingDirty();
 //Modify End
 }
 
@@ -1105,7 +1229,6 @@ void SceneLightManager::BuildGpuData()
 {
     m_DirectionalLightGpuData.clear();
     m_PointLightGpuData.clear();
-    m_AreaLightGpuData.clear();
 
     m_DirectionalLightGpuData.reserve(m_DirectionalLights.size());
     for (const DirectionalLight& light : m_DirectionalLights)
@@ -1129,35 +1252,96 @@ void SceneLightManager::BuildGpuData()
     }
 
 //Modify Begin:2026-08-06 by BestHui
-    RebuildAreaLightGpuData();
+    RebuildSurfaceEmitterGpuData();
 //Modify End
 }
 
 //Modify Begin:2026-08-06 by BestHui
-void SceneLightManager::RebuildAreaLightGpuData()
+void SceneLightManager::RebuildSurfaceEmitterGpuData()
 {
-    m_AreaLightGpuData = m_AreaLights;
-    m_AreaLightGpuData.insert(
-        m_AreaLightGpuData.end(),
-        m_EmissiveMeshLights.begin(),
-        m_EmissiveMeshLights.end());
+    m_SurfaceEmitterGeometryGpuData = m_MeshSurfaceEmitterData.Geometries;
+    m_SurfaceEmitterTriangleGpuData = m_MeshSurfaceEmitterData.Triangles;
+    m_SurfaceEmitterTriangleCdfGpuData = m_MeshSurfaceEmitterData.TriangleCdf;
+    m_SurfaceEmitterInstanceGpuData = m_MeshSurfaceEmitterData.Instances;
+    m_RectangleSurfaceEmitterOffset = m_SurfaceEmitterInstanceGpuData.size();
+    m_RectangleEmitterGeometryIndex = SurfaceEmitterInvalidMaterialIndex;
+
+    if (m_AreaLights.empty())
+    {
+        return;
+    }
+
+    SurfaceEmitterGeometryData rectangleGeometry{};
+    rectangleGeometry.TriangleOffset = static_cast<uint32_t>(m_SurfaceEmitterTriangleGpuData.size());
+    rectangleGeometry.TriangleCdfOffset = static_cast<uint32_t>(m_SurfaceEmitterTriangleCdfGpuData.size());
+    rectangleGeometry.TriangleCount = 2u;
+    m_RectangleEmitterGeometryIndex = static_cast<uint32_t>(m_SurfaceEmitterGeometryGpuData.size());
+    m_SurfaceEmitterGeometryGpuData.push_back(rectangleGeometry);
+    m_SurfaceEmitterTriangleGpuData.push_back(CreateSurfaceEmitterTriangle(
+        { -1.0f, -1.0f, 0.0f }, { 1.0f, -1.0f, 0.0f }, { 1.0f, 1.0f, 0.0f },
+        { 0.0f, 0.0f }, { 1.0f, 0.0f }, { 1.0f, 1.0f }));
+    m_SurfaceEmitterTriangleGpuData.push_back(CreateSurfaceEmitterTriangle(
+        { -1.0f, -1.0f, 0.0f }, { 1.0f, 1.0f, 0.0f }, { -1.0f, 1.0f, 0.0f },
+        { 0.0f, 0.0f }, { 1.0f, 1.0f }, { 0.0f, 1.0f }));
+    m_SurfaceEmitterTriangleCdfGpuData.push_back(0.5f);
+    m_SurfaceEmitterTriangleCdfGpuData.push_back(1.0f);
+
+    m_SurfaceEmitterInstanceGpuData.reserve(m_RectangleSurfaceEmitterOffset + m_AreaLights.size());
+    for (const AreaLightData& light : m_AreaLights)
+    {
+        m_SurfaceEmitterInstanceGpuData.push_back(CreateRectangleSurfaceEmitterInstance(light, m_RectangleEmitterGeometryIndex));
+    }
+
+    for (SurfaceEmitterInstanceData& instance : m_SurfaceEmitterInstanceGpuData)
+    {
+        if (instance.GeometryIndex < m_SurfaceEmitterGeometryGpuData.size())
+        {
+            instance.SurfaceArea = GetSurfaceEmitterWorldArea(
+                instance,
+                m_SurfaceEmitterGeometryGpuData[instance.GeometryIndex],
+                m_SurfaceEmitterTriangleGpuData);
+        }
+    }
+}
+
+void SceneLightManager::UpdateAreaLightSurfaceEmitter(const size_t lightIndex)
+{
+    const size_t instanceIndex = m_RectangleSurfaceEmitterOffset + lightIndex;
+    if (lightIndex >= m_AreaLights.size() ||
+        m_RectangleEmitterGeometryIndex == SurfaceEmitterInvalidMaterialIndex ||
+        instanceIndex >= m_SurfaceEmitterInstanceGpuData.size())
+    {
+        return;
+    }
+
+    m_SurfaceEmitterInstanceGpuData[instanceIndex] = CreateRectangleSurfaceEmitterInstance(
+        m_AreaLights[lightIndex],
+        m_RectangleEmitterGeometryIndex);
+    m_SurfaceEmitterInstanceGpuData[instanceIndex].SurfaceArea = GetSurfaceEmitterWorldArea(
+        m_SurfaceEmitterInstanceGpuData[instanceIndex],
+        m_SurfaceEmitterGeometryGpuData[m_RectangleEmitterGeometryIndex],
+        m_SurfaceEmitterTriangleGpuData);
+    MarkDirtyRange(instanceIndex, instanceIndex + 1, m_SurfaceEmitterInstanceDirtyBegin, m_SurfaceEmitterInstanceDirtyEnd);
+    MarkDirectLightSamplingDirty();
 }
 //Modify End
 
 //Modify Begin:2026-08-06 by BestHui
 void SceneLightManager::RebuildDirectLightSamplingCdf()
 {
-    constexpr float minimumWeight = 1.0e-4f;
     m_DirectLightCdfGpuData.clear();
     m_DirectLightCdfGpuData.reserve(
         m_DirectionalLightGpuData.size() +
         m_PointLightGpuData.size() +
-        m_AreaLightGpuData.size());
+        m_SurfaceEmitterInstanceGpuData.size());
 
     float totalWeight = 0.0f;
-    const auto appendWeight = [this, &totalWeight](const float weight)
+    const auto appendWeight = [this, &totalWeight](const float weight, const bool enabled)
     {
-        totalWeight += std::max(minimumWeight, weight);
+        if (enabled)
+        {
+            totalWeight += std::max(1.0e-4f, weight);
+        }
         m_DirectLightCdfGpuData.push_back(totalWeight);
     };
 
@@ -1167,7 +1351,8 @@ void SceneLightManager::RebuildDirectLightSamplingCdf()
             (light.ColorAndIntensity.x * 0.2126f +
              light.ColorAndIntensity.y * 0.7152f +
              light.ColorAndIntensity.z * 0.0722f) *
-            light.ColorAndIntensity.w);
+            light.ColorAndIntensity.w,
+            m_DirectionalLightsEnabled);
     }
     for (const PointLightData& light : m_PointLightGpuData)
     {
@@ -1175,18 +1360,17 @@ void SceneLightManager::RebuildDirectLightSamplingCdf()
             (light.ColorAndIntensity.x * 0.2126f +
              light.ColorAndIntensity.y * 0.7152f +
              light.ColorAndIntensity.z * 0.0722f) *
-            light.ColorAndIntensity.w);
+            light.ColorAndIntensity.w,
+            m_PointLightsEnabled);
     }
-    for (const AreaLightData& light : m_AreaLightGpuData)
+    for (const SurfaceEmitterInstanceData& instance : m_SurfaceEmitterInstanceGpuData)
     {
         const float luminance =
-            light.ColorAndIntensity.x * 0.2126f +
-            light.ColorAndIntensity.y * 0.7152f +
-            light.ColorAndIntensity.z * 0.0722f;
-        const float area = light.NormalAndType.w > 0.5f
-            ? std::max(0.0f, light.PositionAndRange.w)
-            : std::max(0.0f, 4.0f * light.AxisUAndExtent.w * light.AxisVAndExtent.w);
-        appendWeight(luminance * light.ColorAndIntensity.w * area);
+            instance.EmissionAndIntensity.x * 0.2126f +
+            instance.EmissionAndIntensity.y * 0.7152f +
+            instance.EmissionAndIntensity.z * 0.0722f;
+        const float intensity = std::max(0.0f, instance.EmissionAndIntensity.w);
+        appendWeight(luminance * intensity * instance.SurfaceArea, m_AreaLightsEnabled);
     }
 
     if (totalWeight > 0.0f)
@@ -1251,16 +1435,4 @@ void SceneLightManager::MarkPointLightsDirty(const size_t beginIndex, const size
 //Modify End
 }
 
-void SceneLightManager::MarkAreaLightsDirty()
-{
-    MarkAreaLightsDirty(0, m_AreaLightGpuData.size());
-}
-
-void SceneLightManager::MarkAreaLightsDirty(const size_t beginIndex, const size_t endIndex)
-{
-    MarkDirtyRange(beginIndex, endIndex, m_AreaLightDirtyBegin, m_AreaLightDirtyEnd);
-//Modify Begin:2026-08-06 by BestHui
-    MarkDirectLightSamplingDirty();
-//Modify End
-}
 //Modify End

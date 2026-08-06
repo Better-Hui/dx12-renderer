@@ -31,7 +31,7 @@ RaytracingDemoCameraConstants BuildPassCameraConstants(
     resources.Lights.FillCameraConstants(
         camera.DirectionalLightCount,
         camera.PointLightCount,
-        camera.AreaLightCount,
+        camera.SurfaceEmitterCount,
         camera.SkyLight);
     camera.FrameIndex = frameState.FrameIndex;
     const RaytracingDemoLightingTechnique directLightingTechnique = frameState.DirectLightingTechnique;

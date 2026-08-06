@@ -14,7 +14,7 @@ cbuffer CameraConstants : register(b0, space0)
     uint Camera_SamplesPerPixel;
     uint Camera_DirectionalLightCount;
     uint Camera_PointLightCount;
-    uint Camera_AreaLightCount;
+    uint Camera_SurfaceEmitterCount;
     uint Camera_FrameIndex;
     uint Camera_AccumulationFrameIndex;
     uint Camera_AccumulationEnabled;

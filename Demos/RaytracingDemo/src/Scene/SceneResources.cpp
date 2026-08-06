@@ -316,7 +316,7 @@ void RaytracingDemoSceneResources::TransitionRayTracingShaderResources(
 //Modify End
 
 //Modify Begin:2026-08-06 by BestHui
-std::vector<AreaLightData> RaytracingDemoSceneResources::CollectEmissiveMeshLights() const
+SurfaceEmitterSceneData RaytracingDemoSceneResources::CollectEmissiveMeshSurfaceEmitters() const
 {
     constexpr float emissionThreshold = 1.0e-4f;
     constexpr float triangleAreaThreshold = 1.0e-8f;
@@ -324,16 +324,11 @@ std::vector<AreaLightData> RaytracingDemoSceneResources::CollectEmissiveMeshLigh
     const std::vector<RaytracingDemoMaterialData>& materials = m_TextureMaterialResources.GetMaterials();
     const std::vector<RaytracingDemoSceneGeometry>& geometries = m_GeometryResources.GetGeometries();
     const std::vector<RaytracingDemoSceneObject>& objects = m_GeometryResources.GetObjects();
-    std::vector<AreaLightData> emissiveLights;
+    SurfaceEmitterSceneData emitterData;
+    std::unordered_map<uint32_t, uint32_t> geometryIndices;
 
     for (const RaytracingDemoSceneObject& object : objects)
     {
-//Modify Begin:2026-07-30 by BestHui
-        if (object.MaterialIndex == m_StressTestSphereMaterialIndex)
-        {
-            continue;
-        }
-//Modify End
         if (object.MaterialIndex >= materials.size() || object.GeometryIndex >= geometries.size())
         {
             continue;
@@ -348,75 +343,100 @@ std::vector<AreaLightData> RaytracingDemoSceneResources::CollectEmissiveMeshLigh
             continue;
         }
 
-        const RaytracingDemoSceneGeometry& geometry = geometries[object.GeometryIndex];
-        for (const MeshPrototype& prototype : geometry.MeshPrototypes)
+        uint32_t emitterGeometryIndex = 0;
+        const auto geometryIt = geometryIndices.find(object.GeometryIndex);
+        if (geometryIt == geometryIndices.end())
         {
-            for (size_t index = 0; index + 2 < prototype.m_Indices.size(); index += 3)
+            SurfaceEmitterGeometryData emitterGeometry{};
+            emitterGeometry.TriangleOffset = static_cast<uint32_t>(emitterData.Triangles.size());
+            emitterGeometry.TriangleCdfOffset = static_cast<uint32_t>(emitterData.TriangleCdf.size());
+            float cumulativeArea = 0.0f;
+
+            const RaytracingDemoSceneGeometry& geometry = geometries[object.GeometryIndex];
+            for (const MeshPrototype& prototype : geometry.MeshPrototypes)
             {
-                const VertexAttributes& vertex0 = prototype.m_Vertices[prototype.m_Indices[index + 0]];
-                const VertexAttributes& vertex1 = prototype.m_Vertices[prototype.m_Indices[index + 1]];
-                const VertexAttributes& vertex2 = prototype.m_Vertices[prototype.m_Indices[index + 2]];
-
-                const XMVECTOR position0 = XMVector3TransformCoord(
-                    XMVectorSet(vertex0.Position.x, vertex0.Position.y, vertex0.Position.z, 1.0f),
-                    object.WorldMatrix);
-                const XMVECTOR position1 = XMVector3TransformCoord(
-                    XMVectorSet(vertex1.Position.x, vertex1.Position.y, vertex1.Position.z, 1.0f),
-                    object.WorldMatrix);
-                const XMVECTOR position2 = XMVector3TransformCoord(
-                    XMVectorSet(vertex2.Position.x, vertex2.Position.y, vertex2.Position.z, 1.0f),
-                    object.WorldMatrix);
-                const XMVECTOR cross = XMVector3Cross(
-                    XMVectorSubtract(position1, position0),
-                    XMVectorSubtract(position2, position0));
-                const float doubleArea = XMVectorGetX(XMVector3Length(cross));
-                if (doubleArea <= triangleAreaThreshold * 2.0f)
+                for (size_t index = 0; index + 2 < prototype.m_Indices.size(); index += 3)
                 {
-                    continue;
-                }
+                    const uint32_t vertexIndex0 = prototype.m_Indices[index + 0];
+                    const uint32_t vertexIndex1 = prototype.m_Indices[index + 1];
+                    const uint32_t vertexIndex2 = prototype.m_Indices[index + 2];
+                    if (vertexIndex0 >= prototype.m_Vertices.size() ||
+                        vertexIndex1 >= prototype.m_Vertices.size() ||
+                        vertexIndex2 >= prototype.m_Vertices.size())
+                    {
+                        continue;
+                    }
 
-                XMFLOAT3 position0Float{};
-                XMFLOAT3 position1Float{};
-                XMFLOAT3 position2Float{};
-                XMFLOAT3 normal{};
-                XMStoreFloat3(&position0Float, position0);
-                XMStoreFloat3(&position1Float, position1);
-                XMStoreFloat3(&position2Float, position2);
-                XMStoreFloat3(&normal, XMVector3Normalize(cross));
+                    const VertexAttributes& vertex0 = prototype.m_Vertices[vertexIndex0];
+                    const VertexAttributes& vertex1 = prototype.m_Vertices[vertexIndex1];
+                    const VertexAttributes& vertex2 = prototype.m_Vertices[vertexIndex2];
+                    const XMVECTOR position0 = XMVectorSet(vertex0.Position.x, vertex0.Position.y, vertex0.Position.z, 0.0f);
+                    const XMVECTOR position1 = XMVectorSet(vertex1.Position.x, vertex1.Position.y, vertex1.Position.z, 0.0f);
+                    const XMVECTOR position2 = XMVectorSet(vertex2.Position.x, vertex2.Position.y, vertex2.Position.z, 0.0f);
+                    const float triangleArea = 0.5f * XMVectorGetX(XMVector3Length(XMVector3Cross(
+                        XMVectorSubtract(position1, position0),
+                        XMVectorSubtract(position2, position0))));
+                    if (triangleArea <= triangleAreaThreshold)
+                    {
+                        continue;
+                    }
 
-                AreaLightData light{};
-                light.PositionAndRange = {
-                    position0Float.x,
-                    position0Float.y,
-                    position0Float.z,
-                    0.5f * doubleArea
-                };
-                light.NormalAndType = { normal.x, normal.y, normal.z, 1.0f };
-                light.AxisUAndExtent = { position1Float.x, position1Float.y, position1Float.z, 0.0f };
-                light.AxisVAndExtent = { position2Float.x, position2Float.y, position2Float.z, 0.0f };
-                light.ColorAndIntensity = material.Emission;
-                if (material.HasEmissionMap != 0u && emissionLuminance <= emissionThreshold)
-                {
-                    light.ColorAndIntensity = { 1.0f, 1.0f, 1.0f, 1.0f };
+                    SurfaceEmitterTriangleData triangle{};
+                    triangle.Position0 = { vertex0.Position.x, vertex0.Position.y, vertex0.Position.z, 0.0f };
+                    triangle.Position1 = { vertex1.Position.x, vertex1.Position.y, vertex1.Position.z, 0.0f };
+                    triangle.Position2 = { vertex2.Position.x, vertex2.Position.y, vertex2.Position.z, 0.0f };
+                    triangle.Uv0Uv1 = { vertex0.Uv.x, vertex0.Uv.y, vertex1.Uv.x, vertex1.Uv.y };
+                    triangle.Uv2AndPadding = { vertex2.Uv.x, vertex2.Uv.y, 0.0f, 0.0f };
+                    emitterData.Triangles.push_back(triangle);
+                    cumulativeArea += triangleArea;
+                    emitterData.TriangleCdf.push_back(cumulativeArea);
                 }
-                light.EmissiveUv0Uv1 = {
-                    vertex0.Uv.x,
-                    vertex0.Uv.y,
-                    vertex1.Uv.x,
-                    vertex1.Uv.y
-                };
-                light.EmissiveUv2AndMaterialIndex = {
-                    vertex2.Uv.x,
-                    vertex2.Uv.y,
-                    static_cast<float>(object.MaterialIndex),
-                    0.0f
-                };
-                emissiveLights.push_back(light);
             }
+
+            emitterGeometry.TriangleCount = static_cast<uint32_t>(emitterData.Triangles.size()) - emitterGeometry.TriangleOffset;
+            if (emitterGeometry.TriangleCount == 0u)
+            {
+                continue;
+            }
+
+            for (uint32_t triangleIndex = 0; triangleIndex < emitterGeometry.TriangleCount; ++triangleIndex)
+            {
+                const uint32_t cdfIndex = emitterGeometry.TriangleCdfOffset + triangleIndex;
+                emitterData.TriangleCdf[cdfIndex] /= cumulativeArea;
+            }
+
+            emitterGeometryIndex = static_cast<uint32_t>(emitterData.Geometries.size());
+            emitterData.Geometries.push_back(emitterGeometry);
+            geometryIndices.emplace(object.GeometryIndex, emitterGeometryIndex);
         }
+        else
+        {
+            emitterGeometryIndex = geometryIt->second;
+        }
+
+        SurfaceEmitterInstanceData instance{};
+        XMFLOAT3 origin{};
+        XMFLOAT3 axisX{};
+        XMFLOAT3 axisY{};
+        XMFLOAT3 axisZ{};
+        XMStoreFloat3(&origin, XMVector3TransformCoord(XMVectorZero(), object.WorldMatrix));
+        XMStoreFloat3(&axisX, XMVector3TransformNormal(XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f), object.WorldMatrix));
+        XMStoreFloat3(&axisY, XMVector3TransformNormal(XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f), object.WorldMatrix));
+        XMStoreFloat3(&axisZ, XMVector3TransformNormal(XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f), object.WorldMatrix));
+        instance.OriginAndRange = { origin.x, origin.y, origin.z, 10000.0f };
+        instance.AxisX = { axisX.x, axisX.y, axisX.z, 0.0f };
+        instance.AxisY = { axisY.x, axisY.y, axisY.z, 0.0f };
+        instance.AxisZ = { axisZ.x, axisZ.y, axisZ.z, 0.0f };
+        instance.EmissionAndIntensity = emissionLuminance > emissionThreshold
+            ? material.Emission
+            : XMFLOAT4{ 1.0f, 1.0f, 1.0f, 1.0f };
+        instance.GeometryIndex = emitterGeometryIndex;
+        instance.MaterialIndex = object.MaterialIndex;
+        instance.Flags = SurfaceEmitterInstanceFlagUseMaterialEmission;
+        emitterData.Instances.push_back(instance);
     }
 
-    return emissiveLights;
+    return emitterData;
 }
 //Modify End
 

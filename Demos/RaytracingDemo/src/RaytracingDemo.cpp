@@ -366,7 +366,7 @@ void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::files
 
     m_Lights.CreateFromScene(m_Scene);
 //Modify Begin:2026-08-06 by BestHui
-    m_Lights.SetEmissiveMeshLights(m_SceneResources.CollectEmissiveMeshLights());
+    m_Lights.SetEmissiveMeshSurfaceEmitters(m_SceneResources.CollectEmissiveMeshSurfaceEmitters());
 //Modify End
     m_SkyboxEnabled = !skyboxTexturePath.empty() && std::filesystem::exists(skyboxTexturePath);
     m_HasSceneCamera = sceneCamera.RuntimeCamera != nullptr;
@@ -604,6 +604,8 @@ void RaytracingDemo::ApplyStressTestSpheresState()
         const uint64_t fenceValue = commandQueue->ExecuteCommandList(commandList);
         commandQueue->WaitForFenceValue(fenceValue);
         AppendRuntimeAutomationLog("Stress resource update: GPU update completed.");
+        m_Lights.SetEmissiveMeshSurfaceEmitters(m_SceneResources.CollectEmissiveMeshSurfaceEmitters());
+        AppendRuntimeAutomationLog("Stress resource update: surface emitter data rebuilt.");
         EnsureRayTracingPipelines();
         BindRayTracingShaderResources();
         AppendRuntimeAutomationLog("Stress resource update: ray tracing resources rebound.");

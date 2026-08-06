@@ -411,78 +411,124 @@ float3 EvaluatePointLight(
 //Modify End
 
 //Modify Begin:2026-08-06 by BestHui
-struct AreaLightSample
+struct SurfaceEmitterSample
 {
     float3 PositionWs;
     float3 NormalWs;
     float3 Emission;
-    float Area;
+    float AreaOverTriangleSelectionPdf;
     float MaxDistance;
     bool Valid;
 };
 
-AreaLightSample SampleAreaLight(AreaLightData light, float2 sampleUv)
+float3 TransformSurfaceEmitterVector(const SurfaceEmitterInstanceData instance, const float3 localVector)
 {
-    AreaLightSample sample;
+    return instance.AxisX.xyz * localVector.x +
+        instance.AxisY.xyz * localVector.y +
+        instance.AxisZ.xyz * localVector.z;
+}
+
+float SurfaceEmitterHash01(const float2 value)
+{
+    return frac(sin(dot(value, float2(12.9898f, 78.233f))) * 43758.5453f);
+}
+
+SurfaceEmitterSample SampleSurfaceEmitter(const uint emitterIndex, const float2 sampleUv)
+{
+    SurfaceEmitterSample sample;
     sample.PositionWs = 0.0f;
     sample.NormalWs = 0.0f;
     sample.Emission = 0.0f;
-    sample.Area = 0.0f;
+    sample.AreaOverTriangleSelectionPdf = 0.0f;
     sample.MaxDistance = 0.0f;
     sample.Valid = false;
 
-    if (light.NormalAndType.w == AreaLightType_EmissiveTriangle)
+    if (emitterIndex >= Camera_SurfaceEmitterCount)
     {
-        const float sqrtU = sqrt(saturate(sampleUv.x));
-        const float3 barycentrics = float3(
-            1.0f - sqrtU,
-            sqrtU * saturate(sampleUv.y),
-            sqrtU * (1.0f - saturate(sampleUv.y)));
-        const float3 position0 = light.PositionAndRange.xyz;
-        const float3 position1 = light.AxisUAndExtent.xyz;
-        const float3 position2 = light.AxisVAndExtent.xyz;
-        const float3 triangleCross = cross(position1 - position0, position2 - position0);
-        const float doubleArea = length(triangleCross);
-        if (doubleArea <= 1.0e-8f)
-        {
-            return sample;
-        }
-
-        const uint materialIndex = uint(round(light.EmissiveUv2AndMaterialIndex.z));
-        const MaterialData material = Materials[materialIndex];
-        const float2 uv = light.EmissiveUv0Uv1.xy * barycentrics.x +
-            light.EmissiveUv0Uv1.zw * barycentrics.y +
-            light.EmissiveUv2AndMaterialIndex.xy * barycentrics.z;
-        const float3 emissionMap = material.HasEmissionMap != 0u
-            ? SampleBindlessTexture2DLevel(material.EmissionTextureIndex, LinearWrapSampler, uv, 0.0f).rgb
-            : 1.0f;
-        sample.PositionWs = position0 * barycentrics.x + position1 * barycentrics.y + position2 * barycentrics.z;
-        sample.NormalWs = triangleCross / doubleArea;
-        sample.Emission = material.Emission.rgb * emissionMap;
-        sample.Area = 0.5f * doubleArea;
-        sample.MaxDistance = 10000.0f;
-        sample.Valid = MaxComponent(sample.Emission) > 0.0f;
         return sample;
     }
 
-    const float2 rectangleUv = sampleUv * 2.0f - 1.0f;
-    sample.PositionWs = light.PositionAndRange.xyz +
-        light.AxisUAndExtent.xyz * light.AxisUAndExtent.w * rectangleUv.x +
-        light.AxisVAndExtent.xyz * light.AxisVAndExtent.w * rectangleUv.y;
-    sample.NormalWs = normalize(light.NormalAndType.xyz);
-    sample.Emission = light.ColorAndIntensity.rgb * light.ColorAndIntensity.w;
-    sample.Area = max(0.0001f, 4.0f * light.AxisUAndExtent.w * light.AxisVAndExtent.w);
-    sample.MaxDistance = light.PositionAndRange.w;
+    const SurfaceEmitterInstanceData instance = SurfaceEmitterInstances[emitterIndex];
+    const SurfaceEmitterGeometryData geometry = SurfaceEmitterGeometries[instance.GeometryIndex];
+    if (geometry.TriangleCount == 0u)
+    {
+        return sample;
+    }
+
+    const float target = min(saturate(sampleUv.x), 0.99999994f);
+    uint low = 0u;
+    uint high = geometry.TriangleCount - 1u;
+    [loop]
+    while (low < high)
+    {
+        const uint middle = low + (high - low) / 2u;
+        if (target <= SurfaceEmitterTriangleCdf[geometry.TriangleCdfOffset + middle])
+        {
+            high = middle;
+        }
+        else
+        {
+            low = middle + 1u;
+        }
+    }
+
+    const uint triangleIndex = geometry.TriangleOffset + low;
+    const float previousCdf = low == 0u ? 0.0f : SurfaceEmitterTriangleCdf[geometry.TriangleCdfOffset + low - 1u];
+    const float triangleSelectionPdf = SurfaceEmitterTriangleCdf[geometry.TriangleCdfOffset + low] - previousCdf;
+    if (triangleSelectionPdf <= 0.0f)
+    {
+        return sample;
+    }
+
+    const SurfaceEmitterTriangleData surfaceTriangle = SurfaceEmitterTriangles[triangleIndex];
+    const float sqrtU = sqrt(saturate(sampleUv.y));
+    const float sampleV = SurfaceEmitterHash01(sampleUv);
+    const float3 barycentrics = float3(
+        1.0f - sqrtU,
+        sqrtU * sampleV,
+        sqrtU * (1.0f - sampleV));
+    const float3 localPosition0 = surfaceTriangle.Position0.xyz;
+    const float3 localPosition1 = surfaceTriangle.Position1.xyz;
+    const float3 localPosition2 = surfaceTriangle.Position2.xyz;
+    const float3 worldPosition0 = instance.OriginAndRange.xyz + TransformSurfaceEmitterVector(instance, localPosition0);
+    const float3 worldPosition1 = instance.OriginAndRange.xyz + TransformSurfaceEmitterVector(instance, localPosition1);
+    const float3 worldPosition2 = instance.OriginAndRange.xyz + TransformSurfaceEmitterVector(instance, localPosition2);
+    const float3 triangleCross = cross(worldPosition1 - worldPosition0, worldPosition2 - worldPosition0);
+    const float doubleArea = length(triangleCross);
+    if (doubleArea <= 1.0e-8f)
+    {
+        return sample;
+    }
+
+    float3 emission = instance.EmissionAndIntensity.rgb * instance.EmissionAndIntensity.w;
+    if ((instance.Flags & SurfaceEmitterInstanceFlagUseMaterialEmission) != 0u &&
+        instance.MaterialIndex != SurfaceEmitterInvalidMaterialIndex)
+    {
+        const MaterialData material = Materials[instance.MaterialIndex];
+        const float2 uv = surfaceTriangle.Uv0Uv1.xy * barycentrics.x +
+            surfaceTriangle.Uv0Uv1.zw * barycentrics.y +
+            surfaceTriangle.Uv2AndPadding.xy * barycentrics.z;
+        const float3 emissionMap = material.HasEmissionMap != 0u
+            ? SampleBindlessTexture2DLevel(material.EmissionTextureIndex, LinearWrapSampler, uv, 0.0f).rgb
+            : 1.0f;
+        emission *= emissionMap;
+    }
+
+    sample.PositionWs = worldPosition0 * barycentrics.x + worldPosition1 * barycentrics.y + worldPosition2 * barycentrics.z;
+    sample.NormalWs = triangleCross / doubleArea;
+    sample.Emission = emission;
+    sample.AreaOverTriangleSelectionPdf = 0.5f * doubleArea / triangleSelectionPdf;
+    sample.MaxDistance = instance.OriginAndRange.w;
     sample.Valid = MaxComponent(sample.Emission) > 0.0f;
     return sample;
 }
 //Modify End
 
-float3 EvaluateAreaLight(AreaLightData light, SurfaceData surface, inout uint rngState, out float hitDistance)
+float3 EvaluateSurfaceEmitter(const uint emitterIndex, SurfaceData surface, inout uint rngState, out float hitDistance)
 {
     hitDistance = 0.0f;
 //Modify Begin:2026-08-06 by BestHui
-    const AreaLightSample lightSample = SampleAreaLight(light, float2(Random01(rngState), Random01(rngState)));
+    const SurfaceEmitterSample lightSample = SampleSurfaceEmitter(emitterIndex, float2(Random01(rngState), Random01(rngState)));
     if (!lightSample.Valid)
     {
         return 0.0f;
@@ -512,7 +558,7 @@ float3 EvaluateAreaLight(AreaLightData light, SurfaceData surface, inout uint rn
 
     hitDistance = distanceToLight;
 //Modify Begin:2026-08-06 by BestHui
-    float3 radiance = lightSample.Emission * lightSample.Area * lightFacing / max(0.001f, distanceToLight * distanceToLight);
+    float3 radiance = lightSample.Emission * lightSample.AreaOverTriangleSelectionPdf * lightFacing / max(0.001f, distanceToLight * distanceToLight);
 //Modify End
     return EvaluatePbrLighting(surface, lightDirection, radiance);
 }
@@ -526,15 +572,15 @@ bool SampleDirectLightIndex(
     const uint totalLightCount =
         Camera_DirectionalLightCount +
         Camera_PointLightCount +
-        Camera_AreaLightCount;
-    if (totalLightCount == 0u)
+        Camera_SurfaceEmitterCount;
+    if (totalLightCount == 0u || DirectLightCdf[totalLightCount - 1u] <= 0.0f)
     {
         lightIndex = 0u;
         inverseSourcePdf = 0.0f;
         return false;
     }
 
-    const float target = min(saturate(selectionRandom), 0.99999994f);
+    const float target = max(1.0e-7f, min(saturate(selectionRandom), 0.99999994f));
     uint low = 0u;
     uint high = totalLightCount - 1u;
     [loop]
@@ -582,7 +628,7 @@ float3 EvaluateDirectLighting(SurfaceData surface, inout uint rngState, out floa
     }
 
     lightIndex -= Camera_PointLightCount;
-    return EvaluateAreaLight(AreaLights[lightIndex], surface, rngState, nrdDirectHitDistance) * inverseSourcePdf;
+    return EvaluateSurfaceEmitter(lightIndex, surface, rngState, nrdDirectHitDistance) * inverseSourcePdf;
 }
 
 //Modify Begin:2026-08-05 by BestHui
@@ -597,7 +643,7 @@ struct ReSTIRDIDirectLightSample
 
 uint GetReSTIRDILightCount()
 {
-    return Camera_DirectionalLightCount + Camera_PointLightCount + Camera_AreaLightCount;
+    return Camera_DirectionalLightCount + Camera_PointLightCount + Camera_SurfaceEmitterCount;
 }
 
 //Modify Begin:2026-08-06 by BestHui
@@ -687,13 +733,13 @@ ReSTIRDIDirectLightSample SampleReSTIRDIDirectLight(
     }
 
     index -= Camera_PointLightCount;
-    if (index >= Camera_AreaLightCount)
+    if (index >= Camera_SurfaceEmitterCount)
     {
         return sample;
     }
 
 //Modify Begin:2026-08-06 by BestHui
-    const AreaLightSample areaSample = SampleAreaLight(AreaLights[index], sampleUv);
+    const SurfaceEmitterSample areaSample = SampleSurfaceEmitter(index, sampleUv);
     if (!areaSample.Valid)
     {
         return sample;
@@ -714,7 +760,7 @@ ReSTIRDIDirectLightSample SampleReSTIRDIDirectLight(
         return sample;
     }
 
-    const float3 radiance = areaSample.Emission * areaSample.Area * lightFacing /
+    const float3 radiance = areaSample.Emission * areaSample.AreaOverTriangleSelectionPdf * lightFacing /
         max(0.001f, distanceToLight * distanceToLight);
 //Modify End
     sample.UnshadowedContribution = EvaluatePbrLighting(surface, sample.DirectionWs, radiance);

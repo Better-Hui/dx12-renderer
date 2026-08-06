@@ -35,6 +35,7 @@ set(SHADERS_HEADER_FILES
         "shaders/Common/Noise.hlsli"
         "shaders/Common/EnvironmentTexture.hlsli"
         "shaders/Bindless/BindlessResources.hlsli"
+        "shaders/Lighting/SurfaceEmitter.hlsli"
 # Modify End
         "shaders/SVGF/SVGFCommon.hlsli"
 # Modify Begin:2026-07-31 by BestHui

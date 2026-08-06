@@ -5,6 +5,7 @@
 
 #include <Framework/Scene/Light.h>
 #include <Framework/Scene/Scene.h>
+#include <Framework/Rendering/Lighting/SurfaceEmitter.h>
 #include <Framework/Rendering/Pipeline/SharedUploadBuffer.h>
 
 #include <Scene/SceneLighting.h>
@@ -31,7 +32,7 @@ public:
     void CreateDemoLights();
     void CreateFromScene(const Scene& scene);
 //Modify Begin:2026-08-06 by BestHui
-    void SetEmissiveMeshLights(std::vector<AreaLightData> lights);
+    void SetEmissiveMeshSurfaceEmitters(SurfaceEmitterSceneData emitterData);
 //Modify End
     void InitializeGpuBuffers(CommandList& commandList);
 //Modify Begin:2026-07-30 by BestHui
@@ -48,7 +49,7 @@ public:
     void FillCameraConstants(
         uint32_t& directionalLightCount,
         uint32_t& pointLightCount,
-        uint32_t& areaLightCount,
+        uint32_t& surfaceEmitterCount,
         SkyLightData& skyLight) const;
 
     bool IsPointLightAnimationEnabled() const { return m_AnimatePointLights; }
@@ -60,7 +61,7 @@ public:
     const std::vector<PointLight>& GetPointLights() const { return m_PointLights; }
     const std::vector<AreaLightData>& GetAreaLights() const { return m_AreaLights; }
 //Modify Begin:2026-08-06 by BestHui
-    size_t GetEmissiveMeshLightCount() const { return m_EmissiveMeshLights.size(); }
+    size_t GetEmissiveMeshSurfaceEmitterCount() const { return m_MeshSurfaceEmitterData.Instances.size(); }
 //Modify End
 
 private:
@@ -73,16 +74,15 @@ private:
     void RemoveAreaLight(size_t lightIndex);
     void BuildGpuData();
 //Modify Begin:2026-08-06 by BestHui
-    void RebuildAreaLightGpuData();
+    void RebuildSurfaceEmitterGpuData();
     void RebuildDirectLightSamplingCdf();
     void MarkDirectLightSamplingDirty();
+    void UpdateAreaLightSurfaceEmitter(size_t lightIndex);
 //Modify End
     void UpdatePointLightGpuData(size_t lightIndex);
     void MarkDirectionalLightsDirty();
     void MarkDirectionalLightsDirty(size_t beginIndex, size_t endIndex);
     void MarkPointLightsDirty(size_t beginIndex, size_t endIndex);
-    void MarkAreaLightsDirty();
-    void MarkAreaLightsDirty(size_t beginIndex, size_t endIndex);
 
     FrameworkDeviceContext& m_DeviceContext;
     SkyLightData m_SkyLight = {};
@@ -90,15 +90,21 @@ private:
     std::vector<PointLight> m_PointLights;
     std::vector<AreaLightData> m_AreaLights;
 //Modify Begin:2026-08-06 by BestHui
-    std::vector<AreaLightData> m_EmissiveMeshLights;
+    SurfaceEmitterSceneData m_MeshSurfaceEmitterData;
 //Modify End
     std::vector<DirectionalLightData> m_DirectionalLightGpuData;
     std::vector<PointLightData> m_PointLightGpuData;
-    std::vector<AreaLightData> m_AreaLightGpuData;
+    std::vector<SurfaceEmitterGeometryData> m_SurfaceEmitterGeometryGpuData;
+    std::vector<SurfaceEmitterTriangleData> m_SurfaceEmitterTriangleGpuData;
+    std::vector<float> m_SurfaceEmitterTriangleCdfGpuData;
+    std::vector<SurfaceEmitterInstanceData> m_SurfaceEmitterInstanceGpuData;
 
     StructuredBuffer m_DirectionalLightBuffer;
     StructuredBuffer m_PointLightBuffer;
-    StructuredBuffer m_AreaLightBuffer;
+    StructuredBuffer m_SurfaceEmitterGeometryBuffer;
+    StructuredBuffer m_SurfaceEmitterTriangleBuffer;
+    StructuredBuffer m_SurfaceEmitterTriangleCdfBuffer;
+    StructuredBuffer m_SurfaceEmitterInstanceBuffer;
 //Modify Begin:2026-08-06 by BestHui
     StructuredBuffer m_DirectLightCdfBuffer;
 //Modify End
@@ -106,7 +112,10 @@ private:
 
     size_t m_DirectionalLightBufferCapacity = 0;
     size_t m_PointLightBufferCapacity = 0;
-    size_t m_AreaLightBufferCapacity = 0;
+    size_t m_SurfaceEmitterGeometryBufferCapacity = 0;
+    size_t m_SurfaceEmitterTriangleBufferCapacity = 0;
+    size_t m_SurfaceEmitterTriangleCdfBufferCapacity = 0;
+    size_t m_SurfaceEmitterInstanceBufferCapacity = 0;
 //Modify Begin:2026-08-06 by BestHui
     size_t m_DirectLightCdfBufferCapacity = 0;
 //Modify End
@@ -114,12 +123,20 @@ private:
     size_t m_DirectionalLightDirtyEnd = 0;
     size_t m_PointLightDirtyBegin = 0;
     size_t m_PointLightDirtyEnd = 0;
-    size_t m_AreaLightDirtyBegin = 0;
-    size_t m_AreaLightDirtyEnd = 0;
+    size_t m_SurfaceEmitterGeometryDirtyBegin = 0;
+    size_t m_SurfaceEmitterGeometryDirtyEnd = 0;
+    size_t m_SurfaceEmitterTriangleDirtyBegin = 0;
+    size_t m_SurfaceEmitterTriangleDirtyEnd = 0;
+    size_t m_SurfaceEmitterTriangleCdfDirtyBegin = 0;
+    size_t m_SurfaceEmitterTriangleCdfDirtyEnd = 0;
+    size_t m_SurfaceEmitterInstanceDirtyBegin = 0;
+    size_t m_SurfaceEmitterInstanceDirtyEnd = 0;
 //Modify Begin:2026-08-06 by BestHui
     size_t m_DirectLightCdfDirtyBegin = 0;
     size_t m_DirectLightCdfDirtyEnd = 0;
     std::vector<float> m_DirectLightCdfGpuData;
+    uint32_t m_RectangleEmitterGeometryIndex = SurfaceEmitterInvalidMaterialIndex;
+    size_t m_RectangleSurfaceEmitterOffset = 0;
 //Modify End
 
     std::vector<float> m_PointLightBaseY;

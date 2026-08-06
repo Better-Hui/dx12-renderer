@@ -4,6 +4,7 @@
 #include <Scene/SceneResourceBuilders.h>
 #include <Scene/SceneLighting.h>
 #include <Framework/Scene/Scene.h>
+#include <Framework/Rendering/Lighting/SurfaceEmitter.h>
 
 #include <DirectXMath.h>
 #include <d3d12.h>
@@ -37,7 +38,7 @@ public:
     const std::vector<RaytracingDemoSceneGeometry>& GetSceneGeometries() const { return m_GeometryResources.GetGeometries(); }
     const std::vector<RaytracingDemoMaterialData>& GetMaterials() const { return m_TextureMaterialResources.GetMaterials(); }
 //Modify Begin:2026-08-06 by BestHui
-    std::vector<AreaLightData> CollectEmissiveMeshLights() const;
+    SurfaceEmitterSceneData CollectEmissiveMeshSurfaceEmitters() const;
 //Modify End
     const std::vector<std::shared_ptr<Texture>>& GetTextures() const { return m_TextureMaterialResources.GetTextures(); }
     std::vector<ShaderResourceView> CreateTextureShaderResourceViews() const { return m_TextureMaterialResources.CreateTextureShaderResourceViews(); }
