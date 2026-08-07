@@ -4,7 +4,6 @@
 #include <d3dcompiler.h>
 //Modify End
 #include "Helpers.h"
-#include "Application.h"
 
 #include <unordered_set>
 
@@ -103,13 +102,10 @@ Microsoft::WRL::ComPtr<ID3DBlob> ShaderUtils::LoadShaderFromFile(const std::wstr
 {
     const auto completePath = L"Shaders/" + fileName;
 
-    const auto& library = Application::Get().GetDxcLibrary();
-    uint32_t codePage = CP_UTF8;
-    Microsoft::WRL::ComPtr<IDxcBlobEncoding> sourceBlob;
-    ThrowIfFailed(library->CreateBlobFromFile(completePath.c_str(), &codePage, &sourceBlob));
-
     Microsoft::WRL::ComPtr<ID3DBlob> result;
-    ThrowIfFailed(sourceBlob.As(&result));
+//Modify Begin:2026-08-07 by BestHui
+    ThrowIfFailed(D3DReadFileToBlob(completePath.c_str(), &result));
+//Modify End
 
     return result;
 }

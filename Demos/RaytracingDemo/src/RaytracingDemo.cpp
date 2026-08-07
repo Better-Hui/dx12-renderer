@@ -56,19 +56,14 @@ namespace
     FrameworkDeviceContext CreateFrameworkDeviceContext(Application& application)
     {
         FrameworkDeviceContextDesc desc;
-        desc.Device = application.GetDevice();
+//Modify Begin:2026-08-07 by BestHui
+        desc.DeviceContext = application.GetD3D12DeviceContext();
+//Modify End
         desc.DirectQueue = application.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
         desc.ComputeQueue = application.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE);
         desc.CopyQueue = application.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COPY);
-        desc.Streamline = application.GetStreamlineRuntime();
-        desc.SetFrameGenerationEnabled = [&application](const bool enabled)
-        {
-            return application.SetFrameGenerationEnabled(enabled);
-        };
-        desc.AllocateDescriptors = [&application](const D3D12_DESCRIPTOR_HEAP_TYPE type, const uint32_t count)
-        {
-            return application.AllocateDescriptors(type, count);
-        };
+        desc.FrameFeatures = application.GetFrameFeaturesRuntime();
+        desc.FrameGeneration = &application;
         return FrameworkDeviceContext(std::move(desc));
     }
     //Modify End
@@ -869,18 +864,36 @@ void RaytracingDemo::ApplyStressTestSpheresState()
         return;
     }
 
+//Modify Begin:2026-08-07 by BestHui
+    m_RuntimeAutomation.AppendDiagnosticLog("Stress transition: flush queues.");
+//Modify End
     m_FrameworkDeviceContext.Flush();
     const auto commandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
     const auto commandList = commandQueue->GetCommandList();
+//Modify Begin:2026-08-07 by BestHui
+    m_RuntimeAutomation.AppendDiagnosticLog("Stress transition: update scene resources.");
+//Modify End
     if (m_SceneResources.SetStressTestSpheresEnabled(*commandList, m_StressTestSpheresEnabled))
     {
+//Modify Begin:2026-08-07 by BestHui
+        m_RuntimeAutomation.AppendDiagnosticLog("Stress transition: submit resource update.");
+//Modify End
         const uint64_t fenceValue = commandQueue->ExecuteCommandList(commandList);
         commandQueue->WaitForFenceValue(fenceValue);
+//Modify Begin:2026-08-07 by BestHui
+        m_RuntimeAutomation.AppendDiagnosticLog("Stress transition: rebuild lights.");
+//Modify End
         m_Lights.SetEmissiveMeshSurfaceEmitters(m_SceneResources.CollectEmissiveMeshSurfaceEmitters());
+//Modify Begin:2026-08-07 by BestHui
+        m_RuntimeAutomation.AppendDiagnosticLog("Stress transition: rebuild render graph.");
+//Modify End
         RebuildRenderGraph();
 
         m_RenderGraphTimingHistory.Clear();
         ResetAccumulation();
+//Modify Begin:2026-08-07 by BestHui
+        m_RuntimeAutomation.AppendDiagnosticLog("Stress transition: complete.");
+//Modify End
     }
 
     m_StressTestSpheresStateDirty = false;
@@ -1128,9 +1141,16 @@ bool RaytracingDemo::LoadContent()
 
 //Modify Begin:2026-07-28 by BestHui
 //Modify Begin:2026-07-29 by BestHui
-    m_GpuTimestampProfiler.Initialize(128);
+    m_GpuTimestampProfiler.Initialize(
+        m_FrameworkDeviceContext.GetDevice(),
+        m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT),
+        128);
 //Modify Begin:2026-08-03 by BestHui
-    m_AsyncComputeGpuTimestampProfiler.Initialize(128, D3D12_COMMAND_LIST_TYPE_COMPUTE);
+    m_AsyncComputeGpuTimestampProfiler.Initialize(
+        m_FrameworkDeviceContext.GetDevice(),
+        m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE),
+        128,
+        D3D12_COMMAND_LIST_TYPE_COMPUTE);
 //Modify End
 //Modify End
     RebuildRenderGraph();
@@ -1466,6 +1486,9 @@ RaytracingDemoPassResources RaytracingDemo::CreatePassResources()
         m_DisplayBlitMesh,
         GetSceneCamera(),
         m_FrameworkDeviceContext.GetDevice(),
+//Modify Begin:2026-08-07 by BestHui
+        m_FrameworkDeviceContext.GetD3D12DeviceContext(),
+//Modify End
         m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT),
         m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE)
     };

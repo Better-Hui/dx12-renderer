@@ -64,7 +64,10 @@ bool RayTracingAccelerationStructure::RemoveInstance(const RayTracingInstanceHan
 
     m_InstanceHandles.pop_back();
     m_Instances.pop_back();
-    m_InstanceIndices.erase(indexResult);
+    // Modify Begin:2026-08-07 by BestHui
+    // Updating the moved instance may rehash the unordered map and invalidate indexResult.
+    m_InstanceIndices.erase(handle);
+    // Modify End
     return true;
 }
 

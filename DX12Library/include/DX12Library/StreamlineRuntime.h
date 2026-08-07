@@ -1,13 +1,17 @@
 //Modify Begin:2026-08-07 by BestHui
 #pragma once
 
+//Modify Begin:2026-08-07 by BestHui
+#include <DX12Library/FrameFeaturesRuntime.h>
+//Modify End
+
 #include <d3d12.h>
 #include <dxgi1_6.h>
 
 #include <memory>
 #include <string>
 
-class StreamlineRuntime final
+class StreamlineRuntime final : public FrameFeaturesRuntime
 {
 public:
     StreamlineRuntime() = default;
@@ -19,11 +23,11 @@ public:
     bool Initialize(ID3D12Device2* nativeDevice, const std::wstring& logDirectory);
     void Shutdown();
 
-    [[nodiscard]] bool IsInitialized() const { return m_Initialized; }
-    [[nodiscard]] bool IsRayReconstructionSupported() const { return m_RayReconstructionSupported; }
-    [[nodiscard]] bool IsFrameGenerationSupported() const { return m_FrameGenerationSupported; }
+    [[nodiscard]] bool IsInitialized() const override { return m_Initialized; }
+    [[nodiscard]] bool IsRayReconstructionSupported() const override { return m_RayReconstructionSupported; }
+    [[nodiscard]] bool IsFrameGenerationSupported() const override { return m_FrameGenerationSupported; }
     [[nodiscard]] bool IsFrameGenerationEnabled() const { return m_FrameGenerationEnabled; }
-    [[nodiscard]] const std::string& GetStatusMessage() const { return m_StatusMessage; }
+    [[nodiscard]] const std::string& GetStatusMessage() const override { return m_StatusMessage; }
 
     bool SetFrameGenerationEnabled(bool enabled);
 

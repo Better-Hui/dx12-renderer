@@ -323,7 +323,8 @@ void Window::OnResize(ResizeEventArgs& e)
 		MRenderTarget.AttachTexture(Color0, std::make_shared<Texture>());
 		for (int i = 0; i < BUFFER_COUNT; ++i)
 		{
-			ResourceStateTracker::RemoveGlobalResourceState(BackBufferTextures[i]->GetD3D12Resource().Get());
+			Application::Get().GetResourceStateRegistry()->RemoveResource(
+				BackBufferTextures[i]->GetD3D12Resource().Get());
 			BackBufferTextures[i]->Reset();
 		}
 
@@ -353,7 +354,8 @@ void Window::ReleaseSwapChainResources()
 	MRenderTarget.AttachTexture(Color0, std::make_shared<Texture>());
 	for (int i = 0; i < BUFFER_COUNT; ++i)
 	{
-		ResourceStateTracker::RemoveGlobalResourceState(BackBufferTextures[i]->GetD3D12Resource().Get());
+		Application::Get().GetResourceStateRegistry()->RemoveResource(
+			BackBufferTextures[i]->GetD3D12Resource().Get());
 		BackBufferTextures[i]->Reset();
 	}
 	DxgiSwapChain.Reset();
@@ -437,7 +439,9 @@ void Window::UpdateRenderTargetViews()
 		ComPtr<ID3D12Resource> backBuffer;
 		ThrowIfFailed(DxgiSwapChain->GetBuffer(i, IID_PPV_ARGS(&backBuffer)));
 
-		ResourceStateTracker::AddGlobalResourceState(backBuffer.Get(), D3D12_RESOURCE_STATE_COMMON);
+		Application::Get().GetResourceStateRegistry()->RegisterResource(
+			backBuffer.Get(),
+			D3D12_RESOURCE_STATE_COMMON);
 
 		BackBufferTextures[i]->SetD3D12Resource(backBuffer);
 		BackBufferTextures[i]->CreateViews();

@@ -35,31 +35,50 @@
 //Modify Begin:2026-07-28 by BestHui
 #include "D3D12RenderContext.h"
 //Modify End
+//Modify Begin:2026-08-07 by BestHui
+#include "FrameFeaturesRuntime.h"
+//Modify End
 
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <wrl.h>
-#include <dxcapi.h>
-
 #include <memory>
 #include <string>
 
 
 class CommandQueue;
+class D3D12DeviceContext;
 class DescriptorAllocator;
 class Game;
+class ResourceStateRegistry;
 class Window;
 class StreamlineRuntime;
 
-class Application
+//Modify Begin:2026-08-07 by BestHui
+struct ApplicationCreateDesc
+{
+    bool EnableStreamlineInterposer = false;
+};
+//Modify End
+
+class Application : public FrameGenerationController
 {
 public:
     /**
     * Create the application singleton with the application instance handle.
     */
     static void Create(HINSTANCE hInst);
+//Modify Begin:2026-08-07 by BestHui
+    static void Create(HINSTANCE hInst, const ApplicationCreateDesc& createDesc);
+//Modify End
 //Modify Begin:2026-07-21 by BestHui
     static void Create(HINSTANCE hInst, const ExternalD3D12Context& externalContext);
+//Modify End
+//Modify Begin:2026-08-07 by BestHui
+    static void Create(
+        HINSTANCE hInst,
+        const ExternalD3D12Context& externalContext,
+        const ApplicationCreateDesc& createDesc);
 //Modify End
 
     /**
@@ -127,6 +146,9 @@ public:
      * Get the Direct3D 12 device
      */
     Microsoft::WRL::ComPtr<ID3D12Device2> GetDevice() const;
+//Modify Begin:2026-08-07 by BestHui
+    std::shared_ptr<D3D12DeviceContext> GetD3D12DeviceContext() const;
+//Modify End
 //Modify Begin:2026-07-21 by BestHui
     bool UsesExternalDevice() const;
 //Modify End
@@ -138,7 +160,13 @@ public:
      */
     std::shared_ptr<CommandQueue> GetCommandQueue(D3D12_COMMAND_LIST_TYPE type = D3D12_COMMAND_LIST_TYPE_DIRECT) const;
     std::shared_ptr<StreamlineRuntime> GetStreamlineRuntime() const;
-    bool SetFrameGenerationEnabled(bool enabled);
+//Modify Begin:2026-07-30 by BestHui
+    std::shared_ptr<ResourceStateRegistry> GetResourceStateRegistry() const;
+//Modify End
+//Modify Begin:2026-08-07 by BestHui
+    std::shared_ptr<FrameFeaturesRuntime> GetFrameFeaturesRuntime() const;
+//Modify End
+    bool SetFrameGenerationEnabled(bool enabled) override;
 
     /**
      * Flush all command queues.
@@ -163,8 +191,6 @@ public:
         return s_FrameCount;
     }
 
-    const Microsoft::WRL::ComPtr<IDxcLibrary>& GetDxcLibrary() const;
-
     using WndProcHandler = LRESULT (*)(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
     static void AddWndProcHandler(WndProcHandler handler);
     static void RemoveWndProcHandler(WndProcHandler handler);
@@ -184,7 +210,7 @@ protected:
 
     // Initialize the application instance.
 //Modify Begin:2026-07-21 by BestHui
-    void Initialize(const ExternalD3D12Context* externalContext = nullptr);
+    void Initialize(const ExternalD3D12Context* externalContext, const ApplicationCreateDesc& createDesc);
 //Modify End
 
     Microsoft::WRL::ComPtr<IDXGIAdapter4> GetAdapter(bool bUseWarp);
@@ -201,9 +227,6 @@ private:
 //Modify Begin:2026-07-28 by BestHui
     D3D12RenderContext m_RenderContext;
 //Modify End
-    Microsoft::WRL::ComPtr<IDxcLibrary> m_DxcLibrary;
-
-    std::unique_ptr<DescriptorAllocator> m_DescriptorAllocators[D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES];
 
     bool m_TearingSupported;
 

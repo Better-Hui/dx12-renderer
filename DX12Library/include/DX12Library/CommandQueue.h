@@ -42,9 +42,11 @@
 #include <memory>
 #include <vector>
 
+#include "ResourceStateRegistry.h"
 #include "ThreadSafeQueue.h"
 
 class CommandList;
+class D3D12DeviceContext;
 class StreamlineRuntime;
 
 class CommandQueue
@@ -53,12 +55,12 @@ public:
 	//Modify Begin:2026-08-07 by BestHui
 	CommandQueue(
 		D3D12_COMMAND_LIST_TYPE type,
-		Microsoft::WRL::ComPtr<ID3D12Device2> device,
+		std::shared_ptr<D3D12DeviceContext> deviceContext,
 		std::shared_ptr<StreamlineRuntime> streamlineRuntime = nullptr);
 //Modify Begin:2026-07-21 by BestHui
 	CommandQueue(
 		D3D12_COMMAND_LIST_TYPE type,
-		Microsoft::WRL::ComPtr<ID3D12Device2> device,
+		std::shared_ptr<D3D12DeviceContext> deviceContext,
 		ID3D12CommandQueue* externalCommandQueue,
 		std::shared_ptr<StreamlineRuntime> streamlineRuntime = nullptr);
 //Modify End
@@ -88,6 +90,9 @@ public:
 //Modify End
 
 	Microsoft::WRL::ComPtr<ID3D12CommandQueue> GetD3D12CommandQueue() const;
+//Modify Begin:2026-07-30 by BestHui
+	std::shared_ptr<ResourceStateRegistry> GetResourceStateRegistry() const;
+//Modify End
 
 private:
 //Modify Begin:2026-07-21 by BestHui
@@ -103,7 +108,7 @@ private:
 
 	D3D12_COMMAND_LIST_TYPE m_CommandListType;
 	//Modify Begin:2026-08-07 by BestHui
-	Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;
+	std::shared_ptr<D3D12DeviceContext> m_DeviceContext;
 	std::shared_ptr<StreamlineRuntime> m_StreamlineRuntime;
 	std::function<std::shared_ptr<CommandList>()> m_ComputeCommandListFactory;
 	std::shared_ptr<CommandQueue> m_ComputeCommandQueue;

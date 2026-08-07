@@ -135,6 +135,11 @@ void DemoAutomation::RuntimeAutomationController::Update(
     AppendLog("Applied " + step.Name + ".");
 }
 
+void DemoAutomation::RuntimeAutomationController::AppendDiagnosticLog(const std::string& message) const
+{
+    AppendLog(message);
+}
+
 void DemoAutomation::RuntimeAutomationController::AppendLog(const std::string& message) const
 {
     if (m_LogPath.empty())

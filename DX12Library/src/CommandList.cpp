@@ -30,12 +30,15 @@ namespace fs = std::filesystem;
 CommandList::CommandList(
     const D3D12_COMMAND_LIST_TYPE type,
     Microsoft::WRL::ComPtr<ID3D12Device2> device,
+    std::shared_ptr<ResourceStateRegistry> resourceStateRegistry,
     std::function<std::shared_ptr<CommandList>()> computeCommandListFactory)
     : m_D3d12CommandListType(type)
     , m_Device(std::move(device))
+    , m_ResourceStateRegistry(std::move(resourceStateRegistry))
     , m_ComputeCommandListFactory(std::move(computeCommandListFactory))
 {
     Assert(m_Device != nullptr, "D3D12 device is null.");
+    Assert(m_ResourceStateRegistry != nullptr, "Resource state registry is null.");
 
     ThrowIfFailed(m_Device->CreateCommandAllocator(m_D3d12CommandListType, IID_PPV_ARGS(&m_D3d12CommandAllocator)));
 
@@ -49,7 +52,7 @@ CommandList::CommandList(
 
     m_PUploadBuffer = std::make_unique<UploadBuffer>(m_Device);
 
-    m_PResourceStateTracker = std::make_unique<ResourceStateTracker>();
+    m_PResourceStateTracker = std::make_unique<ResourceStateTracker>(m_ResourceStateRegistry);
 
     for (int i = 0; i < D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES; ++i)
     {
@@ -225,8 +228,7 @@ void CommandList::CopyBuffer(Buffer& buffer, const size_t numElements, const siz
 
         if (buffer.AreAutoBarriersEnabled())
         {
-            // Add the resource to the global resource state tracker.
-            ResourceStateTracker::AddGlobalResourceState(d3d12Resource.Get(), D3D12_RESOURCE_STATE_COMMON);
+            m_ResourceStateRegistry->RegisterResource(d3d12Resource.Get(), D3D12_RESOURCE_STATE_COMMON);
         }
     }
     else // use existing
@@ -484,7 +486,7 @@ bool CommandList::LoadTextureFromFile(Texture& texture, const std::wstring& file
         texture.CreateViews();
         texture.SetName(effectiveFileName);
 
-        ResourceStateTracker::AddGlobalResourceState(textureResource.Get(), initialResourceState);
+        m_ResourceStateRegistry->RegisterResource(textureResource.Get(), initialResourceState);
 
         std::vector<D3D12_SUBRESOURCE_DATA> subresources(scratchImage.GetImageCount());
         const DirectX::Image* pImages = scratchImage.GetImages();
@@ -641,7 +643,7 @@ void CommandList::GenerateMips(Texture& texture)
             IID_PPV_ARGS(&aliasResource)
         ));
 
-        ResourceStateTracker::AddGlobalResourceState(aliasResource.Get(), D3D12_RESOURCE_STATE_COMMON);
+        m_ResourceStateRegistry->RegisterResource(aliasResource.Get(), D3D12_RESOURCE_STATE_COMMON);
         // Ensure the scope of the alias resource.
         TrackObject(aliasResource);
 
@@ -656,7 +658,7 @@ void CommandList::GenerateMips(Texture& texture)
             IID_PPV_ARGS(&uavResource)
         ));
 
-        ResourceStateTracker::AddGlobalResourceState(uavResource.Get(), D3D12_RESOURCE_STATE_COMMON);
+        m_ResourceStateRegistry->RegisterResource(uavResource.Get(), D3D12_RESOURCE_STATE_COMMON);
         // Ensure the scope of the UAV compatible resource.
         TrackObject(uavResource);
 
@@ -1254,7 +1256,10 @@ void CommandList::BindShaderVisibleDescriptorHeap(
 //Modify End
 //Modify End
 
-bool CommandList::Close(CommandList& pendingCommandList)
+//Modify Begin:2026-07-30 by BestHui
+bool CommandList::Close(
+    CommandList& pendingCommandList,
+    ResourceStateRegistry::SubmissionScope& submissionScope)
 {
     // Flush any remaining barriers.
     FlushResourceBarriers();
@@ -1262,12 +1267,14 @@ bool CommandList::Close(CommandList& pendingCommandList)
     m_D3d12CommandList->Close();
 
     // Flush pending resource barriers.
-    const uint32_t numPendingBarriers = m_PResourceStateTracker->FlushPendingResourceBarriers(pendingCommandList);
-    // Commit the final resource state to the global state.
-    m_PResourceStateTracker->CommitFinalResourceStates();
+    const uint32_t numPendingBarriers = m_PResourceStateTracker->FlushPendingResourceBarriers(
+        pendingCommandList,
+        submissionScope);
+    m_PResourceStateTracker->CommitFinalResourceStates(submissionScope);
 
     return numPendingBarriers > 0;
 }
+//Modify End
 
 void CommandList::Close()
 {
@@ -1309,7 +1316,9 @@ void CommandList::GenerateMipsUav(Texture& texture, DXGI_FORMAT format)
 {
     if (!m_GenerateMipsPso)
     {
-        m_GenerateMipsPso = std::make_unique<GenerateMipsPso>();
+//Modify Begin:2026-08-07 by BestHui
+        m_GenerateMipsPso = std::make_unique<GenerateMipsPso>(m_Device);
+//Modify End
     }
 
     m_D3d12CommandList->SetPipelineState(m_GenerateMipsPso->GetPipelineState().Get());

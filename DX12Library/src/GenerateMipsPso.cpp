@@ -3,19 +3,20 @@
 #include "GenerateMipsPso.h"
 #include <DX12Library/GenerateMips_CS.h>
 
-#include "Application.h"
 #include "Helpers.h"
 
 #include "d3dx12.h"
 #include "ShaderUtils.h"
 
-GenerateMipsPso::GenerateMipsPso()
+//Modify Begin:2026-08-07 by BestHui
+GenerateMipsPso::GenerateMipsPso(Microsoft::WRL::ComPtr<ID3D12Device2> device)
+    : m_Device(std::move(device))
 {
-	const auto device = Application::Get().GetDevice();
+	Assert(m_Device != nullptr, "GenerateMips requires a D3D12 device.");
 
 	D3D12_FEATURE_DATA_ROOT_SIGNATURE featureData;
 	featureData.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_1;
-	if (FAILED(device->CheckFeatureSupport(D3D12_FEATURE_ROOT_SIGNATURE, &featureData, sizeof(featureData))))
+	if (FAILED(m_Device->CheckFeatureSupport(D3D12_FEATURE_ROOT_SIGNATURE, &featureData, sizeof(featureData))))
 	{
 		featureData.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_0;
 	}
@@ -46,7 +47,8 @@ GenerateMipsPso::GenerateMipsPso()
 
 	m_RootSignature.SetRootSignatureDesc(
 		rootSignatureDesc.Desc_1_1,
-		featureData.HighestVersion
+		featureData.HighestVersion,
+		*m_Device.Get()
 	);
 
 	// Create the PSO for GenerateMips shader
@@ -62,10 +64,13 @@ GenerateMipsPso::GenerateMipsPso()
 	pipelineStateStream.Cs = CD3DX12_SHADER_BYTECODE(ShaderBytecode_GenerateMips_CS, sizeof ShaderBytecode_GenerateMips_CS);
 
 	const D3D12_PIPELINE_STATE_STREAM_DESC pipelineStateStreamDesc{ sizeof(PipelineStateStream), &pipelineStateStream };
-	ThrowIfFailed(device->CreatePipelineState(&pipelineStateStreamDesc, IID_PPV_ARGS(&m_PipelineState)));
+	ThrowIfFailed(m_Device->CreatePipelineState(&pipelineStateStreamDesc, IID_PPV_ARGS(&m_PipelineState)));
 
 	// Create some default texture UAV's to pad any unused UAV's during mip map generation.
-	m_DefaultUav = Application::Get().AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, MAX_MIP_LEVELS_AT_ONCE);
+	m_DescriptorAllocator = std::make_unique<DescriptorAllocator>(
+		D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+		m_Device);
+	m_DefaultUav = m_DescriptorAllocator->Allocate(MAX_MIP_LEVELS_AT_ONCE);
 
 	for (UINT i = 0; i < MAX_MIP_LEVELS_AT_ONCE; ++i)
 	{
@@ -75,6 +80,7 @@ GenerateMipsPso::GenerateMipsPso()
 		uavDesc.Texture2D.MipSlice = i;
 		uavDesc.Texture2D.PlaneSlice = 0;
 
-		device->CreateUnorderedAccessView(nullptr, nullptr, &uavDesc, m_DefaultUav.GetDescriptorHandle(i));
+		m_Device->CreateUnorderedAccessView(nullptr, nullptr, &uavDesc, m_DefaultUav.GetDescriptorHandle(i));
 	}
 }
+//Modify End

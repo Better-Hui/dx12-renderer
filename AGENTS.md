@@ -118,6 +118,14 @@ Avoid adding new sample code that directly touches root signatures, raw descript
 - The current audited batch is only Inline Ray Query `Direct Lighting` plus `Indirect Lighting` while indirect async compute is disabled. Async compute remains a separate queue-overlap feature and is intentionally not combined with same-queue recording batches.
 - `BufferDescription` declares `BufferKind::Structured` or `BufferKind::Raw` and `BufferUsage`; do not infer a raw buffer from `stride == 1`. `RWStructuredBuffer<T>` maps to a `StructuredBuffer` created with `BufferUsage::UnorderedAccess`, then bound through `UnorderedAccessView`. UAV binding validates the D3D12 UAV resource flag, and structured UAV descriptors validate their byte stride.
 
+## Device Context Ownership
+
+- `D3D12RenderContext` owns the per-device `D3D12DeviceContext`. It is the sole owner of the D3D12 device-facing `ResourceStateRegistry` and CPU-visible descriptor allocators; `Application` only forwards it for standalone composition.
+- `CommandQueue` receives `D3D12DeviceContext`, not independent device/registry copies. It creates each `CommandList` from that same context, so queue submission state merges and resource registration always address one explicit device scope.
+- `FrameworkDeviceContext` receives the same `D3D12DeviceContext` plus queues. It must not carry a descriptor-allocation callback that captures `Application`; use `FrameworkDeviceContext::AllocateDescriptors()` instead.
+- `RootSignature` creation receives an explicit `ID3D12Device2&`. `GenerateMipsPso` receives an explicit device and owns its static CPU descriptor allocator. Binary shader loading uses `D3DReadFileToBlob` and must not access `Application` for a DXC library.
+- `ResourceStateRegistry::SubmissionScope` serializes CPU-side final-state merging only. It is not a GPU synchronization primitive: cross-queue execution still requires the queue fence/wait plan emitted by RenderGraph.
+
 ## RaytracingDemo Responsibilities
 
 `RaytracingDemo` is a sample-style demo, not just a one-off feature test. It should demonstrate the recommended API usage.
@@ -143,7 +151,13 @@ Current major pieces:
 - `DLSSOutput`, `DLSSFinishedToken`, `DLSSNormalRoughness`, and `FrameGenerationHudLess` must be registered only for the graph topology that produces and consumes them. Registering unused transient resources corrupts RenderGraph lifetimes during graph destruction.
 - The experimental FG path prepares Streamline constants/options before RenderGraph execution, produces tone-mapped HUD-less color, tags depth/motion/HUD-less resources before present, emits PCL submit/present markers, then lets the Streamline-proxied swapchain present inject generated frames. It requires a supported adapter/driver/OS configuration; do not force-enable it on unsupported hardware or infer that it works from a successful build.
 - Recreate the native NGX feature only when mode or render/display resolution changes. Before releasing an already evaluated feature, flush the injected `FrameworkDeviceContext`; do not release an in-flight handle. Only commit a newly created handle after NGX creation succeeds.
-- Runtime values: `RAYTRACING_DEMO_DLSS=off|dlaa|quality|balanced|performance|ultra-performance`, `RAYTRACING_DEMO_DLSS_RR=0|1`, and `RAYTRACING_DEMO_DLSS_FRAME_GENERATION=0|1`. The SDK runtime files live in `External/Streamline`; preserve its notices and deployed runtime files when distributing builds.
+- RR/FG require process startup with `--streamline-interposer`; the default path intentionally leaves device, queues, and swapchain unproxied. Runtime values: `RAYTRACING_DEMO_DLSS=off|dlaa|quality|balanced|performance|ultra-performance`, `RAYTRACING_DEMO_DLSS_RR=0|1`, and `RAYTRACING_DEMO_DLSS_FRAME_GENERATION=0|1`. The SDK runtime files live in `External/Streamline`; preserve its notices and deployed runtime files when distributing builds.
+
+## External Present Processing
+
+- RenderGraph::ExternalFrameProcessor is the typed boundary for SDKs that require resource preparation and lifecycle callbacks around Present. It owns required resource IDs plus Process, BeforePresent, and AfterPresent; do not add another group of independent callbacks to RenderGraphRoot.
+- The DLSS Frame Generation adapter uses this contract. Demo code only supplies the graph-resource adapter and overlay; Streamline calls remain inside Framework/Rendering/Upscaling/DLSS.
+- FrameworkDeviceContext receives FrameFeaturesRuntime for RR/FG capability queries and a FrameGenerationController for presentation reconfiguration. It must not store StreamlineRuntime directly or capture Application with an anonymous frame-generation lambda. Application remains the standalone controller because only it owns window swapchain destruction and recreation.
 
 ## Meshlet / Mesh Shader State
 

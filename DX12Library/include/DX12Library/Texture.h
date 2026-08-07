@@ -48,23 +48,27 @@ class Texture : public Resource
 {
 public:
     explicit Texture(TextureUsageType textureUsage = TextureUsageType::Albedo,
-        const std::wstring& name = L"");
+        const std::wstring& name = L"",
+        std::shared_ptr<D3D12DeviceContext> deviceContext = nullptr);
 
     // commited resource
     explicit Texture(const D3D12_RESOURCE_DESC& resourceDesc,
         const D3D12_CLEAR_VALUE* clearValue = nullptr,
         TextureUsageType textureUsage = TextureUsageType::Albedo,
-        const std::wstring& name = L"");
+        const std::wstring& name = L"",
+        std::shared_ptr<D3D12DeviceContext> deviceContext = nullptr);
     explicit Texture(const D3D12_RESOURCE_DESC& resourceDesc,
         const ClearValue& clearValue = {},
         TextureUsageType textureUsage = TextureUsageType::Albedo,
-        const std::wstring& name = L"");
+        const std::wstring& name = L"",
+        std::shared_ptr<D3D12DeviceContext> deviceContext = nullptr);
 //Modify Begin:2026-07-28 by BestHui
     explicit Texture(const D3D12_RESOURCE_DESC& resourceDesc,
         D3D12_HEAP_FLAGS heapFlags,
         const ClearValue& clearValue = {},
         TextureUsageType textureUsage = TextureUsageType::Albedo,
-        const std::wstring& name = L"");
+        const std::wstring& name = L"",
+        std::shared_ptr<D3D12DeviceContext> deviceContext = nullptr);
 //Modify End
 
     // placed resource
@@ -73,17 +77,20 @@ public:
         UINT64 heapOffset = 0,
         const D3D12_CLEAR_VALUE* clearValue = nullptr,
         TextureUsageType textureUsage = TextureUsageType::Albedo,
-        const std::wstring& name = L"");
+        const std::wstring& name = L"",
+        std::shared_ptr<D3D12DeviceContext> deviceContext = nullptr);
     explicit Texture(const D3D12_RESOURCE_DESC& resourceDesc,
         const Microsoft::WRL::ComPtr<ID3D12Heap>& pHeap,
         UINT64 heapOffset = 0,
         const ClearValue& clearValue = {},
         TextureUsageType textureUsage = TextureUsageType::Albedo,
-        const std::wstring& name = L"");
+        const std::wstring& name = L"",
+        std::shared_ptr<D3D12DeviceContext> deviceContext = nullptr);
 
     explicit Texture(Microsoft::WRL::ComPtr<ID3D12Resource> resource,
         TextureUsageType textureUsage = TextureUsageType::Albedo,
-        const std::wstring& name = L"");
+        const std::wstring& name = L"",
+        std::shared_ptr<D3D12DeviceContext> deviceContext = nullptr);
 
     Texture(const Texture& copy);
     Texture(Texture&& copy);

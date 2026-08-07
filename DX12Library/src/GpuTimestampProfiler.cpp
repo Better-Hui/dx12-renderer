@@ -2,7 +2,6 @@
 
 #include "GpuTimestampProfiler.h"
 
-#include "Application.h"
 #include "CommandList.h"
 #include "CommandQueue.h"
 #include "Helpers.h"
@@ -14,6 +13,8 @@
 
 //Modify Begin:2026-07-29 by BestHui
 bool GpuTimestampProfiler::Initialize(
+    Microsoft::WRL::ComPtr<ID3D12Device2> device,
+    std::shared_ptr<CommandQueue> commandQueue,
     const uint32_t maxTimestampCount,
     const D3D12_COMMAND_LIST_TYPE commandListType)
 {
@@ -24,10 +25,9 @@ bool GpuTimestampProfiler::Initialize(
         return false;
     }
 
-    const auto device = Application::Get().GetDevice();
 //Modify Begin:2026-08-03 by BestHui
-    const auto commandQueue = Application::Get().GetCommandQueue(commandListType);
-    if (commandQueue == nullptr || FAILED(commandQueue->GetD3D12CommandQueue()->GetTimestampFrequency(&m_TimestampFrequency)) ||
+    if (device == nullptr || commandQueue == nullptr ||
+        FAILED(commandQueue->GetD3D12CommandQueue()->GetTimestampFrequency(&m_TimestampFrequency)) ||
         m_TimestampFrequency == 0)
     {
         return false;

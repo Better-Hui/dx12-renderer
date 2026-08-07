@@ -14,6 +14,7 @@ set(HEADER_FILES
         include/DX12Library/ConstantBuffer.h
         include/DX12Library/Cubemap.h
         # Modify Begin:2026-07-28 by BestHui
+        include/DX12Library/D3D12DeviceContext.h
         include/DX12Library/D3D12RenderContext.h
         # Modify End
         include/DX12Library/Defines.h
@@ -39,6 +40,9 @@ set(HEADER_FILES
         include/DX12Library/Resource.h
         # Modify Begin:2026-07-30 by BestHui
         include/DX12Library/ResourceStateTransition.h
+        # Modify End
+        # Modify Begin:2026-07-30 by BestHui
+        include/DX12Library/ResourceStateRegistry.h
         # Modify End
         include/DX12Library/ResourceStateTracker.h
         include/DX12Library/RootSignature.h

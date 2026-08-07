@@ -5,9 +5,9 @@
 
 #include "CommandQueue.h"
 #include "Game.h"
-#include "DescriptorAllocator.h"
 //Modify Begin:2026-08-07 by BestHui
 #include "StreamlineRuntime.h"
+#include "D3D12DeviceContext.h"
 //Modify End
 #include "Window.h"
 #include <ctime>
@@ -96,7 +96,9 @@ Application::Application(HINSTANCE hInst, const ExternalD3D12Context* externalCo
 }
 
 //Modify Begin:2026-07-21 by BestHui
-void Application::Initialize(const ExternalD3D12Context* externalContext)
+void Application::Initialize(
+    const ExternalD3D12Context* externalContext,
+    const ApplicationCreateDesc& createDesc)
 //Modify End
 {
 //Modify Begin:2026-07-21 by BestHui
@@ -145,9 +147,11 @@ void Application::Initialize(const ExternalD3D12Context* externalContext)
 #endif
 
 //Modify Begin:2026-07-21 by BestHui
+    D3D12RenderContextInitializationDesc renderContextDesc;
+    renderContextDesc.EnableStreamlineInterposer = createDesc.EnableStreamlineInterposer;
     if (useExternalDevice)
     {
-        m_RenderContext.InitializeExternal(*externalContext);
+        m_RenderContext.InitializeExternal(*externalContext, renderContextDesc);
     }
     else
     {
@@ -160,7 +164,7 @@ void Application::Initialize(const ExternalD3D12Context* externalContext)
 
         if (dxgiAdapter)
         {
-            m_RenderContext.InitializeOwned(CreateDevice(dxgiAdapter));
+            m_RenderContext.InitializeOwned(CreateDevice(dxgiAdapter), renderContextDesc);
         }
         else
         {
@@ -184,37 +188,48 @@ void Application::Initialize(const ExternalD3D12Context* externalContext)
 
     m_TearingSupported = CheckTearingSupport();
 
-    // Create descriptor allocators
-    for (int i = 0; i < D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES; ++i)
-    {
-        m_DescriptorAllocators[i] = std::make_unique<DescriptorAllocator>(static_cast<D3D12_DESCRIPTOR_HEAP_TYPE>(i));
-    }
-
     // Initialize frame counter
     s_FrameCount = 0;
 
     srand(static_cast<unsigned>(time(nullptr)));
-
-    ThrowIfFailed(DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(&m_DxcLibrary)));
 }
 
 void Application::Create(HINSTANCE hInst)
 {
+    ApplicationCreateDesc createDesc;
+    Create(hInst, createDesc);
+}
+
+//Modify Begin:2026-08-07 by BestHui
+void Application::Create(HINSTANCE hInst, const ApplicationCreateDesc& createDesc)
+{
     if (!gs_pSingelton)
     {
         gs_pSingelton = new Application(hInst);
-        gs_pSingelton->Initialize();
+        gs_pSingelton->Initialize(nullptr, createDesc);
     }
 }
+//Modify End
 
 //Modify Begin:2026-07-21 by BestHui
 void Application::Create(HINSTANCE hInst, const ExternalD3D12Context& externalContext)
+{
+    ApplicationCreateDesc createDesc;
+    Create(hInst, externalContext, createDesc);
+}
+//Modify End
+
+//Modify Begin:2026-08-07 by BestHui
+void Application::Create(
+    HINSTANCE hInst,
+    const ExternalD3D12Context& externalContext,
+    const ApplicationCreateDesc& createDesc)
 {
     Assert(externalContext.Device != nullptr, "External D3D12 device is required.");
     if (!gs_pSingelton)
     {
         gs_pSingelton = new Application(hInst, &externalContext);
-        gs_pSingelton->Initialize(&externalContext);
+        gs_pSingelton->Initialize(&externalContext, createDesc);
     }
 }
 //Modify End
@@ -508,10 +523,33 @@ Microsoft::WRL::ComPtr<ID3D12Device2> Application::GetDevice() const
 //Modify End
 }
 
+//Modify Begin:2026-08-07 by BestHui
+std::shared_ptr<D3D12DeviceContext> Application::GetD3D12DeviceContext() const
+{
+//Modify Begin:2026-08-07 by BestHui
+    return m_RenderContext.GetD3D12DeviceContext();
+//Modify End
+}
+//Modify End
+
 std::shared_ptr<StreamlineRuntime> Application::GetStreamlineRuntime() const
 {
     return m_RenderContext.GetStreamlineRuntime();
 }
+
+//Modify Begin:2026-07-30 by BestHui
+std::shared_ptr<ResourceStateRegistry> Application::GetResourceStateRegistry() const
+{
+    return m_RenderContext.GetResourceStateRegistry();
+}
+//Modify End
+
+//Modify Begin:2026-08-07 by BestHui
+std::shared_ptr<FrameFeaturesRuntime> Application::GetFrameFeaturesRuntime() const
+{
+    return m_RenderContext.GetStreamlineRuntime();
+}
+//Modify End
 
 bool Application::SetFrameGenerationEnabled(const bool enabled)
 {
@@ -575,15 +613,12 @@ void Application::Flush()
 
 DescriptorAllocation Application::AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t numDescriptors)
 {
-    return m_DescriptorAllocators[type]->Allocate(numDescriptors);
+    return m_RenderContext.GetD3D12DeviceContext()->AllocateDescriptors(type, numDescriptors);
 }
 
 void Application::ReleaseStaleDescriptors(uint64_t finishedFrame)
 {
-    for (int i = 0; i < D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES; ++i)
-    {
-        m_DescriptorAllocators[i]->ReleaseStaleDescriptors(finishedFrame);
-    }
+    m_RenderContext.GetD3D12DeviceContext()->ReleaseStaleDescriptors(finishedFrame);
 }
 
 Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> Application::CreateDescriptorHeap(
@@ -608,11 +643,6 @@ UINT Application::GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE ty
 //Modify Begin:2026-07-28 by BestHui
     return m_RenderContext.GetDevice()->GetDescriptorHandleIncrementSize(type);
 //Modify End
-}
-
-const Microsoft::WRL::ComPtr<IDxcLibrary>& Application::GetDxcLibrary() const
-{
-    return m_DxcLibrary;
 }
 
 
@@ -926,5 +956,15 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
         PostQuitMessage(4);
         return 0;
     }
+//Modify Begin:2026-08-07 by BestHui
+    catch (...)
+    {
+        std::ofstream errorLog("C:\\Users\\minghuidai\\AppData\\Local\\Temp\\RaytracingDemo-WndProcException.log", std::ios::out | std::ios::trunc);
+        errorLog << "Message=" << message << std::endl;
+        errorLog << "Unhandled non-std exception escaped the window callback." << std::endl;
+        PostQuitMessage(4);
+        return 0;
+    }
+//Modify End
 //Modify End
 }

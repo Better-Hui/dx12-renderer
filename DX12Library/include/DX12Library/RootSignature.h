@@ -45,10 +45,13 @@ class RootSignature
 {
 public:
 	RootSignature();
+//Modify Begin:2026-08-07 by BestHui
 	RootSignature(
 		const D3D12_ROOT_SIGNATURE_DESC1& rootSignatureDesc,
-		D3D_ROOT_SIGNATURE_VERSION rootSignatureVersion
+		D3D_ROOT_SIGNATURE_VERSION rootSignatureVersion,
+		ID3D12Device2& device
 	);
+//Modify End
 
 	virtual ~RootSignature();
 
@@ -59,10 +62,13 @@ public:
 		return D3d12RootSignature;
 	}
 
+	//Modify Begin:2026-08-07 by BestHui
 	void SetRootSignatureDesc(
 		const D3D12_ROOT_SIGNATURE_DESC1& rootSignatureDesc,
-		D3D_ROOT_SIGNATURE_VERSION rootSignatureVersion
+		D3D_ROOT_SIGNATURE_VERSION rootSignatureVersion,
+		ID3D12Device2& device
 	);
+	//Modify End
 
 	const D3D12_ROOT_SIGNATURE_DESC1& GetRootSignatureDesc() const
 	{

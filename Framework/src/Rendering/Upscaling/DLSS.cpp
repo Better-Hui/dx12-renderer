@@ -2,9 +2,9 @@
 #include <Framework/Rendering/Upscaling/DLSS.h>
 
 #include <DX12Library/CommandList.h>
+#include <DX12Library/FrameFeaturesRuntime.h>
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Texture.h>
-#include <DX12Library/StreamlineRuntime.h>
 #include <Framework/Core/FrameworkDeviceContext.h>
 
 #include <nvsdk_ngx_helpers.h>
@@ -175,16 +175,22 @@ DLSS::~DLSS()
 }
 
 //Modify Begin:2026-08-07 by BestHui
+bool DLSS::IsStreamlineRuntimeInitialized() const
+{
+    const std::shared_ptr<FrameFeaturesRuntime> frameFeaturesRuntime = m_DeviceContext.GetFrameFeaturesRuntime();
+    return frameFeaturesRuntime != nullptr && frameFeaturesRuntime->IsInitialized();
+}
+
 bool DLSS::IsRayReconstructionSupported() const
 {
-    const std::shared_ptr<StreamlineRuntime> streamlineRuntime = m_DeviceContext.GetStreamlineRuntime();
-    return streamlineRuntime != nullptr && streamlineRuntime->IsInitialized() && streamlineRuntime->IsRayReconstructionSupported();
+    const std::shared_ptr<FrameFeaturesRuntime> frameFeaturesRuntime = m_DeviceContext.GetFrameFeaturesRuntime();
+    return IsStreamlineRuntimeInitialized() && frameFeaturesRuntime->IsRayReconstructionSupported();
 }
 
 bool DLSS::IsFrameGenerationSupported() const
 {
-    const std::shared_ptr<StreamlineRuntime> streamlineRuntime = m_DeviceContext.GetStreamlineRuntime();
-    return streamlineRuntime != nullptr && streamlineRuntime->IsInitialized() && streamlineRuntime->IsFrameGenerationSupported();
+    const std::shared_ptr<FrameFeaturesRuntime> frameFeaturesRuntime = m_DeviceContext.GetFrameFeaturesRuntime();
+    return IsStreamlineRuntimeInitialized() && frameFeaturesRuntime->IsFrameGenerationSupported();
 }
 //Modify End
 
@@ -201,9 +207,15 @@ void DLSS::SetMode(const DLSSMode mode)
 
 void DLSS::SetRayReconstructionEnabled(const bool enabled)
 {
+    if (enabled && !IsStreamlineRuntimeInitialized())
+    {
+        m_StatusMessage = "DLSS Ray Reconstruction requires restart with --streamline-interposer.";
+        m_RayReconstructionEnabled = false;
+        return;
+    }
     if (enabled && !IsRayReconstructionSupported())
     {
-        m_StatusMessage = "DLSS Ray Reconstruction requires the Streamline runtime.";
+        m_StatusMessage = "DLSS Ray Reconstruction is unavailable on the active adapter.";
         m_RayReconstructionEnabled = false;
         return;
     }
@@ -216,10 +228,17 @@ void DLSS::SetRayReconstructionEnabled(const bool enabled)
 
 void DLSS::SetFrameGenerationEnabled(const bool enabled)
 {
-    const std::shared_ptr<StreamlineRuntime> streamlineRuntime = m_DeviceContext.GetStreamlineRuntime();
+    const std::shared_ptr<FrameFeaturesRuntime> frameFeaturesRuntime = m_DeviceContext.GetFrameFeaturesRuntime();
+    FrameGenerationController* frameGenerationController = m_DeviceContext.GetFrameGenerationController();
+    if (enabled && !IsStreamlineRuntimeInitialized())
+    {
+        m_StatusMessage = "DLSS Frame Generation requires restart with --streamline-interposer.";
+        m_FrameGenerationEnabled = false;
+        return;
+    }
     if (enabled && !IsFrameGenerationSupported())
     {
-        m_StatusMessage = "DLSS Frame Generation requires the Streamline runtime.";
+        m_StatusMessage = "DLSS Frame Generation is unavailable on the active adapter.";
         m_FrameGenerationEnabled = false;
         return;
     }
@@ -245,10 +264,10 @@ void DLSS::SetFrameGenerationEnabled(const bool enabled)
         }
     }
 
-    if (!m_DeviceContext.SetFrameGenerationEnabled(enabled))
+    if (frameGenerationController == nullptr || !frameGenerationController->SetFrameGenerationEnabled(enabled))
     {
         m_StatusMessage = "DLSS Frame Generation swapchain recreation failed: " +
-            (streamlineRuntime != nullptr ? streamlineRuntime->GetStatusMessage() : std::string("no runtime"));
+            (frameFeaturesRuntime != nullptr ? frameFeaturesRuntime->GetStatusMessage() : std::string("no runtime"));
         return;
     }
 
@@ -257,7 +276,7 @@ void DLSS::SetFrameGenerationEnabled(const bool enabled)
     const sl::Result reflexResult = slReflexSetOptions(reflexOptions);
     if (reflexResult != sl::Result::eOk)
     {
-        m_DeviceContext.SetFrameGenerationEnabled(false);
+        (void)frameGenerationController->SetFrameGenerationEnabled(false);
         m_StatusMessage = "slReflexSetOptions failed while toggling DLSS Frame Generation.";
         return;
     }
@@ -583,8 +602,8 @@ void DLSS::ExecuteRayReconstruction(CommandList& commandList, const DLSSExecutio
         throw std::runtime_error("DLSS Ray Reconstruction requires diffuse albedo, specular albedo, and a packed normal-roughness texture.");
     }
 
-    const std::shared_ptr<StreamlineRuntime> streamlineRuntime = m_DeviceContext.GetStreamlineRuntime();
-    if (streamlineRuntime == nullptr || !streamlineRuntime->IsInitialized())
+    const std::shared_ptr<FrameFeaturesRuntime> frameFeaturesRuntime = m_DeviceContext.GetFrameFeaturesRuntime();
+    if (frameFeaturesRuntime == nullptr || !frameFeaturesRuntime->IsInitialized())
     {
         throw std::runtime_error("DLSS Ray Reconstruction requires an initialized Streamline runtime.");
     }

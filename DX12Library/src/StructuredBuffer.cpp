@@ -2,15 +2,18 @@
 
 #include <d3dx12.h>
 
-#include "Application.h"
 #include "Buffer.h"
+#include "D3D12DeviceContext.h"
 #include "Helpers.h"
 
 namespace
 {
-    UINT64 GetBufferOffset(const D3D12_RESOURCE_DESC& resourceDesc, UINT64 baseOffset)
+    UINT64 GetBufferOffset(
+        const D3D12_RESOURCE_DESC& resourceDesc,
+        UINT64 baseOffset,
+        const D3D12DeviceContext& deviceContext)
     {
-        auto pDevice = Application::Get().GetDevice();
+        const auto pDevice = deviceContext.GetDevice();
         D3D12_RESOURCE_DESC descs[2] = {
             StructuredBuffer::COUNTER_DESC,
             resourceDesc,
@@ -20,35 +23,73 @@ namespace
     }
 }
 
-StructuredBuffer::StructuredBuffer(const std::wstring& name /*= L""*/)
-    : Buffer(name)
+StructuredBuffer::StructuredBuffer(
+    const std::wstring& name,
+    std::shared_ptr<D3D12DeviceContext> deviceContext)
+    : Buffer(name, std::move(deviceContext))
     , m_NumElements(0)
     , m_ElementSize(0)
-    , m_CounterBuffer(std::make_shared<ByteAddressBuffer>(COUNTER_DESC, 1, 4, name + L" Counter"))
+    , m_CounterBuffer(std::make_shared<ByteAddressBuffer>(
+        COUNTER_DESC,
+        1,
+        4,
+        name + L" Counter",
+        m_DeviceContext))
 {
-    m_Srv = Application::Get().AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    m_Uav = Application::Get().AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    m_Srv = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    m_Uav = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 }
 
-StructuredBuffer::StructuredBuffer(const D3D12_RESOURCE_DESC& resourceDesc, const size_t numElements, const size_t elementSize, const std::wstring& name /*= L""*/)
-    : Buffer(resourceDesc, numElements, elementSize, name)
+StructuredBuffer::StructuredBuffer(
+    const D3D12_RESOURCE_DESC& resourceDesc,
+    const size_t numElements,
+    const size_t elementSize,
+    const std::wstring& name,
+    std::shared_ptr<D3D12DeviceContext> deviceContext)
+    : Buffer(resourceDesc, numElements, elementSize, name, std::move(deviceContext))
     , m_NumElements(numElements)
     , m_ElementSize(elementSize)
-    , m_CounterBuffer(std::make_shared<ByteAddressBuffer>(COUNTER_DESC, 1, 4, name + L" Counter"))
+    , m_CounterBuffer(std::make_shared<ByteAddressBuffer>(
+        COUNTER_DESC,
+        1,
+        4,
+        name + L" Counter",
+        m_DeviceContext))
 {
-    m_Srv = Application::Get().AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    m_Uav = Application::Get().AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    m_Srv = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    m_Uav = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
     CreateViews(m_NumElements, m_ElementSize);
 }
 
-StructuredBuffer::StructuredBuffer(const D3D12_RESOURCE_DESC& resourceDesc, const Microsoft::WRL::ComPtr<ID3D12Heap>& pHeap, UINT64 heapOffset, size_t numElements, size_t elementSize, const std::wstring& name)
-    : Buffer(resourceDesc, pHeap, GetBufferOffset(resourceDesc, heapOffset), numElements, elementSize, name)
+StructuredBuffer::StructuredBuffer(
+    const D3D12_RESOURCE_DESC& resourceDesc,
+    const Microsoft::WRL::ComPtr<ID3D12Heap>& pHeap,
+    UINT64 heapOffset,
+    size_t numElements,
+    size_t elementSize,
+    const std::wstring& name,
+    std::shared_ptr<D3D12DeviceContext> deviceContext)
+    : Buffer(
+        resourceDesc,
+        pHeap,
+        GetBufferOffset(resourceDesc, heapOffset, *deviceContext),
+        numElements,
+        elementSize,
+        name,
+        std::move(deviceContext))
     , m_NumElements(numElements)
     , m_ElementSize(elementSize)
-    , m_CounterBuffer(std::make_shared<ByteAddressBuffer>(COUNTER_DESC, pHeap, heapOffset, 1, 4, name + L" Counter"))
+    , m_CounterBuffer(std::make_shared<ByteAddressBuffer>(
+        COUNTER_DESC,
+        pHeap,
+        heapOffset,
+        1,
+        4,
+        name + L" Counter",
+        m_DeviceContext))
 {
-    m_Srv = Application::Get().AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    m_Uav = Application::Get().AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    m_Srv = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    m_Uav = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
     CreateViews(m_NumElements, m_ElementSize);
 }
 
@@ -64,7 +105,7 @@ size_t StructuredBuffer::GetElementSize() const
 
 void StructuredBuffer::CreateViews(size_t numElements, size_t elementSize)
 {
-    auto device = Application::Get().GetDevice();
+    const auto device = m_DeviceContext->GetDevice();
 
     m_NumElements = numElements;
     m_ElementSize = elementSize;

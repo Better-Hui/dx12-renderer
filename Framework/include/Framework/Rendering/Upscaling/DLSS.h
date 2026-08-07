@@ -89,6 +89,9 @@ public:
 
     [[nodiscard]] bool IsSupported() const { return m_Supported; }
     [[nodiscard]] bool IsEnabled() const { return m_Supported && m_Mode != DLSSMode::Disabled; }
+//Modify Begin:2026-08-07 by BestHui
+    [[nodiscard]] bool IsStreamlineRuntimeInitialized() const;
+//Modify End
     [[nodiscard]] bool IsRayReconstructionSupported() const;
     [[nodiscard]] bool IsFrameGenerationSupported() const;
     [[nodiscard]] bool IsRayReconstructionEnabled() const { return m_RayReconstructionEnabled; }

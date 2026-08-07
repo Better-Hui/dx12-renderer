@@ -3,8 +3,8 @@
 #include "CommandQueue.h"
 
 #include "CommandList.h"
-#include "ResourceStateTracker.h"
 //Modify Begin:2026-08-07 by BestHui
+#include "D3D12DeviceContext.h"
 #include "StreamlineRuntime.h"
 //Modify End
 
@@ -18,15 +18,16 @@
 //Modify Begin:2026-08-07 by BestHui
 CommandQueue::CommandQueue(
 	const D3D12_COMMAND_LIST_TYPE type,
-	Microsoft::WRL::ComPtr<ID3D12Device2> device,
+	std::shared_ptr<D3D12DeviceContext> deviceContext,
 	std::shared_ptr<StreamlineRuntime> streamlineRuntime)
 	: m_CommandListType(type)
-	, m_Device(std::move(device))
+	, m_DeviceContext(std::move(deviceContext))
 	, m_StreamlineRuntime(std::move(streamlineRuntime))
 	, m_FenceValue(0)
 	, m_IsProcessingInFlightCommandLists(true)
 {
-	Assert(m_Device != nullptr, "D3D12 device is null.");
+	Assert(m_DeviceContext != nullptr, "D3D12 device context is null.");
+	const Microsoft::WRL::ComPtr<ID3D12Device2>& device = m_DeviceContext->GetDevice();
 
 	D3D12_COMMAND_QUEUE_DESC desc = {};
 	desc.Type = type;
@@ -37,13 +38,13 @@ CommandQueue::CommandQueue(
 	if (m_StreamlineRuntime != nullptr)
 	{
 		ThrowIfFailed(m_StreamlineRuntime->CreateCommandQueue(
-			m_Device.Get(),
+			device.Get(),
 			&desc,
 			IID_PPV_ARGS(&m_D3d12CommandQueue)));
 	}
 	else
 	{
-		ThrowIfFailed(m_Device->CreateCommandQueue(&desc, IID_PPV_ARGS(&m_D3d12CommandQueue)));
+		ThrowIfFailed(device->CreateCommandQueue(&desc, IID_PPV_ARGS(&m_D3d12CommandQueue)));
 	}
 //Modify Begin:2026-07-21 by BestHui
 	InitializeFenceAndWorker();
@@ -53,17 +54,17 @@ CommandQueue::CommandQueue(
 //Modify Begin:2026-07-21 by BestHui
 CommandQueue::CommandQueue(
 	const D3D12_COMMAND_LIST_TYPE type,
-	Microsoft::WRL::ComPtr<ID3D12Device2> device,
+	std::shared_ptr<D3D12DeviceContext> deviceContext,
 	ID3D12CommandQueue* externalCommandQueue,
 	std::shared_ptr<StreamlineRuntime> streamlineRuntime)
 	: m_CommandListType(type)
-	, m_Device(std::move(device))
+	, m_DeviceContext(std::move(deviceContext))
 	, m_StreamlineRuntime(std::move(streamlineRuntime))
 	, m_D3d12CommandQueue(externalCommandQueue)
 	, m_FenceValue(0)
 	, m_IsProcessingInFlightCommandLists(true)
 {
-	Assert(m_Device != nullptr, "D3D12 device is null.");
+	Assert(m_DeviceContext != nullptr, "D3D12 device context is null.");
 	Assert(m_D3d12CommandQueue != nullptr, "External command queue is null.");
 	Assert(m_D3d12CommandQueue->GetDesc().Type == type, "External command queue type does not match the wrapper type.");
 	InitializeFenceAndWorker();
@@ -71,7 +72,7 @@ CommandQueue::CommandQueue(
 
 void CommandQueue::InitializeFenceAndWorker()
 {
-	ThrowIfFailed(m_Device->CreateFence(m_FenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_D3d12Fence)));
+	ThrowIfFailed(m_DeviceContext->GetDevice()->CreateFence(m_FenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_D3d12Fence)));
 
 	switch (m_CommandListType)
 	{
@@ -156,17 +157,23 @@ std::shared_ptr<CommandList> CommandQueue::GetCommandList()
 {
 	std::shared_ptr<CommandList> commandList;
 
-	// If there is a command list on the queue.
-	if (!m_AvailableCommandLists.Empty())
+//Modify Begin:2026-07-30 by BestHui
+	// TryPop is the atomic availability check. Empty followed by TryPop is racy
+	// when multiple recording workers request command lists concurrently.
+	if (m_AvailableCommandLists.TryPop(commandList))
 	{
-		m_AvailableCommandLists.TryPop(commandList);
 		assert(commandList != nullptr);
 	}
+	//Modify End
 	else
 	{
 		// Otherwise create a new command list.
 		//Modify Begin:2026-08-07 by BestHui
-		commandList = std::make_shared<CommandList>(m_CommandListType, m_Device, m_ComputeCommandListFactory);
+		commandList = std::make_shared<CommandList>(
+			m_CommandListType,
+			m_DeviceContext->GetDevice(),
+			m_DeviceContext->GetResourceStateRegistry(),
+			m_ComputeCommandListFactory);
 		//Modify End
 	}
 
@@ -182,7 +189,9 @@ uint64_t CommandQueue::ExecuteCommandList(std::shared_ptr<CommandList> commandLi
 
 uint64_t CommandQueue::ExecuteCommandLists(const std::vector<std::shared_ptr<CommandList>>& commandLists)
 {
-	ResourceStateTracker::Lock();
+//Modify Begin:2026-07-30 by BestHui
+	auto submissionScope = m_DeviceContext->GetResourceStateRegistry()->AcquireSubmissionScope();
+//Modify End
 
 	// Command lists that need to put back on the command list queue.
 	std::vector<std::shared_ptr<CommandList>> toBeQueued;
@@ -199,7 +208,7 @@ uint64_t CommandQueue::ExecuteCommandLists(const std::vector<std::shared_ptr<Com
 	for (auto commandList : commandLists)
 	{
 		auto pendingCommandList = GetCommandList();
-		bool hasPendingBarriers = commandList->Close(*pendingCommandList);
+		bool hasPendingBarriers = commandList->Close(*pendingCommandList, submissionScope);
 		pendingCommandList->Close();
 		// If there are no pending barriers on the pending command list, there is no reason to 
 		// execute an empty command list on the command queue.
@@ -222,8 +231,6 @@ uint64_t CommandQueue::ExecuteCommandLists(const std::vector<std::shared_ptr<Com
 	UINT numCommandLists = static_cast<UINT>(d3d12CommandLists.size());
 	m_D3d12CommandQueue->ExecuteCommandLists(numCommandLists, d3d12CommandLists.data());
 	uint64_t fenceValue = Signal();
-
-	ResourceStateTracker::Unlock();
 
 	// Queue command lists for reuse.
 	for (auto commandList : toBeQueued)
@@ -268,9 +275,19 @@ ComPtr<ID3D12CommandQueue> CommandQueue::GetD3D12CommandQueue() const
 	return m_D3d12CommandQueue;
 }
 
+//Modify Begin:2026-07-30 by BestHui
+std::shared_ptr<ResourceStateRegistry> CommandQueue::GetResourceStateRegistry() const
+{
+	return m_DeviceContext->GetResourceStateRegistry();
+}
+//Modify End
+
 void CommandQueue::ProcessInFlightCommandLists()
 {
 	std::unique_lock lock(m_ProcessInFlightCommandListsThreadMutex, std::defer_lock);
+//Modify Begin:2026-07-30 by BestHui
+	const char* stage = "initialization";
+//Modify End
 
 //Modify Begin:2026-07-28 by BestHui
 	try
@@ -278,6 +295,7 @@ void CommandQueue::ProcessInFlightCommandLists()
 //Modify End
 	while (m_IsProcessingInFlightCommandLists)
 	{
+		stage = "dequeue in-flight command list";
 		CommandListEntry commandListEntry;
 
 //Modify Begin:2026-07-29 by BestHui
@@ -298,10 +316,27 @@ void CommandQueue::ProcessInFlightCommandLists()
 		const auto fenceValue = std::get<0>(commandListEntry);
 		const auto commandList = std::get<1>(commandListEntry);
 
-		WaitForFenceValue(fenceValue);
+		stage = "wait for submitted fence";
+		try
+		{
+			WaitForFenceValue(fenceValue);
+		}
+		catch (const std::exception& exception)
+		{
+			throw std::runtime_error("Command queue fence wait failed: " + std::string(exception.what()));
+		}
 
-		commandList->Reset();
+		stage = "reset command list";
+		try
+		{
+			commandList->Reset();
+		}
+		catch (const std::exception& exception)
+		{
+			throw std::runtime_error("Command list reset failed: " + std::string(exception.what()));
+		}
 
+		stage = "return command list to available queue";
 		m_AvailableCommandLists.Push(commandList);
 		m_ProcessInFlightCommandListsThreadCv.notify_one();
 //Modify End
@@ -311,7 +346,7 @@ void CommandQueue::ProcessInFlightCommandLists()
 	catch (const std::exception& exception)
 	{
 		std::ofstream errorLog("C:\\Users\\minghuidai\\AppData\\Local\\Temp\\RaytracingDemo-CommandQueueException.log", std::ios::out | std::ios::trunc);
-		errorLog << exception.what() << std::endl;
+		errorLog << "QueueType=" << static_cast<uint32_t>(m_CommandListType) << ", Stage=" << stage << ", Error=" << exception.what() << std::endl;
 		//Modify Begin:2026-08-07 by BestHui
 		if (m_FatalErrorHandler)
 		{

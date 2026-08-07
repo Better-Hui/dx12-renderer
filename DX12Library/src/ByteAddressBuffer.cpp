@@ -1,35 +1,45 @@
 #include "DX12LibPCH.h"
 #include "ByteAddressBuffer.h"
-#include "Application.h"
+#include "D3D12DeviceContext.h"
 
-ByteAddressBuffer::ByteAddressBuffer(const std::wstring& name)
-    : Buffer(name)
+ByteAddressBuffer::ByteAddressBuffer(
+    const std::wstring& name,
+    std::shared_ptr<D3D12DeviceContext> deviceContext)
+    : Buffer(name, std::move(deviceContext))
 {
-    m_Srv = Application::Get().AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    m_Uav = Application::Get().AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    m_Srv = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    m_Uav = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 }
 
 ByteAddressBuffer::ByteAddressBuffer(const D3D12_RESOURCE_DESC& resDesc,
     const size_t numElements, const size_t elementSize,
-    const std::wstring& name)
-    : Buffer(resDesc, numElements, elementSize, name)
+    const std::wstring& name,
+    std::shared_ptr<D3D12DeviceContext> deviceContext)
+    : Buffer(resDesc, numElements, elementSize, name, std::move(deviceContext))
 {
-    m_Srv = Application::Get().AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    m_Uav = Application::Get().AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    m_Srv = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    m_Uav = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
     CreateViews(numElements, elementSize);
 }
 
-ByteAddressBuffer::ByteAddressBuffer(const D3D12_RESOURCE_DESC& resDesc, const ComPtr<ID3D12Heap>& pHeap, UINT64 heapOffset, size_t numElements, size_t elementSize, const std::wstring& name)
-    : Buffer(resDesc, pHeap, heapOffset, numElements, elementSize, name)
+ByteAddressBuffer::ByteAddressBuffer(
+    const D3D12_RESOURCE_DESC& resDesc,
+    const ComPtr<ID3D12Heap>& pHeap,
+    UINT64 heapOffset,
+    size_t numElements,
+    size_t elementSize,
+    const std::wstring& name,
+    std::shared_ptr<D3D12DeviceContext> deviceContext)
+    : Buffer(resDesc, pHeap, heapOffset, numElements, elementSize, name, std::move(deviceContext))
 {
-    m_Srv = Application::Get().AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    m_Uav = Application::Get().AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    m_Srv = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    m_Uav = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
     CreateViews(numElements, elementSize);
 }
 
 void ByteAddressBuffer::CreateViews(size_t numElements, size_t elementSize)
 {
-    auto device = Application::Get().GetDevice();
+    const auto device = m_DeviceContext->GetDevice();
 
     // Make sure buffer size is aligned to 4 bytes.
     m_BufferSize = Math::AlignUp(numElements * elementSize, 4);

@@ -2,6 +2,7 @@
 #include <Framework/Core/FrameworkDeviceContext.h>
 
 #include <DX12Library/CommandQueue.h>
+#include <DX12Library/D3D12DeviceContext.h>
 #include <DX12Library/Helpers.h>
 
 #include <utility>
@@ -9,11 +10,12 @@
 FrameworkDeviceContext::FrameworkDeviceContext(FrameworkDeviceContextDesc desc)
     : m_Desc(std::move(desc))
 {
-    Assert(m_Desc.Device != nullptr, "Framework device context requires a D3D12 device.");
+//Modify Begin:2026-08-07 by BestHui
+    Assert(m_Desc.DeviceContext != nullptr, "Framework device context requires a D3D12 device context.");
+//Modify End
     Assert(m_Desc.DirectQueue != nullptr, "Framework device context requires a direct queue.");
     Assert(m_Desc.ComputeQueue != nullptr, "Framework device context requires a compute queue.");
     Assert(m_Desc.CopyQueue != nullptr, "Framework device context requires a copy queue.");
-    Assert(static_cast<bool>(m_Desc.AllocateDescriptors), "Framework device context requires a descriptor allocator.");
 }
 
 std::shared_ptr<CommandQueue> FrameworkDeviceContext::GetCommandQueue(
@@ -33,22 +35,10 @@ std::shared_ptr<CommandQueue> FrameworkDeviceContext::GetCommandQueue(
     }
 }
 
-DescriptorAllocation FrameworkDeviceContext::AllocateDescriptors(
-    const D3D12_DESCRIPTOR_HEAP_TYPE type,
-    const uint32_t descriptorCount) const
-{
-    return m_Desc.AllocateDescriptors(type, descriptorCount);
-}
-
 void FrameworkDeviceContext::Flush() const
 {
     m_Desc.DirectQueue->Flush();
     m_Desc.ComputeQueue->Flush();
     m_Desc.CopyQueue->Flush();
-}
-
-bool FrameworkDeviceContext::SetFrameGenerationEnabled(const bool enabled) const
-{
-    return m_Desc.SetFrameGenerationEnabled && m_Desc.SetFrameGenerationEnabled(enabled);
 }
 //Modify End

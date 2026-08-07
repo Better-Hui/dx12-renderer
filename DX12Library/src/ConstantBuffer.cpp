@@ -2,15 +2,14 @@
 
 #include "ConstantBuffer.h"
 
-#include "Application.h"
-
+#include "D3D12DeviceContext.h"
 #include "d3dx12.h"
 
 ConstantBuffer::ConstantBuffer(const std::wstring& name)
 	: Buffer(name)
 	, SizeInBytes(0)
 {
-	ConstantBufferView = Application::Get().AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	ConstantBufferView = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 }
 
 ConstantBuffer::~ConstantBuffer() = default;
@@ -23,7 +22,7 @@ void ConstantBuffer::CreateViews(const size_t numElements, const size_t elementS
 	d3d12ConstantBufferViewDesc.BufferLocation = m_d3d12Resource->GetGPUVirtualAddress();
 	d3d12ConstantBufferViewDesc.SizeInBytes = static_cast<UINT>(Math::AlignUp(SizeInBytes, 16));
 
-	const auto device = Application::Get().GetDevice();
+	const auto device = m_DeviceContext->GetDevice();
 
 	device->CreateConstantBufferView(&d3d12ConstantBufferViewDesc, ConstantBufferView.GetDescriptorHandle());
 }

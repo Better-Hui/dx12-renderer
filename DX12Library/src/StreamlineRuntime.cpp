@@ -83,20 +83,23 @@ bool StreamlineRuntime::Initialize(ID3D12Device2* nativeDevice, const std::wstri
         return false;
     }
 
-    const sl::Result disableFrameGenerationResult = slSetFeatureLoaded(sl::kFeatureDLSS_G, false);
-    if (disableFrameGenerationResult != sl::Result::eOk)
-    {
-        m_StatusMessage = GetResultMessage("slSetFeatureLoaded(DLSS_G off)", disableFrameGenerationResult);
-        Shutdown();
-        return false;
-    }
-
     LUID adapterLuid = nativeDevice->GetAdapterLuid();
     sl::AdapterInfo adapterInfo{};
     adapterInfo.deviceLUID = reinterpret_cast<uint8_t*>(&adapterLuid);
     adapterInfo.deviceLUIDSizeInBytes = sizeof(adapterLuid);
     m_RayReconstructionSupported = slIsFeatureSupported(sl::kFeatureDLSS_RR, adapterInfo) == sl::Result::eOk;
     m_FrameGenerationSupported = slIsFeatureSupported(sl::kFeatureDLSS_G, adapterInfo) == sl::Result::eOk;
+
+    if (m_FrameGenerationSupported)
+    {
+        const sl::Result disableFrameGenerationResult = slSetFeatureLoaded(sl::kFeatureDLSS_G, false);
+        if (disableFrameGenerationResult != sl::Result::eOk)
+        {
+            m_StatusMessage = GetResultMessage("slSetFeatureLoaded(DLSS_G off)", disableFrameGenerationResult);
+            Shutdown();
+            return false;
+        }
+    }
 
     m_StatusMessage = "Streamline initialized with manual D3D12 hooks.";
     return true;

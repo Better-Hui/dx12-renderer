@@ -7,11 +7,62 @@
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <Passes/RaytracingDemoPasses.h>
 #include <RenderGraph/RaytracingDemoGraphResources.h>
+//Modify Begin:2026-08-07 by BestHui
+#include <RenderGraph/ExternalFrameProcessor.h>
+//Modify End
 #include <RenderGraph/RenderContext.h>
 #include <RenderGraph/RenderMetadata.h>
 #include <RenderGraph/RenderPass.h>
 
 #include <array>
+//Modify Begin:2026-08-07 by BestHui
+#include <span>
+//Modify End
+
+namespace
+{
+//Modify Begin:2026-08-07 by BestHui
+    class DLSSFrameGenerationProcessor final : public RenderGraph::ExternalFrameProcessor
+    {
+    public:
+        DLSSFrameGenerationProcessor(DLSS& dlss, DLSSFrameGenerationInputs& inputs)
+            : m_DLSS(dlss)
+            , m_Inputs(inputs)
+        {
+        }
+
+        [[nodiscard]] std::span<const RenderGraph::ResourceId> GetRequiredResourceIds() const override
+        {
+            return m_RequiredResourceIds;
+        }
+
+        void Process(CommandList& commandList, const std::shared_ptr<Texture>& displayTexture) override
+        {
+            m_Inputs.HudLessColor = displayTexture;
+            m_DLSS.TagFrameGenerationResources(commandList, m_Inputs);
+        }
+
+        void BeforePresent() override
+        {
+            m_DLSS.MarkFrameGenerationRenderSubmissionEnd();
+            m_DLSS.MarkFrameGenerationPresentStart();
+        }
+
+        void AfterPresent() override
+        {
+            m_DLSS.MarkFrameGenerationPresentEnd();
+        }
+
+    private:
+        DLSS& m_DLSS;
+        DLSSFrameGenerationInputs& m_Inputs;
+        const std::array<RenderGraph::ResourceId, 2> m_RequiredResourceIds = {
+            RaytracingDemoRenderGraph::ResourceIds::DepthBuffer,
+            RaytracingDemoRenderGraph::ResourceIds::MotionVector,
+        };
+    };
+//Modify End
+}
 
 std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateCudaBloomPass(
     const RaytracingDemoPassResources& resources,
@@ -77,31 +128,14 @@ void RaytracingDemo::PresentDisplayOutput()
 //Modify Begin:2026-08-07 by BestHui
     if (m_RenderGraphFrameState->FrameGenerationEnabled)
     {
-        const std::array frameProcessorResources = {
-            DemoResourceIds::DepthBuffer,
-            DemoResourceIds::MotionVector,
-        };
+        DLSSFrameGenerationProcessor frameProcessor(m_DLSS, m_FrameGenerationInputs);
         m_RenderGraph->PresentWithExternalFrameProcessor(
             PWindow,
             DemoResourceIds::FrameGenerationHudLess,
-            frameProcessorResources,
-            [this](CommandList& commandList, const std::shared_ptr<Texture>& hudLessColor)
-            {
-                m_FrameGenerationInputs.HudLessColor = hudLessColor;
-                m_DLSS.TagFrameGenerationResources(commandList, m_FrameGenerationInputs);
-            },
+            frameProcessor,
             [this](CommandList& commandList)
             {
                 DrawPostBloomOverlays(commandList);
-            },
-            [this]()
-            {
-                m_DLSS.MarkFrameGenerationRenderSubmissionEnd();
-                m_DLSS.MarkFrameGenerationPresentStart();
-            },
-            [this]()
-            {
-                m_DLSS.MarkFrameGenerationPresentEnd();
             });
         return;
     }

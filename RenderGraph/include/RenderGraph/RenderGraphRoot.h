@@ -2,7 +2,6 @@
 
 #include <map>
 #include <memory>
-#include <span>
 #include <vector>
 
 #include <DX12Library/CommandQueue.h>
@@ -10,6 +9,9 @@
 #include <DX12Library/Window.h>
 
 #include "RenderPass.h"
+//Modify Begin:2026-08-07 by BestHui
+#include "ExternalFrameProcessor.h"
+//Modify End
 //Modify Begin:2026-07-30 by BestHui
 #include "RenderGraphCommandExecutor.h"
 //Modify Begin:2026-08-07 by BestHui
@@ -27,6 +29,7 @@
 #include "ResourcePool.h"
 
 class Texture;
+class D3D12DeviceContext;
 //Modify Begin:2026-07-29 by BestHui
 //Modify End
 
@@ -37,6 +40,7 @@ namespace RenderGraph
     public:
         RenderGraphRoot(
 //Modify Begin:2026-07-30 by BestHui
+            std::shared_ptr<D3D12DeviceContext> deviceContext,
             Microsoft::WRL::ComPtr<ID3D12Device2> device,
             std::shared_ptr<CommandQueue> directCommandQueue,
             std::shared_ptr<CommandQueue> asyncComputeCommandQueue,
@@ -75,11 +79,8 @@ namespace RenderGraph
         void PresentWithExternalFrameProcessor(
             const std::shared_ptr<Window>& pWindow,
             ResourceId displayResourceId,
-            std::span<const ResourceId> processorResourceIds,
-            const std::function<void(CommandList&, const std::shared_ptr<Texture>&)>& processorCallback,
-            const std::function<void(CommandList&)>& overlayCallback,
-            const std::function<void()>& beforePresentCallback,
-            const std::function<void()>& afterPresentCallback);
+            ExternalFrameProcessor& processor,
+            const std::function<void(CommandList&)>& overlayCallback);
 //Modify End
         void CopyTexture(const RenderMetadata& renderMetadata, ResourceId sourceId, ResourceId destinationId, bool waitForCompletion = false);
         void DrawToTexture(const RenderMetadata& renderMetadata, ResourceId resourceId, const std::function<void(CommandList&)>& drawCallback);
@@ -99,6 +100,7 @@ namespace RenderGraph
 
 //Modify Begin:2026-07-30 by BestHui
         Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;
+        std::shared_ptr<D3D12DeviceContext> m_DeviceContext;
         std::shared_ptr<CommandQueue> m_DirectCommandQueue;
 //Modify Begin:2026-08-03 by BestHui
         std::shared_ptr<CommandQueue> m_AsyncComputeCommandQueue;

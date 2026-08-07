@@ -155,6 +155,7 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
     }
 
     return std::make_unique<RenderGraph::RenderGraphRoot>(
+        resources.DeviceContext,
         resources.Device,
         resources.DirectQueue,
         resources.AsyncComputeQueue,

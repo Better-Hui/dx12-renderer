@@ -3,10 +3,17 @@
 
 #include "RootSignature.h"
 #include "DescriptorAllocation.h"
+//Modify Begin:2026-08-07 by BestHui
+#include "DescriptorAllocator.h"
+//Modify End
 
 #include <d3d12.h>
 #include <DirectXMath.h>
 #include <wrl.h>
+
+//Modify Begin:2026-08-07 by BestHui
+#include <memory>
+//Modify End
 
 
 constexpr size_t GENERATE_MIPS_CB_ALIGNMENT = 16;
@@ -39,7 +46,9 @@ public:
 
 
 
-	GenerateMipsPso();
+//Modify Begin:2026-08-07 by BestHui
+	explicit GenerateMipsPso(Microsoft::WRL::ComPtr<ID3D12Device2> device);
+//Modify End
 
 	const RootSignature& GetRootSignature() const
 	{
@@ -61,6 +70,10 @@ public:
 private:
 	RootSignature m_RootSignature;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> m_PipelineState;
+//Modify Begin:2026-08-07 by BestHui
+	Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;
+	std::unique_ptr<DescriptorAllocator> m_DescriptorAllocator;
+//Modify End
 
 	// Default (no resource) UAV's to pad the unused UAV descriptors.
 	// If generating less than 4 mip map levels, the unused mip maps

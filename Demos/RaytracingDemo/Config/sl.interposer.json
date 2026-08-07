@@ -1,0 +1,14 @@
+{
+  "enableInterposer": true,
+  "useDXGIProxy": false,
+  "loadAllFeatures": false,
+  "showConsole": false,
+  "logLevel": 1,
+  "logMessageDelayMs": 5000,
+  "waitForDebugger": false,
+  "vkValidation": false,
+  "forceProxies": false,
+  "forceNonNVDA": false,
+  "trackEngineAllocations": false,
+  "logPath": "Logs/Streamline"
+}

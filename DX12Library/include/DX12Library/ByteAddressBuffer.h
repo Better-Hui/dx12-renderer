@@ -39,16 +39,20 @@
 class ByteAddressBuffer final: public Buffer
 {
 public:
-    ByteAddressBuffer(const std::wstring& name = L"");
+    ByteAddressBuffer(
+        const std::wstring& name = L"",
+        std::shared_ptr<D3D12DeviceContext> deviceContext = nullptr);
     ByteAddressBuffer(const D3D12_RESOURCE_DESC& resDesc,
         size_t numElements, size_t elementSize,
-        const std::wstring& name = L"");
+        const std::wstring& name = L"",
+        std::shared_ptr<D3D12DeviceContext> deviceContext = nullptr);
 
     ByteAddressBuffer(const D3D12_RESOURCE_DESC& resDesc,
         const Microsoft::WRL::ComPtr<ID3D12Heap>& pHeap,
         UINT64 heapOffset,
         size_t numElements, size_t elementSize,
-        const std::wstring& name = L"");
+        const std::wstring& name = L"",
+        std::shared_ptr<D3D12DeviceContext> deviceContext = nullptr);
 
     size_t GetBufferSize() const
     {

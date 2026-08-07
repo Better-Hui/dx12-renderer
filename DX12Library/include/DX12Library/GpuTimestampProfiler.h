@@ -5,6 +5,9 @@
 
 #include <chrono>
 #include <cstdint>
+//Modify Begin:2026-07-30 by BestHui
+#include <memory>
+//Modify End
 #include <string>
 #include <vector>
 
@@ -31,6 +34,8 @@ public:
 //Modify End
 
     bool Initialize(
+        Microsoft::WRL::ComPtr<ID3D12Device2> device,
+        std::shared_ptr<CommandQueue> commandQueue,
         uint32_t maxTimestampCount = 128,
         D3D12_COMMAND_LIST_TYPE commandListType = D3D12_COMMAND_LIST_TYPE_DIRECT);
     void Shutdown();

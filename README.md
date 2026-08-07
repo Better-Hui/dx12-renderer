@@ -22,6 +22,7 @@ The upstream renderer remains the foundation. This fork adds framework and sampl
 | Scene workflow | Shared `Scene` data, Unity/JSON import, and incremental runtime instance add/remove used by the stress-scene controls. |
 | Meshlets | Meshlet generation/GPU resources, task-shader and compute-indirect GBuffer backends, and incremental instance-buffer updates. |
 | Denoising and interop | NRD/SVGF sample paths, RenderGraph-aware NRD resource-state handoff, and CUDA Bloom using D3D12 shared resources with external fence/semaphore synchronization. |
+| Experimental frame features | Native NGX DLSS SR/DLAA plus Streamline Ray Reconstruction and Frame Generation integration. These paths are experimental and not validated for delivery. |
 | Investigation | PIX scopes, RenderGraph timing history/CSV export, `UnitySceneDump`, and runtime UI controls. |
 
 ## Repository layout
@@ -34,7 +35,7 @@ The upstream renderer remains the foundation. This fork adds framework and sampl
 | `Demos/RaytracingDemo/` | Primary maintained sample and the best entry point for current API usage. |
 | `Demos/*` | Additional historical or focused samples. Useful references, but not the main integration target. |
 | `Assets/` | Demo scenes, textures, and runtime sample assets. |
-| `External/` | Checked-in third-party integration packages and headers. |
+| `External/` | Third-party integration materials and headers. Each component retains its own license and redistribution terms. |
 | `Docs/` | Architecture and sample API notes. |
 
 ## What `RaytracingDemo` demonstrates
@@ -85,6 +86,7 @@ const Scene& scene = result.SceneData;
 | Lighting | Separate direct and indirect lighting passes followed by composition. |
 | Soft shadows | Precompiled hard/soft shader variants for directional and point lights; area lights retain their sampled emitter surface. |
 | Denoising | Optional NRD or SVGF integration. |
+| DLSS and Streamline | Experimental NGX DLSS SR/DLAA plus Streamline RR/FG resource preparation. Capability queries and startup configuration decide whether a path is available. |
 | Meshlets | Task-shader and compute-indirect GBuffer backends with cluster debugging. |
 | CUDA Bloom | External D3D12/CUDA post process with shared-resource and shared-fence synchronization. |
 | Profiling | PIX scopes and RenderGraph GPU timestamp history exported as CSV. |
@@ -120,6 +122,8 @@ Set `VCPKG_ROOT` before configuring, or pass `CMAKE_TOOLCHAIN_FILE` explicitly.
 | DirectX Shader Compiler | `DXC/dxc.exe` when present; otherwise a Windows SDK `dxc.exe` | Compiles ray-tracing, task, mesh, compute, and other sample shaders. |
 | WinPixEventRuntime | `WinPixEventRuntime/` | PIX CPU/GPU event markers. |
 | NVIDIA NRD / NRI | `External/NRD/`, `External/NRI/` | Denoising integration and its API layer/runtime binaries. |
+| NVIDIA DLSS SDK | `External/DLSS/` | Experimental native NGX SR/DLAA integration. Subject to the NVIDIA RTX SDK License in `External/DLSS/LICENSE.txt`. |
+| NVIDIA Streamline | `External/Streamline/` | Experimental RR/FG integration and runtime interposer. Preserve `license.txt`, `nvngx_dlss.license.txt`, and `3rd-party-licenses.md`. |
 | Unity PluginAPI | `External/UnityPluginAPI/` | Headers for Unity-facing D3D12 interop experiments. |
 | CUDA Driver API | CUDA Toolkit 12.8 | Builds Bloom PTX and provides `cuda.h` / `cuda.lib`. |
 
@@ -172,20 +176,20 @@ The startup compiler currently covers the shaders directly owned by `RaytracingD
 - Consecutive async passes are currently submitted per pass rather than batch-scheduled as a larger compute segment.
 - `RenderGraphRoot::Execute` is now a thin graph entry point; `RenderGraphCommandExecutor` owns pass recording/submission and `RenderGraphProfiler` owns optional direct/async timestamp lifetimes. Graph build/topology orchestration remains in `RenderGraphRoot`.
 - Transient resources are retired using the actual Direct/Async Compute fence values recorded for the frame. Aliasing is deliberately conservative: resources used by different queues are not aliased until a more general multi-queue allocator is designed.
-- The Framework and RenderGraph no longer query `Application::Get()` for device/queue state. The application composition root injects device, queues, and descriptor allocation; the legacy `DemoMain` startup code remains the only Framework-level application entry dependency.
+- Device and queue state is injected through the application composition root for the current Framework and RenderGraph execution paths. Standalone application/window lifecycle code and a small set of legacy resource-wrapper compatibility paths still retain `Application` dependencies.
 - `RaytracingDemoSceneResources` exposes four internal builders for texture/material, geometry, meshlet, and RTAS resources. The facade remains sample-facing while scene mutation updates meshlet/TLAS instances incrementally.
 - Per-queue RenderGraph timestamps are useful for pass duration; PIX Timing Capture is required to inspect cross-queue wall-clock overlap, waits, and GPU bubbles.
 - The Unity importer is static and limited: prefab resolution, nested prefabs, skinned meshes, `LODGroup`, and an asset-database cache are not complete.
 - JSON scene import exists, but the stress-test spheres are still defined by sample C++ rather than scene data. They are enabled by default and can be added or removed incrementally from the runtime UI.
 - Meshlet rendering is an experimental GBuffer backend, not a complete visibility/streaming system or a claim of optimal meshlet performance.
-- ReSTIR DI is currently an inline-ray-query direct-lighting sample. It uses uniform light selection, RIS, optional temporal reuse, and optional spatial reuse, but does not use light presampling or emissive geometry. Temporal/spatial reuse deliberately performs no visibility test; the final shading pass traces one shadow ray, so disocclusions and reuse can produce visible noise.
-- ReSTIR DI currently uses hard-shadow direct-light sampling. It does not yet use the directional/point-light soft-shadow variants and falls back to standard direct lighting in shader-table DXR mode.
+- ReSTIR DI is an experimental inline-ray-query direct-lighting sample. Its light sampling, emissive surface emitters, temporal/spatial reuse, and visibility-test options continue to evolve; image quality, stability, and performance have not been accepted as an RTXDI-equivalent implementation.
 - Soft shadows currently use a fixed four-sample variant. Directional lights use angular radius, point lights use source radius, and adaptive sampling or quality presets are not implemented yet.
 - Shader variants compile only during startup/pipeline creation. Runtime source hot reload, background compilation, and a project-wide variant manifest are not implemented.
-- **DLSS status: experimental, not validated for delivery.** Native NGX SR/DLAA is wired into the sample, and Streamline RR/FG integration is under active evaluation. The implementation has build/startup and automation safety coverage only; it has not completed image-quality, stability, timing, or performance validation on supported RR/FG hardware. Runtime capability queries are authoritative: on the current RTX 2060 development machine, FG is unsupported by the adapter and RR reports unavailable for the active adapter. Do not treat any DLSS mode in this repository as guaranteed usable or production-ready.
+- **DLSS, Ray Reconstruction, and Frame Generation are experimental and not validated for delivery.** Native NGX SR/DLAA is wired into the sample, and Streamline RR/FG integration is under active evaluation. RR/FG require an application restart with `--streamline-interposer`; this opt-in keeps the normal D3D12 device, queues, and swapchain free of Streamline proxies. The implementation has build/startup and automation safety coverage only. It has not completed image-quality, stability, timing, or performance validation on supported RR/FG hardware, and unknown functional or integration issues may remain. Runtime capability queries are authoritative: on the current RTX 2060 development machine, FG is unsupported by the adapter and RR reports unavailable for the active adapter. Do not treat any DLSS mode in this repository as guaranteed usable or production-ready.
 
 ## Documentation and notices
 
 - [RaytracingDemo API Guide](Docs/RaytracingSampleApi.md) explains sample APIs, RenderGraph behavior, scene import, profiling, and boundaries.
 - Keep maintained sample passes framework-facing; avoid raw D3D12 calls where an existing API covers the operation.
 - This fork preserves upstream and third-party notices. Review the upstream project and vendored license files before use or redistribution; this README introduces no replacement repository-wide license.
+- `External/DLSS/` and the NVIDIA components used by `External/Streamline/` are governed by NVIDIA RTX SDK terms, not by the repository's upstream license or Streamline's MIT license alone. Keeping the SDK under `External/` does not make it open source and does not grant a sublicense. Preserve all notices and licenses, do not treat this repository as a standalone SDK mirror, and obtain a legal/license review before publishing source, redistributing binaries, or making a commercial release that includes these components.

@@ -43,16 +43,20 @@ class StructuredBuffer final : public Buffer
 public:
     const static inline D3D12_RESOURCE_DESC COUNTER_DESC = CD3DX12_RESOURCE_DESC::Buffer(4, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
-    explicit StructuredBuffer(const std::wstring& name = L"");
+    explicit StructuredBuffer(
+        const std::wstring& name = L"",
+        std::shared_ptr<D3D12DeviceContext> deviceContext = nullptr);
     explicit StructuredBuffer(const D3D12_RESOURCE_DESC& resourceDesc,
         size_t numElements, size_t elementSize,
-        const std::wstring& name = L"");
+        const std::wstring& name = L"",
+        std::shared_ptr<D3D12DeviceContext> deviceContext = nullptr);
 
     explicit StructuredBuffer(const D3D12_RESOURCE_DESC& resourceDesc,
         const Microsoft::WRL::ComPtr<ID3D12Heap>& pHeap,
         UINT64 heapOffset,
         size_t numElements, size_t elementSize,
-        const std::wstring& name = L"");
+        const std::wstring& name = L"",
+        std::shared_ptr<D3D12DeviceContext> deviceContext = nullptr);
 
     size_t GetNumElements() const;
 

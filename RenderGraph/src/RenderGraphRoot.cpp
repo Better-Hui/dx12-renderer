@@ -13,6 +13,7 @@
 
 RenderGraph::RenderGraphRoot::RenderGraphRoot(
 //Modify Begin:2026-07-30 by BestHui
+    std::shared_ptr<D3D12DeviceContext> deviceContext,
     Microsoft::WRL::ComPtr<ID3D12Device2> device,
     std::shared_ptr<CommandQueue> directCommandQueue,
     std::shared_ptr<CommandQueue> asyncComputeCommandQueue,
@@ -26,7 +27,8 @@ RenderGraph::RenderGraphRoot::RenderGraphRoot(
 //Modify End
 )
 //Modify Begin:2026-07-30 by BestHui
-    : m_Device(std::move(device))
+    : m_DeviceContext(std::move(deviceContext))
+    , m_Device(std::move(device))
     , m_DirectCommandQueue(std::move(directCommandQueue))
 //Modify Begin:2026-08-03 by BestHui
     , m_AsyncComputeCommandQueue(std::move(asyncComputeCommandQueue))
@@ -43,11 +45,12 @@ RenderGraph::RenderGraphRoot::RenderGraphRoot(
     , m_ExternalOutputIds(std::move(externalOutputs))
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
-    , m_ResourcePool(std::make_shared<ResourcePool>(m_DirectCommandQueue, m_AsyncComputeCommandQueue))
+    , m_ResourcePool(std::make_shared<ResourcePool>(m_DeviceContext, m_DirectCommandQueue, m_AsyncComputeCommandQueue))
 //Modify End
 {
 //Modify Begin:2026-07-30 by BestHui
     Assert(m_Device != nullptr, "Render graph requires a D3D12 device.");
+    Assert(m_DeviceContext != nullptr, "Render graph requires a D3D12 device context.");
     Assert(m_DirectCommandQueue != nullptr, "Render graph requires a direct command queue.");
     Assert(m_AsyncComputeCommandQueue != nullptr, "Render graph requires an async compute command queue.");
 //Modify End
@@ -192,13 +195,11 @@ void RenderGraph::RenderGraphRoot::PresentWithOverlay(
 void RenderGraph::RenderGraphRoot::PresentWithExternalFrameProcessor(
     const std::shared_ptr<Window>& pWindow,
     const ResourceId displayResourceId,
-    const std::span<const ResourceId> processorResourceIds,
-    const std::function<void(CommandList&, const std::shared_ptr<Texture>&)>& processorCallback,
-    const std::function<void(CommandList&)>& overlayCallback,
-    const std::function<void()>& beforePresentCallback,
-    const std::function<void()>& afterPresentCallback)
+    ExternalFrameProcessor& processor,
+    const std::function<void(CommandList&)>& overlayCallback)
 {
     const auto& displayTexture = m_ResourcePool->GetTexture(displayResourceId);
+    const std::span<const ResourceId> processorResourceIds = processor.GetRequiredResourceIds();
     auto commandList = m_DirectCommandQueue->GetCommandList();
 
     {
@@ -219,10 +220,7 @@ void RenderGraph::RenderGraphRoot::PresentWithExternalFrameProcessor(
         TransitionBarrier(*displayTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         FlushBarriers(*commandList);
 
-        if (processorCallback)
-        {
-            processorCallback(*commandList, displayTexture);
-        }
+        processor.Process(*commandList, displayTexture);
         if (overlayCallback)
         {
             commandList->SetRenderTarget(backBufferRenderTarget);
@@ -238,15 +236,9 @@ void RenderGraph::RenderGraphRoot::PresentWithExternalFrameProcessor(
     }
     m_QueueScheduler.SubmitDirect(commandList);
 
-    if (beforePresentCallback)
-    {
-        beforePresentCallback();
-    }
+    processor.BeforePresent();
     pWindow->Present();
-    if (afterPresentCallback)
-    {
-        afterPresentCallback();
-    }
+    processor.AfterPresent();
 }
 //Modify End
 

@@ -455,7 +455,10 @@ void RaytracingDemo::OnImGui()
             }
             else
             {
-                ImGui::TextDisabled("DLSS Ray Reconstruction unavailable on the active adapter.");
+                ImGui::TextDisabled(
+                    m_DLSS.IsStreamlineRuntimeInitialized()
+                        ? "DLSS Ray Reconstruction unavailable on the active adapter."
+                        : "DLSS Ray Reconstruction requires restart with --streamline-interposer.");
             }
 
             if (m_DLSS.IsFrameGenerationSupported())
@@ -469,7 +472,10 @@ void RaytracingDemo::OnImGui()
             }
             else
             {
-                ImGui::TextDisabled("DLSS Frame Generation requires compatible hardware, driver, and Hardware-accelerated GPU Scheduling.");
+                ImGui::TextDisabled(
+                    m_DLSS.IsStreamlineRuntimeInitialized()
+                        ? "DLSS Frame Generation requires compatible hardware, driver, and Hardware-accelerated GPU Scheduling."
+                        : "DLSS Frame Generation requires restart with --streamline-interposer.");
             }
 
             if (m_DLSS.IsEnabled())

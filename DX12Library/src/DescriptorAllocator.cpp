@@ -5,8 +5,12 @@
 #include "DescriptorAllocator.h"
 #include "DescriptorAllocatorPage.h"
 
-DescriptorAllocator::DescriptorAllocator(const D3D12_DESCRIPTOR_HEAP_TYPE type, const uint32_t numDescriptorsPerHeap) :
+DescriptorAllocator::DescriptorAllocator(
+	const D3D12_DESCRIPTOR_HEAP_TYPE type,
+	Microsoft::WRL::ComPtr<ID3D12Device2> device,
+	const uint32_t numDescriptorsPerHeap) :
 	HeapType(type),
+	Device(std::move(device)),
 	NumDescriptorsPerHeap(numDescriptorsPerHeap)
 {
 }
@@ -15,7 +19,7 @@ DescriptorAllocator::~DescriptorAllocator() = default;
 
 std::shared_ptr<DescriptorAllocatorPage> DescriptorAllocator::CreateAllocatorPage()
 {
-	auto newPage = std::make_shared<DescriptorAllocatorPage>(HeapType, NumDescriptorsPerHeap);
+	auto newPage = std::make_shared<DescriptorAllocatorPage>(HeapType, NumDescriptorsPerHeap, Device);
 
 	HeapPool.emplace_back(newPage);
 	AvailableHeaps.insert(HeapPool.size() - 1);

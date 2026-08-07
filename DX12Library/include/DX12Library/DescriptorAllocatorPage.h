@@ -14,7 +14,10 @@ class DescriptorAllocation;
 class DescriptorAllocatorPage : public std::enable_shared_from_this<DescriptorAllocatorPage>
 {
 public:
-	explicit DescriptorAllocatorPage(D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t numDescriptors);
+	explicit DescriptorAllocatorPage(
+		D3D12_DESCRIPTOR_HEAP_TYPE type,
+		uint32_t numDescriptors,
+		Microsoft::WRL::ComPtr<ID3D12Device2> device);
 
 	D3D12_DESCRIPTOR_HEAP_TYPE GetHeapType() const;
 
@@ -107,6 +110,9 @@ private:
 	StaleDescriptorQueueType StaleDescriptors;
 
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> DescriptorHeap;
+//Modify Begin:2026-08-07 by BestHui
+	Microsoft::WRL::ComPtr<ID3D12Device2> Device;
+//Modify End
 	D3D12_DESCRIPTOR_HEAP_TYPE HeapType;
 	D3D12_CPU_DESCRIPTOR_HANDLE BaseDescriptor;
 	uint32_t DescriptorHandleIncrementSize;

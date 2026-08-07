@@ -272,7 +272,7 @@ add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
         # Modify Begin:2026-08-07 by BestHui
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DX12_RENDERER_DLSS_RUNTIME_DLL}" "$<TARGET_FILE_DIR:${TARGET_NAME}>/nvngx_dlss.dll"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${DX12_RENDERER_STREAMLINE_RUNTIME_FILES} "$<TARGET_FILE_DIR:${TARGET_NAME}>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DX12_RENDERER_STREAMLINE_ROOT}/sl.interposer.json" "$<TARGET_FILE_DIR:${TARGET_NAME}>/sl.interposer.json"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/Config/sl.interposer.json" "$<TARGET_FILE_DIR:${TARGET_NAME}>/sl.interposer.json"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DX12_RENDERER_STREAMLINE_ROOT}/sl.common.json" "$<TARGET_FILE_DIR:${TARGET_NAME}>/sl.common.json"
         # Modify End
         # Modify Begin:2026-08-03 by BestHui

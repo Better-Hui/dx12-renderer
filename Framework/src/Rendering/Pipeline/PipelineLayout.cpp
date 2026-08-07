@@ -1,5 +1,9 @@
 #include <Framework/Rendering/Pipeline/PipelineLayout.h>
 
+//Modify Begin:2026-08-07 by BestHui
+#include <Framework/Core/FrameworkDeviceContext.h>
+//Modify End
+
 //Modify Begin:2026-07-24 by BestHui
 
 #include <DX12Library/Helpers.h>
@@ -560,7 +564,12 @@ std::shared_ptr<RootSignature> PipelineLayout::CreateRootSignature(const Pipelin
 
     try
     {
-        return std::make_shared<RootSignature>(rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1_1);
+//Modify Begin:2026-08-07 by BestHui
+        return std::make_shared<RootSignature>(
+            rootSignatureDesc,
+            D3D_ROOT_SIGNATURE_VERSION_1_1,
+            *m_DeviceContext->GetDevice().Get());
+//Modify End
     }
     catch (const std::exception& exception)
     {

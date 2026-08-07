@@ -1,20 +1,28 @@
 ﻿#include "DX12LibPCH.h"
-#include "Application.h"
-
 #include "Buffer.h"
 
-Buffer::Buffer(const std::wstring& name)
-    : Resource(name)
+#include "D3D12DeviceContext.h"
+
+Buffer::Buffer(const std::wstring& name, std::shared_ptr<D3D12DeviceContext> deviceContext)
+    : Resource(name, std::move(deviceContext))
 {}
 
 Buffer::Buffer(const D3D12_RESOURCE_DESC& resDesc,
     const size_t numElements, const size_t elementSize,
-    const std::wstring& name)
-    : Resource(resDesc, nullptr, name)
+    const std::wstring& name,
+    std::shared_ptr<D3D12DeviceContext> deviceContext)
+    : Resource(resDesc, nullptr, name, std::move(deviceContext))
 {}
 
-Buffer::Buffer(const D3D12_RESOURCE_DESC & resDesc, const Microsoft::WRL::ComPtr<ID3D12Heap>& pHeap, UINT64 heapOffset, size_t numElements, size_t elementSize, const std::wstring & name)
-    : Resource(resDesc, pHeap, heapOffset, nullptr, name)
+Buffer::Buffer(
+    const D3D12_RESOURCE_DESC& resDesc,
+    const Microsoft::WRL::ComPtr<ID3D12Heap>& pHeap,
+    UINT64 heapOffset,
+    size_t numElements,
+    size_t elementSize,
+    const std::wstring& name,
+    std::shared_ptr<D3D12DeviceContext> deviceContext)
+    : Resource(resDesc, pHeap, heapOffset, nullptr, name, std::move(deviceContext))
 {
 
 }
@@ -28,7 +36,7 @@ const Microsoft::WRL::ComPtr<ID3D12Resource>& Buffer::GetUploadResource(size_t s
 
     m_UploadResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(size);
 
-    const auto device = Application::Get().GetDevice();
+    const auto device = m_DeviceContext->GetDevice();
     const auto heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
     ThrowIfFailed(device->CreateCommittedResource(
         &heapProperties,

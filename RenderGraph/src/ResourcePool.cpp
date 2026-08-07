@@ -3,6 +3,7 @@
 #include <DX12Library/Buffer.h>
 #include <DX12Library/ByteAddressBuffer.h>
 #include <DX12Library/CommandQueue.h>
+#include <DX12Library/D3D12DeviceContext.h>
 #include <DX12Library/Helpers.h>
 #include <DX12Library/StructuredBuffer.h>
 #include <DX12Library/Texture.h>
@@ -39,7 +40,8 @@ namespace
 
     std::shared_ptr<Texture> CreateTextureImpl(
         const RenderGraph::ResourceDescription& desc,
-        const ComPtr<ID3D12Heap>& pHeap
+        const ComPtr<ID3D12Heap>& pHeap,
+        const std::shared_ptr<D3D12DeviceContext>& deviceContext
     )
     {
         const bool useClearValue =
@@ -52,14 +54,17 @@ namespace
             heapOffset,
             useClearValue ? desc.m_TextureDescription.m_ClearValue : ClearValue{},
             desc.m_TextureUsageType,
-            RenderGraph::ResourceIds::GetResourceName(desc.m_TextureDescription.m_Id)
+            RenderGraph::ResourceIds::GetResourceName(desc.m_TextureDescription.m_Id),
+            deviceContext
         );
         texture->SetAutoBarriersEnabled(false);
         return texture;
     }
 
 //Modify Begin:2026-07-28 by BestHui
-    std::shared_ptr<Texture> CreateDedicatedTextureImpl(const RenderGraph::ResourceDescription& desc)
+    std::shared_ptr<Texture> CreateDedicatedTextureImpl(
+        const RenderGraph::ResourceDescription& desc,
+        const std::shared_ptr<D3D12DeviceContext>& deviceContext)
     {
         const bool useClearValue =
             desc.m_TextureUsageType == TextureUsageType::RenderTarget ||
@@ -69,7 +74,8 @@ namespace
             desc.m_HeapFlags,
             useClearValue ? desc.m_TextureDescription.m_ClearValue : ClearValue{},
             desc.m_TextureUsageType,
-            RenderGraph::ResourceIds::GetResourceName(desc.m_TextureDescription.m_Id)
+            RenderGraph::ResourceIds::GetResourceName(desc.m_TextureDescription.m_Id),
+            deviceContext
         );
         texture->SetAutoBarriersEnabled(false);
         return texture;
@@ -78,7 +84,8 @@ namespace
 
     std::shared_ptr<Buffer> CreateBufferImpl(
         const RenderGraph::ResourceDescription& desc,
-        const ComPtr<ID3D12Heap>& pHeap
+        const ComPtr<ID3D12Heap>& pHeap,
+        const std::shared_ptr<D3D12DeviceContext>& deviceContext
     )
     {
         constexpr UINT64 heapOffset = 0u;
@@ -90,7 +97,8 @@ namespace
                 pHeap,
                 heapOffset,
                 desc.m_ElementsCount, desc.m_BufferDescription.m_Stride,
-                RenderGraph::ResourceIds::GetResourceName(desc.m_BufferDescription.m_Id)
+                RenderGraph::ResourceIds::GetResourceName(desc.m_BufferDescription.m_Id),
+                deviceContext
             );
         }
         else
@@ -100,7 +108,8 @@ namespace
                 pHeap,
                 heapOffset,
                 desc.m_ElementsCount, desc.m_BufferDescription.m_Stride,
-                RenderGraph::ResourceIds::GetResourceName(desc.m_BufferDescription.m_Id)
+                RenderGraph::ResourceIds::GetResourceName(desc.m_BufferDescription.m_Id),
+                deviceContext
             );
             // TODO: add subresources for the Resource class, override it for the structured buffer
             pStructuredBuffer->GetCounterBuffer().SetAutoBarriersEnabled(false);
@@ -115,13 +124,18 @@ namespace
 
 //Modify Begin:2026-07-30 by BestHui
 RenderGraph::ResourcePool::ResourcePool(
+    std::shared_ptr<D3D12DeviceContext> deviceContext,
     std::shared_ptr<CommandQueue> directCommandQueue,
     std::shared_ptr<CommandQueue> asyncComputeCommandQueue)
     : m_DirectCommandQueue(std::move(directCommandQueue))
     , m_AsyncComputeCommandQueue(std::move(asyncComputeCommandQueue))
+    , m_DeviceContext(std::move(deviceContext))
 {
     Assert(m_DirectCommandQueue != nullptr, "Resource pool requires a direct command queue.");
     Assert(m_AsyncComputeCommandQueue != nullptr, "Resource pool requires an async compute command queue.");
+    Assert(m_DeviceContext != nullptr, "Resource pool requires a D3D12 device context.");
+    m_ResourceStateRegistry = m_DirectCommandQueue->GetResourceStateRegistry();
+    Assert(m_ResourceStateRegistry != nullptr, "Resource pool requires a resource state registry.");
 }
 //Modify End
 
@@ -142,6 +156,12 @@ void RenderGraph::ResourcePool::BeginFrame(CommandList& commandList)
         if (IsRetirementComplete(m_DeferredDeletionQueue.front().FenceValues))
 //Modify End
         {
+//Modify Begin:2026-07-30 by BestHui
+            for (ID3D12Resource* resource : m_DeferredDeletionQueue.front().ResourceStateEntries)
+            {
+                m_ResourceStateRegistry->RemoveResource(resource);
+            }
+//Modify End
             m_DeferredDeletionQueue.pop();
         }
         else
@@ -286,7 +306,9 @@ void RenderGraph::ResourcePool::Clear(
         deletionBatch->FenceValues.Merge(fenceValues);
         GetResource(desc.m_Id).ForEachResourceRecursive([deletionBatch](const Resource& resource)
         {
-            deletionBatch->Resources.push_back(resource.GetD3D12Resource());
+            const Microsoft::WRL::ComPtr<ID3D12Resource> d3d12Resource = resource.GetD3D12Resource();
+            deletionBatch->Resources.push_back(d3d12Resource);
+            deletionBatch->ResourceStateEntries.push_back(d3d12Resource.Get());
         });
         return true;
     });
@@ -525,8 +547,8 @@ const std::shared_ptr<Texture>& RenderGraph::ResourcePool::CreateTexture(const R
 //Modify Begin:2026-07-28 by BestHui
     Assert(resourceDescription.m_DedicatedResource || m_ResourceHeapInfo.contains(resourceId), "Transient texture has no lifecycle heap.");
     const std::shared_ptr<Texture> pTexture = resourceDescription.m_DedicatedResource
-        ? CreateDedicatedTextureImpl(resourceDescription)
-        : CreateTextureImpl(resourceDescription, m_HeapInfos[m_ResourceHeapInfo[resourceId].m_HeapIndex].m_Heap);
+        ? CreateDedicatedTextureImpl(resourceDescription, m_DeviceContext)
+        : CreateTextureImpl(resourceDescription, m_HeapInfos[m_ResourceHeapInfo[resourceId].m_HeapIndex].m_Heap, m_DeviceContext);
 //Modify End
 
     ResourceInstance resourceInstance = {};
@@ -546,7 +568,7 @@ const std::shared_ptr<Buffer>& RenderGraph::ResourcePool::CreateBuffer(const Res
 //Modify End
     const uint32_t heapIndex = m_ResourceHeapInfo[resourceId].m_HeapIndex;
     const ComPtr<ID3D12Heap>& pHeap = m_HeapInfos[heapIndex].m_Heap;
-    const std::shared_ptr<Buffer> pBuffer = CreateBufferImpl(resourceMetadata, pHeap);
+    const std::shared_ptr<Buffer> pBuffer = CreateBufferImpl(resourceMetadata, pHeap, m_DeviceContext);
 
     ResourceInstance resourceInstance = {};
     resourceInstance.m_Type = ResourceInstanceType::Buffer;

@@ -45,6 +45,9 @@ struct Parameters
 {
 	int m_ClientWidth = 1280;
 	int m_ClientHeight = 720;
+	//Modify Begin:2026-08-07 by BestHui
+	bool m_EnableStreamlineInterposer = false;
+	//Modify End
 
 	GraphicsSettings m_GraphicsSettings;
 };
@@ -75,6 +78,13 @@ void ParseCommandLineArguments(Parameters& parameters)
 		{
 			parameters.m_GraphicsSettings.DirectionalLightShadows.m_PoissonSpread = wcstof(argv[++i], nullptr);
 		}
+
+		//Modify Begin:2026-08-07 by BestHui
+		if (wcscmp(argv[i], L"--streamline-interposer") == 0)
+		{
+			parameters.m_EnableStreamlineInterposer = true;
+		}
+		//Modify End
 	}
 
 	LocalFree(argv);
@@ -217,7 +227,9 @@ int CALLBACK wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR lpCmdL
 	const bool shouldUninitializeCom = SUCCEEDED(coInitializeResult);
 	try
 	{
-		Application::Create(hInstance);
+		ApplicationCreateDesc applicationCreateDesc;
+		applicationCreateDesc.EnableStreamlineInterposer = parameters.m_EnableStreamlineInterposer;
+		Application::Create(hInstance, applicationCreateDesc);
 		{
 			applicationStage = "CreateGame";
 			const auto demo = CreateGame(parameters);

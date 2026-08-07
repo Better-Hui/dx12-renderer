@@ -4,7 +4,7 @@
 
 #include <cassert>
 //Modify Begin:2026-07-21 by BestHui
-#include "Application.h"
+#include "D3D12DeviceContext.h"
 #include "Helpers.h"
 //Modify End
 
@@ -14,7 +14,7 @@ IndexBuffer::IndexBuffer(const std::wstring& name)
 	, IndexFormat(DXGI_FORMAT_UNKNOWN)
 	, IndexBufferView({})
 //Modify Begin:2026-07-21 by BestHui
-	, m_Srv(Application::Get().AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV))
+	, m_Srv(m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV))
 //Modify End
 {
 }
@@ -39,7 +39,7 @@ void IndexBuffer::CreateViews(const size_t numElements, const size_t elementSize
 	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 	srvDesc.Buffer.NumElements = static_cast<UINT>(NumIndices);
 	srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
-	Application::Get().GetDevice()->CreateShaderResourceView(m_d3d12Resource.Get(), &srvDesc, m_Srv.GetDescriptorHandle());
+	m_DeviceContext->GetDevice()->CreateShaderResourceView(m_d3d12Resource.Get(), &srvDesc, m_Srv.GetDescriptorHandle());
 //Modify End
 }
 
@@ -57,8 +57,8 @@ D3D12_CPU_DESCRIPTOR_HANDLE IndexBuffer::GetShaderResourceView(const D3D12_SHADE
 	auto iter = m_CustomSrvs.find(hash);
 	if (iter == m_CustomSrvs.end())
 	{
-		DescriptorAllocation srv = Application::Get().AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-		Application::Get().GetDevice()->CreateShaderResourceView(m_d3d12Resource.Get(), srvDesc, srv.GetDescriptorHandle());
+		DescriptorAllocation srv = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+		m_DeviceContext->GetDevice()->CreateShaderResourceView(m_d3d12Resource.Get(), srvDesc, srv.GetDescriptorHandle());
 		iter = m_CustomSrvs.insert({ hash, std::move(srv) }).first;
 	}
 

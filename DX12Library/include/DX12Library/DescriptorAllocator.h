@@ -18,7 +18,10 @@ class DescriptorAllocatorPage;
 class DescriptorAllocator
 {
 public:
-	explicit DescriptorAllocator(D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t numDescriptorsPerHeap = 256);
+	explicit DescriptorAllocator(
+		D3D12_DESCRIPTOR_HEAP_TYPE type,
+		Microsoft::WRL::ComPtr<ID3D12Device2> device,
+		uint32_t numDescriptorsPerHeap = 256);
 	virtual ~DescriptorAllocator();
 
 
@@ -45,6 +48,9 @@ private:
 	std::shared_ptr<DescriptorAllocatorPage> CreateAllocatorPage();
 
 	D3D12_DESCRIPTOR_HEAP_TYPE HeapType;
+//Modify Begin:2026-08-07 by BestHui
+	Microsoft::WRL::ComPtr<ID3D12Device2> Device;
+//Modify End
 	uint32_t NumDescriptorsPerHeap;
 
 	DescriptorHeapPoolType HeapPool;

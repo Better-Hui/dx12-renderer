@@ -2,8 +2,6 @@
 
 #include "RootSignature.h"
 
-#include "Application.h"
-
 RootSignature::RootSignature()
 	:
 	RootSignatureDesc{}
@@ -13,15 +11,19 @@ RootSignature::RootSignature()
 {
 }
 
+//Modify Begin:2026-08-07 by BestHui
 RootSignature::RootSignature(
-	const D3D12_ROOT_SIGNATURE_DESC1& rootSignatureDesc, const D3D_ROOT_SIGNATURE_VERSION rootSignatureVersion)
+	const D3D12_ROOT_SIGNATURE_DESC1& rootSignatureDesc,
+	const D3D_ROOT_SIGNATURE_VERSION rootSignatureVersion,
+	ID3D12Device2& device)
 	: RootSignatureDesc{}
 	, NumDescriptorsPerTable{ 0 }
 	, SamplerTableBitMask(0)
 	, DescriptorTableBitMask(0)
 {
-	SetRootSignatureDesc(rootSignatureDesc, rootSignatureVersion);
+	SetRootSignatureDesc(rootSignatureDesc, rootSignatureVersion, device);
 }
+//Modify End
 
 RootSignature::~RootSignature()
 {
@@ -53,16 +55,16 @@ void RootSignature::Destroy()
 	memset(NumDescriptorsPerTable, 0, sizeof NumDescriptorsPerTable);
 }
 
+//Modify Begin:2026-08-07 by BestHui
 void RootSignature::SetRootSignatureDesc(
 	const D3D12_ROOT_SIGNATURE_DESC1& rootSignatureDesc,
-	const D3D_ROOT_SIGNATURE_VERSION rootSignatureVersion
+	const D3D_ROOT_SIGNATURE_VERSION rootSignatureVersion,
+	ID3D12Device2& device
 )
 {
 	// Make sure any previously allocated root signature description is cleaned 
 	// up first.
 	Destroy();
-
-	const auto device = Application::Get().GetDevice();
 
 	UINT numParameters = rootSignatureDesc.NumParameters;
 	D3D12_ROOT_PARAMETER1* pParameters = numParameters > 0 ? new D3D12_ROOT_PARAMETER1[numParameters] : nullptr;
@@ -150,9 +152,10 @@ void RootSignature::SetRootSignatureDesc(
 
 
 	// Create the root signature.
-	ThrowIfFailed(device->CreateRootSignature(0, rootSignatureBlob->GetBufferPointer(),
+	ThrowIfFailed(device.CreateRootSignature(0, rootSignatureBlob->GetBufferPointer(),
 		rootSignatureBlob->GetBufferSize(), IID_PPV_ARGS(&D3d12RootSignature)));
 }
+//Modify End
 
 uint32_t RootSignature::GetDescriptorTableBitMask(const D3D12_DESCRIPTOR_HEAP_TYPE descriptorHeapType) const
 {

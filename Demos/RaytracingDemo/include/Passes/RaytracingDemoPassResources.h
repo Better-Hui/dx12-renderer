@@ -155,6 +155,9 @@ struct RaytracingDemoPassResources
     Camera& SceneCamera;
 //Modify Begin:2026-07-30 by BestHui
     Microsoft::WRL::ComPtr<ID3D12Device2> Device;
+//Modify Begin:2026-08-07 by BestHui
+    std::shared_ptr<D3D12DeviceContext> DeviceContext;
+//Modify End
     std::shared_ptr<CommandQueue> DirectQueue;
     std::shared_ptr<CommandQueue> AsyncComputeQueue;
 //Modify End

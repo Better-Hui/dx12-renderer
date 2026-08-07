@@ -1,11 +1,10 @@
-﻿#pragma once
+#pragma once
 
+#include "ResourceStateRegistry.h"
 
 #include <d3d12.h>
 
-#include <mutex>
-#include <map>
-#include <unordered_map>
+#include <memory>
 #include <vector>
 
 class CommandList;
@@ -14,159 +13,46 @@ class Resource;
 class ResourceStateTracker
 {
 public:
-	ResourceStateTracker();
-	virtual ~ResourceStateTracker();
+//Modify Begin:2026-07-30 by BestHui
+    explicit ResourceStateTracker(std::shared_ptr<ResourceStateRegistry> resourceStateRegistry);
+//Modify End
+    virtual ~ResourceStateTracker();
 
-	/**
-	 * Push a resource barrier to the resource state tracker.
-	 *
-	 * @param barrier The resource barrier to push to the resource state tracker.
-	 */
-	void ResourceBarrier(const D3D12_RESOURCE_BARRIER& barrier);
+    void ResourceBarrier(const D3D12_RESOURCE_BARRIER& barrier);
 
-	/**
-		 * Push a transition resource barrier to the resource state tracker.
-		 *
-		 * @param resource The resource to transition.
-		 * @param stateAfter The state to transition the resource to.
-		 * @param subResource The subresource to transition. By default, this is D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES
-		 * which indicates that all subresources should be transitioned to the same state.
-		 */
-	void TransitionResource(ID3D12Resource* resource, D3D12_RESOURCE_STATES stateAfter,
-		UINT subResource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
-	void TransitionResource(const Resource& resource, D3D12_RESOURCE_STATES stateAfter,
-		UINT subResource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
+    void TransitionResource(
+        ID3D12Resource* resource,
+        D3D12_RESOURCE_STATES stateAfter,
+        UINT subResource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
+    void TransitionResource(
+        const Resource& resource,
+        D3D12_RESOURCE_STATES stateAfter,
+        UINT subResource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
 
-	/**
-	 * Push a UAV resource barrier for the given resource.
-	 *
-	 * @param resource The resource to add a UAV barrier for. Can be NULL which
-	 * indicates that any UAV access could require the barrier.
-	 */
-	void UavBarrier(const Resource* resource = nullptr);
+    void UavBarrier(const Resource* resource = nullptr);
+    void AliasBarrier(const Resource* beforeResource = nullptr, const Resource* afterResource = nullptr);
 
-	/**
-	 * Push an aliasing barrier for the given resource.
-	 *
-	 * @param beforeResource The resource currently occupying the space in the heap.
-	 * @param afterResource The resource that will be occupying the space in the heap.
-	 *
-	 * Either the beforeResource or the afterResource parameters can be NULL which
-	 * indicates that any placed or reserved resource could cause aliasing.
-	 */
-	void AliasBarrier(const Resource* beforeResource = nullptr, const Resource* afterResource = nullptr);
-
-	/**
-	 * Flush any pending resource barriers to the command list.
-	 *
-	 * @return The number of resource barriers that were flushed to the command list.
-	 */
-	uint32_t FlushPendingResourceBarriers(const CommandList& commandList);
-
-	/**
-	 * Flush any (non-pending) resource barriers that have been pushed to the resource state
-	 * tracker.
-	 */
-	void FlushResourceBarriers(const CommandList& commandList);
-
-	/**
-	 * Commit final resource states to the global resource state map.
-	 * This must be called when the command list is closed.
-	 */
-	void CommitFinalResourceStates();
-
-	/**
-	 * Reset state tracking. This must be done when the command list is reset.
-	 */
-	void Reset();
-
-	/**
-	 * The global state must be locked before flushing pending resource barriers
-	 * and committing the final resource state to the global resource state.
-	 * This ensures consistency of the global resource state between command list
-	 * executions.
-	 */
-	static void Lock();
-
-	/**
-	 * Unlocks the global resource state after the final states have been committed
-	 * to the global resource state array.
-	 */
-	static void Unlock();
-
-	/**
-	 * Add a resource with a given state to the global resource state array (map).
-	 * This should be done when the resource is created for the first time.
-	 */
-    static void AddGlobalResourceState(ID3D12Resource* resource, D3D12_RESOURCE_STATES state);
-
-	/**
-	 * Remove a resource from the global resource state array (map).
-	 * This should only be done when the resource is destroyed.
-	 */
-	static void RemoveGlobalResourceState(ID3D12Resource* resource);
+//Modify Begin:2026-07-30 by BestHui
+    uint32_t FlushPendingResourceBarriers(
+        const CommandList& commandList,
+        ResourceStateRegistry::SubmissionScope& submissionScope);
+//Modify End
+    void FlushResourceBarriers(const CommandList& commandList);
+//Modify Begin:2026-07-30 by BestHui
+    void CommitFinalResourceStates(ResourceStateRegistry::SubmissionScope& submissionScope);
+//Modify End
+    void Reset();
 
 private:
-	using ResourceBarriersType = std::vector<D3D12_RESOURCE_BARRIER>;
+    using ResourceBarriersType = std::vector<D3D12_RESOURCE_BARRIER>;
+//Modify Begin:2026-07-30 by BestHui
+    using ResourceStateMapType = ResourceStateRegistry::ResourceStateMap;
+//Modify End
 
-	// Pending resource transitions are committed before a command list
-	// is executed on the command queue. This guarantees that resources will
-	// be in the expected state at the beginning of a command list.
-	ResourceBarriersType m_PendingResourceBarriers;
-
-	// Resource barriers that need to be committed to the command list
-	ResourceBarriersType m_ResourceBarriers;
-
-	struct ResourceState
-	{
-		explicit ResourceState(const D3D12_RESOURCE_STATES state = D3D12_RESOURCE_STATE_COMMON) :
-			m_State(state)
-		{
-		}
-
-		void SetSubresourceState(const UINT subresource, const D3D12_RESOURCE_STATES state)
-		{
-			if (subresource == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
-			{
-				m_State = state;
-				m_SubresourceStates.clear();
-			}
-			else
-			{
-				m_SubresourceStates[subresource] = state;
-			}
-		}
-
-		// Get the state of a (sub)resource within the resource.
-		// If the specified subresource is not found in the SubresourceState array (map)
-		// then the state of the resource (D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES) is
-		// returned.
-		D3D12_RESOURCE_STATES GetSubResourceState(const UINT subresource) const
-		{
-			D3D12_RESOURCE_STATES state = m_State;
-			const auto iter = m_SubresourceStates.find(subresource);
-			if (iter != m_SubresourceStates.end())
-			{
-				state = iter->second;
-			}
-			return state;
-		}
-
-		D3D12_RESOURCE_STATES m_State;
-		std::map<UINT, D3D12_RESOURCE_STATES> m_SubresourceStates;
-	};
-
-	using ResourceStateMapType = std::unordered_map<ID3D12Resource*, ResourceState>;
-
-	// The final (last known state) of the resources within a command list.
-	// The final resource state is committed to the global resource state when the 
-	// command list is closed but before it is executed on the command queue.
-	ResourceStateMapType m_FinalResourceStates;
-
-	// The global resource state array (map) stores the state of a resource
-	// between command list execution.
-	static ResourceStateMapType s_GlobalResourceStates;
-
-	static std::mutex s_GlobalMutex;
-	static bool s_IsLocked;
+    ResourceBarriersType m_PendingResourceBarriers;
+    ResourceBarriersType m_ResourceBarriers;
+    ResourceStateMapType m_FinalResourceStates;
+//Modify Begin:2026-07-30 by BestHui
+    std::shared_ptr<ResourceStateRegistry> m_ResourceStateRegistry;
+//Modify End
 };

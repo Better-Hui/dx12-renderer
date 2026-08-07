@@ -22,6 +22,7 @@
 - **Meshlet 实验路径**：包含 Meshlet 构建、GPU 资源、task shader / compute-indirect 两种 GBuffer 后端，以及只更新实例数据的增量路径。
 - **ReSTIR DI 直接光**：提供 RIS、可选时域复用、可选空域复用和最终着色阶段的一次可见性测试。
 - **CUDA Bloom**：演示 D3D12 shared resource、shared fence 与 CUDA external semaphore 的互操作流程。
+- **实验性帧特性**：接入 Native NGX DLSS SR/DLAA，以及 Streamline Ray Reconstruction 和 Frame Generation；这些路径尚未完成可交付验证。
 - **调试与分析工具**：集成 PIX event、RenderGraph timing history/CSV、运行时调试 UI 和 `UnitySceneDump`。
 
 这些内容的定位是“可运行的工程实验和 API 示例”。其中不少封装仍在演进，尤其是异步计算、Meshlet 和场景导入；请把它们视为当前仓库的实现方式，而不是通用最佳实践。
@@ -67,6 +68,7 @@ auto pass = RenderGraph::RenderPass::Create(
 | 光照 | direct lighting 和 indirect lighting 分离，再进行 composite。 |
 | 软阴影 | 平行光和点光源使用预编译 Hard/Soft Shader 变体；面积光继续采样真实发光面。 |
 | 降噪 | NRD 与 SVGF 两条可选路径；NRD 的 native 状态变化会回写 RenderGraph。 |
+| DLSS 与 Streamline | 实验性的 NGX DLSS SR/DLAA 与 Streamline RR/FG 资源准备路径；是否可用由启动配置和运行时 capability query 决定。 |
 | Meshlet | task shader 和 compute-indirect 后端、cluster 调试显示，以及实例数据增量更新。 |
 | CUDA 互操作 | 基于 shared resource / shared fence 的 Bloom 后处理。 |
 | 性能分析 | PIX scope，以及 Direct、Compute queue 分别记录的 RenderGraph GPU timing / CSV。 |
@@ -109,6 +111,8 @@ vcpkg install --triplet x64-windows assimp directxtex directxmesh imgui meshopti
 | DirectX Shader Compiler | 优先 `DXC/dxc.exe`，否则使用 Windows SDK 的 `dxc.exe` | 编译 ray tracing、task、mesh、compute 等 shader。 |
 | WinPixEventRuntime | `WinPixEventRuntime/` | 向 PIX 写入 CPU/GPU event marker。 |
 | NVIDIA NRD / NRI | `External/NRD/`、`External/NRI/` | 降噪路径及其依赖。 |
+| NVIDIA DLSS SDK | `External/DLSS/` | 实验性的 Native NGX SR/DLAA 集成；受 `External/DLSS/LICENSE.txt` 中的 NVIDIA RTX SDK License 约束。 |
+| NVIDIA Streamline | `External/Streamline/` | 实验性的 RR/FG 集成与 runtime interposer；需保留 `license.txt`、`nvngx_dlss.license.txt` 和 `3rd-party-licenses.md`。 |
 | Unity PluginAPI | `External/UnityPluginAPI/` | Unity-facing D3D12 互操作实验所需头文件。 |
 | CUDA Driver API | CUDA Toolkit 12.8 | 编译 Bloom PTX，提供 `cuda.h` 与 `cuda.lib`。 |
 
@@ -173,21 +177,20 @@ cmake --build ..\build --config Release --target RaytracingDemo UnitySceneDump
 - 连续的 async pass 目前逐 pass 提交，尚未合并成更大的 compute segment。
 - `RenderGraphRoot::Execute()` 现在只是图执行入口；pass 录制/提交由 `RenderGraphCommandExecutor` 负责，Direct/Async Compute 的可选 timestamp 生命周期由 `RenderGraphProfiler` 负责。Root 仍负责图构建和拓扑编排。
 - transient resource 会按本帧实际记录的 Direct/Async Compute fence 做延迟退休。aliasing 仍采取保守策略：不同 queue 使用的资源不会互相 alias，后续再设计更一般的多 queue allocator。
-- Framework 和 RenderGraph 不再通过 `Application::Get()` 反查 device/queue。应用组合根显式注入 device、queue 和 descriptor 分配器；Framework 中剩下的全局入口只位于 `DemoMain` 启动层。
+- 当前 Framework 和 RenderGraph 的执行路径由应用组合根显式注入 device、queue 和 descriptor 分配器。独立运行时的 application/window 生命周期，以及少量 legacy resource-wrapper 兼容路径，仍保留 `Application` 依赖。
 - `RaytracingDemoSceneResources` 内部已拆成 texture/material、geometry、meshlet、RTAS 四个 builder。facade 仍是 sample 层入口，但压力球等场景修改只增量更新 Meshlet/TLAS instance 数据。
 - RenderGraph timing 分别记录每条 queue 上的 pass 时长；判断跨 queue overlap、wait 和 GPU bubble 时，请使用 PIX Timing Capture。
 - Unity importer 是静态、有限的导入器；prefab / nested prefab、skinned mesh、`LODGroup` 与 asset-database cache 尚未覆盖。
 - JSON 场景已经可用，但压力球仍由 sample C++ 定义，不属于场景数据。它们默认开启，可以通过运行时 UI 走增量 Add/Remove 路径切换。
 - Meshlet 路径是实验性 GBuffer 后端，不是完整的 visibility / streaming 系统，也不代表已达到最优 Meshlet 性能。
-- ReSTIR DI 目前是 inline ray-query 的直接光 sample：使用均匀选灯、RIS、可选时域复用和可选空域复用；还没有 light presampling、emissive geometry 等完整重要性采样能力。
-- 时域/空域复用阶段按当前示例设计不做可见性测试，最终着色阶段才追踪一次 shadow ray。因此遮挡变化和复用本身都会带来明显噪声；这是当前有意保留的实现边界，不应当视为完整的 RTXDI 质量实现。
-- ReSTIR DI 目前不接入平行光和点光源的软阴影变体；shader-table DXR 模式会自动使用普通 `PathTracing` 直接光路径。
+- ReSTIR DI 是实验性的 inline ray-query 直接光 sample。它的光源采样、自发光表面发射体、时空复用和可见性测试选项仍在演进；图像质量、稳定性和性能均未作为等价 RTXDI 的实现完成验收。
 - 软阴影当前使用固定 4 次采样的变体：平行光读取 angular radius，点光源读取 source radius；自适应采样和质量档位尚未实现。
 - Shader 变体只在启动期或创建 pipeline 时编译；运行期源码热更新、后台编译和项目级 variant manifest 还没有实现。
-- 尚未接入 DLSS / Streamline。
+- **DLSS、Ray Reconstruction 和 Frame Generation 均为实验性功能，尚未完成可交付验证。** sample 已接入 Native NGX SR/DLAA，并在评估 Streamline RR/FG。RR/FG 需要带 `--streamline-interposer` 重启程序；这是有意的启动期 opt-in，默认 D3D12 device、queue 和 swapchain 不会经过 Streamline proxy。当前只有 build、startup 与自动化安全覆盖，尚未在支持 RR/FG 的硬件上完成功能正确性、画质、稳定性、timing 和性能验证，仍可能存在未知问题。最终是否可用以运行时 capability query 为准：当前 RTX 2060 开发机不支持 FG，且当前 adapter 上 RR 报告不可用。不要把仓库中的任意 DLSS 模式视为保证可用或可直接交付的功能。
 
 ## 进一步阅读与许可证
 
 - [RaytracingDemo API 说明（英文）](Docs/RaytracingSampleApi.md)：介绍 Framework 用法、RenderGraph、场景导入、profiling 和功能边界。
 - 使用或再分发本仓库前，请保留上游与第三方组件的声明，并审阅对应的许可证文件。
 - 本 README 不引入替代性的仓库级许可证。
+- `External/DLSS/` 和 `External/Streamline/` 中使用的 NVIDIA 组件受 NVIDIA RTX SDK 条款约束，不能只按上游仓库许可证或 Streamline 的 MIT License 理解。SDK 放在 `External/` 不代表它变成开源，也不代表本仓库向任何人授予 NVIDIA SDK 的再许可；请保留全部 notice 与 license，不要把本仓库当作可独立分发的 SDK 镜像。在公开源码、再分发二进制或包含这些组件的商业发布前，应单独完成法务/许可证审查。

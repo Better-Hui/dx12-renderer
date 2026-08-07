@@ -50,6 +50,7 @@
 #include "GenerateMipsPso.h"
 #include "ClearValue.h"
 #include "RenderTargetState.h"
+#include "ResourceStateRegistry.h"
 #include "UploadBuffer.h"
 
 class Buffer;
@@ -73,6 +74,7 @@ public:
     CommandList(
         D3D12_COMMAND_LIST_TYPE type,
         Microsoft::WRL::ComPtr<ID3D12Device2> device,
+        std::shared_ptr<ResourceStateRegistry> resourceStateRegistry,
         std::function<std::shared_ptr<CommandList>()> computeCommandListFactory = {});
 //Modify End
     virtual ~CommandList();
@@ -612,7 +614,11 @@ public:
      * @return true if there are any pending resource barriers that need to be
      * processed.
      */
-    bool Close(CommandList& pendingCommandList);
+//Modify Begin:2026-07-30 by BestHui
+    bool Close(
+        CommandList& pendingCommandList,
+        ResourceStateRegistry::SubmissionScope& submissionScope);
+//Modify End
     // Just close the command list. This is useful for pending command lists.
     void Close();
 
@@ -681,6 +687,9 @@ private:
     D3D12_COMMAND_LIST_TYPE m_D3d12CommandListType;
 //Modify Begin:2026-08-07 by BestHui
     Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;
+//Modify Begin:2026-07-30 by BestHui
+    std::shared_ptr<ResourceStateRegistry> m_ResourceStateRegistry;
+//Modify End
     std::function<std::shared_ptr<CommandList>()> m_ComputeCommandListFactory;
 //Modify End
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList2> m_D3d12CommandList;

@@ -32,6 +32,7 @@ namespace DemoAutomation
 
         void Initialize(const TestSuites& testSuites);
         void Update(double totalTime, const ActionHandler& actionHandler, const CompletionHandler& completionHandler);
+        void AppendDiagnosticLog(const std::string& message) const;
 
     private:
         void AppendLog(const std::string& message) const;

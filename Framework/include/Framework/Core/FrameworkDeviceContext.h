@@ -2,26 +2,31 @@
 #pragma once
 
 #include <DX12Library/DescriptorAllocation.h>
+//Modify Begin:2026-08-07 by BestHui
+#include <DX12Library/D3D12DeviceContext.h>
+//Modify End
 
 #include <d3d12.h>
 #include <wrl.h>
 
 #include <cstdint>
-#include <functional>
 #include <memory>
 
 class CommandQueue;
-class StreamlineRuntime;
+class D3D12DeviceContext;
+class FrameFeaturesRuntime;
+class FrameGenerationController;
 
 struct FrameworkDeviceContextDesc
 {
-    Microsoft::WRL::ComPtr<ID3D12Device2> Device;
+//Modify Begin:2026-08-07 by BestHui
+    std::shared_ptr<D3D12DeviceContext> DeviceContext;
+//Modify End
     std::shared_ptr<CommandQueue> DirectQueue;
     std::shared_ptr<CommandQueue> ComputeQueue;
     std::shared_ptr<CommandQueue> CopyQueue;
-    std::shared_ptr<StreamlineRuntime> Streamline;
-    std::function<DescriptorAllocation(D3D12_DESCRIPTOR_HEAP_TYPE, uint32_t)> AllocateDescriptors;
-    std::function<bool(bool)> SetFrameGenerationEnabled;
+    std::shared_ptr<FrameFeaturesRuntime> FrameFeatures;
+    FrameGenerationController* FrameGeneration = nullptr;
 };
 
 class FrameworkDeviceContext final
@@ -29,14 +34,20 @@ class FrameworkDeviceContext final
 public:
     explicit FrameworkDeviceContext(FrameworkDeviceContextDesc desc);
 
-    const Microsoft::WRL::ComPtr<ID3D12Device2>& GetDevice() const { return m_Desc.Device; }
+    const Microsoft::WRL::ComPtr<ID3D12Device2>& GetDevice() const { return m_Desc.DeviceContext->GetDevice(); }
+//Modify Begin:2026-08-07 by BestHui
+    const std::shared_ptr<D3D12DeviceContext>& GetD3D12DeviceContext() const { return m_Desc.DeviceContext; }
+//Modify End
     std::shared_ptr<CommandQueue> GetCommandQueue(D3D12_COMMAND_LIST_TYPE type) const;
-    std::shared_ptr<StreamlineRuntime> GetStreamlineRuntime() const { return m_Desc.Streamline; }
+    std::shared_ptr<FrameFeaturesRuntime> GetFrameFeaturesRuntime() const { return m_Desc.FrameFeatures; }
+    FrameGenerationController* GetFrameGenerationController() const { return m_Desc.FrameGeneration; }
     DescriptorAllocation AllocateDescriptors(
         D3D12_DESCRIPTOR_HEAP_TYPE type,
-        uint32_t descriptorCount = 1) const;
+        uint32_t descriptorCount = 1) const
+    {
+        return m_Desc.DeviceContext->AllocateDescriptors(type, descriptorCount);
+    }
     void Flush() const;
-    bool SetFrameGenerationEnabled(bool enabled) const;
 
 private:
     FrameworkDeviceContextDesc m_Desc;

@@ -19,6 +19,8 @@ class Buffer;
 class ByteAddressBuffer;
 class StructuredBuffer;
 class Resource;
+class ResourceStateRegistry;
+class D3D12DeviceContext;
 
 namespace RenderGraph
 {
@@ -32,6 +34,7 @@ namespace RenderGraph
     public:
 //Modify Begin:2026-07-30 by BestHui
         ResourcePool(
+            std::shared_ptr<D3D12DeviceContext> deviceContext,
             std::shared_ptr<CommandQueue> directCommandQueue,
             std::shared_ptr<CommandQueue> asyncComputeCommandQueue);
 //Modify End
@@ -106,12 +109,15 @@ namespace RenderGraph
             RenderGraphQueueFenceValues FenceValues;
             std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> Resources;
             std::vector<Microsoft::WRL::ComPtr<ID3D12Heap>> Heaps;
+            std::vector<ID3D12Resource*> ResourceStateEntries;
         };
 
         bool IsRetirementComplete(const RenderGraphQueueFenceValues& fenceValues) const;
 
         std::shared_ptr<CommandQueue> m_DirectCommandQueue;
         std::shared_ptr<CommandQueue> m_AsyncComputeCommandQueue;
+        std::shared_ptr<D3D12DeviceContext> m_DeviceContext;
+        std::shared_ptr<ResourceStateRegistry> m_ResourceStateRegistry;
         std::queue<DeferredDeletionBatch> m_DeferredDeletionQueue;
 //Modify End
 
