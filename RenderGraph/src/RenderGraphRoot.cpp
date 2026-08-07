@@ -188,6 +188,68 @@ void RenderGraph::RenderGraphRoot::PresentWithOverlay(
     pWindow->Present();
 }
 
+//Modify Begin:2026-08-07 by BestHui
+void RenderGraph::RenderGraphRoot::PresentWithExternalFrameProcessor(
+    const std::shared_ptr<Window>& pWindow,
+    const ResourceId displayResourceId,
+    const std::span<const ResourceId> processorResourceIds,
+    const std::function<void(CommandList&, const std::shared_ptr<Texture>&)>& processorCallback,
+    const std::function<void(CommandList&)>& overlayCallback,
+    const std::function<void()>& beforePresentCallback,
+    const std::function<void()>& afterPresentCallback)
+{
+    const auto& displayTexture = m_ResourcePool->GetTexture(displayResourceId);
+    auto commandList = m_DirectCommandQueue->GetCommandList();
+
+    {
+        PIXScope(*commandList, L"Render Graph: Prepare External Frame Processor");
+
+        TransitionBarrier(*displayTexture, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        for (const ResourceId resourceId : processorResourceIds)
+        {
+            Assert(resourceId != displayResourceId, "Display resource must not be duplicated in external processor resources.");
+            TransitionBarrier(m_ResourcePool->GetResource(resourceId), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        }
+        FlushBarriers(*commandList);
+
+        const RenderTarget& backBufferRenderTarget = pWindow->GetRenderTarget();
+        const std::shared_ptr<Texture>& backBuffer = backBufferRenderTarget.GetTexture(Color0);
+        commandList->CopyResource(*backBuffer, *displayTexture);
+
+        TransitionBarrier(*displayTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        FlushBarriers(*commandList);
+
+        if (processorCallback)
+        {
+            processorCallback(*commandList, displayTexture);
+        }
+        if (overlayCallback)
+        {
+            commandList->SetRenderTarget(backBufferRenderTarget);
+            commandList->SetAutomaticViewportAndScissorRect(backBufferRenderTarget);
+            overlayCallback(*commandList);
+        }
+    }
+
+    m_QueueScheduler.TrackExternalResource(displayResourceId, RenderPassQueue::Direct);
+    for (const ResourceId resourceId : processorResourceIds)
+    {
+        m_QueueScheduler.TrackExternalResource(resourceId, RenderPassQueue::Direct);
+    }
+    m_QueueScheduler.SubmitDirect(commandList);
+
+    if (beforePresentCallback)
+    {
+        beforePresentCallback();
+    }
+    pWindow->Present();
+    if (afterPresentCallback)
+    {
+        afterPresentCallback();
+    }
+}
+//Modify End
+
 void RenderGraph::RenderGraphRoot::PresentWithOverlayBlit(
     const std::shared_ptr<Window>& pWindow,
     const ResourceId resourceId,

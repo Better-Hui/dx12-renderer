@@ -55,6 +55,7 @@ set(SOURCE_FILES
         src/Passes/ReSTIRDIPasses.cpp
         # Modify Begin:2026-08-07 by BestHui
         src/Passes/DLSSPass.cpp
+        src/Passes/DLSSRayReconstructionPreparationPass.cpp
         # Modify End
         src/Passes/CudaBloomPass.cpp
         # Modify Begin:2026-07-30 by BestHui
@@ -162,6 +163,9 @@ set(SHADER_FILES_COMPUTE
         shaders/PathTracing/IndirectLighting.softshadow.cs.hlsl
         # Modify End
         shaders/PathTracing/LightingComposite.cs.hlsl
+        # Modify Begin:2026-08-07 by BestHui
+        shaders/Upscaling/DLSSRayReconstructionPrepare.cs.hlsl
+        # Modify End
 # Modify Begin:2026-07-28 by BestHui
         shaders/Skybox/Skybox.cs.hlsl
         shaders/Skybox/SkyboxEquirectangular.cs.hlsl

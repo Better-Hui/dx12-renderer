@@ -182,7 +182,7 @@ The startup compiler currently covers the shaders directly owned by `RaytracingD
 - ReSTIR DI currently uses hard-shadow direct-light sampling. It does not yet use the directional/point-light soft-shadow variants and falls back to standard direct lighting in shader-table DXR mode.
 - Soft shadows currently use a fixed four-sample variant. Directional lights use angular radius, point lights use source radius, and adaptive sampling or quality presets are not implemented yet.
 - Shader variants compile only during startup/pipeline creation. Runtime source hot reload, background compilation, and a project-wide variant manifest are not implemented.
-- DLSS/Streamline is not currently integrated.
+- DLSS Super Resolution / DLAA is integrated through native NGX. Streamline Ray Reconstruction uses a packed FP16 world-normal/roughness input and bypasses the regular denoiser; Frame Generation prepares HUD-less color, depth, motion vectors, PCL markers, and Streamline-tagged present resources. RR and FG remain hardware/driver capability-gated. The current RTX 2060 development machine validates build, startup, SR, and RR-path safety, but cannot provide a real generated-frame quality or performance validation.
 
 ## Documentation and notices
 

@@ -537,6 +537,24 @@ RaytracingDemo::RaytracingDemo(const std::wstring& name, const int width, const 
         m_DLSS.SetMode(ParseDLSSMode(dlssMode));
     }
     std::free(dlssMode);
+
+    char* rayReconstruction = nullptr;
+    size_t rayReconstructionLength = 0;
+    _dupenv_s(&rayReconstruction, &rayReconstructionLength, "RAYTRACING_DEMO_DLSS_RR");
+    if (rayReconstruction != nullptr)
+    {
+        m_DLSS.SetRayReconstructionEnabled(std::strcmp(rayReconstruction, "0") != 0);
+    }
+    std::free(rayReconstruction);
+
+    char* frameGeneration = nullptr;
+    size_t frameGenerationLength = 0;
+    _dupenv_s(&frameGeneration, &frameGenerationLength, "RAYTRACING_DEMO_DLSS_FRAME_GENERATION");
+    if (frameGeneration != nullptr)
+    {
+        m_DLSS.SetFrameGenerationEnabled(std::strcmp(frameGeneration, "0") != 0);
+    }
+    std::free(frameGeneration);
 //Modify End
 
 //Modify Begin:2026-07-30 by BestHui
@@ -1061,6 +1079,20 @@ bool RaytracingDemo::LoadContent()
     });
 //Modify End
 
+//Modify Begin:2026-08-07 by BestHui
+    withShaderCreateContext("DLSSRayReconstructionPrepare", [&]()
+    {
+        const auto rayReconstructionPrepareShader = LoadShaderVariant(
+            L"DLSSRayReconstructionPrepare.cs.cso",
+            L"Demos/RaytracingDemo/shaders/Upscaling/DLSSRayReconstructionPrepare.cs.hlsl",
+            ShaderTargetProfile::Compute());
+        m_DLSSRayReconstructionPrepareShader = std::make_shared<ComputeShader>(
+            m_FrameworkDeviceContext,
+            *rayReconstructionPrepareShader,
+            ComputePipelineDescBuilder::ReflectedDefault(*rayReconstructionPrepareShader).Build());
+    });
+//Modify End
+
     withShaderCreateContext("LightBillboard", [&]()
     {
     const auto vertexShader = LoadShaderVariant(
@@ -1124,6 +1156,9 @@ void RaytracingDemo::UnloadContent()
     m_SkyboxEquirectangularComputeShader.reset();
 //Modify Begin:2026-08-06 by BestHui
     m_SkyboxCubemapStripComputeShader.reset();
+//Modify End
+//Modify Begin:2026-08-07 by BestHui
+    m_DLSSRayReconstructionPrepareShader.reset();
 //Modify End
     m_DisplayCompositeShader.reset();
 //Modify End
@@ -1283,6 +1318,8 @@ void RaytracingDemo::RebuildRenderGraph()
     m_RenderGraphCudaBloomEnabled = m_CudaBloom.IsEnabled();
 //Modify Begin:2026-08-07 by BestHui
     m_RenderGraphDLSSEnabled = m_DLSS.IsEnabled();
+    m_RenderGraphRayReconstructionEnabled = m_DLSS.IsEnabled() && m_DLSS.IsRayReconstructionEnabled();
+    m_RenderGraphFrameGenerationEnabled = m_DLSS.IsFrameGenerationEnabled();
 //Modify End
 //Modify Begin:2026-08-03 by BestHui
     m_RenderGraphAsyncComputeEnabled = m_AsyncComputeEnabled;
@@ -1309,6 +1346,8 @@ void RaytracingDemo::EnsureRenderGraphTopology()
         m_RenderGraphCudaBloomEnabled != m_CudaBloom.IsEnabled()
 //Modify Begin:2026-08-07 by BestHui
         || m_RenderGraphDLSSEnabled != m_DLSS.IsEnabled()
+        || m_RenderGraphRayReconstructionEnabled != (m_DLSS.IsEnabled() && m_DLSS.IsRayReconstructionEnabled())
+        || m_RenderGraphFrameGenerationEnabled != m_DLSS.IsFrameGenerationEnabled()
 //Modify End
 //Modify Begin:2026-08-03 by BestHui
         || m_RenderGraphAsyncComputeEnabled != m_AsyncComputeEnabled
@@ -1408,6 +1447,7 @@ RaytracingDemoPassResources RaytracingDemo::CreatePassResources()
 //Modify End
 //Modify Begin:2026-08-07 by BestHui
         m_DLSS,
+        m_DLSSRayReconstructionPrepareShader,
 //Modify End
         m_Denoisers,
         m_CudaBloom,
@@ -1459,6 +1499,8 @@ void RaytracingDemo::UpdateRenderGraphFrameState()
     const uint32_t displayHeight = static_cast<uint32_t>((std::max)(m_Height, 1));
     const DLSSOptimalSettings dlssSettings = m_DLSS.GetOptimalSettings(displayWidth, displayHeight);
     state.DLSSEnabled = m_DLSS.IsEnabled();
+    state.RayReconstructionEnabled = state.DLSSEnabled && m_DLSS.IsRayReconstructionEnabled();
+    state.FrameGenerationEnabled = m_DLSS.IsFrameGenerationEnabled();
     state.DlssMode = m_DLSS.GetMode();
     state.Width = dlssSettings.RenderWidth;
     state.Height = dlssSettings.RenderHeight;
@@ -1554,6 +1596,13 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
 //Modify End
 
 //Modify Begin:2026-08-07 by BestHui
+    if (m_DLSS.IsFrameGenerationEnabled())
+    {
+        m_DLSS.BeginFrameGeneration(m_FrameIndex);
+    }
+//Modify End
+
+//Modify Begin:2026-08-07 by BestHui
     UpdateRenderGraphFrameState();
     RenderGraph::RenderMetadata metadata;
     metadata.m_ScreenWidth = m_RenderGraphFrameState->Width;
@@ -1566,6 +1615,27 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
 
 //Modify Begin:2026-07-28 by BestHui
     EnsureRenderGraphTopology();
+//Modify End
+//Modify Begin:2026-08-07 by BestHui
+    if (m_RenderGraphFrameState->FrameGenerationEnabled)
+    {
+        m_FrameGenerationInputs = {};
+        m_FrameGenerationInputs.Depth = m_RenderGraph->GetTexture(RaytracingDemoRenderGraph::ResourceIds::DepthBuffer);
+        m_FrameGenerationInputs.MotionVectors = m_RenderGraph->GetTexture(RaytracingDemoRenderGraph::ResourceIds::MotionVector);
+        m_FrameGenerationInputs.HudLessColor = m_RenderGraph->GetTexture(RaytracingDemoRenderGraph::ResourceIds::FrameGenerationHudLess);
+        m_FrameGenerationInputs.RenderWidth = m_RenderGraphFrameState->Width;
+        m_FrameGenerationInputs.RenderHeight = m_RenderGraphFrameState->Height;
+        m_FrameGenerationInputs.DisplayWidth = m_RenderGraphFrameState->DisplayWidth;
+        m_FrameGenerationInputs.DisplayHeight = m_RenderGraphFrameState->DisplayHeight;
+        m_FrameGenerationInputs.FrameIndex = m_FrameIndex;
+        m_FrameGenerationInputs.HasPreviousViewProjection = m_RenderGraphFrameState->HasPreviousViewProjection;
+        m_FrameGenerationInputs.JitterOffset = m_RenderGraphFrameState->DLSSJitterOffset;
+        m_FrameGenerationInputs.View = m_RenderGraphFrameState->View;
+        m_FrameGenerationInputs.Projection = m_RenderGraphFrameState->Projection;
+        m_FrameGenerationInputs.ViewProjection = m_RenderGraphFrameState->ViewProjection;
+        m_FrameGenerationInputs.PreviousViewProjection = m_RenderGraphFrameState->PreviousViewProjection;
+        m_DLSS.PrepareFrameGeneration(m_FrameGenerationInputs);
+    }
 //Modify End
 //Modify Begin:2026-07-29 by BestHui
     m_RenderGraph->SetGpuTimestampProfiler(m_GpuTimingEnabled ? &m_GpuTimestampProfiler : nullptr);

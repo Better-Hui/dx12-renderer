@@ -134,14 +134,15 @@ Current major pieces:
 - RenderGraph schedules base resources, lighting, denoise, skybox, postprocess, overlays.
 - CUDA bloom is an external pass/tool path and must not corrupt history resources.
 
-## DLSS Super Resolution
+## DLSS / Streamline
 
-- `Framework/Rendering/Upscaling/DLSS` owns the native NGX lifecycle, capability query, optimal render resolution, projection jitter, history reset, feature recreation, and evaluation. Do not put NGX handles or `nvsdk_ngx_*` calls in demo code.
-- `RaytracingDemo` only adapts its graph resources in `Passes/DLSSPass.cpp`: HDR `SceneColor`, `DepthBuffer`, low-resolution `MotionVector`, and a display-resolution output. Motion vectors are stored in UV units; pass render dimensions as `InMVScaleX/Y` so NGX receives pixels.
-- `DLSSOutput` and `DLSSFinishedToken` must be registered only when the DLSS pass is present. Registering a transient resource with no producer/consumer corrupts the RenderGraph resource lifetime during graph destruction.
-- Recreate the NGX feature only when mode or render/display resolution changes. Before releasing an already evaluated feature, flush the injected `FrameworkDeviceContext`; do not release an in-flight handle. Only commit a newly created handle after NGX creation succeeds.
-- Current scope is DLSS Super Resolution / DLAA only. Frame Generation, Ray Reconstruction, and Streamline are not integrated. Runtime values: `RAYTRACING_DEMO_DLSS=off|dlaa|quality|balanced|performance|ultra-performance`.
-- External SDK files live in `External/DLSS` and currently provide `nvngx_dlss.dll` version `310.7.0`; preserve `External/DLSS/LICENSE.txt` when distributing builds.
+- `Framework/Rendering/Upscaling/DLSS` owns native NGX Super Resolution / DLAA and Streamline Ray Reconstruction / Frame Generation lifecycle, capability query, optimal render resolution, projection jitter, history reset, feature recreation, frame tokens, PCL markers, resource tagging, and evaluation. Do not put NGX or Streamline handles/calls in demo code.
+- `RaytracingDemo` adapts RenderGraph resources only. `Passes/DLSSPass.cpp` supplies HDR `SceneColor`, `DepthBuffer`, UV-space `MotionVector`, and the display-resolution output. `Passes/DLSSRayReconstructionPreparationPass.cpp` writes the RR contract resource: `R16G16B16A16_FLOAT` world normal in `xyz` and linear roughness in `w`, then tags it as `kBufferTypeNormalRoughness` with `ePacked` mode.
+- RR consumes noisy ray-traced `SceneColor`; when RR is active the regular NRD/SVGF pass is excluded from graph construction and its camera-side denoiser writes are disabled. Do not feed already denoised radiance to RR.
+- `DLSSOutput`, `DLSSFinishedToken`, `DLSSNormalRoughness`, and `FrameGenerationHudLess` must be registered only for the graph topology that produces and consumes them. Registering unused transient resources corrupts RenderGraph lifetimes during graph destruction.
+- FG prepares Streamline constants/options before RenderGraph execution, produces tone-mapped HUD-less color, tags depth/motion/HUD-less resources before present, emits PCL submit/present markers, then lets the Streamline-proxied swapchain present inject generated frames. It requires a supported adapter/driver/OS configuration; do not force-enable it on unsupported hardware.
+- Recreate the native NGX feature only when mode or render/display resolution changes. Before releasing an already evaluated feature, flush the injected `FrameworkDeviceContext`; do not release an in-flight handle. Only commit a newly created handle after NGX creation succeeds.
+- Runtime values: `RAYTRACING_DEMO_DLSS=off|dlaa|quality|balanced|performance|ultra-performance`, `RAYTRACING_DEMO_DLSS_RR=0|1`, and `RAYTRACING_DEMO_DLSS_FRAME_GENERATION=0|1`. The SDK runtime files live in `External/Streamline`; preserve its notices and deployed runtime files when distributing builds.
 
 ## Meshlet / Mesh Shader State
 

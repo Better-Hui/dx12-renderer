@@ -11,6 +11,8 @@
 #include <RenderGraph/RenderMetadata.h>
 #include <RenderGraph/RenderPass.h>
 
+#include <array>
+
 std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateCudaBloomPass(
     const RaytracingDemoPassResources& resources,
     const RenderGraph::ResourceId sceneReadyToken)
@@ -37,10 +39,73 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateCu
         });
 }
 
+//Modify Begin:2026-08-07 by BestHui
+std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateFrameGenerationHudLessPass(
+    const RaytracingDemoPassResources& resources,
+    const RenderGraph::ResourceId sceneColor,
+    const RenderGraph::ResourceId sceneReadyToken)
+{
+    using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
+
+    return RenderGraph::RenderPass::Create(
+        L"Frame Generation HUD-less Color",
+        {
+            { sceneReadyToken, RenderGraph::InputType::Token },
+            { sceneColor, RenderGraph::InputType::ShaderResource },
+        },
+        {
+            { DemoResourceIds::FrameGenerationHudLess, RenderGraph::OutputType::RenderTarget },
+            { DemoResourceIds::FrameGenerationHudLessFinishedToken, RenderGraph::OutputType::Token },
+        },
+        [resources, sceneColor](const RenderGraph::RenderContext& context, CommandList& commandList)
+        {
+            CommandContext commandContext(commandList);
+            commandContext.SetTexture(
+                *resources.DisplayCompositeShader,
+                "SceneColor",
+                ShaderResourceView(context.GetTexture(sceneColor)));
+            commandContext.BindPipeline(*resources.DisplayCompositeShader);
+            commandContext.BindDescriptorSet(resources.DisplayCompositeShader->GetDescriptorSet());
+            resources.DisplayBlitMesh->Draw(commandList);
+        });
+}
+//Modify End
+
 void RaytracingDemo::PresentDisplayOutput()
 {
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
 //Modify Begin:2026-08-07 by BestHui
+    if (m_RenderGraphFrameState->FrameGenerationEnabled)
+    {
+        const std::array frameProcessorResources = {
+            DemoResourceIds::DepthBuffer,
+            DemoResourceIds::MotionVector,
+        };
+        m_RenderGraph->PresentWithExternalFrameProcessor(
+            PWindow,
+            DemoResourceIds::FrameGenerationHudLess,
+            frameProcessorResources,
+            [this](CommandList& commandList, const std::shared_ptr<Texture>& hudLessColor)
+            {
+                m_FrameGenerationInputs.HudLessColor = hudLessColor;
+                m_DLSS.TagFrameGenerationResources(commandList, m_FrameGenerationInputs);
+            },
+            [this](CommandList& commandList)
+            {
+                DrawPostBloomOverlays(commandList);
+            },
+            [this]()
+            {
+                m_DLSS.MarkFrameGenerationRenderSubmissionEnd();
+                m_DLSS.MarkFrameGenerationPresentStart();
+            },
+            [this]()
+            {
+                m_DLSS.MarkFrameGenerationPresentEnd();
+            });
+        return;
+    }
+
     const RenderGraph::ResourceId displayColor = m_RenderGraphFrameState->DLSSEnabled
         ? DemoResourceIds::DLSSOutput
         : DemoResourceIds::SceneColor;

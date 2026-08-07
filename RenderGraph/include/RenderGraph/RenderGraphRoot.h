@@ -2,6 +2,7 @@
 
 #include <map>
 #include <memory>
+#include <span>
 #include <vector>
 
 #include <DX12Library/CommandQueue.h>
@@ -70,6 +71,16 @@ namespace RenderGraph
             ResourceId resourceId,
             const std::function<void(CommandList&, const std::shared_ptr<Texture>&)>& blitCallback,
             const std::function<void(CommandList&)>& overlayCallback);
+//Modify Begin:2026-08-07 by BestHui
+        void PresentWithExternalFrameProcessor(
+            const std::shared_ptr<Window>& pWindow,
+            ResourceId displayResourceId,
+            std::span<const ResourceId> processorResourceIds,
+            const std::function<void(CommandList&, const std::shared_ptr<Texture>&)>& processorCallback,
+            const std::function<void(CommandList&)>& overlayCallback,
+            const std::function<void()>& beforePresentCallback,
+            const std::function<void()>& afterPresentCallback);
+//Modify End
         void CopyTexture(const RenderMetadata& renderMetadata, ResourceId sourceId, ResourceId destinationId, bool waitForCompletion = false);
         void DrawToTexture(const RenderMetadata& renderMetadata, ResourceId resourceId, const std::function<void(CommandList&)>& drawCallback);
         void TransitionTexture(const RenderMetadata& renderMetadata, ResourceId resourceId, D3D12_RESOURCE_STATES stateAfter, bool waitForCompletion = false);

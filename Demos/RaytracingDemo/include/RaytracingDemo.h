@@ -131,7 +131,9 @@ private:
     void PresentDisplayOutput();
 //Modify End
     void ResetAccumulation(bool resetDenoiserHistory = true, bool resetReSTIRDIHistory = true);
-    bool IsDenoiserEnabled() const { return m_Denoisers.IsEnabled(); }
+//Modify Begin:2026-08-07 by BestHui
+    bool IsDenoiserEnabled() const { return m_Denoisers.IsEnabled() && !(m_DLSS.IsEnabled() && m_DLSS.IsRayReconstructionEnabled()); }
+//Modify End
     Camera& GetSceneCamera() { return m_Scene.GetRuntimeCamera(); }
     const Camera& GetSceneCamera() const { return m_Scene.GetRuntimeCamera(); }
     DenoiserController& GetDenoisers() { return m_Denoisers; }
@@ -168,6 +170,8 @@ private:
     bool m_RenderGraphCudaBloomEnabled = false;
 //Modify Begin:2026-08-07 by BestHui
     bool m_RenderGraphDLSSEnabled = false;
+    bool m_RenderGraphRayReconstructionEnabled = false;
+    bool m_RenderGraphFrameGenerationEnabled = false;
 //Modify End
 //Modify Begin:2026-08-03 by BestHui
     bool m_RenderGraphAsyncComputeEnabled = false;
@@ -191,6 +195,8 @@ private:
     FrameworkDeviceContext m_FrameworkDeviceContext;
 //Modify Begin:2026-08-07 by BestHui
     DLSS m_DLSS;
+    DLSSFrameGenerationInputs m_FrameGenerationInputs;
+    std::shared_ptr<ComputeShader> m_DLSSRayReconstructionPrepareShader;
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
     ShaderVariantManager m_ShaderVariants;

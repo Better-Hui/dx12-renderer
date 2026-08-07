@@ -444,6 +444,34 @@ void RaytracingDemo::OnImGui()
                 ResetAccumulation();
             }
 
+            if (m_DLSS.IsRayReconstructionSupported())
+            {
+                bool rayReconstructionEnabled = m_DLSS.IsRayReconstructionEnabled();
+                if (ImGui::Checkbox("DLSS Ray Reconstruction", &rayReconstructionEnabled))
+                {
+                    m_DLSS.SetRayReconstructionEnabled(rayReconstructionEnabled);
+                    ResetAccumulation();
+                }
+            }
+            else
+            {
+                ImGui::TextDisabled("DLSS Ray Reconstruction unavailable on the active adapter.");
+            }
+
+            if (m_DLSS.IsFrameGenerationSupported())
+            {
+                bool frameGenerationEnabled = m_DLSS.IsFrameGenerationEnabled();
+                if (ImGui::Checkbox("DLSS Frame Generation", &frameGenerationEnabled))
+                {
+                    m_DLSS.SetFrameGenerationEnabled(frameGenerationEnabled);
+                    ResetAccumulation();
+                }
+            }
+            else
+            {
+                ImGui::TextDisabled("DLSS Frame Generation requires compatible hardware, driver, and Hardware-accelerated GPU Scheduling.");
+            }
+
             if (m_DLSS.IsEnabled())
             {
                 const DLSSOptimalSettings settings = m_DLSS.GetOptimalSettings(

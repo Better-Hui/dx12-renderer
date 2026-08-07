@@ -6,6 +6,9 @@
 #include "CommandQueue.h"
 #include "Game.h"
 #include "DescriptorAllocator.h"
+//Modify Begin:2026-08-07 by BestHui
+#include "StreamlineRuntime.h"
+//Modify End
 #include "Window.h"
 #include <ctime>
 //Modify Begin:2026-07-28 by BestHui

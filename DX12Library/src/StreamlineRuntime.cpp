@@ -91,6 +91,13 @@ bool StreamlineRuntime::Initialize(ID3D12Device2* nativeDevice, const std::wstri
         return false;
     }
 
+    LUID adapterLuid = nativeDevice->GetAdapterLuid();
+    sl::AdapterInfo adapterInfo{};
+    adapterInfo.deviceLUID = reinterpret_cast<uint8_t*>(&adapterLuid);
+    adapterInfo.deviceLUIDSizeInBytes = sizeof(adapterLuid);
+    m_RayReconstructionSupported = slIsFeatureSupported(sl::kFeatureDLSS_RR, adapterInfo) == sl::Result::eOk;
+    m_FrameGenerationSupported = slIsFeatureSupported(sl::kFeatureDLSS_G, adapterInfo) == sl::Result::eOk;
+
     m_StatusMessage = "Streamline initialized with manual D3D12 hooks.";
     return true;
 }
@@ -103,6 +110,8 @@ void StreamlineRuntime::Shutdown()
     }
 
     m_FrameGenerationEnabled = false;
+    m_RayReconstructionSupported = false;
+    m_FrameGenerationSupported = false;
     m_ProxyDevice = nullptr;
     const sl::Result shutdownResult = slShutdown();
     if (shutdownResult != sl::Result::eOk)
@@ -117,6 +126,11 @@ bool StreamlineRuntime::SetFrameGenerationEnabled(const bool enabled)
     if (!m_Initialized)
     {
         m_StatusMessage = "Frame Generation requires an initialized Streamline runtime.";
+        return false;
+    }
+    if (enabled && !m_FrameGenerationSupported)
+    {
+        m_StatusMessage = "DLSS Frame Generation is not supported by the active adapter, driver, or operating-system configuration.";
         return false;
     }
     if (m_FrameGenerationEnabled == enabled)

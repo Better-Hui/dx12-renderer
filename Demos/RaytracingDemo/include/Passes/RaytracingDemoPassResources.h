@@ -135,6 +135,7 @@ struct RaytracingDemoPassResources
 //Modify End
 //Modify Begin:2026-08-07 by BestHui
     DLSS& Dlss;
+    std::shared_ptr<ComputeShader> DLSSRayReconstructionPrepareShader;
 //Modify End
     DenoiserController& Denoisers;
     CudaBloomPass& CudaBloom;
@@ -180,6 +181,8 @@ struct RaytracingDemoFrameState
     bool SkyboxEnabled = false;
 //Modify Begin:2026-08-07 by BestHui
     bool DLSSEnabled = false;
+    bool RayReconstructionEnabled = false;
+    bool FrameGenerationEnabled = false;
     DLSSMode DlssMode = DLSSMode::Disabled;
 //Modify End
     int DebugLightingTextureTarget = 0;

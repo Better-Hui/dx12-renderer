@@ -2,7 +2,10 @@
 
 namespace RaytracingDemoRenderGraph
 {
-    std::vector<RenderGraph::TextureDescription> CreateTextureDescriptions(const bool includeDLSS)
+    std::vector<RenderGraph::TextureDescription> CreateTextureDescriptions(
+        const bool includeDLSS,
+        const bool includeFrameGeneration,
+        const bool includeRayReconstruction)
     {
         const RenderGraph::RenderMetadataExpression<uint32_t> renderWidthExpression = [](const RenderGraph::RenderMetadata& metadata) { return metadata.m_ScreenWidth; };
         const RenderGraph::RenderMetadataExpression<uint32_t> renderHeightExpression = [](const RenderGraph::RenderMetadata& metadata) { return metadata.m_ScreenHeight; };
@@ -51,6 +54,32 @@ namespace RaytracingDemoRenderGraph
                 D3D12_HEAP_FLAG_NONE,
                 true);
         }
+        if (includeRayReconstruction)
+        {
+            textureDescriptions.emplace_back(
+                ResourceIds::DLSSNormalRoughness,
+                renderWidthExpression,
+                renderHeightExpression,
+                DLSS_NORMAL_ROUGHNESS_FORMAT,
+                GBUFFER_CLEAR_COLOR,
+                RenderGraph::ResourceInitAction::Discard,
+                D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                D3D12_HEAP_FLAG_NONE,
+                true);
+        }
+        if (includeFrameGeneration)
+        {
+            textureDescriptions.emplace_back(
+                ResourceIds::FrameGenerationHudLess,
+                displayWidthExpression,
+                displayHeightExpression,
+                OUTPUT_FORMAT,
+                OUTPUT_CLEAR_COLOR,
+                RenderGraph::ResourceInitAction::Discard,
+                D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET,
+                D3D12_HEAP_FLAG_NONE,
+                true);
+        }
         return textureDescriptions;
 //Modify End
     }
@@ -60,7 +89,9 @@ namespace RaytracingDemoRenderGraph
         return {};
     }
 
-    std::vector<RenderGraph::TokenDescription> CreateTokenDescriptions(const bool includeDLSS)
+    std::vector<RenderGraph::TokenDescription> CreateTokenDescriptions(
+        const bool includeDLSS,
+        const bool includeFrameGeneration)
     {
 //Modify Begin:2026-08-07 by BestHui
         std::vector<RenderGraph::TokenDescription> tokenDescriptions = {
@@ -78,6 +109,10 @@ namespace RaytracingDemoRenderGraph
         if (includeDLSS)
         {
             tokenDescriptions.emplace_back(ResourceIds::DLSSFinishedToken);
+        }
+        if (includeFrameGeneration)
+        {
+            tokenDescriptions.emplace_back(ResourceIds::FrameGenerationHudLessFinishedToken);
         }
         return tokenDescriptions;
 //Modify End

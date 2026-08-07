@@ -61,6 +61,12 @@ namespace RaytracingDemoPasses
             const RaytracingDemoPassResources& resources,
             const RaytracingDemoPassConfig& config,
             RenderGraph::ResourceId sceneReadyToken);
+        static std::unique_ptr<RenderGraph::RenderPass> CreateDLSSRayReconstructionPreparationPass(
+            const RaytracingDemoPassResources& resources);
+        static std::unique_ptr<RenderGraph::RenderPass> CreateFrameGenerationHudLessPass(
+            const RaytracingDemoPassResources& resources,
+            RenderGraph::ResourceId sceneColor,
+            RenderGraph::ResourceId sceneReadyToken);
 //Modify End
 //Modify End
     };

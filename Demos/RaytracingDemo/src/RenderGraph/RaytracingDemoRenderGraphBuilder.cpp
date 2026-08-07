@@ -6,6 +6,7 @@
 #include <RaytracingDemo.h>
 #include <RenderGraph/RenderPass.h>
 
+#include <utility>
 #include <vector>
 
 std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::Create(RaytracingDemo& demo)
@@ -124,11 +125,34 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
     RenderGraph::ResourceId displayColor = RaytracingDemoRenderGraph::ResourceIds::SceneColor;
     if (frameState.DLSSEnabled)
     {
+        if (frameState.RayReconstructionEnabled)
+        {
+            renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDLSSRayReconstructionPreparationPass(resources));
+        }
         renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDLSSPass(resources, config, sceneReadyToken));
         sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::DLSSFinishedToken;
         displayColor = RaytracingDemoRenderGraph::ResourceIds::DLSSOutput;
     }
+    if (frameState.FrameGenerationEnabled)
+    {
+        renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateFrameGenerationHudLessPass(
+            resources,
+            displayColor,
+            sceneReadyToken));
+        sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::FrameGenerationHudLessFinishedToken;
+        displayColor = RaytracingDemoRenderGraph::ResourceIds::FrameGenerationHudLess;
+    }
 //Modify End
+
+    std::vector<RenderGraph::ResourceId> externalOutputs = {
+        displayColor,
+        sceneReadyToken,
+    };
+    if (frameState.FrameGenerationEnabled)
+    {
+        externalOutputs.emplace_back(RaytracingDemoRenderGraph::ResourceIds::DepthBuffer);
+        externalOutputs.emplace_back(RaytracingDemoRenderGraph::ResourceIds::MotionVector);
+    }
 
     return std::make_unique<RenderGraph::RenderGraphRoot>(
         resources.Device,
@@ -136,15 +160,17 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
         resources.AsyncComputeQueue,
         std::move(renderPasses),
 //Modify Begin:2026-08-07 by BestHui
-        RaytracingDemoRenderGraph::CreateTextureDescriptions(frameState.DLSSEnabled),
+        RaytracingDemoRenderGraph::CreateTextureDescriptions(
+            frameState.DLSSEnabled,
+            frameState.FrameGenerationEnabled,
+            frameState.DLSSEnabled && frameState.RayReconstructionEnabled),
 //Modify End
         RaytracingDemoRenderGraph::CreateBufferDescriptions(),
 //Modify Begin:2026-08-07 by BestHui
-        RaytracingDemoRenderGraph::CreateTokenDescriptions(frameState.DLSSEnabled),
+        RaytracingDemoRenderGraph::CreateTokenDescriptions(
+            frameState.DLSSEnabled,
+            frameState.FrameGenerationEnabled),
 //Modify End
-        std::vector<RenderGraph::ResourceId>{
-            displayColor,
-            sceneReadyToken
-        });
+        std::move(externalOutputs));
 }
 //Modify End

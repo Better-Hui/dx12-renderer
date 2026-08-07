@@ -48,7 +48,11 @@ RaytracingDemoCameraConstants BuildPassCameraConstants(
     camera.AccumulationFrameIndex = accumulationEnabled ? frameState.AccumulationFrameIndex : 0u;
     camera.AccumulationEnabled = accumulationEnabled ? 1u : 0u;
     resources.Denoisers.FillCameraConstants(camera.NRDDenoiserMode, camera.NRDReblurHitDistanceParameters);
-    camera.DenoiserEnabled = static_cast<uint32_t>(resources.Denoisers.GetAlgorithm());
+//Modify Begin:2026-08-07 by BestHui
+    camera.DenoiserEnabled = frameState.RayReconstructionEnabled
+        ? 0u
+        : static_cast<uint32_t>(resources.Denoisers.GetAlgorithm());
+//Modify End
     const bool directLightingUsesReSTIRDI = restirDIEnabled;
     camera.DirectLightingActive =
         (directLightingTechnique == RaytracingDemoLightingTechnique::PathTracing || directLightingUsesReSTIRDI) ? 1u : 0u;

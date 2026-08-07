@@ -20,6 +20,8 @@ public:
     void Shutdown();
 
     [[nodiscard]] bool IsInitialized() const { return m_Initialized; }
+    [[nodiscard]] bool IsRayReconstructionSupported() const { return m_RayReconstructionSupported; }
+    [[nodiscard]] bool IsFrameGenerationSupported() const { return m_FrameGenerationSupported; }
     [[nodiscard]] bool IsFrameGenerationEnabled() const { return m_FrameGenerationEnabled; }
     [[nodiscard]] const std::string& GetStatusMessage() const { return m_StatusMessage; }
 
@@ -44,6 +46,8 @@ private:
 
     ID3D12Device2* m_ProxyDevice = nullptr;
     bool m_Initialized = false;
+    bool m_RayReconstructionSupported = false;
+    bool m_FrameGenerationSupported = false;
     bool m_FrameGenerationEnabled = false;
     std::string m_StatusMessage;
 };

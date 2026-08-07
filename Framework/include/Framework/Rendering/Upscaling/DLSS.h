@@ -42,8 +42,7 @@ struct DLSSExecutionInputs
     std::shared_ptr<Texture> Output;
     std::shared_ptr<Texture> DiffuseAlbedo;
     std::shared_ptr<Texture> SpecularAlbedo;
-    std::shared_ptr<Texture> Normals;
-    std::shared_ptr<Texture> Roughness;
+    std::shared_ptr<Texture> NormalRoughness;
     uint32_t RenderWidth = 1;
     uint32_t RenderHeight = 1;
     uint32_t DisplayWidth = 1;
@@ -59,6 +58,26 @@ struct DLSSExecutionInputs
     DirectX::XMMATRIX PreviousViewProjection = DirectX::XMMatrixIdentity();
 };
 
+//Modify Begin:2026-08-07 by BestHui
+struct DLSSFrameGenerationInputs
+{
+    std::shared_ptr<Texture> Depth;
+    std::shared_ptr<Texture> MotionVectors;
+    std::shared_ptr<Texture> HudLessColor;
+    uint32_t RenderWidth = 1;
+    uint32_t RenderHeight = 1;
+    uint32_t DisplayWidth = 1;
+    uint32_t DisplayHeight = 1;
+    uint32_t FrameIndex = 0;
+    bool HasPreviousViewProjection = false;
+    DirectX::XMFLOAT2 JitterOffset = { 0.0f, 0.0f };
+    DirectX::XMMATRIX View = DirectX::XMMatrixIdentity();
+    DirectX::XMMATRIX Projection = DirectX::XMMatrixIdentity();
+    DirectX::XMMATRIX ViewProjection = DirectX::XMMatrixIdentity();
+    DirectX::XMMATRIX PreviousViewProjection = DirectX::XMMatrixIdentity();
+};
+//Modify End
+
 class DLSS final
 {
 public:
@@ -70,6 +89,8 @@ public:
 
     [[nodiscard]] bool IsSupported() const { return m_Supported; }
     [[nodiscard]] bool IsEnabled() const { return m_Supported && m_Mode != DLSSMode::Disabled; }
+    [[nodiscard]] bool IsRayReconstructionSupported() const;
+    [[nodiscard]] bool IsFrameGenerationSupported() const;
     [[nodiscard]] bool IsRayReconstructionEnabled() const { return m_RayReconstructionEnabled; }
     [[nodiscard]] bool IsFrameGenerationEnabled() const { return m_FrameGenerationEnabled; }
     [[nodiscard]] DLSSMode GetMode() const { return m_Mode; }
@@ -83,6 +104,14 @@ public:
     void InvalidateHistory();
     void OnResourcesRecreated();
     void Execute(CommandList& commandList, const DLSSExecutionInputs& inputs);
+//Modify Begin:2026-08-07 by BestHui
+    void BeginFrameGeneration(uint32_t frameIndex);
+    void PrepareFrameGeneration(const DLSSFrameGenerationInputs& inputs);
+    void TagFrameGenerationResources(CommandList& commandList, const DLSSFrameGenerationInputs& inputs);
+    void MarkFrameGenerationRenderSubmissionEnd();
+    void MarkFrameGenerationPresentStart();
+    void MarkFrameGenerationPresentEnd();
+//Modify End
 
 private:
     struct InternalState;
@@ -90,6 +119,10 @@ private:
     [[nodiscard]] bool Initialize(const DLSSInitializationDesc& initializationDesc);
     [[nodiscard]] bool EnsureFeature(CommandList& commandList, const DLSSExecutionInputs& inputs);
     void ExecuteRayReconstruction(CommandList& commandList, const DLSSExecutionInputs& inputs);
+//Modify Begin:2026-08-07 by BestHui
+    void* AcquireStreamlineFrameToken(uint32_t frameIndex);
+    void ReleaseStreamlineFrameToken();
+//Modify End
     void ReleaseFeature();
     void Shutdown();
 
@@ -101,6 +134,11 @@ private:
     bool m_HistoryReset = true;
     bool m_RayReconstructionEnabled = false;
     bool m_FrameGenerationEnabled = false;
+//Modify Begin:2026-08-07 by BestHui
+    bool m_FrameGenerationPrepared = false;
+    uint32_t m_ActiveStreamlineFrameIndex = UINT32_MAX;
+    void* m_ActiveStreamlineFrameToken = nullptr;
+//Modify End
     std::string m_StatusMessage;
 };
 //Modify End
