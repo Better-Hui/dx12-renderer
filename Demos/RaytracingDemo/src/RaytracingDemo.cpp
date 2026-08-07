@@ -75,6 +75,33 @@ namespace
             std::max(resourceCount, resourceCapacity)));
     }
 
+//Modify Begin:2026-08-07 by BestHui
+    DLSSMode ParseDLSSMode(const char* value)
+    {
+        if (value == nullptr || std::strcmp(value, "0") == 0 || std::strcmp(value, "off") == 0)
+        {
+            return DLSSMode::Disabled;
+        }
+        if (std::strcmp(value, "dlaa") == 0)
+        {
+            return DLSSMode::DLAA;
+        }
+        if (std::strcmp(value, "balanced") == 0)
+        {
+            return DLSSMode::Balanced;
+        }
+        if (std::strcmp(value, "performance") == 0)
+        {
+            return DLSSMode::Performance;
+        }
+        if (std::strcmp(value, "ultra-performance") == 0)
+        {
+            return DLSSMode::UltraPerformance;
+        }
+        return DLSSMode::Quality;
+    }
+//Modify End
+
 //Modify Begin:2026-08-03 by BestHui
     std::filesystem::path GetScenePath()
     {
@@ -147,6 +174,9 @@ namespace
         GpuTiming,
         TimingCapture,
         DumpTiming,
+//Modify Begin:2026-08-07 by BestHui
+        DLSS,
+//Modify End
         MatrixCase
     };
 
@@ -163,6 +193,7 @@ namespace
         bool StressSpheres = false;
         bool Skybox = false;
         bool Accumulation = false;
+        DLSSMode DlssMode = DLSSMode::Disabled;
         std::string Name;
     };
 
@@ -182,6 +213,26 @@ namespace
         case RaytracingDemoLightingTechnique::None:
         default:
             return "none";
+        }
+    }
+
+    const char* GetRuntimeAutomationDLSSModeName(const DLSSMode mode)
+    {
+        switch (mode)
+        {
+        case DLSSMode::DLAA:
+            return "dlaa";
+        case DLSSMode::Quality:
+            return "quality";
+        case DLSSMode::Balanced:
+            return "balanced";
+        case DLSSMode::Performance:
+            return "performance";
+        case DLSSMode::UltraPerformance:
+            return "ultra-performance";
+        case DLSSMode::Disabled:
+        default:
+            return "off";
         }
     }
 
@@ -213,6 +264,10 @@ namespace
             const std::vector<RaytracingDemoLightingTechnique> indirectTechniques = {
                 RaytracingDemoLightingTechnique::None,
                 RaytracingDemoLightingTechnique::PathTracing,
+            };
+            const std::vector<DLSSMode> dlssModes = {
+                DLSSMode::Disabled,
+                DLSSMode::Quality,
             };
 
             std::vector<RuntimeAutomationMatrixCase> result;
@@ -248,31 +303,36 @@ namespace
                                             {
                                                 for (const bool accumulation : { false, true })
                                                 {
-                                                    RuntimeAutomationMatrixCase testCase;
-                                                    testCase.Backend = backend;
-                                                    testCase.DirectLighting = directLighting;
-                                                    testCase.IndirectLighting = indirectLighting;
-                                                    testCase.AsyncCompute = asyncCompute;
-                                                    testCase.ParallelDirectCommandRecording = parallelDirectCommandRecording;
-                                                    testCase.UseMeshletGBuffer = meshletMode.Enabled;
-                                                    testCase.UseTaskShaderMeshlets = meshletMode.TaskShader;
-                                                    testCase.SoftShadows = softShadows;
-                                                    testCase.StressSpheres = stressSpheres;
-                                                    testCase.Skybox = skybox;
-                                                    testCase.Accumulation = accumulation;
-                                                    testCase.Name =
-                                                        "matrix#" + std::to_string(caseIndex++) +
-                                                        " backend=" + GetRuntimeAutomationBackendName(backend) +
-                                                        " meshlet=" + meshletMode.Name +
-                                                        " direct=" + GetRuntimeAutomationLightingName(directLighting) +
-                                                        " indirect=" + GetRuntimeAutomationLightingName(indirectLighting) +
-                                                        " async=" + std::to_string(asyncCompute) +
-                                                        " parallelrecording=" + std::to_string(parallelDirectCommandRecording) +
-                                                        " soft=" + std::to_string(softShadows) +
-                                                        " stress=" + std::to_string(stressSpheres) +
-                                                        " skybox=" + std::to_string(skybox) +
-                                                        " accumulation=" + std::to_string(accumulation);
-                                                    result.push_back(std::move(testCase));
+                                                    for (const DLSSMode dlssMode : dlssModes)
+                                                    {
+                                                        RuntimeAutomationMatrixCase testCase;
+                                                        testCase.Backend = backend;
+                                                        testCase.DirectLighting = directLighting;
+                                                        testCase.IndirectLighting = indirectLighting;
+                                                        testCase.AsyncCompute = asyncCompute;
+                                                        testCase.ParallelDirectCommandRecording = parallelDirectCommandRecording;
+                                                        testCase.UseMeshletGBuffer = meshletMode.Enabled;
+                                                        testCase.UseTaskShaderMeshlets = meshletMode.TaskShader;
+                                                        testCase.SoftShadows = softShadows;
+                                                        testCase.StressSpheres = stressSpheres;
+                                                        testCase.Skybox = skybox;
+                                                        testCase.Accumulation = accumulation;
+                                                        testCase.DlssMode = dlssMode;
+                                                        testCase.Name =
+                                                            "matrix#" + std::to_string(caseIndex++) +
+                                                            " backend=" + GetRuntimeAutomationBackendName(backend) +
+                                                            " meshlet=" + meshletMode.Name +
+                                                            " direct=" + GetRuntimeAutomationLightingName(directLighting) +
+                                                            " indirect=" + GetRuntimeAutomationLightingName(indirectLighting) +
+                                                            " async=" + std::to_string(asyncCompute) +
+                                                            " parallelrecording=" + std::to_string(parallelDirectCommandRecording) +
+                                                            " soft=" + std::to_string(softShadows) +
+                                                            " stress=" + std::to_string(stressSpheres) +
+                                                            " skybox=" + std::to_string(skybox) +
+                                                            " accumulation=" + std::to_string(accumulation) +
+                                                            " dlss=" + GetRuntimeAutomationDLSSModeName(dlssMode);
+                                                        result.push_back(std::move(testCase));
+                                                    }
                                                 }
                                             }
                                         }
@@ -308,6 +368,14 @@ namespace
             makeStep(Action::StressSpheres, 0u, "stress=0"),
             makeStep(Action::MeshletGBuffer, 0u, "meshlet=0"),
             makeStep(Action::MeshletGBuffer, 1u, "meshlet=1"),
+//Modify Begin:2026-08-07 by BestHui
+            makeStep(Action::DLSS, static_cast<uint32_t>(DLSSMode::Disabled), "dlss=off"),
+            makeStep(Action::DLSS, static_cast<uint32_t>(DLSSMode::DLAA), "dlss=dlaa"),
+            makeStep(Action::DLSS, static_cast<uint32_t>(DLSSMode::Quality), "dlss=quality"),
+            makeStep(Action::DLSS, static_cast<uint32_t>(DLSSMode::Balanced), "dlss=balanced"),
+            makeStep(Action::DLSS, static_cast<uint32_t>(DLSSMode::Performance), "dlss=performance"),
+            makeStep(Action::DLSS, static_cast<uint32_t>(DLSSMode::UltraPerformance), "dlss=ultra-performance"),
+//Modify End
             makeStep(Action::MeshletTaskShader, 0u, "meshletbackend=indirect"),
             makeStep(Action::MeshletTaskShader, 1u, "meshletbackend=task"),
             makeStep(Action::DirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::PathTracing), "direct=pathtracing"),
@@ -380,6 +448,9 @@ RaytracingDemo::RaytracingDemo(const std::wstring& name, const int width, const 
     , m_Width(width)
     , m_Height(height)
     , m_FrameworkDeviceContext(CreateFrameworkDeviceContext(Application::Get()))
+//Modify Begin:2026-08-07 by BestHui
+    , m_DLSS(m_FrameworkDeviceContext)
+//Modify End
     , m_PathTracingPipelines(m_FrameworkDeviceContext)
 //Modify Begin:2026-07-30 by BestHui
     , m_DirectLightingReSTIRDIPass(
@@ -451,6 +522,17 @@ RaytracingDemo::RaytracingDemo(const std::wstring& name, const int width, const 
         m_Denoisers.SetAlgorithmFromName(denoiserMode);
     }
     std::free(denoiserMode);
+
+//Modify Begin:2026-08-07 by BestHui
+    char* dlssMode = nullptr;
+    size_t dlssModeLength = 0;
+    _dupenv_s(&dlssMode, &dlssModeLength, "RAYTRACING_DEMO_DLSS");
+    if (dlssMode != nullptr)
+    {
+        m_DLSS.SetMode(ParseDLSSMode(dlssMode));
+    }
+    std::free(dlssMode);
+//Modify End
 
 //Modify Begin:2026-07-30 by BestHui
     char* asyncCompute = nullptr;
@@ -648,6 +730,7 @@ void RaytracingDemo::ApplyRuntimeAutomationMatrixCase(const uint32_t caseIndex)
     m_StressTestSpheresEnabled = testCase.StressSpheres;
     m_SkyboxEnabled = testCase.Skybox;
     m_AccumulationEnabled = testCase.Accumulation;
+    m_DLSS.SetMode(testCase.DlssMode);
     m_DebugMeshletClusters = false;
     m_DebugLightingTextureTarget = 0;
     m_DebugTextureTarget = 0;
@@ -735,6 +818,12 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
     case RuntimeAutomationAction::DumpTiming:
         m_RenderGraphTimingHistory.DumpCsv();
         break;
+//Modify Begin:2026-08-07 by BestHui
+    case RuntimeAutomationAction::DLSS:
+        m_DLSS.SetMode(static_cast<DLSSMode>(value));
+        ResetAccumulation();
+        break;
+//Modify End
     case RuntimeAutomationAction::MatrixCase:
         ApplyRuntimeAutomationMatrixCase(value);
         break;
@@ -1164,6 +1253,9 @@ void RaytracingDemo::RebuildRenderGraph()
 //Modify Begin:2026-07-28 by BestHui
         m_CudaBloom.ReleaseInteropResource();
 //Modify End
+//Modify Begin:2026-08-07 by BestHui
+        m_DLSS.OnResourcesRecreated();
+//Modify End
     }
 //Modify Begin:2026-07-30 by BestHui
     EnsureRayTracingPipelines();
@@ -1184,6 +1276,9 @@ void RaytracingDemo::RebuildRenderGraph()
 //Modify End
     m_RenderGraphDenoiserEnabled = IsDenoiserEnabled();
     m_RenderGraphCudaBloomEnabled = m_CudaBloom.IsEnabled();
+//Modify Begin:2026-08-07 by BestHui
+    m_RenderGraphDLSSEnabled = m_DLSS.IsEnabled();
+//Modify End
 //Modify Begin:2026-08-03 by BestHui
     m_RenderGraphAsyncComputeEnabled = m_AsyncComputeEnabled;
     m_RenderGraphPathTracingBackend = m_PathTracingBackend;
@@ -1207,6 +1302,9 @@ void RaytracingDemo::EnsureRenderGraphTopology()
     if (m_RenderGraph == nullptr ||
         m_RenderGraphDenoiserEnabled != IsDenoiserEnabled() ||
         m_RenderGraphCudaBloomEnabled != m_CudaBloom.IsEnabled()
+//Modify Begin:2026-08-07 by BestHui
+        || m_RenderGraphDLSSEnabled != m_DLSS.IsEnabled()
+//Modify End
 //Modify Begin:2026-08-03 by BestHui
         || m_RenderGraphAsyncComputeEnabled != m_AsyncComputeEnabled
         || m_RenderGraphPathTracingBackend != m_PathTracingBackend
@@ -1243,6 +1341,10 @@ void RaytracingDemo::ResetAccumulation(bool resetDenoiserHistory, bool resetReST
     if (resetDenoiserHistory)
     {
         m_Denoisers.ResetHistory();
+//Modify Begin:2026-08-07 by BestHui
+        m_DLSS.InvalidateHistory();
+        m_HasPreviousViewProjection = false;
+//Modify End
     }
 }
 
@@ -1299,6 +1401,9 @@ RaytracingDemoPassResources RaytracingDemo::CreatePassResources()
         m_DirectLightingReSTIRDIPass,
 //Modify End
 //Modify End
+//Modify Begin:2026-08-07 by BestHui
+        m_DLSS,
+//Modify End
         m_Denoisers,
         m_CudaBloom,
         m_GBufferShader,
@@ -1344,8 +1449,27 @@ void RaytracingDemo::UpdateRenderGraphFrameState()
     state.DebugLightingTextureTarget = m_DebugLightingTextureTarget;
     state.DebugTextureTarget = m_DebugTextureTarget;
     state.MaxBounces = m_MaxBounces;
-    state.Width = static_cast<uint32_t>(m_Width);
-    state.Height = static_cast<uint32_t>(m_Height);
+//Modify Begin:2026-08-07 by BestHui
+    const uint32_t displayWidth = static_cast<uint32_t>((std::max)(m_Width, 1));
+    const uint32_t displayHeight = static_cast<uint32_t>((std::max)(m_Height, 1));
+    const DLSSOptimalSettings dlssSettings = m_DLSS.GetOptimalSettings(displayWidth, displayHeight);
+    state.DLSSEnabled = m_DLSS.IsEnabled();
+    state.DlssMode = m_DLSS.GetMode();
+    state.Width = dlssSettings.RenderWidth;
+    state.Height = dlssSettings.RenderHeight;
+    state.DisplayWidth = displayWidth;
+    state.DisplayHeight = displayHeight;
+    state.DLSSSharpness = dlssSettings.Sharpness;
+    state.DLSSJitterOffset = m_DLSS.GetJitterOffset(m_FrameIndex);
+    state.View = GetSceneCamera().GetViewMatrix();
+    state.Projection = GetSceneCamera().GetProjectionMatrix();
+    if (state.DLSSEnabled)
+    {
+        state.Projection.r[2].m128_f32[0] += 2.0f * state.DLSSJitterOffset.x / static_cast<float>(state.Width);
+        state.Projection.r[2].m128_f32[1] -= 2.0f * state.DLSSJitterOffset.y / static_cast<float>(state.Height);
+    }
+    state.ViewProjection = state.View * state.Projection;
+//Modify End
     state.AccumulationEnabled = m_AccumulationEnabled;
     state.FrameIndex = m_FrameIndex;
     state.AccumulationFrameIndex = m_AccumulationFrameIndex;
@@ -1424,16 +1548,18 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     ApplyStressTestSpheresState();
 //Modify End
 
+//Modify Begin:2026-08-07 by BestHui
+    UpdateRenderGraphFrameState();
     RenderGraph::RenderMetadata metadata;
-    metadata.m_ScreenWidth = static_cast<uint32_t>(m_Width);
-    metadata.m_ScreenHeight = static_cast<uint32_t>(m_Height);
+    metadata.m_ScreenWidth = m_RenderGraphFrameState->Width;
+    metadata.m_ScreenHeight = m_RenderGraphFrameState->Height;
+    metadata.m_DisplayWidth = m_RenderGraphFrameState->DisplayWidth;
+    metadata.m_DisplayHeight = m_RenderGraphFrameState->DisplayHeight;
+//Modify End
     metadata.m_FrameIndex = m_FrameIndex;
     metadata.m_Time = e.TotalTime;
 
 //Modify Begin:2026-07-28 by BestHui
-//Modify Begin:2026-07-30 by BestHui
-    UpdateRenderGraphFrameState();
-//Modify End
     EnsureRenderGraphTopology();
 //Modify End
 //Modify Begin:2026-07-29 by BestHui
@@ -1497,6 +1623,8 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
         m_DirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRDI;
 //Modify End
 
-    m_PreviousViewProjection = GetSceneCamera().GetViewMatrix() * GetSceneCamera().GetProjectionMatrix();
+//Modify Begin:2026-08-07 by BestHui
+    m_PreviousViewProjection = m_RenderGraphFrameState->ViewProjection;
+//Modify End
     m_HasPreviousViewProjection = true;
 }

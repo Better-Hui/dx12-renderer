@@ -3,6 +3,7 @@
 
 #include "RenderGraphExecutionPlan.h"
 #include "RenderPass.h"
+#include "RenderGraphTaskScheduler.h"
 #include "RenderTargetInfo.h"
 
 #include <map>
@@ -66,6 +67,9 @@ namespace RenderGraph
         RenderGraphQueueScheduler& m_QueueScheduler;
         RenderGraphResourceStateTracker& m_ResourceStateTracker;
         RenderGraphProfiler& m_Profiler;
+//Modify Begin:2026-08-07 by BestHui
+        RenderGraphTaskScheduler m_ParallelRecordingTaskScheduler;
+//Modify End
     };
 }
 //Modify End

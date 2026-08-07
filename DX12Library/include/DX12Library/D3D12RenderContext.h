@@ -4,6 +4,7 @@
 #include <wrl.h>
 
 #include <memory>
+#include <functional>
 
 class CommandQueue;
 
@@ -29,10 +30,16 @@ public:
 
     Microsoft::WRL::ComPtr<ID3D12Device2> GetDevice() const;
     std::shared_ptr<CommandQueue> GetCommandQueue(D3D12_COMMAND_LIST_TYPE type) const;
+//Modify Begin:2026-08-07 by BestHui
+    void SetFatalErrorHandler(std::function<void(int)> handler);
+//Modify End
 
 private:
     void CreateOwnedQueues();
     void WrapExternalQueues(const ExternalD3D12Context& externalContext);
+//Modify Begin:2026-08-07 by BestHui
+    void ConfigureCommandListDependencies();
+//Modify End
 
     Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;
     std::shared_ptr<CommandQueue> m_DirectCommandQueue;

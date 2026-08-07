@@ -164,6 +164,9 @@ void Application::Initialize(const ExternalD3D12Context* externalContext)
             throw std::exception("DXGI adapter enumeration failed.");
         }
     }
+//Modify Begin:2026-08-07 by BestHui
+    m_RenderContext.SetFatalErrorHandler([this](const int exitCode) { Quit(exitCode); });
+//Modify End
     const auto device = m_RenderContext.GetDevice();
     D3D12_FEATURE_DATA_SHADER_MODEL shaderModel = { D3D_SHADER_MODEL_6_9 };
     ThrowIfFailed(device->CheckFeatureSupport(

@@ -22,8 +22,10 @@ RaytracingDemoCameraConstants BuildPassCameraConstants(
     const RaytracingDemoFrameState& frameState = *config.FrameState;
 //Modify End
     RaytracingDemoCameraConstants camera{};
-    camera.InverseView = XMMatrixInverse(nullptr, resources.SceneCamera.GetViewMatrix());
-    camera.InverseProjection = XMMatrixInverse(nullptr, resources.SceneCamera.GetProjectionMatrix());
+//Modify Begin:2026-08-07 by BestHui
+    camera.InverseView = XMMatrixInverse(nullptr, frameState.View);
+    camera.InverseProjection = XMMatrixInverse(nullptr, frameState.Projection);
+//Modify End
     XMStoreFloat4(&camera.CameraPosition, resources.SceneCamera.GetTranslation());
     camera.Width = context.GetMetadata().m_ScreenWidth;
     camera.Height = context.GetMetadata().m_ScreenHeight;
@@ -65,9 +67,11 @@ RaytracingDemoPipelineConstants BuildPassPipelineConstants(
     const RaytracingDemoFrameState& frameState = *config.FrameState;
 //Modify End
     RaytracingDemoPipelineConstants pipeline{};
-    pipeline.View = resources.SceneCamera.GetViewMatrix();
-    pipeline.Projection = resources.SceneCamera.GetProjectionMatrix();
-    pipeline.ViewProjection = pipeline.View * pipeline.Projection;
+//Modify Begin:2026-08-07 by BestHui
+    pipeline.View = frameState.View;
+    pipeline.Projection = frameState.Projection;
+    pipeline.ViewProjection = frameState.ViewProjection;
+//Modify End
     XMStoreFloat4(&pipeline.CameraPosition, resources.SceneCamera.GetTranslation());
     pipeline.InverseView = XMMatrixInverse(nullptr, pipeline.View);
     pipeline.InverseProjection = XMMatrixInverse(nullptr, pipeline.Projection);

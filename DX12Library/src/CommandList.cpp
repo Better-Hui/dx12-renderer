@@ -2,7 +2,6 @@
 
 #include "CommandList.h"
 
-#include "Application.h"
 #include "ByteAddressBuffer.h"
 #include "ConstantBuffer.h"
 #include "CommandQueue.h"
@@ -27,13 +26,20 @@ std::map<std::wstring, ID3D12Resource*> CommandList::m_TextureCache;
 std::mutex CommandList::m_TextureCacheMutex;
 namespace fs = std::filesystem;
 
-CommandList::CommandList(D3D12_COMMAND_LIST_TYPE type) : m_D3d12CommandListType(type)
+//Modify Begin:2026-08-07 by BestHui
+CommandList::CommandList(
+    const D3D12_COMMAND_LIST_TYPE type,
+    Microsoft::WRL::ComPtr<ID3D12Device2> device,
+    std::function<std::shared_ptr<CommandList>()> computeCommandListFactory)
+    : m_D3d12CommandListType(type)
+    , m_Device(std::move(device))
+    , m_ComputeCommandListFactory(std::move(computeCommandListFactory))
 {
-    auto device = Application::Get().GetDevice();
+    Assert(m_Device != nullptr, "D3D12 device is null.");
 
-    ThrowIfFailed(device->CreateCommandAllocator(m_D3d12CommandListType, IID_PPV_ARGS(&m_D3d12CommandAllocator)));
+    ThrowIfFailed(m_Device->CreateCommandAllocator(m_D3d12CommandListType, IID_PPV_ARGS(&m_D3d12CommandAllocator)));
 
-    ThrowIfFailed(device->CreateCommandList(0, m_D3d12CommandListType, m_D3d12CommandAllocator.Get(),
+    ThrowIfFailed(m_Device->CreateCommandList(0, m_D3d12CommandListType, m_D3d12CommandAllocator.Get(),
         nullptr, IID_PPV_ARGS(&m_D3d12CommandList)));
 
     ThrowIfFailed(m_D3d12CommandList.As(&m_D3d12CommandList5));
@@ -41,7 +47,7 @@ CommandList::CommandList(D3D12_COMMAND_LIST_TYPE type) : m_D3d12CommandListType(
     ThrowIfFailed(m_D3d12CommandList.As(&m_D3d12CommandList6));
 //Modify End
 
-    m_PUploadBuffer = std::make_unique<UploadBuffer>();
+    m_PUploadBuffer = std::make_unique<UploadBuffer>(m_Device);
 
     m_PResourceStateTracker = std::make_unique<ResourceStateTracker>();
 
@@ -51,12 +57,14 @@ CommandList::CommandList(D3D12_COMMAND_LIST_TYPE type) : m_D3d12CommandListType(
         const uint32_t numDescriptorsPerHeap =
             i == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV ? 8192u : 1024u;
         m_DynamicDescriptorHeaps[i] = std::make_unique<DynamicDescriptorHeap>(
+            m_Device,
             static_cast<D3D12_DESCRIPTOR_HEAP_TYPE>(i),
             numDescriptorsPerHeap);
 //Modify End
         m_DescriptorHeaps[i] = nullptr;
     }
 }
+//Modify End
 
 CommandList::~CommandList() = default;
 
@@ -182,7 +190,9 @@ void CommandList::ResolveSubresource(const Resource& dstRes, const Resource& src
 void CommandList::CopyBuffer(Buffer& buffer, const size_t numElements, const size_t elementSize, const void* bufferData,
     const D3D12_RESOURCE_FLAGS flags)
 {
-    const auto device = Application::Get().GetDevice();
+//Modify Begin:2026-08-07 by BestHui
+    const auto& device = m_Device;
+//Modify End
 
     const size_t bufferSize = numElements * elementSize;
 
@@ -453,7 +463,9 @@ bool CommandList::LoadTextureFromFile(Texture& texture, const std::wstring& file
             throw std::exception("Invalid texture dimension.");
         }
 
-        const auto device = Application::Get().GetDevice();
+//Modify Begin:2026-08-07 by BestHui
+        const auto& device = m_Device;
+//Modify End
         ComPtr<ID3D12Resource> textureResource;
 
         const auto heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
@@ -540,8 +552,10 @@ void CommandList::GenerateMips(Texture& texture)
     {
         if (!m_ComputeCommandList)
         {
-            m_ComputeCommandList = Application::Get().GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE)->
-            GetCommandList();
+//Modify Begin:2026-08-07 by BestHui
+            Assert(static_cast<bool>(m_ComputeCommandListFactory), "Compute command-list factory is unavailable.");
+            m_ComputeCommandList = m_ComputeCommandListFactory();
+//Modify End
         }
         m_ComputeCommandList->GenerateMips(texture);
         return;
@@ -577,7 +591,9 @@ void CommandList::GenerateMips(Texture& texture)
     if (!texture.CheckUavSupport() ||
         (resourceDesc.Flags & D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS) == 0)
     {
-        const auto device = Application::Get().GetDevice();
+//Modify Begin:2026-08-07 by BestHui
+        const auto& device = m_Device;
+//Modify End
 
         // Describe an alias resource that is used to copy the original texture.
         auto aliasDesc = resourceDesc;
@@ -671,7 +687,9 @@ void CommandList::CopyTextureSubresource(const Texture& texture, const uint32_t 
     const uint32_t numSubresources,
     D3D12_SUBRESOURCE_DATA* subresourceData)
 {
-    const auto device = Application::Get().GetDevice();
+//Modify Begin:2026-08-07 by BestHui
+    const auto& device = m_Device;
+//Modify End
     const auto destinationResource = texture.GetD3D12Resource();
     if (!destinationResource)
     {

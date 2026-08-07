@@ -13,6 +13,9 @@
 #include <Framework/Rendering/Pipeline/MeshShader.h>
 #include <Framework/Rendering/Pipeline/Shader.h>
 #include <Framework/Rendering/RayTracing/RayTracingShader.h>
+//Modify Begin:2026-08-07 by BestHui
+#include <Framework/Rendering/Upscaling/DLSS.h>
+//Modify End
 
 #include <DX12Library/Camera.h>
 
@@ -130,6 +133,9 @@ struct RaytracingDemoPassResources
     ReSTIRDIPass& DirectLightingReSTIRDIPass;
 //Modify End
 //Modify End
+//Modify Begin:2026-08-07 by BestHui
+    DLSS& Dlss;
+//Modify End
     DenoiserController& Denoisers;
     CudaBloomPass& CudaBloom;
     std::shared_ptr<Shader> GBufferShader;
@@ -172,11 +178,24 @@ struct RaytracingDemoFrameState
     bool UseTaskShaderMeshlets = false;
     bool DebugMeshletClusters = false;
     bool SkyboxEnabled = false;
+//Modify Begin:2026-08-07 by BestHui
+    bool DLSSEnabled = false;
+    DLSSMode DlssMode = DLSSMode::Disabled;
+//Modify End
     int DebugLightingTextureTarget = 0;
     int DebugTextureTarget = 0;
     int MaxBounces = 1;
     uint32_t Width = 1;
     uint32_t Height = 1;
+//Modify Begin:2026-08-07 by BestHui
+    uint32_t DisplayWidth = 1;
+    uint32_t DisplayHeight = 1;
+    float DLSSSharpness = 0.0f;
+    DirectX::XMFLOAT2 DLSSJitterOffset = { 0.0f, 0.0f };
+    DirectX::XMMATRIX View = DirectX::XMMatrixIdentity();
+    DirectX::XMMATRIX Projection = DirectX::XMMatrixIdentity();
+    DirectX::XMMATRIX ViewProjection = DirectX::XMMatrixIdentity();
+//Modify End
     bool AccumulationEnabled = false;
     uint32_t FrameIndex = 0;
     uint32_t AccumulationFrameIndex = 0;

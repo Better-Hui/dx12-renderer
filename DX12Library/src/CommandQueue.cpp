@@ -2,7 +2,6 @@
 
 #include "CommandQueue.h"
 
-#include "Application.h"
 #include "CommandList.h"
 #include "ResourceStateTracker.h"
 
@@ -13,12 +12,14 @@
 //Modify End
 //Modify End
 
-CommandQueue::CommandQueue(D3D12_COMMAND_LIST_TYPE type)
+//Modify Begin:2026-08-07 by BestHui
+CommandQueue::CommandQueue(const D3D12_COMMAND_LIST_TYPE type, Microsoft::WRL::ComPtr<ID3D12Device2> device)
 	: m_CommandListType(type)
+	, m_Device(std::move(device))
 	, m_FenceValue(0)
 	, m_IsProcessingInFlightCommandLists(true)
 {
-	auto device = Application::Get().GetDevice();
+	Assert(m_Device != nullptr, "D3D12 device is null.");
 
 	D3D12_COMMAND_QUEUE_DESC desc = {};
 	desc.Type = type;
@@ -26,19 +27,24 @@ CommandQueue::CommandQueue(D3D12_COMMAND_LIST_TYPE type)
 	desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
 	desc.NodeMask = 0;
 
-	ThrowIfFailed(device->CreateCommandQueue(&desc, IID_PPV_ARGS(&m_D3d12CommandQueue)));
+	ThrowIfFailed(m_Device->CreateCommandQueue(&desc, IID_PPV_ARGS(&m_D3d12CommandQueue)));
 //Modify Begin:2026-07-21 by BestHui
 	InitializeFenceAndWorker();
 //Modify End
 }
 
 //Modify Begin:2026-07-21 by BestHui
-CommandQueue::CommandQueue(D3D12_COMMAND_LIST_TYPE type, ID3D12CommandQueue* externalCommandQueue)
+CommandQueue::CommandQueue(
+	const D3D12_COMMAND_LIST_TYPE type,
+	Microsoft::WRL::ComPtr<ID3D12Device2> device,
+	ID3D12CommandQueue* externalCommandQueue)
 	: m_CommandListType(type)
+	, m_Device(std::move(device))
 	, m_D3d12CommandQueue(externalCommandQueue)
 	, m_FenceValue(0)
 	, m_IsProcessingInFlightCommandLists(true)
 {
+	Assert(m_Device != nullptr, "D3D12 device is null.");
 	Assert(m_D3d12CommandQueue != nullptr, "External command queue is null.");
 	Assert(m_D3d12CommandQueue->GetDesc().Type == type, "External command queue type does not match the wrapper type.");
 	InitializeFenceAndWorker();
@@ -46,8 +52,7 @@ CommandQueue::CommandQueue(D3D12_COMMAND_LIST_TYPE type, ID3D12CommandQueue* ext
 
 void CommandQueue::InitializeFenceAndWorker()
 {
-	auto device = Application::Get().GetDevice();
-	ThrowIfFailed(device->CreateFence(m_FenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_D3d12Fence)));
+	ThrowIfFailed(m_Device->CreateFence(m_FenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_D3d12Fence)));
 
 	switch (m_CommandListType)
 	{
@@ -63,6 +68,23 @@ void CommandQueue::InitializeFenceAndWorker()
 	}
 
 	m_ProcessInFlightCommandListsThread = std::thread(&CommandQueue::ProcessInFlightCommandLists, this);
+}
+//Modify End
+
+//Modify Begin:2026-08-07 by BestHui
+void CommandQueue::SetComputeCommandListFactory(std::function<std::shared_ptr<CommandList>()> factory)
+{
+	m_ComputeCommandListFactory = std::move(factory);
+}
+
+void CommandQueue::SetComputeCommandQueue(std::shared_ptr<CommandQueue> queue)
+{
+	m_ComputeCommandQueue = std::move(queue);
+}
+
+void CommandQueue::SetFatalErrorHandler(std::function<void(int)> handler)
+{
+	m_FatalErrorHandler = std::move(handler);
 }
 //Modify End
 
@@ -124,7 +146,9 @@ std::shared_ptr<CommandList> CommandQueue::GetCommandList()
 	else
 	{
 		// Otherwise create a new command list.
-		commandList = std::make_shared<CommandList>(m_CommandListType);
+		//Modify Begin:2026-08-07 by BestHui
+		commandList = std::make_shared<CommandList>(m_CommandListType, m_Device, m_ComputeCommandListFactory);
+		//Modify End
 	}
 
 	return commandList;
@@ -195,9 +219,11 @@ uint64_t CommandQueue::ExecuteCommandLists(const std::vector<std::shared_ptr<Com
 	// after the initial resource command lists have finished.
 	if (generateMipsCommandLists.size() > 0)
 	{
-		auto computeQueue = Application::Get().GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE);
-		computeQueue->Wait(*this);
-		computeQueue->ExecuteCommandLists(generateMipsCommandLists);
+		//Modify Begin:2026-08-07 by BestHui
+		Assert(m_ComputeCommandQueue != nullptr, "Compute command queue is unavailable.");
+		m_ComputeCommandQueue->Wait(*this);
+		m_ComputeCommandQueue->ExecuteCommandLists(generateMipsCommandLists);
+		//Modify End
 	}
 
 	return fenceValue;
@@ -267,7 +293,16 @@ void CommandQueue::ProcessInFlightCommandLists()
 	{
 		std::ofstream errorLog("C:\\Users\\minghuidai\\AppData\\Local\\Temp\\RaytracingDemo-CommandQueueException.log", std::ios::out | std::ios::trunc);
 		errorLog << exception.what() << std::endl;
-		Application::Get().Quit(5);
+		//Modify Begin:2026-08-07 by BestHui
+		if (m_FatalErrorHandler)
+		{
+			m_FatalErrorHandler(5);
+		}
+		else
+		{
+			std::terminate();
+		}
+		//Modify End
 	}
 //Modify End
 }

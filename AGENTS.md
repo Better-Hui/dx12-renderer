@@ -134,6 +134,15 @@ Current major pieces:
 - RenderGraph schedules base resources, lighting, denoise, skybox, postprocess, overlays.
 - CUDA bloom is an external pass/tool path and must not corrupt history resources.
 
+## DLSS Super Resolution
+
+- `Framework/Rendering/Upscaling/DLSS` owns the native NGX lifecycle, capability query, optimal render resolution, projection jitter, history reset, feature recreation, and evaluation. Do not put NGX handles or `nvsdk_ngx_*` calls in demo code.
+- `RaytracingDemo` only adapts its graph resources in `Passes/DLSSPass.cpp`: HDR `SceneColor`, `DepthBuffer`, low-resolution `MotionVector`, and a display-resolution output. Motion vectors are stored in UV units; pass render dimensions as `InMVScaleX/Y` so NGX receives pixels.
+- `DLSSOutput` and `DLSSFinishedToken` must be registered only when the DLSS pass is present. Registering a transient resource with no producer/consumer corrupts the RenderGraph resource lifetime during graph destruction.
+- Recreate the NGX feature only when mode or render/display resolution changes. Before releasing an already evaluated feature, flush the injected `FrameworkDeviceContext`; do not release an in-flight handle. Only commit a newly created handle after NGX creation succeeds.
+- Current scope is DLSS Super Resolution / DLAA only. Frame Generation, Ray Reconstruction, and Streamline are not integrated. Runtime values: `RAYTRACING_DEMO_DLSS=off|dlaa|quality|balanced|performance|ultra-performance`.
+- External SDK files live in `External/DLSS` and currently provide `nvngx_dlss.dll` version `310.7.0`; preserve `External/DLSS/LICENSE.txt` when distributing builds.
+
 ## Meshlet / Mesh Shader State
 
 Framework now has:

@@ -3,6 +3,8 @@
 
 #include <imgui.h>
 
+#include <algorithm>
+
 void RaytracingDemo::OnImGui()
 {
     ImGui::SetNextWindowSize(ImVec2(520.0f, 680.0f), ImGuiCond_FirstUseEver);
@@ -421,6 +423,39 @@ void RaytracingDemo::OnImGui()
         if (m_LightEditor.Draw(m_Lights))
         {
             ResetAccumulation();
+        }
+    }
+//Modify End
+
+//Modify Begin:2026-08-07 by BestHui
+    if (ImGui::CollapsingHeader("Upscaling"))
+    {
+        if (!m_DLSS.IsSupported())
+        {
+            ImGui::TextDisabled("DLSS unavailable: %s", m_DLSS.GetStatusMessage().c_str());
+        }
+        else
+        {
+            const char* dlssModeNames[] = { "Off", "DLAA", "Quality", "Balanced", "Performance", "Ultra Performance" };
+            int dlssMode = static_cast<int>(m_DLSS.GetMode());
+            if (ImGui::Combo("DLSS Super Resolution", &dlssMode, dlssModeNames, IM_ARRAYSIZE(dlssModeNames)))
+            {
+                m_DLSS.SetMode(static_cast<DLSSMode>(dlssMode));
+                ResetAccumulation();
+            }
+
+            if (m_DLSS.IsEnabled())
+            {
+                const DLSSOptimalSettings settings = m_DLSS.GetOptimalSettings(
+                    static_cast<uint32_t>((std::max)(m_Width, 1)),
+                    static_cast<uint32_t>((std::max)(m_Height, 1)));
+                ImGui::Text(
+                    "Render resolution: %u x %u (display %d x %d)",
+                    settings.RenderWidth,
+                    settings.RenderHeight,
+                    m_Width,
+                    m_Height);
+            }
         }
     }
 //Modify End

@@ -40,7 +40,11 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateCu
 void RaytracingDemo::PresentDisplayOutput()
 {
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
-    RenderGraph::ResourceId displayColor = DemoResourceIds::SceneColor;
+//Modify Begin:2026-08-07 by BestHui
+    const RenderGraph::ResourceId displayColor = m_RenderGraphFrameState->DLSSEnabled
+        ? DemoResourceIds::DLSSOutput
+        : DemoResourceIds::SceneColor;
+//Modify End
 
 //Modify Begin:2026-07-28 by BestHui
     m_RenderGraph->PresentWithOverlayBlit(

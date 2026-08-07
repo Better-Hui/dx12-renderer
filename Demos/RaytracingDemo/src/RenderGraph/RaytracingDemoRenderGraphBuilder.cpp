@@ -120,16 +120,30 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
     }
 //Modify End
 
+//Modify Begin:2026-08-07 by BestHui
+    RenderGraph::ResourceId displayColor = RaytracingDemoRenderGraph::ResourceIds::SceneColor;
+    if (frameState.DLSSEnabled)
+    {
+        renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDLSSPass(resources, config, sceneReadyToken));
+        sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::DLSSFinishedToken;
+        displayColor = RaytracingDemoRenderGraph::ResourceIds::DLSSOutput;
+    }
+//Modify End
+
     return std::make_unique<RenderGraph::RenderGraphRoot>(
         resources.Device,
         resources.DirectQueue,
         resources.AsyncComputeQueue,
         std::move(renderPasses),
-        RaytracingDemoRenderGraph::CreateTextureDescriptions(),
+//Modify Begin:2026-08-07 by BestHui
+        RaytracingDemoRenderGraph::CreateTextureDescriptions(frameState.DLSSEnabled),
+//Modify End
         RaytracingDemoRenderGraph::CreateBufferDescriptions(),
-        RaytracingDemoRenderGraph::CreateTokenDescriptions(),
+//Modify Begin:2026-08-07 by BestHui
+        RaytracingDemoRenderGraph::CreateTokenDescriptions(frameState.DLSSEnabled),
+//Modify End
         std::vector<RenderGraph::ResourceId>{
-            RaytracingDemoRenderGraph::ResourceIds::SceneColor,
+            displayColor,
             sceneReadyToken
         });
 }

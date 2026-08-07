@@ -310,8 +310,7 @@ void RenderGraph::RenderGraphCommandExecutor::ExecuteParallelDirectBatch(
     recordingTasks.reserve(batch.Passes.size());
     for (RenderPass* renderPass : batch.Passes)
     {
-        recordingTasks.push_back(std::async(
-            std::launch::async,
+        recordingTasks.push_back(m_ParallelRecordingTaskScheduler.Enqueue(
             [this, renderPass, &renderMetadata, &renderTargets]()
             {
                 auto commandList = m_DirectCommandQueue->GetCommandList();

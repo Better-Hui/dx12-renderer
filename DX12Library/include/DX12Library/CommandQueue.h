@@ -38,6 +38,8 @@
 #include <atomic>               // For std::atomic_bool
 #include <cstdint>              // For uint64_t
 #include <condition_variable>   // For std::condition_variable.
+#include <functional>
+#include <memory>
 #include <vector>
 
 #include "ThreadSafeQueue.h"
@@ -47,10 +49,18 @@ class CommandList;
 class CommandQueue
 {
 public:
-	CommandQueue(D3D12_COMMAND_LIST_TYPE type);
+	//Modify Begin:2026-08-07 by BestHui
+	CommandQueue(D3D12_COMMAND_LIST_TYPE type, Microsoft::WRL::ComPtr<ID3D12Device2> device);
 //Modify Begin:2026-07-21 by BestHui
-	CommandQueue(D3D12_COMMAND_LIST_TYPE type, ID3D12CommandQueue* externalCommandQueue);
+	CommandQueue(
+		D3D12_COMMAND_LIST_TYPE type,
+		Microsoft::WRL::ComPtr<ID3D12Device2> device,
+		ID3D12CommandQueue* externalCommandQueue);
 //Modify End
+	void SetComputeCommandListFactory(std::function<std::shared_ptr<CommandList>()> factory);
+	void SetComputeCommandQueue(std::shared_ptr<CommandQueue> queue);
+	void SetFatalErrorHandler(std::function<void(int)> handler);
+	//Modify End
 	virtual ~CommandQueue();
 
 	// Get an available command list from the command queue.
@@ -87,6 +97,12 @@ private:
 	using CommandListEntry = std::tuple<uint64_t, std::shared_ptr<CommandList>>;
 
 	D3D12_COMMAND_LIST_TYPE m_CommandListType;
+	//Modify Begin:2026-08-07 by BestHui
+	Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;
+	std::function<std::shared_ptr<CommandList>()> m_ComputeCommandListFactory;
+	std::shared_ptr<CommandQueue> m_ComputeCommandQueue;
+	std::function<void(int)> m_FatalErrorHandler;
+	//Modify End
 	Microsoft::WRL::ComPtr<ID3D12CommandQueue> m_D3d12CommandQueue;
 	Microsoft::WRL::ComPtr<ID3D12Fence> m_D3d12Fence;
 	std::atomic_uint64_t m_FenceValue;

@@ -41,6 +41,7 @@
 #include <wrl.h>
 
 #include <map> // for std::map
+#include <functional>
 #include <memory> // for std::unique_ptr
 #include <mutex> // for std::mutex
 #include <string>
@@ -68,7 +69,12 @@ class VertexBuffer;
 class CommandList
 {
 public:
-    explicit CommandList(D3D12_COMMAND_LIST_TYPE type);
+//Modify Begin:2026-08-07 by BestHui
+    CommandList(
+        D3D12_COMMAND_LIST_TYPE type,
+        Microsoft::WRL::ComPtr<ID3D12Device2> device,
+        std::function<std::shared_ptr<CommandList>()> computeCommandListFactory = {});
+//Modify End
     virtual ~CommandList();
 
     /**
@@ -673,6 +679,10 @@ private:
     using TrackedObjectsType = std::vector<Microsoft::WRL::ComPtr<ID3D12Object>>;
 
     D3D12_COMMAND_LIST_TYPE m_D3d12CommandListType;
+//Modify Begin:2026-08-07 by BestHui
+    Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;
+    std::function<std::shared_ptr<CommandList>()> m_ComputeCommandListFactory;
+//Modify End
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList2> m_D3d12CommandList;
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList5> m_D3d12CommandList5;
 //Modify Begin:2026-07-30 by BestHui

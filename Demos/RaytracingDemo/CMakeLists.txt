@@ -53,6 +53,9 @@ set(SOURCE_FILES
         src/PathTracing/PathTracingPipelineController.cpp
         src/Passes/PathTracingPass.cpp
         src/Passes/ReSTIRDIPasses.cpp
+        # Modify Begin:2026-08-07 by BestHui
+        src/Passes/DLSSPass.cpp
+        # Modify End
         src/Passes/CudaBloomPass.cpp
         # Modify Begin:2026-07-30 by BestHui
         src/Passes/RaytracingDemoPassResources.cpp
@@ -262,6 +265,9 @@ target_link_libraries(${TARGET_NAME}
 add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${NRD_BIN_DIR}/NRD.dll" "$<TARGET_FILE_DIR:${TARGET_NAME}>/NRD.dll"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${NRI_BIN_DIR}/NRI.dll" "$<TARGET_FILE_DIR:${TARGET_NAME}>/NRI.dll"
+        # Modify Begin:2026-08-07 by BestHui
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DX12_RENDERER_DLSS_RUNTIME_DLL}" "$<TARGET_FILE_DIR:${TARGET_NAME}>/nvngx_dlss.dll"
+        # Modify End
         # Modify Begin:2026-08-03 by BestHui
         COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${TARGET_NAME}>/Assets/Scenes"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/Assets/Scenes/DefaultScene.json" "$<TARGET_FILE_DIR:${TARGET_NAME}>/Assets/Scenes/DefaultScene.json"

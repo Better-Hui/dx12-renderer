@@ -42,6 +42,9 @@ namespace RaytracingDemoRenderGraph
         static inline const RenderGraph::ResourceId DirectLighting = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DirectLighting");
         static inline const RenderGraph::ResourceId IndirectLighting = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.IndirectLighting");
         static inline const RenderGraph::ResourceId SceneColor = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.SceneColor");
+//Modify Begin:2026-08-07 by BestHui
+        static inline const RenderGraph::ResourceId DLSSOutput = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DLSSOutput");
+//Modify End
         static inline const RenderGraph::ResourceId HistoryColor = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.HistoryColor");
         static inline const RenderGraph::ResourceId NoisyRadiance = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.NoisyRadiance");
         static inline const RenderGraph::ResourceId NRDNoisyRadiance = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.NRDNoisyRadiance");
@@ -58,6 +61,9 @@ namespace RaytracingDemoRenderGraph
         static inline const RenderGraph::ResourceId RayTracingFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.RayTracingFinished");
         static inline const RenderGraph::ResourceId DenoiseFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DenoiseFinished");
         static inline const RenderGraph::ResourceId CudaBloomFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.CudaBloomFinished");
+//Modify Begin:2026-08-07 by BestHui
+        static inline const RenderGraph::ResourceId DLSSFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DLSSFinished");
+//Modify End
 //Modify Begin:2026-07-31 by BestHui
         static inline const RenderGraph::ResourceId DebugOutputFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DebugOutputFinished");
 //Modify End
@@ -97,7 +103,11 @@ namespace RaytracingDemoRenderGraph
     LightingResources GetLightingResources(const RenderGraph::RenderContext& context);
     NRDResources GetNRDResources(const RenderGraph::RenderContext& context);
 
-    std::vector<RenderGraph::TextureDescription> CreateTextureDescriptions();
+//Modify Begin:2026-08-07 by BestHui
+    std::vector<RenderGraph::TextureDescription> CreateTextureDescriptions(bool includeDLSS);
+//Modify End
     std::vector<RenderGraph::BufferDescription> CreateBufferDescriptions();
-    std::vector<RenderGraph::TokenDescription> CreateTokenDescriptions();
+//Modify Begin:2026-08-07 by BestHui
+    std::vector<RenderGraph::TokenDescription> CreateTokenDescriptions(bool includeDLSS);
+//Modify End
 }

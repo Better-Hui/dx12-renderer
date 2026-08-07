@@ -23,6 +23,7 @@
 //Modify End
 #include <Framework/Rendering/RayTracing/RayTracingShader.h>
 #include <Framework/Rendering/Lighting/ReSTIRDIPass.h>
+#include <Framework/Rendering/Upscaling/DLSS.h>
 #include <Framework/Scene/Scene.h>
 #include <Framework/Rendering/Pipeline/Shader.h>
 //Modify Begin:2026-07-30 by BestHui
@@ -165,6 +166,9 @@ private:
 //Modify Begin:2026-07-28 by BestHui
     bool m_RenderGraphDenoiserEnabled = false;
     bool m_RenderGraphCudaBloomEnabled = false;
+//Modify Begin:2026-08-07 by BestHui
+    bool m_RenderGraphDLSSEnabled = false;
+//Modify End
 //Modify Begin:2026-08-03 by BestHui
     bool m_RenderGraphAsyncComputeEnabled = false;
     PathTracingBackend m_RenderGraphPathTracingBackend = PathTracingBackend::InlineRayQuery;
@@ -185,6 +189,9 @@ private:
 //Modify End
 //Modify Begin:2026-07-27 by BestHui
     FrameworkDeviceContext m_FrameworkDeviceContext;
+//Modify Begin:2026-08-07 by BestHui
+    DLSS m_DLSS;
+//Modify End
 //Modify Begin:2026-07-30 by BestHui
     ShaderVariantManager m_ShaderVariants;
 //Modify End

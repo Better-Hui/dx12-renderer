@@ -45,6 +45,21 @@ message(STATUS "DX12 renderer Agility SDK version: ${DX12_RENDERER_AGILITY_SDK_V
 message(STATUS "DX12 renderer DXC executable: ${DX12_RENDERER_DXC_EXECUTABLE}")
 # Modify End
 
+# Modify Begin:2026-08-07 by BestHui
+set(DX12_RENDERER_DLSS_ROOT "${CMAKE_SOURCE_DIR}/External/DLSS" CACHE PATH "DLSS SDK root used by DX12 renderer.")
+set(DX12_RENDERER_DLSS_INCLUDE_DIRECTORY "${DX12_RENDERER_DLSS_ROOT}/include")
+set(DX12_RENDERER_DLSS_LIBRARY "${DX12_RENDERER_DLSS_ROOT}/lib/x64/nvsdk_ngx_d.lib")
+set(DX12_RENDERER_DLSS_RUNTIME_DLL "${DX12_RENDERER_DLSS_ROOT}/bin/x64/nvngx_dlss.dll")
+foreach(DX12_RENDERER_DLSS_FILE
+        "${DX12_RENDERER_DLSS_INCLUDE_DIRECTORY}/nvsdk_ngx.h"
+        "${DX12_RENDERER_DLSS_LIBRARY}"
+        "${DX12_RENDERER_DLSS_RUNTIME_DLL}")
+        if (NOT EXISTS "${DX12_RENDERER_DLSS_FILE}")
+                message(FATAL_ERROR "DX12 renderer requires the DLSS SDK file: ${DX12_RENDERER_DLSS_FILE}")
+        endif()
+endforeach()
+# Modify End
+
 # Libraries
 add_subdirectory(DX12Library)
 # Modify Begin:2026-07-21 by BestHui

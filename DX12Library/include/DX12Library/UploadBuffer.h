@@ -21,7 +21,9 @@ public:
 	/**
 	 * \param pageSize The size to use to allocate new pages in GPU memory.
 	 */
-	explicit UploadBuffer(size_t pageSize = _2MB);
+//Modify Begin:2026-08-07 by BestHui
+	UploadBuffer(Microsoft::WRL::ComPtr<ID3D12Device2> device, size_t pageSize = _2MB);
+//Modify End
 
 
 	size_t GetPageSize() const { return m_PageSize; }
@@ -44,7 +46,9 @@ public:
 private:
 	struct Page
 	{
-		explicit Page(size_t sizeInBytes);
+//Modify Begin:2026-08-07 by BestHui
+		Page(Microsoft::WRL::ComPtr<ID3D12Device2> device, size_t sizeInBytes);
+//Modify End
 		~Page();
 
 		bool HasSpace(size_t sizeInBytes, size_t alignment) const;
@@ -78,5 +82,8 @@ private:
 	PagePoolType m_AvailablePages;
 
 	std::shared_ptr<Page> m_CurrentPage;
+	//Modify Begin:2026-08-07 by BestHui
+	Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;
+	//Modify End
 	size_t m_PageSize;
 };

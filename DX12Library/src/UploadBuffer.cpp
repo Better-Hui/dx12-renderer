@@ -4,16 +4,18 @@
 
 #include <memory>
 
-#include "Application.h"
 #include "Helpers.h"
 
 #include "d3dx12.h"
 
 #include <new>
 
-UploadBuffer::UploadBuffer(const size_t pageSize) :
+//Modify Begin:2026-08-07 by BestHui
+UploadBuffer::UploadBuffer(Microsoft::WRL::ComPtr<ID3D12Device2> device, const size_t pageSize) :
+	m_Device(std::move(device)),
 	m_PageSize(pageSize)
 {
+	Assert(m_Device != nullptr, "D3D12 device is null.");
 }
 
 UploadBuffer::Allocation UploadBuffer::Allocate(const size_t sizeInBytes, const size_t alignment)
@@ -42,7 +44,7 @@ std::shared_ptr<UploadBuffer::Page> UploadBuffer::RequestPage()
 	}
 	else
 	{
-		page = std::make_shared<Page>(m_PageSize);
+		page = std::make_shared<Page>(m_Device, m_PageSize);
 		m_PagePool.push_back(page);
 	}
 
@@ -63,13 +65,12 @@ void UploadBuffer::Reset()
 	}
 }
 
-UploadBuffer::Page::Page(const size_t sizeInBytes) :
+UploadBuffer::Page::Page(Microsoft::WRL::ComPtr<ID3D12Device2> device, const size_t sizeInBytes) :
 	m_CpuPtr(nullptr),
 	m_GpuPtr(static_cast<D3D12_GPU_VIRTUAL_ADDRESS>(0)),
 	m_SizeInBytes(sizeInBytes),
 	m_OffsetInBytes(0)
 {
-	const auto device = Application::Get().GetDevice();
 	const auto heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
 	const auto resourceDesc = CD3DX12_RESOURCE_DESC::Buffer(m_SizeInBytes);
 
@@ -85,6 +86,7 @@ UploadBuffer::Page::Page(const size_t sizeInBytes) :
 	m_GpuPtr = m_Resource->GetGPUVirtualAddress();
 	m_Resource->Map(0, nullptr, &m_CpuPtr);
 }
+//Modify End
 
 UploadBuffer::Page::~Page()
 {

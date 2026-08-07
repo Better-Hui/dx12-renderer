@@ -181,7 +181,10 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
             commandContext.SetConstantBuffer(*resources.GBufferShader, "GBufferDebugCBuffer", sizeof(debugConstants), &debugConstants);
 //Modify End
 
-            const XMMATRIX viewProjection = resources.SceneCamera.GetViewMatrix() * resources.SceneCamera.GetProjectionMatrix();
+//Modify Begin:2026-08-07 by BestHui
+            const RaytracingDemoPipelineConstants pipelineConstants = BuildPassPipelineConstants(resources, config);
+            const XMMATRIX viewProjection = pipelineConstants.ViewProjection;
+//Modify End
             const XMMATRIX previousViewProjection = frameState.HasPreviousViewProjection
                 ? frameState.PreviousViewProjection
                 : viewProjection;

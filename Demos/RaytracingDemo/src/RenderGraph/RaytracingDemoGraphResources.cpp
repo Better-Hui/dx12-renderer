@@ -2,12 +2,17 @@
 
 namespace RaytracingDemoRenderGraph
 {
-    std::vector<RenderGraph::TextureDescription> CreateTextureDescriptions()
+    std::vector<RenderGraph::TextureDescription> CreateTextureDescriptions(const bool includeDLSS)
     {
         const RenderGraph::RenderMetadataExpression<uint32_t> renderWidthExpression = [](const RenderGraph::RenderMetadata& metadata) { return metadata.m_ScreenWidth; };
         const RenderGraph::RenderMetadataExpression<uint32_t> renderHeightExpression = [](const RenderGraph::RenderMetadata& metadata) { return metadata.m_ScreenHeight; };
+//Modify Begin:2026-08-07 by BestHui
+        const RenderGraph::RenderMetadataExpression<uint32_t> displayWidthExpression = [](const RenderGraph::RenderMetadata& metadata) { return metadata.m_DisplayWidth; };
+        const RenderGraph::RenderMetadataExpression<uint32_t> displayHeightExpression = [](const RenderGraph::RenderMetadata& metadata) { return metadata.m_DisplayHeight; };
+//Modify End
 
-        return {
+//Modify Begin:2026-08-07 by BestHui
+        std::vector<RenderGraph::TextureDescription> textureDescriptions = {
             { RenderGraph::ResourceIds::GRAPH_OUTPUT, renderWidthExpression, renderHeightExpression, OUTPUT_FORMAT, OUTPUT_CLEAR_COLOR, RenderGraph::ResourceInitAction::Clear },
 //Modify Begin:2026-07-28 by BestHui
             { ResourceIds::SceneColor, renderWidthExpression, renderHeightExpression, SCENE_COLOR_FORMAT, OUTPUT_CLEAR_COLOR, RenderGraph::ResourceInitAction::Clear, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS | D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS, D3D12_HEAP_FLAG_SHARED, true },
@@ -33,6 +38,21 @@ namespace RaytracingDemoRenderGraph
             { ResourceIds::NRDMotion, renderWidthExpression, renderHeightExpression, NRD_MOTION_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Discard },
             { ResourceIds::DepthBuffer, renderWidthExpression, renderHeightExpression, DEPTH_FORMAT, { 1.0f, 0u }, RenderGraph::ResourceInitAction::Clear },
         };
+        if (includeDLSS)
+        {
+            textureDescriptions.emplace_back(
+                ResourceIds::DLSSOutput,
+                displayWidthExpression,
+                displayHeightExpression,
+                SCENE_COLOR_FORMAT,
+                OUTPUT_CLEAR_COLOR,
+                RenderGraph::ResourceInitAction::Discard,
+                D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                D3D12_HEAP_FLAG_NONE,
+                true);
+        }
+        return textureDescriptions;
+//Modify End
     }
 
     std::vector<RenderGraph::BufferDescription> CreateBufferDescriptions()
@@ -40,9 +60,10 @@ namespace RaytracingDemoRenderGraph
         return {};
     }
 
-    std::vector<RenderGraph::TokenDescription> CreateTokenDescriptions()
+    std::vector<RenderGraph::TokenDescription> CreateTokenDescriptions(const bool includeDLSS)
     {
-        return {
+//Modify Begin:2026-08-07 by BestHui
+        std::vector<RenderGraph::TokenDescription> tokenDescriptions = {
             { ResourceIds::BaseResourcesFinishedToken },
             { ResourceIds::SkyboxFinishedToken },
             { ResourceIds::DirectLightingFinishedToken },
@@ -54,6 +75,12 @@ namespace RaytracingDemoRenderGraph
             { ResourceIds::DebugOutputFinishedToken },
 //Modify End
         };
+        if (includeDLSS)
+        {
+            tokenDescriptions.emplace_back(ResourceIds::DLSSFinishedToken);
+        }
+        return tokenDescriptions;
+//Modify End
     }
 
     FrameGBufferResources GetFrameGBufferResources(const RenderGraph::RenderContext& context)

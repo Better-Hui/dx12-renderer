@@ -10,6 +10,9 @@ set(HEADER_FILES
         include/RenderGraph/RenderGraphCompiler.h
         # Modify End
         include/RenderGraph/RenderGraphExecutionPlan.h
+        # Modify Begin:2026-08-07 by BestHui
+        include/RenderGraph/RenderGraphTaskScheduler.h
+        # Modify End
         include/RenderGraph/RenderGraphProfiler.h
         include/RenderGraph/RenderGraphQueueFence.h
         include/RenderGraph/RenderGraphQueueScheduler.h
@@ -29,6 +32,9 @@ set(SOURCE_FILES
         # Modify Begin:2026-07-30 by BestHui
         src/RenderContext.cpp
         src/RenderGraphCommandExecutor.cpp
+        # Modify Begin:2026-08-07 by BestHui
+        src/RenderGraphTaskScheduler.cpp
+        # Modify End
         # Modify Begin:2026-08-07 by BestHui
         src/RenderGraphCompiler.cpp
         # Modify End

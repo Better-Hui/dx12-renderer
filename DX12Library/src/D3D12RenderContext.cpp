@@ -11,6 +11,9 @@ void D3D12RenderContext::InitializeOwned(Microsoft::WRL::ComPtr<ID3D12Device2> d
     m_Device = device;
     m_UsesExternalDevice = false;
     CreateOwnedQueues();
+//Modify Begin:2026-08-07 by BestHui
+    ConfigureCommandListDependencies();
+//Modify End
 }
 
 void D3D12RenderContext::InitializeExternal(const ExternalD3D12Context& externalContext)
@@ -19,6 +22,9 @@ void D3D12RenderContext::InitializeExternal(const ExternalD3D12Context& external
     ThrowIfFailed(externalContext.Device->QueryInterface(IID_PPV_ARGS(&m_Device)));
     m_UsesExternalDevice = true;
     WrapExternalQueues(externalContext);
+//Modify Begin:2026-08-07 by BestHui
+    ConfigureCommandListDependencies();
+//Modify End
 }
 
 bool D3D12RenderContext::IsValid() const
@@ -53,23 +59,54 @@ std::shared_ptr<CommandQueue> D3D12RenderContext::GetCommandQueue(const D3D12_CO
     }
 }
 
+//Modify Begin:2026-08-07 by BestHui
+void D3D12RenderContext::SetFatalErrorHandler(std::function<void(int)> handler)
+{
+    m_DirectCommandQueue->SetFatalErrorHandler(handler);
+    m_ComputeCommandQueue->SetFatalErrorHandler(handler);
+    m_CopyCommandQueue->SetFatalErrorHandler(std::move(handler));
+}
+//Modify End
+
 void D3D12RenderContext::CreateOwnedQueues()
 {
-    m_DirectCommandQueue = std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_DIRECT);
-    m_ComputeCommandQueue = std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COMPUTE);
-    m_CopyCommandQueue = std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COPY);
+//Modify Begin:2026-08-07 by BestHui
+    m_DirectCommandQueue = std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_DIRECT, m_Device);
+    m_ComputeCommandQueue = std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COMPUTE, m_Device);
+    m_CopyCommandQueue = std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COPY, m_Device);
+//Modify End
 }
 
 void D3D12RenderContext::WrapExternalQueues(const ExternalD3D12Context& externalContext)
 {
     m_DirectCommandQueue = externalContext.DirectCommandQueue != nullptr
-        ? std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_DIRECT, externalContext.DirectCommandQueue)
-        : std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_DIRECT);
+//Modify Begin:2026-08-07 by BestHui
+        ? std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_DIRECT, m_Device, externalContext.DirectCommandQueue)
+        : std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_DIRECT, m_Device);
     m_ComputeCommandQueue = externalContext.ComputeCommandQueue != nullptr
-        ? std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COMPUTE, externalContext.ComputeCommandQueue)
-        : std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COMPUTE);
+        ? std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COMPUTE, m_Device, externalContext.ComputeCommandQueue)
+        : std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COMPUTE, m_Device);
     m_CopyCommandQueue = externalContext.CopyCommandQueue != nullptr
-        ? std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COPY, externalContext.CopyCommandQueue)
-        : std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COPY);
+        ? std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COPY, m_Device, externalContext.CopyCommandQueue)
+        : std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COPY, m_Device);
+//Modify End
 }
+
+//Modify Begin:2026-08-07 by BestHui
+void D3D12RenderContext::ConfigureCommandListDependencies()
+{
+    const std::weak_ptr<CommandQueue> computeQueue = m_ComputeCommandQueue;
+    const auto requestComputeCommandList = [computeQueue]()
+    {
+        const std::shared_ptr<CommandQueue> resolvedComputeQueue = computeQueue.lock();
+        Assert(resolvedComputeQueue != nullptr, "Compute command queue is unavailable.");
+        return resolvedComputeQueue->GetCommandList();
+    };
+
+    m_DirectCommandQueue->SetComputeCommandListFactory(requestComputeCommandList);
+    m_CopyCommandQueue->SetComputeCommandListFactory(requestComputeCommandList);
+    m_DirectCommandQueue->SetComputeCommandQueue(m_ComputeCommandQueue);
+    m_CopyCommandQueue->SetComputeCommandQueue(m_ComputeCommandQueue);
+}
+//Modify End
 //Modify End

@@ -6,10 +6,13 @@ namespace RenderGraph
 {
     struct RenderMetadata
     {
-        uint32_t m_ScreenWidth;
-        uint32_t m_ScreenHeight;
-        double m_Time;
-        uint64_t m_FrameIndex;
+        uint32_t m_ScreenWidth = 1;
+        uint32_t m_ScreenHeight = 1;
+//Modify Begin:2026-08-07 by BestHui
+        uint32_t m_DisplayWidth = 1;
+        uint32_t m_DisplayHeight = 1;
+//Modify End
+        double m_Time = 0.0;
+        uint64_t m_FrameIndex = 0;
     };
 }
-

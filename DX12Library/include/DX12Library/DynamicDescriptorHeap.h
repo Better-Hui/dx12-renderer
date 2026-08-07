@@ -23,7 +23,12 @@ class RootSignature;
 class DynamicDescriptorHeap
 {
 public:
-	DynamicDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE heapType, uint32_t numDescriptorsPerHeap = 1024);
+//Modify Begin:2026-08-07 by BestHui
+	DynamicDescriptorHeap(
+		Microsoft::WRL::ComPtr<ID3D12Device2> device,
+		D3D12_DESCRIPTOR_HEAP_TYPE heapType,
+		uint32_t numDescriptorsPerHeap = 1024);
+//Modify End
 
 	virtual ~DynamicDescriptorHeap();
 
@@ -127,6 +132,9 @@ private:
 	//   * D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER
 	// This parameter also determines the type of GPU visible descriptor heap to create.
 	D3D12_DESCRIPTOR_HEAP_TYPE m_DescriptorHeapType;
+	//Modify Begin:2026-08-07 by BestHui
+	Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;
+	//Modify End
 
 	uint32_t m_NumDescriptorsPerHeap;
 	uint32_t m_DescriptorHandleIncrementSize;
