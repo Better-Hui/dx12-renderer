@@ -61,17 +61,17 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
             inputs.MotionVector = gbuffer.MotionVector;
             inputs.BindSceneInputs = [resources, gbuffer, camera](CommandList& bindCommandList, ComputeShader& shader)
             {
+                CommandContext commandContext(bindCommandList);
                 RaytracingDemoPassBindings::BindInlinePathTracingInputs(
                     resources,
-                    bindCommandList,
+                    commandContext,
                     shader,
                     gbuffer,
                     camera);
                 resources.Scene.TransitionRayTracingShaderResources(
                     bindCommandList,
                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-                CommandContext(bindCommandList).BindBindlessDescriptorHeap(
-                    resources.Scene.GetBindlessDescriptorHeap());
+                commandContext.BindBindlessDescriptorHeap(resources.Scene.GetBindlessDescriptorHeap());
             };
             resources.DirectLightingReSTIRDIPass.Execute(commandList, inputs);
         });

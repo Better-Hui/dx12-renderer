@@ -6,12 +6,13 @@
 //Modify End
 
 class CommandList;
+class CommandContext;
 class ComputeShader;
 class RayTracingBindingSet;
 
 namespace RenderGraph
 {
-    struct RenderContext;
+    class FrameContext;
 }
 
 struct RaytracingDemoPassBindings
@@ -19,11 +20,11 @@ struct RaytracingDemoPassBindings
     static RaytracingDemoCameraConstants BuildPassCameraConstants(
         const RaytracingDemoPassResources& resources,
         const RaytracingDemoPassConfig& config,
-        const RenderGraph::RenderContext& context);
+        const RenderGraph::FrameContext& context);
 
     static void BindInlinePathTracingInputs(
         const RaytracingDemoPassResources& resources,
-        CommandList& cmd,
+        CommandContext& commandContext,
         ComputeShader& shader,
         const RaytracingDemoRenderGraph::FrameGBufferResources& gbuffer,
         const RaytracingDemoCameraConstants& camera);
@@ -37,7 +38,7 @@ struct RaytracingDemoPassBindings
     static void BindCompositeInputs(
         const RaytracingDemoPassResources& resources,
         CommandList& cmd,
-        const RenderGraph::RenderContext& context,
+        const RenderGraph::FrameContext& context,
         const RaytracingDemoRenderGraph::FrameGBufferResources& gbuffer,
         const RaytracingDemoCameraConstants& camera);
 };

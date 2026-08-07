@@ -12,7 +12,8 @@ endif()
 
 add_dependencies(${TARGET_NAME} CopyRuntimeDlls)
 
-if (DX12_RENDERER_ENABLE_SM610_LINALG AND NOT TARGET CopyD3D12AgilityRuntime)
+# Modify Begin:2026-07-30 by BestHui
+if (DX12_RENDERER_ENABLE_D3D12_AGILITY AND NOT TARGET CopyD3D12AgilityRuntime)
         add_custom_target(CopyD3D12AgilityRuntime
                 COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/$<CONFIG>/D3D12"
                 COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/D3D12" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/$<CONFIG>/D3D12"
@@ -20,7 +21,7 @@ if (DX12_RENDERER_ENABLE_SM610_LINALG AND NOT TARGET CopyD3D12AgilityRuntime)
                 )
 endif()
 
-if (TARGET CopyD3D12AgilityRuntime)
+if (DX12_RENDERER_ENABLE_D3D12_AGILITY AND TARGET CopyD3D12AgilityRuntime)
         add_dependencies(${TARGET_NAME} CopyD3D12AgilityRuntime)
 endif()
 # Modify End

@@ -23,6 +23,9 @@ namespace RenderGraph
 
         void BeginFrame();
         uint64_t SubmitDirect(std::shared_ptr<CommandList>& commandList);
+//Modify Begin:2026-07-30 by BestHui
+        uint64_t SubmitDirect(std::vector<std::shared_ptr<CommandList>>& commandLists);
+//Modify End
         uint64_t SubmitAsyncCompute(std::shared_ptr<CommandList>& commandList, bool waitForCompletion);
         uint64_t GetCrossQueueProducerFence(const RenderPass& pass) const;
         bool WasLastWrittenBy(ResourceId resourceId, RenderPassQueue queue) const;

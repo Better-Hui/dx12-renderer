@@ -1,21 +1,4 @@
-#define RAYTRACING_DEMO_ENABLE_LINALG 0
-
-#if defined(RAYTRACING_DEMO_ENABLE_LINALG) && RAYTRACING_DEMO_ENABLE_LINALG
-#include <hlsl/dx/linalg.h>
-#endif
 #include "PathTracing.rt.hlsli"
-
-float3 ApplyClosestHitCooperativeVector(float3 color)
-{
-#if defined(RAYTRACING_DEMO_ENABLE_LINALG) && RAYTRACING_DEMO_ENABLE_LINALG
-    uint3 quantizedColor = uint3(saturate(color) * 1024.0f + 0.5f);
-    dx::linalg::InterpretedVector<float, 3, dx::linalg::ComponentType::F32> convertedColor =
-        dx::linalg::Convert<dx::linalg::ComponentType::F32, dx::linalg::ComponentType::U32>(quantizedColor);
-    return saturate(float3(convertedColor.Data[0], convertedColor.Data[1], convertedColor.Data[2]) / 1024.0f);
-#else
-    return color;
-#endif
-}
 
 #include "PathTracingShared.hlsli"
 
@@ -52,7 +35,19 @@ void IndirectLightingRayGen()
 [shader("miss")]
 void Miss(inout RayPayload payload)
 {
-    payload = MakeMissPayload(WorldRayDirection());
+//Modify Begin:2026-07-30 by BestHui
+    const RayPayload missPayload = MakeMissPayload(WorldRayDirection());
+    payload.BaseColor = missPayload.BaseColor;
+    payload.HitT = missPayload.HitT;
+    payload.Normal = missPayload.Normal;
+    payload.Hit = missPayload.Hit;
+    payload.PositionError = missPayload.PositionError;
+    payload.Metallic = missPayload.Metallic;
+    payload.Roughness = missPayload.Roughness;
+    payload.AmbientOcclusion = missPayload.AmbientOcclusion;
+    payload.Emission = missPayload.Emission;
+    payload.Padding0 = missPayload.Padding0;
+//Modify End
 }
 
 [shader("closesthit")]
@@ -60,7 +55,8 @@ void ClosestHit(inout RayPayload payload, BuiltInTriangleIntersectionAttributes 
 {
     GeometryData geometry = Geometries[InstanceID()];
     MaterialData material = Materials[geometry.MaterialIndex];
-    payload = MakeTrianglePayload(
+//Modify Begin:2026-07-30 by BestHui
+    const RayPayload trianglePayload = MakeTrianglePayload(
         geometry,
         material,
         PrimitiveIndex(),
@@ -68,7 +64,17 @@ void ClosestHit(inout RayPayload payload, BuiltInTriangleIntersectionAttributes 
         WorldRayDirection(),
         ObjectToWorld3x4(),
         RayTCurrent());
-    payload.BaseColor = ApplyClosestHitCooperativeVector(payload.BaseColor);
+    payload.BaseColor = trianglePayload.BaseColor;
+    payload.HitT = trianglePayload.HitT;
+    payload.Normal = trianglePayload.Normal;
+    payload.Hit = trianglePayload.Hit;
+    payload.PositionError = trianglePayload.PositionError;
+    payload.Metallic = trianglePayload.Metallic;
+    payload.Roughness = trianglePayload.Roughness;
+    payload.AmbientOcclusion = trianglePayload.AmbientOcclusion;
+    payload.Emission = trianglePayload.Emission;
+    payload.Padding0 = trianglePayload.Padding0;
+//Modify End
 }
 
 //Modify Begin:2026-07-27 by BestHui
@@ -76,7 +82,17 @@ void ClosestHit(inout RayPayload payload, BuiltInTriangleIntersectionAttributes 
 void VisibilityClosestHit(inout RayPayload payload, BuiltInTriangleIntersectionAttributes attributes)
 {
     (void)attributes;
+//Modify Begin:2026-07-30 by BestHui
+    payload.BaseColor = 0.0f;
     payload.Hit = 1u;
     payload.HitT = RayTCurrent();
+    payload.Normal = 0.0f;
+    payload.PositionError = 0.0f;
+    payload.Metallic = 0.0f;
+    payload.Roughness = 1.0f;
+    payload.AmbientOcclusion = 1.0f;
+    payload.Emission = 0.0f;
+    payload.Padding0 = 0u;
+//Modify End
 }
 //Modify End

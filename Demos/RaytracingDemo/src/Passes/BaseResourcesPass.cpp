@@ -47,7 +47,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
 //Modify End
 //Modify Begin:2026-07-29 by BestHui
 //Modify Begin:2026-07-30 by BestHui
-            if (resources.Lights.Upload(cmd, context.m_Metadata.m_FrameIndex))
+            if (resources.Lights.Upload(cmd, context.GetMetadata().m_FrameIndex))
             {
                 resources.Pipelines.BindRayTracingResources(
                     resources.Scene.GetRayTracingAccelerationStructure(),

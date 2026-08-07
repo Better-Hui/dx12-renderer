@@ -294,7 +294,7 @@ void RaytracingDemo::OnResize(ResizeEventArgs& e)
     if (m_RenderGraph != nullptr)
     {
 //Modify Begin:2026-07-28 by BestHui
-        Application::Get().Flush();
+        m_FrameworkDeviceContext.Flush();
         m_CudaBloom.ReleaseInteropResource();
 //Modify End
         m_RenderGraph->MarkDirty();

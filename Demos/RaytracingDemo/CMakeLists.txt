@@ -4,6 +4,10 @@ project("RaytracingDemo")
 
 set(HEADER_FILES
         include/Denoising/DenoiserController.h
+        # Modify Begin:2026-08-07 by BestHui
+        include/Automation/RuntimeAutomationController.h
+        include/Profiling/RenderGraphTimingHistory.h
+        # Modify End
         include/RaytracingDemo.h
         include/RenderGraph/RaytracingDemoRenderGraphBuilder.h
         include/PathTracing/PathTracingSceneBindings.h
@@ -30,6 +34,10 @@ set(HEADER_FILES
 set(SOURCE_FILES
         src/main.cpp
         src/Denoising/DenoiserController.cpp
+        # Modify Begin:2026-08-07 by BestHui
+        src/Automation/RuntimeAutomationController.cpp
+        src/Profiling/RenderGraphTimingHistory.cpp
+        # Modify End
         src/RaytracingDemoCamera.cpp
         src/RaytracingDemo.cpp
         src/RaytracingDemoUI.cpp
@@ -153,6 +161,7 @@ set(SHADER_FILES_COMPUTE
         shaders/PathTracing/LightingComposite.cs.hlsl
 # Modify Begin:2026-07-28 by BestHui
         shaders/Skybox/Skybox.cs.hlsl
+        shaders/Skybox/SkyboxEquirectangular.cs.hlsl
         shaders/Skybox/SkyboxCubemapStrip.cs.hlsl
 # Modify End
         )
@@ -261,14 +270,7 @@ add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
 )
 
 # Modify Begin:2026-07-21 by BestHui
-set(PROJECT_DXC_EXECUTABLE "${CMAKE_SOURCE_DIR}/DXC/dxc.exe")
-if (EXISTS "${PROJECT_DXC_EXECUTABLE}")
-        set(DXC_EXECUTABLE "${PROJECT_DXC_EXECUTABLE}")
-else()
-        file(GLOB DXC_CANDIDATES "C:/Program Files (x86)/Windows Kits/10/bin/*/x64/dxc.exe")
-        list(SORT DXC_CANDIDATES)
-        list(GET DXC_CANDIDATES -1 DXC_EXECUTABLE)
-endif()
+set(DXC_EXECUTABLE "${DX12_RENDERER_DXC_EXECUTABLE}")
 # Modify End
 
 set(RAYTRACING_SHADER_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/shaders/PathTracing/PathTracing.rt.hlsl")
@@ -284,12 +286,8 @@ set(GBUFFER_TASK_MESH_SHADER_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/shaders/GBuffer
 set(GBUFFER_TASK_MESH_SHADER_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/Shaders/GBuffer.task.ms.cso")
 # Modify End
 
-# Modify Begin:2026-07-21 by BestHui
-set(RAYTRACING_SHADER_MODEL lib_6_6)
-if (DX12_RENDERER_ENABLE_SM610_LINALG)
-        set(RAYTRACING_SHADER_MODEL lib_6_10)
-        target_compile_definitions(${TARGET_NAME} PRIVATE DX12_RENDERER_ENABLE_SM610_LINALG=1)
-endif()
+# Modify Begin:2026-07-30 by BestHui
+set(RAYTRACING_SHADER_MODEL ${DX12_RENDERER_RAYTRACING_SHADER_MODEL})
 # Modify End
 
 add_custom_command(TARGET ${TARGET_NAME} PRE_BUILD
@@ -301,8 +299,8 @@ add_custom_command(TARGET ${TARGET_NAME} PRE_BUILD
         COMMAND "${DXC_EXECUTABLE}" -T ${RAYTRACING_SHADER_MODEL} -HV 2021 -Fo "${RAYTRACING_SOFT_SHADOW_SHADER_OUTPUT}" "${RAYTRACING_SOFT_SHADOW_SHADER_SOURCE}" -I "${CMAKE_SOURCE_DIR}/DXC/include" -I "${CMAKE_SOURCE_DIR}/Shaders" -I "${CMAKE_SOURCE_DIR}/Framework/shaders" -I "${CMAKE_SOURCE_DIR}/External/NRD/Shaders" -I "${CMAKE_CURRENT_SOURCE_DIR}/shaders" -WX
 # Modify End
 # Modify Begin:2026-07-31 by BestHui
-        COMMAND "${DXC_EXECUTABLE}" -E main -T as_6_6 -HV 2021 -Fo "${GBUFFER_TASK_SHADER_OUTPUT}" "${GBUFFER_TASK_SHADER_SOURCE}" -I "${CMAKE_SOURCE_DIR}/Shaders" -I "${CMAKE_SOURCE_DIR}/Framework/shaders" -I "${CMAKE_CURRENT_SOURCE_DIR}/shaders" -WX
-        COMMAND "${DXC_EXECUTABLE}" -E main -T ms_6_6 -HV 2021 -Fo "${GBUFFER_TASK_MESH_SHADER_OUTPUT}" "${GBUFFER_TASK_MESH_SHADER_SOURCE}" -I "${CMAKE_SOURCE_DIR}/Shaders" -I "${CMAKE_SOURCE_DIR}/Framework/shaders" -I "${CMAKE_CURRENT_SOURCE_DIR}/shaders" -WX
+        COMMAND "${DXC_EXECUTABLE}" -E main -T as_${DX12_RENDERER_SHADER_MODEL_SUFFIX} -HV 2021 -Fo "${GBUFFER_TASK_SHADER_OUTPUT}" "${GBUFFER_TASK_SHADER_SOURCE}" -I "${CMAKE_SOURCE_DIR}/Shaders" -I "${CMAKE_SOURCE_DIR}/Framework/shaders" -I "${CMAKE_CURRENT_SOURCE_DIR}/shaders" -WX
+        COMMAND "${DXC_EXECUTABLE}" -E main -T ms_${DX12_RENDERER_SHADER_MODEL_SUFFIX} -HV 2021 -Fo "${GBUFFER_TASK_MESH_SHADER_OUTPUT}" "${GBUFFER_TASK_MESH_SHADER_SOURCE}" -I "${CMAKE_SOURCE_DIR}/Shaders" -I "${CMAKE_SOURCE_DIR}/Framework/shaders" -I "${CMAKE_CURRENT_SOURCE_DIR}/shaders" -WX
 # Modify End
 # Modify Begin:2026-07-27 by BestHui
         COMMAND "${DX12_RENDERER_CUDA_NVCC_EXECUTABLE}" -ptx -O3 -arch=sm_75 -ccbin "${CUDA_HOST_COMPILER_DIR}" -Xcompiler=/utf-8 -o "${CUDA_BLOOM_PTX_OUTPUT}" "${CMAKE_CURRENT_SOURCE_DIR}/shaders/CUDA/CudaBloom.cu"

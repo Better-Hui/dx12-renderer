@@ -10,11 +10,14 @@
 #include <Framework/Interop/CudaInterop.h>
 
 class Texture;
+class FrameworkDeviceContext;
 
 class CudaBloomPass final
 {
 public:
-    CudaBloomPass();
+//Modify Begin:2026-07-30 by BestHui
+    explicit CudaBloomPass(FrameworkDeviceContext& deviceContext);
+//Modify End
     ~CudaBloomPass();
 
     bool DrawImGui();
@@ -29,6 +32,9 @@ public:
     const std::string& GetStatus() const { return m_Status; }
 
 private:
+//Modify Begin:2026-07-30 by BestHui
+    FrameworkDeviceContext& m_DeviceContext;
+//Modify End
     static constexpr uint32_t MaxBloomPyramidLevels = 8;
 //Modify Begin:2026-07-30 by BestHui
     static constexpr uint32_t CudaTimingFrameCount = 3;

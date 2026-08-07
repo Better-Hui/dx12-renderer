@@ -8,6 +8,9 @@
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 #include <Framework/Rendering/Pipeline/ComputePipelineStateBuilder.h>
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/Rendering/Pipeline/ShaderTargetProfile.h>
+//Modify End
 #include <Framework/Rendering/Texture/RenderTexture.h>
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <Framework/Rendering/Texture/UnorderedAccessView.h>
@@ -285,7 +288,7 @@ std::unique_ptr<ComputeShader> ReSTIRDIPass::CreateComputeShader(
         ? compiledFileName + L".softshadow"
         : compiledFileName;
     shaderDesc.SourceFileName = sourceFileName;
-    shaderDesc.TargetProfile = "cs_6_6";
+    shaderDesc.TargetProfile = ShaderTargetProfile::Compute();
     shaderDesc.DebugName = "Framework ReSTIR DI";
     if (useSoftShadowVariant)
     {

@@ -30,7 +30,7 @@ class IndirectDrawCommandSignature;
 
 namespace RenderGraph
 {
-    struct RenderContext;
+    class FrameContext;
 }
 
 struct RaytracingDemoCameraConstants
@@ -193,7 +193,7 @@ struct RaytracingDemoPassConfig
 RaytracingDemoCameraConstants BuildPassCameraConstants(
     const RaytracingDemoPassResources& resources,
     const RaytracingDemoPassConfig& config,
-    const RenderGraph::RenderContext& context);
+    const RenderGraph::FrameContext& context);
 
 RaytracingDemoPipelineConstants BuildPassPipelineConstants(
     const RaytracingDemoPassResources& resources,

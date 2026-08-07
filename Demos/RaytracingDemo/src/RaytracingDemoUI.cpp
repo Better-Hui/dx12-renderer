@@ -45,7 +45,7 @@ void RaytracingDemo::OnImGui()
             {
                 m_RenderGraphTimingCaptureEnabled = false;
             }
-            ClearRenderGraphTimingHistory();
+            m_RenderGraphTimingHistory.Clear();
 //Modify End
         }
         if (m_GpuTimingEnabled)
@@ -53,33 +53,31 @@ void RaytracingDemo::OnImGui()
 //Modify Begin:2026-08-03 by BestHui
             if (ImGui::Checkbox("Capture RG Timing History", &m_RenderGraphTimingCaptureEnabled))
             {
-                ClearRenderGraphTimingHistory();
+                m_RenderGraphTimingHistory.Clear();
             }
             ImGui::SameLine();
             ImGui::SetNextItemWidth(140.0f);
-            if (ImGui::SliderInt("History Frames", &m_RenderGraphTimingHistoryCapacity, 30, 3600))
+            int timingHistoryCapacity = static_cast<int>(m_RenderGraphTimingHistory.GetCapacity());
+            if (ImGui::SliderInt("History Frames", &timingHistoryCapacity, 30, 3600))
             {
-                while (m_RenderGraphTimingHistory.size() > static_cast<size_t>(m_RenderGraphTimingHistoryCapacity))
-                {
-                    m_RenderGraphTimingHistory.pop_front();
-                }
+                m_RenderGraphTimingHistory.SetCapacity(static_cast<size_t>(timingHistoryCapacity));
             }
             if (ImGui::Button("Dump RG Timing CSV"))
             {
-                DumpRenderGraphTimingHistory();
+                m_RenderGraphTimingHistory.DumpCsv();
             }
             ImGui::SameLine();
             if (ImGui::Button("Clear RG Timing History"))
             {
-                ClearRenderGraphTimingHistory();
+                m_RenderGraphTimingHistory.Clear();
             }
             ImGui::Text(
                 "History: %zu/%d frames",
-                m_RenderGraphTimingHistory.size(),
-                m_RenderGraphTimingHistoryCapacity);
-            if (!m_RenderGraphTimingExportStatus.empty())
+                m_RenderGraphTimingHistory.GetFrameCount(),
+                static_cast<int>(m_RenderGraphTimingHistory.GetCapacity()));
+            if (!m_RenderGraphTimingHistory.GetStatus().empty())
             {
-                ImGui::TextWrapped("%s", m_RenderGraphTimingExportStatus.c_str());
+                ImGui::TextWrapped("%s", m_RenderGraphTimingHistory.GetStatus().c_str());
             }
 //Modify End
 //Modify Begin:2026-08-02 by BestHui
@@ -355,6 +353,10 @@ void RaytracingDemo::OnImGui()
     {
         ImGui::TextDisabled("Async Compute: Inline Ray Query only");
     }
+//Modify Begin:2026-08-07 by BestHui
+    ImGui::Checkbox("Enable Parallel Direct Command Recording", &m_ParallelDirectCommandRecordingEnabled);
+    ImGui::TextDisabled("Current batch: Inline Ray Query direct and indirect lighting. GPU execution remains ordered.");
+//Modify End
 //Modify Begin:2026-07-30 by BestHui
     const char* lightingDebugTargetNames[] = {
         "Off",

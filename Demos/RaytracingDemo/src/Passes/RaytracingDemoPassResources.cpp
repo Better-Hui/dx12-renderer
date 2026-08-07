@@ -25,8 +25,8 @@ RaytracingDemoCameraConstants BuildPassCameraConstants(
     camera.InverseView = XMMatrixInverse(nullptr, resources.SceneCamera.GetViewMatrix());
     camera.InverseProjection = XMMatrixInverse(nullptr, resources.SceneCamera.GetProjectionMatrix());
     XMStoreFloat4(&camera.CameraPosition, resources.SceneCamera.GetTranslation());
-    camera.Width = context.m_Metadata.m_ScreenWidth;
-    camera.Height = context.m_Metadata.m_ScreenHeight;
+    camera.Width = context.GetMetadata().m_ScreenWidth;
+    camera.Height = context.GetMetadata().m_ScreenHeight;
     camera.MaxBounces = static_cast<uint32_t>(std::clamp(frameState.MaxBounces, 0, 5));
     resources.Lights.FillCameraConstants(
         camera.DirectionalLightCount,

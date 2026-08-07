@@ -15,6 +15,13 @@ if ("${SOURCE_FILES}" STREQUAL "")
 endif ()
 
 # Shaders
+# Modify Begin:2026-07-30 by BestHui
+if (NOT DEFINED DX12_RENDERER_SHADER_MODEL_VERSION)
+    set(DX12_RENDERER_SHADER_MODEL_VERSION "6.9")
+endif ()
+string(REPLACE "." "_" DX12_RENDERER_SHADER_MODEL_SUFFIX "${DX12_RENDERER_SHADER_MODEL_VERSION}")
+# Modify End
+
 if ("${SHADER_FILES_VERTEX}" STREQUAL "")
     FILE(GLOB_RECURSE SHADER_FILES_VERTEX ${CMAKE_CURRENT_SOURCE_DIR}/shaders/*_VS.hlsl)
 endif ()
@@ -31,43 +38,52 @@ list(APPEND SHADER_FILES ${SHADER_FILES_VERTEX} ${SHADER_FILES_PIXEL} ${SHADER_F
 
 source_group("Resources\\Shaders" FILES ${SHADER_FILES})
 
-set_source_files_properties(${SHADER_FILES}
-        PROPERTIES
-# Modify Begin:2026-07-21 by BestHui
-        VS_SHADER_MODEL 6.6
-# Modify End
-        VS_SHADER_DISABLE_OPTIMIZATIONS $<$<CONFIG:Debug>:ON>
-        VS_SHADER_ENABLE_DEBUG $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:ON>
-# Modify Begin:2026-07-28 by BestHui
-        # Modify Begin:2026-07-31 by BestHui
-        VS_SHADER_FLAGS "/I \"${CMAKE_SOURCE_DIR}/Shaders\" /I \"${CMAKE_SOURCE_DIR}/Framework/shaders\" -WX" # include shader libraries, treat warnings as errors
-        # Modify End
-# Modify End
+# Modify Begin:2026-07-30 by BestHui
+set_source_files_properties(${SHADER_FILES} PROPERTIES HEADER_FILE_ONLY TRUE)
+set(DX12_RENDERER_SHADER_INCLUDE_ARGS
+        -I "${CMAKE_SOURCE_DIR}/Shaders"
+        -I "${CMAKE_SOURCE_DIR}/Framework/shaders"
+        -I "${CMAKE_CURRENT_SOURCE_DIR}/shaders"
         )
+set(DX12_RENDERER_GENERATED_SHADER_OUTPUTS)
 
-if (${SHADERS_OUTPUT_HEADERS}) 
-    # use headers
-    set_source_files_properties(${SHADER_FILES}
-        PROPERTIES
-                VS_SHADER_VARIABLE_NAME "ShaderBytecode_%(Filename)"
-                VS_SHADER_OUTPUT_HEADER_FILE "${CMAKE_CURRENT_BINARY_DIR}/Shaders/${TARGET_NAME}/%(Filename).h"
-        )
-else()
-    # use object files
-    set_source_files_properties(${SHADER_FILES}
-        PROPERTIES
-                VS_SHADER_OBJECT_FILE_NAME "${CMAKE_CURRENT_BINARY_DIR}/Shaders/%(Filename).cso"
-        )
+function(dx12_renderer_add_shader_compile source_path target_profile)
+    get_filename_component(shader_absolute_path "${source_path}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+    get_filename_component(shader_file_name "${shader_absolute_path}" NAME)
+    string(REGEX REPLACE "\\.hlsl$" "" shader_name "${shader_file_name}")
+    if (SHADERS_OUTPUT_HEADERS)
+        set(shader_output_directory "${CMAKE_CURRENT_BINARY_DIR}/Shaders/${TARGET_NAME}")
+        set(shader_output_path "${shader_output_directory}/${shader_name}.h")
+        set(shader_output_args -Fh "${shader_output_path}" -Vn "ShaderBytecode_${shader_name}")
+    else()
+        set(shader_output_directory "${CMAKE_CURRENT_BINARY_DIR}/Shaders")
+        set(shader_output_path "${shader_output_directory}/${shader_name}.cso")
+        set(shader_output_args -Fo "${shader_output_path}")
+    endif()
+
+    add_custom_command(
+            OUTPUT "${shader_output_path}"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${shader_output_directory}"
+            COMMAND "${DX12_RENDERER_DXC_EXECUTABLE}" -E main -T "${target_profile}" -HV 2021 -WX ${DX12_RENDERER_SHADER_INCLUDE_ARGS} ${shader_output_args} "${shader_absolute_path}"
+            DEPENDS "${shader_absolute_path}"
+            COMMENT "DXC ${target_profile}: ${shader_absolute_path}"
+            VERBATIM
+            )
+    list(APPEND DX12_RENDERER_GENERATED_SHADER_OUTPUTS "${shader_output_path}")
+    set(DX12_RENDERER_GENERATED_SHADER_OUTPUTS "${DX12_RENDERER_GENERATED_SHADER_OUTPUTS}" PARENT_SCOPE)
+endfunction()
+
+foreach(shader_file IN LISTS SHADER_FILES_VERTEX)
+    dx12_renderer_add_shader_compile("${shader_file}" "vs_${DX12_RENDERER_SHADER_MODEL_SUFFIX}")
+endforeach()
+foreach(shader_file IN LISTS SHADER_FILES_PIXEL)
+    dx12_renderer_add_shader_compile("${shader_file}" "ps_${DX12_RENDERER_SHADER_MODEL_SUFFIX}")
+endforeach()
+foreach(shader_file IN LISTS SHADER_FILES_COMPUTE)
+    dx12_renderer_add_shader_compile("${shader_file}" "cs_${DX12_RENDERER_SHADER_MODEL_SUFFIX}")
+endforeach()
+
+if (DX12_RENDERER_GENERATED_SHADER_OUTPUTS)
+    add_custom_target(${TARGET_NAME}_ShaderBytecode DEPENDS ${DX12_RENDERER_GENERATED_SHADER_OUTPUTS})
 endif()
-
-set_source_files_properties(${SHADER_FILES_VERTEX} PROPERTIES
-        VS_SHADER_TYPE Vertex
-        )
-
-set_source_files_properties(${SHADER_FILES_PIXEL} PROPERTIES
-        VS_SHADER_TYPE Pixel
-        )
-
-set_source_files_properties(${SHADER_FILES_COMPUTE} PROPERTIES
-        VS_SHADER_TYPE Compute
-        )
+# Modify End

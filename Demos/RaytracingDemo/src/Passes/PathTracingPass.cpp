@@ -55,7 +55,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
         ? InputType::NonPixelShaderResource
         : InputType::ShaderResource;
 
-    return RenderPass::Create(
+    auto pass = RenderPass::Create(
         L"Direct Lighting",
         {
             { DemoResourceIds::BaseResourcesFinishedToken, InputType::Token },
@@ -78,12 +78,12 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
             if (backend == PathTracingBackend::InlineRayQuery)
             {
                 ComputeShader& directLightingShader = resources.Pipelines.GetInlineDirectLightingShader();
-                RaytracingDemoPassBindings::BindInlinePathTracingInputs(resources, cmd, directLightingShader, gbuffer, camera);
+                CommandContext commandContext(cmd);
+                RaytracingDemoPassBindings::BindInlinePathTracingInputs(resources, commandContext, directLightingShader, gbuffer, camera);
 //Modify Begin:2026-07-28 by BestHui
                 resources.Scene.TransitionRayTracingShaderResources(
                     cmd,
                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-                CommandContext commandContext(cmd);
                 commandContext.SetUnorderedAccessView(directLightingShader, "DirectLighting", UnorderedAccessView(context.GetTexture(DemoResourceIds::DirectLighting)));
 //Modify Begin:2026-07-30 by BestHui
                 commandContext.BindBindlessDescriptorHeap(resources.Scene.GetBindlessDescriptorHeap());
@@ -115,6 +115,13 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
 //Modify End
             }
         });
+//Modify Begin:2026-07-30 by BestHui
+    if (backend == PathTracingBackend::InlineRayQuery)
+    {
+        pass->SetParallelRecordingEligible(true);
+    }
+    return pass;
+//Modify End
 }
 
 //Modify Begin:2026-08-06 by BestHui
@@ -180,7 +187,8 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
             if (backend == PathTracingBackend::InlineRayQuery)
             {
                 ComputeShader& indirectLightingShader = resources.Pipelines.GetInlineIndirectLightingShader();
-                RaytracingDemoPassBindings::BindInlinePathTracingInputs(resources, cmd, indirectLightingShader, gbuffer, camera);
+                CommandContext commandContext(cmd);
+                RaytracingDemoPassBindings::BindInlinePathTracingInputs(resources, commandContext, indirectLightingShader, gbuffer, camera);
 //Modify Begin:2026-07-28 by BestHui
                 if (queue != RenderPassQueue::AsyncCompute)
                 {
@@ -188,7 +196,6 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
                         cmd,
                         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
                 }
-                CommandContext commandContext(cmd);
                 commandContext.SetUnorderedAccessView(indirectLightingShader, "IndirectLighting", UnorderedAccessView(context.GetTexture(DemoResourceIds::IndirectLighting)));
 //Modify Begin:2026-07-30 by BestHui
                 commandContext.BindBindlessDescriptorHeap(resources.Scene.GetBindlessDescriptorHeap());
@@ -243,6 +250,10 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
             }
             resources.Lights.PrepareAsyncComputeResources(commandList);
         });
+    }
+    else if (backend == PathTracingBackend::InlineRayQuery)
+    {
+        pass->SetParallelRecordingEligible(true);
     }
     return pass;
 //Modify End

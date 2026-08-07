@@ -13,6 +13,9 @@
 #include <Framework/Rendering/Pipeline/RasterPipelineStateBuilder.h>
 #include <Framework/Rendering/Pipeline/ShaderBlob.h>
 //Modify Begin:2026-07-30 by BestHui
+#include <Framework/Rendering/Pipeline/ShaderTargetProfile.h>
+//Modify End
+//Modify Begin:2026-07-30 by BestHui
 #include <Framework/Scene/SceneImporter.h>
 //Modify End
 
@@ -28,17 +31,11 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
-//Modify Begin:2026-08-03 by BestHui
-#include <ctime>
-//Modify End
 #include <filesystem>
-//Modify Begin:2026-08-03 by BestHui
-#include <fstream>
-#include <iomanip>
-//Modify End
 #include <random>
-#include <sstream>
 #include <stdexcept>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include <RenderGraph/RaytracingDemoRenderGraphBuilder.h>
@@ -133,23 +130,216 @@ namespace
     }
 //Modify End
 
-//Modify Begin:2026-08-03 by BestHui
-    std::string EscapeCsvField(const std::string& value)
+//Modify Begin:2026-08-07 by BestHui
+    enum class RuntimeAutomationAction : uint32_t
     {
-        std::string escaped = "\"";
-        for (const char character : value)
+        SoftShadows,
+        StressSpheres,
+        MeshletGBuffer,
+        MeshletTaskShader,
+        PathTracingBackend,
+        DirectLighting,
+        IndirectLighting,
+        AsyncCompute,
+        ParallelDirectCommandRecording,
+        Skybox,
+        Accumulation,
+        GpuTiming,
+        TimingCapture,
+        DumpTiming,
+        MatrixCase
+    };
+
+    struct RuntimeAutomationMatrixCase
+    {
+        PathTracingBackend Backend = PathTracingBackend::InlineRayQuery;
+        RaytracingDemoLightingTechnique DirectLighting = RaytracingDemoLightingTechnique::None;
+        RaytracingDemoLightingTechnique IndirectLighting = RaytracingDemoLightingTechnique::None;
+        bool AsyncCompute = false;
+        bool ParallelDirectCommandRecording = true;
+        bool UseMeshletGBuffer = false;
+        bool UseTaskShaderMeshlets = true;
+        bool SoftShadows = false;
+        bool StressSpheres = false;
+        bool Skybox = false;
+        bool Accumulation = false;
+        std::string Name;
+    };
+
+    const char* GetRuntimeAutomationBackendName(const PathTracingBackend backend)
+    {
+        return backend == PathTracingBackend::InlineRayQuery ? "inline" : "dxr";
+    }
+
+    const char* GetRuntimeAutomationLightingName(const RaytracingDemoLightingTechnique technique)
+    {
+        switch (technique)
         {
-            if (character == '\"')
-            {
-                escaped += "\"\"";
-            }
-            else
-            {
-                escaped += character;
-            }
+        case RaytracingDemoLightingTechnique::PathTracing:
+            return "pathtracing";
+        case RaytracingDemoLightingTechnique::ReSTIRDI:
+            return "restirdi";
+        case RaytracingDemoLightingTechnique::None:
+        default:
+            return "none";
         }
-        escaped += "\"";
-        return escaped;
+    }
+
+    const std::vector<RuntimeAutomationMatrixCase>& GetRuntimeAutomationMatrixCases()
+    {
+        static const std::vector<RuntimeAutomationMatrixCase> cases = []()
+        {
+            struct MeshletMode
+            {
+                bool Enabled;
+                bool TaskShader;
+                const char* Name;
+            };
+
+            const std::vector<MeshletMode> meshletModes = {
+                { false, true, "raster" },
+                { true, true, "task" },
+                { true, false, "indirect" },
+            };
+            const std::vector<PathTracingBackend> backends = {
+                PathTracingBackend::InlineRayQuery,
+                PathTracingBackend::ShaderTableDxr,
+            };
+            const std::vector<RaytracingDemoLightingTechnique> directTechniques = {
+                RaytracingDemoLightingTechnique::None,
+                RaytracingDemoLightingTechnique::PathTracing,
+                RaytracingDemoLightingTechnique::ReSTIRDI,
+            };
+            const std::vector<RaytracingDemoLightingTechnique> indirectTechniques = {
+                RaytracingDemoLightingTechnique::None,
+                RaytracingDemoLightingTechnique::PathTracing,
+            };
+
+            std::vector<RuntimeAutomationMatrixCase> result;
+            uint32_t caseIndex = 1;
+            for (const bool stressSpheres : { false, true })
+            {
+                for (const bool softShadows : { false, true })
+                {
+                    for (const PathTracingBackend backend : backends)
+                    {
+                        for (const MeshletMode& meshletMode : meshletModes)
+                        {
+                            for (const RaytracingDemoLightingTechnique directLighting : directTechniques)
+                            {
+                                if (directLighting == RaytracingDemoLightingTechnique::ReSTIRDI &&
+                                    backend != PathTracingBackend::InlineRayQuery)
+                                {
+                                    continue;
+                                }
+
+                                for (const RaytracingDemoLightingTechnique indirectLighting : indirectTechniques)
+                                {
+                                    for (const bool asyncCompute : { false, true })
+                                    {
+                                        if (asyncCompute && backend != PathTracingBackend::InlineRayQuery)
+                                        {
+                                            continue;
+                                        }
+
+                                        for (const bool parallelDirectCommandRecording : { false, true })
+                                        {
+                                            for (const bool skybox : { false, true })
+                                            {
+                                                for (const bool accumulation : { false, true })
+                                                {
+                                                    RuntimeAutomationMatrixCase testCase;
+                                                    testCase.Backend = backend;
+                                                    testCase.DirectLighting = directLighting;
+                                                    testCase.IndirectLighting = indirectLighting;
+                                                    testCase.AsyncCompute = asyncCompute;
+                                                    testCase.ParallelDirectCommandRecording = parallelDirectCommandRecording;
+                                                    testCase.UseMeshletGBuffer = meshletMode.Enabled;
+                                                    testCase.UseTaskShaderMeshlets = meshletMode.TaskShader;
+                                                    testCase.SoftShadows = softShadows;
+                                                    testCase.StressSpheres = stressSpheres;
+                                                    testCase.Skybox = skybox;
+                                                    testCase.Accumulation = accumulation;
+                                                    testCase.Name =
+                                                        "matrix#" + std::to_string(caseIndex++) +
+                                                        " backend=" + GetRuntimeAutomationBackendName(backend) +
+                                                        " meshlet=" + meshletMode.Name +
+                                                        " direct=" + GetRuntimeAutomationLightingName(directLighting) +
+                                                        " indirect=" + GetRuntimeAutomationLightingName(indirectLighting) +
+                                                        " async=" + std::to_string(asyncCompute) +
+                                                        " parallelrecording=" + std::to_string(parallelDirectCommandRecording) +
+                                                        " soft=" + std::to_string(softShadows) +
+                                                        " stress=" + std::to_string(stressSpheres) +
+                                                        " skybox=" + std::to_string(skybox) +
+                                                        " accumulation=" + std::to_string(accumulation);
+                                                    result.push_back(std::move(testCase));
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return result;
+        }();
+        return cases;
+    }
+
+    DemoAutomation::TestSuites CreateRuntimeAutomationTestSuites()
+    {
+        using Action = RuntimeAutomationAction;
+        const auto makeStep = [](const Action action, const uint32_t value, std::string name)
+        {
+            return DemoAutomation::Step{ static_cast<uint32_t>(action), value, std::move(name) };
+        };
+
+        DemoAutomation::TestSuites testSuites;
+        testSuites.Core = {
+            makeStep(Action::GpuTiming, 1u, "timing=1"),
+            makeStep(Action::TimingCapture, 1u, "timingcapture=1"),
+            makeStep(Action::SoftShadows, 0u, "soft=0"),
+            makeStep(Action::SoftShadows, 1u, "soft=1"),
+            makeStep(Action::StressSpheres, 1u, "stress=1"),
+            makeStep(Action::StressSpheres, 0u, "stress=0"),
+            makeStep(Action::StressSpheres, 1u, "stress=1"),
+            makeStep(Action::StressSpheres, 0u, "stress=0"),
+            makeStep(Action::MeshletGBuffer, 0u, "meshlet=0"),
+            makeStep(Action::MeshletGBuffer, 1u, "meshlet=1"),
+            makeStep(Action::MeshletTaskShader, 0u, "meshletbackend=indirect"),
+            makeStep(Action::MeshletTaskShader, 1u, "meshletbackend=task"),
+            makeStep(Action::DirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::PathTracing), "direct=pathtracing"),
+            makeStep(Action::PathTracingBackend, static_cast<uint32_t>(PathTracingBackend::ShaderTableDxr), "backend=dxr"),
+            makeStep(Action::PathTracingBackend, static_cast<uint32_t>(PathTracingBackend::InlineRayQuery), "backend=inline"),
+            makeStep(Action::IndirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::PathTracing), "indirect=pathtracing"),
+            makeStep(Action::ParallelDirectCommandRecording, 0u, "parallelrecording=0"),
+            makeStep(Action::ParallelDirectCommandRecording, 1u, "parallelrecording=1"),
+            makeStep(Action::AsyncCompute, 1u, "async=1"),
+            makeStep(Action::AsyncCompute, 0u, "async=0"),
+            makeStep(Action::IndirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::None), "indirect=none"),
+            makeStep(Action::DirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::ReSTIRDI), "direct=restirdi"),
+            makeStep(Action::Skybox, 0u, "skybox=0"),
+            makeStep(Action::Skybox, 1u, "skybox=1"),
+            makeStep(Action::Accumulation, 0u, "accumulation=0"),
+            makeStep(Action::Accumulation, 1u, "accumulation=1"),
+            makeStep(Action::DumpTiming, 1u, "timingdump=1"),
+            makeStep(Action::GpuTiming, 0u, "timing=0")
+        };
+        testSuites.Stress = {
+            makeStep(Action::StressSpheres, 1u, "stress=1"),
+            makeStep(Action::StressSpheres, 0u, "stress=0"),
+            makeStep(Action::StressSpheres, 1u, "stress=1"),
+            makeStep(Action::StressSpheres, 0u, "stress=0")
+        };
+        const auto& matrixCases = GetRuntimeAutomationMatrixCases();
+        testSuites.Matrix.reserve(matrixCases.size());
+        for (uint32_t caseIndex = 0; caseIndex < matrixCases.size(); ++caseIndex)
+        {
+            testSuites.Matrix.push_back(makeStep(Action::MatrixCase, caseIndex, matrixCases[caseIndex].Name));
+        }
+        return testSuites;
     }
 //Modify End
 
@@ -205,7 +395,10 @@ RaytracingDemo::RaytracingDemo(const std::wstring& name, const int width, const 
 //Modify End
         })
 //Modify End
-    , m_SceneResources(Application::Get().GetDevice())
+//Modify Begin:2026-07-30 by BestHui
+    , m_CudaBloom(m_FrameworkDeviceContext)
+    , m_SceneResources(m_FrameworkDeviceContext.GetDevice())
+//Modify End
     , m_Lights(m_FrameworkDeviceContext)
 {
     (void)graphicsSettings;
@@ -413,122 +606,62 @@ void RaytracingDemo::ResetCameraToInitialSceneState()
     ResetAccumulation();
 }
 
-void RaytracingDemo::AppendRuntimeAutomationLog(const std::string& message) const
-{
-    if (m_RuntimeAutomationLogPath.empty())
-    {
-        return;
-    }
-
-    std::ofstream log(m_RuntimeAutomationLogPath, std::ios::app);
-    if (log.is_open())
-    {
-        log << message << '\n';
-    }
-}
-
+//Modify Begin:2026-08-07 by BestHui
 void RaytracingDemo::InitializeRuntimeAutomation()
 {
-    char* automationMode = nullptr;
-    size_t automationModeLength = 0;
-    _dupenv_s(&automationMode, &automationModeLength, "RAYTRACING_DEMO_AUTOTEST");
-    const std::string mode = automationMode != nullptr ? automationMode : "";
-    std::free(automationMode);
-    if (mode.empty() || mode == "0" || mode == "off")
-    {
-        return;
-    }
-
-    m_RuntimeAutomationLogPath = std::filesystem::current_path() / "Saved" / "RuntimeAutomation.log";
-    std::filesystem::create_directories(m_RuntimeAutomationLogPath.parent_path());
-    std::ofstream(m_RuntimeAutomationLogPath, std::ios::trunc) << "Runtime automation started." << '\n';
-
-    char* stepMilliseconds = nullptr;
-    size_t stepMillisecondsLength = 0;
-    _dupenv_s(&stepMilliseconds, &stepMillisecondsLength, "RAYTRACING_DEMO_AUTOTEST_STEP_MS");
-    if (stepMilliseconds != nullptr)
-    {
-        const double milliseconds = std::strtod(stepMilliseconds, nullptr);
-        if (milliseconds > 0.0)
-        {
-            m_RuntimeAutomationStepIntervalSeconds = milliseconds / 1000.0;
-        }
-    }
-    std::free(stepMilliseconds);
-
-    char* quitOnComplete = nullptr;
-    size_t quitOnCompleteLength = 0;
-    _dupenv_s(&quitOnComplete, &quitOnCompleteLength, "RAYTRACING_DEMO_AUTOTEST_QUIT");
-    m_RuntimeAutomationQuitOnComplete = quitOnComplete != nullptr && std::strcmp(quitOnComplete, "0") != 0;
-    std::free(quitOnComplete);
-
-    const auto addStep = [this](const RuntimeAutomationAction action, const uint32_t value, std::string name)
-    {
-        m_RuntimeAutomationSteps.push_back({ action, value, std::move(name) });
-    };
-
-    if (mode == "core")
-    {
-        addStep(RuntimeAutomationAction::SoftShadows, 0u, "soft=0");
-        addStep(RuntimeAutomationAction::SoftShadows, 1u, "soft=1");
-        addStep(RuntimeAutomationAction::StressSpheres, 1u, "stress=1");
-        addStep(RuntimeAutomationAction::StressSpheres, 0u, "stress=0");
-        addStep(RuntimeAutomationAction::StressSpheres, 1u, "stress=1");
-        addStep(RuntimeAutomationAction::StressSpheres, 0u, "stress=0");
-        addStep(RuntimeAutomationAction::MeshletGBuffer, 0u, "meshlet=0");
-        addStep(RuntimeAutomationAction::MeshletGBuffer, 1u, "meshlet=1");
-        addStep(RuntimeAutomationAction::MeshletTaskShader, 0u, "meshletbackend=indirect");
-        addStep(RuntimeAutomationAction::MeshletTaskShader, 1u, "meshletbackend=task");
-        addStep(RuntimeAutomationAction::DirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::PathTracing), "direct=pathtracing");
-        addStep(RuntimeAutomationAction::IndirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::PathTracing), "indirect=pathtracing");
-        addStep(RuntimeAutomationAction::AsyncCompute, 1u, "async=1");
-        addStep(RuntimeAutomationAction::AsyncCompute, 0u, "async=0");
-        addStep(RuntimeAutomationAction::IndirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::None), "indirect=none");
-        addStep(RuntimeAutomationAction::DirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::ReSTIRDI), "direct=restirdi");
-        addStep(RuntimeAutomationAction::Skybox, 0u, "skybox=0");
-        addStep(RuntimeAutomationAction::Skybox, 1u, "skybox=1");
-        addStep(RuntimeAutomationAction::Accumulation, 0u, "accumulation=0");
-        addStep(RuntimeAutomationAction::Accumulation, 1u, "accumulation=1");
-    }
-    else if (mode == "stress")
-    {
-        addStep(RuntimeAutomationAction::StressSpheres, 1u, "stress=1");
-        addStep(RuntimeAutomationAction::StressSpheres, 0u, "stress=0");
-        addStep(RuntimeAutomationAction::StressSpheres, 1u, "stress=1");
-        addStep(RuntimeAutomationAction::StressSpheres, 0u, "stress=0");
-    }
-    else
-    {
-        throw std::runtime_error("RAYTRACING_DEMO_AUTOTEST must be 'core' or 'stress'.");
-    }
-
-    m_RuntimeAutomationEnabled = !m_RuntimeAutomationSteps.empty();
-    m_RuntimeAutomationLastStepTime = -m_RuntimeAutomationStepIntervalSeconds;
-    AppendRuntimeAutomationLog("Mode=" + mode + ", step interval=" + std::to_string(m_RuntimeAutomationStepIntervalSeconds) + " seconds.");
+    m_RuntimeAutomation.Initialize(CreateRuntimeAutomationTestSuites());
 }
 
 void RaytracingDemo::UpdateRuntimeAutomation(const double totalTime)
 {
-    if (!m_RuntimeAutomationEnabled || m_RuntimeAutomationCompleted ||
-        totalTime - m_RuntimeAutomationLastStepTime < m_RuntimeAutomationStepIntervalSeconds)
-    {
-        return;
-    }
-
-    if (m_RuntimeAutomationStepIndex >= m_RuntimeAutomationSteps.size())
-    {
-        m_RuntimeAutomationCompleted = true;
-        AppendRuntimeAutomationLog("Runtime automation completed.");
-        if (m_RuntimeAutomationQuitOnComplete)
+    m_RuntimeAutomation.Update(
+        totalTime,
+        [this](const uint32_t action, const uint32_t value)
+        {
+            ApplyRuntimeAutomationAction(action, value);
+        },
+        []()
         {
             Application::Get().Quit(0);
-        }
-        return;
+        });
+}
+
+void RaytracingDemo::ApplyRuntimeAutomationMatrixCase(const uint32_t caseIndex)
+{
+    const auto& matrixCases = GetRuntimeAutomationMatrixCases();
+    if (caseIndex >= matrixCases.size())
+    {
+        throw std::out_of_range("Runtime automation matrix case index is out of range.");
     }
 
-    const RuntimeAutomationStep& step = m_RuntimeAutomationSteps[m_RuntimeAutomationStepIndex++];
-    const bool enabled = step.Value != 0u;
-    switch (step.Action)
+    const RuntimeAutomationMatrixCase& testCase = matrixCases[caseIndex];
+    const bool stressSpheresChanged = m_StressTestSpheresEnabled != testCase.StressSpheres;
+
+    m_PathTracingBackend = testCase.Backend;
+    m_DirectLightingTechnique = testCase.DirectLighting;
+    m_IndirectLightingTechnique = testCase.IndirectLighting;
+    m_AsyncComputeEnabled = testCase.Backend == PathTracingBackend::InlineRayQuery && testCase.AsyncCompute;
+    m_ParallelDirectCommandRecordingEnabled = testCase.ParallelDirectCommandRecording;
+    m_UseMeshletGBuffer = testCase.UseMeshletGBuffer;
+    m_UseTaskShaderMeshlets = testCase.UseTaskShaderMeshlets;
+    m_SoftShadowsEnabled = testCase.SoftShadows;
+    m_StressTestSpheresEnabled = testCase.StressSpheres;
+    m_SkyboxEnabled = testCase.Skybox;
+    m_AccumulationEnabled = testCase.Accumulation;
+    m_DebugMeshletClusters = false;
+    m_DebugLightingTextureTarget = 0;
+    m_DebugTextureTarget = 0;
+    m_DebugSerializeAsyncCompute = false;
+    m_StressTestSpheresStateDirty = stressSpheresChanged;
+    EnsureRayTracingPipelines();
+    ResetAccumulation();
+}
+
+void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, const uint32_t value)
+{
+    const bool enabled = value != 0u;
+    const auto action = static_cast<RuntimeAutomationAction>(actionValue);
+    switch (action)
     {
     case RuntimeAutomationAction::SoftShadows:
         m_SoftShadowsEnabled = enabled;
@@ -549,12 +682,20 @@ void RaytracingDemo::UpdateRuntimeAutomation(const double totalTime)
         m_UseMeshletGBuffer = true;
         ResetAccumulation();
         break;
+    case RuntimeAutomationAction::PathTracingBackend:
+        m_PathTracingBackend = static_cast<PathTracingBackend>(value);
+        if (m_PathTracingBackend != PathTracingBackend::InlineRayQuery)
+        {
+            m_AsyncComputeEnabled = false;
+        }
+        ResetAccumulation();
+        break;
     case RuntimeAutomationAction::DirectLighting:
-        m_DirectLightingTechnique = static_cast<RaytracingDemoLightingTechnique>(step.Value);
+        m_DirectLightingTechnique = static_cast<RaytracingDemoLightingTechnique>(value);
         ResetAccumulation();
         break;
     case RuntimeAutomationAction::IndirectLighting:
-        m_IndirectLightingTechnique = static_cast<RaytracingDemoLightingTechnique>(step.Value);
+        m_IndirectLightingTechnique = static_cast<RaytracingDemoLightingTechnique>(value);
         ResetAccumulation();
         break;
     case RuntimeAutomationAction::AsyncCompute:
@@ -564,6 +705,9 @@ void RaytracingDemo::UpdateRuntimeAutomation(const double totalTime)
             ResetAccumulation();
         }
         break;
+    case RuntimeAutomationAction::ParallelDirectCommandRecording:
+        m_ParallelDirectCommandRecordingEnabled = enabled;
+        break;
     case RuntimeAutomationAction::Skybox:
         m_SkyboxEnabled = enabled;
         ResetAccumulation();
@@ -572,11 +716,31 @@ void RaytracingDemo::UpdateRuntimeAutomation(const double totalTime)
         m_AccumulationEnabled = enabled;
         ResetAccumulation();
         break;
+    case RuntimeAutomationAction::GpuTiming:
+        m_GpuTimingEnabled = enabled;
+        m_GpuTimestampSamples.clear();
+        m_GpuTimestampDisplaySamples.clear();
+        m_AsyncComputeGpuTimestampSamples.clear();
+        m_AsyncComputeGpuTimestampDisplaySamples.clear();
+        if (!enabled)
+        {
+            m_RenderGraphTimingCaptureEnabled = false;
+        }
+        m_RenderGraphTimingHistory.Clear();
+        break;
+    case RuntimeAutomationAction::TimingCapture:
+        m_RenderGraphTimingCaptureEnabled = enabled;
+        m_RenderGraphTimingHistory.Clear();
+        break;
+    case RuntimeAutomationAction::DumpTiming:
+        m_RenderGraphTimingHistory.DumpCsv();
+        break;
+    case RuntimeAutomationAction::MatrixCase:
+        ApplyRuntimeAutomationMatrixCase(value);
+        break;
     }
-
-    m_RuntimeAutomationLastStepTime = totalTime;
-    AppendRuntimeAutomationLog("Applied " + step.Name + ".");
 }
+//Modify End
 //Modify End
 
 //Modify Begin:2026-07-30 by BestHui
@@ -593,24 +757,17 @@ void RaytracingDemo::ApplyStressTestSpheresState()
         return;
     }
 
-    AppendRuntimeAutomationLog("Stress resource update begin: enabled=" + std::to_string(m_StressTestSpheresEnabled));
-    Application::Get().Flush();
-    AppendRuntimeAutomationLog("Stress resource update: queues flushed.");
-    const auto commandQueue = Application::Get().GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
+    m_FrameworkDeviceContext.Flush();
+    const auto commandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
     const auto commandList = commandQueue->GetCommandList();
     if (m_SceneResources.SetStressTestSpheresEnabled(*commandList, m_StressTestSpheresEnabled))
     {
-        AppendRuntimeAutomationLog("Stress resource update: scene resources updated.");
         const uint64_t fenceValue = commandQueue->ExecuteCommandList(commandList);
         commandQueue->WaitForFenceValue(fenceValue);
-        AppendRuntimeAutomationLog("Stress resource update: GPU update completed.");
         m_Lights.SetEmissiveMeshSurfaceEmitters(m_SceneResources.CollectEmissiveMeshSurfaceEmitters());
-        AppendRuntimeAutomationLog("Stress resource update: surface emitter data rebuilt.");
-        EnsureRayTracingPipelines();
-        BindRayTracingShaderResources();
-        AppendRuntimeAutomationLog("Stress resource update: ray tracing resources rebound.");
+        RebuildRenderGraph();
 
-        ClearRenderGraphTimingHistory();
+        m_RenderGraphTimingHistory.Clear();
         ResetAccumulation();
     }
 
@@ -639,7 +796,7 @@ bool RaytracingDemo::LoadContent()
 {
     Assert(RayTracingShader::IsSupported(m_FrameworkDeviceContext), "DirectX Raytracing is not supported by the selected adapter.");
 
-    const auto commandQueue = Application::Get().GetCommandQueue();
+    const auto commandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
     const auto commandList = commandQueue->GetCommandList();
 
 //Modify Begin:2026-08-03 by BestHui
@@ -672,11 +829,11 @@ bool RaytracingDemo::LoadContent()
     const auto vertexShader = LoadShaderVariant(
         L"GBuffer.vs.cso",
         L"Demos/RaytracingDemo/shaders/GBuffer/GBuffer.vs.hlsl",
-        "vs_6_6");
+        ShaderTargetProfile::Vertex());
     const auto pixelShader = LoadShaderVariant(
         L"GBuffer.ps.cso",
         L"Demos/RaytracingDemo/shaders/GBuffer/GBuffer.ps.hlsl",
-        "ps_6_6");
+        ShaderTargetProfile::Pixel());
     m_GBufferShader = std::make_shared<Shader>(
         m_FrameworkDeviceContext,
         *vertexShader,
@@ -695,15 +852,15 @@ bool RaytracingDemo::LoadContent()
     const auto amplificationShader = LoadShaderVariant(
         L"GBuffer.task.as.cso",
         L"Demos/RaytracingDemo/shaders/GBuffer/GBuffer.task.as.hlsl",
-        "as_6_6");
+        ShaderTargetProfile::Amplification());
     const auto meshShader = LoadShaderVariant(
         L"GBuffer.task.ms.cso",
         L"Demos/RaytracingDemo/shaders/GBuffer/GBuffer.task.ms.hlsl",
-        "ms_6_6");
+        ShaderTargetProfile::Mesh());
     const auto pixelShader = LoadShaderVariant(
         L"GBuffer.meshletindirect.ps.cso",
         L"Demos/RaytracingDemo/shaders/GBuffer/GBuffer.meshletindirect.ps.hlsl",
-        "ps_6_6");
+        ShaderTargetProfile::Pixel());
     m_GBufferTaskMeshShader = std::make_shared<MeshShader>(
         m_FrameworkDeviceContext,
         *amplificationShader,
@@ -721,11 +878,11 @@ bool RaytracingDemo::LoadContent()
     const auto vertexShader = LoadShaderVariant(
         L"GBuffer.meshletindirect.vs.cso",
         L"Demos/RaytracingDemo/shaders/GBuffer/GBuffer.meshletindirect.vs.hlsl",
-        "vs_6_6");
+        ShaderTargetProfile::Vertex());
     const auto pixelShader = LoadShaderVariant(
         L"GBuffer.meshletindirect.ps.cso",
         L"Demos/RaytracingDemo/shaders/GBuffer/GBuffer.meshletindirect.ps.hlsl",
-        "ps_6_6");
+        ShaderTargetProfile::Pixel());
     PipelineLayoutReflectionOptions meshletIndirectLayoutOptions;
     meshletIndirectLayoutOptions.MaxDescriptorCount = 4096u;
     meshletIndirectLayoutOptions.ShaderStages = PipelineShaderStageFlags::AllGraphics;
@@ -746,7 +903,7 @@ bool RaytracingDemo::LoadContent()
     const auto meshletCullShaderBlob = LoadShaderVariant(
         L"MeshletCull.cs.cso",
         L"Demos/RaytracingDemo/shaders/GBuffer/MeshletCull.cs.hlsl",
-        "cs_6_6");
+        ShaderTargetProfile::Compute());
     m_MeshletCullShader = std::make_shared<ComputeShader>(
         m_FrameworkDeviceContext,
         *meshletCullShaderBlob,
@@ -763,11 +920,11 @@ bool RaytracingDemo::LoadContent()
     const auto vertexShader = LoadShaderVariant(
         L"DisplayComposite.vs.cso",
         L"Demos/RaytracingDemo/shaders/PostProcessing/DisplayComposite.vs.hlsl",
-        "vs_6_6");
+        ShaderTargetProfile::Vertex());
     const auto pixelShader = LoadShaderVariant(
         L"DisplayComposite.ps.cso",
         L"Demos/RaytracingDemo/shaders/PostProcessing/DisplayComposite.ps.hlsl",
-        "ps_6_6");
+        ShaderTargetProfile::Pixel());
     m_DisplayCompositeShader = std::make_shared<Shader>(
         m_FrameworkDeviceContext,
         *vertexShader,
@@ -782,7 +939,7 @@ bool RaytracingDemo::LoadContent()
     const auto skyboxComputeShader = LoadShaderVariant(
         L"Skybox.cs.cso",
         L"Demos/RaytracingDemo/shaders/Skybox/Skybox.cs.hlsl",
-        "cs_6_6");
+        ShaderTargetProfile::Compute());
     m_SkyboxComputeShader = std::make_shared<ComputeShader>(
         m_FrameworkDeviceContext,
         *skyboxComputeShader,
@@ -791,7 +948,7 @@ bool RaytracingDemo::LoadContent()
     const auto equirectangularSkyboxComputeShader = LoadShaderVariant(
         L"SkyboxEquirectangular.cs.cso",
         L"Demos/RaytracingDemo/shaders/Skybox/SkyboxEquirectangular.cs.hlsl",
-        "cs_6_6");
+        ShaderTargetProfile::Compute());
     m_SkyboxEquirectangularComputeShader = std::make_shared<ComputeShader>(
         m_FrameworkDeviceContext,
         *equirectangularSkyboxComputeShader,
@@ -801,7 +958,7 @@ bool RaytracingDemo::LoadContent()
     const auto cubemapStripSkyboxComputeShader = LoadShaderVariant(
         L"SkyboxCubemapStrip.cs.cso",
         L"Demos/RaytracingDemo/shaders/Skybox/SkyboxCubemapStrip.cs.hlsl",
-        "cs_6_6");
+        ShaderTargetProfile::Compute());
     m_SkyboxCubemapStripComputeShader = std::make_shared<ComputeShader>(
         m_FrameworkDeviceContext,
         *cubemapStripSkyboxComputeShader,
@@ -815,11 +972,11 @@ bool RaytracingDemo::LoadContent()
     const auto vertexShader = LoadShaderVariant(
         L"LightBillboard.vs.cso",
         L"Demos/RaytracingDemo/shaders/LightBillboard/LightBillboard.vs.hlsl",
-        "vs_6_6");
+        ShaderTargetProfile::Vertex());
     const auto pixelShader = LoadShaderVariant(
         L"LightBillboard.ps.cso",
         L"Demos/RaytracingDemo/shaders/LightBillboard/LightBillboard.ps.hlsl",
-        "ps_6_6");
+        ShaderTargetProfile::Pixel());
     m_LightBillboardShader = std::make_shared<Shader>(
         m_FrameworkDeviceContext,
         *vertexShader,
@@ -1003,7 +1160,7 @@ void RaytracingDemo::RebuildRenderGraph()
 //Modify End
     if (m_RenderGraph != nullptr)
     {
-        Application::Get().Flush();
+        m_FrameworkDeviceContext.Flush();
 //Modify Begin:2026-07-28 by BestHui
         m_CudaBloom.ReleaseInteropResource();
 //Modify End
@@ -1019,6 +1176,9 @@ void RaytracingDemo::RebuildRenderGraph()
         m_GpuTimingEnabled ? &m_AsyncComputeGpuTimestampProfiler : nullptr);
 //Modify Begin:2026-07-30 by BestHui
     m_RenderGraph->SetDebugSerializeAsyncCompute(m_DebugSerializeAsyncCompute);
+//Modify End
+//Modify Begin:2026-08-07 by BestHui
+    m_RenderGraph->SetParallelDirectCommandRecording(m_ParallelDirectCommandRecordingEnabled);
 //Modify End
 //Modify End
 //Modify End
@@ -1126,56 +1286,6 @@ void RaytracingDemo::SaveCurrentScene()
 //Modify End
 //Modify End
 
-//Modify Begin:2026-08-03 by BestHui
-void RaytracingDemo::ClearRenderGraphTimingHistory()
-{
-    m_RenderGraphTimingHistory.clear();
-    m_RenderGraphTimingExportStatus = "RG timing history cleared.";
-}
-
-void RaytracingDemo::RecordRenderGraphTimingSamples(
-    const uint64_t frameNumber,
-    const char* queueName,
-    const std::vector<GpuTimestampSample>& samples)
-{
-    if (samples.empty())
-    {
-        return;
-    }
-
-    auto frameIt = std::find_if(
-        m_RenderGraphTimingHistory.begin(),
-        m_RenderGraphTimingHistory.end(),
-        [frameNumber](const RenderGraphTimingFrame& frame) { return frame.FrameNumber == frameNumber; });
-    if (frameIt == m_RenderGraphTimingHistory.end())
-    {
-        const auto insertPosition = std::find_if(
-            m_RenderGraphTimingHistory.begin(),
-            m_RenderGraphTimingHistory.end(),
-            [frameNumber](const RenderGraphTimingFrame& frame) { return frame.FrameNumber > frameNumber; });
-        frameIt = m_RenderGraphTimingHistory.insert(insertPosition, { frameNumber, {} });
-    }
-
-    const std::string queueNameString = queueName != nullptr ? queueName : "Unknown";
-    auto queueIt = std::find_if(
-        frameIt->Queues.begin(),
-        frameIt->Queues.end(),
-        [&queueNameString](const RenderGraphTimingQueue& queue) { return queue.QueueName == queueNameString; });
-    if (queueIt == frameIt->Queues.end())
-    {
-        frameIt->Queues.push_back({ queueNameString, samples });
-    }
-    else
-    {
-        queueIt->Samples = samples;
-    }
-
-    while (m_RenderGraphTimingHistory.size() > static_cast<size_t>(m_RenderGraphTimingHistoryCapacity))
-    {
-        m_RenderGraphTimingHistory.pop_front();
-    }
-}
-
 //Modify Begin:2026-07-30 by BestHui
 RaytracingDemoPassResources RaytracingDemo::CreatePassResources()
 {
@@ -1245,72 +1355,14 @@ void RaytracingDemo::UpdateRenderGraphFrameState()
 }
 //Modify End
 
-bool RaytracingDemo::DumpRenderGraphTimingHistory()
-{
-    if (m_RenderGraphTimingHistory.empty())
-    {
-        m_RenderGraphTimingExportStatus = "RG timing history is empty.";
-        return false;
-    }
-
-    try
-    {
-        const std::filesystem::path outputDirectory = std::filesystem::current_path() / "Profiling";
-        std::filesystem::create_directories(outputDirectory);
-
-        const auto currentTime = std::chrono::system_clock::now();
-        const std::time_t currentTimeValue = std::chrono::system_clock::to_time_t(currentTime);
-        std::tm localTime{};
-        localtime_s(&localTime, &currentTimeValue);
-        std::ostringstream filename;
-        filename << "RenderGraphTiming_" << std::put_time(&localTime, "%Y%m%d_%H%M%S") << ".csv";
-        const std::filesystem::path outputPath = outputDirectory / filename.str();
-
-        std::ofstream output(outputPath, std::ios::out | std::ios::trunc);
-        if (!output.is_open())
-        {
-            throw std::runtime_error("Failed to open output file.");
-        }
-
-        output << "frame,queue,marker,gpu_delta_ms,gpu_total_ms,cpu_delta_ms,cpu_total_ms\n";
-        output << std::fixed << std::setprecision(6);
-        for (const RenderGraphTimingFrame& frame : m_RenderGraphTimingHistory)
-        {
-            for (const RenderGraphTimingQueue& queue : frame.Queues)
-            {
-                for (const GpuTimestampSample& sample : queue.Samples)
-                {
-                    output << frame.FrameNumber << ','
-                           << EscapeCsvField(queue.QueueName) << ','
-                           << EscapeCsvField(sample.Name) << ','
-                           << sample.MillisecondsFromPrevious << ','
-                           << sample.MillisecondsFromFrameStart << ','
-                           << sample.CpuMillisecondsFromPrevious << ','
-                           << sample.CpuMillisecondsFromFrameStart << '\n';
-                }
-            }
-        }
-
-        m_RenderGraphTimingExportStatus = "Exported " + std::to_string(m_RenderGraphTimingHistory.size()) +
-            " frames to " + outputPath.string();
-        return true;
-    }
-    catch (const std::exception& exception)
-    {
-        m_RenderGraphTimingExportStatus = std::string("RG timing export failed: ") + exception.what();
-        return false;
-    }
-}
-//Modify End
-
 void RaytracingDemo::OnRender(RenderEventArgs& e)
 {
     Base::OnRender(e);
 
 //Modify Begin:2026-07-29 by BestHui
-    const auto directCommandQueue = Application::Get().GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
+    const auto directCommandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
 //Modify Begin:2026-08-03 by BestHui
-    const auto asyncComputeCommandQueue = Application::Get().GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE);
+    const auto asyncComputeCommandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE);
 //Modify End
 //Modify Begin:2026-08-03 by BestHui
     const auto collectGpuTimingFrames = [this](
@@ -1326,7 +1378,7 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
             latestSamples = completedSamples;
             if (m_RenderGraphTimingCaptureEnabled)
             {
-                RecordRenderGraphTimingSamples(
+                m_RenderGraphTimingHistory.Record(
                     profiler.GetLastCollectedFrameNumber(),
                     queueName,
                     completedSamples);

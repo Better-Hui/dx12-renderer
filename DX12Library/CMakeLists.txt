@@ -131,9 +131,13 @@ set(EXT_LIBRARIES
 # Add source to this project's executable.
 add_library(${TARGET_NAME} STATIC ${HEADER_FILES} ${SOURCE_FILES} ${SHADER_FILES} ${SHADERS_HEADER_FILES})
 
-# Modify Begin:2026-07-21 by BestHui
-if (DX12_RENDERER_ENABLE_SM610_LINALG)
-        target_compile_definitions(${TARGET_NAME} PUBLIC DX12_RENDERER_ENABLE_D3D12_AGILITY_PREVIEW=1)
+# Modify Begin:2026-07-30 by BestHui
+target_include_directories(${TARGET_NAME} BEFORE PUBLIC "${DX12_RENDERER_AGILITY_INCLUDE_DIRECTORY}")
+
+if (DX12_RENDERER_ENABLE_D3D12_AGILITY)
+        target_compile_definitions(${TARGET_NAME} PUBLIC
+                DX12_RENDERER_ENABLE_D3D12_AGILITY=1
+                DX12_RENDERER_AGILITY_SDK_VERSION=${DX12_RENDERER_AGILITY_SDK_VERSION})
 endif()
 # Modify End
 

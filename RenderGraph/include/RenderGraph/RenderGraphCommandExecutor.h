@@ -34,10 +34,9 @@ namespace RenderGraph
 
         void Execute(
             const RenderMetadata& renderMetadata,
-            const std::vector<RenderPass*>& renderPasses,
-            const std::map<const RenderPass*, RenderTargetInfo>& renderTargets,
-            const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans,
-            bool debugSerializeAsyncCompute);
+            const CompiledRenderGraph& compiledGraph,
+            bool debugSerializeAsyncCompute,
+            bool enableParallelDirectRecording);
 
     private:
         void PrepareResourcesForRenderPass(
@@ -48,6 +47,15 @@ namespace RenderGraph
             const std::map<const RenderPass*, RenderTargetInfo>& renderTargets,
             const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans,
             bool skipAliasingOutputs = false);
+//Modify Begin:2026-07-30 by BestHui
+        void ExecuteParallelDirectBatch(
+            const RenderGraphExecutionBatch& batch,
+            const RenderMetadata& renderMetadata,
+            uint32_t firstRenderPassIndex,
+            std::shared_ptr<CommandList>& directCommandList,
+            const std::map<const RenderPass*, RenderTargetInfo>& renderTargets,
+            const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
+//Modify End
         void PrepareQueueDependency(
             const RenderPass& pass,
             std::shared_ptr<CommandList>& directCommandList,

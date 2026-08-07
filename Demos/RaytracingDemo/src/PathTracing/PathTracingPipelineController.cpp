@@ -8,6 +8,9 @@
 //Modify End
 #include <Framework/Rendering/RayTracing/RayTracingAccelerationStructure.h>
 #include <Framework/Rendering/Pipeline/ShaderBlob.h>
+//Modify Begin:2026-07-30 by BestHui
+#include <Framework/Rendering/Pipeline/ShaderTargetProfile.h>
+//Modify End
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <Scene/SceneLightManager.h>
 #include <Scene/SceneResources.h>
@@ -202,11 +205,7 @@ void PathTracingPipelineController::CreateDxrPipeline(const RayTracingSceneResou
     {
         defines.push_back({ "RAYTRACING_DEMO_SOFT_SHADOWS", "1" });
     }
-#if defined(DX12_RENDERER_ENABLE_SM610_LINALG)
-    constexpr const char* targetProfile = "lib_6_10";
-#else
-    constexpr const char* targetProfile = "lib_6_6";
-#endif
+    constexpr const char* targetProfile = ShaderTargetProfile::RayTracingLibrary();
     const std::shared_ptr<ShaderBlob> pathTracingShader = LoadShader(
         shaderFileName,
         L"Demos/RaytracingDemo/shaders/PathTracing/PathTracing.rt.hlsl",
@@ -257,7 +256,7 @@ void PathTracingPipelineController::CreateInlinePipelines(const RayTracingSceneR
     const std::shared_ptr<ShaderBlob> inlineDirectLightingShader = LoadShader(
         std::move(directLightingShaderFileName),
         L"Demos/RaytracingDemo/shaders/PathTracing/DirectLighting.cs.hlsl",
-        "cs_6_6",
+        ShaderTargetProfile::Compute(),
         shaderDefines);
 //Modify End
     const ComputePipelineDesc inlineDirectLightingDesc = ComputePipelineDescBuilder::ReflectedDefault(*inlineDirectLightingShader)
@@ -271,7 +270,7 @@ void PathTracingPipelineController::CreateInlinePipelines(const RayTracingSceneR
     const std::shared_ptr<ShaderBlob> inlineIndirectLightingShader = LoadShader(
         std::move(indirectLightingShaderFileName),
         L"Demos/RaytracingDemo/shaders/PathTracing/IndirectLighting.cs.hlsl",
-        "cs_6_6",
+        ShaderTargetProfile::Compute(),
         shaderDefines);
     //Modify End
     const ComputePipelineDesc inlineIndirectLightingDesc = ComputePipelineDescBuilder::ReflectedDefault(*inlineIndirectLightingShader)
@@ -284,7 +283,7 @@ void PathTracingPipelineController::CreateInlinePipelines(const RayTracingSceneR
     const std::shared_ptr<ShaderBlob> lightingCompositeShader = LoadShader(
         L"LightingComposite.cs.cso",
         L"Demos/RaytracingDemo/shaders/PathTracing/LightingComposite.cs.hlsl",
-        "cs_6_6");
+        ShaderTargetProfile::Compute());
     m_LightingCompositeShader = std::make_unique<ComputeShader>(
         m_DeviceContext,
         *lightingCompositeShader,

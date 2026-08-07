@@ -31,8 +31,8 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateCu
             const auto& sceneColor = context.GetTexture(DemoResourceIds::SceneColor);
             resources.CudaBloom.ExecuteInPlace(
                 *sceneColor,
-                context.m_Metadata.m_ScreenWidth,
-                context.m_Metadata.m_ScreenHeight,
+                context.GetMetadata().m_ScreenWidth,
+                context.GetMetadata().m_ScreenHeight,
                 resources.DirectQueue->GetD3D12CommandQueue().Get());
         });
 }

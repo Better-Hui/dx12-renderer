@@ -141,5 +141,5 @@ add_executable(UnitySceneDump "tools/UnitySceneDump.cpp")
 target_compile_options(UnitySceneDump PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 target_compile_features(UnitySceneDump PRIVATE cxx_std_20)
 target_link_libraries(UnitySceneDump PRIVATE Framework)
-set_target_properties(UnitySceneDump PROPERTIES FOLDER "Framework/Tools")
+set_target_properties(UnitySceneDump PROPERTIES FOLDER "Tools")
 # Modify End

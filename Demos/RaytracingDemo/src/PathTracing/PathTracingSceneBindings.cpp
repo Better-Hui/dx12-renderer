@@ -26,13 +26,12 @@ RaytracingDemoCameraConstants RaytracingDemoPassBindings::BuildPassCameraConstan
 
 void RaytracingDemoPassBindings::BindInlinePathTracingInputs(
     const RaytracingDemoPassResources& resources,
-    CommandList& cmd,
+    CommandContext& commandContext,
     ComputeShader& shader,
     const RaytracingDemoRenderGraph::FrameGBufferResources& gbuffer,
     const RaytracingDemoCameraConstants& camera)
 {
     const RayTracingAccelerationStructure& accelerationStructure = resources.Scene.GetRayTracingAccelerationStructure();
-    CommandContext commandContext(cmd);
 
     commandContext.SetConstantBuffer(shader, "CameraConstants", sizeof(camera), &camera);
     commandContext.SetAccelerationStructure(shader, accelerationStructure);

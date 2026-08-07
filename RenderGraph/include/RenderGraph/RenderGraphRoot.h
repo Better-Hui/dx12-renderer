@@ -11,6 +11,9 @@
 #include "RenderPass.h"
 //Modify Begin:2026-07-30 by BestHui
 #include "RenderGraphCommandExecutor.h"
+//Modify Begin:2026-08-07 by BestHui
+#include "RenderGraphCompiler.h"
+//Modify End
 #include "RenderGraphExecutionPlan.h"
 #include "RenderGraphProfiler.h"
 //Modify End
@@ -56,6 +59,9 @@ namespace RenderGraph
 //Modify Begin:2026-07-30 by BestHui
         void SetDebugSerializeAsyncCompute(bool enabled) { m_DebugSerializeAsyncCompute = enabled; }
 //Modify End
+//Modify Begin:2026-08-07 by BestHui
+        void SetParallelDirectCommandRecording(bool enabled) { m_ParallelDirectCommandRecording = enabled; }
+//Modify End
         void Present(const std::shared_ptr<Window>& pWindow, ResourceId resourceId = ResourceIds::GRAPH_OUTPUT);
 //Modify Begin:2026-07-28 by BestHui
         void PresentWithOverlay(const std::shared_ptr<Window>& pWindow, ResourceId resourceId, const std::function<void(CommandList&)>& drawCallback);
@@ -77,18 +83,8 @@ namespace RenderGraph
     private:
         void RebuildIfNecessary(const RenderMetadata& renderMetadata);
         void CheckPotentiallyDirtyResources(const RenderMetadata& renderMetadata);
-        void Build(const RenderMetadata& renderMetadata);
-//Modify Begin:2026-07-29 by BestHui
-        void BuildPassResourceStatePlans();
-//Modify End
-        D3D12_RESOURCE_STATES GetCurrentResourceState(const Resource& resource) const;
-        void SetCurrentResourceState(const Resource& resource, D3D12_RESOURCE_STATES state);
         void TransitionBarrier(const Resource& resource, D3D12_RESOURCE_STATES stateAfter);
-        void UavBarrier(const Resource& resource);
-        void AliasingBarrier(const Resource& resourceAfter);
         void FlushBarriers(const CommandList& commandList);
-
-        bool IsResourceDefined(ResourceId id) const;
 
 //Modify Begin:2026-07-30 by BestHui
         Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;
@@ -101,10 +97,11 @@ namespace RenderGraph
         RenderGraphQueueScheduler m_QueueScheduler;
         bool m_DebugSerializeAsyncCompute = false;
 //Modify End
+//Modify Begin:2026-08-07 by BestHui
+        bool m_ParallelDirectCommandRecording = true;
+//Modify End
 
         std::vector<std::unique_ptr<RenderPass>> m_RenderPassesDescription;
-        std::vector<std::vector<RenderPass*>> m_RenderPassesSorted;
-        std::vector<RenderPass*> m_RenderPassesBuilt;
 
         std::vector<TextureDescription> m_TextureDescriptions;
         std::vector<BufferDescription> m_BufferDescriptions;
@@ -114,11 +111,12 @@ namespace RenderGraph
 //Modify End
 
         std::shared_ptr<ResourcePool> m_ResourcePool;
-        std::map<const RenderPass*, RenderTargetInfo> m_RenderTargets;
-        std::shared_ptr<RenderTarget> m_GraphOutputRenderTarget;
         RenderGraphResourceStateTracker m_ResourceStateTracker;
 //Modify Begin:2026-07-30 by BestHui
-        std::map<const RenderPass*, PassResourceStatePlan> m_PassResourceStatePlans;
+//Modify Begin:2026-08-07 by BestHui
+        std::unique_ptr<RenderGraphCompiler> m_Compiler;
+        std::unique_ptr<CompiledRenderGraph> m_CompiledGraph;
+//Modify End
         RenderGraphProfiler m_Profiler;
         std::unique_ptr<RenderGraphCommandExecutor> m_CommandExecutor;
 //Modify End

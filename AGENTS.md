@@ -106,9 +106,21 @@ device / queue / command buffer / descriptor pool / descriptor set / pipeline la
 
 Avoid adding new sample code that directly touches root signatures, raw descriptor heaps, raw descriptor tables, or D3D12 PSO internals unless it is truly inside the low-level wrapper.
 
+## Render Graph Recording
+
+- `RenderGraphCompiler` produces the immutable `CompiledRenderGraph`: culled topological order, per-pass resource-state plan, render-target info, and execution batches. `RenderGraphRoot` only owns definitions/rebuilds; `RenderGraphCommandExecutor` records and submits.
+- `FrameContext` is read-only for pass code. Resource barriers, aliasing, clears, and queue dependencies are recorded by the Executor before a pass executes.
+- A pass may enter a parallel batch only by explicitly calling `SetParallelRecordingEligible(true)`. The Compiler rejects candidates that have write/read or write/write resource overlap; shared read-only inputs are allowed.
+- The Executor records a batch in the safe order: serial resource preamble -> one worker-owned direct `CommandList` per pass -> original topological submission order. Each worker therefore owns its command allocator, upload buffer, and dynamic descriptor heaps.
+- `RenderGraphRoot::SetParallelDirectCommandRecording()` is an A/B switch for CPU profiling. It changes only recording strategy, not graph topology or GPU queue ordering; keep it enabled by default and disable it only to compare CPU recording cost.
+- Do not mark a pass parallel-safe if it mutates a descriptor set, binding set, scene cache, or other CPU state shared with another candidate. Refactor that state into pass-owned data first.
+- The current audited batch is only Inline Ray Query `Direct Lighting` plus `Indirect Lighting` while indirect async compute is disabled. Async compute remains a separate queue-overlap feature and is intentionally not combined with same-queue recording batches.
+
 ## RaytracingDemo Responsibilities
 
 `RaytracingDemo` is a sample-style demo, not just a one-off feature test. It should demonstrate the recommended API usage.
+
+Device/queue work in demo feature code must use the injected `FrameworkDeviceContext`. `Application::Get()` is reserved for standalone demo lifecycle operations such as construction and process quit.
 
 Current major pieces:
 
@@ -186,6 +198,7 @@ uses `IUnityGraphicsD3D12v7::GetDevice()` / `GetCommandQueue()`, Unity render ev
 
 Recommended next steps:
 
+- After the SM6.9/SER phase, keep C++20 as the project baseline and actively modernize suitable legacy C++11-style code with C++20 facilities. Keep modern HLSL features capability-gated by shader model and hardware support.
 - Split `RaytracingDemoSceneResources` into clearer scene-to-GPU resource builders.
 - Add task/amplification shader and GPU culling to the meshlet path.
 - Add sample-grade object picking and transform gizmo only after selection/render ID infrastructure is in place.
@@ -215,7 +228,9 @@ if (-not $process.WaitForExit(45000)) { throw 'RaytracingDemo automation did not
 if ($process.ExitCode -ne 0) { throw "RaytracingDemo failed with exit code $($process.ExitCode)." }
 ```
 
-After every automated run, inspect `build\bin\Release\Saved\RuntimeAutomation.log`. A valid `core` run must contain `Runtime automation completed.` and no `build\bin\Release\DemoException.log`. `core` toggles soft shadows, stress spheres four times, meshlet enable/backend, direct/indirect lighting, async compute, skybox, and accumulation. `stress` only performs the four stress-sphere transitions and is the fastest regression test for RTAS/meshlet resource updates.
+After every automated run, inspect `build\bin\Release\Saved\RuntimeAutomation.log`. A valid run must contain `Runtime automation completed.` and no newly written `build\bin\Release\DemoException.log`. `core` toggles RG timing/capture/export, soft shadows, stress spheres four times, meshlet enable/backend, Inline/DXR backend, direct/indirect lighting, parallel direct recording, async compute, skybox, and accumulation. It should produce a non-empty `build\bin\Release\Profiling\RenderGraphTiming_*.csv`. `stress` only performs the four stress-sphere transitions and is the fastest regression test for RTAS/meshlet resource updates.
+
+`RAYTRACING_DEMO_AUTOTEST=matrix` is the crash-regression matrix for discrete production rendering switches. It applies a complete legal state snapshot, waits for the next stable interval, then records `Begin matrix#...` and `Applied matrix#...` in the log. It covers raster/task-mesh/compute-indirect GBuffer, Inline Ray Query/DXR, valid Direct and Indirect lighting techniques, async compute only on Inline, parallel direct recording, hard/soft shadows, stress-sphere add/remove, skybox, and accumulation. Invalid `DXR + ReSTIR DI` and `DXR + async compute` cases are deliberately excluded. The full matrix currently has 1536 cases; it defaults to a 250 ms stable interval. Use `RAYTRACING_DEMO_AUTOTEST_START_CASE=<one-based>` and `RAYTRACING_DEMO_AUTOTEST_MAX_CASES=<count>` to reproduce or smoke-test a bounded range, and set `RAYTRACING_DEMO_AUTOTEST_QUIT=1` to exit after completion. Numeric ImGui parameters and diagnostic texture views are intentionally outside this matrix because they require a separate parameter-quality test rather than a compatibility test.
 
 The automatic test intentionally does not synthesize mouse input and does not replace visual validation. For camera, skybox, material, or UI changes, also launch the executable normally, keep it alive for several seconds, and take a screenshot without injecting desktop input. Do not conclude correctness from a successful build or a short process lifetime alone.
 

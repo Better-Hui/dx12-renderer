@@ -107,6 +107,10 @@ namespace RenderGraph
         const std::wstring& GetPassName() const { return m_PassName; }
 //Modify Begin:2026-08-03 by BestHui
         RenderPassQueue GetQueue() const { return m_Queue; }
+//Modify Begin:2026-07-30 by BestHui
+        void SetParallelRecordingEligible(bool enabled) { m_ParallelRecordingEligible = enabled; }
+        bool IsParallelRecordingEligible() const { return m_ParallelRecordingEligible; }
+//Modify End
 //Modify End
 
         virtual ~RenderPass() = default;
@@ -134,6 +138,9 @@ namespace RenderGraph
 //Modify Begin:2026-08-03 by BestHui
         RenderPassQueue m_Queue = RenderPassQueue::Direct;
         AsyncComputePrepareFuncT m_AsyncComputePrepareFunc;
+//Modify End
+//Modify Begin:2026-07-30 by BestHui
+        bool m_ParallelRecordingEligible = false;
 //Modify End
     };
 }

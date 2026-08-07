@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <stdexcept>
 //Modify End
 
 constexpr wchar_t WINDOW_CLASS_NAME[] = L"DX12RenderWindowClass";
@@ -29,10 +30,15 @@ uint64_t Application::s_FrameCount = 0;
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
 
 //Modify Begin:2026-07-21 by BestHui
-#if defined(DX12_RENDERER_ENABLE_D3D12_AGILITY_PREVIEW) && DX12_RENDERER_ENABLE_D3D12_AGILITY_PREVIEW
+#if defined(DX12_RENDERER_ENABLE_D3D12_AGILITY) && DX12_RENDERER_ENABLE_D3D12_AGILITY
+#if !defined(DX12_RENDERER_AGILITY_SDK_VERSION)
+#error "DX12_RENDERER_AGILITY_SDK_VERSION must match the distributed Agility SDK."
+#endif
+static_assert(D3D12_SDK_VERSION == DX12_RENDERER_AGILITY_SDK_VERSION,
+    "The Agility SDK headers and distributed runtime must use the same SDK version.");
 extern "C"
 {
-    __declspec(dllexport) extern const UINT D3D12SDKVersion = 720;
+    __declspec(dllexport) extern const UINT D3D12SDKVersion = DX12_RENDERER_AGILITY_SDK_VERSION;
     __declspec(dllexport) extern const char* D3D12SDKPath = ".\\D3D12\\";
 }
 #endif
@@ -157,6 +163,16 @@ void Application::Initialize(const ExternalD3D12Context* externalContext)
         {
             throw std::exception("DXGI adapter enumeration failed.");
         }
+    }
+    const auto device = m_RenderContext.GetDevice();
+    D3D12_FEATURE_DATA_SHADER_MODEL shaderModel = { D3D_SHADER_MODEL_6_9 };
+    ThrowIfFailed(device->CheckFeatureSupport(
+        D3D12_FEATURE_SHADER_MODEL,
+        &shaderModel,
+        sizeof(shaderModel)));
+    if (shaderModel.HighestShaderModel < D3D_SHADER_MODEL_6_9)
+    {
+        throw std::runtime_error("DX12 renderer requires Shader Model 6.9 support from the active D3D12 driver.");
     }
 //Modify End
 

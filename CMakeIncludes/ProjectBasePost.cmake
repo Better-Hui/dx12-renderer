@@ -2,6 +2,12 @@ target_include_directories(${TARGET_NAME}
         PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
         )
 
+# Modify Begin:2026-07-30 by BestHui
+if (TARGET ${TARGET_NAME}_ShaderBytecode)
+    add_dependencies(${TARGET_NAME} ${TARGET_NAME}_ShaderBytecode)
+endif()
+# Modify End
+
 # Modify Begin:2026-07-21 by BestHui
 target_include_directories(${TARGET_NAME}
         PUBLIC "${CMAKE_SOURCE_DIR}/Shaders"

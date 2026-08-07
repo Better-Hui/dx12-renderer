@@ -7,6 +7,10 @@
 //Modify End
 
 #include <Denoising/DenoiserController.h>
+//Modify Begin:2026-08-07 by BestHui
+#include <Automation/RuntimeAutomationController.h>
+#include <Profiling/RenderGraphTimingHistory.h>
+//Modify End
 //Modify Begin:2026-07-30 by BestHui
 #include <Framework/Core/FrameworkDeviceContext.h>
 //Modify End
@@ -92,20 +96,6 @@ private:
     using GBufferMaterialConstants = RaytracingDemoGBufferMaterialConstants;
     using GBufferDebugConstants = RaytracingDemoGBufferDebugConstants;
 
-//Modify Begin:2026-08-03 by BestHui
-    struct RenderGraphTimingQueue
-    {
-        std::string QueueName;
-        std::vector<GpuTimestampSample> Samples;
-    };
-
-    struct RenderGraphTimingFrame
-    {
-        uint64_t FrameNumber = 0;
-        std::vector<RenderGraphTimingQueue> Queues;
-    };
-//Modify End
-
     struct LightBillboardConstants
     {
         DirectX::XMFLOAT4 PositionAndSize = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -160,18 +150,11 @@ private:
     void ResetCameraToInitialSceneState();
     void InitializeRuntimeAutomation();
     void UpdateRuntimeAutomation(double totalTime);
-    void AppendRuntimeAutomationLog(const std::string& message) const;
+    void ApplyRuntimeAutomationAction(uint32_t action, uint32_t value);
+    void ApplyRuntimeAutomationMatrixCase(uint32_t caseIndex);
 //Modify End
     void SaveCurrentScene();
     void SaveCurrentCameraToUnityScene();
-//Modify End
-//Modify Begin:2026-08-03 by BestHui
-    void ClearRenderGraphTimingHistory();
-    bool DumpRenderGraphTimingHistory();
-    void RecordRenderGraphTimingSamples(
-        uint64_t frameNumber,
-        const char* queueName,
-        const std::vector<GpuTimestampSample>& samples);
 //Modify End
     void OnImGui();
 
@@ -223,15 +206,13 @@ private:
     std::vector<GpuTimestampSample> m_AsyncComputeGpuTimestampSamples;
     std::vector<GpuTimestampSample> m_AsyncComputeGpuTimestampDisplaySamples;
 //Modify End
-//Modify Begin:2026-08-03 by BestHui
-    std::deque<RenderGraphTimingFrame> m_RenderGraphTimingHistory;
+//Modify Begin:2026-08-07 by BestHui
+    DemoProfiling::RenderGraphTimingHistory m_RenderGraphTimingHistory;
 //Modify End
     double m_LastGpuTimingUiUpdateTime = 0.0;
 //Modify Begin:2026-08-03 by BestHui
     bool m_GpuTimingEnabled = false;
     bool m_RenderGraphTimingCaptureEnabled = false;
-    int m_RenderGraphTimingHistoryCapacity = 300;
-    std::string m_RenderGraphTimingExportStatus;
 //Modify End
 //Modify Begin:2026-08-02 by BestHui
     double m_LastRenderGraphCpuMilliseconds = 0.0;
@@ -283,6 +264,9 @@ private:
     bool m_AsyncComputeEnabled = false;
 //Modify Begin:2026-07-30 by BestHui
     bool m_DebugSerializeAsyncCompute = false;
+//Modify Begin:2026-08-07 by BestHui
+    bool m_ParallelDirectCommandRecordingEnabled = true;
+//Modify End
     int m_DebugLightingTextureTarget = 0;
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
@@ -306,34 +290,9 @@ private:
     int m_LeftMousePressY = 0;
 //Modify End
 
-    enum class RuntimeAutomationAction
-    {
-        SoftShadows,
-        StressSpheres,
-        MeshletGBuffer,
-        MeshletTaskShader,
-        DirectLighting,
-        IndirectLighting,
-        AsyncCompute,
-        Skybox,
-        Accumulation,
-    };
-
-    struct RuntimeAutomationStep
-    {
-        RuntimeAutomationAction Action = RuntimeAutomationAction::SoftShadows;
-        uint32_t Value = 0;
-        std::string Name;
-    };
-
-    std::vector<RuntimeAutomationStep> m_RuntimeAutomationSteps;
-    std::filesystem::path m_RuntimeAutomationLogPath;
-    size_t m_RuntimeAutomationStepIndex = 0;
-    double m_RuntimeAutomationLastStepTime = 0.0;
-    double m_RuntimeAutomationStepIntervalSeconds = 1.0;
-    bool m_RuntimeAutomationEnabled = false;
-    bool m_RuntimeAutomationQuitOnComplete = false;
-    bool m_RuntimeAutomationCompleted = false;
+//Modify Begin:2026-08-07 by BestHui
+    DemoAutomation::RuntimeAutomationController m_RuntimeAutomation;
+//Modify End
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
     bool m_UseMeshletGBuffer = true;

@@ -97,8 +97,12 @@ const Scene& scene = result.SceneData;
 | Platform | Windows 10/11, x64. This is a Windows/D3D12 project. |
 | Toolchain | Visual Studio 2022 with the MSVC C++ desktop toolchain and a Windows SDK. |
 | CMake | CMake 3.8 or newer; a recent CMake version is recommended. |
-| GPU/driver | D3D12-capable GPU and recent driver. DXR, mesh shaders, and CUDA paths need the relevant hardware/driver support. |
+| GPU/driver | A D3D12 GPU/driver that reports **Shader Model 6.9**. DXR, mesh shaders, and CUDA paths need the relevant hardware/driver support. |
 | CUDA | CUDA Toolkit **12.8** is currently required because `Framework` and `RaytracingDemo` build CUDA interop/Bloom. |
+
+### Shader Model 6.9 baseline
+
+The project compiles raster, compute, task/mesh, and DXR libraries with DXC at Shader Model 6.9 (`vs/ps/cs/as/ms/lib_6_9`). It ships the DirectX Agility SDK **1.619.5** runtime in `D3D12/` and its C++ headers in `External/AgilitySDK/include/`; CMake verifies the redistributable, and startup rejects drivers that do not report Shader Model 6.9.
 
 ### vcpkg packages
 
@@ -112,7 +116,7 @@ Set `VCPKG_ROOT` before configuring, or pass `CMAKE_TOOLCHAIN_FILE` explicitly.
 
 | Component | Location / provisioning | Role |
 | --- | --- | --- |
-| DirectX Agility SDK files | `D3D12/` | D3D12 Agility SDK files used by the project environment. |
+| DirectX Agility SDK 1.619.5 | `D3D12/`, `External/AgilitySDK/include/` | Runtime redistributable and matching C++ headers for the SM6.9 baseline. |
 | DirectX Shader Compiler | `DXC/dxc.exe` when present; otherwise a Windows SDK `dxc.exe` | Compiles ray-tracing, task, mesh, compute, and other sample shaders. |
 | WinPixEventRuntime | `WinPixEventRuntime/` | PIX CPU/GPU event markers. |
 | NVIDIA NRD / NRI | `External/NRD/`, `External/NRI/` | Denoising integration and its API layer/runtime binaries. |

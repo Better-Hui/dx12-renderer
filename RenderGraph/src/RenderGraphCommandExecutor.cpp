@@ -15,6 +15,8 @@
 #include <DX12Library/Texture.h>
 
 #include <algorithm>
+#include <future>
+#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -70,11 +72,14 @@ RenderGraph::RenderGraphCommandExecutor::RenderGraphCommandExecutor(
 
 void RenderGraph::RenderGraphCommandExecutor::Execute(
     const RenderMetadata& renderMetadata,
-    const std::vector<RenderPass*>& renderPasses,
-    const std::map<const RenderPass*, RenderTargetInfo>& renderTargets,
-    const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans,
-    const bool debugSerializeAsyncCompute)
+    const CompiledRenderGraph& compiledGraph,
+    const bool debugSerializeAsyncCompute,
+    const bool enableParallelDirectRecording)
 {
+    const std::vector<RenderPass*>& renderPasses = compiledGraph.GetRenderPasses();
+    const std::vector<RenderGraphExecutionBatch>& executionBatches = compiledGraph.GetExecutionBatches();
+    const std::map<const RenderPass*, RenderTargetInfo>& renderTargets = compiledGraph.GetRenderTargets();
+    const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans = compiledGraph.GetResourceStatePlans();
     m_QueueScheduler.BeginFrame();
 
     auto directCommandList = m_DirectCommandQueue->GetCommandList();
@@ -92,16 +97,28 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
     PIXScopeCPU(L"Render Graph: Execute");
     m_Profiler.BeginQueueFrame(RenderPassQueue::Direct, renderMetadata.m_FrameIndex, *directCommandList);
 
-    RenderContext context = {};
-    context.m_ResourcePool = m_ResourcePool;
-    context.m_Metadata = renderMetadata;
-    context.m_ResourceStateTracker = &m_ResourceStateTracker;
+    FrameContext context(m_ResourcePool, renderMetadata);
 
     m_ResourcePool->BeginFrame(*directCommandList);
 
     uint32_t renderPassIndex = 0;
-    for (RenderPass* renderPass : renderPasses)
+    for (const RenderGraphExecutionBatch& executionBatch : executionBatches)
     {
+        if (enableParallelDirectRecording && executionBatch.ParallelRecordingEligible)
+        {
+            ExecuteParallelDirectBatch(
+                executionBatch,
+                renderMetadata,
+                renderPassIndex,
+                directCommandList,
+                renderTargets,
+                resourceStatePlans);
+            renderPassIndex += static_cast<uint32_t>(executionBatch.Passes.size());
+            continue;
+        }
+
+        for (RenderPass* renderPass : executionBatch.Passes)
+        {
         Assert(!renderPass->IsExternal() || renderPass->GetQueue() == RenderPassQueue::Direct,
             "External render passes must use the direct queue.");
 
@@ -129,7 +146,7 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
                     *computeCommandList);
             }
 
-            context.m_RenderTargetInfo = {};
+            context.SetRenderTargetInfo({});
             PrepareResourcesForRenderPass(
                 *computeCommandList,
                 *renderPass,
@@ -138,7 +155,17 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
                 renderTargets,
                 resourceStatePlans,
                 true);
-            renderPass->Execute(context, *computeCommandList);
+            try
+            {
+                renderPass->Execute(context, *computeCommandList);
+            }
+            catch (const std::exception& exception)
+            {
+                throw std::runtime_error(
+                    "RenderGraph async compute pass '" +
+                    RenderGraphProfiler::NarrowPassName(renderPass->GetPassName()) +
+                    "' execution failed: " + exception.what());
+            }
             m_Profiler.WritePassTimestamp(RenderPassQueue::AsyncCompute, *computeCommandList, renderPass->GetPassName());
 
             const bool isLastAsyncComputePass = renderPass == lastAsyncComputePass;
@@ -166,7 +193,7 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
         }
 
         CommandList& commandList = *directCommandList;
-        context.m_RenderTargetInfo = {};
+        context.SetRenderTargetInfo({});
         if (renderPass->IsExternal())
         {
             {
@@ -208,12 +235,23 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
                 context,
                 renderTargets,
                 resourceStatePlans);
-            renderPass->Execute(context, commandList);
+            try
+            {
+                renderPass->Execute(context, commandList);
+            }
+            catch (const std::exception& exception)
+            {
+                throw std::runtime_error(
+                    "RenderGraph direct pass '" +
+                    RenderGraphProfiler::NarrowPassName(renderPass->GetPassName()) +
+                    "' execution failed: " + exception.what());
+            }
             m_Profiler.WritePassTimestamp(RenderPassQueue::Direct, commandList, renderPass->GetPassName());
             m_QueueScheduler.TrackPassResources(*renderPass, 0u);
         }
 
-        ++renderPassIndex;
+            ++renderPassIndex;
+        }
     }
 
     if (m_Profiler.IsQueueFrameActive(RenderPassQueue::Direct))
@@ -231,6 +269,91 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
         m_QueueScheduler.SubmitDirect(directCommandList);
     }
 }
+
+//Modify Begin:2026-07-30 by BestHui
+void RenderGraph::RenderGraphCommandExecutor::ExecuteParallelDirectBatch(
+    const RenderGraphExecutionBatch& batch,
+    const RenderMetadata& renderMetadata,
+    const uint32_t firstRenderPassIndex,
+    std::shared_ptr<CommandList>& directCommandList,
+    const std::map<const RenderPass*, RenderTargetInfo>& renderTargets,
+    const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans)
+{
+    Assert(batch.Passes.size() > 1u, "Parallel recording batches require at least two passes.");
+    for (const RenderPass* renderPass : batch.Passes)
+    {
+        Assert(renderPass->GetQueue() == RenderPassQueue::Direct, "Parallel recording only supports the direct queue.");
+        Assert(!renderPass->IsExternal(), "External passes cannot record in parallel.");
+        Assert(renderPass->IsParallelRecordingEligible(), "Parallel recording batch contains a pass without an explicit safety declaration.");
+        PrepareQueueDependency(*renderPass, directCommandList, resourceStatePlans);
+    }
+
+    if (directCommandList == nullptr)
+    {
+        directCommandList = m_DirectCommandQueue->GetCommandList();
+    }
+
+    CommandList& preambleCommandList = *directCommandList;
+    for (uint32_t passOffset = 0; passOffset < batch.Passes.size(); ++passOffset)
+    {
+        FrameContext preambleContext(m_ResourcePool, renderMetadata);
+        PrepareResourcesForRenderPass(
+            preambleCommandList,
+            *batch.Passes[passOffset],
+            firstRenderPassIndex + passOffset,
+            preambleContext,
+            renderTargets,
+            resourceStatePlans);
+    }
+    m_QueueScheduler.SubmitDirect(directCommandList);
+
+    std::vector<std::future<std::shared_ptr<CommandList>>> recordingTasks;
+    recordingTasks.reserve(batch.Passes.size());
+    for (RenderPass* renderPass : batch.Passes)
+    {
+        recordingTasks.push_back(std::async(
+            std::launch::async,
+            [this, renderPass, &renderMetadata, &renderTargets]()
+            {
+                auto commandList = m_DirectCommandQueue->GetCommandList();
+                FrameContext context(m_ResourcePool, renderMetadata);
+                const auto renderTargetIt = renderTargets.find(renderPass);
+                if (renderTargetIt != renderTargets.end())
+                {
+                    context.SetRenderTargetInfo(renderTargetIt->second);
+                }
+
+                try
+                {
+                    PIXScope(*commandList, renderPass->GetPassName().c_str());
+                    renderPass->Execute(context, *commandList);
+                }
+                catch (const std::exception& exception)
+                {
+                    throw std::runtime_error(
+                        "RenderGraph parallel direct pass '" +
+                        RenderGraphProfiler::NarrowPassName(renderPass->GetPassName()) +
+                        "' execution failed: " + exception.what());
+                }
+                return commandList;
+            }));
+    }
+
+    std::vector<std::shared_ptr<CommandList>> recordedCommandLists;
+    recordedCommandLists.reserve(recordingTasks.size());
+    for (uint32_t passOffset = 0; passOffset < recordingTasks.size(); ++passOffset)
+    {
+        std::shared_ptr<CommandList> commandList = recordingTasks[passOffset].get();
+        m_Profiler.WritePassTimestamp(
+            RenderPassQueue::Direct,
+            *commandList,
+            batch.Passes[passOffset]->GetPassName());
+        m_QueueScheduler.TrackPassResources(*batch.Passes[passOffset], 0u);
+        recordedCommandLists.push_back(std::move(commandList));
+    }
+    m_QueueScheduler.SubmitDirect(recordedCommandLists);
+}
+//Modify End
 
 void RenderGraph::RenderGraphCommandExecutor::PrepareQueueDependency(
     const RenderPass& pass,
@@ -365,7 +488,7 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareResourcesForRenderPass(
     if (renderTargetIt != renderTargets.end())
     {
         const RenderTargetInfo& renderTargetInfo = renderTargetIt->second;
-        context.m_RenderTargetInfo = renderTargetInfo;
+        context.SetRenderTargetInfo(renderTargetInfo);
         const auto& renderTarget = renderTargetInfo.m_RenderTarget;
         const auto& textures = renderTarget->GetTextures();
 

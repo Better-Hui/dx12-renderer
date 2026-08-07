@@ -39,24 +39,14 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDe
         {
             const RaytracingDemoRenderGraph::FrameGBufferResources gbuffer = RaytracingDemoRenderGraph::GetFrameGBufferResources(context);
             const RaytracingDemoRenderGraph::LightingResources lighting = RaytracingDemoRenderGraph::GetLightingResources(context);
-            const uint32_t width = context.m_Metadata.m_ScreenWidth;
-            const uint32_t height = context.m_Metadata.m_ScreenHeight;
+            const uint32_t width = context.GetMetadata().m_ScreenWidth;
+            const uint32_t height = context.GetMetadata().m_ScreenHeight;
 
             const RaytracingDemoRenderGraph::NRDResources nrd = RaytracingDemoRenderGraph::GetNRDResources(context);
             const NRD::FrameMatrices frameMatrices = {
                 resources.SceneCamera.GetViewMatrix(),
                 resources.SceneCamera.GetProjectionMatrix(),
             };
-
-//Modify Begin:2026-07-30 by BestHui
-            const NRD::ResourceTransitionCallback transitionResource =
-                [&context](
-                    CommandList& transitionCommandList,
-                    const std::span<const ResourceStateTransition> transitions)
-                {
-                    context.TransitionResources(transitionCommandList, transitions);
-                };
-//Modify End
 
             resources.Denoisers.Execute(
                 cmd,
@@ -65,8 +55,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDe
                 lighting,
                 nrd,
                 width,
-                height,
-                transitionResource);
+                height);
         });
 }
 //Modify End

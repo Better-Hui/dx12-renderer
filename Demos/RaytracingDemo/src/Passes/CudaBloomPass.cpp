@@ -1,8 +1,8 @@
 #include <Passes/CudaBloomPass.h>
 
-#include <DX12Library/Application.h>
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Texture.h>
+#include <Framework/Core/FrameworkDeviceContext.h>
 
 #include <imgui.h>
 
@@ -21,7 +21,12 @@ namespace
     }
 }
 
-CudaBloomPass::CudaBloomPass() = default;
+//Modify Begin:2026-07-30 by BestHui
+CudaBloomPass::CudaBloomPass(FrameworkDeviceContext& deviceContext)
+    : m_DeviceContext(deviceContext)
+{
+}
+//Modify End
 
 CudaBloomPass::~CudaBloomPass()
 {
@@ -86,7 +91,7 @@ bool CudaBloomPass::InitializeCuda()
 
     m_AvailabilityChecked = true;
     std::string error;
-    const auto device = Application::Get().GetDevice();
+    const auto& device = m_DeviceContext.GetDevice();
     if (!m_CudaContext.InitializeForD3D12Device(device.Get(), error))
     {
         m_Status = error;
@@ -139,7 +144,7 @@ bool CudaBloomPass::EnsureD3D12InteropResource(Texture& postProcessColor, const 
     }
 
     std::string error;
-    const auto device = Application::Get().GetDevice();
+    const auto& device = m_DeviceContext.GetDevice();
     if (!m_InputTexture.Import(m_CudaContext, device.Get(), sourceResource, width, height, true, true, error))
     {
         m_Status = error;
@@ -160,7 +165,7 @@ bool CudaBloomPass::EnsureD3D12CudaSemaphore()
     }
 
     std::string error;
-    const auto device = Application::Get().GetDevice();
+    const auto& device = m_DeviceContext.GetDevice();
     if (!m_TimelineSemaphore.Initialize(m_CudaContext, device.Get(), error))
     {
         m_Status = error;

@@ -59,6 +59,35 @@ uint64_t RenderGraph::RenderGraphQueueScheduler::SubmitDirect(std::shared_ptr<Co
     return fenceValue;
 }
 
+//Modify Begin:2026-07-30 by BestHui
+uint64_t RenderGraph::RenderGraphQueueScheduler::SubmitDirect(
+    std::vector<std::shared_ptr<CommandList>>& commandLists)
+{
+    if (commandLists.empty())
+    {
+        return 0;
+    }
+
+    const uint64_t fenceValue = m_DirectCommandQueue->ExecuteCommandLists(commandLists);
+    for (const ResourceId resourceId : m_PendingDirectResources)
+    {
+        m_ResourceRetirements[resourceId].Direct = (std::max)(
+            m_ResourceRetirements[resourceId].Direct,
+            fenceValue);
+    }
+    m_PendingDirectResources.clear();
+    for (const auto& [resourceId, queue] : m_LastWriterQueues)
+    {
+        if (queue == RenderPassQueue::Direct && m_LastWriterFenceValues[resourceId] == 0)
+        {
+            m_LastWriterFenceValues[resourceId] = fenceValue;
+        }
+    }
+    commandLists.clear();
+    return fenceValue;
+}
+//Modify End
+
 uint64_t RenderGraph::RenderGraphQueueScheduler::SubmitAsyncCompute(
     std::shared_ptr<CommandList>& commandList,
     const bool waitForCompletion)

@@ -84,8 +84,12 @@ auto pass = RenderGraph::RenderPass::Create(
 - Windows 10/11，x64。
 - Visual Studio 2022，以及 MSVC C++ desktop toolchain 和 Windows SDK。
 - CMake 3.8 或更新版本，建议使用较新的 CMake。
-- 支持 D3D12 的 GPU 与较新的驱动。DXR、mesh shader 和 CUDA 路径还取决于各自的硬件和驱动能力。
+- 支持 **Shader Model 6.9** 的 D3D12 GPU 与驱动。DXR、mesh shader 和 CUDA 路径还取决于各自的硬件和驱动能力。
 - **CUDA Toolkit 12.8**。当前 CMake 配置阶段会构建 CUDA interop/Bloom，因此即使运行时关闭 Bloom，配置时仍需要 CUDA。
+
+### Shader Model 6.9 基线
+
+项目中的 raster、compute、task/mesh 和 DXR library shader 均由 DXC 按 Shader Model 6.9 编译，即 `vs/ps/cs/as/ms/lib_6_9`。仓库在 `D3D12/` 随附 DirectX Agility SDK **1.619.5** 运行时，在 `External/AgilitySDK/include/` 随附匹配的 C++ 头文件；CMake 会检查这套 redist，启动时还会拒绝不支持 Shader Model 6.9 的驱动。
 
 ### vcpkg 包
 
@@ -101,7 +105,7 @@ vcpkg install --triplet x64-windows assimp directxtex directxmesh imgui meshopti
 
 | 组件 | 位置 / 获取方式 | 用途 |
 | --- | --- | --- |
-| DirectX Agility SDK | `D3D12/` | 项目使用的 D3D12 Agility SDK 文件。 |
+| DirectX Agility SDK 1.619.5 | `D3D12/`、`External/AgilitySDK/include/` | SM6.9 基线所需的运行时 redist 和匹配的 C++ 头文件。 |
 | DirectX Shader Compiler | 优先 `DXC/dxc.exe`，否则使用 Windows SDK 的 `dxc.exe` | 编译 ray tracing、task、mesh、compute 等 shader。 |
 | WinPixEventRuntime | `WinPixEventRuntime/` | 向 PIX 写入 CPU/GPU event marker。 |
 | NVIDIA NRD / NRI | `External/NRD/`、`External/NRI/` | 降噪路径及其依赖。 |
