@@ -19,8 +19,12 @@ set(HEADER_FILES
         # Modify Begin:2026-07-30 by BestHui
         include/Scene/SceneResourceTypes.h
         include/Scene/SceneResourceBuilders.h
+        include/Scene/SceneStressTestFactory.h
         # Modify End
         include/Scene/SceneResources.h
+        # Modify Begin:2026-08-06 by BestHui
+        include/UI/DemoLightEditor.h
+        # Modify End
         )
 
 set(SOURCE_FILES
@@ -29,6 +33,9 @@ set(SOURCE_FILES
         src/RaytracingDemoCamera.cpp
         src/RaytracingDemo.cpp
         src/RaytracingDemoUI.cpp
+        # Modify Begin:2026-08-06 by BestHui
+        src/UI/DemoLightEditor.cpp
+        # Modify End
         src/RenderGraph/RaytracingDemoRenderGraphBuilder.cpp
         src/Passes/BaseResourcesPass.cpp
         src/Passes/DebugPass.cpp
@@ -48,6 +55,7 @@ set(SOURCE_FILES
         src/Scene/SceneLightManager.cpp
         # Modify Begin:2026-07-30 by BestHui
         src/Scene/SceneResourceBuilders.cpp
+        src/Scene/SceneStressTestFactory.cpp
         # Modify End
         src/Scene/SceneResources.cpp
         )

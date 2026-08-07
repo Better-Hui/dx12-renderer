@@ -29,6 +29,7 @@
 #include <Scene/SceneLightManager.h>
 #include <Scene/SceneLighting.h>
 #include <Scene/SceneResources.h>
+#include <UI/DemoLightEditor.h>
 #include <PathTracing/PathTracingPipelineController.h>
 #include <Passes/CudaBloomPass.h>
 //Modify Begin:2026-07-30 by BestHui
@@ -238,6 +239,7 @@ private:
 //Modify End
     RaytracingDemoSceneResources m_SceneResources;
     SceneLightManager m_Lights;
+    DemoLightEditor m_LightEditor;
     std::unique_ptr<ImGuiImpl> m_ImGui;
     std::shared_ptr<Mesh> m_LightBillboardMesh;
 //Modify Begin:2026-07-28 by BestHui

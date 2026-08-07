@@ -416,7 +416,7 @@ void RaytracingDemo::OnImGui()
 //Modify Begin:2026-07-30 by BestHui
     if (ImGui::CollapsingHeader("Lights"))
     {
-        if (m_Lights.DrawImGui())
+        if (m_LightEditor.Draw(m_Lights))
         {
             ResetAccumulation();
         }
