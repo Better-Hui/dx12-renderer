@@ -60,6 +60,31 @@ foreach(DX12_RENDERER_DLSS_FILE
 endforeach()
 # Modify End
 
+# Modify Begin:2026-08-07 by BestHui
+set(DX12_RENDERER_STREAMLINE_ROOT "${CMAKE_SOURCE_DIR}/External/Streamline" CACHE PATH "Streamline SDK root used by DLSS Frame Generation and Ray Reconstruction.")
+set(DX12_RENDERER_STREAMLINE_INCLUDE_DIRECTORY "${DX12_RENDERER_STREAMLINE_ROOT}/include")
+set(DX12_RENDERER_STREAMLINE_LIBRARY "${DX12_RENDERER_STREAMLINE_ROOT}/lib/x64/sl.interposer.lib")
+set(DX12_RENDERER_STREAMLINE_RUNTIME_DIRECTORY "${DX12_RENDERER_STREAMLINE_ROOT}/bin/x64/development")
+set(DX12_RENDERER_STREAMLINE_RUNTIME_FILES
+        "${DX12_RENDERER_STREAMLINE_RUNTIME_DIRECTORY}/sl.interposer.dll"
+        "${DX12_RENDERER_STREAMLINE_RUNTIME_DIRECTORY}/sl.common.dll"
+        "${DX12_RENDERER_STREAMLINE_RUNTIME_DIRECTORY}/sl.pcl.dll"
+        "${DX12_RENDERER_STREAMLINE_RUNTIME_DIRECTORY}/sl.dlss_g.dll"
+        "${DX12_RENDERER_STREAMLINE_RUNTIME_DIRECTORY}/sl.dlss_d.dll"
+        "${DX12_RENDERER_STREAMLINE_RUNTIME_DIRECTORY}/nvngx_dlssg.dll"
+        "${DX12_RENDERER_STREAMLINE_RUNTIME_DIRECTORY}/nvngx_dlssd.dll")
+foreach(DX12_RENDERER_STREAMLINE_FILE
+        "${DX12_RENDERER_STREAMLINE_INCLUDE_DIRECTORY}/sl.h"
+        "${DX12_RENDERER_STREAMLINE_LIBRARY}"
+        ${DX12_RENDERER_STREAMLINE_RUNTIME_FILES}
+        "${DX12_RENDERER_STREAMLINE_ROOT}/sl.interposer.json"
+        "${DX12_RENDERER_STREAMLINE_ROOT}/sl.common.json")
+        if (NOT EXISTS "${DX12_RENDERER_STREAMLINE_FILE}")
+                message(FATAL_ERROR "DX12 renderer requires the Streamline SDK file: ${DX12_RENDERER_STREAMLINE_FILE}")
+        endif()
+endforeach()
+# Modify End
+
 # Libraries
 add_subdirectory(DX12Library)
 # Modify Begin:2026-07-21 by BestHui

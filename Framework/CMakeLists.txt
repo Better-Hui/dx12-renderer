@@ -76,6 +76,7 @@ target_include_directories(${TARGET_NAME}
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/Framework
 # Modify Begin:2026-08-07 by BestHui
         PRIVATE "${DX12_RENDERER_DLSS_INCLUDE_DIRECTORY}"
+        PRIVATE "${DX12_RENDERER_STREAMLINE_INCLUDE_DIRECTORY}"
 # Modify End
         )
 
@@ -123,6 +124,7 @@ target_link_libraries(${TARGET_NAME}
         PUBLIC DX12Library
 # Modify Begin:2026-08-07 by BestHui
         PUBLIC "${DX12_RENDERER_DLSS_LIBRARY}"
+        PUBLIC "${DX12_RENDERER_STREAMLINE_LIBRARY}"
 # Modify End
 # Modify Begin:2026-07-28 by BestHui
         PUBLIC "${DX12_RENDERER_CUDA_DRIVER_LIBRARY}"
