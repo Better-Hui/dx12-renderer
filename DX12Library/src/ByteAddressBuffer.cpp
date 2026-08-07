@@ -54,3 +54,13 @@ void ByteAddressBuffer::CreateViews(size_t numElements, size_t elementSize)
         device->CreateUnorderedAccessView(m_d3d12Resource.Get(), nullptr, &uavDesc, m_Uav.GetDescriptorHandle());
     }
 }
+
+//Modify Begin:2026-08-07 by BestHui
+D3D12_CPU_DESCRIPTOR_HANDLE ByteAddressBuffer::GetUnorderedAccessView(
+    const D3D12_UNORDERED_ACCESS_VIEW_DESC* uavDesc) const
+{
+    (void)uavDesc;
+    Assert(SupportsUnorderedAccess(), "Byte-address buffer was not created with unordered-access usage.");
+    return m_Uav.GetDescriptorHandle();
+}
+//Modify End

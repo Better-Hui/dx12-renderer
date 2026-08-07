@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <vector>
 
 #include "RenderTargetInfo.h"
@@ -28,6 +29,17 @@ namespace RenderGraph
         std::vector<ResourceId> AliasingOutputs;
         std::vector<PassResourceTransition> OutputTransitions;
         std::vector<ResourceId> InitOutputs;
+
+        //Modify Begin:2026-08-07 by BestHui
+        struct AsyncComputeDirectPreamble
+        {
+            std::vector<PassResourceTransition> DirectProducerInputTransitions;
+            std::vector<ResourceId> AliasingOutputs;
+            std::vector<PassResourceTransition> OutputTransitions;
+        };
+
+        std::optional<AsyncComputeDirectPreamble> DirectPreamble;
+        //Modify End
     };
 
     struct RenderGraphExecutionBatch

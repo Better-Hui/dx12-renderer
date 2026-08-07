@@ -109,12 +109,14 @@ Avoid adding new sample code that directly touches root signatures, raw descript
 ## Render Graph Recording
 
 - `RenderGraphCompiler` produces the immutable `CompiledRenderGraph`: culled topological order, per-pass resource-state plan, render-target info, and execution batches. `RenderGraphRoot` only owns definitions/rebuilds; `RenderGraphCommandExecutor` records and submits.
+- Async-compute ownership transfer is explicit in `PassResourceStatePlan::DirectPreamble`: the Compiler assigns alias barriers and async-output transitions to a direct-queue preamble, then the compute command list records only the remaining per-pass plan. Do not add execution-time `skip...` booleans to suppress duplicated barriers.
 - `FrameContext` is read-only for pass code. Resource barriers, aliasing, clears, and queue dependencies are recorded by the Executor before a pass executes.
 - A pass may enter a parallel batch only by explicitly calling `SetParallelRecordingEligible(true)`. The Compiler rejects candidates that have write/read or write/write resource overlap; shared read-only inputs are allowed.
 - The Executor records a batch in the safe order: serial resource preamble -> one worker-owned direct `CommandList` per pass -> original topological submission order. Each worker therefore owns its command allocator, upload buffer, and dynamic descriptor heaps.
 - `RenderGraphRoot::SetParallelDirectCommandRecording()` is an A/B switch for CPU profiling. It changes only recording strategy, not graph topology or GPU queue ordering; keep it enabled by default and disable it only to compare CPU recording cost.
 - Do not mark a pass parallel-safe if it mutates a descriptor set, binding set, scene cache, or other CPU state shared with another candidate. Refactor that state into pass-owned data first.
 - The current audited batch is only Inline Ray Query `Direct Lighting` plus `Indirect Lighting` while indirect async compute is disabled. Async compute remains a separate queue-overlap feature and is intentionally not combined with same-queue recording batches.
+- `BufferDescription` declares `BufferKind::Structured` or `BufferKind::Raw` and `BufferUsage`; do not infer a raw buffer from `stride == 1`. `RWStructuredBuffer<T>` maps to a `StructuredBuffer` created with `BufferUsage::UnorderedAccess`, then bound through `UnorderedAccessView`. UAV binding validates the D3D12 UAV resource flag, and structured UAV descriptors validate their byte stride.
 
 ## RaytracingDemo Responsibilities
 

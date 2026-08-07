@@ -97,25 +97,69 @@ namespace RenderGraph
         { }
     };
 
+    //Modify Begin:2026-08-07 by BestHui
+    enum class BufferKind : uint8_t
+    {
+        Structured,
+        Raw,
+    };
+
+    enum class BufferUsage : uint8_t
+    {
+        None = 0,
+        ShaderResource = 1 << 0,
+        UnorderedAccess = 1 << 1,
+    };
+
+    constexpr BufferUsage operator|(const BufferUsage left, const BufferUsage right)
+    {
+        return static_cast<BufferUsage>(
+            static_cast<uint8_t>(left) | static_cast<uint8_t>(right));
+    }
+
+    constexpr bool HasBufferUsage(const BufferUsage usage, const BufferUsage requestedUsage)
+    {
+        return (static_cast<uint8_t>(usage) & static_cast<uint8_t>(requestedUsage)) != 0;
+    }
+    //Modify End
+
     struct BufferDescription
     {
         ResourceId m_Id;
         RenderMetadataExpression<size_t> m_SizeExpression;
         size_t m_Stride;
         ResourceInitAction m_InitAction;
+        //Modify Begin:2026-08-07 by BestHui
+        BufferKind m_Kind;
+        BufferUsage m_Usage;
+        //Modify End
 
         BufferDescription()
             : m_Id(0)
             , m_SizeExpression(nullptr)
             , m_Stride(0)
             , m_InitAction(Clear)
+            //Modify Begin:2026-08-07 by BestHui
+            , m_Kind(BufferKind::Structured)
+            , m_Usage(BufferUsage::ShaderResource)
+            //Modify End
         { }
 
-        BufferDescription(const ResourceId id, const RenderMetadataExpression<size_t>& sizeExpression, const size_t stride, const ResourceInitAction initAction)
+        BufferDescription(
+            const ResourceId id,
+            const RenderMetadataExpression<size_t>& sizeExpression,
+            const size_t stride,
+            const ResourceInitAction initAction,
+            const BufferKind kind = BufferKind::Structured,
+            const BufferUsage usage = BufferUsage::ShaderResource)
             : m_Id(id)
             , m_SizeExpression(sizeExpression)
             , m_Stride(stride)
             , m_InitAction(initAction)
+            //Modify Begin:2026-08-07 by BestHui
+            , m_Kind(kind)
+            , m_Usage(usage)
+            //Modify End
         { }
     };
 

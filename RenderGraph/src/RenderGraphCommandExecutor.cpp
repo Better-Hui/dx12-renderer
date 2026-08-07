@@ -153,8 +153,7 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
                 renderPassIndex,
                 context,
                 renderTargets,
-                resourceStatePlans,
-                true);
+                resourceStatePlans);
             try
             {
                 renderPass->Execute(context, *computeCommandList);
@@ -364,13 +363,15 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareQueueDependency(
     {
         const auto planIt = resourceStatePlans.find(&pass);
         Assert(planIt != resourceStatePlans.end(), "Render pass resource state plan was not built.");
+        Assert(planIt->second.DirectPreamble.has_value(), "Async compute render pass has no direct queue preamble plan.");
+        const PassResourceStatePlan::AsyncComputeDirectPreamble& directPreamble = *planIt->second.DirectPreamble;
 
         if (directCommandList == nullptr)
         {
             directCommandList = m_DirectCommandQueue->GetCommandList();
         }
 
-        for (const PassResourceTransition& transition : planIt->second.InputTransitions)
+        for (const PassResourceTransition& transition : directPreamble.DirectProducerInputTransitions)
         {
             if (!m_QueueScheduler.WasLastWrittenBy(transition.Id, RenderPassQueue::Direct))
             {
@@ -386,7 +387,7 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareQueueDependency(
             });
         }
 
-        for (const ResourceId outputId : planIt->second.AliasingOutputs)
+        for (const ResourceId outputId : directPreamble.AliasingOutputs)
         {
             const auto& resource = m_ResourcePool->GetResource(outputId);
             resource.ForEachResourceRecursive([this](const Resource& nestedResource)
@@ -395,7 +396,7 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareQueueDependency(
             });
         }
 
-        for (const PassResourceTransition& transition : planIt->second.OutputTransitions)
+        for (const PassResourceTransition& transition : directPreamble.OutputTransitions)
         {
             const auto& resource = m_ResourcePool->GetResource(transition.Id);
             resource.ForEachResourceRecursive([this, &transition](const Resource& nestedResource)
@@ -449,8 +450,7 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareResourcesForRenderPass(
     const uint32_t renderPassIndex,
     RenderContext& context,
     const std::map<const RenderPass*, RenderTargetInfo>& renderTargets,
-    const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans,
-    const bool skipAliasingOutputs)
+    const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans)
 {
     const auto planIt = resourceStatePlans.find(&renderPass);
     Assert(planIt != resourceStatePlans.end(), "Render pass resource state plan was not built.");
@@ -471,17 +471,14 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareResourcesForRenderPass(
         });
     }
 
-    if (!skipAliasingOutputs)
+    for (const ResourceId outputId : resourceStatePlan.AliasingOutputs)
     {
-        for (const ResourceId outputId : resourceStatePlan.AliasingOutputs)
+        (void)renderPassIndex;
+        const auto& resource = m_ResourcePool->GetResource(outputId);
+        resource.ForEachResourceRecursive([this](const Resource& nestedResource)
         {
-            (void)renderPassIndex;
-            const auto& resource = m_ResourcePool->GetResource(outputId);
-            resource.ForEachResourceRecursive([this](const Resource& nestedResource)
-            {
-                m_ResourceStateTracker.AliasingBarrier(nestedResource);
-            });
-        }
+            m_ResourceStateTracker.AliasingBarrier(nestedResource);
+        });
     }
 
     const auto renderTargetIt = renderTargets.find(&renderPass);

@@ -140,6 +140,13 @@ public:
      */
     bool CheckFormatSupport(D3D12_FORMAT_SUPPORT1 formatSupport) const;
     bool CheckFormatSupport(D3D12_FORMAT_SUPPORT2 formatSupport) const;
+//Modify Begin:2026-08-07 by BestHui
+    bool SupportsUnorderedAccess() const
+    {
+        return m_d3d12Resource != nullptr &&
+            (GetD3D12ResourceDesc().Flags & D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS) != 0;
+    }
+//Modify End
     bool AreAutoBarriersEnabled() const { return m_AutoBarriersEnabled; }
     void SetAutoBarriersEnabled(bool enable) { m_AutoBarriersEnabled = enable; }
 

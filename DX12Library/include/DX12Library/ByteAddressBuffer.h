@@ -74,11 +74,7 @@ public:
      * Get the UAV for a (sub)resource.
      */
     D3D12_CPU_DESCRIPTOR_HANDLE
-        GetUnorderedAccessView(const D3D12_UNORDERED_ACCESS_VIEW_DESC* uavDesc = nullptr) const override
-    {
-        // Buffers only have a single subresource.
-        return m_Uav.GetDescriptorHandle();
-    }
+        GetUnorderedAccessView(const D3D12_UNORDERED_ACCESS_VIEW_DESC* uavDesc = nullptr) const override;
 
 private:
     size_t m_BufferSize = 0;

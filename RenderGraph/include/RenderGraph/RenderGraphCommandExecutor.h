@@ -45,8 +45,7 @@ namespace RenderGraph
             uint32_t renderPassIndex,
             RenderContext& context,
             const std::map<const RenderPass*, RenderTargetInfo>& renderTargets,
-            const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans,
-            bool skipAliasingOutputs = false);
+            const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
 //Modify Begin:2026-07-30 by BestHui
         void ExecuteParallelDirectBatch(
             const RenderGraphExecutionBatch& batch,

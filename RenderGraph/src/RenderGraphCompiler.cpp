@@ -409,6 +409,17 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
                 resourceStatePlan.OutputTransitions.push_back({ output.m_Id, stateAfter, insertUavBarrier });
             }
         }
+
+        //Modify Begin:2026-08-07 by BestHui
+        if (renderPass->GetQueue() == RenderPassQueue::AsyncCompute)
+        {
+            PassResourceStatePlan::AsyncComputeDirectPreamble directPreamble = {};
+            directPreamble.DirectProducerInputTransitions = resourceStatePlan.InputTransitions;
+            directPreamble.AliasingOutputs = std::move(resourceStatePlan.AliasingOutputs);
+            directPreamble.OutputTransitions = std::move(resourceStatePlan.OutputTransitions);
+            resourceStatePlan.DirectPreamble = std::move(directPreamble);
+        }
+        //Modify End
         compiledGraph.m_ResourceStatePlans.emplace(renderPass, std::move(resourceStatePlan));
     }
 

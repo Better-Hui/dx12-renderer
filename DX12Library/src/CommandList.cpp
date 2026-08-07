@@ -895,6 +895,9 @@ void CommandList::SetUnorderedAccessView(const uint32_t rootParameterIndex, cons
     const UINT firstSubresource, const UINT numSubresources,
     const D3D12_UNORDERED_ACCESS_VIEW_DESC* uavDesc)
 {
+//Modify Begin:2026-08-07 by BestHui
+    Assert(resource.SupportsUnorderedAccess(), "Cannot bind a resource without unordered-access usage as a UAV.");
+//Modify End
     Assert(resource.AreAutoBarriersEnabled(), "Auto barriers are disabled.");
 
     if (numSubresources < D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
@@ -951,6 +954,9 @@ void CommandList::SetUnorderedAccessView(const uint32_t rootParameterIndex, cons
     const UINT firstSubresource, const UINT numSubresources,
     const D3D12_UNORDERED_ACCESS_VIEW_DESC* uavDesc)
 {
+//Modify Begin:2026-08-07 by BestHui
+    Assert(resource.SupportsUnorderedAccess(), "Cannot bind a resource without unordered-access usage as a UAV.");
+//Modify End
     if (resource.AreAutoBarriersEnabled())
     {
         constexpr auto stateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;

@@ -405,6 +405,11 @@ UINT PipelineDescriptorSet::SetUnorderedAccessView(
     const UnorderedAccessView& unorderedAccessView)
 {
     Assert(unorderedAccessView.m_Resource != nullptr, "Pipeline UAV resource must not be null.");
+//Modify Begin:2026-08-07 by BestHui
+    Assert(
+        unorderedAccessView.m_Resource->SupportsUnorderedAccess(),
+        "Pipeline UAV resource was not created with unordered-access usage.");
+//Modify End
 
     const DescriptorBindingInfo& binding = GetBinding(name, DescriptorBindingKind::UnorderedAccessView);
 //Modify Begin:2026-07-29 by BestHui

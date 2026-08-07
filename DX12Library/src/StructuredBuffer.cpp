@@ -105,6 +105,17 @@ D3D12_CPU_DESCRIPTOR_HANDLE StructuredBuffer::GetShaderResourceView(const D3D12_
 
 D3D12_CPU_DESCRIPTOR_HANDLE StructuredBuffer::GetUnorderedAccessView(const D3D12_UNORDERED_ACCESS_VIEW_DESC* uavDesc /*= nullptr*/) const
 {
+//Modify Begin:2026-08-07 by BestHui
+    Assert(SupportsUnorderedAccess(), "Structured buffer was not created with unordered-access usage.");
+    if (uavDesc != nullptr)
+    {
+        Assert(uavDesc->ViewDimension == D3D12_UAV_DIMENSION_BUFFER, "Structured-buffer UAV must use a buffer view.");
+        Assert(uavDesc->Format == DXGI_FORMAT_UNKNOWN, "Structured-buffer UAV must use DXGI_FORMAT_UNKNOWN.");
+        Assert(
+            uavDesc->Buffer.StructureByteStride == m_ElementSize,
+            "Structured-buffer UAV stride does not match the buffer element size.");
+    }
+//Modify End
     return m_Uav.GetDescriptorHandle();
 }
 

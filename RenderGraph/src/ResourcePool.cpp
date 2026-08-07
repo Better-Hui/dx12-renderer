@@ -83,7 +83,7 @@ namespace
     {
         constexpr UINT64 heapOffset = 0u;
         std::shared_ptr<Buffer> pBuffer;
-        if (desc.m_BufferDescription.m_Stride == 1)
+        if (desc.m_BufferDescription.m_Kind == RenderGraph::BufferKind::Raw)
         {
             pBuffer = std::make_shared<ByteAddressBuffer>(
                 desc.m_DxDesc,
@@ -195,6 +195,11 @@ const std::shared_ptr<Buffer>& RenderGraph::ResourcePool::GetBuffer(const Resour
 
 std::shared_ptr<StructuredBuffer> RenderGraph::ResourcePool::GetStructuredBuffer(const ResourceId resourceId) const
 {
+//Modify Begin:2026-08-07 by BestHui
+    Assert(
+        GetDescription(resourceId).m_BufferDescription.m_Kind == BufferKind::Structured,
+        "Render graph buffer is not declared as structured.");
+//Modify End
     const std::shared_ptr<Buffer>& pBuffer = GetBuffer(resourceId);
     const std::shared_ptr<StructuredBuffer> pStructuredBuffer = std::dynamic_pointer_cast<StructuredBuffer>(pBuffer);
     Assert(pStructuredBuffer != nullptr, "Invalid cast");
@@ -203,6 +208,11 @@ std::shared_ptr<StructuredBuffer> RenderGraph::ResourcePool::GetStructuredBuffer
 
 std::shared_ptr<ByteAddressBuffer> RenderGraph::ResourcePool::GetByteAddressBuffer(ResourceId resourceId) const
 {
+//Modify Begin:2026-08-07 by BestHui
+    Assert(
+        GetDescription(resourceId).m_BufferDescription.m_Kind == BufferKind::Raw,
+        "Render graph buffer is not declared as raw.");
+//Modify End
     const std::shared_ptr<Buffer>& pBuffer = GetBuffer(resourceId);
     const std::shared_ptr<ByteAddressBuffer> pByteAddressBuffer = std::dynamic_pointer_cast<ByteAddressBuffer>(pBuffer);
     Assert(pByteAddressBuffer != nullptr, "Invalid cast");
@@ -445,7 +455,14 @@ void RenderGraph::ResourcePool::RegisterBuffer(const BufferDescription& desc, co
 {
     D3D12_RESOURCE_FLAGS resourceFlags = D3D12_RESOURCE_FLAG_NONE;
 
-    bool unorderedAccess = false;
+//Modify Begin:2026-08-07 by BestHui
+    Assert(desc.m_Stride > 0, "Render graph buffer stride must be positive.");
+    Assert(
+        desc.m_Kind != BufferKind::Raw || desc.m_Stride == 1,
+        "Raw render graph buffers must use a byte stride of one.");
+
+    bool unorderedAccess = HasBufferUsage(desc.m_Usage, BufferUsage::UnorderedAccess);
+//Modify End
 
     for (const auto& pRenderPass : renderPasses)
     {
@@ -489,7 +506,11 @@ void RenderGraph::ResourcePool::RegisterBuffer(const BufferDescription& desc, co
     description.m_ElementsCount = elementsCount;
     description.m_ResourceType = ResourceType::Buffer;
 
-    const auto allocationInfo = GetStructuredBufferResourceAllocationInfo(pDevice, dxDesc, StructuredBuffer::COUNTER_DESC);
+//Modify Begin:2026-08-07 by BestHui
+    const auto allocationInfo = desc.m_Kind == BufferKind::Structured
+        ? GetStructuredBufferResourceAllocationInfo(pDevice, dxDesc, StructuredBuffer::COUNTER_DESC)
+        : GetResourceAllocationInfo(pDevice, dxDesc);
+//Modify End
     description.m_TotalSize = allocationInfo.SizeInBytes;
     description.m_Alignment = allocationInfo.Alignment;
 
