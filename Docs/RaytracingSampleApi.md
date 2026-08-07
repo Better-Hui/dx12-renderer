@@ -156,6 +156,6 @@ The current soft variant uses four shadow samples. This is a sample-quality fixe
 - Pass construction uses explicit `RaytracingDemoPassResources` and `RaytracingDemoPassConfig` rather than capturing `RaytracingDemo&` or using friend access.
 - Scene-to-GPU conversion is organized by four builders: texture/material, geometry, meshlet, and RTAS. `RaytracingDemoSceneResources` remains the sample-facing facade.
 - Transient-resource aliasing/lifetime planning is not yet fully queue-fence-aware.
-- DLSS/Streamline is not integrated.
+- DLSS/Streamline integration is experimental. Native NGX SR/DLAA and tentative Streamline RR/FG paths are present, but they have not completed supported-hardware image-quality, stability, timing, or performance validation. Runtime capability queries gate RR/FG; the current RTX 2060 development machine reports RR unavailable and cannot support FG. Do not treat this sample path as a production-ready DLSS integration.
 
 Prefer a small, explicit framework API addition plus a clear sample usage site over increasing low-level D3D12 exposure.
