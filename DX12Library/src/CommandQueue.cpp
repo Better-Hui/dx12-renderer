@@ -4,6 +4,9 @@
 
 #include "CommandList.h"
 #include "ResourceStateTracker.h"
+//Modify Begin:2026-08-07 by BestHui
+#include "StreamlineRuntime.h"
+//Modify End
 
 //Modify Begin:2026-07-28 by BestHui
 #include <fstream>
@@ -13,9 +16,13 @@
 //Modify End
 
 //Modify Begin:2026-08-07 by BestHui
-CommandQueue::CommandQueue(const D3D12_COMMAND_LIST_TYPE type, Microsoft::WRL::ComPtr<ID3D12Device2> device)
+CommandQueue::CommandQueue(
+	const D3D12_COMMAND_LIST_TYPE type,
+	Microsoft::WRL::ComPtr<ID3D12Device2> device,
+	std::shared_ptr<StreamlineRuntime> streamlineRuntime)
 	: m_CommandListType(type)
 	, m_Device(std::move(device))
+	, m_StreamlineRuntime(std::move(streamlineRuntime))
 	, m_FenceValue(0)
 	, m_IsProcessingInFlightCommandLists(true)
 {
@@ -27,7 +34,17 @@ CommandQueue::CommandQueue(const D3D12_COMMAND_LIST_TYPE type, Microsoft::WRL::C
 	desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
 	desc.NodeMask = 0;
 
-	ThrowIfFailed(m_Device->CreateCommandQueue(&desc, IID_PPV_ARGS(&m_D3d12CommandQueue)));
+	if (m_StreamlineRuntime != nullptr)
+	{
+		ThrowIfFailed(m_StreamlineRuntime->CreateCommandQueue(
+			m_Device.Get(),
+			&desc,
+			IID_PPV_ARGS(&m_D3d12CommandQueue)));
+	}
+	else
+	{
+		ThrowIfFailed(m_Device->CreateCommandQueue(&desc, IID_PPV_ARGS(&m_D3d12CommandQueue)));
+	}
 //Modify Begin:2026-07-21 by BestHui
 	InitializeFenceAndWorker();
 //Modify End
@@ -37,9 +54,11 @@ CommandQueue::CommandQueue(const D3D12_COMMAND_LIST_TYPE type, Microsoft::WRL::C
 CommandQueue::CommandQueue(
 	const D3D12_COMMAND_LIST_TYPE type,
 	Microsoft::WRL::ComPtr<ID3D12Device2> device,
-	ID3D12CommandQueue* externalCommandQueue)
+	ID3D12CommandQueue* externalCommandQueue,
+	std::shared_ptr<StreamlineRuntime> streamlineRuntime)
 	: m_CommandListType(type)
 	, m_Device(std::move(device))
+	, m_StreamlineRuntime(std::move(streamlineRuntime))
 	, m_D3d12CommandQueue(externalCommandQueue)
 	, m_FenceValue(0)
 	, m_IsProcessingInFlightCommandLists(true)

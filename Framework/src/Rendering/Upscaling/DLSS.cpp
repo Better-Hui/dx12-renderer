@@ -4,9 +4,17 @@
 #include <DX12Library/CommandList.h>
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Texture.h>
+#include <DX12Library/StreamlineRuntime.h>
 #include <Framework/Core/FrameworkDeviceContext.h>
 
 #include <nvsdk_ngx_helpers.h>
+#include <sl.h>
+#include <sl_consts.h>
+#include <sl_core_api.h>
+#include <sl_dlss.h>
+#include <sl_dlss_d.h>
+#include <sl_dlss_g.h>
+#include <sl_reflex.h>
 
 #include <algorithm>
 #include <array>
@@ -65,6 +73,47 @@ namespace
         }
     }
 
+    sl::DLSSMode GetStreamlineMode(const DLSSMode mode)
+    {
+        switch (mode)
+        {
+        case DLSSMode::DLAA:
+            return sl::DLSSMode::eDLAA;
+        case DLSSMode::Quality:
+            return sl::DLSSMode::eMaxQuality;
+        case DLSSMode::Balanced:
+            return sl::DLSSMode::eBalanced;
+        case DLSSMode::Performance:
+            return sl::DLSSMode::eMaxPerformance;
+        case DLSSMode::UltraPerformance:
+            return sl::DLSSMode::eUltraPerformance;
+        case DLSSMode::Disabled:
+        default:
+            return sl::DLSSMode::eOff;
+        }
+    }
+
+    sl::float4x4 GetStreamlineMatrix(const DirectX::XMMATRIX& matrix)
+    {
+        DirectX::XMFLOAT4X4 values{};
+        DirectX::XMStoreFloat4x4(&values, matrix);
+        sl::float4x4 result{};
+        result.setRow(0u, { values._11, values._12, values._13, values._14 });
+        result.setRow(1u, { values._21, values._22, values._23, values._24 });
+        result.setRow(2u, { values._31, values._32, values._33, values._34 });
+        result.setRow(3u, { values._41, values._42, values._43, values._44 });
+        return result;
+    }
+
+    sl::Resource GetStreamlineTextureResource(const std::shared_ptr<Texture>& texture, const D3D12_RESOURCE_STATES state)
+    {
+        return {
+            sl::ResourceType::eTex2d,
+            texture->GetD3D12Resource().Get(),
+            static_cast<uint32_t>(state),
+        };
+    }
+
     std::string GetResultMessage(const char* operation, const NVSDK_NGX_Result result)
     {
         std::ostringstream message;
@@ -97,6 +146,55 @@ void DLSS::SetMode(const DLSSMode mode)
     InvalidateHistory();
 }
 
+void DLSS::SetRayReconstructionEnabled(const bool enabled)
+{
+    const std::shared_ptr<StreamlineRuntime> streamlineRuntime = m_DeviceContext.GetStreamlineRuntime();
+    if (enabled && (streamlineRuntime == nullptr || !streamlineRuntime->IsInitialized()))
+    {
+        m_StatusMessage = "DLSS Ray Reconstruction requires the Streamline runtime.";
+        m_RayReconstructionEnabled = false;
+        return;
+    }
+    if (m_RayReconstructionEnabled != enabled)
+    {
+        m_RayReconstructionEnabled = enabled;
+        InvalidateHistory();
+    }
+}
+
+void DLSS::SetFrameGenerationEnabled(const bool enabled)
+{
+    const std::shared_ptr<StreamlineRuntime> streamlineRuntime = m_DeviceContext.GetStreamlineRuntime();
+    if (enabled && (streamlineRuntime == nullptr || !streamlineRuntime->IsInitialized()))
+    {
+        m_StatusMessage = "DLSS Frame Generation requires the Streamline runtime.";
+        m_FrameGenerationEnabled = false;
+        return;
+    }
+    if (m_FrameGenerationEnabled == enabled)
+    {
+        return;
+    }
+    if (!m_DeviceContext.SetFrameGenerationEnabled(enabled))
+    {
+        m_StatusMessage = "DLSS Frame Generation swapchain recreation failed: " +
+            (streamlineRuntime != nullptr ? streamlineRuntime->GetStatusMessage() : std::string("no runtime"));
+        return;
+    }
+
+    sl::ReflexOptions reflexOptions{};
+    reflexOptions.mode = enabled ? sl::ReflexMode::eLowLatency : sl::ReflexMode::eOff;
+    const sl::Result reflexResult = slReflexSetOptions(reflexOptions);
+    if (reflexResult != sl::Result::eOk)
+    {
+        m_DeviceContext.SetFrameGenerationEnabled(false);
+        m_StatusMessage = "slReflexSetOptions failed while toggling DLSS Frame Generation.";
+        return;
+    }
+    m_FrameGenerationEnabled = enabled;
+    InvalidateHistory();
+}
+
 DLSSOptimalSettings DLSS::GetOptimalSettings(const uint32_t displayWidth, const uint32_t displayHeight)
 {
     DLSSOptimalSettings settings{};
@@ -105,6 +203,27 @@ DLSSOptimalSettings DLSS::GetOptimalSettings(const uint32_t displayWidth, const 
 
     if (!IsEnabled() || m_Mode == DLSSMode::DLAA)
     {
+        return settings;
+    }
+
+    if (m_RayReconstructionEnabled)
+    {
+        sl::DLSSDOptions options{};
+        options.mode = GetStreamlineMode(m_Mode);
+        options.outputWidth = displayWidth;
+        options.outputHeight = displayHeight;
+        options.colorBuffersHDR = sl::Boolean::eTrue;
+        options.normalRoughnessMode = sl::DLSSDNormalRoughnessMode::eUnpacked;
+        sl::DLSSDOptimalSettings reconstructionSettings{};
+        const sl::Result result = slDLSSDGetOptimalSettings(options, reconstructionSettings);
+        if (result != sl::Result::eOk)
+        {
+            m_StatusMessage = "slDLSSDGetOptimalSettings failed (Streamline result " + std::to_string(static_cast<uint32_t>(result)) + ").";
+            return settings;
+        }
+        settings.RenderWidth = (std::max)(reconstructionSettings.optimalRenderWidth, 1u);
+        settings.RenderHeight = (std::max)(reconstructionSettings.optimalRenderHeight, 1u);
+        settings.Sharpness = reconstructionSettings.optimalSharpness;
         return settings;
     }
 
@@ -179,6 +298,12 @@ void DLSS::Execute(CommandList& commandList, const DLSSExecutionInputs& inputs)
         throw std::runtime_error("DLSS requires color, depth, motion-vector, and output textures.");
     }
 
+    if (m_RayReconstructionEnabled)
+    {
+        ExecuteRayReconstruction(commandList, inputs);
+        return;
+    }
+
     if (!EnsureFeature(commandList, inputs))
     {
         throw std::runtime_error(m_StatusMessage);
@@ -208,6 +333,120 @@ void DLSS::Execute(CommandList& commandList, const DLSSExecutionInputs& inputs)
     {
         m_StatusMessage = GetResultMessage("NGX_D3D12_EVALUATE_DLSS_EXT", result);
         throw std::runtime_error(m_StatusMessage);
+    }
+
+    m_HistoryReset = false;
+}
+
+void DLSS::ExecuteRayReconstruction(CommandList& commandList, const DLSSExecutionInputs& inputs)
+{
+    if (inputs.DiffuseAlbedo == nullptr || inputs.SpecularAlbedo == nullptr || inputs.Normals == nullptr || inputs.Roughness == nullptr)
+    {
+        throw std::runtime_error("DLSS Ray Reconstruction requires diffuse albedo, specular albedo, normals, and roughness textures.");
+    }
+
+    const std::shared_ptr<StreamlineRuntime> streamlineRuntime = m_DeviceContext.GetStreamlineRuntime();
+    if (streamlineRuntime == nullptr || !streamlineRuntime->IsInitialized())
+    {
+        throw std::runtime_error("DLSS Ray Reconstruction requires an initialized Streamline runtime.");
+    }
+
+    sl::FrameToken* frameToken = nullptr;
+    const sl::Result tokenResult = slGetNewFrameToken(frameToken, &inputs.FrameIndex);
+    if (tokenResult != sl::Result::eOk || frameToken == nullptr)
+    {
+        throw std::runtime_error("slGetNewFrameToken failed for DLSS Ray Reconstruction.");
+    }
+
+    const DirectX::XMMATRIX clipToPreviousClip = DirectX::XMMatrixMultiply(
+        DirectX::XMMatrixInverse(nullptr, inputs.ViewProjection),
+        inputs.HasPreviousViewProjection ? inputs.PreviousViewProjection : inputs.ViewProjection);
+    const DirectX::XMMATRIX inverseView = DirectX::XMMatrixInverse(nullptr, inputs.View);
+    DirectX::XMFLOAT4X4 inverseViewValues{};
+    DirectX::XMStoreFloat4x4(&inverseViewValues, inverseView);
+
+    sl::Constants constants{};
+    constants.cameraViewToClip = GetStreamlineMatrix(inputs.Projection);
+    constants.clipToCameraView = GetStreamlineMatrix(DirectX::XMMatrixInverse(nullptr, inputs.Projection));
+    constants.clipToPrevClip = GetStreamlineMatrix(clipToPreviousClip);
+    constants.prevClipToClip = GetStreamlineMatrix(DirectX::XMMatrixInverse(nullptr, clipToPreviousClip));
+    constants.jitterOffset = { inputs.JitterOffset.x, inputs.JitterOffset.y };
+    constants.mvecScale = { 1.0f, 1.0f };
+    constants.cameraPos = { inverseViewValues._41, inverseViewValues._42, inverseViewValues._43 };
+    constants.cameraRight = { inverseViewValues._11, inverseViewValues._12, inverseViewValues._13 };
+    constants.cameraUp = { inverseViewValues._21, inverseViewValues._22, inverseViewValues._23 };
+    constants.cameraFwd = { inverseViewValues._31, inverseViewValues._32, inverseViewValues._33 };
+    constants.depthInverted = sl::Boolean::eFalse;
+    constants.cameraMotionIncluded = sl::Boolean::eTrue;
+    constants.motionVectors3D = sl::Boolean::eFalse;
+    constants.motionVectorsJittered = sl::Boolean::eTrue;
+    constants.reset = inputs.Reset || m_HistoryReset ? sl::Boolean::eTrue : sl::Boolean::eFalse;
+
+    const sl::ViewportHandle viewport(0u);
+    const sl::Result constantsResult = slSetConstants(constants, *frameToken, viewport);
+    if (constantsResult != sl::Result::eOk)
+    {
+        throw std::runtime_error("slSetConstants failed for DLSS Ray Reconstruction.");
+    }
+
+    sl::DLSSOptions dlssOptions{};
+    dlssOptions.mode = GetStreamlineMode(m_Mode);
+    dlssOptions.outputWidth = inputs.DisplayWidth;
+    dlssOptions.outputHeight = inputs.DisplayHeight;
+    dlssOptions.colorBuffersHDR = sl::Boolean::eTrue;
+    const sl::Result dlssOptionsResult = slDLSSSetOptions(viewport, dlssOptions);
+    if (dlssOptionsResult != sl::Result::eOk)
+    {
+        throw std::runtime_error("slDLSSSetOptions failed for DLSS Ray Reconstruction.");
+    }
+
+    sl::DLSSDOptions reconstructionOptions{};
+    reconstructionOptions.mode = GetStreamlineMode(m_Mode);
+    reconstructionOptions.outputWidth = inputs.DisplayWidth;
+    reconstructionOptions.outputHeight = inputs.DisplayHeight;
+    reconstructionOptions.sharpness = inputs.Sharpness;
+    reconstructionOptions.colorBuffersHDR = sl::Boolean::eTrue;
+    reconstructionOptions.normalRoughnessMode = sl::DLSSDNormalRoughnessMode::eUnpacked;
+    reconstructionOptions.worldToCameraView = GetStreamlineMatrix(inputs.View);
+    reconstructionOptions.cameraViewToWorld = GetStreamlineMatrix(inverseView);
+    const sl::Result reconstructionOptionsResult = slDLSSDSetOptions(viewport, reconstructionOptions);
+    if (reconstructionOptionsResult != sl::Result::eOk)
+    {
+        throw std::runtime_error("slDLSSDSetOptions failed for DLSS Ray Reconstruction.");
+    }
+
+    const sl::Extent renderExtent{ 0u, 0u, inputs.RenderWidth, inputs.RenderHeight };
+    const sl::Extent displayExtent{ 0u, 0u, inputs.DisplayWidth, inputs.DisplayHeight };
+    sl::Resource color = GetStreamlineTextureResource(inputs.Color, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    sl::Resource depth = GetStreamlineTextureResource(inputs.Depth, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    sl::Resource motionVectors = GetStreamlineTextureResource(inputs.MotionVectors, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    sl::Resource diffuseAlbedo = GetStreamlineTextureResource(inputs.DiffuseAlbedo, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    sl::Resource specularAlbedo = GetStreamlineTextureResource(inputs.SpecularAlbedo, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    sl::Resource normals = GetStreamlineTextureResource(inputs.Normals, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    sl::Resource roughness = GetStreamlineTextureResource(inputs.Roughness, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    sl::Resource output = GetStreamlineTextureResource(inputs.Output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    const std::array<sl::ResourceTag, 8> tags = {
+        sl::ResourceTag{ &color, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eValidUntilEvaluate, &renderExtent },
+        sl::ResourceTag{ &output, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eValidUntilEvaluate, &displayExtent },
+        sl::ResourceTag{ &depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilEvaluate, &renderExtent },
+        sl::ResourceTag{ &motionVectors, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilEvaluate, &renderExtent },
+        sl::ResourceTag{ &diffuseAlbedo, sl::kBufferTypeAlbedo, sl::ResourceLifecycle::eValidUntilEvaluate, &renderExtent },
+        sl::ResourceTag{ &specularAlbedo, sl::kBufferTypeSpecularAlbedo, sl::ResourceLifecycle::eValidUntilEvaluate, &renderExtent },
+        sl::ResourceTag{ &normals, sl::kBufferTypeNormals, sl::ResourceLifecycle::eValidUntilEvaluate, &renderExtent },
+        sl::ResourceTag{ &roughness, sl::kBufferTypeRoughness, sl::ResourceLifecycle::eValidUntilEvaluate, &renderExtent },
+    };
+    const auto rawCommandList = reinterpret_cast<sl::CommandBuffer*>(commandList.GetGraphicsCommandList().Get());
+    const sl::Result tagResult = slSetTagForFrame(*frameToken, viewport, tags.data(), static_cast<uint32_t>(tags.size()), rawCommandList);
+    if (tagResult != sl::Result::eOk)
+    {
+        throw std::runtime_error("slSetTagForFrame failed for DLSS Ray Reconstruction.");
+    }
+
+    const sl::BaseStructure* evaluateInputs[] = { &viewport };
+    const sl::Result evaluateResult = slEvaluateFeature(sl::kFeatureDLSS_RR, *frameToken, evaluateInputs, _countof(evaluateInputs), rawCommandList);
+    if (evaluateResult != sl::Result::eOk)
+    {
+        throw std::runtime_error("slEvaluateFeature(DLSS_RR) failed.");
     }
 
     m_HistoryReset = false;

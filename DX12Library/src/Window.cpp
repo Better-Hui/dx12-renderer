@@ -9,6 +9,9 @@
 #include "RenderTarget.h"
 #include "ResourceStateTracker.h"
 #include "Texture.h"
+//Modify Begin:2026-08-07 by BestHui
+#include "StreamlineRuntime.h"
+//Modify End
 #include "Helpers.h"
 
 //Modify Begin:2026-07-21 by BestHui
@@ -345,6 +348,25 @@ void Window::OnResize(ResizeEventArgs& e)
 	}
 }
 
+void Window::ReleaseSwapChainResources()
+{
+	MRenderTarget.AttachTexture(Color0, std::make_shared<Texture>());
+	for (int i = 0; i < BUFFER_COUNT; ++i)
+	{
+		ResourceStateTracker::RemoveGlobalResourceState(BackBufferTextures[i]->GetD3D12Resource().Get());
+		BackBufferTextures[i]->Reset();
+	}
+	DxgiSwapChain.Reset();
+}
+
+void Window::RecreateSwapChain()
+{
+	DxgiSwapChain = CreateSwapChain();
+	FrameResources.Reset(BUFFER_COUNT);
+	FrameResources.SetCurrentIndex(CurrentBackBufferIndex);
+	UpdateRenderTargetViews();
+}
+
 ComPtr<IDXGISwapChain4> Window::CreateSwapChain()
 {
 	Application& app = Application::Get();
@@ -374,13 +396,28 @@ ComPtr<IDXGISwapChain4> Window::CreateSwapChain()
 	ID3D12CommandQueue* pCommandQueue = app.GetCommandQueue()->GetD3D12CommandQueue().Get();
 
 	ComPtr<IDXGISwapChain1> swapChain1;
-	ThrowIfFailed(dxgiFactory4->CreateSwapChainForHwnd(
-		pCommandQueue,
-		HWnd,
-		&swapChainDesc,
-		nullptr,
-		nullptr,
-		&swapChain1));
+	const std::shared_ptr<StreamlineRuntime> streamlineRuntime = app.GetStreamlineRuntime();
+	if (streamlineRuntime != nullptr)
+	{
+		ThrowIfFailed(streamlineRuntime->CreateSwapChainForHwnd(
+			dxgiFactory4.Get(),
+			pCommandQueue,
+			HWnd,
+			&swapChainDesc,
+			nullptr,
+			nullptr,
+			&swapChain1));
+	}
+	else
+	{
+		ThrowIfFailed(dxgiFactory4->CreateSwapChainForHwnd(
+			pCommandQueue,
+			HWnd,
+			&swapChainDesc,
+			nullptr,
+			nullptr,
+			&swapChain1));
+	}
 
 	// Disable the Alt+Enter fullscreen toggle feature. Switching to fullscreen
 	// will be handled manually.

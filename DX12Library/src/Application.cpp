@@ -505,6 +505,46 @@ Microsoft::WRL::ComPtr<ID3D12Device2> Application::GetDevice() const
 //Modify End
 }
 
+std::shared_ptr<StreamlineRuntime> Application::GetStreamlineRuntime() const
+{
+    return m_RenderContext.GetStreamlineRuntime();
+}
+
+bool Application::SetFrameGenerationEnabled(const bool enabled)
+{
+    const std::shared_ptr<StreamlineRuntime> streamlineRuntime = GetStreamlineRuntime();
+    if (streamlineRuntime == nullptr)
+    {
+        return false;
+    }
+    if (streamlineRuntime->IsFrameGenerationEnabled() == enabled)
+    {
+        return true;
+    }
+
+    Flush();
+    for (const auto& [windowHandle, window] : gs_Windows)
+    {
+        (void)windowHandle;
+        window->ReleaseSwapChainResources();
+    }
+    if (!streamlineRuntime->SetFrameGenerationEnabled(enabled))
+    {
+        for (const auto& [windowHandle, window] : gs_Windows)
+        {
+            (void)windowHandle;
+            window->RecreateSwapChain();
+        }
+        return false;
+    }
+    for (const auto& [windowHandle, window] : gs_Windows)
+    {
+        (void)windowHandle;
+        window->RecreateSwapChain();
+    }
+    return true;
+}
+
 //Modify Begin:2026-07-21 by BestHui
 bool Application::UsesExternalDevice() const
 {

@@ -163,6 +163,8 @@ protected:
 
 	// Create the swapchain.
 	Microsoft::WRL::ComPtr<IDXGISwapChain4> CreateSwapChain();
+	void ReleaseSwapChainResources();
+	void RecreateSwapChain();
 
 	// Update the render target views for the swapchain back buffers.
 	void UpdateRenderTargetViews();

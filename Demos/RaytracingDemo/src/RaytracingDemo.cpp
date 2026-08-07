@@ -60,6 +60,11 @@ namespace
         desc.DirectQueue = application.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
         desc.ComputeQueue = application.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE);
         desc.CopyQueue = application.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COPY);
+        desc.Streamline = application.GetStreamlineRuntime();
+        desc.SetFrameGenerationEnabled = [&application](const bool enabled)
+        {
+            return application.SetFrameGenerationEnabled(enabled);
+        };
         desc.AllocateDescriptors = [&application](const D3D12_DESCRIPTOR_HEAP_TYPE type, const uint32_t count)
         {
             return application.AllocateDescriptors(type, count);

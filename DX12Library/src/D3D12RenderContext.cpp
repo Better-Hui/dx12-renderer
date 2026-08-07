@@ -3,6 +3,11 @@
 #include "D3D12RenderContext.h"
 
 #include "CommandQueue.h"
+//Modify Begin:2026-08-07 by BestHui
+#include "StreamlineRuntime.h"
+
+#include <filesystem>
+//Modify End
 
 //Modify Begin:2026-07-28 by BestHui
 void D3D12RenderContext::InitializeOwned(Microsoft::WRL::ComPtr<ID3D12Device2> device)
@@ -10,6 +15,8 @@ void D3D12RenderContext::InitializeOwned(Microsoft::WRL::ComPtr<ID3D12Device2> d
     Assert(device != nullptr, "D3D12 device is null.");
     m_Device = device;
     m_UsesExternalDevice = false;
+    m_StreamlineRuntime = std::make_shared<StreamlineRuntime>();
+    (void)m_StreamlineRuntime->Initialize(m_Device.Get(), std::filesystem::current_path().wstring());
     CreateOwnedQueues();
 //Modify Begin:2026-08-07 by BestHui
     ConfigureCommandListDependencies();
@@ -21,6 +28,8 @@ void D3D12RenderContext::InitializeExternal(const ExternalD3D12Context& external
     Assert(externalContext.Device != nullptr, "External D3D12 device is required.");
     ThrowIfFailed(externalContext.Device->QueryInterface(IID_PPV_ARGS(&m_Device)));
     m_UsesExternalDevice = true;
+    m_StreamlineRuntime = std::make_shared<StreamlineRuntime>();
+    (void)m_StreamlineRuntime->Initialize(m_Device.Get(), std::filesystem::current_path().wstring());
     WrapExternalQueues(externalContext);
 //Modify Begin:2026-08-07 by BestHui
     ConfigureCommandListDependencies();
@@ -59,6 +68,22 @@ std::shared_ptr<CommandQueue> D3D12RenderContext::GetCommandQueue(const D3D12_CO
     }
 }
 
+std::shared_ptr<StreamlineRuntime> D3D12RenderContext::GetStreamlineRuntime() const
+{
+    return m_StreamlineRuntime;
+}
+
+D3D12RenderContext::~D3D12RenderContext()
+{
+    m_DirectCommandQueue.reset();
+    m_ComputeCommandQueue.reset();
+    m_CopyCommandQueue.reset();
+    if (m_StreamlineRuntime != nullptr)
+    {
+        m_StreamlineRuntime->Shutdown();
+    }
+}
+
 //Modify Begin:2026-08-07 by BestHui
 void D3D12RenderContext::SetFatalErrorHandler(std::function<void(int)> handler)
 {
@@ -71,9 +96,9 @@ void D3D12RenderContext::SetFatalErrorHandler(std::function<void(int)> handler)
 void D3D12RenderContext::CreateOwnedQueues()
 {
 //Modify Begin:2026-08-07 by BestHui
-    m_DirectCommandQueue = std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_DIRECT, m_Device);
-    m_ComputeCommandQueue = std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COMPUTE, m_Device);
-    m_CopyCommandQueue = std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COPY, m_Device);
+    m_DirectCommandQueue = std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_DIRECT, m_Device, m_StreamlineRuntime);
+    m_ComputeCommandQueue = std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COMPUTE, m_Device, m_StreamlineRuntime);
+    m_CopyCommandQueue = std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COPY, m_Device, m_StreamlineRuntime);
 //Modify End
 }
 
@@ -81,14 +106,14 @@ void D3D12RenderContext::WrapExternalQueues(const ExternalD3D12Context& external
 {
     m_DirectCommandQueue = externalContext.DirectCommandQueue != nullptr
 //Modify Begin:2026-08-07 by BestHui
-        ? std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_DIRECT, m_Device, externalContext.DirectCommandQueue)
-        : std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_DIRECT, m_Device);
+        ? std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_DIRECT, m_Device, externalContext.DirectCommandQueue, m_StreamlineRuntime)
+        : std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_DIRECT, m_Device, m_StreamlineRuntime);
     m_ComputeCommandQueue = externalContext.ComputeCommandQueue != nullptr
-        ? std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COMPUTE, m_Device, externalContext.ComputeCommandQueue)
-        : std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COMPUTE, m_Device);
+        ? std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COMPUTE, m_Device, externalContext.ComputeCommandQueue, m_StreamlineRuntime)
+        : std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COMPUTE, m_Device, m_StreamlineRuntime);
     m_CopyCommandQueue = externalContext.CopyCommandQueue != nullptr
-        ? std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COPY, m_Device, externalContext.CopyCommandQueue)
-        : std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COPY, m_Device);
+        ? std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COPY, m_Device, externalContext.CopyCommandQueue, m_StreamlineRuntime)
+        : std::make_shared<CommandQueue>(D3D12_COMMAND_LIST_TYPE_COPY, m_Device, m_StreamlineRuntime);
 //Modify End
 }
 

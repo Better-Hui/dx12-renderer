@@ -40,6 +40,10 @@ struct DLSSExecutionInputs
     std::shared_ptr<Texture> Depth;
     std::shared_ptr<Texture> MotionVectors;
     std::shared_ptr<Texture> Output;
+    std::shared_ptr<Texture> DiffuseAlbedo;
+    std::shared_ptr<Texture> SpecularAlbedo;
+    std::shared_ptr<Texture> Normals;
+    std::shared_ptr<Texture> Roughness;
     uint32_t RenderWidth = 1;
     uint32_t RenderHeight = 1;
     uint32_t DisplayWidth = 1;
@@ -47,6 +51,12 @@ struct DLSSExecutionInputs
     DirectX::XMFLOAT2 JitterOffset = { 0.0f, 0.0f };
     float Sharpness = 0.0f;
     bool Reset = false;
+    uint32_t FrameIndex = 0;
+    bool HasPreviousViewProjection = false;
+    DirectX::XMMATRIX View = DirectX::XMMatrixIdentity();
+    DirectX::XMMATRIX Projection = DirectX::XMMatrixIdentity();
+    DirectX::XMMATRIX ViewProjection = DirectX::XMMatrixIdentity();
+    DirectX::XMMATRIX PreviousViewProjection = DirectX::XMMatrixIdentity();
 };
 
 class DLSS final
@@ -60,10 +70,14 @@ public:
 
     [[nodiscard]] bool IsSupported() const { return m_Supported; }
     [[nodiscard]] bool IsEnabled() const { return m_Supported && m_Mode != DLSSMode::Disabled; }
+    [[nodiscard]] bool IsRayReconstructionEnabled() const { return m_RayReconstructionEnabled; }
+    [[nodiscard]] bool IsFrameGenerationEnabled() const { return m_FrameGenerationEnabled; }
     [[nodiscard]] DLSSMode GetMode() const { return m_Mode; }
     [[nodiscard]] const std::string& GetStatusMessage() const { return m_StatusMessage; }
 
     void SetMode(DLSSMode mode);
+    void SetRayReconstructionEnabled(bool enabled);
+    void SetFrameGenerationEnabled(bool enabled);
     [[nodiscard]] DLSSOptimalSettings GetOptimalSettings(uint32_t displayWidth, uint32_t displayHeight);
     [[nodiscard]] DirectX::XMFLOAT2 GetJitterOffset(uint64_t frameIndex) const;
     void InvalidateHistory();
@@ -75,6 +89,7 @@ private:
 
     [[nodiscard]] bool Initialize(const DLSSInitializationDesc& initializationDesc);
     [[nodiscard]] bool EnsureFeature(CommandList& commandList, const DLSSExecutionInputs& inputs);
+    void ExecuteRayReconstruction(CommandList& commandList, const DLSSExecutionInputs& inputs);
     void ReleaseFeature();
     void Shutdown();
 
@@ -84,6 +99,8 @@ private:
     bool m_Initialized = false;
     bool m_Supported = false;
     bool m_HistoryReset = true;
+    bool m_RayReconstructionEnabled = false;
+    bool m_FrameGenerationEnabled = false;
     std::string m_StatusMessage;
 };
 //Modify End

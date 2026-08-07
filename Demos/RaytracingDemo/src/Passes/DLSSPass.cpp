@@ -36,6 +36,10 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDL
             inputs.Depth = context.GetTexture(DemoResourceIds::DepthBuffer);
             inputs.MotionVectors = context.GetTexture(DemoResourceIds::MotionVector);
             inputs.Output = context.GetTexture(DemoResourceIds::DLSSOutput);
+            inputs.DiffuseAlbedo = context.GetTexture(DemoResourceIds::GBufferAlbedoOcclusion);
+            inputs.SpecularAlbedo = context.GetTexture(DemoResourceIds::GBufferSpecularSmoothness);
+            inputs.Normals = context.GetTexture(DemoResourceIds::GBufferNormal);
+            inputs.Roughness = context.GetTexture(DemoResourceIds::GBufferSpecularSmoothness);
             inputs.RenderWidth = frameState.Width;
             inputs.RenderHeight = frameState.Height;
             inputs.DisplayWidth = frameState.DisplayWidth;
@@ -43,6 +47,12 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDL
             inputs.JitterOffset = frameState.DLSSJitterOffset;
             inputs.Sharpness = frameState.DLSSSharpness;
             inputs.Reset = !frameState.HasPreviousViewProjection;
+            inputs.FrameIndex = frameState.FrameIndex;
+            inputs.HasPreviousViewProjection = frameState.HasPreviousViewProjection;
+            inputs.View = frameState.View;
+            inputs.Projection = frameState.Projection;
+            inputs.ViewProjection = frameState.ViewProjection;
+            inputs.PreviousViewProjection = frameState.PreviousViewProjection;
             resources.Dlss.Execute(commandList, inputs);
         });
 }

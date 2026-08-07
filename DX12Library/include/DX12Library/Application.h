@@ -49,6 +49,7 @@ class CommandQueue;
 class DescriptorAllocator;
 class Game;
 class Window;
+class StreamlineRuntime;
 
 class Application
 {
@@ -136,6 +137,8 @@ public:
      * - D3D12_COMMAND_LIST_TYPE_COPY   : Can be used for copy commands.
      */
     std::shared_ptr<CommandQueue> GetCommandQueue(D3D12_COMMAND_LIST_TYPE type = D3D12_COMMAND_LIST_TYPE_DIRECT) const;
+    std::shared_ptr<StreamlineRuntime> GetStreamlineRuntime() const;
+    bool SetFrameGenerationEnabled(bool enabled);
 
     /**
      * Flush all command queues.

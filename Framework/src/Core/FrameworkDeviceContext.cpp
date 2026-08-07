@@ -46,4 +46,9 @@ void FrameworkDeviceContext::Flush() const
     m_Desc.ComputeQueue->Flush();
     m_Desc.CopyQueue->Flush();
 }
+
+bool FrameworkDeviceContext::SetFrameGenerationEnabled(const bool enabled) const
+{
+    return m_Desc.SetFrameGenerationEnabled && m_Desc.SetFrameGenerationEnabled(enabled);
+}
 //Modify End

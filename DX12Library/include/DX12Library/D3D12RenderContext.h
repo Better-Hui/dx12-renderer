@@ -7,6 +7,7 @@
 #include <functional>
 
 class CommandQueue;
+class StreamlineRuntime;
 
 //Modify Begin:2026-07-28 by BestHui
 struct ExternalD3D12Context
@@ -21,6 +22,7 @@ class D3D12RenderContext
 {
 public:
     D3D12RenderContext() = default;
+    ~D3D12RenderContext();
 
     void InitializeOwned(Microsoft::WRL::ComPtr<ID3D12Device2> device);
     void InitializeExternal(const ExternalD3D12Context& externalContext);
@@ -30,6 +32,7 @@ public:
 
     Microsoft::WRL::ComPtr<ID3D12Device2> GetDevice() const;
     std::shared_ptr<CommandQueue> GetCommandQueue(D3D12_COMMAND_LIST_TYPE type) const;
+    std::shared_ptr<StreamlineRuntime> GetStreamlineRuntime() const;
 //Modify Begin:2026-08-07 by BestHui
     void SetFatalErrorHandler(std::function<void(int)> handler);
 //Modify End
@@ -42,6 +45,7 @@ private:
 //Modify End
 
     Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;
+    std::shared_ptr<StreamlineRuntime> m_StreamlineRuntime;
     std::shared_ptr<CommandQueue> m_DirectCommandQueue;
     std::shared_ptr<CommandQueue> m_ComputeCommandQueue;
     std::shared_ptr<CommandQueue> m_CopyCommandQueue;

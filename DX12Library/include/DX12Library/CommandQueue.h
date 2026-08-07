@@ -45,17 +45,22 @@
 #include "ThreadSafeQueue.h"
 
 class CommandList;
+class StreamlineRuntime;
 
 class CommandQueue
 {
 public:
 	//Modify Begin:2026-08-07 by BestHui
-	CommandQueue(D3D12_COMMAND_LIST_TYPE type, Microsoft::WRL::ComPtr<ID3D12Device2> device);
+	CommandQueue(
+		D3D12_COMMAND_LIST_TYPE type,
+		Microsoft::WRL::ComPtr<ID3D12Device2> device,
+		std::shared_ptr<StreamlineRuntime> streamlineRuntime = nullptr);
 //Modify Begin:2026-07-21 by BestHui
 	CommandQueue(
 		D3D12_COMMAND_LIST_TYPE type,
 		Microsoft::WRL::ComPtr<ID3D12Device2> device,
-		ID3D12CommandQueue* externalCommandQueue);
+		ID3D12CommandQueue* externalCommandQueue,
+		std::shared_ptr<StreamlineRuntime> streamlineRuntime = nullptr);
 //Modify End
 	void SetComputeCommandListFactory(std::function<std::shared_ptr<CommandList>()> factory);
 	void SetComputeCommandQueue(std::shared_ptr<CommandQueue> queue);
@@ -99,6 +104,7 @@ private:
 	D3D12_COMMAND_LIST_TYPE m_CommandListType;
 	//Modify Begin:2026-08-07 by BestHui
 	Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;
+	std::shared_ptr<StreamlineRuntime> m_StreamlineRuntime;
 	std::function<std::shared_ptr<CommandList>()> m_ComputeCommandListFactory;
 	std::shared_ptr<CommandQueue> m_ComputeCommandQueue;
 	std::function<void(int)> m_FatalErrorHandler;

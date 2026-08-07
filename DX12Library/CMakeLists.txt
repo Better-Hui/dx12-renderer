@@ -44,6 +44,9 @@ set(HEADER_FILES
         include/DX12Library/RootSignature.h
         include/DX12Library/ShaderUtils.h
         include/DX12Library/StructuredBuffer.h
+        # Modify Begin:2026-08-07 by BestHui
+        include/DX12Library/StreamlineRuntime.h
+        # Modify End
         include/DX12Library/Texture.h
         include/DX12Library/TextureUsageType.h
         include/DX12Library/ThreadSafeQueue.h
@@ -90,6 +93,9 @@ set(SOURCE_FILES
         src/RootSignature.cpp
         src/ShaderUtils.cpp
         src/StructuredBuffer.cpp
+        # Modify Begin:2026-08-07 by BestHui
+        src/StreamlineRuntime.cpp
+        # Modify End
         src/Texture.cpp
         src/UploadBuffer.cpp
         src/VertexBuffer.cpp
@@ -145,6 +151,9 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/../CMakeIncludes/ProjectBasePost.cmake)
 
 target_include_directories(${TARGET_NAME}
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/DX12Library
+        # Modify Begin:2026-08-07 by BestHui
+        PRIVATE "${DX12_RENDERER_STREAMLINE_INCLUDE_DIRECTORY}"
+        # Modify End
         )
 
 # Includes and libraries
@@ -154,6 +163,9 @@ target_include_directories(${TARGET_NAME}
         )
 target_link_libraries(${TARGET_NAME}
         PUBLIC ${EXT_LIBRARIES}
+        # Modify Begin:2026-08-07 by BestHui
+        PUBLIC "${DX12_RENDERER_STREAMLINE_LIBRARY}"
+        # Modify End
         )
 
 
