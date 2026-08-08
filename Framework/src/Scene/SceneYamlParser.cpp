@@ -1144,40 +1144,6 @@ namespace
         return materialPath.parent_path() / ImportTrim(std::move(texturePath));
     }
 
-//Modify Begin:2026-07-30 by BestHui
-    std::filesystem::path ResolveObjNormalTexturePath(
-        const std::filesystem::path& materialPath,
-        std::string texturePath)
-    {
-        const std::filesystem::path requestedPath = ParseObjTexturePath(materialPath, std::move(texturePath));
-        if (std::filesystem::exists(requestedPath))
-        {
-            return requestedPath;
-        }
-
-        const std::string stem = requestedPath.stem().string();
-        const std::string lowerStem = ToLower(stem);
-        constexpr std::string_view BumpSuffix = "_bump";
-        if (!lowerStem.ends_with(BumpSuffix))
-        {
-            return requestedPath;
-        }
-
-        const std::string baseName = stem.substr(0u, stem.size() - BumpSuffix.size());
-        for (const std::string_view suffix : { std::string_view("_normal"), std::string_view("_normals") })
-        {
-            std::filesystem::path candidate = requestedPath;
-            candidate.replace_filename(baseName + std::string(suffix) + requestedPath.extension().string());
-            if (std::filesystem::exists(candidate))
-            {
-                return candidate;
-            }
-        }
-
-        return requestedPath;
-    }
-//Modify End
-
     struct ObjMaterialLibrary
     {
         std::unordered_map<std::string, std::string> GroupMaterialNames;
@@ -1267,7 +1233,7 @@ namespace
                 std::string texturePath;
                 std::getline(values, texturePath);
 //Modify Begin:2026-07-30 by BestHui
-                material->NormalMap.AssetPath = ResolveObjNormalTexturePath(materialPath, texturePath);
+                material->NormalMap.AssetPath = ParseObjTexturePath(materialPath, texturePath);
 //Modify End
             }
         }
