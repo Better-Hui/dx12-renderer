@@ -18,7 +18,7 @@
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <Framework/Rendering/Texture/UnorderedAccessView.h>
 
-#include "../../External/NRD/Include/NRD.h"
+#include <NRD.h>
 #include <NRDDescs.h>
 #include <NRDSettings.h>
 #include <NRI.h>

@@ -2,7 +2,7 @@
 
 > An experimental DirectX 12 renderer and Windows sample collection for exploring renderer architecture, RenderGraph execution, ray tracing, meshlets, scene import, and CUDA/D3D12 interop.
 
-[中文文档](README.zh-CN.md) · [RaytracingDemo API Guide](Docs/RaytracingSampleApi.md)
+[中文文档](README.zh-CN.md) · [Architecture Overview](Docs/ArchitectureOverview.md) · [RaytracingDemo API Guide](Docs/RaytracingSampleApi.md)
 
 ## Fork and attribution
 
@@ -18,8 +18,8 @@ The upstream renderer remains the foundation. This fork adds framework and sampl
 | RenderGraph | Logical resources, compiled resource-state plans, centralized resource-state tracking, native/external state handoff, per-queue GPU timestamps/CSV export, and explicit Direct/Async Compute queue synchronization. |
 | RaytracingDemo | The maintained integration sample. It demonstrates this repository's framework APIs rather than treating raw D3D12 calls as normal sample-facing code. |
 | Ray tracing | Runtime-selectable inline ray-query and shader-table DXR paths sharing the same scene/resource model. |
-| ReSTIR DI | Inline ray-query direct-lighting sample with RIS, optional temporal reuse, optional spatial reuse, and final-shading visibility. |
-| Scene workflow | Shared `Scene` data, Unity/JSON import, and incremental runtime instance add/remove used by the stress-scene controls. |
+| ReSTIR DI | Inline ray-query direct-lighting sample with RIS, temporal/boiling/spatial resampling, stage-specific visibility and bias-correction settings, and final shading. |
+| Scene workflow | Shared `Scene` data, Unity/JSON import, PBR material adaptation, emissive surface emitters, and incremental runtime instance add/remove used by the stress-scene controls. |
 | Meshlets | Meshlet generation/GPU resources, task-shader and compute-indirect GBuffer backends, and incremental instance-buffer updates. |
 | Denoising and interop | NRD/SVGF sample paths, RenderGraph-aware NRD resource-state handoff, and CUDA Bloom using D3D12 shared resources with external fence/semaphore synchronization. |
 | Experimental frame features | Native NGX DLSS SR/DLAA plus Streamline Ray Reconstruction and Frame Generation integration. These paths are experimental and not validated for delivery. |
@@ -35,7 +35,7 @@ The upstream renderer remains the foundation. This fork adds framework and sampl
 | `Demos/RaytracingDemo/` | Primary maintained sample and the best entry point for current API usage. |
 | `Demos/*` | Additional historical or focused samples. Useful references, but not the main integration target. |
 | `Assets/` | Demo scenes, textures, and runtime sample assets. |
-| `External/` | Third-party integration materials and headers. Each component retains its own license and redistribution terms. |
+| `External/` | Third-party integrations. DLSS, NRI, and NRD are pinned Git submodules; each component retains its own license and redistribution terms. |
 | `Docs/` | Architecture and sample API notes. |
 
 ## What `RaytracingDemo` demonstrates
@@ -98,7 +98,7 @@ const Scene& scene = result.SceneData;
 | --- | --- |
 | Platform | Windows 10/11, x64. This is a Windows/D3D12 project. |
 | Toolchain | Visual Studio 2022 with the MSVC C++ desktop toolchain and a Windows SDK. |
-| CMake | CMake 3.8 or newer; a recent CMake version is recommended. |
+| CMake | CMake 3.22 or newer; the current NRI/NRD source builds require this baseline. |
 | GPU/driver | A D3D12 GPU/driver that reports **Shader Model 6.9**. DXR, mesh shaders, and CUDA paths need the relevant hardware/driver support. |
 | CUDA | CUDA Toolkit **12.8** is currently required because `Framework` and `RaytracingDemo` build CUDA interop/Bloom. |
 
@@ -121,13 +121,25 @@ Set `VCPKG_ROOT` before configuring, or pass `CMAKE_TOOLCHAIN_FILE` explicitly.
 | DirectX Agility SDK 1.619.5 | `D3D12/`, `External/AgilitySDK/include/` | Runtime redistributable and matching C++ headers for the SM6.9 baseline. |
 | DirectX Shader Compiler | `DXC/dxc.exe` when present; otherwise a Windows SDK `dxc.exe` | Compiles ray-tracing, task, mesh, compute, and other sample shaders. |
 | WinPixEventRuntime | `WinPixEventRuntime/` | PIX CPU/GPU event markers. |
-| NVIDIA NRD / NRI | `External/NRD/`, `External/NRI/` | Denoising integration and its API layer/runtime binaries. |
-| NVIDIA DLSS SDK | `External/DLSS/` | Experimental native NGX SR/DLAA integration. Subject to the NVIDIA RTX SDK License in `External/DLSS/LICENSE.txt`. |
+| NVIDIA NRD / NRI | Git submodules at `External/NRD/` and `External/NRI/` | Denoising integration and its API layer. CMake builds the D3D12 libraries from the pinned upstream commits. |
+| NVIDIA DLSS SDK | Git submodule at `External/DLSS/` | Experimental native NGX SR/DLAA integration. The SDK's own license and notices are provided by the submodule. |
 | NVIDIA Streamline | `External/Streamline/` | Experimental RR/FG integration and runtime interposer. Preserve `license.txt`, `nvngx_dlss.license.txt`, and `3rd-party-licenses.md`. |
 | Unity PluginAPI | `External/UnityPluginAPI/` | Headers for Unity-facing D3D12 interop experiments. |
 | CUDA Driver API | CUDA Toolkit 12.8 | Builds Bloom PTX and provides `cuda.h` / `cuda.lib`. |
 
 ## Build and run
+
+### Git submodules
+
+The repository stores links to upstream third-party repositories instead of copying their source or SDK files into the parent repository:
+
+```powershell
+git clone --recurse-submodules https://github.com/best-Hui/dx12-renderer.git
+cd dx12-renderer
+git submodule update --init --recursive
+```
+
+The current pinned revisions are DLSS `v310.7.0`, NRI `v180`, and NRD `4.17.4`. NRI and NRD are built from source by CMake. Their upstream CMake files may download build-only dependencies such as D3D12 Memory Allocator, MathLib, and ShaderMake into the build directory; those files are not committed to this repository. Streamline remains a separately provisioned SDK package because its official source repository does not contain the runtime DLL set required by this sample.
 
 Run from the repository root. The example uses a sibling build directory.
 
@@ -189,7 +201,8 @@ The startup compiler currently covers the shaders directly owned by `RaytracingD
 
 ## Documentation and notices
 
+- [Architecture Overview](Docs/ArchitectureOverview.md) maps the DX12Library, Framework, RenderGraph, and RaytracingDemo responsibilities and data flow.
 - [RaytracingDemo API Guide](Docs/RaytracingSampleApi.md) explains sample APIs, RenderGraph behavior, scene import, profiling, and boundaries.
 - Keep maintained sample passes framework-facing; avoid raw D3D12 calls where an existing API covers the operation.
 - This fork preserves upstream and third-party notices. Review the upstream project and vendored license files before use or redistribution; this README introduces no replacement repository-wide license.
-- `External/DLSS/` and the NVIDIA components used by `External/Streamline/` are governed by NVIDIA RTX SDK terms, not by the repository's upstream license or Streamline's MIT license alone. Keeping the SDK under `External/` does not make it open source and does not grant a sublicense. Preserve all notices and licenses, do not treat this repository as a standalone SDK mirror, and obtain a legal/license review before publishing source, redistributing binaries, or making a commercial release that includes these components.
+- `External/DLSS/`, `External/NRI/`, `External/NRD/`, and the NVIDIA components used by `External/Streamline/` retain their upstream terms. A Git submodule link does not transfer or replace those terms. Keeping an SDK under `External/` does not make it open source and does not grant a sublicense. Preserve all notices and licenses, do not treat this repository as a standalone SDK mirror, and obtain a legal/license review before publishing source, redistributing binaries, or making a commercial release that includes these components.

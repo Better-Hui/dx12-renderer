@@ -2,6 +2,8 @@
 
 `RaytracingDemo` is the maintained integration sample for this repository. It demonstrates **this repository's current renderer and framework APIs**; it is not a claim that every wrapper is final or that this API shape is universally optimal.
 
+For a layer-by-layer map of the codebase and data flow, see [Architecture Overview](ArchitectureOverview.md).
+
 ## Sample responsibility
 
 The sample owns algorithms and sample policy: scene/camera/lights, RenderGraph topology, backend selection, runtime UI, and explicitly assigning an eligible pass to `RenderPassQueue::AsyncCompute`.
@@ -47,32 +49,37 @@ Base Resources
 -> Present
 ```
 
-When the Direct Lighting UI selects ReSTIR DI on the inline ray-query backend, the direct-light branch becomes:
+When the Direct Lighting UI selects ReSTIR DI on the inline ray-query backend, the graph contains one framework-backed direct-light pass:
 
 ```text
 Base Resources
--> ReSTIR DI RIS
--> ReSTIR DI Temporal Reuse (optional)
--> ReSTIR DI Spatial Reuse (optional)
--> ReSTIR DI Shade / final visibility ray
+-> ReSTIR DI
+   -> RIS
+   -> Temporal Reuse + Boiling Filter
+   -> Spatial Reuse
+   -> Final Visibility / Shade
 -> Lighting Composite
 ```
 
-The four passes remain declared in the graph so their resources and dependencies are visible to profiling. Disabled reuse stages forward the reservoir without adding candidates.
+`ReSTIRDIPass` records the internal compute dispatches in the same command-list scope. RenderGraph therefore tracks the feature as one pass and reports one graph-level timing; its internal stages share the pass scope rather than becoming independently scheduled RenderGraph passes.
 
 ### ReSTIR DI direct lighting
 
-`Framework/Rendering/Lighting/ReSTIRDI.h` owns renderer-neutral settings and frame constants; the sample owns its graph passes and direct-light sampling policy. `ReSTIRDISettings` exposes candidate count, temporal reuse, spatial reuse, and spatial-neighbor count.
+`Framework/Rendering/Lighting/ReSTIRDI.h` owns renderer-neutral settings and frame constants. `Framework/Rendering/Lighting/ReSTIRDIPass.h` owns persistent reservoir/history resources, shader variants, and the RIS/temporal/spatial/final dispatch sequence. The sample creates one RenderGraph pass, supplies `DirectLighting` and motion vectors, and gives the framework pass a callback that binds the sample scene contract.
 
-The current sample intentionally has a narrow scope:
+`ReSTIRDISettings` currently exposes:
 
-- RIS selects from the finite directional, point, and area-light list with a uniform light PMF.
-- Temporal reuse reprojects through the motion-vector texture; spatial reuse selects screen-space neighbors.
-- RIS, temporal reuse, and spatial reuse evaluate only unshadowed target functions. They do not trace visibility rays.
-- The Shade pass traces one visibility ray for the selected sample and writes `DirectLighting`.
-- The path is inline-ray-query only. Shader-table DXR continues to use the normal direct-lighting path.
+- RIS candidate count and optional initial visibility.
+- Temporal reuse, `Off` / `Basic` / `RayTraced` temporal bias correction, a 20-frame default history-length clamp, reprojection similarity tests, and permutation sampling.
+- Boiling filtering within the temporal shader, after temporal resampling and before spatial resampling.
+- Spatial reuse, `Off` / `Basic` / `Pairwise` / `RayTraced` spatial bias correction, neighbor/radius settings, disocclusion boosting, and normal/depth/material similarity tests.
+- Final visibility, optional final-visibility reuse, and reuse age/distance limits.
 
-This is useful for demonstrating reservoir resource history and pass decomposition, but it is not a replacement for RTXDI: it has no light presampling, emissive-mesh support, visibility reuse, disocclusion validation, bias correction, or soft-shadow integration. Reuse-related noise is expected with this deliberately simplified policy.
+The light domain contains directional, point, rectangular area, and scene-generated emissive surface emitters. The path remains inline-ray-query only; shader-table DXR continues to use the normal direct-lighting path.
+
+Visibility is selected by the stage-specific settings above. In particular, enabling final visibility performs visibility testing for the selected final sample; temporal/spatial `RayTraced` correction modes can additionally trace during their resampling logic. Do not treat a stage switch as a guaranteed quality or performance improvement without a visual and timing A/B on the target adapter.
+
+This is still an experimental ReSTIR DI implementation. Its sampling policy, quality, stability, and performance are not accepted as RTXDI-equivalent, and it does not yet provide a complete production light-presampling, dynamic-scene validation, or quality-tuning system.
 
 ### Explicit async compute
 
@@ -123,7 +130,7 @@ PIX is the authority for cross-queue wall-clock overlap; CSV is the lightweight 
 
 `SceneImporter::ImportFromFile` selects the parser from extension: `.unity` for Unity text scenes and `.json` for JSON scenes. The default demo scene is `Assets/Scenes/Sponza.unity`; its model, textures, and Unity `.meta` files are repository-local under `Assets/Models/Sponza`.
 
-`RaytracingDemoSceneResources::LoadScene` adapts a `Scene` into textures, materials, geometry, meshlet buffers, and RTAS. A fallback PBR-like material is used when an imported object lacks a supported material.
+`RaytracingDemoSceneResources::LoadScene` adapts a `Scene` into textures, materials, geometry, meshlet buffers, acceleration structures, and emissive surface-emitter sampling data. The current renderer only has a PBR material path; an imported non-PBR material receives the fallback PBR-like material rather than a water, particle, or custom Unity shader implementation.
 
 The default sample still appends C++ stress-test spheres for renderer load testing; the runtime scene is therefore not yet fully data-authored. The UI toggle uses incremental add/remove handles: static meshlet geometry and existing BLAS data are reused, while meshlet instance buffers and the TLAS are updated.
 
@@ -141,6 +148,7 @@ The current soft variant uses four shadow samples. This is a sample-quality fixe
 
 - **Ray tracing:** inline ray query is the default path; shader-table DXR uses ray-generation, miss, and hit groups. Both share scene resources.
 - **Meshlets:** task-shader and compute-indirect GBuffer backends plus cluster debugging. This is not yet a production visibility, streaming, residency, or LOD system.
+- **Surface emitters:** rectangular area lights and emissive meshes are represented by reusable geometry-level triangle CDF data plus per-instance data, then uploaded with the other light buffers.
 - **CUDA Bloom:** imports shared D3D12 resources/fences once and uses timeline values for D3D12-to-CUDA and CUDA-to-D3D12 ordering. It must not overwrite history or overlay resources.
 - **Denoising:** NRD and SVGF are selectable sample integrations. NRD reports native D3D12 state changes back to RenderGraph; history must reset after incompatible resolution, layout, or backend changes.
 
@@ -155,7 +163,6 @@ The current soft variant uses four shadow samples. This is a sample-quality fixe
 - Transient resources are retired from actual Direct/Async Compute fence values. Aliasing is conservative and only combines lifetimes that are proven to use the same queue; cross-queue aliasing is intentionally disabled.
 - Pass construction uses explicit `RaytracingDemoPassResources` and `RaytracingDemoPassConfig` rather than capturing `RaytracingDemo&` or using friend access.
 - Scene-to-GPU conversion is organized by four builders: texture/material, geometry, meshlet, and RTAS. `RaytracingDemoSceneResources` remains the sample-facing facade.
-- Transient-resource aliasing/lifetime planning is not yet fully queue-fence-aware.
 - DLSS/Streamline integration is experimental. Native NGX SR/DLAA and tentative Streamline RR/FG paths are present, but they have not completed supported-hardware image-quality, stability, timing, or performance validation. Runtime capability queries gate RR/FG; the current RTX 2060 development machine reports RR unavailable and cannot support FG. Do not treat this sample path as a production-ready DLSS integration.
 - RR/FG interposition is an explicit process-start choice: launch with `--streamline-interposer`. The default path keeps the native D3D12 device, queues, and swapchain unproxied; enabling RR/FG later requires a restart. The sample deploys a project-owned Streamline configuration with console logging disabled.
 

@@ -37,6 +37,15 @@ Comments inside code must be English. Conversation with the user stays Chinese.
 - Obsidian project note: `C:\Users\minghuidai\Documents\Obsidian Vault\渲染器\说明书.md`
 - Update the Obsidian note after meaningful architecture or demo changes.
 
+### External dependency provisioning
+
+- `External/DLSS` is the pinned `NVIDIA/DLSS` submodule at `v310.7.0`; use the official `include/` and `lib/Windows_x86_64/` layout from that checkout.
+- `External/NRI` is the pinned `NVIDIA-RTX/NRI` submodule at `v180`, and `External/NRD` is the pinned upstream commit that reports NRD `4.17.4`.
+- The root CMake config builds NRI and NRD source targets with only the D3D12 backend enabled. Framework links the `NRI`, `NRD`, and `NRDIntegration` targets; do not reintroduce direct `_Bin/*.lib` or `_Bin/*.dll` paths in Demo CMake.
+- First configure may download NRI/NRD build-only dependencies into the build tree through upstream CMake `FetchContent`. These generated dependencies and NRD shader blobs must not be copied into the parent repository.
+- `External/Streamline` remains a separately provisioned SDK package because its official source repository does not contain the runtime DLL set used by the current interposer integration.
+- After a fresh clone, run `git submodule update --init --recursive` before configuring. Verify the pinned commits with `git submodule status`.
+
 Current tracked focus is bottom/framework/render graph/external libs/docs and `Demos/RaytracingDemo`. Old demos may still exist locally and should stay build-visible when present, but they are not the current correctness target.
 
 ## Build And Run

@@ -107,19 +107,6 @@ target_include_directories(${TARGET_NAME}
         )
 # Modify End
 
-# Modify Begin:2026-07-27 by BestHui
-set(NRD_ROOT "${CMAKE_SOURCE_DIR}/External/NRD")
-set(NRI_ROOT "${CMAKE_SOURCE_DIR}/External/NRI")
-set(NRD_BIN_DIR "${NRD_ROOT}/_Bin")
-set(NRI_BIN_DIR "${NRD_ROOT}/_Bin")
-
-target_include_directories(${TARGET_NAME}
-        PUBLIC "${NRD_ROOT}/Include"
-        PUBLIC "${NRD_ROOT}/Integration"
-        PUBLIC "${NRI_ROOT}/Include"
-        )
-# Modify End
-
 target_link_libraries(${TARGET_NAME}
         PUBLIC DX12Library
 # Modify Begin:2026-08-07 by BestHui
@@ -129,9 +116,10 @@ target_link_libraries(${TARGET_NAME}
 # Modify Begin:2026-07-28 by BestHui
         PUBLIC "${DX12_RENDERER_CUDA_DRIVER_LIBRARY}"
 # Modify End
-# Modify Begin:2026-07-27 by BestHui
-        PUBLIC "${NRD_BIN_DIR}/NRD.lib"
-        PUBLIC "${NRI_BIN_DIR}/NRI.lib"
+# Modify Begin:2026-08-10 by BestHui
+        PUBLIC NRD
+        PUBLIC NRDIntegration
+        PUBLIC NRI
 # Modify End
         )
         

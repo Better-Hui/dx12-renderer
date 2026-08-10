@@ -2,7 +2,7 @@
 
 > 一个基于 DirectX 12 的实验性渲染器仓库。它用于验证和学习渲染器架构、RenderGraph、光线追踪、Meshlet、场景导入，以及 CUDA/D3D12 互操作。
 
-[English README](README.md) · [RaytracingDemo API 说明（英文）](Docs/RaytracingSampleApi.md)
+[English README](README.md) · [架构总览](Docs/ArchitectureOverview.zh-CN.md) · [RaytracingDemo API 说明（英文）](Docs/RaytracingSampleApi.md)
 
 ## 这是什么项目
 
@@ -18,9 +18,9 @@
 - **RenderGraph**：提供资源读写声明、依赖排序、编译后的状态计划、统一资源状态追踪、native/external 状态交接、GPU timing 记录和 CSV 导出。
 - **显式异步计算**：pass 可以指定使用 `Direct` 或 `AsyncCompute` queue；RenderGraph 负责跨 queue 的 GPU fence 等待与资源交接。
 - **光线追踪与降噪**：同一场景可在 inline ray query 和 shader-table DXR 之间切换，并可使用 NRD 或 SVGF。
-- **场景工作流**：新增公共 `Scene` 和 `SceneImporter`，可以读取 Unity 文本序列化场景和 JSON 场景，并通过压力球开关验证增量增删实例。
+- **场景工作流**：新增公共 `Scene` 和 `SceneImporter`，可以读取 Unity 文本序列化场景和 JSON 场景，适配 PBR 材质和自发光 surface emitter，并通过压力球开关验证增量增删实例。
 - **Meshlet 实验路径**：包含 Meshlet 构建、GPU 资源、task shader / compute-indirect 两种 GBuffer 后端，以及只更新实例数据的增量路径。
-- **ReSTIR DI 直接光**：提供 RIS、可选时域复用、可选空域复用和最终着色阶段的一次可见性测试。
+- **ReSTIR DI 直接光**：提供 RIS、时域/Boiling/空域复用、各阶段的可见性与 bias correction 配置，以及最终着色。
 - **CUDA Bloom**：演示 D3D12 shared resource、shared fence 与 CUDA external semaphore 的互操作流程。
 - **实验性帧特性**：接入 Native NGX DLSS SR/DLAA，以及 Streamline Ray Reconstruction 和 Frame Generation；这些路径尚未完成可交付验证。
 - **调试与分析工具**：集成 PIX event、RenderGraph timing history/CSV、运行时调试 UI 和 `UnitySceneDump`。
@@ -85,7 +85,7 @@ auto pass = RenderGraph::RenderPass::Create(
 
 - Windows 10/11，x64。
 - Visual Studio 2022，以及 MSVC C++ desktop toolchain 和 Windows SDK。
-- CMake 3.8 或更新版本，建议使用较新的 CMake。
+- CMake 3.22 或更新版本；当前 NRI/NRD 源码构建以此为最低版本。
 - 支持 **Shader Model 6.9** 的 D3D12 GPU 与驱动。DXR、mesh shader 和 CUDA 路径还取决于各自的硬件和驱动能力。
 - **CUDA Toolkit 12.8**。当前 CMake 配置阶段会构建 CUDA interop/Bloom，因此即使运行时关闭 Bloom，配置时仍需要 CUDA。
 
@@ -110,13 +110,25 @@ vcpkg install --triplet x64-windows assimp directxtex directxmesh imgui meshopti
 | DirectX Agility SDK 1.619.5 | `D3D12/`、`External/AgilitySDK/include/` | SM6.9 基线所需的运行时 redist 和匹配的 C++ 头文件。 |
 | DirectX Shader Compiler | 优先 `DXC/dxc.exe`，否则使用 Windows SDK 的 `dxc.exe` | 编译 ray tracing、task、mesh、compute 等 shader。 |
 | WinPixEventRuntime | `WinPixEventRuntime/` | 向 PIX 写入 CPU/GPU event marker。 |
-| NVIDIA NRD / NRI | `External/NRD/`、`External/NRI/` | 降噪路径及其依赖。 |
-| NVIDIA DLSS SDK | `External/DLSS/` | 实验性的 Native NGX SR/DLAA 集成；受 `External/DLSS/LICENSE.txt` 中的 NVIDIA RTX SDK License 约束。 |
+| NVIDIA NRD / NRI | `External/NRD/`、`External/NRI/` Git submodule | 降噪路径及其 API 层；CMake 会从固定的上游提交构建 D3D12 库。 |
+| NVIDIA DLSS SDK | `External/DLSS/` Git submodule | 实验性的 Native NGX SR/DLAA 集成；许可证和 notice 由该 submodule 自身提供。 |
 | NVIDIA Streamline | `External/Streamline/` | 实验性的 RR/FG 集成与 runtime interposer；需保留 `license.txt`、`nvngx_dlss.license.txt` 和 `3rd-party-licenses.md`。 |
 | Unity PluginAPI | `External/UnityPluginAPI/` | Unity-facing D3D12 互操作实验所需头文件。 |
 | CUDA Driver API | CUDA Toolkit 12.8 | 编译 Bloom PTX，提供 `cuda.h` 与 `cuda.lib`。 |
 
 ## 构建
+
+### 获取 Git submodule
+
+父仓库只保存第三方仓库的固定提交，不再把 DLSS、NRI、NRD 的源码或 SDK 文件复制进父仓库：
+
+```powershell
+git clone --recurse-submodules https://github.com/best-Hui/dx12-renderer.git
+cd dx12-renderer
+git submodule update --init --recursive
+```
+
+当前固定版本为：DLSS `v310.7.0`、NRI `v180`、NRD `4.17.4`。NRI 和 NRD 会由 CMake 从源码构建。它们的官方 CMake 在首次配置时可能把 D3D12 Memory Allocator、MathLib、ShaderMake 等仅用于构建的依赖下载到 build 目录；这些文件不会提交到本仓库。Streamline 暂时仍使用单独提供的 SDK 包，因为它的官方源码仓库不包含本 sample 所需的完整 runtime DLL 集合。
 
 以下命令在仓库根目录执行，并将构建产物放到同级 `build` 目录：
 
@@ -190,7 +202,8 @@ cmake --build ..\build --config Release --target RaytracingDemo UnitySceneDump
 
 ## 进一步阅读与许可证
 
+- [架构总览](Docs/ArchitectureOverview.zh-CN.md)：按 DX12Library、Framework、RenderGraph、RaytracingDemo 分层说明职责、数据流和当前技术边界。
 - [RaytracingDemo API 说明（英文）](Docs/RaytracingSampleApi.md)：介绍 Framework 用法、RenderGraph、场景导入、profiling 和功能边界。
 - 使用或再分发本仓库前，请保留上游与第三方组件的声明，并审阅对应的许可证文件。
 - 本 README 不引入替代性的仓库级许可证。
-- `External/DLSS/` 和 `External/Streamline/` 中使用的 NVIDIA 组件受 NVIDIA RTX SDK 条款约束，不能只按上游仓库许可证或 Streamline 的 MIT License 理解。SDK 放在 `External/` 不代表它变成开源，也不代表本仓库向任何人授予 NVIDIA SDK 的再许可；请保留全部 notice 与 license，不要把本仓库当作可独立分发的 SDK 镜像。在公开源码、再分发二进制或包含这些组件的商业发布前，应单独完成法务/许可证审查。
+- `External/DLSS/`、`External/NRI/`、`External/NRD/` 以及 `External/Streamline/` 中的 NVIDIA 组件均保留上游条款；Git submodule 链接不会转移或替换这些条款。SDK 放在 `External/` 不代表它变成开源，也不代表本仓库向任何人授予 NVIDIA SDK 的再许可；请保留全部 notice 与 license，不要把本仓库当作可独立分发的 SDK 镜像。在公开源码、再分发二进制或包含这些组件的商业发布前，应单独完成法务/许可证审查。
