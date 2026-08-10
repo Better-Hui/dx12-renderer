@@ -42,17 +42,17 @@ namespace RenderGraph
         //Modify End
     };
 
-    struct RenderGraphExecutionBatch
+    struct RenderGraphRecordingBatch
     {
         std::vector<RenderPass*> Passes;
-        bool ParallelRecordingEligible = false;
+        bool RecordInParallel = false;
     };
 
     class CompiledRenderGraph final
     {
     public:
         const std::vector<RenderPass*>& GetRenderPasses() const { return m_RenderPasses; }
-        const std::vector<RenderGraphExecutionBatch>& GetExecutionBatches() const { return m_ExecutionBatches; }
+        const std::vector<RenderGraphRecordingBatch>& GetRecordingBatches() const { return m_RecordingBatches; }
         const std::map<const RenderPass*, RenderTargetInfo>& GetRenderTargets() const { return m_RenderTargets; }
         const std::map<const RenderPass*, PassResourceStatePlan>& GetResourceStatePlans() const { return m_ResourceStatePlans; }
 
@@ -60,7 +60,7 @@ namespace RenderGraph
         friend class RenderGraphCompiler;
 
         std::vector<RenderPass*> m_RenderPasses;
-        std::vector<RenderGraphExecutionBatch> m_ExecutionBatches;
+        std::vector<RenderGraphRecordingBatch> m_RecordingBatches;
         std::map<const RenderPass*, RenderTargetInfo> m_RenderTargets;
         std::map<const RenderPass*, PassResourceStatePlan> m_ResourceStatePlans;
     };

@@ -375,6 +375,29 @@ void RenderGraph::ResourcePool::InitHeaps(
     }
 }
 
+//Modify Begin:2026-08-10 by BestHui
+void RenderGraph::ResourcePool::CreateResources()
+{
+    Assert(m_ResourceInstances.empty(), "Render graph resources must be cleared before recreation.");
+
+    for (const auto& [resourceId, resourceDescription] : m_ResourceDescriptions)
+    {
+        switch (resourceDescription.m_ResourceType)
+        {
+        case ResourceType::Texture:
+            CreateTexture(resourceId);
+            break;
+        case ResourceType::Buffer:
+            CreateBuffer(resourceId);
+            break;
+        default:
+            Assert(false, "Unsupported render graph resource type.");
+            break;
+        }
+    }
+}
+//Modify End
+
 void RenderGraph::ResourcePool::RegisterTexture(const TextureDescription& desc, const std::vector<RenderPass*>& renderPasses, const RenderMetadata& renderMetadata, const ComPtr<ID3D12Device2>& pDevice)
 {
 //Modify Begin:2026-07-28 by BestHui

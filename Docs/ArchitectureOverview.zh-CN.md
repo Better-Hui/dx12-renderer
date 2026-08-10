@@ -41,7 +41,7 @@ DX12Library
 
 - `CommandContext` 以统一的 bind/dispatch 风格录制 raster、compute、mesh shader 和 DXR 命令。
 - Shader reflection 构建 `PipelineLayout`、`PipelineDescriptorPool`、`PipelineDescriptorSet` 和 `PipelineBindingSet`，通过资源名字完成绑定。
-- `BindlessDescriptorHeap` 管理 shader-visible resource descriptor 区间。材质保存 descriptor index；`CommandContext` 再为当前 pipeline 准备使用 direct heap indexing 的 descriptor table。
+- `BindlessDescriptorHeap` 将 canonical descriptor 保存在 CPU-only heap，再镜像到按 fence 退休的 shader-visible frame page。材质保存稳定的 descriptor index；`CommandContext` 在当前 page 中准备使用 direct heap indexing 的 descriptor table。这样 CPU 更新 descriptor 时不会覆盖仍被 Direct 或 Async Compute GPU 工作读取的页。
 - `ShaderVariantManager` 在启动期编译代码显式请求的变体，指纹覆盖源码、include、宏和编译参数并缓存字节码。它不是运行时热更，也不会枚举所有理论宏组合。
 - `SharedUploadBuffer`、临时 descriptor 分配、`StructuredBuffer`、raw buffer 与 `RWStructuredBuffer` 风格 UAV 绑定覆盖常用数据上传和 compute 场景。
 
@@ -79,13 +79,13 @@ RenderPass 声明
 
 - pass 通过 `RenderPassQueue` 显式指定 `Direct` 或 `AsyncCompute`；系统不会自动推断 placement。
 - `RenderGraphQueueScheduler` 保存每个逻辑 resource 的 last producer queue 与 submitted fence value；有依赖的 consumer 提交前会收到 GPU-side wait。
-- `RenderGraphResourceStateTracker` 按编译计划插入 transition、UAV、aliasing barrier，并配合 producer/consumer 顺序完成跨 queue ownership handoff。
+- `PassResourceStatePlan` 保存不可变的 per-pass transition、UAV、aliasing、初始化和 async handoff 工作。Executor 将该计划录入拥有该 pass 的 command list；各 list 在最终提交顺序中关闭时，`CommandList` 通过共享 `ResourceStateRegistry` 解析 transition 的初始状态。
 - 底层具备 Copy queue，但 RenderGraph 尚未调度 Copy-queue pass。
 - transient resource 按本帧实际的 Direct/Compute fence 延迟退休。aliasing 目前是保守的：仅复用可证明在同一 queue 上的 lifetime，跨 queue aliasing 仍禁用。
 
 ### 多线程命令录制
 
-编译器可以把同一 queue 内无数据依赖的 pass 标记为可并行录制。`RenderGraphTaskScheduler` 提供常驻 worker；每个 worker 独占 command allocator/list 和临时 descriptor 分配。录制得到的 command list 仍按依赖顺序提交，因此它降低的是 CPU recording 成本，而不是让同一 Direct queue 的 GPU 工作并行执行。
+Compiler 会把连续、显式声明为 parallel-safe 的 Direct pass 组成 recording batch；即使这些 pass 存在 GPU resource 依赖也可以并行录制。`RenderGraphTaskScheduler` 提供常驻 worker，并在关闭时 drain 已接受任务；每个 worker 独占 command allocator/list 和临时 descriptor 分配。提交始终采用 Compiler 生成的稳定拓扑顺序，pending aliasing barrier 会先于首次使用的 transition 写入。bindless frame page 同时由 Direct 与 Async Compute fence 退休，因此 descriptor table 镜像不会覆盖仍被 GPU 引用的页。因此它降低的是 CPU recording 成本，而不是让同一 Direct queue 的 GPU 工作并行执行。
 
 观察 direct/compute overlap、GPU wait 和 CPU/GPU bubble 时，应使用 PIX Timing Capture。RenderGraph CSV 记录的是每条 queue 局部时间，更适合固定场景下反复 A/B。
 

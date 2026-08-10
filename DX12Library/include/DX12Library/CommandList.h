@@ -141,6 +141,9 @@ public:
     void AliasingBarrier(const Resource& beforeResource, const Resource& afterResource, bool flushBarriers = false);
     void AliasingBarrier(Microsoft::WRL::ComPtr<ID3D12Resource> beforeResource,
         Microsoft::WRL::ComPtr<ID3D12Resource> afterResource, bool flushBarriers = false);
+//Modify Begin:2026-08-10 by BestHui
+    void AliasingBarrierBeforeFirstUse(const Resource& resourceAfter);
+//Modify End
 
     /**
      * Flush any barriers that have been pushed to the command list.

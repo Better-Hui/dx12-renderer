@@ -67,13 +67,11 @@ RenderGraph::RenderGraphRoot::RenderGraphRoot(
         m_AsyncComputeCommandQueue,
         m_ResourcePool,
         m_QueueScheduler,
-        m_ResourceStateTracker,
         m_Profiler);
 //Modify Begin:2026-08-07 by BestHui
-    m_Compiler = std::make_unique<RenderGraphCompiler>(
-        m_Device,
-        m_ResourcePool,
-        m_ResourceStateTracker);
+        m_Compiler = std::make_unique<RenderGraphCompiler>(
+            m_Device,
+        m_ResourcePool);
     m_Compiler->ValidateDefinition(
         m_RenderPassesDescription,
         m_TextureDescriptions,
@@ -122,14 +120,14 @@ void RenderGraph::RenderGraphRoot::Present(const std::shared_ptr<Window>& pWindo
 
         if (pTexture->GetD3D12ResourceDesc().SampleDesc.Count > 1)
         {
-            TransitionBarrier(*pTexture, D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
+            pCommandList->TransitionBarrier(*pTexture, D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
         }
         else
         {
-            TransitionBarrier(*pTexture, D3D12_RESOURCE_STATE_COPY_SOURCE);
+            pCommandList->TransitionBarrier(*pTexture, D3D12_RESOURCE_STATE_COPY_SOURCE);
         }
 
-        FlushBarriers(*pCommandList);
+        pCommandList->FlushResourceBarriers();
     }
 
 //Modify Begin:2026-07-30 by BestHui
@@ -157,13 +155,13 @@ void RenderGraph::RenderGraphRoot::PresentWithOverlay(
 
         if (pTexture->GetD3D12ResourceDesc().SampleDesc.Count > 1)
         {
-            TransitionBarrier(*pTexture, D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
+            commandList.TransitionBarrier(*pTexture, D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
         }
         else
         {
-            TransitionBarrier(*pTexture, D3D12_RESOURCE_STATE_COPY_SOURCE);
+            commandList.TransitionBarrier(*pTexture, D3D12_RESOURCE_STATE_COPY_SOURCE);
         }
-        FlushBarriers(commandList);
+        commandList.FlushResourceBarriers();
 
         const RenderTarget& backBufferRenderTarget = pWindow->GetRenderTarget();
         const std::shared_ptr<Texture>& backBuffer = backBufferRenderTarget.GetTexture(Color0);
@@ -205,20 +203,20 @@ void RenderGraph::RenderGraphRoot::PresentWithExternalFrameProcessor(
     {
         PIXScope(*commandList, L"Render Graph: Prepare External Frame Processor");
 
-        TransitionBarrier(*displayTexture, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        commandList->TransitionBarrier(*displayTexture, D3D12_RESOURCE_STATE_COPY_SOURCE);
         for (const ResourceId resourceId : processorResourceIds)
         {
             Assert(resourceId != displayResourceId, "Display resource must not be duplicated in external processor resources.");
-            TransitionBarrier(m_ResourcePool->GetResource(resourceId), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            commandList->TransitionBarrier(m_ResourcePool->GetResource(resourceId), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         }
-        FlushBarriers(*commandList);
+        commandList->FlushResourceBarriers();
 
         const RenderTarget& backBufferRenderTarget = pWindow->GetRenderTarget();
         const std::shared_ptr<Texture>& backBuffer = backBufferRenderTarget.GetTexture(Color0);
         commandList->CopyResource(*backBuffer, *displayTexture);
 
-        TransitionBarrier(*displayTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-        FlushBarriers(*commandList);
+        commandList->TransitionBarrier(*displayTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        commandList->FlushResourceBarriers();
 
         processor.Process(*commandList, displayTexture);
         if (overlayCallback)
@@ -258,8 +256,8 @@ void RenderGraph::RenderGraphRoot::PresentWithOverlayBlit(
     {
         PIXScope(commandList, L"Render Graph: Prepare Display Blit");
 
-        TransitionBarrier(*pTexture, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-        FlushBarriers(commandList);
+        commandList.TransitionBarrier(*pTexture, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        commandList.FlushResourceBarriers();
 
         const RenderTarget& backBufferRenderTarget = pWindow->GetRenderTarget();
         commandList.SetRenderTarget(backBufferRenderTarget);
@@ -295,8 +293,8 @@ void RenderGraph::RenderGraphRoot::TransitionTexture(
 //Modify End
     const auto& pTexture = m_ResourcePool->GetTexture(resourceId);
 
-    TransitionBarrier(*pTexture, stateAfter);
-    FlushBarriers(*pCommandList);
+    pCommandList->TransitionBarrier(*pTexture, stateAfter);
+    pCommandList->FlushResourceBarriers();
 
 //Modify Begin:2026-07-30 by BestHui
     m_QueueScheduler.TrackExternalResource(resourceId, RenderPassQueue::Direct);
@@ -323,9 +321,9 @@ void RenderGraph::RenderGraphRoot::CopyTexture(
     const auto& source = m_ResourcePool->GetTexture(sourceId);
     const auto& destination = m_ResourcePool->GetTexture(destinationId);
 
-    TransitionBarrier(*source, D3D12_RESOURCE_STATE_COPY_SOURCE);
-    TransitionBarrier(*destination, D3D12_RESOURCE_STATE_COPY_DEST);
-    FlushBarriers(commandList);
+    commandList.TransitionBarrier(*source, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    commandList.TransitionBarrier(*destination, D3D12_RESOURCE_STATE_COPY_DEST);
+    commandList.FlushResourceBarriers();
 
     commandList.CopyResource(*destination, *source);
 
@@ -353,8 +351,8 @@ void RenderGraph::RenderGraphRoot::DrawToTexture(
     auto& commandList = *pCommandList;
     const auto& pTexture = m_ResourcePool->GetTexture(resourceId);
 
-    TransitionBarrier(*pTexture, D3D12_RESOURCE_STATE_RENDER_TARGET);
-    FlushBarriers(commandList);
+    commandList.TransitionBarrier(*pTexture, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    commandList.FlushResourceBarriers();
 
     RenderTarget renderTarget;
     renderTarget.AttachTexture(Color0, pTexture);
@@ -381,6 +379,13 @@ void RenderGraph::RenderGraphRoot::DrawToGraphOutput(const RenderMetadata& rende
 const std::shared_ptr<Texture>& RenderGraph::RenderGraphRoot::GetTexture(const ResourceId resourceId) const
 {
     return m_ResourcePool->GetTexture(resourceId);
+}
+//Modify End
+
+//Modify Begin:2026-08-10 by BestHui
+const RenderGraph::RenderGraphQueueFenceValues& RenderGraph::RenderGraphRoot::GetFrameSubmissionFences() const
+{
+    return m_QueueScheduler.GetFrameSubmissionFences();
 }
 //Modify End
 
@@ -457,13 +462,4 @@ void RenderGraph::RenderGraphRoot::CheckPotentiallyDirtyResources(const RenderMe
 
         return true;
     });
-}
-void RenderGraph::RenderGraphRoot::TransitionBarrier(const Resource& resource, D3D12_RESOURCE_STATES stateAfter)
-{
-    m_ResourceStateTracker.TransitionBarrier(resource, stateAfter);
-}
-
-void RenderGraph::RenderGraphRoot::FlushBarriers(const CommandList& commandList)
-{
-    m_ResourceStateTracker.FlushBarriers(commandList);
 }

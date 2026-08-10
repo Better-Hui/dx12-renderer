@@ -22,7 +22,6 @@
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
 #include "RenderGraphQueueScheduler.h"
-#include "RenderGraphResourceStateTracker.h"
 //Modify End
 #include "RenderMetadata.h"
 #include "ResourceDescription.h"
@@ -90,14 +89,14 @@ namespace RenderGraph
 //Modify Begin:2026-07-27 by BestHui
         const std::shared_ptr<Texture>& GetTexture(ResourceId resourceId) const;
 //Modify End
+//Modify Begin:2026-08-10 by BestHui
+        const RenderGraphQueueFenceValues& GetFrameSubmissionFences() const;
+//Modify End
         void MarkDirty();
 
     private:
         void RebuildIfNecessary(const RenderMetadata& renderMetadata);
         void CheckPotentiallyDirtyResources(const RenderMetadata& renderMetadata);
-        void TransitionBarrier(const Resource& resource, D3D12_RESOURCE_STATES stateAfter);
-        void FlushBarriers(const CommandList& commandList);
-
 //Modify Begin:2026-07-30 by BestHui
         Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;
         std::shared_ptr<D3D12DeviceContext> m_DeviceContext;
@@ -124,7 +123,6 @@ namespace RenderGraph
 //Modify End
 
         std::shared_ptr<ResourcePool> m_ResourcePool;
-        RenderGraphResourceStateTracker m_ResourceStateTracker;
 //Modify Begin:2026-07-30 by BestHui
 //Modify Begin:2026-08-07 by BestHui
         std::unique_ptr<RenderGraphCompiler> m_Compiler;

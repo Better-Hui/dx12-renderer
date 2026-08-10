@@ -1,7 +1,6 @@
 //Modify Begin:2026-08-07 by BestHui
 #include "RenderGraphCompiler.h"
 
-#include "RenderGraphResourceStateTracker.h"
 #include "RenderMetadata.h"
 #include "RenderPass.h"
 #include "ResourceDescription.h"
@@ -10,7 +9,6 @@
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Buffer.h>
 #include <DX12Library/RenderTarget.h>
-#include <DX12Library/Resource.h>
 
 #include <algorithm>
 #include <set>
@@ -223,63 +221,19 @@ namespace
             std::ranges::any_of(tokens, matches);
     }
 
-    bool CanRecordTogether(
-        const RenderPass& firstPass,
-        const RenderPass& secondPass)
+    bool CanRecordInParallel(const RenderPass& renderPass)
     {
-        if (firstPass.GetQueue() != RenderPassQueue::Direct ||
-            secondPass.GetQueue() != RenderPassQueue::Direct ||
-            firstPass.IsExternal() ||
-            secondPass.IsExternal() ||
-            !firstPass.IsParallelRecordingEligible() ||
-            !secondPass.IsParallelRecordingEligible())
-        {
-            return false;
-        }
-
-        std::set<ResourceId> firstWrites;
-        std::set<ResourceId> firstReads;
-        for (const Output& output : firstPass.GetOutputs())
-        {
-            if (output.m_Type != OutputType::Token)
-            {
-                firstWrites.insert(output.m_Id);
-            }
-        }
-        for (const Input& input : firstPass.GetInputs())
-        {
-            if (input.m_Type != InputType::Token)
-            {
-                firstReads.insert(input.m_Id);
-            }
-        }
-
-        for (const Output& output : secondPass.GetOutputs())
-        {
-            if (output.m_Type != OutputType::Token &&
-                (firstWrites.contains(output.m_Id) || firstReads.contains(output.m_Id)))
-            {
-                return false;
-            }
-        }
-        for (const Input& input : secondPass.GetInputs())
-        {
-            if (input.m_Type != InputType::Token && firstWrites.contains(input.m_Id))
-            {
-                return false;
-            }
-        }
-        return true;
+        return renderPass.GetQueue() == RenderPassQueue::Direct &&
+            !renderPass.IsExternal() &&
+            renderPass.IsParallelRecordingEligible();
     }
 }
 
 RenderGraph::RenderGraphCompiler::RenderGraphCompiler(
     Microsoft::WRL::ComPtr<ID3D12Device2> device,
-    std::shared_ptr<ResourcePool> resourcePool,
-    RenderGraphResourceStateTracker& resourceStateTracker)
+    std::shared_ptr<ResourcePool> resourcePool)
     : m_Device(std::move(device))
     , m_ResourcePool(std::move(resourcePool))
-    , m_ResourceStateTracker(resourceStateTracker)
 {
     Assert(m_Device != nullptr, "Render graph compiler requires a D3D12 device.");
     Assert(m_ResourcePool != nullptr, "Render graph compiler requires a resource pool.");
@@ -339,32 +293,9 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
         m_ResourcePool->RegisterBuffer(buffer, compiledGraph.m_RenderPasses, renderMetadata, m_Device);
     }
     m_ResourcePool->InitHeaps(compiledGraph.m_RenderPasses, m_Device, std::vector<ResourceId>(externalOutputIds.begin(), externalOutputIds.end()));
-
-    m_ResourceStateTracker.Reset();
-    for (const TextureDescription& texture : textures)
-    {
-        if (!m_ResourcePool->IsRegistered(texture.m_Id))
-        {
-            continue;
-        }
-        const ResourceDescription& description = m_ResourcePool->GetDescription(texture.m_Id);
-        if (description.m_DedicatedResource || m_ResourcePool->HasResourceLifecycle(texture.m_Id))
-        {
-            m_ResourceStateTracker.SetCurrentResourceState(*m_ResourcePool->CreateTexture(texture.m_Id), D3D12_RESOURCE_STATE_COMMON);
-        }
-    }
-    for (const BufferDescription& buffer : buffers)
-    {
-        if (!m_ResourcePool->IsRegistered(buffer.m_Id) || !m_ResourcePool->HasResourceLifecycle(buffer.m_Id))
-        {
-            continue;
-        }
-        m_ResourcePool->CreateBuffer(buffer.m_Id)->ForEachResourceRecursive(
-            [this](const Resource& resource)
-            {
-                m_ResourceStateTracker.SetCurrentResourceState(resource, D3D12_RESOURCE_STATE_COMMON);
-            });
-    }
+//Modify Begin:2026-08-10 by BestHui
+    m_ResourcePool->CreateResources();
+//Modify End
 
     for (uint32_t passIndex = 0; passIndex < compiledGraph.m_RenderPasses.size(); ++passIndex)
     {
@@ -423,59 +354,30 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
         compiledGraph.m_ResourceStatePlans.emplace(renderPass, std::move(resourceStatePlan));
     }
 
-    for (const std::vector<RenderPass*>& passLevel : sortedRenderPasses)
+    RenderGraphRecordingBatch recordingBatch = {};
+    const auto flushRecordingBatch = [&compiledGraph, &recordingBatch]()
     {
-        RenderGraphExecutionBatch parallelBatch = {};
-        const auto flushParallelBatch = [&compiledGraph, &parallelBatch]()
+        if (recordingBatch.Passes.empty())
         {
-            if (parallelBatch.Passes.empty())
-            {
-                return;
-            }
-            parallelBatch.ParallelRecordingEligible = parallelBatch.Passes.size() > 1u;
-            compiledGraph.m_ExecutionBatches.push_back(std::move(parallelBatch));
-            parallelBatch = {};
-        };
-
-        for (RenderPass* renderPass : passLevel)
-        {
-            if (unusedPasses.contains(renderPass))
-            {
-                continue;
-            }
-
-            const bool canJoinParallelBatch =
-                !parallelBatch.Passes.empty() &&
-                CanRecordTogether(*parallelBatch.Passes.front(), *renderPass) &&
-                std::ranges::all_of(
-                    parallelBatch.Passes,
-                    [renderPass](const RenderPass* batchPass)
-                    {
-                        return CanRecordTogether(*batchPass, *renderPass);
-                    });
-            if (parallelBatch.Passes.empty() && renderPass->IsParallelRecordingEligible())
-            {
-                parallelBatch.Passes.push_back(renderPass);
-            }
-            else if (canJoinParallelBatch)
-            {
-                parallelBatch.Passes.push_back(renderPass);
-            }
-            else
-            {
-                flushParallelBatch();
-                if (renderPass->IsParallelRecordingEligible())
-                {
-                    parallelBatch.Passes.push_back(renderPass);
-                }
-                else
-                {
-                    compiledGraph.m_ExecutionBatches.push_back({ { renderPass }, false });
-                }
-            }
+            return;
         }
-        flushParallelBatch();
+        recordingBatch.RecordInParallel = recordingBatch.Passes.size() > 1u;
+        compiledGraph.m_RecordingBatches.push_back(std::move(recordingBatch));
+        recordingBatch = {};
+    };
+
+    for (RenderPass* renderPass : compiledGraph.m_RenderPasses)
+    {
+        if (CanRecordInParallel(*renderPass))
+        {
+            recordingBatch.Passes.push_back(renderPass);
+            continue;
+        }
+
+        flushRecordingBatch();
+        compiledGraph.m_RecordingBatches.push_back({ { renderPass }, false });
     }
+    flushRecordingBatch();
 
     return compiledGraph;
 }

@@ -63,6 +63,9 @@ namespace RenderGraph
             const Microsoft::WRL::ComPtr<ID3D12Device2>& pDevice,
             const std::vector<ResourceId>& externalOutputIds = { ResourceIds::GRAPH_OUTPUT });
 //Modify End
+//Modify Begin:2026-08-10 by BestHui
+        void CreateResources();
+//Modify End
 
         void RegisterTexture(
             const TextureDescription& desc,

@@ -34,6 +34,7 @@ namespace RenderGraph
         void TrackPassResources(const RenderPass& pass, uint64_t fenceValue);
         void TrackExternalResource(ResourceId resourceId, RenderPassQueue queue);
         const std::map<ResourceId, RenderGraphQueueFenceValues>& GetResourceRetirements() const;
+        const RenderGraphQueueFenceValues& GetFrameSubmissionFences() const;
 
     private:
         std::shared_ptr<CommandQueue> m_DirectCommandQueue;
@@ -41,6 +42,7 @@ namespace RenderGraph
         std::map<ResourceId, RenderPassQueue> m_LastWriterQueues;
         std::map<ResourceId, uint64_t> m_LastWriterFenceValues;
         std::map<ResourceId, RenderGraphQueueFenceValues> m_ResourceRetirements;
+        RenderGraphQueueFenceValues m_FrameSubmissionFences;
         std::set<ResourceId> m_PendingDirectResources;
         bool m_AsyncComputeSubmitted = false;
         uint64_t m_LastAsyncComputeFenceValue = 0;

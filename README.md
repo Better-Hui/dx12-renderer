@@ -66,7 +66,7 @@ auto pass = RenderGraph::RenderPass::Create(
 
 Pass input/output declarations drive ordering, resource states, and cross-queue waits. The graph currently supports explicit `Direct` and `AsyncCompute` assignment, tracks each resource's producer queue and submitted fence value, and inserts GPU-side waits for dependent consumers. Inline-ray-query `Indirect Lighting` is the current async-compute sample path.
 
-Queue submission and last-writer fence tracking live in `RenderGraphQueueScheduler`; barrier ownership lives in `RenderGraphResourceStateTracker`. Native integrations such as NRD can batch `ResourceStateTransition` requests through `RenderContext`, so native barriers and the graph's tracked state stay synchronized.
+Queue submission and last-writer fence tracking live in `RenderGraphQueueScheduler`. The compiler emits immutable per-pass transition/aliasing plans; the executor records them into the owning command list. `CommandList` resolves each list's initial state against the shared `ResourceStateRegistry` in final submission order, so CPU recording order never changes GPU resource ordering.
 
 `RenderGraphRoot` receives its device and queues from the application composition root. Its execution path is split into `RenderGraphCommandExecutor` for pass recording/submission and `RenderGraphProfiler` for optional per-queue GPU timestamps. `RaytracingDemo` follows the same boundary: `RaytracingDemoPassResources` supplies object references and `RaytracingDemoPassConfig` supplies explicit runtime configuration, so pass lambdas do not capture the whole demo or use friend access.
 

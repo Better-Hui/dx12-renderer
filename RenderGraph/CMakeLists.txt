@@ -16,7 +16,6 @@ set(HEADER_FILES
         include/RenderGraph/RenderGraphProfiler.h
         include/RenderGraph/RenderGraphQueueFence.h
         include/RenderGraph/RenderGraphQueueScheduler.h
-        include/RenderGraph/RenderGraphResourceStateTracker.h
         # Modify End
         include/RenderGraph/RenderGraphRoot.h
         include/RenderGraph/RenderMetadata.h
@@ -43,7 +42,6 @@ set(SOURCE_FILES
         src/RenderGraphRoot.cpp
         # Modify Begin:2026-07-30 by BestHui
         src/RenderGraphQueueScheduler.cpp
-        src/RenderGraphResourceStateTracker.cpp
         # Modify End
         src/RenderPass.cpp
         src/ResourceId.cpp

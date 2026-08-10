@@ -15,7 +15,6 @@ class CommandQueue;
 
 namespace RenderGraph
 {
-    class RenderGraphResourceStateTracker;
     class RenderPass;
     class ResourcePool;
     struct BufferDescription;
@@ -28,8 +27,7 @@ namespace RenderGraph
     public:
         RenderGraphCompiler(
             Microsoft::WRL::ComPtr<ID3D12Device2> device,
-            std::shared_ptr<ResourcePool> resourcePool,
-            RenderGraphResourceStateTracker& resourceStateTracker);
+            std::shared_ptr<ResourcePool> resourcePool);
 
         void ValidateDefinition(
             std::span<const std::unique_ptr<RenderPass>> renderPasses,
@@ -49,7 +47,6 @@ namespace RenderGraph
     private:
         Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;
         std::shared_ptr<ResourcePool> m_ResourcePool;
-        RenderGraphResourceStateTracker& m_ResourceStateTracker;
     };
 }
 //Modify End

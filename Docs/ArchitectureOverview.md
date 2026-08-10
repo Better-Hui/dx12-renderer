@@ -41,7 +41,7 @@ This layer deliberately exposes D3D12 concepts. `Framework` is responsible for p
 
 - `CommandContext` records raster, compute, mesh-shader, and DXR work through the same bind/dispatch style.
 - Reflection builds `PipelineLayout`, `PipelineDescriptorPool`, `PipelineDescriptorSet`, and `PipelineBindingSet` from named shader bindings.
-- `BindlessDescriptorHeap` owns a shader-visible resource-descriptor range. Materials keep descriptor indices; `CommandContext` stages the corresponding descriptor table for a pipeline using direct heap indexing.
+- `BindlessDescriptorHeap` keeps canonical descriptors in a CPU-only heap and mirrors them into fence-retired shader-visible frame pages. Materials keep stable descriptor indices; `CommandContext` stages the corresponding table in the selected page for direct heap indexing. This prevents CPU descriptor updates from overwriting descriptors still consumed by Direct or Async Compute GPU work.
 - `ShaderVariantManager` compiles explicitly requested variants at startup, fingerprints sources/includes/defines, and caches bytecode. It is not runtime shader hot reload or exhaustive permutation generation.
 - `SharedUploadBuffer`, transient descriptor allocation, `StructuredBuffer`, raw buffers, and `RWStructuredBuffer`-style UAV binding support common data-upload and compute workloads.
 
@@ -79,13 +79,13 @@ The compiler performs pass culling, dependency ordering, resource-state planning
 
 - A pass explicitly chooses `Direct` or `AsyncCompute` with `RenderPassQueue`; queue placement is not inferred automatically.
 - `RenderGraphQueueScheduler` tracks a logical resource's last producer queue and submitted fence value. A dependent consumer receives a GPU-side wait before its work is submitted.
-- `RenderGraphResourceStateTracker` applies transition, UAV, and aliasing barriers from the compiled plan. Cross-queue ownership handoff is recorded with the corresponding producer/consumer ordering.
+- `PassResourceStatePlan` stores immutable per-pass transition, UAV, aliasing, initialization, and async-handoff work. The executor records that plan in the command list that owns the pass; `CommandList` resolves initial transition states through the shared `ResourceStateRegistry` when lists are closed in final submission order.
 - The low-level Copy queue exists, but RenderGraph does not yet schedule Copy-queue passes.
 - Transient resources retire against the actual Direct/Compute fence values of the frame. Aliasing is intentionally conservative: only same-queue lifetimes are reused; cross-queue aliasing remains disabled.
 
 ### Recording model
 
-The compiler can mark independent passes in the same queue as eligible for parallel command recording. `RenderGraphTaskScheduler` supplies persistent workers; every worker uses its own command allocator/list and temporary descriptor allocation. Recorded lists are still submitted in dependency order, so parallel recording lowers CPU recording cost but does not make one Direct queue execute GPU work in parallel.
+The compiler groups consecutive explicitly parallel-safe Direct passes into recording batches, including passes with GPU resource dependencies. `RenderGraphTaskScheduler` supplies persistent workers and drains already accepted work during shutdown; every worker uses an exclusive command allocator/list and temporary descriptor allocation. The compiler's stable topological order is retained for submission, and pending aliasing barriers are emitted before their first-use transitions. A bindless frame page is retained by both Direct and Async Compute fences, so descriptor-table mirroring never overwrites a page still referenced by GPU work. Parallel recording therefore lowers CPU recording cost without making one Direct queue execute GPU work in parallel.
 
 Use PIX Timing Capture to evaluate queue overlap, GPU waits, and CPU/GPU bubbles. RenderGraph CSV timing is intentionally queue-local and is best used for repeated fixed-scene A/B measurements.
 

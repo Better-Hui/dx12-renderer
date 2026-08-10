@@ -107,6 +107,15 @@ void ResourceStateTracker::AliasBarrier(const Resource* beforeResource, const Re
 	ResourceBarrier(CD3DX12_RESOURCE_BARRIER::Aliasing(pResourceBefore, pResourceAfter));
 }
 
+//Modify Begin:2026-08-10 by BestHui
+void ResourceStateTracker::QueueAliasingBarrier(const Resource* beforeResource, const Resource* afterResource)
+{
+    ID3D12Resource* pResourceBefore = beforeResource != nullptr ? beforeResource->GetD3D12Resource().Get() : nullptr;
+    ID3D12Resource* pResourceAfter = afterResource != nullptr ? afterResource->GetD3D12Resource().Get() : nullptr;
+    m_PendingAliasingBarriers.push_back(CD3DX12_RESOURCE_BARRIER::Aliasing(pResourceBefore, pResourceAfter));
+}
+//Modify End
+
 void ResourceStateTracker::FlushResourceBarriers(const CommandList& commandList)
 {
 	const UINT numBarriers = static_cast<UINT>(m_ResourceBarriers.size());
@@ -127,7 +136,14 @@ uint32_t ResourceStateTracker::FlushPendingResourceBarriers(
 {
     ResourceStateMapType& resourceStates = submissionScope.GetStates();
 	ResourceBarriersType resourceBarriers;
-	resourceBarriers.reserve(m_PendingResourceBarriers.size());
+	resourceBarriers.reserve(m_PendingAliasingBarriers.size() + m_PendingResourceBarriers.size());
+
+//Modify Begin:2026-08-10 by BestHui
+    resourceBarriers.insert(
+        resourceBarriers.end(),
+        m_PendingAliasingBarriers.begin(),
+        m_PendingAliasingBarriers.end());
+//Modify End
 
     for (auto pendingBarrier : m_PendingResourceBarriers)
 	{
@@ -187,6 +203,9 @@ uint32_t ResourceStateTracker::FlushPendingResourceBarriers(
 	}
 
 	m_PendingResourceBarriers.clear();
+//Modify Begin:2026-08-10 by BestHui
+    m_PendingAliasingBarriers.clear();
+//Modify End
 	return numBarriers;
 }
 //Modify End
@@ -208,6 +227,9 @@ void ResourceStateTracker::CommitFinalResourceStates(
 void ResourceStateTracker::Reset()
 {
 	m_PendingResourceBarriers.clear();
+//Modify Begin:2026-08-10 by BestHui
+    m_PendingAliasingBarriers.clear();
+//Modify End
 	m_ResourceBarriers.clear();
 	m_FinalResourceStates.clear();
 }

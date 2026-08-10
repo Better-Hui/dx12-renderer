@@ -15,6 +15,10 @@ namespace RenderGraph
 
     RenderGraphTaskScheduler::~RenderGraphTaskScheduler()
     {
+        {
+            std::lock_guard lock(m_TaskMutex);
+            m_Stopping = true;
+        }
         for (std::jthread& worker : m_Workers)
         {
             worker.request_stop();
@@ -36,19 +40,18 @@ namespace RenderGraph
 
     void RenderGraphTaskScheduler::WorkerLoop(const std::stop_token stopToken)
     {
-        while (!stopToken.stop_requested())
+        while (true)
         {
             std::function<void()> task;
             {
                 std::unique_lock lock(m_TaskMutex);
-                m_TaskAvailable.wait(lock, stopToken, [this]() { return !m_Tasks.empty(); });
-                if (stopToken.stop_requested() && m_Tasks.empty())
-                {
-                    return;
-                }
-
+                m_TaskAvailable.wait(lock, stopToken, [this]() { return m_Stopping || !m_Tasks.empty(); });
                 if (m_Tasks.empty())
                 {
+                    if (m_Stopping)
+                    {
+                        return;
+                    }
                     continue;
                 }
 

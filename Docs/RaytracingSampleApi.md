@@ -93,7 +93,7 @@ Current behavior:
 
 - Direct and Async Compute queues are created and profiled separately.
 - `RenderGraphQueueScheduler` records the last writer queue and submitted fence value for each logical resource.
-- `RenderGraphResourceStateTracker` owns the graph's current-state table and pending transition/UAV/aliasing barriers.
+- `PassResourceStatePlan` describes transition/UAV/aliasing work per pass. The worker-owned command list records that plan, and its initial states are resolved against the shared `ResourceStateRegistry` when command lists are submitted in graph order.
 - A cross-queue consumer submits the producer work, then receives a GPU-side fence wait.
 - Direct-to-Compute transitions are recorded on Direct before submission; a Direct consumer of Compute output receives the reciprocal wait.
 - Async inputs are limited to read-only classes; async outputs are tokens, UAVs, or copy destinations. Render targets, depth, and external passes remain Direct-only.

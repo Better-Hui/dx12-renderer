@@ -31,6 +31,9 @@ public:
 
     void UavBarrier(const Resource* resource = nullptr);
     void AliasBarrier(const Resource* beforeResource = nullptr, const Resource* afterResource = nullptr);
+//Modify Begin:2026-08-10 by BestHui
+    void QueueAliasingBarrier(const Resource* beforeResource = nullptr, const Resource* afterResource = nullptr);
+//Modify End
 
 //Modify Begin:2026-07-30 by BestHui
     uint32_t FlushPendingResourceBarriers(
@@ -50,6 +53,9 @@ private:
 //Modify End
 
     ResourceBarriersType m_PendingResourceBarriers;
+//Modify Begin:2026-08-10 by BestHui
+    ResourceBarriersType m_PendingAliasingBarriers;
+//Modify End
     ResourceBarriersType m_ResourceBarriers;
     ResourceStateMapType m_FinalResourceStates;
 //Modify Begin:2026-07-30 by BestHui

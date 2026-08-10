@@ -265,7 +265,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateLi
 {
     using namespace RenderGraph;
 
-    return RenderPass::Create(
+    auto pass = RenderPass::Create(
         L"Lighting Composite",
         {
             { DemoResourceIds::DirectLightingFinishedToken, InputType::Token },
@@ -299,5 +299,10 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateLi
             commandContext.Dispatch(Math::DivideByMultiple(camera.Width, 8u), Math::DivideByMultiple(camera.Height, 8u), 1u);
 //Modify End
         });
+    if (config.FrameState->Backend == PathTracingBackend::InlineRayQuery)
+    {
+        pass->SetParallelRecordingEligible(true);
+    }
+    return pass;
 }
 //Modify End

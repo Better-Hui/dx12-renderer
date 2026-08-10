@@ -1674,12 +1674,34 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     const auto renderGraphCpuStart = std::chrono::steady_clock::now();
 //Modify End
 //Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-08-10 by BestHui
+    BindlessDescriptorHeap& bindlessDescriptorHeap = m_SceneResources.GetBindlessDescriptorHeap();
+    bindlessDescriptorHeap.BeginFrame(*directCommandQueue, *asyncComputeCommandQueue);
+    bool bindlessFrameEnded = false;
+    const auto endBindlessFrame = [this, &bindlessDescriptorHeap, &bindlessFrameEnded]()
+    {
+        if (bindlessFrameEnded)
+        {
+            return;
+        }
+
+        const RenderGraph::RenderGraphQueueFenceValues& frameFences = m_RenderGraph->GetFrameSubmissionFences();
+        bindlessDescriptorHeap.EndFrame(frameFences.Direct, frameFences.AsyncCompute);
+        bindlessFrameEnded = true;
+    };
+//Modify End
     try
     {
         m_RenderGraph->Execute(metadata);
+//Modify Begin:2026-08-10 by BestHui
+        endBindlessFrame();
+//Modify End
     }
     catch (const std::exception& exception)
     {
+//Modify Begin:2026-08-10 by BestHui
+        endBindlessFrame();
+//Modify End
         throw std::runtime_error(std::string("RaytracingDemo::OnRender RenderGraph.Execute failed: ") + exception.what());
     }
 //Modify Begin:2026-08-02 by BestHui

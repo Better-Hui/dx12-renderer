@@ -10,6 +10,7 @@
 #include <memory>
 #include <mutex>
 #include <stop_token>
+#include <stdexcept>
 #include <thread>
 #include <type_traits>
 #include <utility>
@@ -35,6 +36,10 @@ namespace RenderGraph
             std::future<ResultT> result = task->get_future();
             {
                 std::lock_guard lock(m_TaskMutex);
+                if (m_Stopping)
+                {
+                    throw std::runtime_error("Render graph task scheduler is stopping.");
+                }
                 m_Tasks.emplace_back([task]() { (*task)(); });
             }
             m_TaskAvailable.notify_one();
@@ -51,6 +56,7 @@ namespace RenderGraph
         std::condition_variable_any m_TaskAvailable;
         std::deque<std::function<void()>> m_Tasks;
         std::vector<std::jthread> m_Workers;
+        bool m_Stopping = false;
     };
 }
 //Modify End

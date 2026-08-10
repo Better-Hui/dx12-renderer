@@ -128,6 +128,13 @@ void CommandList::AliasingBarrier(const ComPtr<ID3D12Resource> beforeResource,
     }
 }
 
+//Modify Begin:2026-08-10 by BestHui
+void CommandList::AliasingBarrierBeforeFirstUse(const Resource& resourceAfter)
+{
+    m_PResourceStateTracker->QueueAliasingBarrier(nullptr, &resourceAfter);
+}
+//Modify End
+
 void CommandList::FlushResourceBarriers()
 {
     m_PResourceStateTracker->FlushResourceBarriers(*this);

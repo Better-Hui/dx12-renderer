@@ -28,6 +28,7 @@ void RenderGraph::RenderGraphQueueScheduler::BeginFrame()
     m_LastWriterQueues.clear();
     m_LastWriterFenceValues.clear();
     m_ResourceRetirements.clear();
+    m_FrameSubmissionFences = {};
     m_PendingDirectResources.clear();
     m_AsyncComputeSubmitted = false;
     m_LastAsyncComputeFenceValue = 0;
@@ -41,6 +42,7 @@ uint64_t RenderGraph::RenderGraphQueueScheduler::SubmitDirect(std::shared_ptr<Co
     }
 
     const uint64_t fenceValue = m_DirectCommandQueue->ExecuteCommandList(commandList);
+    m_FrameSubmissionFences.Direct = (std::max)(m_FrameSubmissionFences.Direct, fenceValue);
     for (const ResourceId resourceId : m_PendingDirectResources)
     {
         m_ResourceRetirements[resourceId].Direct = (std::max)(
@@ -69,6 +71,7 @@ uint64_t RenderGraph::RenderGraphQueueScheduler::SubmitDirect(
     }
 
     const uint64_t fenceValue = m_DirectCommandQueue->ExecuteCommandLists(commandLists);
+    m_FrameSubmissionFences.Direct = (std::max)(m_FrameSubmissionFences.Direct, fenceValue);
     for (const ResourceId resourceId : m_PendingDirectResources)
     {
         m_ResourceRetirements[resourceId].Direct = (std::max)(
@@ -94,6 +97,7 @@ uint64_t RenderGraph::RenderGraphQueueScheduler::SubmitAsyncCompute(
 {
     Assert(commandList != nullptr, "Cannot submit a null async compute command list.");
     const uint64_t fenceValue = m_AsyncComputeCommandQueue->ExecuteCommandList(commandList);
+    m_FrameSubmissionFences.AsyncCompute = (std::max)(m_FrameSubmissionFences.AsyncCompute, fenceValue);
     commandList.reset();
 
     if (waitForCompletion)
@@ -214,5 +218,11 @@ const std::map<RenderGraph::ResourceId, RenderGraph::RenderGraphQueueFenceValues
 RenderGraph::RenderGraphQueueScheduler::GetResourceRetirements() const
 {
     return m_ResourceRetirements;
+}
+
+const RenderGraph::RenderGraphQueueFenceValues&
+RenderGraph::RenderGraphQueueScheduler::GetFrameSubmissionFences() const
+{
+    return m_FrameSubmissionFences;
 }
 //Modify End

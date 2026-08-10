@@ -55,7 +55,7 @@ auto pass = RenderGraph::RenderPass::Create(
 
 输入/输出声明会参与依赖分析与资源状态安排。`AsyncCompute` 表示“这个 pass 明确请求 compute queue”，不是自动性能优化开关：RenderGraph 会处理必要的 GPU fence 等待，但不会自动判断哪个 pass 最适合异步、拆分 pass，或保证一定产生 direct/compute overlap。
 
-当前 queue 提交、last-writer 和跨 queue fence 由 `RenderGraphQueueScheduler` 管理；barrier 与资源当前状态由 `RenderGraphResourceStateTracker` 管理。NRD 这类 native 集成可以通过 `RenderContext` 批量提交 `ResourceStateTransition`，让真实 D3D12 barrier 和 RenderGraph 状态表保持一致。
+当前 queue 提交、last-writer 和跨 queue fence 由 `RenderGraphQueueScheduler` 管理。Compiler 为每个 pass 生成不可变的 transition/aliasing 计划，Executor 把它录入所属的 command list；`CommandList` 在最终提交顺序中通过共享 `ResourceStateRegistry` 解析每条 list 的初始状态。因此 CPU 录制先后不会改变 GPU 的资源状态与执行顺序。
 
 `RenderGraphRoot` 的 device 和 queue 由应用组合根显式注入。执行路径已经拆为 `RenderGraphCommandExecutor`（pass 录制与提交）和 `RenderGraphProfiler`（可选的 Direct/Async Compute GPU timing）。`RaytracingDemo` 也遵循同一边界：`RaytracingDemoPassResources` 提供 pass 所需对象，`RaytracingDemoPassConfig` 提供显式运行时配置，因此 pass lambda 不再捕获整个 Demo，也不依赖 `friend` 访问私有成员。
 
