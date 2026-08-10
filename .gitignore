@@ -40,3 +40,22 @@ packages/*
 /**/CMakeFiles/
 /**/CMakeCache.txt
 /**/cmake_install.cmake
+
+# Runtime SDK files required by the RaytracingDemo CMake configuration.
+!External/
+!External/DLSS/
+!External/DLSS/bin/
+!External/DLSS/bin/x64/
+!External/DLSS/bin/x64/nvngx_dlss.dll
+!External/DLSS/lib/
+!External/DLSS/lib/x64/
+!External/DLSS/lib/x64/nvsdk_ngx_d.lib
+!External/DLSS/lib/x64/nvsdk_ngx_s.lib
+!External/Streamline/
+!External/Streamline/bin/
+!External/Streamline/bin/x64/
+!External/Streamline/bin/x64/development/
+!External/Streamline/bin/x64/development/nvngx_dlss.dll
+!External/Streamline/bin/x64/development/reflex.license.txt
+!External/Streamline/bin/x64/development/sl.dlss.dll
+!External/Streamline/bin/x64/development/sl.reflex.dll
