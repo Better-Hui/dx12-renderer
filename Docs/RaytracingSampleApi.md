@@ -81,6 +81,26 @@ Visibility is selected by the stage-specific settings above. In particular, enab
 
 This is still an experimental ReSTIR DI implementation. Its sampling policy, quality, stability, and performance are not accepted as RTXDI-equivalent, and it does not yet provide a complete production light-presampling, dynamic-scene validation, or quality-tuning system.
 
+### ReSTIR GI indirect lighting
+
+When `Indirect Lighting` selects `ReSTIR GI` on the inline ray-query backend, the graph contains one framework-backed indirect-light pass:
+
+```text
+Base Resources
+-> ReSTIR GI
+   -> Initial BSDF sample
+   -> Temporal reservoir reuse
+   -> Spatial reservoir reuse
+   -> Final visibility / Shade
+-> Lighting Composite
+```
+
+`Framework/Rendering/Lighting/ReSTIRGI.h` owns renderer-neutral settings and frame constants. `Framework/Rendering/Lighting/ReSTIRGIPass.h` owns the packed reservoir textures, shader variants, and the four internal dispatches. The sample adds exactly one `ReSTIR GI` RenderGraph pass, supplies `IndirectLighting`, motion vectors, and a callback that binds its GBuffer/TLAS/bindless scene ABI.
+
+The implementation follows the ReSTIR GI data flow in [DQLin/ReSTIR_PT](https://github.com/DQLin/ReSTIR_PT): initial secondary-hit sampling, temporal reuse with surface validation, spatial reuse with Jacobian correction, and final visibility evaluation. Each selected secondary vertex stores emitted radiance plus direct and bounded continuation-path radiance using the same estimator as ordinary indirect path tracing. The reservoir itself still represents one resampled secondary vertex, and the feature is Inline Ray Query only. The feature stores three `R32G32B32A32_UINT` textures per reservoir set for creation surface, secondary hit, and radiance/state; `Initial`, `Temporal`, and persistent `History` sets consume roughly 144 bytes per pixel before allocator overhead.
+
+This is an experimental feature, not a complete ReSTIR PT implementation. It has no previous-frame TLAS, reuse of multi-bounce path segments, ReSTIR-N reservoir sets, or accepted image-quality/performance validation. Treat the UI controls as algorithm debugging parameters and validate temporal stability, memory use, and GPU cost on the target adapter.
+
 ### Explicit async compute
 
 ```cpp

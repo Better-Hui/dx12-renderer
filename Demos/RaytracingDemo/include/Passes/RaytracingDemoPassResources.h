@@ -10,6 +10,10 @@
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
 #include <Framework/Rendering/Lighting/ReSTIRDI.h>
 #include <Framework/Rendering/Lighting/ReSTIRDIPass.h>
+//Modify Begin:2026-08-10 by BestHui
+#include <Framework/Rendering/Lighting/ReSTIRGI.h>
+#include <Framework/Rendering/Lighting/ReSTIRGIPass.h>
+//Modify End
 #include <Framework/Rendering/Pipeline/MeshShader.h>
 #include <Framework/Rendering/Pipeline/Shader.h>
 #include <Framework/Rendering/RayTracing/RayTracingShader.h>
@@ -132,6 +136,10 @@ struct RaytracingDemoPassResources
 //Modify Begin:2026-07-30 by BestHui
     ReSTIRDIPass& DirectLightingReSTIRDIPass;
 //Modify End
+//Modify Begin:2026-08-10 by BestHui
+    ReSTIRGI& IndirectLightingReSTIRGI;
+    ReSTIRGIPass& IndirectLightingReSTIRGIPass;
+//Modify End
 //Modify End
 //Modify Begin:2026-08-07 by BestHui
     DLSS& Dlss;
@@ -169,6 +177,9 @@ enum class RaytracingDemoLightingTechnique : uint32_t
     None = 0,
     PathTracing = 1,
     ReSTIRDI = 2,
+//Modify Begin:2026-08-10 by BestHui
+    ReSTIRGI = 3,
+//Modify End
 };
 //Modify End
 
@@ -206,6 +217,9 @@ struct RaytracingDemoFrameState
     uint32_t FrameIndex = 0;
     uint32_t AccumulationFrameIndex = 0;
     bool ReSTIRDIHistoryValid = false;
+//Modify Begin:2026-08-10 by BestHui
+    bool ReSTIRGIHistoryValid = false;
+//Modify End
     bool HasPreviousViewProjection = false;
     DirectX::XMMATRIX PreviousViewProjection = DirectX::XMMatrixIdentity();
 };

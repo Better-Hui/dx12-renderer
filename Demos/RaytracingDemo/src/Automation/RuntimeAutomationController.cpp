@@ -97,9 +97,18 @@ void DemoAutomation::RuntimeAutomationController::Initialize(const TestSuites& t
             m_Steps.resize(maxCases);
         }
     }
+//Modify Begin:2026-07-30 by BestHui
+    else if (mode == "restirgi-profile")
+    {
+        m_Steps = testSuites.ReSTIRGIProfile;
+    }
+//Modify End
     else
     {
-        throw std::runtime_error("RAYTRACING_DEMO_AUTOTEST must be 'core', 'stress', or 'matrix'.");
+//Modify Begin:2026-07-30 by BestHui
+        throw std::runtime_error(
+            "RAYTRACING_DEMO_AUTOTEST must be 'core', 'stress', 'matrix', or 'restirgi-profile'.");
+//Modify End
     }
 
     m_Enabled = !m_Steps.empty();

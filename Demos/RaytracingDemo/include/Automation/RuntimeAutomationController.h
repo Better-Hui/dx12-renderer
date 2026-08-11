@@ -22,6 +22,9 @@ namespace DemoAutomation
         std::vector<Step> Core;
         std::vector<Step> Stress;
         std::vector<Step> Matrix;
+//Modify Begin:2026-07-30 by BestHui
+        std::vector<Step> ReSTIRGIProfile;
+//Modify End
     };
 
     class RuntimeAutomationController final

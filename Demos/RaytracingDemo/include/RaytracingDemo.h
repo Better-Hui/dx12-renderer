@@ -23,6 +23,9 @@
 //Modify End
 #include <Framework/Rendering/RayTracing/RayTracingShader.h>
 #include <Framework/Rendering/Lighting/ReSTIRDIPass.h>
+//Modify Begin:2026-08-10 by BestHui
+#include <Framework/Rendering/Lighting/ReSTIRGIPass.h>
+//Modify End
 #include <Framework/Rendering/Upscaling/DLSS.h>
 #include <Framework/Scene/Scene.h>
 #include <Framework/Rendering/Pipeline/Shader.h>
@@ -130,7 +133,9 @@ private:
 //Modify End
     void PresentDisplayOutput();
 //Modify End
-    void ResetAccumulation(bool resetDenoiserHistory = true, bool resetReSTIRDIHistory = true);
+//Modify Begin:2026-08-10 by BestHui
+    void ResetAccumulation(bool resetDenoiserHistory = true, bool resetReSTIRHistory = true);
+//Modify End
 //Modify Begin:2026-08-07 by BestHui
     bool IsDenoiserEnabled() const { return m_Denoisers.IsEnabled() && !(m_DLSS.IsEnabled() && m_DLSS.IsRayReconstructionEnabled()); }
 //Modify End
@@ -179,6 +184,10 @@ private:
 //Modify Begin:2026-08-06 by BestHui
     RaytracingDemoLightingTechnique m_RenderGraphDirectLightingTechnique = RaytracingDemoLightingTechnique::None;
 //Modify End
+//Modify Begin:2026-08-10 by BestHui
+    RaytracingDemoLightingTechnique m_RenderGraphIndirectLightingTechnique = RaytracingDemoLightingTechnique::None;
+    bool m_RenderGraphIndirectLightingEnabled = false;
+//Modify End
 //Modify Begin:2026-07-30 by BestHui
     int m_RenderGraphLightingDebugTextureTarget = 0;
 //Modify End
@@ -204,6 +213,9 @@ private:
     PathTracingPipelineController m_PathTracingPipelines;
 //Modify Begin:2026-07-30 by BestHui
     ReSTIRDIPass m_DirectLightingReSTIRDIPass;
+//Modify End
+//Modify Begin:2026-08-10 by BestHui
+    ReSTIRGIPass m_IndirectLightingReSTIRGIPass;
 //Modify End
 //Modify End
     DenoiserController m_Denoisers;
@@ -272,6 +284,10 @@ private:
     RaytracingDemoLightingTechnique m_IndirectLightingTechnique = RaytracingDemoLightingTechnique::None;
     ReSTIRDI m_DirectLightingReSTIRDI;
     bool m_ReSTIRDIHistoryValid = false;
+//Modify End
+//Modify Begin:2026-08-10 by BestHui
+    ReSTIRGI m_IndirectLightingReSTIRGI;
+    bool m_ReSTIRGIHistoryValid = false;
 //Modify End
 //Modify Begin:2026-08-03 by BestHui
     bool m_AsyncComputeEnabled = false;

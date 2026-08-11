@@ -132,7 +132,9 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
         L"Direct Lighting Disabled",
         {},
         {
-            { DemoResourceIds::DirectLighting, OutputType::UnorderedAccess },
+//Modify Begin:2026-08-11 by BestHui
+            { DemoResourceIds::DirectLighting, OutputType::RenderTarget },
+//Modify End
             { DemoResourceIds::DirectLightingFinishedToken, OutputType::Token },
         },
         [](const RenderContext&, CommandList&)
@@ -176,11 +178,6 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
         },
         [resources, config, backend, queue](const RenderContext& context, CommandList& cmd)
         {
-            if (config.FrameState->IndirectLightingTechnique != RaytracingDemoLightingTechnique::PathTracing)
-            {
-                return;
-            }
-
             const RaytracingDemoRenderGraph::FrameGBufferResources gbuffer = RaytracingDemoRenderGraph::GetFrameGBufferResources(context);
             const RaytracingDemoCameraConstants camera = RaytracingDemoPassBindings::BuildPassCameraConstants(resources, config, context);
 
@@ -258,6 +255,25 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
     return pass;
 //Modify End
 }
+
+//Modify Begin:2026-08-10 by BestHui
+std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDisabledIndirectLightingPass()
+{
+    using namespace RenderGraph;
+    return RenderPass::Create(
+        L"Indirect Lighting Disabled",
+        {},
+        {
+//Modify Begin:2026-08-11 by BestHui
+            { DemoResourceIds::IndirectLighting, OutputType::RenderTarget },
+//Modify End
+            { DemoResourceIds::IndirectLightingFinishedToken, OutputType::Token },
+        },
+        [](const RenderContext&, CommandList&)
+        {
+        });
+}
+//Modify End
 
 std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateLightingCompositePass(
     const RaytracingDemoPassResources& resources,

@@ -170,9 +170,10 @@ void ReSTIRDIPass::ExecuteInitialSampling(
     PipelineSet& pipelines)
 {
     ComputeShader& shader = *pipelines.RIS;
-    inputs.BindSceneInputs(commandList, shader);
-
+//Modify Begin:2026-07-30 by BestHui
     CommandContext commandContext(commandList);
+    inputs.BindSceneInputs(commandContext, shader);
+//Modify End
     commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
     commandContext.SetUnorderedAccessView(shader, "ReSTIRDIRISReservoir", UnorderedAccessView(m_Resources->InitialReservoir));
     commandContext.SetUnorderedAccessView(shader, "ReSTIRDIRISReservoirState", UnorderedAccessView(m_Resources->InitialReservoirState));
@@ -187,10 +188,11 @@ void ReSTIRDIPass::ExecuteTemporalResampling(
     PipelineSet& pipelines)
 {
     ComputeShader& shader = *pipelines.Temporal;
-    inputs.BindSceneInputs(commandList, shader);
-
     const bool writeReservoirA = (inputs.FrameState.FrameIndex & 1u) == 0u;
+//Modify Begin:2026-07-30 by BestHui
     CommandContext commandContext(commandList);
+    inputs.BindSceneInputs(commandContext, shader);
+//Modify End
     commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
     commandContext.SetShaderResourceView(shader, "ReSTIRDIRISReservoir", ShaderResourceView(m_Resources->InitialReservoir));
     commandContext.SetShaderResourceView(shader, "ReSTIRDIRISReservoirState", ShaderResourceView(m_Resources->InitialReservoirState));
@@ -214,9 +216,10 @@ void ReSTIRDIPass::ExecuteSpatialResampling(
     PipelineSet& pipelines)
 {
     ComputeShader& shader = *pipelines.Spatial;
-    inputs.BindSceneInputs(commandList, shader);
-
+//Modify Begin:2026-07-30 by BestHui
     CommandContext commandContext(commandList);
+    inputs.BindSceneInputs(commandContext, shader);
+//Modify End
     commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
     commandContext.SetShaderResourceView(shader, "ReSTIRDITemporalReservoir", ShaderResourceView(m_Resources->TemporalReservoir));
     commandContext.SetShaderResourceView(shader, "ReSTIRDITemporalReservoirState", ShaderResourceView(m_Resources->TemporalReservoirState));
@@ -233,10 +236,11 @@ void ReSTIRDIPass::ExecuteFinalShading(
     PipelineSet& pipelines)
 {
     ComputeShader& shader = *pipelines.Shade;
-    inputs.BindSceneInputs(commandList, shader);
-
     const bool writeReservoirA = (inputs.FrameState.FrameIndex & 1u) == 0u;
+//Modify Begin:2026-07-30 by BestHui
     CommandContext commandContext(commandList);
+    inputs.BindSceneInputs(commandContext, shader);
+//Modify End
     commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
     commandContext.SetShaderResourceView(shader, "ReSTIRDIFinalReservoir", ShaderResourceView(m_Resources->SpatialReservoir));
     commandContext.SetShaderResourceView(shader, "ReSTIRDIFinalReservoirState", ShaderResourceView(m_Resources->SpatialReservoirState));

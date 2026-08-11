@@ -102,6 +102,60 @@ namespace
     }
 //Modify End
 
+//Modify Begin:2026-08-10 by BestHui
+    bool TryGetEnvironmentBoolean(const char* variableName, bool& value)
+    {
+        char* environmentValue = nullptr;
+        size_t environmentValueLength = 0;
+        _dupenv_s(&environmentValue, &environmentValueLength, variableName);
+        if (environmentValue == nullptr)
+        {
+            return false;
+        }
+
+        value = std::strcmp(environmentValue, "0") != 0;
+        std::free(environmentValue);
+        return true;
+    }
+
+    bool TryGetEnvironmentLightingTechnique(
+        const char* variableName,
+        RaytracingDemoLightingTechnique& technique)
+    {
+        char* environmentValue = nullptr;
+        size_t environmentValueLength = 0;
+        _dupenv_s(&environmentValue, &environmentValueLength, variableName);
+        if (environmentValue == nullptr)
+        {
+            return false;
+        }
+
+        const std::string value(environmentValue);
+        std::free(environmentValue);
+        if (value == "none")
+        {
+            technique = RaytracingDemoLightingTechnique::None;
+            return true;
+        }
+        if (value == "pathtracing")
+        {
+            technique = RaytracingDemoLightingTechnique::PathTracing;
+            return true;
+        }
+        if (value == "restirdi")
+        {
+            technique = RaytracingDemoLightingTechnique::ReSTIRDI;
+            return true;
+        }
+        if (value == "restirgi")
+        {
+            technique = RaytracingDemoLightingTechnique::ReSTIRGI;
+            return true;
+        }
+        return false;
+    }
+//Modify End
+
 //Modify Begin:2026-08-03 by BestHui
     std::filesystem::path GetScenePath()
     {
@@ -177,6 +231,10 @@ namespace
 //Modify Begin:2026-08-07 by BestHui
         DLSS,
 //Modify End
+//Modify Begin:2026-07-30 by BestHui
+        MaxBounces,
+        Wait,
+//Modify End
         MatrixCase
     };
 
@@ -194,6 +252,9 @@ namespace
         bool Skybox = false;
         bool Accumulation = false;
         DLSSMode DlssMode = DLSSMode::Disabled;
+//Modify Begin:2026-07-30 by BestHui
+        int MaxBounces = 1;
+//Modify End
         std::string Name;
     };
 
@@ -210,6 +271,8 @@ namespace
             return "pathtracing";
         case RaytracingDemoLightingTechnique::ReSTIRDI:
             return "restirdi";
+        case RaytracingDemoLightingTechnique::ReSTIRGI:
+            return "restirgi";
         case RaytracingDemoLightingTechnique::None:
         default:
             return "none";
@@ -264,6 +327,7 @@ namespace
             const std::vector<RaytracingDemoLightingTechnique> indirectTechniques = {
                 RaytracingDemoLightingTechnique::None,
                 RaytracingDemoLightingTechnique::PathTracing,
+                RaytracingDemoLightingTechnique::ReSTIRGI,
             };
             const std::vector<DLSSMode> dlssModes = {
                 DLSSMode::Disabled,
@@ -290,6 +354,12 @@ namespace
 
                                 for (const RaytracingDemoLightingTechnique indirectLighting : indirectTechniques)
                                 {
+                                    if (indirectLighting == RaytracingDemoLightingTechnique::ReSTIRGI &&
+                                        backend != PathTracingBackend::InlineRayQuery)
+                                    {
+                                        continue;
+                                    }
+
                                     for (const bool asyncCompute : { false, true })
                                     {
                                         if (asyncCompute && backend != PathTracingBackend::InlineRayQuery)
@@ -318,6 +388,9 @@ namespace
                                                         testCase.Skybox = skybox;
                                                         testCase.Accumulation = accumulation;
                                                         testCase.DlssMode = dlssMode;
+//Modify Begin:2026-07-30 by BestHui
+                                                        testCase.MaxBounces = indirectLighting == RaytracingDemoLightingTechnique::None ? 1 : 3;
+//Modify End
                                                         testCase.Name =
                                                             "matrix#" + std::to_string(caseIndex++) +
                                                             " backend=" + GetRuntimeAutomationBackendName(backend) +
@@ -330,6 +403,9 @@ namespace
                                                             " stress=" + std::to_string(stressSpheres) +
                                                             " skybox=" + std::to_string(skybox) +
                                                             " accumulation=" + std::to_string(accumulation) +
+//Modify Begin:2026-07-30 by BestHui
+                                                            " bounces=" + std::to_string(testCase.MaxBounces) +
+//Modify End
                                                             " dlss=" + GetRuntimeAutomationDLSSModeName(dlssMode);
                                                         result.push_back(std::move(testCase));
                                                     }
@@ -381,12 +457,20 @@ namespace
             makeStep(Action::DirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::PathTracing), "direct=pathtracing"),
             makeStep(Action::PathTracingBackend, static_cast<uint32_t>(PathTracingBackend::ShaderTableDxr), "backend=dxr"),
             makeStep(Action::PathTracingBackend, static_cast<uint32_t>(PathTracingBackend::InlineRayQuery), "backend=inline"),
+//Modify Begin:2026-07-30 by BestHui
+            makeStep(Action::MaxBounces, 3u, "bounces=3"),
+//Modify End
             makeStep(Action::IndirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::PathTracing), "indirect=pathtracing"),
+            makeStep(Action::IndirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::ReSTIRGI), "indirect=restirgi"),
+            makeStep(Action::DumpTiming, 1u, "timingdump=restirgi"),
             makeStep(Action::ParallelDirectCommandRecording, 0u, "parallelrecording=0"),
             makeStep(Action::ParallelDirectCommandRecording, 1u, "parallelrecording=1"),
             makeStep(Action::AsyncCompute, 1u, "async=1"),
             makeStep(Action::AsyncCompute, 0u, "async=0"),
             makeStep(Action::IndirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::None), "indirect=none"),
+//Modify Begin:2026-07-30 by BestHui
+            makeStep(Action::MaxBounces, 1u, "bounces=1"),
+//Modify End
             makeStep(Action::DirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::ReSTIRDI), "direct=restirdi"),
             makeStep(Action::Skybox, 0u, "skybox=0"),
             makeStep(Action::Skybox, 1u, "skybox=1"),
@@ -401,6 +485,27 @@ namespace
             makeStep(Action::StressSpheres, 1u, "stress=1"),
             makeStep(Action::StressSpheres, 0u, "stress=0")
         };
+//Modify Begin:2026-07-30 by BestHui
+        testSuites.ReSTIRGIProfile = {
+            makeStep(Action::GpuTiming, 1u, "timing=1"),
+            makeStep(Action::TimingCapture, 1u, "timingcapture=1"),
+            makeStep(Action::DirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::None), "direct=none"),
+            makeStep(Action::IndirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::ReSTIRGI), "indirect=restirgi"),
+            makeStep(Action::MaxBounces, 2u, "bounces=2"),
+            makeStep(Action::Wait, 0u, "warmup-bounces2=1"),
+            makeStep(Action::Wait, 0u, "warmup-bounces2=2"),
+            makeStep(Action::Wait, 0u, "warmup-bounces2=3"),
+            makeStep(Action::Wait, 0u, "warmup-bounces2=4"),
+            makeStep(Action::DumpTiming, 1u, "timingdump=bounces2"),
+            makeStep(Action::MaxBounces, 5u, "bounces=5"),
+            makeStep(Action::Wait, 0u, "warmup-bounces5=1"),
+            makeStep(Action::Wait, 0u, "warmup-bounces5=2"),
+            makeStep(Action::Wait, 0u, "warmup-bounces5=3"),
+            makeStep(Action::Wait, 0u, "warmup-bounces5=4"),
+            makeStep(Action::DumpTiming, 1u, "timingdump=bounces5"),
+            makeStep(Action::GpuTiming, 0u, "timing=0"),
+        };
+//Modify End
         const auto& matrixCases = GetRuntimeAutomationMatrixCases();
         testSuites.Matrix.reserve(matrixCases.size());
         for (uint32_t caseIndex = 0; caseIndex < matrixCases.size(); ++caseIndex)
@@ -466,6 +571,18 @@ RaytracingDemo::RaytracingDemo(const std::wstring& name, const int width, const 
 //Modify End
         })
 //Modify End
+//Modify Begin:2026-08-10 by BestHui
+    , m_IndirectLightingReSTIRGIPass(
+        m_FrameworkDeviceContext,
+        {
+            L"Demos/RaytracingDemo/shaders/ReSTIRGI/ReSTIRGI.Initial.cs.hlsl",
+            L"Demos/RaytracingDemo/shaders/ReSTIRGI/ReSTIRGI.Temporal.cs.hlsl",
+            L"Demos/RaytracingDemo/shaders/ReSTIRGI/ReSTIRGI.Spatial.cs.hlsl",
+            L"Demos/RaytracingDemo/shaders/ReSTIRGI/ReSTIRGI.Shade.cs.hlsl",
+            { { "RAYTRACING_DEMO_SOFT_SHADOWS", "1" } },
+            "RAYTRACING_DEMO_ENVIRONMENT_PROJECTION",
+        })
+//Modify End
 //Modify Begin:2026-07-30 by BestHui
     , m_CudaBloom(m_FrameworkDeviceContext)
     , m_SceneResources(m_FrameworkDeviceContext.GetDevice())
@@ -493,6 +610,44 @@ RaytracingDemo::RaytracingDemo(const std::wstring& name, const int width, const 
         m_PathTracingBackend = PathTracingBackend::ShaderTableDxr;
     }
     std::free(mode);
+
+//Modify Begin:2026-08-10 by BestHui
+    char* bounceCount = nullptr;
+    size_t bounceCountLength = 0;
+    _dupenv_s(&bounceCount, &bounceCountLength, "RAYTRACING_DEMO_BOUNCES");
+    if (bounceCount != nullptr)
+    {
+        char* parseEnd = nullptr;
+        const long parsedBounces = std::strtol(bounceCount, &parseEnd, 10);
+        if (parseEnd != bounceCount && *parseEnd == '\0')
+        {
+            m_MaxBounces = std::clamp(static_cast<int>(parsedBounces), 1, 5);
+        }
+    }
+    std::free(bounceCount);
+//Modify End
+
+//Modify Begin:2026-08-10 by BestHui
+    TryGetEnvironmentLightingTechnique("RAYTRACING_DEMO_DIRECT_LIGHTING", m_DirectLightingTechnique);
+    TryGetEnvironmentLightingTechnique("RAYTRACING_DEMO_INDIRECT_LIGHTING", m_IndirectLightingTechnique);
+    TryGetEnvironmentBoolean("RAYTRACING_DEMO_ACCUMULATION", m_AccumulationEnabled);
+
+    ReSTIRGISettings restirGISettings = m_IndirectLightingReSTIRGI.GetSettings();
+    bool restirGISettingsOverridden = false;
+    restirGISettingsOverridden |= TryGetEnvironmentBoolean(
+        "RAYTRACING_DEMO_RESTIRGI_TEMPORAL",
+        restirGISettings.EnableTemporalResampling);
+    restirGISettingsOverridden |= TryGetEnvironmentBoolean(
+        "RAYTRACING_DEMO_RESTIRGI_SPATIAL",
+        restirGISettings.EnableSpatialResampling);
+    restirGISettingsOverridden |= TryGetEnvironmentBoolean(
+        "RAYTRACING_DEMO_RESTIRGI_SPATIAL_VISIBILITY",
+        restirGISettings.EnableSpatialVisibility);
+    if (restirGISettingsOverridden)
+    {
+        m_IndirectLightingReSTIRGI.SetSettings(restirGISettings);
+    }
+//Modify End
 
 //Modify Begin:2026-07-30 by BestHui
     char* softShadows = nullptr;
@@ -658,6 +813,27 @@ void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::files
     m_Scene.SetSkybox(sceneSkybox);
 
     m_Lights.CreateFromScene(m_Scene);
+//Modify Begin:2026-08-10 by BestHui
+    bool directionalLightsEnabled = m_Lights.AreDirectionalLightsEnabled();
+    bool pointLightsEnabled = m_Lights.ArePointLightsEnabled();
+    bool areaLightsEnabled = m_Lights.AreAreaLightsEnabled();
+    bool lightGroupsOverridden = false;
+    lightGroupsOverridden |= TryGetEnvironmentBoolean("RAYTRACING_DEMO_DIRECTIONAL_LIGHTS", directionalLightsEnabled);
+    lightGroupsOverridden |= TryGetEnvironmentBoolean("RAYTRACING_DEMO_POINT_LIGHTS", pointLightsEnabled);
+    lightGroupsOverridden |= TryGetEnvironmentBoolean("RAYTRACING_DEMO_AREA_LIGHTS", areaLightsEnabled);
+    if (lightGroupsOverridden)
+    {
+        m_Lights.SetLightGroupSettings(directionalLightsEnabled, pointLightsEnabled, areaLightsEnabled);
+    }
+
+    bool skyLightEnabled = true;
+    if (TryGetEnvironmentBoolean("RAYTRACING_DEMO_SKY_LIGHT", skyLightEnabled) && !skyLightEnabled)
+    {
+        SkyLightData skyLight = m_Lights.GetSkyLight();
+        skyLight.ColorAndIntensity.w = 0.0f;
+        m_Lights.SetSkyLight(skyLight);
+    }
+//Modify End
 //Modify Begin:2026-08-06 by BestHui
     m_Lights.SetEmissiveMeshSurfaceEmitters(m_SceneResources.CollectEmissiveMeshSurfaceEmitters());
 //Modify End
@@ -749,6 +925,9 @@ void RaytracingDemo::ApplyRuntimeAutomationMatrixCase(const uint32_t caseIndex)
     m_SkyboxEnabled = testCase.Skybox;
     m_AccumulationEnabled = testCase.Accumulation;
     m_DLSS.SetMode(testCase.DlssMode);
+//Modify Begin:2026-07-30 by BestHui
+    m_MaxBounces = testCase.MaxBounces;
+//Modify End
     m_DebugMeshletClusters = false;
     m_DebugLightingTextureTarget = 0;
     m_DebugTextureTarget = 0;
@@ -799,6 +978,16 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         m_IndirectLightingTechnique = static_cast<RaytracingDemoLightingTechnique>(value);
         ResetAccumulation();
         break;
+//Modify Begin:2026-07-30 by BestHui
+    case RuntimeAutomationAction::MaxBounces:
+        m_MaxBounces = std::clamp(static_cast<int>(value), 1, 5);
+        ResetAccumulation();
+        break;
+//Modify End
+//Modify Begin:2026-07-30 by BestHui
+    case RuntimeAutomationAction::Wait:
+        break;
+//Modify End
     case RuntimeAutomationAction::AsyncCompute:
         if (m_PathTracingBackend == PathTracingBackend::InlineRayQuery)
         {
@@ -1242,6 +1431,18 @@ void RaytracingDemo::EnsureRayTracingPipelines()
         m_SoftShadowsEnabled,
         static_cast<uint32_t>(layout.EnvironmentProjection));
 //Modify End
+//Modify Begin:2026-08-10 by BestHui
+    const bool restirGIActive =
+        m_PathTracingBackend == PathTracingBackend::InlineRayQuery &&
+        m_IndirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRGI &&
+        m_MaxBounces > 1;
+    if (restirGIActive)
+    {
+        m_IndirectLightingReSTIRGIPass.EnsurePipelines(
+            m_SoftShadowsEnabled,
+            static_cast<uint32_t>(layout.EnvironmentProjection));
+    }
+//Modify End
     if (m_SceneResources.GetRayTracingAccelerationStructure().GetInstanceCount() > 0)
     {
         BindRayTracingShaderResources();
@@ -1264,10 +1465,30 @@ void RaytracingDemo::PrewarmRuntimeShadowVariants()
     m_DirectLightingReSTIRDIPass.EnsurePipelines(
         alternateShadowMode == PathTracingShadowMode::SoftShadows,
         static_cast<uint32_t>(layout.EnvironmentProjection));
+//Modify Begin:2026-08-10 by BestHui
+    const bool restirGIActive =
+        m_PathTracingBackend == PathTracingBackend::InlineRayQuery &&
+        m_IndirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRGI &&
+        m_MaxBounces > 1;
+    if (restirGIActive)
+    {
+        m_IndirectLightingReSTIRGIPass.EnsurePipelines(
+            alternateShadowMode == PathTracingShadowMode::SoftShadows,
+            static_cast<uint32_t>(layout.EnvironmentProjection));
+    }
+//Modify End
     m_PathTracingPipelines.EnsurePipelines(m_PathTracingBackend, currentShadowMode, layout);
     m_DirectLightingReSTIRDIPass.EnsurePipelines(
         currentShadowMode == PathTracingShadowMode::SoftShadows,
         static_cast<uint32_t>(layout.EnvironmentProjection));
+//Modify Begin:2026-08-10 by BestHui
+    if (restirGIActive)
+    {
+        m_IndirectLightingReSTIRGIPass.EnsurePipelines(
+            currentShadowMode == PathTracingShadowMode::SoftShadows,
+            static_cast<uint32_t>(layout.EnvironmentProjection));
+    }
+//Modify End
     BindRayTracingShaderResources();
 }
 //Modify End
@@ -1347,6 +1568,10 @@ void RaytracingDemo::RebuildRenderGraph()
 //Modify Begin:2026-08-06 by BestHui
     m_RenderGraphDirectLightingTechnique = m_DirectLightingTechnique;
 //Modify End
+//Modify Begin:2026-08-10 by BestHui
+    m_RenderGraphIndirectLightingTechnique = m_IndirectLightingTechnique;
+    m_RenderGraphIndirectLightingEnabled = m_MaxBounces > 1;
+//Modify End
 //Modify Begin:2026-07-30 by BestHui
     m_RenderGraphLightingDebugTextureTarget = m_DebugLightingTextureTarget;
 //Modify End
@@ -1375,6 +1600,10 @@ void RaytracingDemo::EnsureRenderGraphTopology()
 //Modify Begin:2026-08-06 by BestHui
         || m_RenderGraphDirectLightingTechnique != m_DirectLightingTechnique
 //Modify End
+//Modify Begin:2026-08-10 by BestHui
+        || m_RenderGraphIndirectLightingTechnique != m_IndirectLightingTechnique
+        || m_RenderGraphIndirectLightingEnabled != (m_MaxBounces > 1)
+//Modify End
 //Modify Begin:2026-07-30 by BestHui
         || m_RenderGraphLightingDebugTextureTarget != m_DebugLightingTextureTarget
 //Modify End
@@ -1393,13 +1622,16 @@ void RaytracingDemo::EnsureRenderGraphTopology()
 }
 //Modify End
 
-void RaytracingDemo::ResetAccumulation(bool resetDenoiserHistory, bool resetReSTIRDIHistory)
+void RaytracingDemo::ResetAccumulation(bool resetDenoiserHistory, bool resetReSTIRHistory)
 {
     m_AccumulationFrameIndex = 0;
 //Modify Begin:2026-08-05 by BestHui
-    if (resetReSTIRDIHistory)
+    if (resetReSTIRHistory)
     {
         m_ReSTIRDIHistoryValid = false;
+//Modify Begin:2026-08-10 by BestHui
+        m_ReSTIRGIHistoryValid = false;
+//Modify End
     }
 //Modify End
     if (resetDenoiserHistory)
@@ -1464,6 +1696,10 @@ RaytracingDemoPassResources RaytracingDemo::CreatePassResources()
 //Modify Begin:2026-07-30 by BestHui
         m_DirectLightingReSTIRDIPass,
 //Modify End
+//Modify End
+//Modify Begin:2026-08-10 by BestHui
+        m_IndirectLightingReSTIRGI,
+        m_IndirectLightingReSTIRGIPass,
 //Modify End
 //Modify Begin:2026-08-07 by BestHui
         m_DLSS,
@@ -1544,6 +1780,9 @@ void RaytracingDemo::UpdateRenderGraphFrameState()
     state.FrameIndex = m_FrameIndex;
     state.AccumulationFrameIndex = m_AccumulationFrameIndex;
     state.ReSTIRDIHistoryValid = m_ReSTIRDIHistoryValid;
+//Modify Begin:2026-08-10 by BestHui
+    state.ReSTIRGIHistoryValid = m_ReSTIRGIHistoryValid;
+//Modify End
     state.HasPreviousViewProjection = m_HasPreviousViewProjection;
     state.PreviousViewProjection = m_PreviousViewProjection;
 }
@@ -1741,6 +1980,12 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     m_ReSTIRDIHistoryValid =
         m_PathTracingBackend == PathTracingBackend::InlineRayQuery &&
         m_DirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRDI;
+//Modify End
+//Modify Begin:2026-08-10 by BestHui
+    m_ReSTIRGIHistoryValid =
+        m_PathTracingBackend == PathTracingBackend::InlineRayQuery &&
+        m_IndirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRGI &&
+        m_MaxBounces > 1;
 //Modify End
 
 //Modify Begin:2026-08-07 by BestHui

@@ -53,6 +53,9 @@ set(SOURCE_FILES
         src/PathTracing/PathTracingPipelineController.cpp
         src/Passes/PathTracingPass.cpp
         src/Passes/ReSTIRDIPasses.cpp
+        # Modify Begin:2026-08-10 by BestHui
+        src/Passes/ReSTIRGIPasses.cpp
+        # Modify End
         # Modify Begin:2026-08-07 by BestHui
         src/Passes/DLSSPass.cpp
         src/Passes/DLSSRayReconstructionPreparationPass.cpp
@@ -137,6 +140,15 @@ set(RESTIR_DI_CORE_SHADER_FILES
         ../../Framework/shaders/ReSTIRDI/ReSTIRDI.Shade.cs.hlsl
         )
 
+# Modify Begin:2026-08-10 by BestHui
+set(RESTIR_GI_CORE_SHADER_FILES
+        ../../Framework/shaders/ReSTIRGI/ReSTIRGI.Initial.cs.hlsl
+        ../../Framework/shaders/ReSTIRGI/ReSTIRGI.Temporal.cs.hlsl
+        ../../Framework/shaders/ReSTIRGI/ReSTIRGI.Spatial.cs.hlsl
+        ../../Framework/shaders/ReSTIRGI/ReSTIRGI.Shade.cs.hlsl
+        )
+# Modify End
+
 # Modify Begin:2026-08-06 by BestHui
 set(RESTIR_DI_SHADER_FILES
         shaders/ReSTIRDI/ReSTIRDI.RIS.cs.hlsl
@@ -151,11 +163,28 @@ list(APPEND SHADERS_HEADER_FILES
 set_source_files_properties(${RESTIR_DI_CORE_SHADER_FILES} PROPERTIES HEADER_FILE_ONLY TRUE)
 # Modify End
 
+# Modify Begin:2026-08-10 by BestHui
+set(RESTIR_GI_SHADER_FILES
+        shaders/ReSTIRGI/ReSTIRGI.Initial.cs.hlsl
+        shaders/ReSTIRGI/ReSTIRGI.Temporal.cs.hlsl
+        shaders/ReSTIRGI/ReSTIRGI.Spatial.cs.hlsl
+        shaders/ReSTIRGI/ReSTIRGI.Shade.cs.hlsl
+        )
+list(APPEND SHADERS_HEADER_FILES
+        ${RESTIR_GI_CORE_SHADER_FILES}
+        shaders/ReSTIRGI/ReSTIRGISceneAdapter.hlsli
+        )
+set_source_files_properties(${RESTIR_GI_CORE_SHADER_FILES} PROPERTIES HEADER_FILE_ONLY TRUE)
+# Modify End
+
 set(SHADER_FILES_COMPUTE
         shaders/GBuffer/MeshletCull.cs.hlsl
         shaders/PathTracing/DirectLighting.cs.hlsl
         # Modify Begin:2026-08-05 by BestHui
         ${RESTIR_DI_SHADER_FILES}
+        # Modify End
+        # Modify Begin:2026-08-10 by BestHui
+        ${RESTIR_GI_SHADER_FILES}
         # Modify End
         shaders/PathTracing/IndirectLighting.cs.hlsl
         # Modify Begin:2026-07-30 by BestHui
@@ -197,8 +226,14 @@ set(DEMO_SHADER_FILES
         ${CUDA_SHADER_FILES}
         )
 list(REMOVE_ITEM DEMO_SHADER_FILES ${RESTIR_DI_CORE_SHADER_FILES})
+# Modify Begin:2026-08-10 by BestHui
+list(REMOVE_ITEM DEMO_SHADER_FILES ${RESTIR_GI_CORE_SHADER_FILES})
+# Modify End
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/shaders" PREFIX "shaders" FILES ${DEMO_SHADER_FILES})
 source_group(TREE "${CMAKE_SOURCE_DIR}/Framework/shaders/ReSTIRDI" PREFIX "Framework\\ReSTIRDI" FILES ${RESTIR_DI_CORE_SHADER_FILES})
+# Modify Begin:2026-08-10 by BestHui
+source_group(TREE "${CMAKE_SOURCE_DIR}/Framework/shaders/ReSTIRGI" PREFIX "Framework\\ReSTIRGI" FILES ${RESTIR_GI_CORE_SHADER_FILES})
+# Modify End
 # Modify End
 
 set_source_files_properties(${SHADER_FILES_RAYTRACING} PROPERTIES HEADER_FILE_ONLY TRUE)

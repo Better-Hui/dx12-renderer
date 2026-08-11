@@ -19,6 +19,7 @@ The upstream renderer remains the foundation. This fork adds framework and sampl
 | RaytracingDemo | The maintained integration sample. It demonstrates this repository's framework APIs rather than treating raw D3D12 calls as normal sample-facing code. |
 | Ray tracing | Runtime-selectable inline ray-query and shader-table DXR paths sharing the same scene/resource model. |
 | ReSTIR DI | Inline ray-query direct-lighting sample with RIS, temporal/boiling/spatial resampling, stage-specific visibility and bias-correction settings, and final shading. |
+| ReSTIR GI | Inline ray-query one-bounce indirect-lighting sample with initial BSDF sampling, temporal reuse, spatial reuse, Jacobian correction, and final visibility/shading. |
 | Scene workflow | Shared `Scene` data, Unity/JSON import, PBR material adaptation, emissive surface emitters, and incremental runtime instance add/remove used by the stress-scene controls. |
 | Meshlets | Meshlet generation/GPU resources, task-shader and compute-indirect GBuffer backends, and incremental instance-buffer updates. |
 | Denoising and interop | NRD/SVGF sample paths, RenderGraph-aware NRD resource-state handoff, and CUDA Bloom using D3D12 shared resources with external fence/semaphore synchronization. |
@@ -83,7 +84,7 @@ const Scene& scene = result.SceneData;
 | --- | --- |
 | Base resources | GBuffer-style normal/depth/material data, motion/world-position data, history/display resources, and raster or meshlet GBuffer generation. |
 | Ray tracing | Inline ray-query compute shaders and shader-table DXR. |
-| Lighting | Separate direct and indirect lighting passes followed by composition. |
+| Lighting | Separate direct and indirect lighting producers followed by composition, including ReSTIR DI for direct lighting and ReSTIR GI for inline-ray-query indirect lighting. |
 | Soft shadows | Precompiled hard/soft shader variants for directional and point lights; area lights retain their sampled emitter surface. |
 | Denoising | Optional NRD or SVGF integration. |
 | DLSS and Streamline | Experimental NGX DLSS SR/DLAA plus Streamline RR/FG resource preparation. Capability queries and startup configuration decide whether a path is available. |
@@ -195,6 +196,7 @@ The startup compiler currently covers the shaders directly owned by `RaytracingD
 - JSON scene import exists, but the stress-test spheres are still defined by sample C++ rather than scene data. They are enabled by default and can be added or removed incrementally from the runtime UI.
 - Meshlet rendering is an experimental GBuffer backend, not a complete visibility/streaming system or a claim of optimal meshlet performance.
 - ReSTIR DI is an experimental inline-ray-query direct-lighting sample. Its light sampling, emissive surface emitters, temporal/spatial reuse, and visibility-test options continue to evolve; image quality, stability, and performance have not been accepted as an RTXDI-equivalent implementation.
+- ReSTIR GI is an experimental inline-ray-query indirect-lighting sample adapted from the ReSTIR GI data flow in [DQLin/ReSTIR_PT](https://github.com/DQLin/ReSTIR_PT). It currently targets one-bounce transport, uses persistent packed reservoirs, and has build/automation coverage only; visual quality, temporal stability, memory use, and performance still require target-hardware validation.
 - Soft shadows currently use a fixed four-sample variant. Directional lights use angular radius, point lights use source radius, and adaptive sampling or quality presets are not implemented yet.
 - Shader variants compile only during startup/pipeline creation. Runtime source hot reload, background compilation, and a project-wide variant manifest are not implemented.
 - **DLSS, Ray Reconstruction, and Frame Generation are experimental and not validated for delivery.** Native NGX SR/DLAA is wired into the sample, and Streamline RR/FG integration is under active evaluation. RR/FG require an application restart with `--streamline-interposer`; this opt-in keeps the normal D3D12 device, queues, and swapchain free of Streamline proxies. The implementation has build/startup and automation safety coverage only. It has not completed image-quality, stability, timing, or performance validation on supported RR/FG hardware, and unknown functional or integration issues may remain. Runtime capability queries are authoritative: on the current RTX 2060 development machine, FG is unsupported by the adapter and RR reports unavailable for the active adapter. Do not treat any DLSS mode in this repository as guaranteed usable or production-ready.

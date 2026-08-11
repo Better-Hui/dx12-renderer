@@ -55,6 +55,7 @@ DX12Library
 ### 通用渲染模块
 
 - `ReSTIRDIPass` 拥有 ReSTIR DI 的 history、pipeline variant，以及 RIS、temporal、spatial、final shading 的 dispatch 序列。调用方提供输出、motion vector、frame constant 和场景绑定回调。
+- `ReSTIRGIPass` 拥有 packed GI reservoir、pipeline variant，以及 initial sampling、temporal、spatial、final shading 的 dispatch 序列。调用方提供间接光输出、motion vector、frame constant 和 Inline Ray Query 场景绑定回调。
 - `Taa`、`NRD`、`SVGF` 是抗锯齿和降噪模块；NRD 会通过 `RenderContext` 把 native 状态变化回报给 RenderGraph。
 - `DLSS` 管理 Native NGX DLSS SR/DLAA 与实验性 Streamline RR/FG 的边界。RR/FG 需要启动期 interposer，尚未完成支持硬件上的完整验证。
 - CUDA interop 封装 shared D3D12 resource 与 external fence/semaphore 同步；当前 CUDA Bloom 使用此路径。
@@ -112,12 +113,14 @@ Unity YAML 或 JSON
 ### 已演示的渲染路径
 
 - GBuffer：普通 raster、task/mesh shader，或 compute cull + `ExecuteIndirect`。
-- 直接光：`None`、path tracing 或 inline ray-query ReSTIR DI；间接光：`None` 或 path tracing。
+- 直接光：`None`、path tracing 或 inline ray-query ReSTIR DI；间接光：`None`、path tracing 或 inline ray-query ReSTIR GI。
 - shader-table DXR 与 inline ray query 共用同一份 scene geometry、material、bindless texture、light buffer 和 acceleration structure。
 - 平行光、点光、矩形面积光与自发光 surface emitter 都通过 GPU buffer 上传。平行光和点光的软阴影使用预编译 shader variant；矩形面积光直接采样发光面。
 - 可选 NRD/SVGF、TAA、skybox、CUDA Bloom、Native DLSS SR/DLAA，以及实验性 Streamline RR/FG 围绕核心光照输出组合。
 
 ReSTIR DI 在图中只有一个 `ReSTIR DI` pass。该 pass 调用 Framework 的 `ReSTIRDIPass::Execute`，在同一个 command-list scope 内依次录制 RIS、temporal（其中 shader 内包含 boiling filter）、spatial、final visibility/shading。这样 history 和 pipeline 归 Framework 所有，而 demo 仍负责图级数据流和 scene binding。
+
+ReSTIR GI 同样只作为一个 `ReSTIR GI` 间接光 producer 进入图。它调用 Framework 的 `ReSTIRGIPass::Execute`，在同一个 command-list scope 内依次录制初始 BSDF 采样、temporal reservoir reuse、spatial reservoir reuse 和最终可见性/着色。Demo adapter 提供 GBuffer、TLAS、bindless scene data、直接光采样、自发光和环境光契约；该路径当前只支持 Inline Ray Query。
 
 ### 调试和自动化
 
@@ -132,6 +135,6 @@ ReSTIR DI 在图中只有一个 `ReSTIR DI` pass。该 pass 调用 Framework 的
 - Async Compute 只有依赖和硬件允许 overlap 时才可能降低 GPU wall time；额外 fence、cache 与带宽竞争也可能令它变慢。
 - Meshlet 是实验性的 GBuffer backend，不是完整的 visibility、streaming、residency 或 LOD 系统。
 - 场景导入有意保持有限：完整 prefab/nested prefab、skinned mesh、`LODGroup`、asset database live sync 与完整非 PBR material 都不在当前范围内。
-- ReSTIR DI、CUDA Bloom、DLSS SR/DLAA、Streamline RR/FG、Unity interop 都是工程实验；用于交付前必须逐硬件完成正确性、画质、稳定性和性能验证。
+- ReSTIR DI/GI、CUDA Bloom、DLSS SR/DLAA、Streamline RR/FG、Unity interop 都是工程实验；用于交付前必须逐硬件完成正确性、画质、稳定性、显存和性能验证。
 
 使用示例和更细的功能边界见 [RaytracingDemo API Guide](RaytracingSampleApi.md)。

@@ -1,31 +1,28 @@
-# ReSTIR GI integration plan
+# ReSTIR GI integration status
 
 ## Reference scope
 
-The reference repository at C:\Users\minghuidai\Desktop\coderef\ReSTIRGI is a 2023 Mitsuba3 and Dr.Jit teaching implementation. It is not a production real-time renderer. It is valuable for validating the algorithmic data flow, but its author explicitly states that the Jacobian bias correction is incomplete. Do not copy that implementation line by line as final renderer code.
+The reference repository is [DQLin/ReSTIR_PT](https://github.com/DQLin/ReSTIR_PT), checked out locally at `C:\Users\minghuidai\Desktop\coderef\ReSTIRPT`. Its `Source/Falcor/Experimental/ScreenSpaceReSTIR/GIResampling.cs.slang` provides the ReSTIR GI reservoir data flow used as the algorithmic reference. The repository also contains the broader ReSTIR PT research implementation; this renderer currently implements only the one-bounce ReSTIR GI subset.
 
 ## Algorithmic flow
 
 The reference separates ReSTIR GI into four logical stages:
 
-1. Initial sampling traces the primary visible point, samples a BSDF or hemisphere direction, traces the secondary point, and stores radiance plus proposal PDF.
+1. Initial sampling traces the primary visible point, samples a BSDF or hemisphere direction, traces the secondary point, and stores its emitted radiance, direct-light estimate, bounded continuation-path radiance, and proposal PDF.
 2. Temporal resampling reprojects the previous reservoir, rejects dissimilar primary surfaces, merges the previous reservoir, and clamps M to a bounded history length.
 3. Spatial resampling merges neighboring reservoirs. It needs donor primary point and normal plus selected secondary point and normal for Jacobian and visibility correction.
 4. Final shading evaluates the current-surface BSDF against the selected secondary sample, applies the reservoir contribution weight, and adds primary-surface emission.
 
 The reference reservoir stores the selected sample, accumulated weight, contribution weight W, and sample count M. Its selected GI sample contains primary and secondary positions/normals, radiance, proposal PDF, and a validity flag.
 
-## Framework API boundary
+## Implemented Framework API boundary
 
-The future renderer API should mirror ReSTIRDIPass, not the Python integrator:
+The renderer now mirrors `ReSTIRDIPass`, not the Falcor pass API:
 
     struct ReSTIRGIExecutionInputs
     {
-        GBufferInputs Surface;
-        std::shared_ptr<RayTracingAccelerationStructure> TopLevelAS;
-        std::shared_ptr<Texture> DirectLighting;
         std::shared_ptr<Texture> IndirectLighting;
-        std::shared_ptr<Texture> MotionVectors;
+        std::shared_ptr<Texture> MotionVector;
         ReSTIRGIFrameState FrameState;
         std::function<void(CommandList&, ComputeShader&)> BindSceneInputs;
     };
@@ -36,10 +33,10 @@ The future renderer API should mirror ReSTIRDIPass, not the Python integrator:
         void Execute(CommandList&, const ReSTIRGIExecutionInputs&);
     };
 
-ReSTIRGIPass owns ping-pong reservoirs, reprojection metadata, intermediate resources, and shader variants. The demo provides only the GBuffer, TLAS, bindless scene adapter, light and emission domain, and output resource. The RenderGraph constructs exactly one indirect-lighting producer: PathTracing or ReSTIR GI, never two runtime-gated writers of the same output.
+`ReSTIRGIPass` owns `Initial`, `Temporal`, and persistent `History` packed reservoir sets, plus the six hard/soft-shadow and environment-projection shader-variant combinations. The demo provides only the GBuffer, TLAS, bindless scene adapter, direct-light/emission/environment evaluation, and output resource. The RenderGraph constructs exactly one indirect-lighting producer: PathTracing, ReSTIR GI, or a disabled producer; there are never two runtime-gated writers of the same output.
 
-## Implementation milestones
+## Current boundaries
 
-The first implementation should target one-bounce GI with RIS, temporal reuse, spatial reuse, and final shading. Previous-frame TLAS support, multi-bounce reuse, exact Jacobian correction, and configurable visibility/bias policies are separate correctness milestones.
+The implemented path resamples one secondary transport vertex. Its stored radiance uses the same bounded continuation estimator as ordinary indirect path tracing, so `Camera_MaxBounces` affects the gather-path radiance without changing the reservoir representation. Previous-frame TLAS, reuse of multi-bounce path segments, ReSTIR-N, full source-equivalent unbiased spatial correction, and final quality/performance acceptance remain separate milestones. The packed resources use approximately 144 bytes per pixel before allocator overhead, so memory cost must be measured before enabling it at high resolution.
 
 The GI reservoir cannot reuse the current DI light-index-only reservoir format. It must represent a secondary transport sample and its proposal. Dynamic geometry must not be hidden behind an unconditional history reset; invalidation and GPU resource retirement need explicit lifetime rules.

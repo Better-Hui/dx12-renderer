@@ -8,14 +8,14 @@
 #include "../PathTracing/PathTracingShared.hlsli"
 
 #define ReSTIRDI_Surface SurfaceData
-#define ReSTIRDI_LightSample ReSTIRDIDirectLightSample
+#define ReSTIRDI_LightSample PathTracingDirectLightSample
 #define ReSTIRDI_LoadSurface LoadGBufferSurface
 #define ReSTIRDI_GetLightCount GetReSTIRDILightCount
 //Modify Begin:2026-08-06 by BestHui
-#define ReSTIRDI_SampleLightIndex SampleReSTIRDIDirectLightIndex
+#define ReSTIRDI_SampleLightIndex SamplePathTracingDirectLightIndex
 //Modify End
-#define ReSTIRDI_SampleLight SampleReSTIRDIDirectLight
-#define ReSTIRDI_TestVisibility IsReSTIRDIDirectLightSampleVisible
+#define ReSTIRDI_SampleLight SamplePathTracingDirectLight
+#define ReSTIRDI_TestVisibility IsPathTracingDirectLightSampleVisible
 #define ReSTIRDI_Luminance Luminance
 #define ReSTIRDI_Random01 Random01
 #define ReSTIRDI_InitializeRandomState InitializeRandomState

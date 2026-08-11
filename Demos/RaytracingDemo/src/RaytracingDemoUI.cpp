@@ -308,13 +308,154 @@ void RaytracingDemo::OnImGui()
             ResetAccumulation();
         }
     }
-    const char* indirectLightingTechniqueNames[] = { "None", "PathTracing" };
-    int indirectLightingTechnique = static_cast<int>(m_IndirectLightingTechnique);
+//Modify Begin:2026-08-10 by BestHui
+    const char* indirectLightingTechniqueNames[] = { "None", "PathTracing", "ReSTIR GI" };
+//Modify Begin:2026-07-30 by BestHui
+    int indirectLightingTechnique = 0;
+    switch (m_IndirectLightingTechnique)
+    {
+    case RaytracingDemoLightingTechnique::PathTracing:
+        indirectLightingTechnique = 1;
+        break;
+    case RaytracingDemoLightingTechnique::ReSTIRGI:
+        indirectLightingTechnique = 2;
+        break;
+    case RaytracingDemoLightingTechnique::None:
+    default:
+        break;
+    }
+//Modify End
     if (ImGui::Combo("Indirect Lighting", &indirectLightingTechnique, indirectLightingTechniqueNames, IM_ARRAYSIZE(indirectLightingTechniqueNames)))
     {
-        m_IndirectLightingTechnique = static_cast<RaytracingDemoLightingTechnique>(indirectLightingTechnique);
+//Modify Begin:2026-07-30 by BestHui
+        switch (indirectLightingTechnique)
+        {
+        case 1:
+            m_IndirectLightingTechnique = RaytracingDemoLightingTechnique::PathTracing;
+            break;
+        case 2:
+            m_IndirectLightingTechnique = RaytracingDemoLightingTechnique::ReSTIRGI;
+            break;
+        case 0:
+        default:
+            m_IndirectLightingTechnique = RaytracingDemoLightingTechnique::None;
+            break;
+        }
+//Modify End
         ResetAccumulation();
     }
+    if (m_IndirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRGI &&
+        m_PathTracingBackend != PathTracingBackend::InlineRayQuery)
+    {
+        ImGui::TextDisabled("ReSTIR GI currently requires Inline Ray Query.");
+    }
+    else if (m_IndirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRGI &&
+        ImGui::CollapsingHeader("ReSTIR GI Settings"))
+    {
+        ReSTIRGISettings restirSettings = m_IndirectLightingReSTIRGI.GetSettings();
+//Modify Begin:2026-07-30 by BestHui
+        int initialCandidateCount = static_cast<int>(restirSettings.InitialCandidateCount);
+//Modify End
+        int temporalMaxHistoryLength = static_cast<int>(restirSettings.TemporalMaxHistoryLength);
+        int spatialMaxHistoryLength = static_cast<int>(restirSettings.SpatialMaxHistoryLength);
+        int maxSampleAge = static_cast<int>(restirSettings.MaxSampleAge);
+        int spatialNeighborCount = static_cast<int>(restirSettings.SpatialNeighborCount);
+        bool settingsChanged = false;
+
+//Modify Begin:2026-07-30 by BestHui
+        settingsChanged |= ImGui::DragInt("GI Initial Candidates", &initialCandidateCount, 1.0f, 1, 32);
+//Modify End
+        if (ImGui::CollapsingHeader("Temporal Resampling"))
+        {
+            settingsChanged |= ImGui::Checkbox(
+                "Enable GI Temporal Resampling",
+                &restirSettings.EnableTemporalResampling);
+            settingsChanged |= ImGui::Checkbox(
+                "Enable GI Temporal Jacobian",
+                &restirSettings.EnableTemporalJacobian);
+            settingsChanged |= ImGui::DragInt(
+                "GI Temporal Max History",
+                &temporalMaxHistoryLength,
+                1.0f,
+                1,
+                256);
+            settingsChanged |= ImGui::DragInt("GI Max Sample Age", &maxSampleAge, 1.0f, 1, 256);
+            settingsChanged |= ImGui::SliderFloat(
+                "GI Temporal Normal Threshold",
+                &restirSettings.TemporalNormalSimilarityThreshold,
+                -1.0f,
+                1.0f);
+            settingsChanged |= ImGui::SliderFloat(
+                "GI Temporal Position Threshold",
+                &restirSettings.TemporalPositionSimilarityThreshold,
+                0.001f,
+                2.0f);
+        }
+
+        if (ImGui::CollapsingHeader("Spatial Resampling"))
+        {
+            settingsChanged |= ImGui::Checkbox(
+                "Enable GI Spatial Resampling",
+                &restirSettings.EnableSpatialResampling);
+            settingsChanged |= ImGui::Checkbox(
+                "Enable GI Spatial Visibility (per neighbor)",
+                &restirSettings.EnableSpatialVisibility);
+//Modify Begin:2026-07-30 by BestHui
+            settingsChanged |= ImGui::Checkbox(
+                "Enable GI Unbiased Spatial Reuse (extra shadow rays)",
+                &restirSettings.EnableUnbiasedSpatialResampling);
+//Modify End
+            settingsChanged |= ImGui::DragInt("GI Spatial Neighbors", &spatialNeighborCount, 1.0f, 1, 16);
+            settingsChanged |= ImGui::DragInt(
+                "GI Spatial Max History",
+                &spatialMaxHistoryLength,
+                1.0f,
+                1,
+                256);
+            settingsChanged |= ImGui::SliderFloat(
+                "GI Spatial Radius",
+                &restirSettings.SpatialSamplingRadius,
+                1.0f,
+                256.0f);
+            settingsChanged |= ImGui::SliderFloat(
+                "GI Spatial Normal Threshold",
+                &restirSettings.SpatialNormalSimilarityThreshold,
+                -1.0f,
+                1.0f);
+            settingsChanged |= ImGui::SliderFloat(
+                "GI Spatial Position Threshold",
+                &restirSettings.SpatialPositionSimilarityThreshold,
+                0.001f,
+                2.0f);
+            settingsChanged |= ImGui::SliderFloat(
+                "GI Max Jacobian",
+                &restirSettings.MaxJacobian,
+                1.0f,
+                100.0f);
+            settingsChanged |= ImGui::SliderFloat(
+                "GI Max Spatial Weight",
+                &restirSettings.MaxSpatialWeight,
+                0.001f,
+                256.0f);
+        }
+
+        if (settingsChanged)
+        {
+//Modify Begin:2026-07-30 by BestHui
+            restirSettings.InitialCandidateCount = static_cast<uint32_t>(initialCandidateCount < 1 ? 1 : initialCandidateCount);
+//Modify End
+            restirSettings.TemporalMaxHistoryLength = static_cast<uint32_t>(
+                temporalMaxHistoryLength < 1 ? 1 : temporalMaxHistoryLength);
+            restirSettings.SpatialMaxHistoryLength = static_cast<uint32_t>(
+                spatialMaxHistoryLength < 1 ? 1 : spatialMaxHistoryLength);
+            restirSettings.MaxSampleAge = static_cast<uint32_t>(maxSampleAge < 1 ? 1 : maxSampleAge);
+            restirSettings.SpatialNeighborCount = static_cast<uint32_t>(
+                spatialNeighborCount < 1 ? 1 : spatialNeighborCount);
+            m_IndirectLightingReSTIRGI.SetSettings(restirSettings);
+            ResetAccumulation();
+        }
+    }
+//Modify End
     }
 //Modify End
 //Modify End
@@ -517,7 +658,9 @@ void RaytracingDemo::OnImGui()
         m_PathTracingBackend = static_cast<PathTracingBackend>(selectedMode);
         ResetAccumulation();
     }
-    const bool bouncesChanged = ImGui::SliderInt("Bounces", &m_MaxBounces, 0, 5);
+//Modify Begin:2026-08-10 by BestHui
+    const bool bouncesChanged = ImGui::SliderInt("Bounces", &m_MaxBounces, 1, 5);
+//Modify End
 //Modify Begin:2026-08-05 by BestHui
     bool fovChanged = false;
     bool nearClipChanged = false;

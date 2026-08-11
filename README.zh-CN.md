@@ -21,6 +21,7 @@
 - **场景工作流**：新增公共 `Scene` 和 `SceneImporter`，可以读取 Unity 文本序列化场景和 JSON 场景，适配 PBR 材质和自发光 surface emitter，并通过压力球开关验证增量增删实例。
 - **Meshlet 实验路径**：包含 Meshlet 构建、GPU 资源、task shader / compute-indirect 两种 GBuffer 后端，以及只更新实例数据的增量路径。
 - **ReSTIR DI 直接光**：提供 RIS、时域/Boiling/空域复用、各阶段的可见性与 bias correction 配置，以及最终着色。
+- **ReSTIR GI 间接光**：基于 Inline Ray Query，提供初始 BSDF 采样、时域复用、空域复用、Jacobian correction 和最终可见性/着色。
 - **CUDA Bloom**：演示 D3D12 shared resource、shared fence 与 CUDA external semaphore 的互操作流程。
 - **实验性帧特性**：接入 Native NGX DLSS SR/DLAA，以及 Streamline Ray Reconstruction 和 Frame Generation；这些路径尚未完成可交付验证。
 - **调试与分析工具**：集成 PIX event、RenderGraph timing history/CSV、运行时调试 UI 和 `UnitySceneDump`。
@@ -65,7 +66,7 @@ auto pass = RenderGraph::RenderPass::Create(
 | --- | --- |
 | GBuffer | 常规 raster GBuffer，以及实验性的 Meshlet GBuffer 路径。 |
 | 光线追踪 | inline ray query compute shader 与 shader-table DXR，可在运行时切换。 |
-| 光照 | direct lighting 和 indirect lighting 分离，再进行 composite。 |
+| 光照 | direct lighting 与 indirect lighting 分离后再 composite；直接光可选 ReSTIR DI，Inline Ray Query 间接光可选 ReSTIR GI。 |
 | 软阴影 | 平行光和点光源使用预编译 Hard/Soft Shader 变体；面积光继续采样真实发光面。 |
 | 降噪 | NRD 与 SVGF 两条可选路径；NRD 的 native 状态变化会回写 RenderGraph。 |
 | DLSS 与 Streamline | 实验性的 NGX DLSS SR/DLAA 与 Streamline RR/FG 资源准备路径；是否可用由启动配置和运行时 capability query 决定。 |
@@ -196,6 +197,7 @@ cmake --build ..\build --config Release --target RaytracingDemo UnitySceneDump
 - JSON 场景已经可用，但压力球仍由 sample C++ 定义，不属于场景数据。它们默认开启，可以通过运行时 UI 走增量 Add/Remove 路径切换。
 - Meshlet 路径是实验性 GBuffer 后端，不是完整的 visibility / streaming 系统，也不代表已达到最优 Meshlet 性能。
 - ReSTIR DI 是实验性的 inline ray-query 直接光 sample。它的光源采样、自发光表面发射体、时空复用和可见性测试选项仍在演进；图像质量、稳定性和性能均未作为等价 RTXDI 的实现完成验收。
+- ReSTIR GI 是实验性的 inline ray-query 间接光 sample，参考 [DQLin/ReSTIR_PT](https://github.com/DQLin/ReSTIR_PT) 中 ReSTIR GI 的数据流实现。当前目标是 one-bounce transport，使用持久化 packed reservoir；现阶段只有构建与自动化覆盖，画质、时域稳定性、显存占用和性能仍需要在目标硬件上验收。
 - 软阴影当前使用固定 4 次采样的变体：平行光读取 angular radius，点光源读取 source radius；自适应采样和质量档位尚未实现。
 - Shader 变体只在启动期或创建 pipeline 时编译；运行期源码热更新、后台编译和项目级 variant manifest 还没有实现。
 - **DLSS、Ray Reconstruction 和 Frame Generation 均为实验性功能，尚未完成可交付验证。** sample 已接入 Native NGX SR/DLAA，并在评估 Streamline RR/FG。RR/FG 需要带 `--streamline-interposer` 重启程序；这是有意的启动期 opt-in，默认 D3D12 device、queue 和 swapchain 不会经过 Streamline proxy。当前只有 build、startup 与自动化安全覆盖，尚未在支持 RR/FG 的硬件上完成功能正确性、画质、稳定性、timing 和性能验证，仍可能存在未知问题。最终是否可用以运行时 capability query 为准：当前 RTX 2060 开发机不支持 FG，且当前 adapter 上 RR 报告不可用。不要把仓库中的任意 DLSS 模式视为保证可用或可直接交付的功能。

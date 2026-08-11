@@ -76,32 +76,39 @@ float3 ToWorldHemisphere(float3 normal, float x, float y, float z)
     return normalize(tangent * x + bitangent * y + normal * z);
 }
 
-float3 SampleCosineHemisphere(float3 normal, inout uint rngState)
+//Modify Begin:2026-07-30 by BestHui
+float3 SampleCosineHemisphere(float3 normal, const float2 sample)
 {
-    float u0 = Random01(rngState);
-    float u1 = Random01(rngState);
-
-    float r = sqrt(u0);
-    float phi = 2.0f * PI * u1;
+    float r = sqrt(sample.x);
+    float phi = 2.0f * PI * sample.y;
     float x = r * cos(phi);
     float y = r * sin(phi);
-    float z = sqrt(max(0.0f, 1.0f - u0));
+    float z = sqrt(max(0.0f, 1.0f - sample.x));
 
     return ToWorldHemisphere(normal, x, y, z);
 }
 
-float3 SampleGGXHalfVector(float3 normal, float roughness, inout uint rngState)
+float3 SampleCosineHemisphere(float3 normal, inout uint rngState)
 {
-    float u0 = Random01(rngState);
-    float u1 = Random01(rngState);
+    return SampleCosineHemisphere(normal, float2(Random01(rngState), Random01(rngState)));
+}
 
-    float alpha = max(0.001f, roughness * roughness);
-    float alpha2 = alpha * alpha;
-    float phi = 2.0f * PI * u1;
-    float cosTheta = sqrt((1.0f - u0) / max(0.0001f, 1.0f + (alpha2 - 1.0f) * u0));
-    float sinTheta = sqrt(max(0.0f, 1.0f - cosTheta * cosTheta));
+float3 SampleGGXHalfVector(float3 normal, float roughness, const float2 sample)
+{
+    const float alpha = max(0.001f, roughness * roughness);
+    const float alpha2 = alpha * alpha;
+    const float phi = 2.0f * PI * sample.y;
+    const float cosTheta = sqrt((1.0f - sample.x) /
+        max(0.0001f, 1.0f + (alpha2 - 1.0f) * sample.x));
+    const float sinTheta = sqrt(max(0.0f, 1.0f - cosTheta * cosTheta));
 
     return ToWorldHemisphere(normal, sinTheta * cos(phi), sinTheta * sin(phi), cosTheta);
 }
+
+float3 SampleGGXHalfVector(float3 normal, float roughness, inout uint rngState)
+{
+    return SampleGGXHalfVector(normal, roughness, float2(Random01(rngState), Random01(rngState)));
+}
+//Modify End
 
 #endif

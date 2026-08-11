@@ -55,6 +55,7 @@ This layer deliberately exposes D3D12 concepts. `Framework` is responsible for p
 ### Reusable rendering features
 
 - `ReSTIRDIPass` owns the ReSTIR DI resource history, pipeline variants, and RIS, temporal, spatial, and final-shading dispatch sequence. A caller supplies the output, motion vectors, frame constants, and a scene-binding callback.
+- `ReSTIRGIPass` owns packed GI reservoirs, pipeline variants, and initial-sampling, temporal, spatial, and final-shading dispatches. A caller supplies an indirect-lighting output, motion vectors, frame constants, and an inline-ray-query scene-binding callback.
 - `Taa`, `NRD`, and `SVGF` provide temporal anti-aliasing and denoising integration. NRD reports its native state transitions back to RenderGraph through `RenderContext`.
 - `DLSS` owns native NGX DLSS SR/DLAA setup and the experimental Streamline RR/FG integration boundary. RR/FG require startup interposition and have not completed supported-hardware validation.
 - CUDA interop wraps shared D3D12 resources and external fence/semaphore synchronization. CUDA Bloom is the current consumer.
@@ -112,12 +113,14 @@ Unity YAML or JSON
 ### Render paths demonstrated
 
 - GBuffer generation through ordinary raster, task/mesh shaders, or compute culling plus `ExecuteIndirect`.
-- Direct lighting selected as `None`, path tracing, or inline-ray-query ReSTIR DI; indirect lighting selected as `None` or path tracing.
+- Direct lighting selected as `None`, path tracing, or inline-ray-query ReSTIR DI; indirect lighting selected as `None`, path tracing, or inline-ray-query ReSTIR GI.
 - Shader-table DXR and inline ray query share the same scene geometry, materials, bindless textures, light buffers, and acceleration structures.
 - Directional, point, rectangular area, and emissive surface-emitter data upload through GPU buffers. Directional and point soft shadows use precompiled shader variants; rectangular area lights sample their emitter surface.
 - Optional NRD/SVGF, TAA, skybox, CUDA Bloom, native DLSS SR/DLAA, and experimental Streamline RR/FG paths compose around the core lighting outputs.
 
 For ReSTIR DI, the graph contains one `ReSTIR DI` pass. The pass calls Framework `ReSTIRDIPass::Execute`, which records RIS, temporal resampling, boiling filtering inside the temporal shader, spatial resampling, and final visibility/shading dispatches in one command-list scope. This keeps reusable history/pipeline ownership in Framework while the demo still owns graph-level data flow and scene binding.
+
+For ReSTIR GI, the graph instead selects one `ReSTIR GI` indirect-lighting producer. It calls Framework `ReSTIRGIPass::Execute`, which records initial BSDF sampling, temporal reservoir reuse, spatial reservoir reuse, and final visibility/shading in one command-list scope. The demo adapter supplies its GBuffer, TLAS, bindless scene data, direct-light sampling, emission, and environment contract; the feature is Inline Ray Query only.
 
 ### Diagnostics and automation
 
@@ -132,6 +135,6 @@ For ReSTIR DI, the graph contains one `ReSTIR DI` pass. The pass calls Framework
 - Explicit async compute can reduce GPU wall time only when dependencies and hardware allow overlap; fence waits, cache pressure, and bandwidth contention can make it slower.
 - Meshlets are an experimental GBuffer backend, not a complete visibility, streaming, residency, or LOD system.
 - Scene import is intentionally limited: full prefabs, nested prefabs, skinned meshes, `LODGroup`, live asset-database synchronization, and complete non-PBR material support are outside the current importer scope.
-- ReSTIR DI, CUDA Bloom, DLSS SR/DLAA, Streamline RR/FG, and Unity interop are engineering experiments. They require per-hardware functional, image-quality, stability, and performance validation before any delivery use.
+- ReSTIR DI/GI, CUDA Bloom, DLSS SR/DLAA, Streamline RR/FG, and Unity interop are engineering experiments. They require per-hardware functional, image-quality, stability, memory, and performance validation before any delivery use.
 
 For sample-facing API examples and detailed feature limitations, see [RaytracingDemo API Guide](RaytracingSampleApi.md).

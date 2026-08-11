@@ -1,6 +1,5 @@
 #include <Passes/RaytracingDemoPasses.h>
 
-//Modify Begin:2026-07-30 by BestHui
 #include <PathTracing/PathTracingSceneBindings.h>
 #include <RenderGraph/RaytracingDemoGraphResources.h>
 
@@ -9,18 +8,19 @@
 #include <RenderGraph/RenderContext.h>
 #include <RenderGraph/RenderPass.h>
 
+//Modify Begin:2026-08-10 by BestHui
 namespace
 {
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
 }
 
-std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateReSTIRDIPass(
+std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateReSTIRGIPass(
     const RaytracingDemoPassResources& resources,
     const RaytracingDemoPassConfig& config)
 {
     using namespace RenderGraph;
-    return RenderPass::Create(
-        L"ReSTIR DI",
+    auto pass = RenderPass::Create(
+        L"ReSTIR GI",
         {
             { DemoResourceIds::BaseResourcesFinishedToken, InputType::Token },
             { DemoResourceIds::GBufferAlbedoOcclusion, InputType::NonPixelShaderResource },
@@ -32,10 +32,8 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
             { DemoResourceIds::DepthBuffer, InputType::NonPixelShaderResource },
         },
         {
-            { DemoResourceIds::DirectLighting, OutputType::UnorderedAccess },
-//Modify Begin:2026-08-06 by BestHui
-            { DemoResourceIds::DirectLightingFinishedToken, OutputType::Token },
-//Modify End
+            { DemoResourceIds::IndirectLighting, OutputType::UnorderedAccess },
+            { DemoResourceIds::IndirectLightingFinishedToken, OutputType::Token },
         },
         [resources, config](const RenderContext& context, CommandList& commandList)
         {
@@ -44,20 +42,19 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
             const RaytracingDemoCameraConstants camera =
                 RaytracingDemoPassBindings::BuildPassCameraConstants(resources, config, context);
 
-            ReSTIRDIExecutionInputs inputs;
+            ReSTIRGIExecutionInputs inputs;
             inputs.FrameState.Enabled = true;
             inputs.FrameState.UseSoftShadowVariant =
                 resources.Pipelines.GetShadowMode() == PathTracingShadowMode::SoftShadows;
-//Modify Begin:2026-08-06 by BestHui
             inputs.FrameState.EnvironmentProjectionVariant =
                 static_cast<uint32_t>(resources.Pipelines.GetLayout().EnvironmentProjection);
-//Modify End
-            inputs.FrameState.Width = config.FrameState->Width;
-            inputs.FrameState.Height = config.FrameState->Height;
-            inputs.FrameState.FrameIndex = config.FrameState->FrameIndex;
-            inputs.FrameState.Constants = resources.DirectLightingReSTIRDI.GetFrameConstants(
-                config.FrameState->ReSTIRDIHistoryValid);
-            inputs.DirectLighting = context.GetTexture(DemoResourceIds::DirectLighting);
+            inputs.FrameState.Constants = resources.IndirectLightingReSTIRGI.GetFrameConstants(
+                config.FrameState->Width,
+                config.FrameState->Height,
+                config.FrameState->FrameIndex,
+                config.FrameState->ReSTIRGIHistoryValid,
+                static_cast<uint32_t>(config.FrameState->MaxBounces));
+            inputs.IndirectLighting = context.GetTexture(DemoResourceIds::IndirectLighting);
             inputs.MotionVector = gbuffer.MotionVector;
             inputs.BindSceneInputs = [resources, gbuffer, camera](CommandContext& commandContext, ComputeShader& shader)
             {
@@ -72,7 +69,8 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
                 commandContext.BindBindlessDescriptorHeap(resources.Scene.GetBindlessDescriptorHeap());
             };
-            resources.DirectLightingReSTIRDIPass.Execute(commandList, inputs);
+            resources.IndirectLightingReSTIRGIPass.Execute(commandList, inputs);
         });
+    return pass;
 }
 //Modify End

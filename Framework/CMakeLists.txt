@@ -50,6 +50,11 @@ set(SHADERS_HEADER_FILES
         # Modify Begin:2026-08-06 by BestHui
         "shaders/ReSTIRDI/ReSTIRDISceneContract.hlsli"
         # Modify End
+        # Modify Begin:2026-08-10 by BestHui
+        "shaders/ReSTIRGI/ReSTIRGI.hlsli"
+        "shaders/ReSTIRGI/ReSTIRGIConstants.hlsli"
+        "shaders/ReSTIRGI/ReSTIRGISceneContract.hlsli"
+        # Modify End
         )
 # Modify End
 

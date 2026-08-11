@@ -29,7 +29,9 @@ RaytracingDemoCameraConstants BuildPassCameraConstants(
     XMStoreFloat4(&camera.CameraPosition, resources.SceneCamera.GetTranslation());
     camera.Width = context.GetMetadata().m_ScreenWidth;
     camera.Height = context.GetMetadata().m_ScreenHeight;
-    camera.MaxBounces = static_cast<uint32_t>(std::clamp(frameState.MaxBounces, 0, 5));
+//Modify Begin:2026-08-10 by BestHui
+    camera.MaxBounces = static_cast<uint32_t>(std::clamp(frameState.MaxBounces, 1, 5));
+//Modify End
     resources.Lights.FillCameraConstants(
         camera.DirectionalLightCount,
         camera.PointLightCount,
@@ -56,7 +58,16 @@ RaytracingDemoCameraConstants BuildPassCameraConstants(
     const bool directLightingUsesReSTIRDI = restirDIEnabled;
     camera.DirectLightingActive =
         (directLightingTechnique == RaytracingDemoLightingTechnique::PathTracing || directLightingUsesReSTIRDI) ? 1u : 0u;
-    camera.IndirectLightingActive = indirectLightingTechnique == RaytracingDemoLightingTechnique::PathTracing ? 1u : 0u;
+//Modify Begin:2026-08-10 by BestHui
+    const bool indirectLightingUsesReSTIRGI =
+        indirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRGI &&
+        backend == PathTracingBackend::InlineRayQuery;
+    camera.IndirectLightingActive =
+        frameState.MaxBounces > 1 &&
+        (indirectLightingTechnique == RaytracingDemoLightingTechnique::PathTracing || indirectLightingUsesReSTIRGI)
+            ? 1u
+            : 0u;
+//Modify End
 //Modify Begin:2026-08-05 by BestHui
     camera.ReSTIRDIHistoryValid = frameState.ReSTIRDIHistoryValid ? 1u : 0u;
 //Modify End

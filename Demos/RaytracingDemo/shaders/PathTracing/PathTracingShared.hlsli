@@ -146,10 +146,14 @@ float GeometrySmith(float3 normalWs, float3 viewDirectionWs, float3 lightDirecti
         GeometrySchlickGGX(saturate(dot(normalWs, lightDirectionWs)), roughness);
 }
 
-float3 EvaluatePbrLighting(SurfaceData surface, float3 lightDirectionWs, float3 radiance)
+float3 EvaluatePbrLighting(
+    SurfaceData surface,
+    float3 viewDirectionWs,
+    float3 lightDirectionWs,
+    float3 radiance)
 {
     const float3 normalWs = normalize(surface.NormalWs);
-    const float3 viewDirectionWs = normalize(Camera_Position.xyz - surface.PositionWs);
+    viewDirectionWs = normalize(viewDirectionWs);
     const float3 halfVectorWs = normalize(viewDirectionWs + lightDirectionWs);
     const float roughness = max(0.04f, surface.Roughness);
     const float metallic = saturate(surface.Metallic);
@@ -167,6 +171,15 @@ float3 EvaluatePbrLighting(SurfaceData surface, float3 lightDirectionWs, float3 
     const float3 specular = (d * g * f) / max(0.0001f, 4.0f * nDotV * nDotL);
     const float3 kd = (1.0f - f) * (1.0f - metallic);
     return (kd * surface.Diffuse * INV_PI + specular) * radiance * nDotL * surface.AmbientOcclusion;
+}
+
+float3 EvaluatePbrLighting(SurfaceData surface, float3 lightDirectionWs, float3 radiance)
+{
+    return EvaluatePbrLighting(
+        surface,
+        Camera_Position.xyz - surface.PositionWs,
+        lightDirectionWs,
+        radiance);
 }
 
 float Luminance(float3 color)
@@ -207,10 +220,18 @@ float3 EvaluatePbrBrdf(SurfaceData surface, float3 viewDirectionWs, float3 light
     return kd * surface.Diffuse * INV_PI + specular;
 }
 
-bool SamplePbrDirection(SurfaceData surface, float3 viewDirectionWs, inout uint rngState, out float3 directionWs, out float3 sampleWeight)
+bool SamplePbrDirection(
+    SurfaceData surface,
+    float3 viewDirectionWs,
+    const float lobeSelection,
+    const float2 directionalSample,
+    out float3 directionWs,
+    out float3 sampleWeight,
+    out float sourcePdf)
 {
     directionWs = 0.0f;
     sampleWeight = 0.0f;
+    sourcePdf = 0.0f;
 
     float3 normalWs = normalize(surface.NormalWs);
     viewDirectionWs = normalize(viewDirectionWs);
@@ -228,10 +249,10 @@ bool SamplePbrDirection(SurfaceData surface, float3 viewDirectionWs, inout uint 
     float specularProbability = specularWeight / max(0.0001f, diffuseWeight + specularWeight);
     specularProbability = clamp(specularProbability, 0.05f, 0.95f);
 
-    bool sampleSpecular = Random01(rngState) < specularProbability;
+    bool sampleSpecular = lobeSelection < specularProbability;
     if (sampleSpecular)
     {
-        float3 halfVectorWs = SampleGGXHalfVector(normalWs, roughness, rngState);
+        float3 halfVectorWs = SampleGGXHalfVector(normalWs, roughness, directionalSample);
         if (dot(halfVectorWs, viewDirectionWs) < 0.0f)
         {
             halfVectorWs = -halfVectorWs;
@@ -240,7 +261,7 @@ bool SamplePbrDirection(SurfaceData surface, float3 viewDirectionWs, inout uint 
     }
     else
     {
-        directionWs = SampleCosineHemisphere(normalWs, rngState);
+        directionWs = SampleCosineHemisphere(normalWs, directionalSample);
     }
 
     float nDotL = saturate(dot(normalWs, directionWs));
@@ -260,6 +281,7 @@ bool SamplePbrDirection(SurfaceData surface, float3 viewDirectionWs, inout uint 
         return false;
     }
 
+    sourcePdf = pdf;
     float3 brdf = EvaluatePbrBrdf(surface, viewDirectionWs, directionWs);
     sampleWeight = brdf * nDotL / pdf;
     sampleWeight *= surface.AmbientOcclusion;
@@ -268,9 +290,30 @@ bool SamplePbrDirection(SurfaceData surface, float3 viewDirectionWs, inout uint 
 }
 
 //Modify Begin:2026-07-30 by BestHui
+bool SamplePbrDirection(
+    SurfaceData surface,
+    float3 viewDirectionWs,
+    inout uint rngState,
+    out float3 directionWs,
+    out float3 sampleWeight,
+    out float sourcePdf)
+{
+    return SamplePbrDirection(
+        surface,
+        viewDirectionWs,
+        Random01(rngState),
+        float2(Random01(rngState), Random01(rngState)),
+        directionWs,
+        sampleWeight,
+        sourcePdf);
+}
+//Modify End
+
+//Modify Begin:2026-07-30 by BestHui
 float3 EvaluateDirectionalLight(
     DirectionalLightData light,
     SurfaceData surface,
+    float3 viewDirectionWs,
     inout uint rngState,
     out float hitDistance)
 {
@@ -295,7 +338,7 @@ float3 EvaluateDirectionalLight(
         const float3 rayOrigin = OffsetRayOrigin(surface.PositionWs, surface.PositionError, surface.NormalWs, lightDirection);
         if (IsVisibleAlongRay(rayOrigin, lightDirection, 10000.0f))
         {
-            lighting += EvaluatePbrLighting(surface, lightDirection, radiance);
+            lighting += EvaluatePbrLighting(surface, viewDirectionWs, lightDirection, radiance);
         }
     }
 
@@ -317,13 +360,14 @@ float3 EvaluateDirectionalLight(
 
     hitDistance = 10000.0f;
     const float3 radiance = light.ColorAndIntensity.rgb * light.ColorAndIntensity.w;
-    return EvaluatePbrLighting(surface, lightDirection, radiance);
+    return EvaluatePbrLighting(surface, viewDirectionWs, lightDirection, radiance);
 #endif
 }
 
 float3 EvaluatePointLight(
     PointLightData light,
     SurfaceData surface,
+    float3 viewDirectionWs,
     inout uint rngState,
     out float hitDistance)
 {
@@ -373,7 +417,7 @@ float3 EvaluatePointLight(
             attenuationTerms.x +
             attenuationTerms.y * distanceToLight +
             attenuationTerms.z * distanceToLight * distanceToLight));
-        lighting += EvaluatePbrLighting(surface, lightDirection, baseRadiance * attenuation);
+        lighting += EvaluatePbrLighting(surface, viewDirectionWs, lightDirection, baseRadiance * attenuation);
     }
 
     hitDistance = baseDistanceToLight;
@@ -405,7 +449,7 @@ float3 EvaluatePointLight(
         0.001f,
         attenuationTerms.x + attenuationTerms.y * distanceToLight + attenuationTerms.z * distanceToLight * distanceToLight));
     float3 radiance = light.ColorAndIntensity.rgb * light.ColorAndIntensity.w * attenuation;
-    return EvaluatePbrLighting(surface, lightDirection, radiance);
+    return EvaluatePbrLighting(surface, viewDirectionWs, lightDirection, radiance);
 #endif
 }
 //Modify End
@@ -524,7 +568,12 @@ SurfaceEmitterSample SampleSurfaceEmitter(const uint emitterIndex, const float2 
 }
 //Modify End
 
-float3 EvaluateSurfaceEmitter(const uint emitterIndex, SurfaceData surface, inout uint rngState, out float hitDistance)
+float3 EvaluateSurfaceEmitter(
+    const uint emitterIndex,
+    SurfaceData surface,
+    float3 viewDirectionWs,
+    inout uint rngState,
+    out float hitDistance)
 {
     hitDistance = 0.0f;
 //Modify Begin:2026-08-06 by BestHui
@@ -560,7 +609,7 @@ float3 EvaluateSurfaceEmitter(const uint emitterIndex, SurfaceData surface, inou
 //Modify Begin:2026-08-06 by BestHui
     float3 radiance = lightSample.Emission * lightSample.AreaOverTriangleSelectionPdf * lightFacing / max(0.001f, distanceToLight * distanceToLight);
 //Modify End
-    return EvaluatePbrLighting(surface, lightDirection, radiance);
+    return EvaluatePbrLighting(surface, viewDirectionWs, lightDirection, radiance);
 }
 
 //Modify Begin:2026-08-06 by BestHui
@@ -604,7 +653,11 @@ bool SampleDirectLightIndex(
 }
 //Modify End
 
-float3 EvaluateDirectLighting(SurfaceData surface, inout uint rngState, out float nrdDirectHitDistance)
+float3 EvaluateDirectLighting(
+    SurfaceData surface,
+    float3 viewDirectionWs,
+    inout uint rngState,
+    out float nrdDirectHitDistance)
 {
     nrdDirectHitDistance = 0.0f;
 //Modify Begin:2026-08-06 by BestHui
@@ -618,26 +671,54 @@ float3 EvaluateDirectLighting(SurfaceData surface, inout uint rngState, out floa
 
     if (lightIndex < Camera_DirectionalLightCount)
     {
-        return EvaluateDirectionalLight(DirectionalLights[lightIndex], surface, rngState, nrdDirectHitDistance) * inverseSourcePdf;
+        return EvaluateDirectionalLight(
+            DirectionalLights[lightIndex],
+            surface,
+            viewDirectionWs,
+            rngState,
+            nrdDirectHitDistance) * inverseSourcePdf;
     }
 
     lightIndex -= Camera_DirectionalLightCount;
     if (lightIndex < Camera_PointLightCount)
     {
-        return EvaluatePointLight(PointLights[lightIndex], surface, rngState, nrdDirectHitDistance) * inverseSourcePdf;
+        return EvaluatePointLight(
+            PointLights[lightIndex],
+            surface,
+            viewDirectionWs,
+            rngState,
+            nrdDirectHitDistance) * inverseSourcePdf;
     }
 
     lightIndex -= Camera_PointLightCount;
-    return EvaluateSurfaceEmitter(lightIndex, surface, rngState, nrdDirectHitDistance) * inverseSourcePdf;
+    return EvaluateSurfaceEmitter(
+        lightIndex,
+        surface,
+        viewDirectionWs,
+        rngState,
+        nrdDirectHitDistance) * inverseSourcePdf;
+}
+
+float3 EvaluateDirectLighting(SurfaceData surface, inout uint rngState, out float nrdDirectHitDistance)
+{
+    return EvaluateDirectLighting(
+        surface,
+        Camera_Position.xyz - surface.PositionWs,
+        rngState,
+        nrdDirectHitDistance);
 }
 
 //Modify Begin:2026-08-05 by BestHui
-#if defined(FRAMEWORK_RESTIR_DI_SCENE_ADAPTER)
-struct ReSTIRDIDirectLightSample
+#if defined(FRAMEWORK_RESTIR_DI_SCENE_ADAPTER) || defined(FRAMEWORK_RESTIR_GI_SCENE_ADAPTER)
+struct PathTracingDirectLightSample
 {
     float3 DirectionWs;
+    float3 Radiance;
     float3 UnshadowedContribution;
     float Distance;
+//Modify Begin:2026-07-30 by BestHui
+    bool TransportValid;
+//Modify End
     bool Valid;
 };
 
@@ -647,7 +728,7 @@ uint GetReSTIRDILightCount()
 }
 
 //Modify Begin:2026-08-06 by BestHui
-bool SampleReSTIRDIDirectLightIndex(
+bool SamplePathTracingDirectLightIndex(
     const float selectionRandom,
     out uint lightIndex,
     out float inverseSourcePdf)
@@ -656,15 +737,19 @@ bool SampleReSTIRDIDirectLightIndex(
 }
 //Modify End
 
-ReSTIRDIDirectLightSample SampleReSTIRDIDirectLight(
+PathTracingDirectLightSample SamplePathTracingDirectLight(
     const uint lightIndex,
     const SurfaceData surface,
     const float2 sampleUv)
 {
-    ReSTIRDIDirectLightSample sample;
+    PathTracingDirectLightSample sample;
     sample.DirectionWs = 0.0f;
+    sample.Radiance = 0.0f;
     sample.UnshadowedContribution = 0.0f;
     sample.Distance = 0.0f;
+//Modify Begin:2026-07-30 by BestHui
+    sample.TransportValid = false;
+//Modify End
     sample.Valid = false;
 
     uint index = lightIndex;
@@ -681,10 +766,14 @@ ReSTIRDIDirectLightSample SampleReSTIRDIDirectLight(
         sample.DirectionWs = normalize(light.DirectionAndAngularRadius.xyz);
 #endif
         sample.Distance = 10000.0f;
+        sample.Radiance = light.ColorAndIntensity.rgb * light.ColorAndIntensity.w;
         sample.UnshadowedContribution = EvaluatePbrLighting(
             surface,
             sample.DirectionWs,
-            light.ColorAndIntensity.rgb * light.ColorAndIntensity.w);
+            sample.Radiance);
+//Modify Begin:2026-07-30 by BestHui
+        sample.TransportValid = MaxComponent(sample.Radiance) > 0.0f;
+//Modify End
         sample.Valid = MaxComponent(sample.UnshadowedContribution) > 0.0f;
         return sample;
     }
@@ -724,10 +813,14 @@ ReSTIRDIDirectLightSample SampleReSTIRDIDirectLight(
         const float attenuation = rcp(max(
             0.001f,
             attenuationTerms.x + attenuationTerms.y * distanceToLight + attenuationTerms.z * distanceToLight * distanceToLight));
+        sample.Radiance = light.ColorAndIntensity.rgb * light.ColorAndIntensity.w * attenuation;
         sample.UnshadowedContribution = EvaluatePbrLighting(
             surface,
             sample.DirectionWs,
-            light.ColorAndIntensity.rgb * light.ColorAndIntensity.w * attenuation);
+            sample.Radiance);
+//Modify Begin:2026-07-30 by BestHui
+        sample.TransportValid = MaxComponent(sample.Radiance) > 0.0f;
+//Modify End
         sample.Valid = MaxComponent(sample.UnshadowedContribution) > 0.0f;
         return sample;
     }
@@ -760,17 +853,20 @@ ReSTIRDIDirectLightSample SampleReSTIRDIDirectLight(
         return sample;
     }
 
-    const float3 radiance = areaSample.Emission * areaSample.AreaOverTriangleSelectionPdf * lightFacing /
+    sample.Radiance = areaSample.Emission * areaSample.AreaOverTriangleSelectionPdf * lightFacing /
         max(0.001f, distanceToLight * distanceToLight);
 //Modify End
-    sample.UnshadowedContribution = EvaluatePbrLighting(surface, sample.DirectionWs, radiance);
+    sample.UnshadowedContribution = EvaluatePbrLighting(surface, sample.DirectionWs, sample.Radiance);
+//Modify Begin:2026-07-30 by BestHui
+    sample.TransportValid = MaxComponent(sample.Radiance) > 0.0f;
+//Modify End
     sample.Valid = MaxComponent(sample.UnshadowedContribution) > 0.0f;
     return sample;
 }
 
-bool IsReSTIRDIDirectLightSampleVisible(
+bool IsPathTracingDirectLightSampleVisible(
     const SurfaceData surface,
-    const ReSTIRDIDirectLightSample sample)
+    const PathTracingDirectLightSample sample)
 {
     if (!sample.Valid)
     {
@@ -785,78 +881,261 @@ bool IsReSTIRDIDirectLightSampleVisible(
     return IsVisibleAlongRay(rayOrigin, sample.DirectionWs, sample.Distance);
 }
 
+//Modify Begin:2026-07-30 by BestHui
+bool IsPathTracingDirectLightTransportVisible(
+    const SurfaceData surface,
+    const PathTracingDirectLightSample sample)
+{
+    if (!sample.TransportValid)
+    {
+        return false;
+    }
+
+    const float3 rayOrigin = OffsetRayOrigin(
+        surface.PositionWs,
+        surface.PositionError,
+        surface.NormalWs,
+        sample.DirectionWs);
+    return IsVisibleAlongRay(rayOrigin, sample.DirectionWs, sample.Distance);
+}
+//Modify End
+
 #endif
 //Modify End
 
-float3 TraceIndirectLighting(SurfaceData surface, inout uint rngState, out float nrdDiffuseHitDistance)
+//Modify Begin:2026-08-10 by BestHui
+SurfaceData MakeRayHitSurface(const RayPayload payload, const float3 positionWs)
 {
-    nrdDiffuseHitDistance = 0.0f;
-    float3 radiance = 0.0f;
-    float3 throughput = 1.0f;
-    float3 viewDirection = normalize(Camera_Position.xyz - surface.PositionWs);
-    float3 direction = 0.0f;
-    float3 sampleWeight = 0.0f;
-    if (!SamplePbrDirection(surface, viewDirection, rngState, direction, sampleWeight))
+    SurfaceData surface;
+    surface.Diffuse = saturate(payload.BaseColor);
+    surface.Specular = 0.04f;
+    surface.PositionWs = positionWs;
+    surface.NormalWs = payload.Normal;
+    surface.PositionError = payload.PositionError;
+    surface.Metallic = payload.Metallic;
+    surface.Roughness = payload.Roughness;
+    surface.AmbientOcclusion = payload.AmbientOcclusion;
+    surface.Valid = true;
+    return surface;
+}
+
+#if defined(FRAMEWORK_RESTIR_GI_SCENE_ADAPTER)
+float3 EvaluateDiffuseReflectance(const SurfaceData surface)
+{
+    return max(surface.Diffuse, 0.0f) * (1.0f - saturate(surface.Metallic)) * INV_PI;
+}
+
+float3 EvaluateDiffuseBounceContribution(
+    const SurfaceData surface,
+    const float3 directionWs,
+    const float3 radiance)
+{
+    const float cosine = saturate(dot(normalize(surface.NormalWs), directionWs));
+    return EvaluateDiffuseReflectance(surface) * cosine * surface.AmbientOcclusion * radiance;
+}
+
+bool SampleDiffuseDirection(
+    const SurfaceData surface,
+    inout uint rngState,
+    out float3 directionWs,
+    out float sourcePdf)
+{
+    directionWs = 0.0f;
+    sourcePdf = 0.0f;
+    if (MaxComponent(EvaluateDiffuseReflectance(surface)) <= 0.0f)
     {
-        return radiance;
+        return false;
     }
-    throughput *= sampleWeight;
-    float3 origin = OffsetRayOrigin(surface.PositionWs, surface.PositionError, surface.NormalWs, direction);
-    uint bounceCount = min(Camera_MaxBounces, 5u);
+
+    const float3 normalWs = normalize(surface.NormalWs);
+    directionWs = SampleCosineHemisphere(normalWs, rngState);
+    const float cosine = saturate(dot(normalWs, directionWs));
+    sourcePdf = cosine * INV_PI;
+    return sourcePdf > 0.00001f;
+}
+
+float3 EvaluateDiffuseDirectLighting(
+    const SurfaceData surface,
+    inout uint rngState)
+{
+    uint lightIndex = 0u;
+    float inverseSourcePdf = 0.0f;
+    if (!SamplePathTracingDirectLightIndex(Random01(rngState), lightIndex, inverseSourcePdf))
+    {
+        return 0.0f;
+    }
+
+    const PathTracingDirectLightSample sample = SamplePathTracingDirectLight(
+        lightIndex,
+        surface,
+        float2(Random01(rngState), Random01(rngState)));
+    if (!sample.TransportValid)
+    {
+        return 0.0f;
+    }
+
+//Modify Begin:2026-07-30 by BestHui
+    const float3 contribution = EvaluateDiffuseBounceContribution(
+        surface,
+        sample.DirectionWs,
+        sample.Radiance);
+    if (MaxComponent(contribution) <= 0.0f || !IsPathTracingDirectLightTransportVisible(surface, sample))
+    {
+        return 0.0f;
+    }
+
+    return contribution * inverseSourcePdf;
+//Modify End
+}
+
+float3 TraceDiffuseGatherPathRadiance(
+    const SurfaceData initialSurface,
+    const float3 initialEmission,
+    const uint continuationBounceCount,
+    inout uint rngState)
+{
+    float3 radiance = initialEmission + EvaluateDiffuseDirectLighting(initialSurface, rngState);
+    float3 throughput = 1.0f;
+    SurfaceData currentSurface = initialSurface;
 
     [loop]
-    for (uint bounce = 0u; bounce < bounceCount; ++bounce)
+    for (uint bounce = 0u; bounce < continuationBounceCount; ++bounce)
     {
-        RayPayload payload = TraceScene(origin, direction, 10000.0f, RAY_FLAG_NONE);
+        if (MaxComponent(throughput) < 0.005f)
+        {
+            break;
+        }
+
+        float3 directionWs = 0.0f;
+        float sourcePdf = 0.0f;
+        if (!SampleDiffuseDirection(currentSurface, rngState, directionWs, sourcePdf))
+        {
+            break;
+        }
+
+        const float cosine = saturate(dot(normalize(currentSurface.NormalWs), directionWs));
+        throughput *= EvaluateDiffuseReflectance(currentSurface) * cosine / sourcePdf;
+        const float3 rayOrigin = OffsetRayOrigin(
+            currentSurface.PositionWs,
+            currentSurface.PositionError,
+            currentSurface.NormalWs,
+            directionWs);
+        const RayPayload payload = TraceScene(rayOrigin, directionWs, 10000.0f, RAY_FLAG_NONE);
         if (payload.Hit == 0u)
         {
-            if (bounce == 0u)
-            {
-                nrdDiffuseHitDistance = 10000.0f;
-            }
             radiance += throughput * payload.BaseColor;
             break;
         }
 
-        if (bounce == 0u)
-        {
-            nrdDiffuseHitDistance = max(0.0f, payload.HitT);
-        }
-
-//Modify Begin:2026-08-06 by BestHui
-        radiance += throughput * payload.Emission;
-//Modify End
-        float3 positionWs = origin + direction * payload.HitT;
-        SurfaceData hitSurface;
-        hitSurface.Diffuse = saturate(payload.BaseColor);
-        hitSurface.Specular = 0.04f;
-        hitSurface.PositionWs = positionWs;
-        hitSurface.NormalWs = payload.Normal;
-        hitSurface.PositionError = payload.PositionError;
-        hitSurface.Metallic = payload.Metallic;
-        hitSurface.Roughness = payload.Roughness;
-        hitSurface.AmbientOcclusion = payload.AmbientOcclusion;
-        hitSurface.Valid = true;
-
-        float directHitDistance = 0.0f;
-        radiance += throughput * EvaluateDirectLighting(hitSurface, rngState, directHitDistance);
-
-        if (max(throughput.r, max(throughput.g, throughput.b)) < 0.005f)
-        {
-            break;
-        }
-
-        viewDirection = -direction;
-        if (!SamplePbrDirection(hitSurface, viewDirection, rngState, direction, sampleWeight))
-        {
-            break;
-        }
-        throughput *= sampleWeight;
-        origin = OffsetRayOrigin(positionWs, payload.PositionError, hitSurface.NormalWs, direction);
+        currentSurface = MakeRayHitSurface(payload, rayOrigin + directionWs * payload.HitT);
+        radiance += throughput * (
+            payload.Emission +
+            EvaluateDiffuseDirectLighting(currentSurface, rngState));
     }
 
     return radiance;
 }
+#endif
+
+float3 TraceGatherPathRadiance(
+    const SurfaceData initialSurface,
+    const float3 initialEmission,
+    const float3 initialViewDirection,
+    const uint continuationBounceCount,
+    inout uint rngState)
+{
+    float3 radiance = initialEmission;
+    float3 throughput = 1.0f;
+    SurfaceData currentSurface = initialSurface;
+    float3 viewDirection = normalize(initialViewDirection);
+
+    float directHitDistance = 0.0f;
+    radiance += EvaluateDirectLighting(currentSurface, viewDirection, rngState, directHitDistance);
+
+    [loop]
+    for (uint bounce = 0u; bounce < continuationBounceCount; ++bounce)
+    {
+        if (MaxComponent(throughput) < 0.005f)
+        {
+            break;
+        }
+
+        float3 direction = 0.0f;
+        float3 sampleWeight = 0.0f;
+        float sourcePdf = 0.0f;
+        if (!SamplePbrDirection(
+            currentSurface,
+            viewDirection,
+            rngState,
+            direction,
+            sampleWeight,
+            sourcePdf))
+        {
+            break;
+        }
+
+        throughput *= sampleWeight;
+        const float3 origin = OffsetRayOrigin(
+            currentSurface.PositionWs,
+            currentSurface.PositionError,
+            currentSurface.NormalWs,
+            direction);
+        const RayPayload payload = TraceScene(origin, direction, 10000.0f, RAY_FLAG_NONE);
+        if (payload.Hit == 0u)
+        {
+            radiance += throughput * payload.BaseColor;
+            break;
+        }
+
+        const float3 positionWs = origin + direction * payload.HitT;
+        currentSurface = MakeRayHitSurface(payload, positionWs);
+        viewDirection = -direction;
+        radiance += throughput * (
+            payload.Emission +
+            EvaluateDirectLighting(currentSurface, viewDirection, rngState, directHitDistance));
+    }
+
+    return radiance;
+}
+
+float3 TraceIndirectLighting(SurfaceData surface, inout uint rngState, out float nrdDiffuseHitDistance)
+{
+    nrdDiffuseHitDistance = 0.0f;
+    if (Camera_MaxBounces <= 1u)
+    {
+        return 0.0f;
+    }
+
+    const float3 viewDirection = normalize(Camera_Position.xyz - surface.PositionWs);
+    float3 direction = 0.0f;
+    float3 sampleWeight = 0.0f;
+    float sourcePdf = 0.0f;
+    if (!SamplePbrDirection(surface, viewDirection, rngState, direction, sampleWeight, sourcePdf))
+    {
+        return 0.0f;
+    }
+
+    const float3 origin = OffsetRayOrigin(surface.PositionWs, surface.PositionError, surface.NormalWs, direction);
+    const RayPayload payload = TraceScene(origin, direction, 10000.0f, RAY_FLAG_NONE);
+    if (payload.Hit == 0u)
+    {
+        nrdDiffuseHitDistance = 10000.0f;
+        return sampleWeight * payload.BaseColor;
+    }
+
+    nrdDiffuseHitDistance = max(0.0f, payload.HitT);
+    const SurfaceData hitSurface = MakeRayHitSurface(payload, origin + direction * payload.HitT);
+    const uint continuationBounceCount = Camera_MaxBounces > 2u
+        ? min(Camera_MaxBounces - 2u, 3u)
+        : 0u;
+    return sampleWeight * TraceGatherPathRadiance(
+        hitSurface,
+        payload.Emission,
+        -direction,
+        continuationBounceCount,
+        rngState);
+}
+
 
 void WriteDirectLightingOutput(uint2 pixel, uint width, uint frameIndex)
 {

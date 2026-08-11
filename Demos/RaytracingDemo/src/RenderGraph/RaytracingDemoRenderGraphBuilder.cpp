@@ -20,7 +20,32 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
 //Modify End
     std::vector<std::unique_ptr<RenderGraph::RenderPass>> renderPasses;
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateBaseResourcesPass(resources, config));
-    renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateIndirectLightingPass(resources, config));
+//Modify Begin:2026-08-10 by BestHui
+    if (frameState.MaxBounces <= 1)
+    {
+        renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDisabledIndirectLightingPass());
+    }
+    else
+    {
+        switch (frameState.IndirectLightingTechnique)
+        {
+        case RaytracingDemoLightingTechnique::PathTracing:
+            renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateIndirectLightingPass(resources, config));
+            break;
+        case RaytracingDemoLightingTechnique::ReSTIRGI:
+            if (frameState.Backend == PathTracingBackend::InlineRayQuery)
+            {
+                renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateReSTIRGIPass(resources, config));
+                break;
+            }
+            [[fallthrough]];
+        case RaytracingDemoLightingTechnique::None:
+        default:
+            renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDisabledIndirectLightingPass());
+            break;
+        }
+    }
+//Modify End
 //Modify Begin:2026-08-06 by BestHui
     switch (frameState.DirectLightingTechnique)
     {
