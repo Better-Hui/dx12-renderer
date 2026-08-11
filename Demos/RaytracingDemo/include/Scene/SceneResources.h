@@ -41,7 +41,9 @@ public:
     SurfaceEmitterSceneData CollectEmissiveMeshSurfaceEmitters() const;
 //Modify End
     const std::vector<std::shared_ptr<Texture>>& GetTextures() const { return m_TextureMaterialResources.GetTextures(); }
-    std::vector<ShaderResourceView> CreateTextureShaderResourceViews() const { return m_TextureMaterialResources.CreateTextureShaderResourceViews(); }
+//Modify Begin:2026-08-11 by BestHui
+    const std::vector<ShaderResourceView>& GetTextureShaderResourceViews() const { return m_TextureMaterialResources.GetTextureShaderResourceViews(); }
+//Modify End
     const StructuredBuffer& GetMaterialBuffer() const { return m_TextureMaterialResources.GetMaterialBuffer(); }
     const StructuredBuffer& GetGeometryBuffer() const { return m_RayTracingResources.GetGeometryBuffer(); }
     void TransitionRayTracingShaderResources(CommandList& commandList, D3D12_RESOURCE_STATES stateAfter) const;

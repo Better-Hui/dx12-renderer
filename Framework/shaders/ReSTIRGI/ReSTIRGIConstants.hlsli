@@ -1,6 +1,24 @@
 #ifndef FRAMEWORK_RESTIR_GI_CONSTANTS_HLSLI
 #define FRAMEWORK_RESTIR_GI_CONSTANTS_HLSLI
 
+//Modify Begin:2026-08-11 by BestHui
+#ifndef RESTIR_GI_USE_TEMPORAL_REUSE
+#define RESTIR_GI_USE_TEMPORAL_REUSE 1
+#endif
+
+#ifndef RESTIR_GI_USE_UNBIASED_SPATIAL_REUSE
+#define RESTIR_GI_USE_UNBIASED_SPATIAL_REUSE 0
+#endif
+
+#ifndef RESTIR_GI_USE_TEMPORAL_JACOBIAN
+#define RESTIR_GI_USE_TEMPORAL_JACOBIAN 1
+#endif
+
+#ifndef RESTIR_GI_MAX_PATH_BOUNCES
+#define RESTIR_GI_MAX_PATH_BOUNCES 3
+#endif
+//Modify End
+
 //Modify Begin:2026-08-10 by BestHui
 cbuffer ReSTIRGIConstants : register(b1)
 {
@@ -14,7 +32,6 @@ cbuffer ReSTIRGIConstants : register(b1)
 //Modify End
     uint ReSTIRGI_TemporalResamplingEnabled;
     uint ReSTIRGI_SpatialResamplingEnabled;
-    uint ReSTIRGI_SpatialVisibilityEnabled;
     uint ReSTIRGI_TemporalJacobianEnabled;
 
     uint ReSTIRGI_TemporalMaxHistoryLength;
@@ -23,10 +40,9 @@ cbuffer ReSTIRGIConstants : register(b1)
     uint ReSTIRGI_SpatialNeighborCount;
 //Modify Begin:2026-07-30 by BestHui
     uint ReSTIRGI_SpatialUnbiasedResamplingEnabled;
-//Modify Begin:2026-07-30 by BestHui
-    uint ReSTIRGI_MaxPathBounces;
-//Modify End
     uint ReSTIRGI_PaddingUint;
+    uint ReSTIRGI_PaddingUint1;
+    uint ReSTIRGI_PaddingUint2;
 //Modify End
 
     float ReSTIRGI_TemporalNormalSimilarityThreshold;

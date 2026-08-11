@@ -4,6 +4,9 @@
 #include <RenderGraph/RaytracingDemoGraphResources.h>
 
 #include <DX12Library/CommandList.h>
+//Modify Begin:2026-08-11 by BestHui
+#include <DX12Library/GpuTimestampProfiler.h>
+//Modify End
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 #include <RenderGraph/RenderContext.h>
 #include <RenderGraph/RenderPass.h>
@@ -52,10 +55,28 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
                 config.FrameState->Width,
                 config.FrameState->Height,
                 config.FrameState->FrameIndex,
-                config.FrameState->ReSTIRGIHistoryValid,
-                static_cast<uint32_t>(config.FrameState->MaxBounces));
+                config.FrameState->ReSTIRGIHistoryValid);
             inputs.IndirectLighting = context.GetTexture(DemoResourceIds::IndirectLighting);
             inputs.MotionVector = gbuffer.MotionVector;
+//Modify Begin:2026-08-11 by BestHui
+            inputs.EnableStageTiming = config.FrameState->ReSTIRGIStageTimingEnabled;
+            inputs.WriteTimestamp = [profiler = resources.DirectGpuTimestampProfiler](
+                CommandList& timestampCommandList,
+                const char* markerName)
+            {
+                if (profiler != nullptr)
+                {
+                    profiler->WriteTimestamp(timestampCommandList, markerName);
+                }
+            };
+            resources.Scene.TransitionRayTracingShaderResources(
+                commandList,
+                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            inputs.PrepareCommandContext = [&resources](CommandContext& commandContext)
+            {
+                commandContext.BindBindlessDescriptorHeap(resources.Scene.GetBindlessDescriptorHeap());
+            };
+//Modify End
             inputs.BindSceneInputs = [resources, gbuffer, camera](CommandContext& commandContext, ComputeShader& shader)
             {
                 RaytracingDemoPassBindings::BindInlinePathTracingInputs(
@@ -64,10 +85,6 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
                     shader,
                     gbuffer,
                     camera);
-                resources.Scene.TransitionRayTracingShaderResources(
-                    commandContext.GetCommandList(),
-                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-                commandContext.BindBindlessDescriptorHeap(resources.Scene.GetBindlessDescriptorHeap());
             };
             resources.IndirectLightingReSTIRGIPass.Execute(commandList, inputs);
         });

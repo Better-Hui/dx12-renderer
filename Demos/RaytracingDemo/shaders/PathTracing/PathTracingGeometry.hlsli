@@ -17,8 +17,8 @@ RayPayload MakeMissPayload(float3 rayDirection)
     RayPayload payload;
     payload.Hit = 0u;
     payload.HitT = 0.0f;
-//Modify Begin:2026-07-30 by BestHui
-    payload.BaseColor = Camera_SkyLight.ColorAndIntensity.rgb * Camera_SkyLight.ColorAndIntensity.w;
+//Modify Begin:2026-08-11 by BestHui
+    payload.BaseColor = SampleEnvironmentRadiance(rayDirection);
 //Modify End
     payload.Normal = 0.0f;
     payload.PositionError = 0.0f;

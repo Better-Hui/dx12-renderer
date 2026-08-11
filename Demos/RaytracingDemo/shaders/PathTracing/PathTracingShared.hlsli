@@ -5,13 +5,13 @@
 #include "../Common/RayOffset.hlsli"
 #include "../../../../External/NRD/Shaders/NRD.hlsli"
 #include "PathTracingRandom.hlsli"
-//Modify Begin:2026-08-06 by BestHui
-#include <Common/EnvironmentTexture.hlsli>
-//Modify End
-
 //Modify Begin:2026-07-30 by BestHui
 #ifndef RAYTRACING_DEMO_SOFT_SHADOWS
 #define RAYTRACING_DEMO_SOFT_SHADOWS 0
+#endif
+
+#ifndef RAYTRACING_DEMO_MAX_BOUNCES
+#define RAYTRACING_DEMO_MAX_BOUNCES 3
 #endif
 
 #define RAYTRACING_DEMO_SOFT_SHADOW_SAMPLE_COUNT 4u
@@ -19,22 +19,8 @@
 
 float3 SampleSkybox(float3 direction)
 {
-//Modify Begin:2026-08-06 by BestHui
-#if RAYTRACING_DEMO_ENVIRONMENT_PROJECTION == 1
-    const float2 uv = float2(
-        atan2(direction.z, direction.x) / (2.0f * PI) + 0.5f,
-        acos(clamp(direction.y, -1.0f, 1.0f)) / PI);
-    return Skybox.SampleLevel(LinearWrapSampler, uv, 0.0f).rgb *
-#elif RAYTRACING_DEMO_ENVIRONMENT_PROJECTION == 2
-    return Skybox.SampleLevel(
-        LinearWrapSampler,
-        FrameworkDirectionToHorizontalCubemapStripUv(direction),
-        0.0f).rgb *
-#else
-    return Skybox.SampleLevel(LinearWrapSampler, direction, 0.0f).rgb *
-#endif
-        Camera_SkyLight.ColorAndIntensity.rgb *
-        Camera_SkyLight.ColorAndIntensity.w;
+//Modify Begin:2026-08-11 by BestHui
+    return SampleEnvironmentRadiance(direction);
 //Modify End
 }
 
@@ -920,7 +906,7 @@ SurfaceData MakeRayHitSurface(const RayPayload payload, const float3 positionWs)
 }
 
 //Modify Begin:2026-08-11 by BestHui
-#if defined(FRAMEWORK_RESTIR_GI_SCENE_ADAPTER) || defined(FRAMEWORK_RESTIR_DI_SCENE_ADAPTER)
+#if defined(FRAMEWORK_RESTIR_GI_SCENE_ADAPTER)
 float3 EvaluateDiffuseReflectance(const SurfaceData surface)
 {
     return max(surface.Diffuse, 0.0f) * (1.0f - saturate(surface.Metallic)) * INV_PI;
@@ -1004,15 +990,15 @@ float3 EvaluateDiffuseDirectLighting(
 float3 TraceDiffuseGatherPathRadiance(
     const SurfaceData initialSurface,
     const float3 initialEmission,
-    const uint continuationBounceCount,
     inout uint rngState)
 {
     float3 radiance = initialEmission + EvaluateDiffuseDirectLighting(initialSurface, rngState);
     float3 throughput = 1.0f;
     SurfaceData currentSurface = initialSurface;
 
-    [loop]
-    for (uint bounce = 0u; bounce < continuationBounceCount; ++bounce)
+#if RAYTRACING_DEMO_MAX_BOUNCES > 2
+    [unroll]
+    for (uint bounce = 0u; bounce < RAYTRACING_DEMO_MAX_BOUNCES - 2u; ++bounce)
     {
         if (MaxComponent(throughput) < 0.005f)
         {
@@ -1045,6 +1031,7 @@ float3 TraceDiffuseGatherPathRadiance(
             payload.Emission +
             EvaluateDiffuseDirectLighting(currentSurface, rngState));
     }
+#endif
 
     return radiance;
 }
@@ -1055,7 +1042,6 @@ float3 TraceGatherPathRadiance(
     const SurfaceData initialSurface,
     const float3 initialEmission,
     const float3 initialViewDirection,
-    const uint continuationBounceCount,
     inout uint rngState)
 {
     float3 radiance = initialEmission;
@@ -1066,8 +1052,9 @@ float3 TraceGatherPathRadiance(
     float directHitDistance = 0.0f;
     radiance += EvaluateDirectLighting(currentSurface, viewDirection, rngState, directHitDistance);
 
-    [loop]
-    for (uint bounce = 0u; bounce < continuationBounceCount; ++bounce)
+#if RAYTRACING_DEMO_MAX_BOUNCES > 2
+    [unroll]
+    for (uint bounce = 0u; bounce < RAYTRACING_DEMO_MAX_BOUNCES - 2u; ++bounce)
     {
         if (MaxComponent(throughput) < 0.005f)
         {
@@ -1108,6 +1095,7 @@ float3 TraceGatherPathRadiance(
             payload.Emission +
             EvaluateDirectLighting(currentSurface, viewDirection, rngState, directHitDistance));
     }
+#endif
 
     return radiance;
 }
@@ -1115,11 +1103,9 @@ float3 TraceGatherPathRadiance(
 float3 TraceIndirectLighting(SurfaceData surface, inout uint rngState, out float nrdDiffuseHitDistance)
 {
     nrdDiffuseHitDistance = 0.0f;
-    if (Camera_MaxBounces <= 1u)
-    {
-        return 0.0f;
-    }
-
+#if RAYTRACING_DEMO_MAX_BOUNCES <= 1
+    return 0.0f;
+#else
     const float3 viewDirection = normalize(Camera_Position.xyz - surface.PositionWs);
     float3 direction = 0.0f;
     float3 sampleWeight = 0.0f;
@@ -1139,15 +1125,12 @@ float3 TraceIndirectLighting(SurfaceData surface, inout uint rngState, out float
 
     nrdDiffuseHitDistance = max(0.0f, payload.HitT);
     const SurfaceData hitSurface = MakeRayHitSurface(payload, origin + direction * payload.HitT);
-    const uint continuationBounceCount = Camera_MaxBounces > 2u
-        ? min(Camera_MaxBounces - 2u, 3u)
-        : 0u;
     return sampleWeight * TraceGatherPathRadiance(
         hitSurface,
         payload.Emission,
         -direction,
-        continuationBounceCount,
         rngState);
+#endif
 }
 
 

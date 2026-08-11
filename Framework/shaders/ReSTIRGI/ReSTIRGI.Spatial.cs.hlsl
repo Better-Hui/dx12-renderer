@@ -9,12 +9,6 @@
 Texture2D<uint4> ReSTIRGITemporalCreation : register(t12, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
 Texture2D<uint4> ReSTIRGITemporalHit : register(t13, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
 Texture2D<uint4> ReSTIRGITemporalLight : register(t14, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
-//Modify Begin:2026-07-30 by BestHui
-Texture2D<uint4> ReSTIRGIPreviousSpatialCreation : register(t15, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
-Texture2D<uint4> ReSTIRGIPreviousSpatialHit : register(t16, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
-Texture2D<uint4> ReSTIRGIPreviousSpatialLight : register(t17, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
-//Modify End
-Texture2D<float2> MotionVectorTexture : register(t18, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
 RWTexture2D<uint4> ReSTIRGIHistoryCreation : register(u2);
 RWTexture2D<uint4> ReSTIRGIHistoryHit : register(u3);
 RWTexture2D<uint4> ReSTIRGIHistoryLight : register(u4);
@@ -45,17 +39,6 @@ bool ReSTIRGIIsSpatiallyCompatible(
 }
 
 //Modify Begin:2026-07-30 by BestHui
-bool ReSTIRGIIsHistorySpatiallyCompatible(
-    const ReSTIRGI_Surface receiver,
-    const ReSTIRGIReservoir history)
-{
-    return ReSTIRGIHasCandidates(history) &&
-        ReSTIRGIGetAge(history) <= ReSTIRGI_MaxSampleAge &&
-        dot(receiver.NormalWs, history.CreationNormal) >= ReSTIRGI_SpatialNormalSimilarityThreshold &&
-        length(receiver.PositionWs - history.CreationPosition) <= ReSTIRGI_SpatialPositionSimilarityThreshold;
-}
-//Modify End
-
 [numthreads(8, 8, 1)]
 void main(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
@@ -74,36 +57,16 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
             ReSTIRGITemporalHit,
             ReSTIRGITemporalLight,
             pixel);
-        ReSTIRGIReservoir previousSpatial = ReSTIRGIEmptyReservoir();
-        const bool usePreviousFrameSpatial =
-            ReSTIRGI_HistoryValid != 0u &&
-            ReSTIRGI_TemporalResamplingEnabled != 0u &&
-            ReSTIRGI_SpatialResamplingEnabled != 0u;
-        if (usePreviousFrameSpatial)
-        {
-            const float2 motion = ReSTIRGI_LoadMotionVector(pixel) * float2(ReSTIRGI_Width, ReSTIRGI_Height);
-            const int2 reprojectedPixel = int2(round(float2(pixel) + motion));
-            if (all(reprojectedPixel >= 0) &&
-                reprojectedPixel.x < int(ReSTIRGI_Width) &&
-                reprojectedPixel.y < int(ReSTIRGI_Height))
-            {
-                previousSpatial = ReSTIRGIReadReservoir(
-                    ReSTIRGIPreviousSpatialCreation,
-                    ReSTIRGIPreviousSpatialHit,
-                    ReSTIRGIPreviousSpatialLight,
-                    uint2(reprojectedPixel));
-                previousSpatial.M = min(previousSpatial.M, ReSTIRGI_SpatialMaxHistoryLength);
-            }
-        }
-
         float weightSum = 0.0f;
 //Modify Begin:2026-07-30 by BestHui
         bool creationVisibilityKnown = false;
 //Modify End
+#if RESTIR_GI_USE_UNBIASED_SPATIAL_REUSE
         float3 candidateCreationPositions[ReSTIRGIMaxSpatialReuseCandidates];
         float3 candidateCreationNormals[ReSTIRGIMaxSpatialReuseCandidates];
         uint candidateMs[ReSTIRGIMaxSpatialReuseCandidates];
         uint candidateCount = 0u;
+#endif
 
         if (ReSTIRGIHasCandidates(temporal))
         {
@@ -118,53 +81,21 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
                 weightSum);
             creationVisibilityKnown = selectedTemporal && ReSTIRGIHasCreationVisibility(temporal);
 //Modify End
+#if RESTIR_GI_USE_UNBIASED_SPATIAL_REUSE
             candidateCreationPositions[candidateCount] = temporal.CreationPosition;
             candidateCreationNormals[candidateCount] = temporal.CreationNormal;
             candidateMs[candidateCount] = temporal.M;
             ++candidateCount;
+#endif
         }
 
-        if (usePreviousFrameSpatial &&
-            ReSTIRGIIsHistorySpatiallyCompatible(surface, previousSpatial))
+        const uint offsetStart = uint(FrameworkInterleavedGradientNoise2D(
+            pixel,
+            ReSTIRGI_FrameIndex,
+            0x739c52d1u).x * 16.0f);
+        [loop]
+        for (uint sampleIndex = 0u; sampleIndex < ReSTIRGI_SpatialNeighborCount; ++sampleIndex)
         {
-            const float jacobian = ReSTIRGIComputeJacobian(
-                previousSpatial,
-                surface.PositionWs,
-                surface.NormalWs,
-                ReSTIRGI_MaxJacobian);
-            float previousTarget = max(0.0f, ReSTIRGI_Luminance(
-                ReSTIRGI_EvaluateContribution(surface, previousSpatial))) * jacobian;
-            if (previousTarget > 0.0f && ReSTIRGI_SpatialVisibilityEnabled != 0u &&
-                !ReSTIRGI_TestVisibility(surface, previousSpatial))
-            {
-                previousTarget = 0.0f;
-            }
-//Modify Begin:2026-07-30 by BestHui
-            if (ReSTIRGIUpdateReservoir(
-                result,
-                previousSpatial,
-                previousSpatial.AverageWeight * float(previousSpatial.M) * previousTarget,
-                FrameworkInterleavedGradientNoise2D(pixel, ReSTIRGI_FrameIndex, 0x4e3a1b97u).x,
-                weightSum))
-            {
-                creationVisibilityKnown = false;
-            }
-//Modify End
-            candidateCreationPositions[candidateCount] = previousSpatial.CreationPosition;
-            candidateCreationNormals[candidateCount] = previousSpatial.CreationNormal;
-            candidateMs[candidateCount] = previousSpatial.M;
-            ++candidateCount;
-        }
-
-        if (ReSTIRGI_SpatialResamplingEnabled != 0u)
-        {
-            const uint offsetStart = uint(FrameworkInterleavedGradientNoise2D(
-                pixel,
-                ReSTIRGI_FrameIndex,
-                0x739c52d1u).x * 16.0f);
-            [loop]
-            for (uint sampleIndex = 0u; sampleIndex < ReSTIRGI_SpatialNeighborCount; ++sampleIndex)
-            {
                 const float2 offset = ReSTIRGISpatialOffsets[(offsetStart + sampleIndex) & 15u];
                 const int2 neighborPixel = clamp(
                     int2(pixel) + int2(round(offset * ReSTIRGI_SpatialSamplingRadius)),
@@ -176,45 +107,17 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
                     continue;
                 }
 
-                const bool usePreviousSpatial =
-                    usePreviousFrameSpatial && (sampleIndex & 1u) != 0u;
-                ReSTIRGIReservoir neighbor = ReSTIRGIEmptyReservoir();
-                if (usePreviousSpatial)
-                {
-                    const uint2 neighborPixelUint = uint2(neighborPixel);
-                    const float2 neighborMotion = ReSTIRGI_LoadMotionVector(neighborPixelUint) *
-                        float2(ReSTIRGI_Width, ReSTIRGI_Height);
-                    const int2 reprojectedNeighborPixel = int2(round(float2(neighborPixel) + neighborMotion));
-                    if (all(reprojectedNeighborPixel >= 0) &&
-                        reprojectedNeighborPixel.x < int(ReSTIRGI_Width) &&
-                        reprojectedNeighborPixel.y < int(ReSTIRGI_Height))
-                    {
-                        neighbor = ReSTIRGIReadReservoir(
-                            ReSTIRGIPreviousSpatialCreation,
-                            ReSTIRGIPreviousSpatialHit,
-                            ReSTIRGIPreviousSpatialLight,
-                            uint2(reprojectedNeighborPixel));
-                    }
-                }
-                else
-                {
-                    neighbor = ReSTIRGIReadReservoir(
-                        ReSTIRGITemporalCreation,
-                        ReSTIRGITemporalHit,
-                        ReSTIRGITemporalLight,
-                        uint2(neighborPixel));
-                }
+                ReSTIRGIReservoir neighbor = ReSTIRGIReadReservoir(
+                    ReSTIRGITemporalCreation,
+                    ReSTIRGITemporalHit,
+                    ReSTIRGITemporalLight,
+                    uint2(neighborPixel));
                 if (!ReSTIRGIHasCandidates(neighbor))
                 {
                     continue;
                 }
 
                 neighbor.M = min(neighbor.M, ReSTIRGI_SpatialMaxHistoryLength);
-                if (usePreviousSpatial && !ReSTIRGIIsHistorySpatiallyCompatible(surface, neighbor))
-                {
-                    continue;
-                }
-
                 float target = max(0.0f, ReSTIRGI_Luminance(
                     ReSTIRGI_EvaluateContribution(surface, neighbor)));
                 target *= ReSTIRGIComputeJacobian(
@@ -222,11 +125,6 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
                     surface.PositionWs,
                     surface.NormalWs,
                     ReSTIRGI_MaxJacobian);
-                if (target > 0.0f && ReSTIRGI_SpatialVisibilityEnabled != 0u &&
-                    !ReSTIRGI_TestVisibility(surface, neighbor))
-                {
-                    target = 0.0f;
-                }
 
 //Modify Begin:2026-07-30 by BestHui
                 if (ReSTIRGIUpdateReservoir(
@@ -242,6 +140,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
                     creationVisibilityKnown = false;
                 }
 //Modify End
+#if RESTIR_GI_USE_UNBIASED_SPATIAL_REUSE
                 if (candidateCount < ReSTIRGIMaxSpatialReuseCandidates)
                 {
                     candidateCreationPositions[candidateCount] = neighbor.CreationPosition;
@@ -249,8 +148,8 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
                     candidateMs[candidateCount] = neighbor.M;
                     ++candidateCount;
                 }
+#endif
             }
-        }
 
         const uint unboundedM = result.M;
         result.M = min(result.M, ReSTIRGI_SpatialMaxHistoryLength);
@@ -262,8 +161,8 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
             ? max(0.0f, ReSTIRGI_Luminance(ReSTIRGI_EvaluateContribution(surface, result)))
             : 0.0f;
         uint normalizationM = unboundedM;
-        if (ReSTIRGI_SpatialResamplingEnabled != 0u &&
-            ReSTIRGI_SpatialUnbiasedResamplingEnabled != 0u && selectedTarget > 0.0f)
+#if RESTIR_GI_USE_UNBIASED_SPATIAL_REUSE
+        if (selectedTarget > 0.0f)
         {
             normalizationM = 0u;
             [loop]
@@ -278,6 +177,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
                 }
             }
         }
+#endif
         result.AverageWeight = selectedTarget > 0.0f && normalizationM > 0u
             ? min(
                 weightSum / (float(normalizationM) * selectedTarget),

@@ -17,10 +17,12 @@ RWTexture2D<uint4> ReSTIRDITemporalReservoirState : register(u3);
 
 #include "ReSTIRDI/ReSTIRDISurface.hlsli"
 
+#if RESTIR_DI_USE_TEMPORAL_BOILING_FILTER
 static const uint ReSTIRDIBoilingFilterGroupSize = 8u;
 static const uint ReSTIRDIBoilingFilterSharedWaveCount = 2u;
 groupshared float ReSTIRDIBoilingFilterWeights[ReSTIRDIBoilingFilterSharedWaveCount];
 groupshared uint ReSTIRDIBoilingFilterCounts[ReSTIRDIBoilingFilterSharedWaveCount];
+#endif
 
 ReSTIRDI_Surface ReSTIRDI_LoadHistorySurface(const uint2 pixel)
 {
@@ -46,13 +48,9 @@ ReSTIRDI_Surface ReSTIRDI_LoadHistorySurface(const uint2 pixel)
     return surface;
 }
 
+#if RESTIR_DI_USE_TEMPORAL_BOILING_FILTER
 void ApplyReSTIRDIBoilingFilter(const uint2 localIndex, inout ReSTIRDIReservoir reservoir)
 {
-    if (ReSTIRDI_BoilingFilterEnabled == 0u)
-    {
-        return;
-    }
-
     const uint linearIndex = localIndex.x + localIndex.y * ReSTIRDIBoilingFilterGroupSize;
     float waveWeight = WaveActiveSum(reservoir.WeightSum);
     uint waveCount = WaveActiveCountBits(reservoir.WeightSum > 0.0f);
@@ -86,7 +84,9 @@ void ApplyReSTIRDIBoilingFilter(const uint2 localIndex, inout ReSTIRDIReservoir 
         reservoir = ReSTIRDIEmptyReservoir();
     }
 }
+#endif
 
+#if RESTIR_DI_USE_TEMPORAL_PERMUTATION_SAMPLING
 int2 ApplyReSTIRDIPermutationSampling(const int2 pixel)
 {
     const uint uniformRandomNumber = ReSTIRDI_FrameIndex * 747796405u + 2891336453u;
@@ -96,6 +96,7 @@ int2 ApplyReSTIRDIPermutationSampling(const int2 pixel)
     permutedPixel.y ^= 3;
     return permutedPixel - offset;
 }
+#endif
 
 [numthreads(8, 8, 1)]
 void main(uint3 dispatchThreadId : SV_DispatchThreadID, uint3 groupThreadId : SV_GroupThreadID)
@@ -112,14 +113,14 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID, uint3 groupThreadId : SV
         if (surface.Valid)
         {
             ReSTIRDICombineReservoirs(result, current, 0.5f, current.SelectedTargetPdf);
-            if (ReSTIRDI_TemporalResamplingEnabled != 0u && ReSTIRDI_HistoryValid != 0u)
+#if RESTIR_DI_USE_TEMPORAL_REUSE
+            if (ReSTIRDI_HistoryValid != 0u)
             {
                 uint rngState = ReSTIRDI_InitializeRandomState(pixel, ReSTIRDI_ScreenWidth, ReSTIRDI_FrameIndex, 0x0f16c4a3u);
                 float2 motion = MotionVectorTexture.Load(int3(pixel, 0)) * float2(ReSTIRDI_ScreenWidth, ReSTIRDI_ScreenHeight);
-                if (ReSTIRDI_TemporalPermutationSamplingEnabled == 0u)
-                {
+#if !RESTIR_DI_USE_TEMPORAL_PERMUTATION_SAMPLING
                     motion += float2(ReSTIRDI_Random01(rngState), ReSTIRDI_Random01(rngState)) - 0.5f;
-                }
+#endif
 
                 const int2 reprojectedPixel = int2(round(float2(pixel) + motion));
                 const float receiverDepth = length(surface.PositionWs - ReSTIRDI_CameraPosition.xyz);
@@ -133,10 +134,12 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID, uint3 groupThreadId : SV
                         ? int2(0, 0)
                         : int2(int((ReSTIRDI_Random01(rngState) - 0.5f) * 4.0f), int((ReSTIRDI_Random01(rngState) - 0.5f) * 4.0f));
                     int2 candidatePixel = reprojectedPixel + offset;
-                    if (ReSTIRDI_TemporalPermutationSamplingEnabled != 0u && searchIndex == 0u)
+#if RESTIR_DI_USE_TEMPORAL_PERMUTATION_SAMPLING
+                    if (searchIndex == 0u)
                     {
                         candidatePixel = ApplyReSTIRDIPermutationSampling(candidatePixel);
                     }
+#endif
                     if (any(candidatePixel < 0) || candidatePixel.x >= int(ReSTIRDI_ScreenWidth) || candidatePixel.y >= int(ReSTIRDI_ScreenHeight))
                     {
                         continue;
@@ -190,7 +193,8 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID, uint3 groupThreadId : SV
                     }
                 }
 
-                if (ReSTIRDI_TemporalBiasCorrectionMode != 0u && ReSTIRDIIsValid(result))
+#if RESTIR_DI_TEMPORAL_BIAS_MODE != 0
+                if (ReSTIRDIIsValid(result))
                 {
                     float normalizationNumerator = result.SelectedTargetPdf;
                     float normalizationDenominator = result.SelectedTargetPdf * current.M;
@@ -203,12 +207,18 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID, uint3 groupThreadId : SV
                         float temporalTargetPdf = selectedSampleAtHistory.Valid
                             ? max(0.0f, ReSTIRDI_Luminance(selectedSampleAtHistory.UnshadowedContribution))
                             : 0.0f;
-                        if (ReSTIRDI_TemporalBiasCorrectionMode == 2u && temporalTargetPdf > 0.0f &&
-                            (!selectedPreviousSample || ReSTIRDI_TemporalVisibilityShortcutEnabled == 0u) &&
+#if RESTIR_DI_TEMPORAL_BIAS_MODE == 2
+#if RESTIR_DI_USE_TEMPORAL_VISIBILITY_SHORTCUT
+                        if (temporalTargetPdf > 0.0f && !selectedPreviousSample &&
                             !ReSTIRDI_TestVisibility(historySurface, selectedSampleAtHistory))
+#else
+                        if (temporalTargetPdf > 0.0f &&
+                            !ReSTIRDI_TestVisibility(historySurface, selectedSampleAtHistory))
+#endif
                         {
                             temporalTargetPdf = 0.0f;
                         }
+#endif
                         normalizationNumerator = selectedPreviousSample ? temporalTargetPdf : normalizationNumerator;
                         normalizationDenominator += temporalTargetPdf * previousM;
                     }
@@ -218,15 +228,23 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID, uint3 groupThreadId : SV
                 {
                     ReSTIRDIFinalizeResampling(result, 1.0f, result.M);
                 }
+#else
+                ReSTIRDIFinalizeResampling(result, 1.0f, result.M);
+#endif
             }
             else
             {
                 ReSTIRDIFinalizeResampling(result, 1.0f, result.M);
             }
+#else
+            ReSTIRDIFinalizeResampling(result, 1.0f, result.M);
+#endif
         }
     }
 
+#if RESTIR_DI_USE_TEMPORAL_BOILING_FILTER
     ApplyReSTIRDIBoilingFilter(groupThreadId.xy, result);
+#endif
     if (pixelInBounds)
     {
         ReSTIRDITemporalReservoir[pixel] = ReSTIRDIPackReservoirCore(result);

@@ -67,7 +67,9 @@ void RaytracingDemoPassBindings::BindInlinePathTracingInputs(
     }
     if (shader.HasShaderResourceView("BindlessTextures"))
     {
-        const std::vector<ShaderResourceView> sceneTextures = resources.Scene.CreateTextureShaderResourceViews();
+//Modify Begin:2026-08-11 by BestHui
+        const std::vector<ShaderResourceView>& sceneTextures = resources.Scene.GetTextureShaderResourceViews();
+//Modify End
         commandContext.SetShaderResourceViews(shader, "BindlessTextures", sceneTextures);
     }
     resources.Lights.BindComputeResources(commandContext, shader);
@@ -93,7 +95,9 @@ void RaytracingDemoPassBindings::BindDxrPathTracingInputs(
     }
     if (shader.HasBinding("BindlessTextures"))
     {
-        shader.SetTextureArray("BindlessTextures", resources.Scene.CreateTextureShaderResourceViews());
+//Modify Begin:2026-08-11 by BestHui
+        shader.SetTextureArray("BindlessTextures", resources.Scene.GetTextureShaderResourceViews());
+//Modify End
     }
     resources.Lights.BindRayTracingResources(shader);
     if (shader.HasBinding("CameraConstants"))
@@ -102,7 +106,7 @@ void RaytracingDemoPassBindings::BindDxrPathTracingInputs(
     }
 }
 
-void RaytracingDemoPassBindings::BindCompositeInputs(
+ComputeShader& RaytracingDemoPassBindings::BindCompositeInputs(
     const RaytracingDemoPassResources& resources,
     CommandList& cmd,
     const RenderGraph::RenderContext& context,
@@ -112,7 +116,14 @@ void RaytracingDemoPassBindings::BindCompositeInputs(
     const RaytracingDemoRenderGraph::LightingResources lighting = RaytracingDemoRenderGraph::GetLightingResources(context);
     CommandContext commandContext(cmd);
 
-    ComputeShader& compositeShader = resources.Pipelines.GetLightingCompositeShader();
+    const PathTracingCompositeFeatures features {
+        .DirectLightingEnabled = camera.DirectLightingActive != 0u,
+        .IndirectLightingEnabled = camera.IndirectLightingActive != 0u,
+        .AccumulationEnabled = camera.AccumulationEnabled != 0u,
+        .DenoiserMode = camera.DenoiserEnabled,
+        .UseNrdReblur = camera.NRDDenoiserMode == 1u,
+    };
+    ComputeShader& compositeShader = resources.Pipelines.GetLightingCompositeShader(features);
     commandContext.SetConstantBuffer(compositeShader, "CameraConstants", sizeof(camera), &camera);
     commandContext.SetShaderResourceView(compositeShader, "GBufferTextures", 0u, ShaderResourceView(gbuffer.AlbedoOcclusion));
     commandContext.SetShaderResourceView(compositeShader, "GBufferTextures", 1u, ShaderResourceView(gbuffer.SpecularSmoothness));
@@ -120,11 +131,27 @@ void RaytracingDemoPassBindings::BindCompositeInputs(
     commandContext.SetShaderResourceView(compositeShader, "GBufferTextures", 3u, ShaderResourceView(gbuffer.EmissionMetallic));
     commandContext.SetShaderResourceView(compositeShader, "GBufferTextures", 4u, ShaderResourceView(gbuffer.Position));
     commandContext.SetShaderResourceView(compositeShader, "DepthTexture", ShaderResourceView::DepthAsFloat(gbuffer.Depth));
-    commandContext.SetShaderResourceView(compositeShader, "DirectLightingTexture", ShaderResourceView(lighting.Direct));
-    commandContext.SetShaderResourceView(compositeShader, "IndirectLightingTexture", ShaderResourceView(lighting.Indirect));
+    if (compositeShader.HasShaderResourceView("DirectLightingTexture"))
+    {
+        commandContext.SetShaderResourceView(compositeShader, "DirectLightingTexture", ShaderResourceView(lighting.Direct));
+    }
+    if (compositeShader.HasShaderResourceView("IndirectLightingTexture"))
+    {
+        commandContext.SetShaderResourceView(compositeShader, "IndirectLightingTexture", ShaderResourceView(lighting.Indirect));
+    }
     commandContext.SetUnorderedAccessView(compositeShader, "SceneColor", UnorderedAccessView(lighting.SceneColor));
-    commandContext.SetUnorderedAccessView(compositeShader, "HistoryColor", UnorderedAccessView(lighting.HistoryColor));
-    commandContext.SetUnorderedAccessView(compositeShader, "NoisyRadiance", UnorderedAccessView(lighting.NoisyRadiance));
-    commandContext.SetUnorderedAccessView(compositeShader, "NRDNoisyRadiance", UnorderedAccessView(lighting.NRDNoisyRadiance));
+    if (compositeShader.HasUnorderedAccessView("HistoryColor"))
+    {
+        commandContext.SetUnorderedAccessView(compositeShader, "HistoryColor", UnorderedAccessView(lighting.HistoryColor));
+    }
+    if (compositeShader.HasUnorderedAccessView("NoisyRadiance"))
+    {
+        commandContext.SetUnorderedAccessView(compositeShader, "NoisyRadiance", UnorderedAccessView(lighting.NoisyRadiance));
+    }
+    if (compositeShader.HasUnorderedAccessView("NRDNoisyRadiance"))
+    {
+        commandContext.SetUnorderedAccessView(compositeShader, "NRDNoisyRadiance", UnorderedAccessView(lighting.NRDNoisyRadiance));
+    }
+    return compositeShader;
 }
 //Modify End

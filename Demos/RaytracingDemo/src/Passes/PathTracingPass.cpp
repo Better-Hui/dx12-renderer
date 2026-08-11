@@ -306,9 +306,13 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateLi
         {
             const RaytracingDemoRenderGraph::FrameGBufferResources gbuffer = RaytracingDemoRenderGraph::GetFrameGBufferResources(context);
             const RaytracingDemoCameraConstants camera = RaytracingDemoPassBindings::BuildPassCameraConstants(resources, config, context);
-            RaytracingDemoPassBindings::BindCompositeInputs(resources, cmd, context, gbuffer, camera);
+            ComputeShader& compositeShader = RaytracingDemoPassBindings::BindCompositeInputs(
+                resources,
+                cmd,
+                context,
+                gbuffer,
+                camera);
 //Modify Begin:2026-07-28 by BestHui
-            ComputeShader& compositeShader = resources.Pipelines.GetLightingCompositeShader();
             CommandContext commandContext(cmd);
             commandContext.BindPipeline(compositeShader);
             commandContext.BindDescriptorSet(compositeShader.GetDescriptorSet());

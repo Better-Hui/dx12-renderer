@@ -10,7 +10,6 @@ cbuffer CameraConstants : register(b0, space0)
     float4 Camera_Position;
     uint Camera_Width;
     uint Camera_Height;
-    uint Camera_MaxBounces;
     uint Camera_SamplesPerPixel;
     uint Camera_DirectionalLightCount;
     uint Camera_PointLightCount;

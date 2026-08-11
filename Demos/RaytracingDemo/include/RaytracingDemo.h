@@ -185,8 +185,10 @@ private:
     RaytracingDemoLightingTechnique m_RenderGraphDirectLightingTechnique = RaytracingDemoLightingTechnique::None;
 //Modify End
 //Modify Begin:2026-08-10 by BestHui
-    RaytracingDemoLightingTechnique m_RenderGraphIndirectLightingTechnique = RaytracingDemoLightingTechnique::None;
-    bool m_RenderGraphIndirectLightingEnabled = false;
+//Modify Begin:2026-08-11 by BestHui
+    RaytracingDemoLightingTechnique m_RenderGraphIndirectLightingTechnique = RaytracingDemoLightingTechnique::ReSTIRGI;
+    bool m_RenderGraphIndirectLightingEnabled = true;
+//Modify End
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
     int m_RenderGraphLightingDebugTextureTarget = 0;
@@ -239,6 +241,9 @@ private:
     bool m_GpuTimingEnabled = false;
     bool m_RenderGraphTimingCaptureEnabled = false;
 //Modify End
+//Modify Begin:2026-08-11 by BestHui
+    bool m_ReSTIRGIStageTimingEnabled = false;
+//Modify End
 //Modify Begin:2026-08-02 by BestHui
     double m_LastRenderGraphCpuMilliseconds = 0.0;
 //Modify End
@@ -277,11 +282,15 @@ private:
     DirectX::XMMATRIX m_PreviousViewProjection = DirectX::XMMatrixIdentity();
     uint32_t m_FrameIndex = 0;
     uint32_t m_AccumulationFrameIndex = 0;
-    int m_MaxBounces = 1;
-    bool m_AccumulationEnabled = true;
+//Modify Begin:2026-08-11 by BestHui
+    int m_MaxBounces = 3;
+    bool m_AccumulationEnabled = false;
+//Modify End
 //Modify Begin:2026-08-05 by BestHui
-    RaytracingDemoLightingTechnique m_DirectLightingTechnique = RaytracingDemoLightingTechnique::ReSTIRDI;
-    RaytracingDemoLightingTechnique m_IndirectLightingTechnique = RaytracingDemoLightingTechnique::None;
+//Modify Begin:2026-08-11 by BestHui
+    RaytracingDemoLightingTechnique m_DirectLightingTechnique = RaytracingDemoLightingTechnique::None;
+    RaytracingDemoLightingTechnique m_IndirectLightingTechnique = RaytracingDemoLightingTechnique::ReSTIRGI;
+//Modify End
     ReSTIRDI m_DirectLightingReSTIRDI;
     bool m_ReSTIRDIHistoryValid = false;
 //Modify End

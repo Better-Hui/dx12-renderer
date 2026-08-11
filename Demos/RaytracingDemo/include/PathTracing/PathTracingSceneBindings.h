@@ -35,7 +35,7 @@ struct RaytracingDemoPassBindings
         const RaytracingDemoRenderGraph::FrameGBufferResources& gbuffer,
         const RaytracingDemoCameraConstants& camera);
 
-    static void BindCompositeInputs(
+    static ComputeShader& BindCompositeInputs(
         const RaytracingDemoPassResources& resources,
         CommandList& cmd,
         const RenderGraph::FrameContext& context,

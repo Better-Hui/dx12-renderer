@@ -59,7 +59,9 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         bool creationVisibilityKnown = selectedInitial && ReSTIRGIHasCreationVisibility(initial);
 //Modify End
 
-        if (ReSTIRGI_TemporalResamplingEnabled != 0u && ReSTIRGI_HistoryValid != 0u)
+//Modify Begin:2026-08-11 by BestHui
+#if RESTIR_GI_USE_TEMPORAL_REUSE
+        if (ReSTIRGI_HistoryValid != 0u)
         {
             const float2 motion = ReSTIRGI_LoadMotionVector(pixel) * float2(ReSTIRGI_Width, ReSTIRGI_Height);
             const int2 reprojectedPixel = int2(round(float2(pixel) + motion));
@@ -77,14 +79,13 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
                     history.M = min(history.M, ReSTIRGI_TemporalMaxHistoryLength);
                     float historyTarget = max(0.0f, ReSTIRGI_Luminance(
                         ReSTIRGI_EvaluateContribution(surface, history)));
-                    if (ReSTIRGI_TemporalJacobianEnabled != 0u)
-                    {
+#if RESTIR_GI_USE_TEMPORAL_JACOBIAN
                         historyTarget *= ReSTIRGIComputeJacobian(
                             history,
                             surface.PositionWs,
                             surface.NormalWs,
                             ReSTIRGI_MaxJacobian);
-                    }
+#endif
 //Modify Begin:2026-07-30 by BestHui
                     if (ReSTIRGIUpdateReservoir(
                         result,
@@ -99,6 +100,8 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
                 }
             }
         }
+#endif
+//Modify End
 
         const uint unboundedM = result.M;
         result.M = min(result.M, ReSTIRGI_TemporalMaxHistoryLength);

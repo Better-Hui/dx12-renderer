@@ -33,24 +33,25 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         if (selectedSample.Valid)
         {
             float visibility = 1.0f;
+#if RESTIR_DI_USE_FINAL_VISIBILITY
             bool reusedVisibility = false;
-            if (ReSTIRDI_FinalVisibilityEnabled != 0u && ReSTIRDI_FinalVisibilityReuseEnabled != 0u)
-            {
-                reusedVisibility = ReSTIRDIGetReusedVisibility(
-                    reservoir,
-                    ReSTIRDI_FinalVisibilityMaxAge,
-                    ReSTIRDI_FinalVisibilityMaxDistance,
-                    visibility);
-            }
+#if RESTIR_DI_USE_FINAL_VISIBILITY_REUSE
+            reusedVisibility = ReSTIRDIGetReusedVisibility(
+                reservoir,
+                ReSTIRDI_FinalVisibilityMaxAge,
+                ReSTIRDI_FinalVisibilityMaxDistance,
+                visibility);
+#endif
 
-            if (ReSTIRDI_FinalVisibilityEnabled != 0u && !reusedVisibility)
+            if (!reusedVisibility)
             {
                 visibility = ReSTIRDI_TestVisibility(surface, selectedSample) ? 1.0f : 0.0f;
                 ReSTIRDIStoreVisibility(
                     reservoir,
                     visibility,
-                    ReSTIRDI_FinalVisibilityDiscardInvisibleSamples != 0u);
+                    RESTIR_DI_DISCARD_INVISIBLE_FINAL_SAMPLES != 0);
             }
+#endif
 
             lighting = selectedSample.UnshadowedContribution * visibility * ReSTIRDIGetFinalWeight(reservoir);
             hitDistance = selectedSample.Distance;

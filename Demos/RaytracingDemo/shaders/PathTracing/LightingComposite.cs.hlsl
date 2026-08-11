@@ -2,14 +2,48 @@
 #include "../Scene/SceneCamera.hlsli"
 #include "../../../../External/NRD/Shaders/NRD.hlsli"
 
+//Modify Begin:2026-07-30 by BestHui
+#ifndef RAYTRACING_DEMO_COMPOSITE_DIRECT_LIGHTING
+#define RAYTRACING_DEMO_COMPOSITE_DIRECT_LIGHTING 1
+#endif
+
+#ifndef RAYTRACING_DEMO_COMPOSITE_INDIRECT_LIGHTING
+#define RAYTRACING_DEMO_COMPOSITE_INDIRECT_LIGHTING 1
+#endif
+
+#ifndef RAYTRACING_DEMO_COMPOSITE_ACCUMULATION
+#define RAYTRACING_DEMO_COMPOSITE_ACCUMULATION 1
+#endif
+
+#ifndef RAYTRACING_DEMO_COMPOSITE_DENOISER_MODE
+#define RAYTRACING_DEMO_COMPOSITE_DENOISER_MODE 0
+#endif
+
+#ifndef RAYTRACING_DEMO_COMPOSITE_NRD_REBLUR
+#define RAYTRACING_DEMO_COMPOSITE_NRD_REBLUR 0
+#endif
+//Modify End
+
 Texture2D<float4> GBufferTextures[GBuffer_Count] : register(t0, space0);
 Texture2D<float> DepthTexture : register(t5, space0);
+//Modify Begin:2026-07-30 by BestHui
+#if RAYTRACING_DEMO_COMPOSITE_DIRECT_LIGHTING
 Texture2D<float4> DirectLightingTexture : register(t7, space0);
+#endif
+#if RAYTRACING_DEMO_COMPOSITE_INDIRECT_LIGHTING
 Texture2D<float4> IndirectLightingTexture : register(t8, space0);
+#endif
 RWTexture2D<float4> SceneColor : register(u0, space0);
+#if RAYTRACING_DEMO_COMPOSITE_ACCUMULATION
 RWTexture2D<float4> HistoryColor : register(u1, space0);
+#endif
+#if RAYTRACING_DEMO_COMPOSITE_DENOISER_MODE == 2
 RWTexture2D<float4> NoisyRadiance : register(u2, space0);
+#endif
+#if RAYTRACING_DEMO_COMPOSITE_DENOISER_MODE == 1
 RWTexture2D<float4> NRDNoisyRadiance : register(u3, space0);
+#endif
+//Modify End
 
 float3 SanitizeNRDRadiance(float3 color)
 {
@@ -21,6 +55,8 @@ float3 SanitizeNRDRadiance(float3 color)
     return min(max(color, 0.0f), 250.0f);
 }
 
+//Modify Begin:2026-07-30 by BestHui
+#if RAYTRACING_DEMO_COMPOSITE_DENOISER_MODE == 1
 float3 GetNRDDiffuseDemodulation(uint2 pixel)
 {
     const float4 albedoOcclusion = GBufferTextures[GBuffer_AlbedoOcclusion].Load(int3(pixel, 0));
@@ -48,8 +84,7 @@ float GetGBufferViewZ(uint2 pixel)
 float4 PackNRDDiffuseRadianceHitDistance(float3 radiance, float hitDistance, float viewZ, float roughness)
 {
     radiance = SanitizeNRDRadiance(radiance);
-    if (Camera_NRDDenoiserMode == 1u)
-    {
+#if RAYTRACING_DEMO_COMPOSITE_NRD_REBLUR
         const float3 hitDistanceParams = Camera_NRDReblurHitDistanceParameters.xyz;
         const float normHitDistance = REBLUR_FrontEnd_GetNormHitDist(
             max(0.0f, hitDistance),
@@ -57,10 +92,12 @@ float4 PackNRDDiffuseRadianceHitDistance(float3 radiance, float hitDistance, flo
             hitDistanceParams,
             max(0.001f, roughness));
         return REBLUR_FrontEnd_PackRadianceAndNormHitDist(radiance, normHitDistance, false);
-    }
-
+#else
     return RELAX_FrontEnd_PackRadianceAndHitDist(radiance, max(0.0f, hitDistance), false);
+#endif
 }
+#endif
+//Modify End
 
 [numthreads(8, 8, 1)]
 void main(uint3 dispatchThreadId : SV_DispatchThreadID)
@@ -75,23 +112,17 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
 //Modify Begin:2026-07-28 by BestHui
     if (depth >= 0.999999f)
     {
-//Modify Begin:2026-08-02 by BestHui
-        // NRD consumes NRDNoisyRadiance, SVGF consumes NoisyRadiance; only write the input
-        // that the active denoiser actually reads.
-        if (Camera_DenoiserEnabled == 1u)
-        {
+//Modify Begin:2026-07-30 by BestHui
+#if RAYTRACING_DEMO_COMPOSITE_DENOISER_MODE == 1
             NRDNoisyRadiance[pixel] = 0.0f;
-        }
-        else if (Camera_DenoiserEnabled == 2u)
-        {
+#elif RAYTRACING_DEMO_COMPOSITE_DENOISER_MODE == 2
             NoisyRadiance[pixel] = 0.0f;
-        }
+#endif
 //Modify End
-//Modify Begin:2026-08-02 by BestHui
-        if (Camera_AccumulationEnabled != 0u)
-        {
+//Modify Begin:2026-07-30 by BestHui
+#if RAYTRACING_DEMO_COMPOSITE_ACCUMULATION
             HistoryColor[pixel] = 0.0f;
-        }
+#endif
 //Modify End
         SceneColor[pixel] = 0.0f;
         return;
@@ -108,20 +139,19 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     sampleColor += emission;
 //Modify End
 //Modify Begin:2026-08-06 by BestHui
-    if (Camera_DirectLightingActive != 0u)
-    {
+//Modify Begin:2026-07-30 by BestHui
+#if RAYTRACING_DEMO_COMPOSITE_DIRECT_LIGHTING
         const float4 directLightingSample = DirectLightingTexture.Load(int3(pixel, 0));
         directLighting = directLightingSample.rgb;
         directHitDistance = directLightingSample.a;
         sampleColor += directLighting;
-    }
-    if (Camera_IndirectLightingActive != 0u)
-    {
+#endif
+#if RAYTRACING_DEMO_COMPOSITE_INDIRECT_LIGHTING
         const float4 indirectLighting = IndirectLightingTexture.Load(int3(pixel, 0));
         indirectLightingColor = indirectLighting.rgb;
         indirectHitDistance = indirectLighting.a;
         sampleColor += indirectLightingColor;
-    }
+#endif
 //Modify End
 
     const float directLuminance = dot(max(directLighting, 0.0f), float3(0.2126f, 0.7152f, 0.0722f));
@@ -130,27 +160,22 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     directHitDistanceContribution = min(directHitDistanceContribution, 0.5f);
     const float hitDistance = lerp(indirectHitDistance, directHitDistance, directHitDistanceContribution);
 
+//Modify Begin:2026-07-30 by BestHui
+#if RAYTRACING_DEMO_COMPOSITE_DENOISER_MODE == 1
     const float viewZ = GetGBufferViewZ(pixel);
     const float roughness = GetGBufferRoughness(pixel);
     const float3 nrdDemodulation = GetNRDDiffuseDemodulation(pixel);
-//Modify Begin:2026-08-02 by BestHui
-    if (Camera_DenoiserEnabled == 1u)
-    {
         NRDNoisyRadiance[pixel] = PackNRDDiffuseRadianceHitDistance(sampleColor / nrdDemodulation, hitDistance, viewZ, roughness);
-    }
-    else if (Camera_DenoiserEnabled == 2u)
-    {
+#elif RAYTRACING_DEMO_COMPOSITE_DENOISER_MODE == 2
         NoisyRadiance[pixel] = float4(SanitizeNRDRadiance(sampleColor), hitDistance);
-    }
+#endif
 //Modify End
 
-    if (Camera_AccumulationEnabled == 0u)
-    {
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-30 by BestHui
+#if !RAYTRACING_DEMO_COMPOSITE_ACCUMULATION
         SceneColor[pixel] = float4(SanitizeNRDRadiance(sampleColor), 1.0f);
-//Modify End
         return;
-    }
+#else
 
     const uint previousSampleCount = Camera_AccumulationFrameIndex;
     float3 accumulatedColor = sampleColor;
@@ -161,7 +186,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     }
 
     HistoryColor[pixel] = float4(accumulatedColor, float(previousSampleCount + 1u));
-//Modify Begin:2026-07-28 by BestHui
     SceneColor[pixel] = float4(SanitizeNRDRadiance(accumulatedColor), 1.0f);
+#endif
 //Modify End
 }

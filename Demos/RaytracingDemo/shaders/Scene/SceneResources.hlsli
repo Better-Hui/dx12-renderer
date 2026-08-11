@@ -13,6 +13,9 @@
 
 #include "../GBuffer/GBufferLayout.hlsli"
 #include <Bindless/BindlessResources.hlsli>
+//Modify Begin:2026-08-11 by BestHui
+#include <Common/EnvironmentTexture.hlsli>
+//Modify End
 #include <Lighting/SurfaceEmitter.hlsli>
 #include "SceneCamera.hlsli"
 #include "SceneGeometryBindless.hlsli"
@@ -93,5 +96,27 @@ StructuredBuffer<float> DirectLightCdf : RAYTRACING_DEMO_DIRECT_LIGHT_CDF_REGIST
 RWTexture2D<float4> DirectLighting : RAYTRACING_DEMO_DIRECT_LIGHTING_REGISTER;
 RWTexture2D<float4> IndirectLighting : RAYTRACING_DEMO_INDIRECT_LIGHTING_REGISTER;
 SamplerState LinearWrapSampler : RAYTRACING_DEMO_LINEAR_SAMPLER_REGISTER;
+
+//Modify Begin:2026-08-11 by BestHui
+float3 SampleEnvironmentRadiance(const float3 directionWs)
+{
+#if RAYTRACING_DEMO_ENVIRONMENT_PROJECTION == 1
+    const float2 uv = float2(
+        atan2(directionWs.z, directionWs.x) / 6.28318530718f + 0.5f,
+        acos(clamp(directionWs.y, -1.0f, 1.0f)) / 3.14159265359f);
+    const float3 textureRadiance = Skybox.SampleLevel(LinearWrapSampler, uv, 0.0f).rgb;
+#elif RAYTRACING_DEMO_ENVIRONMENT_PROJECTION == 2
+    const float3 textureRadiance = Skybox.SampleLevel(
+        LinearWrapSampler,
+        FrameworkDirectionToHorizontalCubemapStripUv(directionWs),
+        0.0f).rgb;
+#else
+    const float3 textureRadiance = Skybox.SampleLevel(LinearWrapSampler, directionWs, 0.0f).rgb;
+#endif
+    return textureRadiance *
+        Camera_SkyLight.ColorAndIntensity.rgb *
+        Camera_SkyLight.ColorAndIntensity.w;
+}
+//Modify End
 
 #endif

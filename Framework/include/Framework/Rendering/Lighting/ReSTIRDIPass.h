@@ -9,6 +9,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 class CommandList;
@@ -35,6 +36,7 @@ struct ReSTIRDIExecutionInputs
     ReSTIRDIFrameState FrameState;
     std::shared_ptr<Texture> DirectLighting;
     std::shared_ptr<Texture> MotionVector;
+    std::function<void(CommandContext&)> PrepareCommandContext;
     std::function<void(CommandContext&, ComputeShader&)> BindSceneInputs;
 };
 
@@ -60,13 +62,24 @@ public:
     ReSTIRDIPass& operator=(const ReSTIRDIPass&) = delete;
 
 //Modify Begin:2026-08-06 by BestHui
-    void EnsurePipelines(bool useSoftShadowVariant, uint32_t environmentProjectionVariant);
+    void EnsurePipelines(
+        bool useSoftShadowVariant,
+        uint32_t environmentProjectionVariant,
+        const ReSTIRDIFrameConstants& constants);
 //Modify End
     void Execute(
         CommandList& commandList,
         const ReSTIRDIExecutionInputs& inputs);
 
 private:
+    enum class ReSTIRDIStage : uint8_t
+    {
+        RIS,
+        Temporal,
+        Spatial,
+        Shade,
+    };
+
     struct PipelineSet;
     struct InternalResources;
 
@@ -75,18 +88,27 @@ private:
     static constexpr uint32_t PipelineVariantCount = EnvironmentProjectionVariantCount * 2u;
 
     static size_t GetPipelineVariantIndex(bool useSoftShadowVariant, uint32_t environmentProjectionVariant);
+    static uint32_t GetStageVariantKey(ReSTIRDIStage stage, const ReSTIRDIFrameConstants& constants);
+    static std::vector<ShaderVariantDefine> GetStageVariantDefines(
+        ReSTIRDIStage stage,
+        const ReSTIRDIFrameConstants& constants);
     PipelineSet& GetPipelines(bool useSoftShadowVariant, uint32_t environmentProjectionVariant);
+    ComputeShader& GetStageShader(
+        PipelineSet& pipelines,
+        ReSTIRDIStage stage,
+        const ReSTIRDIFrameConstants& constants);
 //Modify End
     void EnsureResources(uint32_t width, uint32_t height);
-    void ExecuteInitialSampling(CommandList& commandList, const ReSTIRDIExecutionInputs& inputs, PipelineSet& pipelines);
-    void ExecuteTemporalResampling(CommandList& commandList, const ReSTIRDIExecutionInputs& inputs, PipelineSet& pipelines);
-    void ExecuteSpatialResampling(CommandList& commandList, const ReSTIRDIExecutionInputs& inputs, PipelineSet& pipelines);
-    void ExecuteFinalShading(CommandList& commandList, const ReSTIRDIExecutionInputs& inputs, PipelineSet& pipelines);
+    void ExecuteInitialSampling(CommandContext& commandContext, const ReSTIRDIExecutionInputs& inputs, PipelineSet& pipelines);
+    void ExecuteTemporalResampling(CommandContext& commandContext, const ReSTIRDIExecutionInputs& inputs, PipelineSet& pipelines);
+    void ExecuteSpatialResampling(CommandContext& commandContext, const ReSTIRDIExecutionInputs& inputs, PipelineSet& pipelines);
+    void ExecuteFinalShading(CommandContext& commandContext, const ReSTIRDIExecutionInputs& inputs, PipelineSet& pipelines);
     std::unique_ptr<ComputeShader> CreateComputeShader(
         const std::wstring& compiledFileName,
         const std::wstring& sourceFileName,
         bool useSoftShadowVariant,
-        uint32_t environmentProjectionVariant);
+        uint32_t environmentProjectionVariant,
+        std::vector<ShaderVariantDefine> featureDefines);
 
     FrameworkDeviceContext& m_DeviceContext;
     ReSTIRDIShaderSources m_ShaderSources;

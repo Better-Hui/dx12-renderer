@@ -59,7 +59,8 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         ReSTIRDIFinalizeResampling(reservoir, 1.0f, float(ReSTIRDI_CandidateCount));
         reservoir.M = 1.0f;
 
-        if (ReSTIRDI_InitialVisibilityEnabled != 0u && ReSTIRDIIsValid(reservoir))
+#if RESTIR_DI_USE_INITIAL_VISIBILITY
+        if (ReSTIRDIIsValid(reservoir))
         {
             const ReSTIRDI_LightSample selectedSample = ReSTIRDI_SampleLight(
                 ReSTIRDIGetLightIndex(reservoir), surface, ReSTIRDIGetSampleUv(reservoir));
@@ -68,6 +69,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
                 ReSTIRDIStoreVisibility(reservoir, 0.0f, true);
             }
         }
+#endif
     }
 
     ReSTIRDIRISReservoir[pixel] = ReSTIRDIPackReservoirCore(reservoir);

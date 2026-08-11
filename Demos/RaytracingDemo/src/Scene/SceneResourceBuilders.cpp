@@ -37,6 +37,9 @@ void SceneTextureMaterialResources::Clear()
     m_BindlessDescriptorHeap.Reset();
     m_Materials.clear();
     m_Textures.clear();
+//Modify Begin:2026-08-11 by BestHui
+    m_TextureShaderResourceViews.clear();
+//Modify End
     m_TextureIndices.clear();
 }
 
@@ -55,6 +58,9 @@ uint32_t SceneTextureMaterialResources::AddTexture(
     commandList.LoadTextureFromFile(*texture, path, usage);
     const uint32_t textureIndex = m_BindlessDescriptorHeap.AddShaderResourceView(*texture);
     m_Textures.push_back(texture);
+//Modify Begin:2026-08-11 by BestHui
+    m_TextureShaderResourceViews.emplace_back(texture);
+//Modify End
     m_TextureIndices.emplace(cacheKey, textureIndex);
     return textureIndex;
 }
@@ -160,16 +166,12 @@ void SceneTextureMaterialResources::TransitionTextures(
     }
 }
 
-std::vector<ShaderResourceView> SceneTextureMaterialResources::CreateTextureShaderResourceViews() const
+//Modify Begin:2026-08-11 by BestHui
+const std::vector<ShaderResourceView>& SceneTextureMaterialResources::GetTextureShaderResourceViews() const
 {
-    std::vector<ShaderResourceView> shaderResourceViews;
-    shaderResourceViews.reserve(m_Textures.size());
-    for (const std::shared_ptr<Texture>& texture : m_Textures)
-    {
-        shaderResourceViews.emplace_back(texture);
-    }
-    return shaderResourceViews;
+    return m_TextureShaderResourceViews;
 }
+//Modify End
 
 void SceneGeometryResources::Clear()
 {

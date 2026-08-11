@@ -36,8 +36,7 @@ ReSTIRGIFrameConstants ReSTIRGI::GetFrameConstants(
     const uint32_t width,
     const uint32_t height,
     const uint32_t frameIndex,
-    const bool historyValid,
-    const uint32_t maxPathBounces) const
+    const bool historyValid) const
 {
     return {
         width,
@@ -50,7 +49,6 @@ ReSTIRGIFrameConstants ReSTIRGI::GetFrameConstants(
 //Modify End
         m_Settings.EnableTemporalResampling ? 1u : 0u,
         m_Settings.EnableSpatialResampling ? 1u : 0u,
-        m_Settings.EnableSpatialVisibility ? 1u : 0u,
         m_Settings.EnableTemporalJacobian ? 1u : 0u,
 
         m_Settings.TemporalMaxHistoryLength,
@@ -59,7 +57,8 @@ ReSTIRGIFrameConstants ReSTIRGI::GetFrameConstants(
         m_Settings.SpatialNeighborCount,
 //Modify Begin:2026-07-30 by BestHui
         m_Settings.EnableUnbiasedSpatialResampling ? 1u : 0u,
-        std::max(2u, maxPathBounces),
+        0u,
+        0u,
         0u,
 //Modify End
 

@@ -59,7 +59,9 @@ public:
 
     void UploadMaterialBuffer(CommandList& commandList);
     void TransitionTextures(CommandList& commandList, D3D12_RESOURCE_STATES stateAfter) const;
-    std::vector<ShaderResourceView> CreateTextureShaderResourceViews() const;
+//Modify Begin:2026-08-11 by BestHui
+    const std::vector<ShaderResourceView>& GetTextureShaderResourceViews() const;
+//Modify End
 
     const std::vector<RaytracingDemoMaterialData>& GetMaterials() const { return m_Materials; }
     const std::vector<std::shared_ptr<Texture>>& GetTextures() const { return m_Textures; }
@@ -74,6 +76,9 @@ private:
     BindlessDescriptorHeap m_BindlessDescriptorHeap;
     std::vector<RaytracingDemoMaterialData> m_Materials;
     std::vector<std::shared_ptr<Texture>> m_Textures;
+//Modify Begin:2026-08-11 by BestHui
+    std::vector<ShaderResourceView> m_TextureShaderResourceViews;
+//Modify End
     std::unordered_map<std::wstring, uint32_t> m_TextureIndices;
 };
 

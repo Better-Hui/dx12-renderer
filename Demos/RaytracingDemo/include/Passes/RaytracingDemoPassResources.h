@@ -33,6 +33,9 @@
 
 class CommandQueue;
 class CudaBloomPass;
+//Modify Begin:2026-08-11 by BestHui
+class GpuTimestampProfiler;
+//Modify End
 class IndirectDrawCommandSignature;
 
 namespace RenderGraph
@@ -47,7 +50,6 @@ struct RaytracingDemoCameraConstants
     DirectX::XMFLOAT4 CameraPosition = { 0.0f, 0.0f, 0.0f, 1.0f };
     uint32_t Width = 1;
     uint32_t Height = 1;
-    uint32_t MaxBounces = 5;
     uint32_t SamplesPerPixel = 1;
     uint32_t DirectionalLightCount = 0;
     uint32_t PointLightCount = 0;
@@ -169,6 +171,9 @@ struct RaytracingDemoPassResources
     std::shared_ptr<CommandQueue> DirectQueue;
     std::shared_ptr<CommandQueue> AsyncComputeQueue;
 //Modify End
+//Modify Begin:2026-08-11 by BestHui
+    GpuTimestampProfiler* DirectGpuTimestampProfiler = nullptr;
+//Modify End
 };
 
 //Modify Begin:2026-08-05 by BestHui
@@ -219,6 +224,9 @@ struct RaytracingDemoFrameState
     bool ReSTIRDIHistoryValid = false;
 //Modify Begin:2026-08-10 by BestHui
     bool ReSTIRGIHistoryValid = false;
+//Modify End
+//Modify Begin:2026-08-11 by BestHui
+    bool ReSTIRGIStageTimingEnabled = false;
 //Modify End
     bool HasPreviousViewProjection = false;
     DirectX::XMMATRIX PreviousViewProjection = DirectX::XMMatrixIdentity();

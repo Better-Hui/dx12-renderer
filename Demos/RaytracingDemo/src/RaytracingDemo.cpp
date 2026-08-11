@@ -227,6 +227,9 @@ namespace
         Accumulation,
         GpuTiming,
         TimingCapture,
+//Modify Begin:2026-08-11 by BestHui
+        ReSTIRGIStageTiming,
+//Modify End
         DumpTiming,
 //Modify Begin:2026-08-07 by BestHui
         DLSS,
@@ -462,7 +465,12 @@ namespace
 //Modify End
             makeStep(Action::IndirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::PathTracing), "indirect=pathtracing"),
             makeStep(Action::IndirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::ReSTIRGI), "indirect=restirgi"),
+//Modify Begin:2026-08-11 by BestHui
+            makeStep(Action::ReSTIRGIStageTiming, 1u, "restirgi-stage-timing=1"),
+            makeStep(Action::Wait, 0u, "restirgi-stage-timing-warmup"),
             makeStep(Action::DumpTiming, 1u, "timingdump=restirgi"),
+            makeStep(Action::ReSTIRGIStageTiming, 0u, "restirgi-stage-timing=0"),
+//Modify End
             makeStep(Action::ParallelDirectCommandRecording, 0u, "parallelrecording=0"),
             makeStep(Action::ParallelDirectCommandRecording, 1u, "parallelrecording=1"),
             makeStep(Action::AsyncCompute, 1u, "async=1"),
@@ -640,9 +648,6 @@ RaytracingDemo::RaytracingDemo(const std::wstring& name, const int width, const 
     restirGISettingsOverridden |= TryGetEnvironmentBoolean(
         "RAYTRACING_DEMO_RESTIRGI_SPATIAL",
         restirGISettings.EnableSpatialResampling);
-    restirGISettingsOverridden |= TryGetEnvironmentBoolean(
-        "RAYTRACING_DEMO_RESTIRGI_SPATIAL_VISIBILITY",
-        restirGISettings.EnableSpatialVisibility);
     if (restirGISettingsOverridden)
     {
         m_IndirectLightingReSTIRGI.SetSettings(restirGISettings);
@@ -815,16 +820,16 @@ void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::files
     m_Lights.CreateFromScene(m_Scene);
 //Modify Begin:2026-08-10 by BestHui
     bool directionalLightsEnabled = m_Lights.AreDirectionalLightsEnabled();
-    bool pointLightsEnabled = m_Lights.ArePointLightsEnabled();
+//Modify Begin:2026-08-11 by BestHui
+    bool pointLightsEnabled = false;
+//Modify End
     bool areaLightsEnabled = m_Lights.AreAreaLightsEnabled();
-    bool lightGroupsOverridden = false;
-    lightGroupsOverridden |= TryGetEnvironmentBoolean("RAYTRACING_DEMO_DIRECTIONAL_LIGHTS", directionalLightsEnabled);
-    lightGroupsOverridden |= TryGetEnvironmentBoolean("RAYTRACING_DEMO_POINT_LIGHTS", pointLightsEnabled);
-    lightGroupsOverridden |= TryGetEnvironmentBoolean("RAYTRACING_DEMO_AREA_LIGHTS", areaLightsEnabled);
-    if (lightGroupsOverridden)
-    {
-        m_Lights.SetLightGroupSettings(directionalLightsEnabled, pointLightsEnabled, areaLightsEnabled);
-    }
+//Modify Begin:2026-08-11 by BestHui
+    TryGetEnvironmentBoolean("RAYTRACING_DEMO_DIRECTIONAL_LIGHTS", directionalLightsEnabled);
+    TryGetEnvironmentBoolean("RAYTRACING_DEMO_POINT_LIGHTS", pointLightsEnabled);
+    TryGetEnvironmentBoolean("RAYTRACING_DEMO_AREA_LIGHTS", areaLightsEnabled);
+    m_Lights.SetLightGroupSettings(directionalLightsEnabled, pointLightsEnabled, areaLightsEnabled);
+//Modify End
 
     bool skyLightEnabled = true;
     if (TryGetEnvironmentBoolean("RAYTRACING_DEMO_SKY_LIGHT", skyLightEnabled) && !skyLightEnabled)
@@ -1022,6 +1027,11 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         m_RenderGraphTimingCaptureEnabled = enabled;
         m_RenderGraphTimingHistory.Clear();
         break;
+//Modify Begin:2026-08-11 by BestHui
+    case RuntimeAutomationAction::ReSTIRGIStageTiming:
+        m_ReSTIRGIStageTimingEnabled = enabled && m_GpuTimingEnabled;
+        break;
+//Modify End
     case RuntimeAutomationAction::DumpTiming:
         m_RenderGraphTimingHistory.DumpCsv();
         break;
@@ -1421,26 +1431,38 @@ RayTracingSceneResourceLayout RaytracingDemo::BuildRayTracingSceneResourceLayout
 void RaytracingDemo::EnsureRayTracingPipelines()
 {
     const RayTracingSceneResourceLayout layout = BuildRayTracingSceneResourceLayout();
+    const ReSTIRDIFrameConstants restirDIConstants = m_DirectLightingReSTIRDI.GetFrameConstants(false);
 //Modify Begin:2026-07-27 by BestHui
     m_PathTracingPipelines.EnsurePipelines(
         m_PathTracingBackend,
         m_SoftShadowsEnabled ? PathTracingShadowMode::SoftShadows : PathTracingShadowMode::HardShadows,
-        layout);
+        layout,
+        static_cast<uint32_t>(m_MaxBounces));
 //Modify Begin:2026-07-30 by BestHui
     m_DirectLightingReSTIRDIPass.EnsurePipelines(
         m_SoftShadowsEnabled,
-        static_cast<uint32_t>(layout.EnvironmentProjection));
+        static_cast<uint32_t>(layout.EnvironmentProjection),
+        restirDIConstants);
 //Modify End
 //Modify Begin:2026-08-10 by BestHui
     const bool restirGIActive =
         m_PathTracingBackend == PathTracingBackend::InlineRayQuery &&
         m_IndirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRGI &&
         m_MaxBounces > 1;
+//Modify Begin:2026-08-11 by BestHui
+    const ReSTIRGIFrameConstants restirGIConstants = m_IndirectLightingReSTIRGI.GetFrameConstants(
+        1u,
+        1u,
+        0u,
+        false);
+//Modify End
     if (restirGIActive)
     {
         m_IndirectLightingReSTIRGIPass.EnsurePipelines(
             m_SoftShadowsEnabled,
-            static_cast<uint32_t>(layout.EnvironmentProjection));
+            static_cast<uint32_t>(layout.EnvironmentProjection),
+            restirGIConstants,
+            static_cast<uint32_t>(m_MaxBounces));
     }
 //Modify End
     if (m_SceneResources.GetRayTracingAccelerationStructure().GetInstanceCount() > 0)
@@ -1454,6 +1476,7 @@ void RaytracingDemo::EnsureRayTracingPipelines()
 void RaytracingDemo::PrewarmRuntimeShadowVariants()
 {
     const RayTracingSceneResourceLayout layout = BuildRayTracingSceneResourceLayout();
+    const ReSTIRDIFrameConstants restirDIConstants = m_DirectLightingReSTIRDI.GetFrameConstants(false);
     const PathTracingShadowMode currentShadowMode = m_SoftShadowsEnabled
         ? PathTracingShadowMode::SoftShadows
         : PathTracingShadowMode::HardShadows;
@@ -1461,32 +1484,53 @@ void RaytracingDemo::PrewarmRuntimeShadowVariants()
         ? PathTracingShadowMode::HardShadows
         : PathTracingShadowMode::SoftShadows;
 
-    m_PathTracingPipelines.EnsurePipelines(m_PathTracingBackend, alternateShadowMode, layout);
+    m_PathTracingPipelines.EnsurePipelines(
+        m_PathTracingBackend,
+        alternateShadowMode,
+        layout,
+        static_cast<uint32_t>(m_MaxBounces));
     m_DirectLightingReSTIRDIPass.EnsurePipelines(
         alternateShadowMode == PathTracingShadowMode::SoftShadows,
-        static_cast<uint32_t>(layout.EnvironmentProjection));
+        static_cast<uint32_t>(layout.EnvironmentProjection),
+        restirDIConstants);
 //Modify Begin:2026-08-10 by BestHui
     const bool restirGIActive =
         m_PathTracingBackend == PathTracingBackend::InlineRayQuery &&
         m_IndirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRGI &&
         m_MaxBounces > 1;
+//Modify Begin:2026-08-11 by BestHui
+    const ReSTIRGIFrameConstants restirGIConstants = m_IndirectLightingReSTIRGI.GetFrameConstants(
+        1u,
+        1u,
+        0u,
+        false);
+//Modify End
     if (restirGIActive)
     {
         m_IndirectLightingReSTIRGIPass.EnsurePipelines(
             alternateShadowMode == PathTracingShadowMode::SoftShadows,
-            static_cast<uint32_t>(layout.EnvironmentProjection));
+            static_cast<uint32_t>(layout.EnvironmentProjection),
+            restirGIConstants,
+            static_cast<uint32_t>(m_MaxBounces));
     }
 //Modify End
-    m_PathTracingPipelines.EnsurePipelines(m_PathTracingBackend, currentShadowMode, layout);
+    m_PathTracingPipelines.EnsurePipelines(
+        m_PathTracingBackend,
+        currentShadowMode,
+        layout,
+        static_cast<uint32_t>(m_MaxBounces));
     m_DirectLightingReSTIRDIPass.EnsurePipelines(
         currentShadowMode == PathTracingShadowMode::SoftShadows,
-        static_cast<uint32_t>(layout.EnvironmentProjection));
+        static_cast<uint32_t>(layout.EnvironmentProjection),
+        restirDIConstants);
 //Modify Begin:2026-08-10 by BestHui
     if (restirGIActive)
     {
         m_IndirectLightingReSTIRGIPass.EnsurePipelines(
             currentShadowMode == PathTracingShadowMode::SoftShadows,
-            static_cast<uint32_t>(layout.EnvironmentProjection));
+            static_cast<uint32_t>(layout.EnvironmentProjection),
+            restirGIConstants,
+            static_cast<uint32_t>(m_MaxBounces));
     }
 //Modify End
     BindRayTracingShaderResources();
@@ -1726,7 +1770,10 @@ RaytracingDemoPassResources RaytracingDemo::CreatePassResources()
         m_FrameworkDeviceContext.GetD3D12DeviceContext(),
 //Modify End
         m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT),
-        m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE)
+        m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE),
+//Modify Begin:2026-08-11 by BestHui
+        &m_GpuTimestampProfiler
+//Modify End
     };
 }
 
@@ -1782,6 +1829,9 @@ void RaytracingDemo::UpdateRenderGraphFrameState()
     state.ReSTIRDIHistoryValid = m_ReSTIRDIHistoryValid;
 //Modify Begin:2026-08-10 by BestHui
     state.ReSTIRGIHistoryValid = m_ReSTIRGIHistoryValid;
+//Modify End
+//Modify Begin:2026-08-11 by BestHui
+    state.ReSTIRGIStageTimingEnabled = m_GpuTimingEnabled && m_ReSTIRGIStageTimingEnabled;
 //Modify End
     state.HasPreviousViewProjection = m_HasPreviousViewProjection;
     state.PreviousViewProjection = m_PreviousViewProjection;

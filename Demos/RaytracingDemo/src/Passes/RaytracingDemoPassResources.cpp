@@ -29,9 +29,6 @@ RaytracingDemoCameraConstants BuildPassCameraConstants(
     XMStoreFloat4(&camera.CameraPosition, resources.SceneCamera.GetTranslation());
     camera.Width = context.GetMetadata().m_ScreenWidth;
     camera.Height = context.GetMetadata().m_ScreenHeight;
-//Modify Begin:2026-08-10 by BestHui
-    camera.MaxBounces = static_cast<uint32_t>(std::clamp(frameState.MaxBounces, 1, 5));
-//Modify End
     resources.Lights.FillCameraConstants(
         camera.DirectionalLightCount,
         camera.PointLightCount,

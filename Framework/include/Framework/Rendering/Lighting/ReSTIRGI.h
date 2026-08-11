@@ -10,7 +10,6 @@ struct ReSTIRGISettings
 //Modify End
     bool EnableTemporalResampling = true;
     bool EnableSpatialResampling = true;
-    bool EnableSpatialVisibility = false;
 //Modify Begin:2026-07-30 by BestHui
     bool EnableUnbiasedSpatialResampling = false;
 //Modify End
@@ -40,7 +39,6 @@ struct ReSTIRGIFrameConstants
 //Modify End
     uint32_t TemporalResamplingEnabled = 1;
     uint32_t SpatialResamplingEnabled = 1;
-    uint32_t SpatialVisibilityEnabled = 1;
     uint32_t TemporalJacobianEnabled = 1;
 
     uint32_t TemporalMaxHistoryLength = 20;
@@ -49,10 +47,9 @@ struct ReSTIRGIFrameConstants
     uint32_t SpatialNeighborCount = 5;
 //Modify Begin:2026-07-30 by BestHui
     uint32_t SpatialUnbiasedResamplingEnabled = 1;
-//Modify Begin:2026-07-30 by BestHui
-    uint32_t MaxPathBounces = 2;
-//Modify End
     uint32_t Padding0 = 0;
+    uint32_t Padding1 = 0;
+    uint32_t Padding2 = 0;
 //Modify End
 
     float TemporalNormalSimilarityThreshold = 0.8f;
@@ -82,8 +79,7 @@ public:
         uint32_t width,
         uint32_t height,
         uint32_t frameIndex,
-        bool historyValid,
-        uint32_t maxPathBounces) const;
+        bool historyValid) const;
 
 private:
     ReSTIRGISettings m_Settings;

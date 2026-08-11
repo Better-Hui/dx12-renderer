@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <deque>
 #include <memory>
+#include <unordered_map>
 
 class RayTracingAccelerationStructure;
 //Modify Begin:2026-07-30 by BestHui
@@ -50,6 +51,15 @@ struct RayTracingSceneResourceLayout
     }
 };
 
+struct PathTracingCompositeFeatures
+{
+    bool DirectLightingEnabled = false;
+    bool IndirectLightingEnabled = false;
+    bool AccumulationEnabled = false;
+    uint32_t DenoiserMode = 0u;
+    bool UseNrdReblur = false;
+};
+
 class PathTracingPipelineController final
 {
 public:
@@ -63,7 +73,8 @@ public:
     void EnsurePipelines(
         PathTracingBackend backend,
         PathTracingShadowMode shadowMode,
-        const RayTracingSceneResourceLayout& layout);
+        const RayTracingSceneResourceLayout& layout,
+        uint32_t maxPathBounces);
     //Modify End
     void BindRayTracingResources(
         const RayTracingAccelerationStructure& accelerationStructure,
@@ -77,7 +88,7 @@ public:
     //Modify End
     ComputeShader& GetInlineDirectLightingShader() const;
     ComputeShader& GetInlineIndirectLightingShader() const;
-    ComputeShader& GetLightingCompositeShader() const;
+    ComputeShader& GetLightingCompositeShader(const PathTracingCompositeFeatures& features);
 //Modify Begin:2026-07-30 by BestHui
     RayTracingShader& GetRayTracingShader() const;
 //Modify End
@@ -96,7 +107,7 @@ private:
         std::unique_ptr<RayTracingBindingSet> IndirectRayTracingBindingSet;
         std::unique_ptr<ComputeShader> InlineDirectLightingShader;
         std::unique_ptr<ComputeShader> InlineIndirectLightingShader;
-        std::unique_ptr<ComputeShader> LightingCompositeShader;
+        std::unordered_map<uint32_t, std::unique_ptr<ComputeShader>> LightingCompositeShaders;
     };
 
     void RetireCurrentPipelines();
@@ -108,22 +119,24 @@ private:
         std::string targetProfile,
         std::vector<ShaderVariantDefine> defines = {},
         std::string entryPoint = "main");
+    static uint32_t GetLightingCompositeVariantKey(const PathTracingCompositeFeatures& features);
     void CreateInlinePipelines(const RayTracingSceneResourceLayout& layout);
     void CreateDxrPipeline(const RayTracingSceneResourceLayout& layout);
 
     FrameworkDeviceContext& m_DeviceContext;
     ShaderVariantManager m_ShaderVariants;
     PathTracingBackend m_Backend = PathTracingBackend::InlineRayQuery;
-    //Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by BestHui
     PathTracingShadowMode m_ShadowMode = PathTracingShadowMode::HardShadows;
-    //Modify End
+//Modify End
+    uint32_t m_MaxPathBounces = 3u;
     RayTracingSceneResourceLayout m_Layout;
     std::unique_ptr<RayTracingShader> m_RayTracingShader;
     std::unique_ptr<RayTracingBindingSet> m_DirectRayTracingBindingSet;
     std::unique_ptr<RayTracingBindingSet> m_IndirectRayTracingBindingSet;
     std::unique_ptr<ComputeShader> m_InlineDirectLightingShader;
     std::unique_ptr<ComputeShader> m_InlineIndirectLightingShader;
-    std::unique_ptr<ComputeShader> m_LightingCompositeShader;
+    std::unordered_map<uint32_t, std::unique_ptr<ComputeShader>> m_LightingCompositeShaders;
 //Modify Begin:2026-07-27 by BestHui
     std::deque<RetiredPipelines> m_RetiredPipelines;
 //Modify End

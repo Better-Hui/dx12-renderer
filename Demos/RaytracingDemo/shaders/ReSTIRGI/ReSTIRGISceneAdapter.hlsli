@@ -4,12 +4,13 @@
 //Modify Begin:2026-08-10 by BestHui
 #define FRAMEWORK_RESTIR_GI_SCENE_ADAPTER 1
 
+//Modify Begin:2026-08-11 by BestHui
+#include <ReSTIRGI/ReSTIRGIConstants.hlsli>
+#define RAYTRACING_DEMO_MAX_BOUNCES RESTIR_GI_MAX_PATH_BOUNCES
+//Modify End
 #include "../PathTracing/PathTracing.rayquery.hlsli"
 #include "../PathTracing/PathTracingShared.hlsli"
 #include <ReSTIRGI/ReSTIRGI.hlsli>
-//Modify Begin:2026-07-30 by BestHui
-#include <ReSTIRGI/ReSTIRGIConstants.hlsli>
-//Modify End
 
 float3 RaytracingDemoReSTIRGIEvaluateContribution(
     const SurfaceData surface,
@@ -77,15 +78,11 @@ bool RaytracingDemoReSTIRGIGenerateInitialSample(
 
     const float3 hitPosition = rayOrigin + directionWs * payload.HitT;
     const SurfaceData hitSurface = MakeRayHitSurface(payload, hitPosition);
-    const uint continuationBounceCount = ReSTIRGI_MaxPathBounces > 2u
-        ? min(ReSTIRGI_MaxPathBounces - 2u, 3u)
-        : 0u;
     reservoir.SamplePosition = hitPosition;
     reservoir.SampleNormal = payload.Normal;
     reservoir.Radiance = TraceDiffuseGatherPathRadiance(
         hitSurface,
         payload.Emission,
-        continuationBounceCount,
         randomState);
     return true;
 //Modify End

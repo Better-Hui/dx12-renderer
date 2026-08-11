@@ -66,7 +66,9 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
             debugConstants.DebugMeshletClusters = useMeshletGBuffer &&
                 frameState.DebugMeshletClusters ? 1u : 0u;
 //Modify Begin:2026-07-30 by BestHui
-            const std::vector<ShaderResourceView> sceneTextures = resources.Scene.CreateTextureShaderResourceViews();
+//Modify Begin:2026-08-11 by BestHui
+            const std::vector<ShaderResourceView>& sceneTextures = resources.Scene.GetTextureShaderResourceViews();
+//Modify End
 //Modify End
             if (useMeshletGBuffer)
             {
