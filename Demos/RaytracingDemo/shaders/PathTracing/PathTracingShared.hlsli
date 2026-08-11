@@ -919,7 +919,8 @@ SurfaceData MakeRayHitSurface(const RayPayload payload, const float3 positionWs)
     return surface;
 }
 
-#if defined(FRAMEWORK_RESTIR_GI_SCENE_ADAPTER)
+//Modify Begin:2026-08-11 by BestHui
+#if defined(FRAMEWORK_RESTIR_GI_SCENE_ADAPTER) || defined(FRAMEWORK_RESTIR_DI_SCENE_ADAPTER)
 float3 EvaluateDiffuseReflectance(const SurfaceData surface)
 {
     return max(surface.Diffuse, 0.0f) * (1.0f - saturate(surface.Metallic)) * INV_PI;
@@ -936,7 +937,7 @@ float3 EvaluateDiffuseBounceContribution(
 
 bool SampleDiffuseDirection(
     const SurfaceData surface,
-    inout uint rngState,
+    const float2 directionalSample,
     out float3 directionWs,
     out float sourcePdf)
 {
@@ -948,12 +949,24 @@ bool SampleDiffuseDirection(
     }
 
     const float3 normalWs = normalize(surface.NormalWs);
-    directionWs = SampleCosineHemisphere(normalWs, rngState);
+    directionWs = SampleCosineHemisphere(normalWs, directionalSample);
     const float cosine = saturate(dot(normalWs, directionWs));
     sourcePdf = cosine * INV_PI;
     return sourcePdf > 0.00001f;
 }
 
+bool SampleDiffuseDirection(
+    const SurfaceData surface,
+    inout uint rngState,
+    out float3 directionWs,
+    out float sourcePdf)
+{
+    return SampleDiffuseDirection(
+        surface,
+        float2(Random01(rngState), Random01(rngState)),
+        directionWs,
+        sourcePdf);
+}
 float3 EvaluateDiffuseDirectLighting(
     const SurfaceData surface,
     inout uint rngState)
@@ -1036,6 +1049,7 @@ float3 TraceDiffuseGatherPathRadiance(
     return radiance;
 }
 #endif
+//Modify End
 
 float3 TraceGatherPathRadiance(
     const SurfaceData initialSurface,

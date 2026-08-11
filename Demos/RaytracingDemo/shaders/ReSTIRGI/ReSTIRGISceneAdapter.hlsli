@@ -29,11 +29,7 @@ float3 RaytracingDemoReSTIRGIEvaluateContribution(
     }
 
     const float3 directionWs = toSample * rsqrt(distanceSquared);
-    return EvaluatePbrLighting(
-        surface,
-        Camera_Position.xyz - surface.PositionWs,
-        directionWs,
-        reservoir.Radiance);
+    return EvaluateDiffuseBounceContribution(surface, directionWs, reservoir.Radiance);
 //Modify End
 }
 
@@ -41,7 +37,6 @@ bool RaytracingDemoReSTIRGIGenerateInitialSample(
     const SurfaceData surface,
     const uint2 pixel,
     inout uint randomState,
-    const float lobeSelection,
     const float2 directionalSample,
     out ReSTIRGIReservoir reservoir)
 {
@@ -49,14 +44,10 @@ bool RaytracingDemoReSTIRGIGenerateInitialSample(
     reservoir = ReSTIRGIEmptyReservoir();
     float3 directionWs = 0.0f;
     float sourcePdf = 0.0f;
-    float3 sampleWeight = 0.0f;
-    if (!SamplePbrDirection(
+    if (!SampleDiffuseDirection(
         surface,
-        normalize(Camera_Position.xyz - surface.PositionWs),
-        lobeSelection,
         directionalSample,
         directionWs,
-        sampleWeight,
         sourcePdf))
     {
         return false;
@@ -91,10 +82,9 @@ bool RaytracingDemoReSTIRGIGenerateInitialSample(
         : 0u;
     reservoir.SamplePosition = hitPosition;
     reservoir.SampleNormal = payload.Normal;
-    reservoir.Radiance = TraceGatherPathRadiance(
+    reservoir.Radiance = TraceDiffuseGatherPathRadiance(
         hitSurface,
         payload.Emission,
-        -directionWs,
         continuationBounceCount,
         randomState);
     return true;

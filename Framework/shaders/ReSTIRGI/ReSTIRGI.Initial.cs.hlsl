@@ -30,10 +30,6 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         for (uint candidateIndex = 0u; candidateIndex < candidateCount; ++candidateIndex)
         {
             const uint candidateSalt = 0x47524931u + candidateIndex * 0x9e3779b9u;
-            const float lobeSelection = FrameworkInterleavedGradientNoise2D(
-                pixel,
-                ReSTIRGI_FrameIndex,
-                candidateSalt).x;
             const float2 directionalSample = FrameworkInterleavedGradientNoise2D(
                 pixel,
                 ReSTIRGI_FrameIndex,
@@ -52,7 +48,6 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
                 surface,
                 pixel,
                 randomState,
-                lobeSelection,
                 directionalSample,
                 candidate))
             {
