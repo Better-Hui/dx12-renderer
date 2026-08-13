@@ -66,10 +66,17 @@ namespace RenderGraph
     };
 
 //Modify Begin:2026-08-13 by BestHui
+    enum class ExternalResourceAccessMode
+    {
+        Read,
+        Write,
+    };
+
     struct ExternalResourceAccess
     {
         const Resource* Resource = nullptr;
         D3D12_RESOURCE_STATES StateAfter = D3D12_RESOURCE_STATE_COMMON;
+        ExternalResourceAccessMode Mode = ExternalResourceAccessMode::Read;
         bool InsertUavBarrier = false;
     };
 //Modify End
@@ -113,6 +120,7 @@ namespace RenderGraph
         void AddExternalResourceAccess(
             const Resource& resource,
             D3D12_RESOURCE_STATES stateAfter,
+            ExternalResourceAccessMode mode = ExternalResourceAccessMode::Read,
             bool insertUavBarrier = false);
         const std::vector<ExternalResourceAccess>& GetExternalResourceAccesses() const
         {

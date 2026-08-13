@@ -121,6 +121,13 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
                 Assert(IsAsyncComputeOutput(output.m_Type),
                     "Async compute render passes cannot write render targets or depth resources.");
             }
+//Modify Begin:2026-08-13 by BestHui
+            for (const ExternalResourceAccess& access : renderPass->GetExternalResourceAccesses())
+            {
+                Assert(access.Mode == ExternalResourceAccessMode::Read,
+                    "Async compute external resources are read-only; write outputs must be RenderGraph resources.");
+            }
+//Modify End
 
             PrepareAsyncComputeDependency(*renderPass, directCommandList, resourceStatePlans);
 

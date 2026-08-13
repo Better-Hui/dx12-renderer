@@ -214,7 +214,7 @@ uint32_t RaytracingDemoSceneResources::AddDiffuseMaterial(
 void RaytracingDemoSceneResources::ForEachGBufferShaderResource(
     const std::function<void(const Resource&)>& action) const
 {
-    m_TextureMaterialResources.ForEachBindlessTexture(action);
+    m_TextureMaterialResources.ForEachShaderResource(action);
 }
 
 void RaytracingDemoSceneResources::ForEachRayTracingShaderResource(

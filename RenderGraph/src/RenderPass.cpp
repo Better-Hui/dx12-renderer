@@ -165,10 +165,11 @@ void RenderGraph::RenderPass::SetPassName(const std::wstring& passName)
 void RenderGraph::RenderPass::AddExternalResourceAccess(
     const Resource& resource,
     const D3D12_RESOURCE_STATES stateAfter,
+    const ExternalResourceAccessMode mode,
     const bool insertUavBarrier)
 {
     resource.ForEachResourceRecursive(
-        [this, stateAfter, insertUavBarrier](const Resource& nestedResource)
+        [this, stateAfter, mode, insertUavBarrier](const Resource& nestedResource)
         {
             Assert(nestedResource.IsValid(), "External render-pass resource must be initialized.");
             const auto existingAccess = std::ranges::find_if(
@@ -180,11 +181,12 @@ void RenderGraph::RenderPass::AddExternalResourceAccess(
             Assert(
                 existingAccess == m_ExternalResourceAccesses.end() ||
                     (existingAccess->StateAfter == stateAfter &&
+                     existingAccess->Mode == mode &&
                      existingAccess->InsertUavBarrier == insertUavBarrier),
                 "A render pass cannot declare conflicting external resource states.");
             if (existingAccess == m_ExternalResourceAccesses.end())
             {
-                m_ExternalResourceAccesses.push_back({ &nestedResource, stateAfter, insertUavBarrier });
+                m_ExternalResourceAccesses.push_back({ &nestedResource, stateAfter, mode, insertUavBarrier });
             }
         });
 }
