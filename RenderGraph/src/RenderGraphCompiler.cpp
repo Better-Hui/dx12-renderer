@@ -119,6 +119,7 @@ namespace
 
     bool TryGetInputTransition(
         const InputType inputType,
+        const RenderPassQueue queue,
         D3D12_RESOURCE_STATES& stateAfter,
         bool& insertUavBarrier)
     {
@@ -126,7 +127,9 @@ namespace
         switch (inputType)
         {
         case InputType::ShaderResource:
-            stateAfter = D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE;
+            stateAfter = queue == RenderPassQueue::AsyncCompute
+                ? D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE
+                : D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE;
             return true;
         case InputType::NonPixelShaderResource:
             stateAfter = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
@@ -349,7 +352,11 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
         {
             D3D12_RESOURCE_STATES stateAfter = D3D12_RESOURCE_STATE_COMMON;
             bool insertUavBarrier = false;
-            if (TryGetInputTransition(input.m_Type, stateAfter, insertUavBarrier))
+            if (TryGetInputTransition(
+                input.m_Type,
+                renderPass->GetQueue(),
+                stateAfter,
+                insertUavBarrier))
             {
                 resourceStatePlan.InputTransitions.push_back({ input.m_Id, stateAfter, insertUavBarrier });
             }

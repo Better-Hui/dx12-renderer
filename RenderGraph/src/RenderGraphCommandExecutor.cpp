@@ -38,17 +38,6 @@ namespace
             outputType == RenderGraph::OutputType::CopyDestination;
     }
 
-    D3D12_RESOURCE_STATES GetQueueResourceState(
-        const RenderGraph::RenderPassQueue queue,
-        const D3D12_RESOURCE_STATES state)
-    {
-        if (queue == RenderGraph::RenderPassQueue::AsyncCompute &&
-            state == D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE)
-        {
-            return D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-        }
-        return state;
-    }
 }
 
 RenderGraph::RenderGraphCommandExecutor::RenderGraphCommandExecutor(
@@ -423,7 +412,7 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareAsyncComputeDependency(
         {
             commandList.TransitionBarrier(
                 nestedResource,
-                GetQueueResourceState(RenderPassQueue::AsyncCompute, transition.StateAfter));
+                transition.StateAfter);
             if (transition.InsertUavBarrier)
             {
                 commandList.UavBarrier(nestedResource);
@@ -447,7 +436,7 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareAsyncComputeDependency(
         {
             commandList.TransitionBarrier(
                 nestedResource,
-                GetQueueResourceState(RenderPassQueue::AsyncCompute, transition.StateAfter));
+                transition.StateAfter);
             if (transition.InsertUavBarrier)
             {
                 commandList.UavBarrier(nestedResource);
@@ -483,7 +472,7 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareResourcesForRenderPass(
         {
             commandList.TransitionBarrier(
                 nestedResource,
-                GetQueueResourceState(renderPass.GetQueue(), transition.StateAfter));
+                transition.StateAfter);
             if (transition.InsertUavBarrier)
             {
                 commandList.UavBarrier(nestedResource);
