@@ -23,6 +23,7 @@
 //Modify End
 #include <Framework/Rendering/RayTracing/RayTracingShader.h>
 #include <Framework/Rendering/Lighting/ReSTIRDIPass.h>
+#include <Framework/Rendering/Lighting/MaterialShadingModel.h>
 //Modify Begin:2026-08-10 by BestHui
 #include <Framework/Rendering/Lighting/ReSTIRGIPass.h>
 //Modify End
@@ -113,6 +114,12 @@ private:
 
     RayTracingSceneResourceLayout BuildRayTracingSceneResourceLayout() const;
     void EnsureRayTracingPipelines();
+//Modify Begin:2026-07-30 by BestHui
+    void SetMaterialShadingModel(MaterialShadingModel shadingModel);
+//Modify End
+//Modify Begin:2026-08-11 by BestHui
+    void SetMaxBounces(int maxBounces);
+//Modify End
 //Modify Begin:2026-07-30 by BestHui
     void PrewarmRuntimeShadowVariants();
 //Modify End
@@ -285,6 +292,9 @@ private:
 //Modify Begin:2026-08-11 by BestHui
     int m_MaxBounces = 3;
     bool m_AccumulationEnabled = false;
+//Modify End
+//Modify Begin:2026-07-30 by BestHui
+    MaterialShadingModel m_MaterialShadingModel = MaterialShadingModel::Pbr;
 //Modify End
 //Modify Begin:2026-08-05 by BestHui
 //Modify Begin:2026-08-11 by BestHui

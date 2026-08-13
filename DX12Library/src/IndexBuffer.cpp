@@ -13,9 +13,6 @@ IndexBuffer::IndexBuffer(const std::wstring& name)
 	, NumIndices(0)
 	, IndexFormat(DXGI_FORMAT_UNKNOWN)
 	, IndexBufferView({})
-//Modify Begin:2026-07-21 by BestHui
-	, m_Srv(m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV))
-//Modify End
 {
 }
 
@@ -33,6 +30,12 @@ void IndexBuffer::CreateViews(const size_t numElements, const size_t elementSize
 	IndexBufferView.Format = IndexFormat;
 
 //Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-08-12 by BestHui
+	if (m_Srv.IsNull())
+	{
+		m_Srv = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	}
+//Modify End
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
 	srvDesc.Format = IndexFormat;
@@ -47,8 +50,15 @@ D3D12_CPU_DESCRIPTOR_HANDLE IndexBuffer::GetShaderResourceView(const D3D12_SHADE
 {
 //Modify Begin:2026-07-21 by BestHui
 //Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-08-12 by BestHui
+	Assert(IsValid(), "Index-buffer SRV is requested before the buffer is initialized.");
+	Assert(m_DeviceContext != nullptr, "Index buffer has no D3D12 device context.");
+//Modify End
 	if (srvDesc == nullptr)
 	{
+//Modify Begin:2026-08-12 by BestHui
+		Assert(!m_Srv.IsNull(), "Index-buffer SRV is requested before the buffer is initialized.");
+//Modify End
 		return m_Srv.GetDescriptorHandle();
 	}
 

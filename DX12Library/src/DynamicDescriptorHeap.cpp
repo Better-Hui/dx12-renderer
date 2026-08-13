@@ -169,13 +169,17 @@ void DynamicDescriptorHeap::CommitStagedDescriptors(CommandList& commandList,
 			m_CurrentGpuDescriptorHandle = m_CurrentDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
 			m_NumFreeHandles = m_NumDescriptorsPerHeap;
 
-			commandList.SetDescriptorHeap(m_DescriptorHeapType, m_CurrentDescriptorHeap.Get());
-
 			// When updating the descriptor heap on the command list, all descriptor
 			// tables must be (re)recopied to the new descriptor heap (not just
 			// the stale descriptor tables).
 			m_StaleDescriptorTableBitMask = m_DescriptorTableBitMask;
 		}
+//Modify Begin:2026-08-12 by BestHui
+		// The command list may currently reference an external bindless heap. Bind
+		// this heap even when it still has space so staged descriptor tables always
+		// point into the heap copied below.
+		commandList.SetDescriptorHeap(m_DescriptorHeapType, m_CurrentDescriptorHeap.Get());
+//Modify End
 		DWORD rootIndex;
 
 		while (_BitScanForward(&rootIndex, m_StaleDescriptorTableBitMask))
@@ -234,6 +238,12 @@ D3D12_GPU_DESCRIPTOR_HANDLE DynamicDescriptorHeap::CopyDescriptor(CommandList& c
 		// the stale descriptor tables).
 		m_StaleDescriptorTableBitMask = m_DescriptorTableBitMask;
 	}
+
+//Modify Begin:2026-08-12 by BestHui
+	// CopyDescriptor may follow bindless work on the same command list. Its GPU
+	// handle is valid only while this dynamic heap is the bound heap.
+	commandList.SetDescriptorHeap(m_DescriptorHeapType, m_CurrentDescriptorHeap.Get());
+//Modify End
 
 	//Modify Begin:2026-08-07 by BestHui
 	const auto& device = m_Device;

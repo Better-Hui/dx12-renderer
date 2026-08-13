@@ -10,8 +10,8 @@ struct ReSTIRGISettings
 //Modify End
     bool EnableTemporalResampling = true;
     bool EnableSpatialResampling = true;
-//Modify Begin:2026-07-30 by BestHui
-    bool EnableUnbiasedSpatialResampling = false;
+//Modify Begin:2026-08-11 by BestHui
+    bool EnableRayTracedSpatialBiasCorrection = false;
 //Modify End
     bool EnableTemporalJacobian = true;
     uint32_t TemporalMaxHistoryLength = 20;
@@ -27,6 +27,17 @@ struct ReSTIRGISettings
     float MaxSpatialWeight = 32.0f;
 };
 
+//Modify Begin:2026-08-11 by BestHui
+struct ReSTIRGIVariantConfig
+{
+    uint32_t MaxPathBounces = 1;
+    bool EnableTemporalResampling = true;
+    bool EnableSpatialResampling = true;
+    bool EnableTemporalJacobian = true;
+    bool EnableRayTracedSpatialBiasCorrection = false;
+};
+//Modify End
+
 struct ReSTIRGIFrameConstants
 {
     uint32_t Width = 1;
@@ -37,20 +48,13 @@ struct ReSTIRGIFrameConstants
 //Modify Begin:2026-07-30 by BestHui
     uint32_t InitialCandidateCount = 1;
 //Modify End
-    uint32_t TemporalResamplingEnabled = 1;
-    uint32_t SpatialResamplingEnabled = 1;
-    uint32_t TemporalJacobianEnabled = 1;
-
     uint32_t TemporalMaxHistoryLength = 20;
     uint32_t SpatialMaxHistoryLength = 32;
     uint32_t MaxSampleAge = 20;
     uint32_t SpatialNeighborCount = 5;
-//Modify Begin:2026-07-30 by BestHui
-    uint32_t SpatialUnbiasedResamplingEnabled = 1;
     uint32_t Padding0 = 0;
     uint32_t Padding1 = 0;
     uint32_t Padding2 = 0;
-//Modify End
 
     float TemporalNormalSimilarityThreshold = 0.8f;
     float TemporalPositionSimilarityThreshold = 0.1f;
@@ -60,12 +64,10 @@ struct ReSTIRGIFrameConstants
     float SpatialSamplingRadius = 30.0f;
     float MaxJacobian = 10.0f;
     float MaxSpatialWeight = 32.0f;
-//Modify Begin:2026-07-30 by BestHui
     float Padding3 = 0.0f;
-//Modify End
 };
 //Modify Begin:2026-07-30 by BestHui
-static_assert(sizeof(ReSTIRGIFrameConstants) == 96u);
+static_assert(sizeof(ReSTIRGIFrameConstants) == 80u);
 //Modify End
 
 class ReSTIRGI final
@@ -80,6 +82,9 @@ public:
         uint32_t height,
         uint32_t frameIndex,
         bool historyValid) const;
+//Modify Begin:2026-08-11 by BestHui
+    ReSTIRGIVariantConfig GetVariantConfig(uint32_t maxPathBounces) const;
+//Modify End
 
 private:
     ReSTIRGISettings m_Settings;

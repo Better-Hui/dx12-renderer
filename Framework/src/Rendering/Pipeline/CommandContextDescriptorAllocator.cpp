@@ -51,7 +51,7 @@ void CommandContextDescriptorAllocator::StageDescriptorTable(
 
         if (bindPoint == PipelineBindPoint::Graphics)
         {
-            commandList.GetGraphicsCommandList()->SetGraphicsRootDescriptorTable(rootParameterIndex, gpuHandle);
+            commandList.SetGraphicsRootDescriptorTable(rootParameterIndex, gpuHandle);
         }
         else
         {

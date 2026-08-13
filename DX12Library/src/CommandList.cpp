@@ -5,6 +5,7 @@
 #include "ByteAddressBuffer.h"
 #include "ConstantBuffer.h"
 #include "CommandQueue.h"
+#include "D3D12DeviceContext.h"
 #include "DynamicDescriptorHeap.h"
 #include "IndexBuffer.h"
 #include "RenderTarget.h"
@@ -22,21 +23,24 @@
 #include <filesystem>
 #include "StructuredBuffer.h"
 
-std::map<std::wstring, ID3D12Resource*> CommandList::m_TextureCache;
-std::mutex CommandList::m_TextureCacheMutex;
 namespace fs = std::filesystem;
 
 //Modify Begin:2026-08-07 by BestHui
 CommandList::CommandList(
     const D3D12_COMMAND_LIST_TYPE type,
-    Microsoft::WRL::ComPtr<ID3D12Device2> device,
-    std::shared_ptr<ResourceStateRegistry> resourceStateRegistry,
+    std::shared_ptr<D3D12DeviceContext> deviceContext,
     std::function<std::shared_ptr<CommandList>()> computeCommandListFactory)
     : m_D3d12CommandListType(type)
-    , m_Device(std::move(device))
-    , m_ResourceStateRegistry(std::move(resourceStateRegistry))
+//Modify Begin:2026-08-12 by BestHui
+    , m_DeviceContext(std::move(deviceContext))
+    , m_Device(m_DeviceContext != nullptr ? m_DeviceContext->GetDevice() : nullptr)
+    , m_ResourceStateRegistry(m_DeviceContext != nullptr ? m_DeviceContext->GetResourceStateRegistry() : nullptr)
+//Modify End
     , m_ComputeCommandListFactory(std::move(computeCommandListFactory))
 {
+//Modify Begin:2026-08-12 by BestHui
+    Assert(m_DeviceContext != nullptr, "D3D12 device context is null.");
+//Modify End
     Assert(m_Device != nullptr, "D3D12 device is null.");
     Assert(m_ResourceStateRegistry != nullptr, "Resource state registry is null.");
 
@@ -71,6 +75,28 @@ CommandList::CommandList(
 
 CommandList::~CommandList() = default;
 
+//Modify Begin:2026-07-30 by BestHui
+void CommandList::ExecuteExternalCommandRecording(
+    const std::function<void(ID3D12GraphicsCommandList2&)>& recordCommands)
+{
+    Assert(static_cast<bool>(recordCommands), "External command-recording callback is empty.");
+
+    FlushResourceBarriers();
+    CommitStagedDescriptors();
+    try
+    {
+        recordCommands(*m_D3d12CommandList.Get());
+    }
+    catch (...)
+    {
+        InvalidateCachedNativeState();
+        throw;
+    }
+
+    InvalidateCachedNativeState();
+}
+//Modify End
+
 void CommandList::TransitionBarrier(const Resource& resource, const D3D12_RESOURCE_STATES stateAfter,
     const UINT subresource,
     const bool flushBarriers)
@@ -82,12 +108,12 @@ void CommandList::TransitionBarrier(const ComPtr<ID3D12Resource> resource, const
     const UINT subresource,
     const bool flushBarriers)
 {
-    if (resource)
-    {
-        const auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(resource.Get(), D3D12_RESOURCE_STATE_COMMON,
-            stateAfter, subresource);
-        m_PResourceStateTracker->ResourceBarrier(barrier);
-    }
+//Modify Begin:2026-08-12 by BestHui
+    Assert(resource != nullptr, "Cannot transition a null D3D12 resource.");
+    const auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(resource.Get(), D3D12_RESOURCE_STATE_COMMON,
+        stateAfter, subresource);
+    m_PResourceStateTracker->ResourceBarrier(barrier);
+//Modify End
 
     if (flushBarriers)
     {
@@ -97,8 +123,14 @@ void CommandList::TransitionBarrier(const ComPtr<ID3D12Resource> resource, const
 
 void CommandList::UavBarrier(const Resource& resource, const bool flushBarriers)
 {
-    const auto d3d12Resource = resource.GetD3D12Resource();
-    const auto barrier = CD3DX12_RESOURCE_BARRIER::UAV(d3d12Resource.Get());
+    UavBarrier(resource.GetD3D12Resource().Get(), flushBarriers);
+}
+
+//Modify Begin:2026-07-30 by BestHui
+void CommandList::UavBarrier(ID3D12Resource* resource, const bool flushBarriers)
+{
+    Assert(resource != nullptr, "Cannot add a UAV barrier for a null D3D12 resource.");
+    const auto barrier = CD3DX12_RESOURCE_BARRIER::UAV(resource);
 
     m_PResourceStateTracker->ResourceBarrier(barrier);
 
@@ -107,6 +139,7 @@ void CommandList::UavBarrier(const Resource& resource, const bool flushBarriers)
         FlushResourceBarriers();
     }
 }
+//Modify End
 
 void CommandList::AliasingBarrier(const Resource& beforeResource, const Resource& afterResource,
     const bool flushBarriers)
@@ -140,14 +173,70 @@ void CommandList::FlushResourceBarriers()
     m_PResourceStateTracker->FlushResourceBarriers(*this);
 }
 
+//Modify Begin:2026-07-30 by BestHui
+void CommandList::NotifyResourceState(
+    const Resource& resource,
+    const D3D12_RESOURCE_STATES state,
+    const UINT subresource)
+{
+    const ComPtr<ID3D12Resource> d3d12Resource = resource.GetD3D12Resource();
+    Assert(d3d12Resource != nullptr, "Cannot notify the state of an uninitialized resource.");
+    m_PResourceStateTracker->NotifyResourceState(d3d12Resource.Get(), state, subresource);
+}
+
+void CommandList::TrackResourceState(
+    const ComPtr<ID3D12Resource> resource,
+    std::shared_ptr<ResourceStateRegistration> stateRegistration)
+{
+    Assert(resource != nullptr, "Cannot track a null D3D12 resource state.");
+    Assert(stateRegistration != nullptr, "D3D12 resource has no state registration.");
+    TrackObject(resource);
+    m_TrackedResourceStateRegistrations.push_back(std::move(stateRegistration));
+}
+
+void CommandList::RetireResourceState(const ComPtr<ID3D12Resource> resource)
+{
+    Assert(resource != nullptr, "Cannot retire a null D3D12 resource state.");
+    TrackResourceState(
+        resource,
+        m_ResourceStateRegistry->AcquireResource(resource.Get(), D3D12_RESOURCE_STATE_COMMON));
+}
+
+void CommandList::RetireResource(Resource& resource)
+{
+    const ComPtr<ID3D12Resource> d3d12Resource = resource.GetD3D12Resource();
+    if (d3d12Resource == nullptr)
+    {
+        return;
+    }
+
+    TrackResourceState(d3d12Resource, resource.GetStateRegistration());
+}
+//Modify End
+
 void CommandList::CommitStagedDescriptors()
 {
-    for (const auto& dynamicDescriptorHeap : m_DynamicDescriptorHeaps)
+    CommitStagedDescriptorsForDraw();
+    CommitStagedDescriptorsForDispatch();
+}
+
+//Modify Begin:2026-08-12 by BestHui
+void CommandList::CommitStagedDescriptorsForDraw()
+{
+    for (uint32_t heapIndex = 0; heapIndex < D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES; ++heapIndex)
     {
-        dynamicDescriptorHeap->CommitStagedDescriptorsForDraw(*this);
-        dynamicDescriptorHeap->CommitStagedDescriptorsForDispatch(*this);
+        m_DynamicDescriptorHeaps[heapIndex]->CommitStagedDescriptorsForDraw(*this);
     }
 }
+
+void CommandList::CommitStagedDescriptorsForDispatch()
+{
+    for (uint32_t heapIndex = 0; heapIndex < D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES; ++heapIndex)
+    {
+        m_DynamicDescriptorHeaps[heapIndex]->CommitStagedDescriptorsForDispatch(*this);
+    }
+}
+//Modify End
 
 void CommandList::CopyResource(const Resource& dstRes, const Resource& srcRes)
 {
@@ -173,6 +262,34 @@ void CommandList::CopyResource(const ComPtr<ID3D12Resource> dstRes, const ComPtr
     TrackObject(dstRes);
     TrackObject(srcRes);
 }
+
+//Modify Begin:2026-08-12 by BestHui
+void CommandList::CopyBufferRegion(
+    const Resource& destination,
+    const uint64_t destinationOffset,
+    const ComPtr<ID3D12Resource> source,
+    const uint64_t sourceOffset,
+    const uint64_t sizeInBytes)
+{
+    Assert(source != nullptr, "Copy source buffer must not be null.");
+    Assert(destination.GetD3D12Resource() != nullptr, "Copy destination buffer must not be null.");
+
+    if (destination.AreAutoBarriersEnabled())
+    {
+        TransitionBarrier(destination, D3D12_RESOURCE_STATE_COPY_DEST);
+    }
+    FlushResourceBarriers();
+
+    m_D3d12CommandList->CopyBufferRegion(
+        destination.GetD3D12Resource().Get(),
+        destinationOffset,
+        source.Get(),
+        sourceOffset,
+        sizeInBytes);
+    TrackObject(source);
+    TrackResource(destination);
+}
+//Modify End
 
 void CommandList::ResolveSubresource(const Resource& dstRes, const Resource& srcRes, const uint32_t dstSubresource,
     const uint32_t srcSubresource)
@@ -202,6 +319,9 @@ void CommandList::CopyBuffer(Buffer& buffer, const size_t numElements, const siz
 {
 //Modify Begin:2026-08-07 by BestHui
     const auto& device = m_Device;
+//Modify End
+//Modify Begin:2026-08-12 by BestHui
+    buffer.AttachDeviceContext(m_DeviceContext);
 //Modify End
 
     const size_t bufferSize = numElements * elementSize;
@@ -235,7 +355,8 @@ void CommandList::CopyBuffer(Buffer& buffer, const size_t numElements, const siz
 
         if (buffer.AreAutoBarriersEnabled())
         {
-            m_ResourceStateRegistry->RegisterResource(d3d12Resource.Get(), D3D12_RESOURCE_STATE_COMMON);
+            m_TrackedResourceStateRegistrations.push_back(
+                m_ResourceStateRegistry->AcquireResource(d3d12Resource.Get(), D3D12_RESOURCE_STATE_COMMON));
         }
     }
     else // use existing
@@ -269,7 +390,7 @@ void CommandList::CopyBuffer(Buffer& buffer, const size_t numElements, const siz
 //Modify Begin:2026-07-30 by BestHui
     if (previousResource != nullptr && previousResource.Get() != d3d12Resource.Get())
     {
-        TrackObject(previousResource);
+        RetireResource(buffer);
     }
 //Modify End
 
@@ -412,6 +533,9 @@ namespace
 bool CommandList::LoadTextureFromFile(Texture& texture, const std::wstring& fileName,
     const TextureUsageType textureUsage, bool throwOnNotFound)
 {
+//Modify Begin:2026-08-12 by BestHui
+    texture.AttachDeviceContext(m_DeviceContext);
+//Modify End
     std::wstring effectiveFileName = fileName;
     fs::path filePath(effectiveFileName);
 
@@ -434,12 +558,23 @@ bool CommandList::LoadTextureFromFile(Texture& texture, const std::wstring& file
         return false;
     }
 
-    std::lock_guard lock(m_TextureCacheMutex);
-    const auto iter = m_TextureCache.find(effectiveFileName);
-    if (iter != m_TextureCache.end())
+//Modify Begin:2026-08-12 by BestHui
+    effectiveFileName = fs::weakly_canonical(filePath).wstring();
+//Modify End
+
+//Modify Begin:2026-08-12 by BestHui
+    ComPtr<ID3D12Resource> cachedTexture;
+    const D3D12TextureCacheKey textureCacheKey = {
+        effectiveFileName,
+        static_cast<uint32_t>(textureUsage)
+    };
+    const bool hasCachedTexture = m_DeviceContext->FindCachedTexture(textureCacheKey, cachedTexture);
+//Modify End
+    if (hasCachedTexture)
     {
+        RetireResource(texture);
         texture.SetTextureUsage(textureUsage);
-        texture.SetD3D12Resource(iter->second);
+        texture.SetD3D12Resource(cachedTexture);
         texture.CreateViews();
         texture.SetName(effectiveFileName);
     }
@@ -488,12 +623,11 @@ bool CommandList::LoadTextureFromFile(Texture& texture, const std::wstring& file
             IID_PPV_ARGS(&textureResource)
         ));
 
+        RetireResource(texture);
         texture.SetTextureUsage(textureUsage);
         texture.SetD3D12Resource(textureResource);
         texture.CreateViews();
         texture.SetName(effectiveFileName);
-
-        m_ResourceStateRegistry->RegisterResource(textureResource.Get(), initialResourceState);
 
         std::vector<D3D12_SUBRESOURCE_DATA> subresources(scratchImage.GetImageCount());
         const DirectX::Image* pImages = scratchImage.GetImages();
@@ -519,7 +653,9 @@ bool CommandList::LoadTextureFromFile(Texture& texture, const std::wstring& file
             GenerateMips(texture);
         }
 
-        m_TextureCache[effectiveFileName] = textureResource.Get();
+//Modify Begin:2026-08-12 by BestHui
+        m_DeviceContext->CacheTexture(textureCacheKey, textureResource);
+//Modify End
     }
 
     return true;
@@ -572,8 +708,9 @@ void CommandList::GenerateMips(Texture& texture)
 
     const auto resource = texture.GetD3D12Resource();
 
-    // If the texture doesn't have a valid resource, do nothing.
-    if (!resource) return;
+//Modify Begin:2026-08-12 by BestHui
+    Assert(resource != nullptr, "Cannot generate mipmaps for an uninitialized texture.");
+//Modify End
     const auto resourceDesc = resource->GetDesc();
 
     // If the texture only has a single mip level (level 0)
@@ -650,7 +787,8 @@ void CommandList::GenerateMips(Texture& texture)
             IID_PPV_ARGS(&aliasResource)
         ));
 
-        m_ResourceStateRegistry->RegisterResource(aliasResource.Get(), D3D12_RESOURCE_STATE_COMMON);
+        m_TrackedResourceStateRegistrations.push_back(
+            m_ResourceStateRegistry->AcquireResource(aliasResource.Get(), D3D12_RESOURCE_STATE_COMMON));
         // Ensure the scope of the alias resource.
         TrackObject(aliasResource);
 
@@ -665,7 +803,8 @@ void CommandList::GenerateMips(Texture& texture)
             IID_PPV_ARGS(&uavResource)
         ));
 
-        m_ResourceStateRegistry->RegisterResource(uavResource.Get(), D3D12_RESOURCE_STATE_COMMON);
+        m_TrackedResourceStateRegistrations.push_back(
+            m_ResourceStateRegistry->AcquireResource(uavResource.Get(), D3D12_RESOURCE_STATE_COMMON));
         // Ensure the scope of the UAV compatible resource.
         TrackObject(uavResource);
 
@@ -681,7 +820,9 @@ void CommandList::GenerateMips(Texture& texture)
     }
 
     // Generate mips with the UAV compatible resource.
-    auto uavTexture = Texture(uavResource, texture.GetTextureUsage());
+//Modify Begin:2026-08-12 by BestHui
+    auto uavTexture = Texture(uavResource, texture.GetTextureUsage(), L"", m_DeviceContext);
+//Modify End
     GenerateMipsUav(uavTexture, resourceDesc.Format);
 
     if (aliasResource)
@@ -692,18 +833,22 @@ void CommandList::GenerateMips(Texture& texture)
     }
 }
 
-void CommandList::CopyTextureSubresource(const Texture& texture, const uint32_t firstSubresource,
+void CommandList::CopyTextureSubresource(Texture& texture, const uint32_t firstSubresource,
     const uint32_t numSubresources,
     D3D12_SUBRESOURCE_DATA* subresourceData)
 {
 //Modify Begin:2026-08-07 by BestHui
     const auto& device = m_Device;
 //Modify End
+//Modify Begin:2026-08-12 by BestHui
+    texture.AttachDeviceContext(m_DeviceContext);
+    Assert(numSubresources > 0, "Texture upload requires at least one subresource.");
+    Assert(subresourceData != nullptr, "Texture upload data is null.");
+//Modify End
     const auto destinationResource = texture.GetD3D12Resource();
-    if (!destinationResource)
-    {
-        return;
-    }
+//Modify Begin:2026-08-12 by BestHui
+    Assert(destinationResource != nullptr, "Texture upload destination has not been created.");
+//Modify End
 
     if (texture.AreAutoBarriersEnabled())
     {
@@ -1154,10 +1299,7 @@ void CommandList::Draw(const uint32_t vertexCount, const uint32_t instanceCount,
 {
     FlushResourceBarriers();
 
-    for (const auto& dynamicDescriptorHeap : m_DynamicDescriptorHeaps)
-    {
-        dynamicDescriptorHeap->CommitStagedDescriptorsForDraw(*this);
-    }
+    CommitStagedDescriptorsForDraw();
 
     m_D3d12CommandList->DrawInstanced(vertexCount, instanceCount, startVertex, startInstance);
 }
@@ -1168,10 +1310,7 @@ void CommandList::DrawIndexed(const uint32_t indexCount, const uint32_t instance
 {
     FlushResourceBarriers();
 
-    for (const auto& dynamicDescriptorHeap : m_DynamicDescriptorHeaps)
-    {
-        dynamicDescriptorHeap->CommitStagedDescriptorsForDraw(*this);
-    }
+    CommitStagedDescriptorsForDraw();
 
     m_D3d12CommandList->DrawIndexedInstanced(indexCount, instanceCount, startIndex, baseVertex, startInstance);
 }
@@ -1184,10 +1323,7 @@ void CommandList::DrawIndirect(
 {
     FlushResourceBarriers();
 
-    for (const auto& dynamicDescriptorHeap : m_DynamicDescriptorHeaps)
-    {
-        dynamicDescriptorHeap->CommitStagedDescriptorsForDraw(*this);
-    }
+    CommitStagedDescriptorsForDraw();
 
     m_D3d12CommandList->ExecuteIndirect(pCommandSignature.Get(), maxCommandCount, pArgumentBuffer.Get(), argumentBufferOffset, pCountBuffer.Get(), countBufferOffset);
 }
@@ -1196,10 +1332,7 @@ void CommandList::Dispatch(const uint32_t numGroupsX, const uint32_t numGroupsY,
 {
     FlushResourceBarriers();
 
-    for (const auto& dynamicDescriptorHeap : m_DynamicDescriptorHeaps)
-    {
-        dynamicDescriptorHeap->CommitStagedDescriptorsForDispatch(*this);
-    }
+    CommitStagedDescriptorsForDispatch();
 
     m_D3d12CommandList->Dispatch(numGroupsX, numGroupsY, numGroupsZ);
 }
@@ -1209,10 +1342,7 @@ void CommandList::DispatchMesh(const uint32_t numGroupsX, const uint32_t numGrou
 {
     FlushResourceBarriers();
 
-    for (const auto& dynamicDescriptorHeap : m_DynamicDescriptorHeaps)
-    {
-        dynamicDescriptorHeap->CommitStagedDescriptorsForDraw(*this);
-    }
+    CommitStagedDescriptorsForDraw();
 
     m_D3d12CommandList6->DispatchMesh(numGroupsX, numGroupsY, numGroupsZ);
 }
@@ -1229,10 +1359,7 @@ void CommandList::DispatchRays(const D3D12_DISPATCH_RAYS_DESC& dispatchRaysDesc)
 {
     FlushResourceBarriers();
 
-    for (const auto& dynamicDescriptorHeap : m_DynamicDescriptorHeaps)
-    {
-        dynamicDescriptorHeap->CommitStagedDescriptorsForDispatch(*this);
-    }
+    CommitStagedDescriptorsForDispatch();
 
     m_D3d12CommandList5->DispatchRays(&dispatchRaysDesc);
 }
@@ -1254,10 +1381,14 @@ void CommandList::StageDynamicDescriptors(
 }
 
 //Modify Begin:2026-07-30 by BestHui
-void CommandList::BindShaderVisibleDescriptorHeap(
+void CommandList::BindExternalDescriptorHeap(
     const D3D12_DESCRIPTOR_HEAP_TYPE heapType,
     ID3D12DescriptorHeap* heap)
 {
+    Assert(heap != nullptr, "External descriptor heap must not be null.");
+    Assert(
+        heapType == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV || heapType == D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER,
+        "Only shader-visible descriptor heap types can be bound externally.");
     SetDescriptorHeap(heapType, heap);
 }
 //Modify End
@@ -1317,6 +1448,7 @@ void CommandList::TrackObject(const ComPtr<ID3D12Object>& object)
 void CommandList::TrackResource(const Resource& res)
 {
     TrackObject(res.GetD3D12Resource());
+    m_TrackedResourceStateRegistrations.push_back(res.GetStateRegistration());
 }
 
 void CommandList::GenerateMipsUav(Texture& texture, DXGI_FORMAT format)
@@ -1417,6 +1549,7 @@ void CommandList::GenerateMipsUav(Texture& texture, DXGI_FORMAT format)
 
 void CommandList::ReleaseTrackedObjects()
 {
+    m_TrackedResourceStateRegistrations.clear();
     m_TrackedObjects.clear();
 }
 
@@ -1461,6 +1594,13 @@ void CommandList::SetComputeRootConstantBufferView(UINT rootParameterIndex, D3D1
 {
     m_D3d12CommandList->SetComputeRootConstantBufferView(rootParameterIndex, gpuAddress);
 }
+
+//Modify Begin:2026-08-12 by BestHui
+void CommandList::SetGraphicsRootDescriptorTable(UINT rootParameterIndex, D3D12_GPU_DESCRIPTOR_HANDLE descriptorHandle)
+{
+    m_D3d12CommandList->SetGraphicsRootDescriptorTable(rootParameterIndex, descriptorHandle);
+}
+//Modify End
 
 void CommandList::SetComputeRootDescriptorTable(UINT rootParameterIndex, D3D12_GPU_DESCRIPTOR_HANDLE descriptorHandle)
 {

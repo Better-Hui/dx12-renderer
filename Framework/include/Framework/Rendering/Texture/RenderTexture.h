@@ -8,12 +8,14 @@
 #include <string>
 
 class Texture;
+class FrameworkDeviceContext;
 
 //Modify Begin:2026-07-23 by BestHui
 class RenderTexture final
 {
 public:
     static std::shared_ptr<Texture> Create2D(
+        const FrameworkDeviceContext& deviceContext,
         DXGI_FORMAT format,
         uint32_t width,
         uint32_t height,
@@ -23,6 +25,7 @@ public:
         uint16_t mipLevels = 1);
 
     static std::shared_ptr<Texture> CreateUav2D(
+        const FrameworkDeviceContext& deviceContext,
         DXGI_FORMAT format,
         uint32_t width,
         uint32_t height,

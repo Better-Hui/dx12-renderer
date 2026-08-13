@@ -47,16 +47,11 @@ ReSTIRGIFrameConstants ReSTIRGI::GetFrameConstants(
 //Modify Begin:2026-07-30 by BestHui
         m_Settings.InitialCandidateCount,
 //Modify End
-        m_Settings.EnableTemporalResampling ? 1u : 0u,
-        m_Settings.EnableSpatialResampling ? 1u : 0u,
-        m_Settings.EnableTemporalJacobian ? 1u : 0u,
-
         m_Settings.TemporalMaxHistoryLength,
         m_Settings.SpatialMaxHistoryLength,
         m_Settings.MaxSampleAge,
         m_Settings.SpatialNeighborCount,
 //Modify Begin:2026-07-30 by BestHui
-        m_Settings.EnableUnbiasedSpatialResampling ? 1u : 0u,
         0u,
         0u,
         0u,
@@ -75,4 +70,17 @@ ReSTIRGIFrameConstants ReSTIRGI::GetFrameConstants(
 //Modify End
     };
 }
+
+//Modify Begin:2026-08-11 by BestHui
+ReSTIRGIVariantConfig ReSTIRGI::GetVariantConfig(const uint32_t maxPathBounces) const
+{
+    return {
+        std::clamp(maxPathBounces, 1u, 5u),
+        m_Settings.EnableTemporalResampling,
+        m_Settings.EnableSpatialResampling,
+        m_Settings.EnableTemporalJacobian,
+        m_Settings.EnableRayTracedSpatialBiasCorrection,
+    };
+}
+//Modify End
 //Modify End

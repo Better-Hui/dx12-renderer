@@ -18,10 +18,13 @@
 #include <vector>
 
 class CommandList;
+class D3D12DeviceContext;
 class RaytracingDemoSceneResources final
 {
 public:
-    explicit RaytracingDemoSceneResources(Microsoft::WRL::ComPtr<ID3D12Device2> device);
+//Modify Begin:2026-07-30 by BestHui
+    explicit RaytracingDemoSceneResources(std::shared_ptr<D3D12DeviceContext> deviceContext);
+//Modify End
 
     void Clear();
     void LoadDeferredLightingScene(CommandList& commandList);

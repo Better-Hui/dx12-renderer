@@ -41,6 +41,11 @@
 
 //Modify Begin:2026-08-07 by BestHui
 class D3D12DeviceContext;
+class ResourceStateRegistration;
+//Modify End
+//Modify Begin:2026-08-12 by BestHui
+class CommandList;
+class Window;
 //Modify End
 
 class Resource
@@ -109,11 +114,6 @@ public:
         return resDesc;
     }
 
-    // Replace the D3D12 resource
-    // Should only be called by the CommandList.
-    virtual void SetD3D12Resource(Microsoft::WRL::ComPtr<ID3D12Resource> d3d12Resource,
-        const D3D12_CLEAR_VALUE* clearValue = nullptr);
-
     const D3D12_CLEAR_VALUE& GetD3D12ClearValue() const;
 
     /**
@@ -142,6 +142,10 @@ public:
     const std::wstring& GetName() const;
 //Modify Begin:2026-08-07 by BestHui
     const std::shared_ptr<D3D12DeviceContext>& GetDeviceContext() const { return m_DeviceContext; }
+    const std::shared_ptr<ResourceStateRegistration>& GetStateRegistration() const
+    {
+        return m_StateRegistration;
+    }
 //Modify End
 
     /**
@@ -179,6 +183,19 @@ protected:
     std::wstring m_ResourceName;
 //Modify Begin:2026-08-07 by BestHui
     std::shared_ptr<D3D12DeviceContext> m_DeviceContext;
+    std::shared_ptr<ResourceStateRegistration> m_StateRegistration;
+//Modify End
+
+protected:
+//Modify Begin:2026-08-12 by BestHui
+    friend class CommandList;
+    friend class Window;
+
+    void AttachDeviceContext(std::shared_ptr<D3D12DeviceContext> deviceContext);
+    void SetD3D12Resource(
+        Microsoft::WRL::ComPtr<ID3D12Resource> d3d12Resource,
+        const D3D12_CLEAR_VALUE* clearValue = nullptr);
+    void AcquireResourceState(D3D12_RESOURCE_STATES initialState);
 //Modify End
 
 private:

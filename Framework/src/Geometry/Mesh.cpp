@@ -2,8 +2,6 @@
 #include <Framework/Geometry/Mesh.h>
 #include <Framework/Geometry/Bone.h>
 
-#include <DX12Library/Application.h>
-
 #include <DirectXMesh.h>
 
 using namespace DirectX;

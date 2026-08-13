@@ -13,18 +13,6 @@
 #include <system_error>
 #include <utility>
 
-namespace
-{
-    Microsoft::WRL::ComPtr<ID3D12Device5> GetRayTracingDevice(const Microsoft::WRL::ComPtr<ID3D12Device2>& device)
-    {
-        Assert(device != nullptr, "Raytracing demo scene resources require a D3D12 device.");
-
-        Microsoft::WRL::ComPtr<ID3D12Device5> rayTracingDevice;
-        ThrowIfFailed(device.As(&rayTracingDevice));
-        return rayTracingDevice;
-    }
-}
-
 SceneTextureMaterialResources::SceneTextureMaterialResources(Microsoft::WRL::ComPtr<ID3D12Device2> device)
     : m_MaterialBuffer(L"Ray Tracing Materials")
     , m_BindlessDescriptorHeap(*device.Get())
@@ -54,7 +42,12 @@ uint32_t SceneTextureMaterialResources::AddTexture(
         return existing->second;
     }
 
-    auto texture = std::make_shared<Texture>();
+//Modify Begin:2026-08-12 by BestHui
+    auto texture = std::make_shared<Texture>(
+        TextureUsageType::Other,
+        L"",
+        commandList.GetDeviceContext());
+//Modify End
     commandList.LoadTextureFromFile(*texture, path, usage);
     const uint32_t textureIndex = m_BindlessDescriptorHeap.AddShaderResourceView(*texture);
     m_Textures.push_back(texture);
@@ -255,10 +248,7 @@ void SceneMeshletResources::AddStressInstances(const std::span<const RaytracingD
 
 void SceneMeshletResources::RemoveStressInstances()
 {
-    for (const MeshletSceneInstanceHandle handle : m_StressInstanceHandles)
-    {
-        Assert(m_Resources.RemoveInstance(handle), "Stress test meshlet instance handle is invalid.");
-    }
+    m_Resources.RemoveInstances(m_StressInstanceHandles);
     m_StressInstanceHandles.clear();
 }
 
@@ -267,11 +257,13 @@ void SceneMeshletResources::Upload(CommandList& commandList)
     m_Resources.Upload(commandList);
 }
 
-SceneRayTracingResources::SceneRayTracingResources(Microsoft::WRL::ComPtr<ID3D12Device2> device)
+//Modify Begin:2026-07-30 by BestHui
+SceneRayTracingResources::SceneRayTracingResources(std::shared_ptr<D3D12DeviceContext> deviceContext)
     : m_GeometryBuffer(L"Ray Tracing Geometry Data")
-    , m_AccelerationStructure(GetRayTracingDevice(device))
+    , m_AccelerationStructure(std::move(deviceContext))
 {
 }
+//Modify End
 
 void SceneRayTracingResources::Clear()
 {
@@ -317,10 +309,7 @@ void SceneRayTracingResources::AddStressInstances(
 
 void SceneRayTracingResources::RemoveStressInstances()
 {
-    for (const RayTracingInstanceHandle handle : m_StressInstanceHandles)
-    {
-        Assert(m_AccelerationStructure.RemoveInstance(handle), "Stress test ray tracing instance handle is invalid.");
-    }
+    m_AccelerationStructure.RemoveInstances(m_StressInstanceHandles);
     m_StressInstanceHandles.clear();
 }
 

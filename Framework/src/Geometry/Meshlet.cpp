@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cfloat>
 #include <stdexcept>
+#include <unordered_set>
 
 using namespace DirectX;
 
@@ -272,7 +273,8 @@ void MeshletGeometrySet::Upload(CommandList& commandList)
             commandBufferDesc,
             m_Instances.size(),
             sizeof(MeshletIndirectCommand),
-            L"MeshletGeometrySet Indirect Commands");
+            L"MeshletGeometrySet Indirect Commands",
+            commandList.GetDeviceContext());
     }
     else
     {
@@ -400,6 +402,45 @@ bool MeshletSceneResources::RemoveInstance(const MeshletSceneInstanceHandle hand
     m_DrawsDirty = true;
     return true;
 }
+
+//Modify Begin:2026-07-30 by BestHui
+void MeshletSceneResources::RemoveInstances(const std::span<const MeshletSceneInstanceHandle> handles)
+{
+    if (handles.empty())
+    {
+        return;
+    }
+
+    std::unordered_set<MeshletSceneInstanceHandle> handlesToRemove(handles.begin(), handles.end());
+    Assert(handlesToRemove.size() == handles.size(), "Meshlet scene instance removal contains duplicate handles.");
+    Assert(handlesToRemove.size() <= m_Instances.size(), "Meshlet scene instance removal exceeds the instance count.");
+
+    for (const MeshletSceneInstanceHandle handle : handlesToRemove)
+    {
+        Assert(m_InstanceIndices.contains(handle), "Meshlet scene instance handle is invalid.");
+    }
+
+    std::vector<InstanceEntry> survivingInstances;
+    survivingInstances.reserve(m_Instances.size() - handlesToRemove.size());
+    for (InstanceEntry& instance : m_Instances)
+    {
+        if (!handlesToRemove.contains(instance.Handle))
+        {
+            survivingInstances.push_back(std::move(instance));
+        }
+    }
+
+    m_Instances = std::move(survivingInstances);
+    m_InstanceIndices.clear();
+    m_InstanceIndices.reserve(m_Instances.size());
+    for (uint32_t instanceIndex = 0; instanceIndex < m_Instances.size(); ++instanceIndex)
+    {
+        const bool inserted = m_InstanceIndices.emplace(m_Instances[instanceIndex].Handle, instanceIndex).second;
+        Assert(inserted, "Meshlet scene instance handle is duplicated.");
+    }
+    m_DrawsDirty = true;
+}
+//Modify End
 
 void MeshletSceneResources::Upload(CommandList& commandList)
 {

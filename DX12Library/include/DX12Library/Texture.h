@@ -41,8 +41,9 @@
 #include <mutex>
 #include <unordered_map>
 
-#include "Application.h"
 #include "ClearValue.h"
+
+class CommandList;
 
 class Texture : public Resource
 {
@@ -113,7 +114,7 @@ public:
     /**
      * Resize the texture.
      */
-    void Resize(uint32_t width, uint32_t height, uint32_t depthOrArraySize = 1);
+    void Resize(CommandList& commandList, uint32_t width, uint32_t height, uint32_t depthOrArraySize = 1);
 
     /**
      * Create SRV and UAVs for the resource.

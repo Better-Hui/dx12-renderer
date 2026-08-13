@@ -9,7 +9,6 @@ ConstantBuffer::ConstantBuffer(const std::wstring& name)
 	: Buffer(name)
 	, SizeInBytes(0)
 {
-	ConstantBufferView = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 }
 
 ConstantBuffer::~ConstantBuffer() = default;
@@ -24,6 +23,12 @@ void ConstantBuffer::CreateViews(const size_t numElements, const size_t elementS
 
 	const auto device = m_DeviceContext->GetDevice();
 
+//Modify Begin:2026-08-12 by BestHui
+	if (ConstantBufferView.IsNull())
+	{
+		ConstantBufferView = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	}
+//Modify End
 	device->CreateConstantBufferView(&d3d12ConstantBufferViewDesc, ConstantBufferView.GetDescriptorHandle());
 }
 

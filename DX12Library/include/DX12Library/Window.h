@@ -49,6 +49,23 @@
 
 class Game;
 class Texture;
+//Modify Begin:2026-08-12 by BestHui
+class CommandQueue;
+class D3D12DeviceContext;
+class StreamlineRuntime;
+//Modify End
+
+//Modify Begin:2026-08-12 by BestHui
+struct WindowD3D12Context
+{
+    std::shared_ptr<D3D12DeviceContext> DeviceContext;
+    std::shared_ptr<CommandQueue> DirectCommandQueue;
+    std::shared_ptr<CommandQueue> ComputeCommandQueue;
+    std::shared_ptr<CommandQueue> CopyCommandQueue;
+    std::shared_ptr<StreamlineRuntime> StreamlineRuntime;
+    bool IsTearingSupported = false;
+};
+//Modify End
 
 class Window : public std::enable_shared_from_this<Window>
 {
@@ -133,7 +150,15 @@ protected:
 	friend class Game;
 
 	Window() = delete;
-	Window(HWND hWnd, const std::wstring& windowName, int clientWidth, int clientHeight, bool vSync);
+//Modify Begin:2026-08-12 by BestHui
+	Window(
+		HWND hWnd,
+		const std::wstring& windowName,
+		int clientWidth,
+		int clientHeight,
+		bool vSync,
+		WindowD3D12Context d3d12Context);
+//Modify End
 	virtual ~Window();
 
 	// Register a Game with this window. This allows
@@ -172,6 +197,10 @@ protected:
 	void UpdateFrameStatistics(double elapsedSeconds);
 //Modify End
 
+//Modify Begin:2026-08-12 by BestHui
+	void BeginFrame(uint64_t frameNumber);
+//Modify End
+
 private:
 	// Windows should not be copied.
 	Window(const Window& copy) = delete;
@@ -208,6 +237,10 @@ private:
 
 	RECT WindowRect;
 	bool IsTearingSupported;
+
+//Modify Begin:2026-08-12 by BestHui
+	WindowD3D12Context m_D3d12Context;
+//Modify End
 
 	int PreviousMouseX;
 	int PreviousMouseY;

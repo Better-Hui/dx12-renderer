@@ -103,10 +103,9 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
         if (enableParallelDirectRecording && recordingBatch.RecordInParallel)
         {
             Assert(!recordingBatch.Passes.empty(), "Parallel recording batch cannot be empty.");
-            PrepareQueueDependency(
-                *recordingBatch.Passes.front(),
-                directCommandList,
-                resourceStatePlans);
+            PrepareDirectQueueDependencies(
+                recordingBatch.Passes,
+                directCommandList);
             ExecuteParallelDirectBatch(
                 recordingBatch,
                 renderMetadata,
@@ -134,7 +133,7 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
                     "Async compute render passes cannot write render targets or depth resources.");
             }
 
-            PrepareQueueDependency(*renderPass, directCommandList, resourceStatePlans);
+            PrepareAsyncComputeDependency(*renderPass, directCommandList, resourceStatePlans);
 
             auto computeCommandList = m_AsyncComputeCommandQueue->GetCommandList();
             if (!m_Profiler.IsQueueFrameActive(RenderPassQueue::AsyncCompute))
@@ -182,7 +181,9 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
             continue;
         }
 
-        PrepareQueueDependency(*renderPass, directCommandList, resourceStatePlans);
+        PrepareDirectQueueDependencies(
+            std::span<RenderPass* const>(&renderPass, 1u),
+            directCommandList);
         if (directCommandList == nullptr)
         {
             directCommandList = m_DirectCommandQueue->GetCommandList();
@@ -359,81 +360,21 @@ void RenderGraph::RenderGraphCommandExecutor::ExecuteParallelDirectBatch(
 }
 //Modify End
 
-void RenderGraph::RenderGraphCommandExecutor::PrepareQueueDependency(
-    const RenderPass& pass,
-    std::shared_ptr<CommandList>& directCommandList,
-    const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans)
+void RenderGraph::RenderGraphCommandExecutor::PrepareDirectQueueDependencies(
+    const std::span<RenderPass* const> passes,
+    std::shared_ptr<CommandList>& directCommandList)
 {
-    if (pass.GetQueue() == RenderPassQueue::AsyncCompute)
+    Assert(!passes.empty(), "Direct queue dependency preparation requires at least one pass.");
+
+    uint64_t producerFenceValue = 0u;
+    for (const RenderPass* pass : passes)
     {
-        const auto planIt = resourceStatePlans.find(&pass);
-        Assert(planIt != resourceStatePlans.end(), "Render pass resource state plan was not built.");
-        Assert(planIt->second.DirectPreamble.has_value(), "Async compute render pass has no direct queue preamble plan.");
-        const PassResourceStatePlan::AsyncComputeDirectPreamble& directPreamble = *planIt->second.DirectPreamble;
-
-        if (directCommandList == nullptr)
-        {
-            directCommandList = m_DirectCommandQueue->GetCommandList();
-        }
-
-        CommandList& commandList = *directCommandList;
-
-        for (const PassResourceTransition& transition : directPreamble.DirectProducerInputTransitions)
-        {
-            if (!m_QueueScheduler.WasLastWrittenBy(transition.Id, RenderPassQueue::Direct))
-            {
-                continue;
-            }
-
-            const auto& resource = m_ResourcePool->GetResource(transition.Id);
-            resource.ForEachResourceRecursive([&commandList, &transition](const Resource& nestedResource)
-            {
-                commandList.TransitionBarrier(
-                    nestedResource,
-                    GetQueueResourceState(RenderPassQueue::AsyncCompute, transition.StateAfter));
-                if (transition.InsertUavBarrier)
-                {
-                    commandList.UavBarrier(nestedResource);
-                }
-            });
-        }
-
-        for (const ResourceId outputId : directPreamble.AliasingOutputs)
-        {
-            const auto& resource = m_ResourcePool->GetResource(outputId);
-            resource.ForEachResourceRecursive([&commandList](const Resource& nestedResource)
-            {
-                commandList.AliasingBarrierBeforeFirstUse(nestedResource);
-            });
-        }
-
-        for (const PassResourceTransition& transition : directPreamble.OutputTransitions)
-        {
-            const auto& resource = m_ResourcePool->GetResource(transition.Id);
-            resource.ForEachResourceRecursive([&commandList, &transition](const Resource& nestedResource)
-            {
-                commandList.TransitionBarrier(
-                    nestedResource,
-                    GetQueueResourceState(RenderPassQueue::AsyncCompute, transition.StateAfter));
-                if (transition.InsertUavBarrier)
-                {
-                    commandList.UavBarrier(nestedResource);
-                }
-            });
-        }
-
-        pass.PrepareAsyncCompute(commandList);
-        m_Profiler.WriteMarker(
-            RenderPassQueue::Direct,
-            commandList,
-            "Async Prepare." + RenderGraphProfiler::NarrowPassName(pass.GetPassName()));
-
-        const uint64_t producerFenceValue = m_QueueScheduler.SubmitDirect(directCommandList);
-        m_QueueScheduler.WaitForDirectSubmissionOnAsyncCompute(producerFenceValue);
-        return;
+        Assert(pass != nullptr, "Direct queue dependency preparation received a null pass.");
+        Assert(pass->GetQueue() == RenderPassQueue::Direct, "Only direct passes can enter a parallel recording batch.");
+        producerFenceValue = (std::max)(
+            producerFenceValue,
+            m_QueueScheduler.GetCrossQueueProducerFence(*pass));
     }
-
-    const uint64_t producerFenceValue = m_QueueScheduler.GetCrossQueueProducerFence(pass);
     if (producerFenceValue == 0)
     {
         return;
@@ -456,6 +397,72 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareQueueDependency(
         directCommandList = m_DirectCommandQueue->GetCommandList();
         m_Profiler.WriteMarker(RenderPassQueue::Direct, *directCommandList, "Async Wait.End");
     }
+}
+
+void RenderGraph::RenderGraphCommandExecutor::PrepareAsyncComputeDependency(
+    const RenderPass& pass,
+    std::shared_ptr<CommandList>& directCommandList,
+    const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans)
+{
+    Assert(pass.GetQueue() == RenderPassQueue::AsyncCompute, "Async compute dependency preparation requires an async compute pass.");
+    const auto planIt = resourceStatePlans.find(&pass);
+    Assert(planIt != resourceStatePlans.end(), "Render pass resource state plan was not built.");
+    Assert(planIt->second.DirectPreamble.has_value(), "Async compute render pass has no direct queue preamble plan.");
+    const PassResourceStatePlan::AsyncComputeDirectPreamble& directPreamble = *planIt->second.DirectPreamble;
+
+    if (directCommandList == nullptr)
+    {
+        directCommandList = m_DirectCommandQueue->GetCommandList();
+    }
+
+    CommandList& commandList = *directCommandList;
+    for (const PassResourceTransition& transition : directPreamble.DirectProducerInputTransitions)
+    {
+        const auto& resource = m_ResourcePool->GetResource(transition.Id);
+        resource.ForEachResourceRecursive([&commandList, &transition](const Resource& nestedResource)
+        {
+            commandList.TransitionBarrier(
+                nestedResource,
+                GetQueueResourceState(RenderPassQueue::AsyncCompute, transition.StateAfter));
+            if (transition.InsertUavBarrier)
+            {
+                commandList.UavBarrier(nestedResource);
+            }
+        });
+    }
+
+    for (const ResourceId outputId : directPreamble.AliasingOutputs)
+    {
+        const auto& resource = m_ResourcePool->GetResource(outputId);
+        resource.ForEachResourceRecursive([&commandList](const Resource& nestedResource)
+        {
+            commandList.AliasingBarrierBeforeFirstUse(nestedResource);
+        });
+    }
+
+    for (const PassResourceTransition& transition : directPreamble.OutputTransitions)
+    {
+        const auto& resource = m_ResourcePool->GetResource(transition.Id);
+        resource.ForEachResourceRecursive([&commandList, &transition](const Resource& nestedResource)
+        {
+            commandList.TransitionBarrier(
+                nestedResource,
+                GetQueueResourceState(RenderPassQueue::AsyncCompute, transition.StateAfter));
+            if (transition.InsertUavBarrier)
+            {
+                commandList.UavBarrier(nestedResource);
+            }
+        });
+    }
+
+    pass.PrepareAsyncCompute(commandList);
+    m_Profiler.WriteMarker(
+        RenderPassQueue::Direct,
+        commandList,
+        "Async Prepare." + RenderGraphProfiler::NarrowPassName(pass.GetPassName()));
+
+    const uint64_t producerFenceValue = m_QueueScheduler.SubmitDirect(directCommandList);
+    m_QueueScheduler.WaitForDirectSubmissionOnAsyncCompute(producerFenceValue);
 }
 
 void RenderGraph::RenderGraphCommandExecutor::PrepareResourcesForRenderPass(

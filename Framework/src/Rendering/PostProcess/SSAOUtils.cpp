@@ -1,5 +1,7 @@
 #include <Framework/Rendering/PostProcess/SSAOUtils.h>
 
+#include <DX12Library/D3D12DeviceContext.h>
+
 using namespace DirectX;
 
 namespace
@@ -54,7 +56,14 @@ std::shared_ptr<Texture> SSAOUtils::GenerateNoiseTexture(CommandList& commandLis
     }
 
     auto noiseTextureDesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R32G32_FLOAT, noiseTextureWidth, noiseTextureHeight, 1, 1);
-    auto noiseTexture = std::make_shared<Texture>(noiseTextureDesc, nullptr, TextureUsageType::Other, L"SSAO Noise Texture");
+//Modify Begin:2026-08-12 by BestHui
+    auto noiseTexture = std::make_shared<Texture>(
+        noiseTextureDesc,
+        nullptr,
+        TextureUsageType::Other,
+        L"SSAO Noise Texture",
+        commandList.GetDeviceContext());
+//Modify End
     D3D12_SUBRESOURCE_DATA subresourceData{};
     subresourceData.pData = noiseSamples.data();
     subresourceData.RowPitch = sizeof(XMFLOAT2) * noiseTextureWidth;

@@ -48,7 +48,7 @@ public:
 		const ShaderBlob& vertexShaderPath,
 		const ShaderBlob& pixelShaderPath,
 		const std::function<void(RasterPipelineStateBuilder&)> buildPipelineState = [](RasterPipelineStateBuilder&) {});
-	explicit Shader(
+    explicit Shader(
 		FrameworkDeviceContext& deviceContext,
 		const ShaderBlob& vertexShaderPath,
 		const ShaderBlob& pixelShaderPath,

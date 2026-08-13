@@ -28,7 +28,6 @@ namespace RenderGraph
 //Modify End
         uint64_t SubmitAsyncCompute(std::shared_ptr<CommandList>& commandList, bool waitForCompletion);
         uint64_t GetCrossQueueProducerFence(const RenderPass& pass) const;
-        bool WasLastWrittenBy(ResourceId resourceId, RenderPassQueue queue) const;
         void WaitForDirectSubmissionOnAsyncCompute(uint64_t fenceValue) const;
         void WaitForAsyncComputeSubmissionOnDirect(uint64_t fenceValue);
         void TrackPassResources(const RenderPass& pass, uint64_t fenceValue);

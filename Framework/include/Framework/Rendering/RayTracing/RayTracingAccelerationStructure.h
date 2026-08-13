@@ -9,12 +9,15 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <span>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
 class CommandList;
+class D3D12DeviceContext;
 class Mesh;
+class ResourceStateRegistration;
 
 using RayTracingInstanceHandle = uint64_t;
 
@@ -56,11 +59,14 @@ struct RayTracingAccelerationStructureBuildSettings
 class RayTracingAccelerationStructure
 {
 public:
-    explicit RayTracingAccelerationStructure(Microsoft::WRL::ComPtr<ID3D12Device5> device);
+//Modify Begin:2026-07-30 by BestHui
+    explicit RayTracingAccelerationStructure(std::shared_ptr<D3D12DeviceContext> deviceContext);
+//Modify End
 
     RayTracingInstanceHandle AddInstance(const RayTracingInstanceDesc& instanceDesc);
     bool UpdateInstance(RayTracingInstanceHandle handle, const RayTracingInstanceDesc& instanceDesc);
     bool RemoveInstance(RayTracingInstanceHandle handle);
+    void RemoveInstances(std::span<const RayTracingInstanceHandle> handles);
     void ClearInstances();
 
     void Build(CommandList& commandList, RayTracingAccelerationStructureBuildSettings settings = {});
@@ -75,18 +81,29 @@ public:
     uint32_t GetInstanceCount() const;
 
 private:
+    struct ManagedRayTracingResource
+    {
+        Microsoft::WRL::ComPtr<ID3D12Resource> Resource;
+        std::shared_ptr<ResourceStateRegistration> StateRegistration;
+
+        explicit operator bool() const
+        {
+            return Resource != nullptr;
+        }
+    };
+
     struct BottomLevelAccelerationStructure
     {
         std::shared_ptr<Mesh> Mesh;
-        Microsoft::WRL::ComPtr<ID3D12Resource> Resource;
+        ManagedRayTracingResource Resource;
     };
 
-    Microsoft::WRL::ComPtr<ID3D12Resource> CreateAccelerationStructureBuffer(
+    ManagedRayTracingResource CreateAccelerationStructureBuffer(
         uint64_t size,
         D3D12_RESOURCE_STATES initialState,
         const wchar_t* name) const;
 
-    Microsoft::WRL::ComPtr<ID3D12Resource> CreateUploadBuffer(
+    ManagedRayTracingResource CreateUploadBuffer(
         const void* data,
         uint64_t size,
         const wchar_t* name) const;
@@ -99,7 +116,7 @@ private:
         CommandList& commandList,
         const std::shared_ptr<Mesh>& mesh,
         D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags,
-        const Microsoft::WRL::ComPtr<ID3D12Resource>& scratch) const;
+        const ManagedRayTracingResource& scratch) const;
 
     std::map<const Mesh*, uint32_t> BuildBottomLevelAccelerationStructures(CommandList& commandList);
     std::map<const Mesh*, uint32_t> CreateMeshToBlasIndex() const;
@@ -114,13 +131,16 @@ private:
     std::vector<RayTracingInstanceDesc> m_Instances;
     std::unordered_map<RayTracingInstanceHandle, uint32_t> m_InstanceIndices;
     std::vector<BottomLevelAccelerationStructure> m_BottomLevelAccelerationStructures;
-    Microsoft::WRL::ComPtr<ID3D12Resource> m_TopLevelAccelerationStructure;
-    Microsoft::WRL::ComPtr<ID3D12Resource> m_InstanceDescUpload;
+    ManagedRayTracingResource m_TopLevelAccelerationStructure;
+    ManagedRayTracingResource m_InstanceDescUpload;
     std::vector<std::shared_ptr<Mesh>> m_Meshes;
     std::vector<RayTracingGeometryData> m_GeometryData;
     RayTracingAccelerationStructureBuildSettings m_LastBuildSettings;
     uint32_t m_BuiltInstanceCount = 0;
+//Modify Begin:2026-07-30 by BestHui
+    std::shared_ptr<D3D12DeviceContext> m_DeviceContext;
     Microsoft::WRL::ComPtr<ID3D12Device5> m_Device;
+//Modify End
     bool m_InstanceMeshChanged = false;
 };
 //Modify End

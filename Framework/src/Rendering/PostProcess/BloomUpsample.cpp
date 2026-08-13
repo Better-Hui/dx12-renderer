@@ -37,6 +37,13 @@ BloomUpsample::BloomUpsample(FrameworkDeviceContext& deviceContext, CommandList&
 		deviceContext,
 		ShaderBlob(ShaderBytecode_Blit_VS, sizeof ShaderBytecode_Blit_VS),
 		ShaderBlob(ShaderBytecode_Bloom_Downsample_PS, sizeof ShaderBytecode_Bloom_Downsample_PS),
+//Modify Begin:2026-07-30 by BestHui
+        PipelineLayoutReflectionOptions{
+            .StaticSamplerContracts = { PipelineStaticSamplers::LinearClamp(3u) },
+            .MaxDescriptorCount = 4096u,
+            .ShaderStages = PipelineShaderStageFlags::AllGraphics
+        },
+//Modify End
 		[](RasterPipelineStateBuilder& builder)
 		{
 			builder.WithAdditiveBlend();

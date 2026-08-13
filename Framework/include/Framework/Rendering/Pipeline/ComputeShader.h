@@ -48,6 +48,9 @@ struct ComputePipelineDesc
     };
 
     std::vector<BindingOverride> BindingOverrides;
+//Modify Begin:2026-08-12 by BestHui
+    std::vector<PipelineStaticSamplerContract> StaticSamplerContracts;
+//Modify End
     UINT MaxDescriptorCount = 1024;
 //Modify Begin:2026-07-30 by BestHui
     D3D12_ROOT_SIGNATURE_FLAGS RootSignatureFlags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
@@ -60,6 +63,10 @@ public:
     static ComputePipelineDescBuilder ReflectedDefault(const ShaderBlob& shader);
 
     ComputePipelineDescBuilder& WithDescriptorArrayCount(std::string name, UINT descriptorCount);
+//Modify Begin:2026-08-12 by BestHui
+    ComputePipelineDescBuilder& WithStaticSamplerContract(PipelineStaticSamplerContract contract);
+    ComputePipelineDescBuilder& WithCommonRootSignatureStaticSamplers();
+//Modify End
     ComputePipelineDescBuilder& WithMaxDescriptorCount(UINT maxDescriptorCount);
 //Modify Begin:2026-07-30 by BestHui
     ComputePipelineDescBuilder& WithRootSignatureFlags(D3D12_ROOT_SIGNATURE_FLAGS flags);
@@ -83,6 +90,9 @@ public:
     bool HasConstantBuffer(const std::string& variableName) const;
     bool HasShaderResourceView(const std::string& variableName) const;
     bool HasUnorderedAccessView(const std::string& variableName) const;
+//Modify Begin:2026-07-30 by BestHui
+    bool HasAccelerationStructure(const std::string& variableName) const;
+//Modify End
     void SetConstantBuffer(CommandList& commandList, const std::string& variableName, size_t size, const void* data) const;
 
     template<typename T>
@@ -102,7 +112,7 @@ public:
     void SetTexture(CommandList& commandList, const std::string& variableName, const std::shared_ptr<Resource>& texture) const;
 
     void SetUnorderedAccessView(CommandList& commandList, const std::string& variableName, const UnorderedAccessView& unorderedAccessView) const;
-    void SetAccelerationStructure(CommandList& commandList, const RayTracingAccelerationStructure& accelerationStructure) const;
+    void SetAccelerationStructure(CommandList& commandList, const std::string& variableName, const RayTracingAccelerationStructure& accelerationStructure) const;
 
     using ShaderMetadata = ShaderReflectionMetadata;
 

@@ -30,18 +30,6 @@ bool PipelineBindingSet::HasBinding(std::string_view name, const DescriptorBindi
     return FindRange(name, expectedKind) != nullptr;
 }
 
-bool PipelineBindingSet::HasBinding(const DescriptorBindingKind expectedKind) const
-{
-    const auto& ranges = GetLayout().GetDesc().DescriptorRanges;
-    return std::any_of(
-        ranges.begin(),
-        ranges.end(),
-        [expectedKind](const PipelineDescriptorRangeDesc& range)
-        {
-            return range.Kind == expectedKind;
-        });
-}
-
 const PipelineDescriptorRangeDesc* PipelineBindingSet::FindRange(
     std::string_view name,
     const DescriptorBindingKind expectedKind) const
@@ -62,35 +50,11 @@ const PipelineDescriptorRangeDesc& PipelineBindingSet::GetRange(
     return *range;
 }
 
-const PipelineDescriptorRangeDesc& PipelineBindingSet::GetFirstRange(const DescriptorBindingKind expectedKind) const
-{
-    const PipelineLayout& layout = GetLayout();
-    const auto& ranges = layout.GetDesc().DescriptorRanges;
-    const auto findResult = std::find_if(
-        ranges.begin(),
-        ranges.end(),
-        [expectedKind](const PipelineDescriptorRangeDesc& range)
-        {
-            return range.Kind == expectedKind;
-        });
-    if (findResult == ranges.end())
-    {
-        throw std::exception("Pipeline binding was not found.");
-    }
-
-    return *findResult;
-}
-
 const DescriptorBindingInfo& PipelineBindingSet::GetBinding(
     std::string_view name,
     const DescriptorBindingKind expectedKind) const
 {
     return GetLayout().GetBinding(std::string(name), expectedKind);
-}
-
-const DescriptorBindingInfo& PipelineBindingSet::GetFirstBinding(const DescriptorBindingKind expectedKind) const
-{
-    return GetLayout().GetFirstBinding(expectedKind);
 }
 
 UINT PipelineBindingSet::GetRootParameterIndex(

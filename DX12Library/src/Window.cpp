@@ -2,9 +2,11 @@
 
 #include "Window.h"
 
-#include "Application.h"
 #include "CommandQueue.h"
 #include "CommandList.h"
+//Modify Begin:2026-08-12 by BestHui
+#include "D3D12DeviceContext.h"
+//Modify End
 #include "Game.h"
 #include "RenderTarget.h"
 #include "ResourceStateTracker.h"
@@ -16,23 +18,42 @@
 
 //Modify Begin:2026-07-21 by BestHui
 #include <cwchar>
+#include <utility>
 //Modify End
 
-Window::Window(HWND hWnd, const std::wstring& windowName, int clientWidth, int clientHeight, bool vSync)
+//Modify Begin:2026-08-12 by BestHui
+Window::Window(
+	HWND hWnd,
+	const std::wstring& windowName,
+	const int clientWidth,
+	const int clientHeight,
+	const bool vSync,
+	WindowD3D12Context d3d12Context)
+//Modify End
 	: HWnd(hWnd)
 	, WindowName(windowName)
 	, ClientWidth(clientWidth)
 	, ClientHeight(clientHeight)
 	, VSync(vSync)
 	, Fullscreen(false)
+	, m_D3d12Context(std::move(d3d12Context))
 {
-	Application& app = Application::Get();
-
-	IsTearingSupported = app.IsTearingSupported();
+//Modify Begin:2026-08-12 by BestHui
+	Assert(m_D3d12Context.DeviceContext != nullptr, "Window requires a D3D12 device context.");
+	Assert(m_D3d12Context.DirectCommandQueue != nullptr, "Window requires a direct command queue.");
+	Assert(m_D3d12Context.ComputeCommandQueue != nullptr, "Window requires a compute command queue.");
+	Assert(m_D3d12Context.CopyCommandQueue != nullptr, "Window requires a copy command queue.");
+	IsTearingSupported = m_D3d12Context.IsTearingSupported;
+//Modify End
 
 	for (int i = 0; i < BUFFER_COUNT; ++i)
 	{
-		BackBufferTextures[i] = std::make_shared<Texture>();
+//Modify Begin:2026-08-12 by BestHui
+		BackBufferTextures[i] = std::make_shared<Texture>(
+			TextureUsageType::Other,
+			L"",
+			m_D3d12Context.DeviceContext);
+//Modify End
 		BackBufferTextures[i]->SetName(L"Backbuffer[" + std::to_wstring(i) + L"]");
 	}
 
@@ -248,6 +269,13 @@ void Window::UpdateFrameStatistics(const double elapsedSeconds)
 }
 //Modify End
 
+//Modify Begin:2026-08-12 by BestHui
+void Window::BeginFrame(const uint64_t frameNumber)
+{
+	m_D3d12Context.DeviceContext->SetDescriptorRetirementFrame(frameNumber);
+}
+//Modify End
+
 void Window::OnKeyPressed(KeyEventArgs& e)
 {
 	if (auto pGame = PGame.lock())
@@ -311,20 +339,34 @@ void Window::OnMouseWheel(MouseWheelEventArgs& e)
 
 void Window::OnResize(ResizeEventArgs& e)
 {
+	//Modify Begin:2026-07-30 by BestHui
+	if (e.Width <= 0 || e.Height <= 0)
+	{
+		return;
+	}
+	//Modify End
+
 	// Update the client size.
 	if (ClientWidth != e.Width || ClientHeight != e.Height)
 	{
 		ClientWidth = std::max(1, e.Width);
 		ClientHeight = std::max(1, e.Height);
 
-		Application::Get().Flush();
+//Modify Begin:2026-08-12 by BestHui
+		m_D3d12Context.DirectCommandQueue->Flush();
+		m_D3d12Context.ComputeCommandQueue->Flush();
+		m_D3d12Context.CopyCommandQueue->Flush();
+//Modify End
 
 		// Release all references to back buffer textures.
-		MRenderTarget.AttachTexture(Color0, std::make_shared<Texture>());
+//Modify Begin:2026-08-12 by BestHui
+		MRenderTarget.AttachTexture(Color0, std::make_shared<Texture>(
+			TextureUsageType::Other,
+			L"",
+			m_D3d12Context.DeviceContext));
+//Modify End
 		for (int i = 0; i < BUFFER_COUNT; ++i)
 		{
-			Application::Get().GetResourceStateRegistry()->RemoveResource(
-				BackBufferTextures[i]->GetD3D12Resource().Get());
 			BackBufferTextures[i]->Reset();
 		}
 
@@ -351,11 +393,14 @@ void Window::OnResize(ResizeEventArgs& e)
 
 void Window::ReleaseSwapChainResources()
 {
-	MRenderTarget.AttachTexture(Color0, std::make_shared<Texture>());
+//Modify Begin:2026-08-12 by BestHui
+	MRenderTarget.AttachTexture(Color0, std::make_shared<Texture>(
+		TextureUsageType::Other,
+		L"",
+		m_D3d12Context.DeviceContext));
+//Modify End
 	for (int i = 0; i < BUFFER_COUNT; ++i)
 	{
-		Application::Get().GetResourceStateRegistry()->RemoveResource(
-			BackBufferTextures[i]->GetD3D12Resource().Get());
 		BackBufferTextures[i]->Reset();
 	}
 	DxgiSwapChain.Reset();
@@ -371,8 +416,6 @@ void Window::RecreateSwapChain()
 
 ComPtr<IDXGISwapChain4> Window::CreateSwapChain()
 {
-	Application& app = Application::Get();
-
 	ComPtr<IDXGISwapChain4> dxgiSwapChain4;
 	ComPtr<IDXGIFactory4> dxgiFactory4;
 	UINT createFactoryFlags = 0;
@@ -395,10 +438,10 @@ ComPtr<IDXGISwapChain4> Window::CreateSwapChain()
 	swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
 	// It is recommended to always allow tearing if tearing support is available.
 	swapChainDesc.Flags = IsTearingSupported ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
-	ID3D12CommandQueue* pCommandQueue = app.GetCommandQueue()->GetD3D12CommandQueue().Get();
+	ID3D12CommandQueue* pCommandQueue = m_D3d12Context.DirectCommandQueue->GetD3D12CommandQueue().Get();
 
 	ComPtr<IDXGISwapChain1> swapChain1;
-	const std::shared_ptr<StreamlineRuntime> streamlineRuntime = app.GetStreamlineRuntime();
+	const std::shared_ptr<StreamlineRuntime> streamlineRuntime = m_D3d12Context.StreamlineRuntime;
 	if (streamlineRuntime != nullptr)
 	{
 		ThrowIfFailed(streamlineRuntime->CreateSwapChainForHwnd(
@@ -439,10 +482,6 @@ void Window::UpdateRenderTargetViews()
 		ComPtr<ID3D12Resource> backBuffer;
 		ThrowIfFailed(DxgiSwapChain->GetBuffer(i, IID_PPV_ARGS(&backBuffer)));
 
-		Application::Get().GetResourceStateRegistry()->RegisterResource(
-			backBuffer.Get(),
-			D3D12_RESOURCE_STATE_COMMON);
-
 		BackBufferTextures[i]->SetD3D12Resource(backBuffer);
 		BackBufferTextures[i]->CreateViews();
 	}
@@ -456,7 +495,7 @@ const RenderTarget& Window::GetRenderTarget() const
 
 UINT Window::Present(const Texture& texture)
 {
-	auto commandQueue = Application::Get().GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
+	auto commandQueue = m_D3d12Context.DirectCommandQueue;
 	auto commandList = commandQueue->GetCommandList();
 
 	PIXScopeCPU("Present");
@@ -487,11 +526,14 @@ UINT Window::Present(const Texture& texture)
 	ThrowIfFailed(DxgiSwapChain->Present(syncInterval, presentFlags));
 
 //Modify Begin:2026-07-28 by BestHui
-	FrameResources.MarkSubmitted(CurrentBackBufferIndex, commandQueue->Signal(), Application::GetFrameCount());
+	FrameResources.MarkSubmitted(
+		CurrentBackBufferIndex,
+		commandQueue->Signal(),
+		m_D3d12Context.DeviceContext->GetDescriptorRetirementFrame());
 	CurrentBackBufferIndex = DxgiSwapChain->GetCurrentBackBufferIndex();
 	FrameResources.SetCurrentIndex(CurrentBackBufferIndex);
 	const uint64_t reusableFrame = FrameResources.WaitForSlot(*commandQueue, CurrentBackBufferIndex);
-	Application::Get().ReleaseStaleDescriptors(reusableFrame);
+	m_D3d12Context.DeviceContext->ReleaseStaleDescriptors(reusableFrame);
 //Modify End
 
 	return CurrentBackBufferIndex;

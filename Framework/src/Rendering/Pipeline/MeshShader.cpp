@@ -84,8 +84,10 @@ MeshShader::MeshShader(
     FrameworkDeviceContext& deviceContext,
     const ShaderBlob& meshShader,
     const ShaderBlob& pixelShader,
+    PipelineLayoutReflectionOptions layoutOptions,
     const std::function<void(RasterPipelineStateBuilder&)> buildPipelineState)
     : m_DeviceContext(deviceContext)
+    , m_PipelineLayoutOptions(std::move(layoutOptions))
     , m_DescriptorPool(deviceContext)
 {
     CollectShaderMetadata(meshShader.GetBlob(), &m_MeshShaderMetadata);
@@ -105,8 +107,10 @@ MeshShader::MeshShader(
     const ShaderBlob& amplificationShader,
     const ShaderBlob& meshShader,
     const ShaderBlob& pixelShader,
+    PipelineLayoutReflectionOptions layoutOptions,
     const std::function<void(RasterPipelineStateBuilder&)> buildPipelineState)
     : m_DeviceContext(deviceContext)
+    , m_PipelineLayoutOptions(std::move(layoutOptions))
     , m_DescriptorPool(deviceContext)
 {
     CollectShaderMetadata(amplificationShader.GetBlob(), &m_AmplificationShaderMetadata);
@@ -148,10 +152,15 @@ void MeshShader::CollectShaderMetadata(const Microsoft::WRL::ComPtr<ID3DBlob>& s
 
 void MeshShader::BuildPipelineLayout()
 {
-    PipelineLayoutReflectionOptions layoutOptions;
-    layoutOptions.MaxDescriptorCount = 4096u;
 //Modify Begin:2026-07-31 by BestHui
-    layoutOptions.ShaderStages = PipelineShaderStageFlags::AllGraphics;
+    if (m_PipelineLayoutOptions.MaxDescriptorCount == 1024u)
+    {
+        m_PipelineLayoutOptions.MaxDescriptorCount = 4096u;
+    }
+    if (m_PipelineLayoutOptions.ShaderStages == PipelineShaderStageFlags::All)
+    {
+        m_PipelineLayoutOptions.ShaderStages = PipelineShaderStageFlags::AllGraphics;
+    }
     const ShaderReflectionMetadata* amplificationReflection = m_AmplificationShaderMetadata.m_ConstantBuffers.empty() &&
         m_AmplificationShaderMetadata.m_ShaderResourceViews.empty() &&
         m_AmplificationShaderMetadata.m_UnorderedAccessViews.empty() &&
@@ -162,7 +171,7 @@ void MeshShader::BuildPipelineLayout()
 //Modify End
     m_PipelineLayout = std::make_unique<PipelineLayout>(
         m_DeviceContext,
-        PipelineLayout::CreateDescFromReflection(mergedReflection, layoutOptions));
+        PipelineLayout::CreateDescFromReflection(mergedReflection, m_PipelineLayoutOptions));
     m_BindingSet = std::make_unique<PipelineBindingSet>(*m_PipelineLayout);
 }
 

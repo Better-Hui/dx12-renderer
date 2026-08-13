@@ -31,8 +31,6 @@ namespace
         {
         case RayTracingShaderBindingType::OutputTexture:
         case RayTracingShaderBindingType::TextureArray:
-        case RayTracingShaderBindingType::VertexBufferArray:
-        case RayTracingShaderBindingType::IndexBufferArray:
             return true;
         default:
             return false;

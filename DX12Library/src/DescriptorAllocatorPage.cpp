@@ -2,16 +2,21 @@
 
 #include "DescriptorAllocation.h"
 #include "DescriptorAllocatorPage.h"
+#include "DescriptorRetirementClock.h"
 DescriptorAllocatorPage::DescriptorAllocatorPage(
 	const D3D12_DESCRIPTOR_HEAP_TYPE type,
 	const uint32_t numDescriptors,
-	Microsoft::WRL::ComPtr<ID3D12Device2> device) :
+	Microsoft::WRL::ComPtr<ID3D12Device2> device,
+	std::shared_ptr<DescriptorRetirementClock> retirementClock) :
 	FreeListByOffset(),
 	FreeListBySize(),
 	HeapType(type),
 	Device(std::move(device)),
+	RetirementClock(std::move(retirementClock)),
 	NumDescriptorsInHeap(numDescriptors)
 {
+	assert(Device != nullptr);
+	assert(RetirementClock != nullptr);
 	D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
 	heapDesc.Type = HeapType;
 	heapDesc.NumDescriptors = NumDescriptorsInHeap;
@@ -99,12 +104,12 @@ uint32_t DescriptorAllocatorPage::ComputeOffset(const D3D12_CPU_DESCRIPTOR_HANDL
 	return static_cast<uint32_t>(handle.ptr - BaseDescriptor.ptr) / DescriptorHandleIncrementSize;
 }
 
-void DescriptorAllocatorPage::Free(DescriptorAllocation&& descriptor, uint64_t frameNumber)
+void DescriptorAllocatorPage::Free(DescriptorAllocation&& descriptor)
 {
 	auto offset = ComputeOffset(descriptor.GetDescriptorHandle());
 	std::lock_guard<std::mutex> lock(AllocationMutex);
 
-	StaleDescriptors.emplace(offset, descriptor.GetNumHandles(), frameNumber);
+	StaleDescriptors.emplace(offset, descriptor.GetNumHandles(), RetirementClock->GetCurrentFrame());
 }
 
 void DescriptorAllocatorPage::FreeBlock(uint32_t offset, uint32_t numDescriptors)

@@ -7,8 +7,6 @@ ByteAddressBuffer::ByteAddressBuffer(
     std::shared_ptr<D3D12DeviceContext> deviceContext)
     : Buffer(name, std::move(deviceContext))
 {
-    m_Srv = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    m_Uav = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 }
 
 ByteAddressBuffer::ByteAddressBuffer(const D3D12_RESOURCE_DESC& resDesc,
@@ -40,6 +38,16 @@ ByteAddressBuffer::ByteAddressBuffer(
 void ByteAddressBuffer::CreateViews(size_t numElements, size_t elementSize)
 {
     const auto device = m_DeviceContext->GetDevice();
+//Modify Begin:2026-08-12 by BestHui
+    if (m_Srv.IsNull())
+    {
+        m_Srv = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    }
+    if (m_Uav.IsNull())
+    {
+        m_Uav = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    }
+//Modify End
 
     // Make sure buffer size is aligned to 4 bytes.
     m_BufferSize = Math::AlignUp(numElements * elementSize, 4);

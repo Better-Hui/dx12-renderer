@@ -6,7 +6,6 @@
 #include <Framework/Core/FrameworkDeviceContext.h>
 //Modify End
 #include <Framework/Rendering/Pipeline/DescriptorLayout.h>
-#include <Framework/Geometry/Mesh.h>
 #include <Framework/Rendering/Pipeline/ShaderBlob.h>
 
 #if defined(min)
@@ -22,29 +21,6 @@ using namespace RayTracingShaderInternal;
 
 namespace
 {
-    D3D12_SHADER_RESOURCE_VIEW_DESC CreateNullRayTracingVertexBufferSrvDesc()
-    {
-        D3D12_SHADER_RESOURCE_VIEW_DESC desc = {};
-        desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-        desc.Format = DXGI_FORMAT_UNKNOWN;
-        desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        desc.Buffer.NumElements = 1;
-        desc.Buffer.StructureByteStride = sizeof(VertexAttributes);
-        desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
-        return desc;
-    }
-
-    D3D12_SHADER_RESOURCE_VIEW_DESC CreateNullRayTracingIndexBufferSrvDesc()
-    {
-        D3D12_SHADER_RESOURCE_VIEW_DESC desc = {};
-        desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-        desc.Format = DXGI_FORMAT_R32_UINT;
-        desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        desc.Buffer.NumElements = 1;
-        desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
-        return desc;
-    }
-
     D3D12_SHADER_RESOURCE_VIEW_DESC CreateNullRayTracingTextureSrvDesc()
     {
         ShaderUtils::ShaderResourceViewMetadata metadata{};
@@ -129,18 +105,6 @@ RayTracingShader::Impl::Impl(
                 std::max(1u, binding.DescriptorCount),
                 CreateNullRayTracingTextureSrvDesc());
             break;
-        case RayTracingShaderBindingType::VertexBufferArray:
-            Layout.AddDefaultShaderResourceViewTable(
-                bindingIndex,
-                std::max(1u, binding.DescriptorCount),
-                CreateNullRayTracingVertexBufferSrvDesc());
-            break;
-        case RayTracingShaderBindingType::IndexBufferArray:
-            Layout.AddDefaultShaderResourceViewTable(
-                bindingIndex,
-                std::max(1u, binding.DescriptorCount),
-                CreateNullRayTracingIndexBufferSrvDesc());
-            break;
         default:
             break;
         }
@@ -149,50 +113,6 @@ RayTracingShader::Impl::Impl(
     Layout.SetRootSignature(PipelineState->GetGlobalRootSignaturePtr());
 }
 //Modify End
-
-RayTracingPipelineDesc RayTracingShader::CreateDefaultPipelineDesc()
-{
-    RayTracingPipelineDesc desc;
-    desc.Exports = {
-        DefaultRayGenerationShaderName,
-        DefaultMissShaderName,
-        DefaultClosestHitShaderName
-    };
-    desc.HitGroups = {
-        {
-            DefaultHitGroupName,
-            DefaultClosestHitShaderName,
-            L"",
-            L"",
-            D3D12_HIT_GROUP_TYPE_TRIANGLES
-        }
-    };
-    desc.Bindings = {
-        { "Output", RayTracingShaderBindingType::OutputTexture, 0, 0, 1 },
-        { "Scene", RayTracingShaderBindingType::AccelerationStructure, 0, 0, 1 },
-        { "CameraConstants", RayTracingShaderBindingType::ConstantBuffer, 0, 0, 1 },
-        { "Materials", RayTracingShaderBindingType::StructuredBuffer, 1, 0, 1 },
-        { "Geometries", RayTracingShaderBindingType::StructuredBuffer, 2, 0, 1 },
-        { "VertexBuffers", RayTracingShaderBindingType::VertexBufferArray, 0, 1, desc.MaxDescriptorCount },
-        { "IndexBuffers", RayTracingShaderBindingType::IndexBufferArray, 0, 2, desc.MaxDescriptorCount },
-        { "Textures", RayTracingShaderBindingType::TextureArray, 0, 3, desc.MaxDescriptorCount }
-    };
-    desc.Passes = {
-        {
-            "RayGen",
-            DefaultRayGenerationShaderName,
-            { { DefaultMissShaderName, {} } },
-            { { DefaultHitGroupName, {} } }
-        }
-    };
-    return desc;
-}
-
-RayTracingShader::RayTracingShader(
-    FrameworkDeviceContext& deviceContext,
-    const ShaderBlob& shaderLibrary)
-    : RayTracingShader(deviceContext, shaderLibrary, CreateDefaultPipelineDesc())
-{}
 
 RayTracingShader::RayTracingShader(
     FrameworkDeviceContext& deviceContext,

@@ -642,6 +642,9 @@ std::shared_ptr<ShaderBlob> ShaderVariantManager::GetOrCompile(const ShaderVaria
         }
         catch (const std::exception&)
         {
+//Modify Begin:2026-07-30 by BestHui
+            Trace(L"Shader variant cache is invalid; rebuilding " + cachePath.wstring());
+//Modify End
             std::error_code error;
             std::filesystem::remove(cachePath, error);
         }

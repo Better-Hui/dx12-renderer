@@ -48,6 +48,9 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
             inputs.FrameState.Enabled = true;
             inputs.FrameState.UseSoftShadowVariant =
                 resources.Pipelines.GetShadowMode() == PathTracingShadowMode::SoftShadows;
+//Modify Begin:2026-07-30 by BestHui
+            inputs.FrameState.ShadingModel = config.FrameState->ShadingModel;
+//Modify End
 //Modify Begin:2026-08-06 by BestHui
             inputs.FrameState.EnvironmentProjectionVariant =
                 static_cast<uint32_t>(resources.Pipelines.GetLayout().EnvironmentProjection);

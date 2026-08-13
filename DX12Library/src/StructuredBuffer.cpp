@@ -29,15 +29,7 @@ StructuredBuffer::StructuredBuffer(
     : Buffer(name, std::move(deviceContext))
     , m_NumElements(0)
     , m_ElementSize(0)
-    , m_CounterBuffer(std::make_shared<ByteAddressBuffer>(
-        COUNTER_DESC,
-        1,
-        4,
-        name + L" Counter",
-        m_DeviceContext))
 {
-    m_Srv = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    m_Uav = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 }
 
 StructuredBuffer::StructuredBuffer(
@@ -109,6 +101,25 @@ void StructuredBuffer::CreateViews(size_t numElements, size_t elementSize)
 
     m_NumElements = numElements;
     m_ElementSize = elementSize;
+//Modify Begin:2026-08-12 by BestHui
+    if (m_Srv.IsNull())
+    {
+        m_Srv = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    }
+    if (m_Uav.IsNull())
+    {
+        m_Uav = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    }
+    if (m_CounterBuffer == nullptr)
+    {
+        m_CounterBuffer = std::make_shared<ByteAddressBuffer>(
+            COUNTER_DESC,
+            1,
+            4,
+            GetName() + L" Counter",
+            m_DeviceContext);
+    }
+//Modify End
 
     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
     srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
@@ -162,10 +173,16 @@ D3D12_CPU_DESCRIPTOR_HANDLE StructuredBuffer::GetUnorderedAccessView(const D3D12
 
 ByteAddressBuffer& StructuredBuffer::GetCounterBuffer()
 {
+//Modify Begin:2026-08-12 by BestHui
+    Assert(m_CounterBuffer != nullptr, "Structured-buffer counter is unavailable before buffer initialization.");
+//Modify End
     return *m_CounterBuffer;
 }
 
 const std::shared_ptr<ByteAddressBuffer>& StructuredBuffer::GetCounterBufferPtr() const
 {
+//Modify Begin:2026-08-12 by BestHui
+    Assert(m_CounterBuffer != nullptr, "Structured-buffer counter is unavailable before buffer initialization.");
+//Modify End
     return m_CounterBuffer;
 }

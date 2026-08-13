@@ -89,8 +89,9 @@ std::shared_ptr<CommandQueue> D3D12RenderContext::GetCommandQueue(const D3D12_CO
     case D3D12_COMMAND_LIST_TYPE_COPY:
         return m_CopyCommandQueue;
     default:
-        assert(false && "Invalid command queue type.");
-        return nullptr;
+//Modify Begin:2026-07-30 by BestHui
+        throw std::invalid_argument("Invalid D3D12 command queue type.");
+//Modify End
     }
 }
 

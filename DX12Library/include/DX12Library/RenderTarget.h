@@ -72,11 +72,11 @@ public:
 
 	// Attach a texture to the render target.
 	// The texture will be copied into the texture array.
-	void AttachTexture(AttachmentPoint attachmentPoint, const std::shared_ptr<Texture>& texture);
+    void AttachTexture(AttachmentPoint attachmentPoint, const std::shared_ptr<Texture>& texture);
 	const std::shared_ptr<Texture>& GetTexture(AttachmentPoint attachmentPoint) const;
 
 	// Resize all of the textures associated with the render target.
-	void Resize(uint32_t width, uint32_t height);
+	void Resize(CommandList& commandList, uint32_t width, uint32_t height);
 
 	// Get a list of the textures attached to the render target.
 	// This method is primarily used by the CommandList when binding the

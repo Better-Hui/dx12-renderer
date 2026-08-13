@@ -11,6 +11,7 @@
 #include <DX12Library/RenderTarget.h>
 
 #include <algorithm>
+#include <map>
 #include <set>
 
 namespace
@@ -221,6 +222,31 @@ namespace
             std::ranges::any_of(tokens, matches);
     }
 
+//Modify Begin:2026-07-30 by BestHui
+    bool IsLiveGpuResource(
+        const ResourceId resourceId,
+        std::span<RenderPass* const> renderPasses,
+        std::span<const ResourceId> externalOutputIds)
+    {
+        if (std::ranges::find(externalOutputIds, resourceId) != externalOutputIds.end())
+        {
+            return true;
+        }
+
+        return std::ranges::any_of(
+            renderPasses,
+            [resourceId](const RenderPass* renderPass)
+            {
+                const auto matchesResource = [resourceId](const auto& access)
+                {
+                    return access.m_Id == resourceId;
+                };
+                return std::ranges::any_of(renderPass->GetInputs(), matchesResource) ||
+                    std::ranges::any_of(renderPass->GetOutputs(), matchesResource);
+            });
+    }
+//Modify End
+
     bool CanRecordInParallel(const RenderPass& renderPass)
     {
         return renderPass.GetQueue() == RenderPassQueue::Direct &&
@@ -286,17 +312,29 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
     m_ResourcePool->Clear(resourceRetirements);
     for (const TextureDescription& texture : textures)
     {
-        m_ResourcePool->RegisterTexture(texture, compiledGraph.m_RenderPasses, renderMetadata, m_Device);
+//Modify Begin:2026-07-30 by BestHui
+        if (IsLiveGpuResource(texture.m_Id, compiledGraph.m_RenderPasses, externalOutputIds))
+        {
+            m_ResourcePool->RegisterTexture(texture, compiledGraph.m_RenderPasses, renderMetadata, m_Device);
+        }
+//Modify End
     }
     for (const BufferDescription& buffer : buffers)
     {
-        m_ResourcePool->RegisterBuffer(buffer, compiledGraph.m_RenderPasses, renderMetadata, m_Device);
+//Modify Begin:2026-07-30 by BestHui
+        if (IsLiveGpuResource(buffer.m_Id, compiledGraph.m_RenderPasses, externalOutputIds))
+        {
+            m_ResourcePool->RegisterBuffer(buffer, compiledGraph.m_RenderPasses, renderMetadata, m_Device);
+        }
+//Modify End
     }
     m_ResourcePool->InitHeaps(compiledGraph.m_RenderPasses, m_Device, std::vector<ResourceId>(externalOutputIds.begin(), externalOutputIds.end()));
 //Modify Begin:2026-08-10 by BestHui
     m_ResourcePool->CreateResources();
 //Modify End
 
+//Modify Begin:2026-07-30 by BestHui
+    std::map<ResourceId, RenderPassQueue> lastWriterQueues;
     for (uint32_t passIndex = 0; passIndex < compiledGraph.m_RenderPasses.size(); ++passIndex)
     {
         RenderPass* renderPass = compiledGraph.m_RenderPasses[passIndex];
@@ -345,13 +383,36 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
         if (renderPass->GetQueue() == RenderPassQueue::AsyncCompute)
         {
             PassResourceStatePlan::AsyncComputeDirectPreamble directPreamble = {};
-            directPreamble.DirectProducerInputTransitions = resourceStatePlan.InputTransitions;
+            std::vector<PassResourceTransition> computeInputTransitions;
+            computeInputTransitions.reserve(resourceStatePlan.InputTransitions.size());
+            for (const PassResourceTransition& transition : resourceStatePlan.InputTransitions)
+            {
+                const auto lastWriter = lastWriterQueues.find(transition.Id);
+                if (lastWriter != lastWriterQueues.end() &&
+                    lastWriter->second == RenderPassQueue::Direct)
+                {
+                    directPreamble.DirectProducerInputTransitions.push_back(transition);
+                }
+                else
+                {
+                    computeInputTransitions.push_back(transition);
+                }
+            }
+            resourceStatePlan.InputTransitions = std::move(computeInputTransitions);
             directPreamble.AliasingOutputs = std::move(resourceStatePlan.AliasingOutputs);
             directPreamble.OutputTransitions = std::move(resourceStatePlan.OutputTransitions);
             resourceStatePlan.DirectPreamble = std::move(directPreamble);
         }
-        //Modify End
         compiledGraph.m_ResourceStatePlans.emplace(renderPass, std::move(resourceStatePlan));
+
+        for (const Output& output : renderPass->GetOutputs())
+        {
+            if (IsProducerOutput(output.m_Type))
+            {
+                lastWriterQueues.insert_or_assign(output.m_Id, renderPass->GetQueue());
+            }
+        }
+//Modify End
     }
 
     RenderGraphRecordingBatch recordingBatch = {};

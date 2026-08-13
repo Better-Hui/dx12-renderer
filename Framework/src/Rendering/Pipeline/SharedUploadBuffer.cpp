@@ -23,20 +23,14 @@ void SharedUploadBuffer::Upload(CommandList& commandList, const Resource& destin
     uint8_t* pUploadPtr = SuballocateFromBuffer(bufferInfo, sizeInBytes, alignment);
     memcpy(pUploadPtr, pData, sizeInBytes);
 
-    //Modify Begin:2026-07-23 by BestHui
-    commandList.TransitionBarrier(destination, D3D12_RESOURCE_STATE_COPY_DEST);
-    commandList.FlushResourceBarriers();
-    //Modify End
-
-    commandList.GetGraphicsCommandList()->CopyBufferRegion(
-        destination.GetD3D12Resource().Get(),
+    //Modify Begin:2026-08-12 by BestHui
+    commandList.CopyBufferRegion(
+        destination,
         destinationOffset,
         bufferInfo.m_Buffer.Get(),
         pUploadPtr - bufferInfo.m_DataBegin,
-        sizeInBytes
-    );
-    commandList.TrackObject(bufferInfo.m_Buffer);
-    commandList.TrackResource(destination);
+        sizeInBytes);
+    //Modify End
 }
 
 SharedUploadBuffer::BufferInfo& SharedUploadBuffer::GetBufferInfoForFrame(const uint64_t frameCount)

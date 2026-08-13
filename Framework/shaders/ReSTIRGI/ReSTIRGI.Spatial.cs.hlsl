@@ -13,10 +13,6 @@ RWTexture2D<uint4> ReSTIRGIHistoryCreation : register(u2);
 RWTexture2D<uint4> ReSTIRGIHistoryHit : register(u3);
 RWTexture2D<uint4> ReSTIRGIHistoryLight : register(u4);
 
-//Modify Begin:2026-07-30 by BestHui
-static const uint ReSTIRGIMaxSpatialReuseCandidates = 17u;
-//Modify End
-
 static const float2 ReSTIRGISpatialOffsets[16] =
 {
     float2(0.125f, -0.375f), float2(-0.625f, -0.125f),
@@ -58,35 +54,25 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
             ReSTIRGITemporalLight,
             pixel);
         float weightSum = 0.0f;
-//Modify Begin:2026-07-30 by BestHui
         bool creationVisibilityKnown = false;
-//Modify End
-#if RESTIR_GI_USE_UNBIASED_SPATIAL_REUSE
-        float3 candidateCreationPositions[ReSTIRGIMaxSpatialReuseCandidates];
-        float3 candidateCreationNormals[ReSTIRGIMaxSpatialReuseCandidates];
-        uint candidateMs[ReSTIRGIMaxSpatialReuseCandidates];
-        uint candidateCount = 0u;
-#endif
+        float selectedTarget = 0.0f;
+        int selectedNeighborIndex = -1;
+        uint acceptedNeighborMask = 0u;
 
         if (ReSTIRGIHasCandidates(temporal))
         {
             const float temporalTarget = max(0.0f, ReSTIRGI_Luminance(
                 ReSTIRGI_EvaluateContribution(surface, temporal)));
-//Modify Begin:2026-07-30 by BestHui
-            const bool selectedTemporal = ReSTIRGIUpdateReservoir(
+            if (ReSTIRGIUpdateReservoir(
                 result,
                 temporal,
                 temporal.AverageWeight * float(temporal.M) * temporalTarget,
                 FrameworkInterleavedGradientNoise2D(pixel, ReSTIRGI_FrameIndex, 0x47524933u).x,
-                weightSum);
-            creationVisibilityKnown = selectedTemporal && ReSTIRGIHasCreationVisibility(temporal);
-//Modify End
-#if RESTIR_GI_USE_UNBIASED_SPATIAL_REUSE
-            candidateCreationPositions[candidateCount] = temporal.CreationPosition;
-            candidateCreationNormals[candidateCount] = temporal.CreationNormal;
-            candidateMs[candidateCount] = temporal.M;
-            ++candidateCount;
-#endif
+                weightSum))
+            {
+                creationVisibilityKnown = ReSTIRGIHasCreationVisibility(temporal);
+                selectedTarget = temporalTarget;
+            }
         }
 
         const uint offsetStart = uint(FrameworkInterleavedGradientNoise2D(
@@ -96,95 +82,127 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         [loop]
         for (uint sampleIndex = 0u; sampleIndex < ReSTIRGI_SpatialNeighborCount; ++sampleIndex)
         {
+            const float2 offset = ReSTIRGISpatialOffsets[(offsetStart + sampleIndex) & 15u];
+            const int2 neighborPixel = clamp(
+                int2(pixel) + int2(round(offset * ReSTIRGI_SpatialSamplingRadius)),
+                int2(0, 0),
+                int2(int(ReSTIRGI_Width) - 1, int(ReSTIRGI_Height) - 1));
+            const ReSTIRGI_Surface neighborSurface = ReSTIRGI_LoadSurface(uint2(neighborPixel));
+            if (!ReSTIRGIIsSpatiallyCompatible(surface, neighborSurface))
+            {
+                continue;
+            }
+
+            ReSTIRGIReservoir neighbor = ReSTIRGIReadReservoir(
+                ReSTIRGITemporalCreation,
+                ReSTIRGITemporalHit,
+                ReSTIRGITemporalLight,
+                uint2(neighborPixel));
+            if (!ReSTIRGIHasCandidates(neighbor))
+            {
+                continue;
+            }
+
+            neighbor.M = min(neighbor.M, ReSTIRGI_SpatialMaxHistoryLength);
+            const float target = max(0.0f, ReSTIRGI_Luminance(
+                ReSTIRGI_EvaluateContribution(surface, neighbor)));
+            const float jacobian = ReSTIRGIComputeJacobian(
+                neighbor,
+                surface.PositionWs,
+                surface.NormalWs,
+                ReSTIRGI_MaxJacobian);
+            if (jacobian <= 0.0f)
+            {
+                continue;
+            }
+
+            acceptedNeighborMask |= 1u << sampleIndex;
+            if (ReSTIRGIUpdateReservoir(
+                result,
+                neighbor,
+                neighbor.AverageWeight * float(neighbor.M) * target * jacobian,
+                FrameworkInterleavedGradientNoise2D(
+                    pixel,
+                    ReSTIRGI_FrameIndex,
+                    0x1ac5473du + sampleIndex * 0x9e3779b9u).x,
+                weightSum))
+            {
+                creationVisibilityKnown = false;
+                selectedTarget = target;
+                selectedNeighborIndex = int(sampleIndex);
+            }
+        }
+
+        const uint unboundedM = result.M;
+        result.M = min(result.M, ReSTIRGI_SpatialMaxHistoryLength);
+        ReSTIRGISetCreationSurface(result, surface.PositionWs, surface.NormalWs);
+        ReSTIRGISetCreationVisibility(result, creationVisibilityKnown);
+        selectedTarget = ReSTIRGIIsValid(result)
+            ? max(0.0f, ReSTIRGI_Luminance(ReSTIRGI_EvaluateContribution(surface, result)))
+            : 0.0f;
+
+#if RESTIR_GI_USE_RAY_TRACED_SPATIAL_BIAS_CORRECTION
+        if (selectedTarget > 0.0f)
+        {
+            float selectedSourceTarget = selectedTarget;
+            float sourceTargetSum = ReSTIRGIHasCandidates(temporal)
+                ? selectedTarget * float(temporal.M)
+                : 0.0f;
+            [loop]
+            for (uint sampleIndex = 0u; sampleIndex < ReSTIRGI_SpatialNeighborCount; ++sampleIndex)
+            {
+                if ((acceptedNeighborMask & (1u << sampleIndex)) == 0u)
+                {
+                    continue;
+                }
+
                 const float2 offset = ReSTIRGISpatialOffsets[(offsetStart + sampleIndex) & 15u];
                 const int2 neighborPixel = clamp(
                     int2(pixel) + int2(round(offset * ReSTIRGI_SpatialSamplingRadius)),
                     int2(0, 0),
                     int2(int(ReSTIRGI_Width) - 1, int(ReSTIRGI_Height) - 1));
                 const ReSTIRGI_Surface neighborSurface = ReSTIRGI_LoadSurface(uint2(neighborPixel));
-                if (!ReSTIRGIIsSpatiallyCompatible(surface, neighborSurface))
-                {
-                    continue;
-                }
-
                 ReSTIRGIReservoir neighbor = ReSTIRGIReadReservoir(
                     ReSTIRGITemporalCreation,
                     ReSTIRGITemporalHit,
                     ReSTIRGITemporalLight,
                     uint2(neighborPixel));
-                if (!ReSTIRGIHasCandidates(neighbor))
-                {
-                    continue;
-                }
-
                 neighbor.M = min(neighbor.M, ReSTIRGI_SpatialMaxHistoryLength);
-                float target = max(0.0f, ReSTIRGI_Luminance(
-                    ReSTIRGI_EvaluateContribution(surface, neighbor)));
-                target *= ReSTIRGIComputeJacobian(
-                    neighbor,
-                    surface.PositionWs,
-                    surface.NormalWs,
-                    ReSTIRGI_MaxJacobian);
 
-//Modify Begin:2026-07-30 by BestHui
-                if (ReSTIRGIUpdateReservoir(
-                    result,
-                    neighbor,
-                    neighbor.AverageWeight * float(neighbor.M) * target,
-                    FrameworkInterleavedGradientNoise2D(
-                        pixel,
-                        ReSTIRGI_FrameIndex,
-                        0x1ac5473du + sampleIndex * 0x9e3779b9u).x,
-                    weightSum))
-                {
-                    creationVisibilityKnown = false;
-                }
-//Modify End
-#if RESTIR_GI_USE_UNBIASED_SPATIAL_REUSE
-                if (candidateCount < ReSTIRGIMaxSpatialReuseCandidates)
-                {
-                    candidateCreationPositions[candidateCount] = neighbor.CreationPosition;
-                    candidateCreationNormals[candidateCount] = neighbor.CreationNormal;
-                    candidateMs[candidateCount] = neighbor.M;
-                    ++candidateCount;
-                }
-#endif
-            }
-
-        const uint unboundedM = result.M;
-        result.M = min(result.M, ReSTIRGI_SpatialMaxHistoryLength);
-        ReSTIRGISetCreationSurface(result, surface.PositionWs, surface.NormalWs);
-//Modify Begin:2026-07-30 by BestHui
-        ReSTIRGISetCreationVisibility(result, creationVisibilityKnown);
-//Modify End
-        const float selectedTarget = ReSTIRGIIsValid(result)
-            ? max(0.0f, ReSTIRGI_Luminance(ReSTIRGI_EvaluateContribution(surface, result)))
-            : 0.0f;
-        uint normalizationM = unboundedM;
-#if RESTIR_GI_USE_UNBIASED_SPATIAL_REUSE
-        if (selectedTarget > 0.0f)
-        {
-            normalizationM = 0u;
-            [loop]
-            for (uint candidateIndex = 0u; candidateIndex < candidateCount; ++candidateIndex)
-            {
-                if (ReSTIRGI_TestVisibilityAt(
-                    candidateCreationPositions[candidateIndex],
-                    candidateCreationNormals[candidateIndex],
+                float sourceTarget = max(0.0f, ReSTIRGI_Luminance(
+                    ReSTIRGI_EvaluateContribution(neighborSurface, result)));
+                if (sourceTarget > 0.0f && !ReSTIRGI_TestVisibilityAt(
+                    neighborSurface.PositionWs,
+                    neighborSurface.NormalWs,
                     result))
                 {
-                    normalizationM += candidateMs[candidateIndex];
+                    sourceTarget = 0.0f;
                 }
+                if (selectedNeighborIndex == int(sampleIndex))
+                {
+                    selectedSourceTarget = sourceTarget;
+                }
+                sourceTargetSum += sourceTarget * float(neighbor.M);
             }
+
+            result.AverageWeight = sourceTargetSum > 0.0f
+                ? min(
+                    weightSum * selectedSourceTarget / (selectedTarget * sourceTargetSum),
+                    ReSTIRGI_MaxSpatialWeight)
+                : 0.0f;
         }
-#endif
-        result.AverageWeight = selectedTarget > 0.0f && normalizationM > 0u
+        else
+        {
+            result.AverageWeight = 0.0f;
+        }
+#else
+        result.AverageWeight = selectedTarget > 0.0f && unboundedM > 0u
             ? min(
-                weightSum / (float(normalizationM) * selectedTarget),
+                weightSum / (float(unboundedM) * selectedTarget),
                 ReSTIRGI_MaxSpatialWeight)
             : 0.0f;
+#endif
         ReSTIRGISetAge(result, min(ReSTIRGIGetAge(result) + 1u, ReSTIRGI_MaxSampleAge));
-
     }
 
     ReSTIRGIWriteReservoir(

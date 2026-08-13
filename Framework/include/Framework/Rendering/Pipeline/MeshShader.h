@@ -29,6 +29,7 @@ public:
 		FrameworkDeviceContext& deviceContext,
         const ShaderBlob& meshShader,
         const ShaderBlob& pixelShader,
+        PipelineLayoutReflectionOptions layoutOptions = {},
         const std::function<void(RasterPipelineStateBuilder&)> buildPipelineState = [](RasterPipelineStateBuilder&) {});
 //Modify Begin:2026-07-31 by BestHui
     explicit MeshShader(
@@ -36,6 +37,7 @@ public:
         const ShaderBlob& amplificationShader,
         const ShaderBlob& meshShader,
         const ShaderBlob& pixelShader,
+        PipelineLayoutReflectionOptions layoutOptions = {},
         const std::function<void(RasterPipelineStateBuilder&)> buildPipelineState = [](RasterPipelineStateBuilder&) {});
 //Modify End
 
@@ -66,6 +68,7 @@ private:
 //Modify End
     ShaderReflectionMetadata m_MeshShaderMetadata;
     ShaderReflectionMetadata m_PixelShaderMetadata;
+    PipelineLayoutReflectionOptions m_PipelineLayoutOptions;
     std::unique_ptr<PipelineLayout> m_PipelineLayout;
     std::unique_ptr<PipelineBindingSet> m_BindingSet;
     std::unique_ptr<PipelineDescriptorSet> m_DescriptorSet;

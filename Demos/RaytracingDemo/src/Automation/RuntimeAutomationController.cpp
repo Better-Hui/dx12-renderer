@@ -103,11 +103,17 @@ void DemoAutomation::RuntimeAutomationController::Initialize(const TestSuites& t
         m_Steps = testSuites.ReSTIRGIProfile;
     }
 //Modify End
+//Modify Begin:2026-08-11 by BestHui
+    else if (mode == "restirgi-variants")
+    {
+        m_Steps = testSuites.ReSTIRGIVariants;
+    }
+//Modify End
     else
     {
 //Modify Begin:2026-07-30 by BestHui
         throw std::runtime_error(
-            "RAYTRACING_DEMO_AUTOTEST must be 'core', 'stress', 'matrix', or 'restirgi-profile'.");
+            "RAYTRACING_DEMO_AUTOTEST must be 'core', 'stress', 'matrix', 'restirgi-profile', or 'restirgi-variants'.");
 //Modify End
     }
 

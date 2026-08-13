@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <sstream>
+#include <stdexcept>
 #include <utility>
 
 #if defined(min)
@@ -90,15 +91,43 @@ namespace
     }
 //Modify End
 
-    bool IsAccelerationStructureSrv(
-        const ShaderUtils::ShaderResourceViewMetadata& srv,
-        const PipelineLayoutReflectionOptions& options)
+    const PipelineStaticSamplerContract* FindStaticSamplerContract(
+        const PipelineLayoutReflectionOptions& options,
+        const UINT shaderRegister,
+        const UINT registerSpace)
     {
-        const char* fallbackName = options.AccelerationStructureFallbackName.empty() ?
-            nullptr :
-            options.AccelerationStructureFallbackName.c_str();
-        return DescriptorLayout::IsRayTracingAccelerationStructureSrv(srv, fallbackName);
+        const auto findResult = std::find_if(
+            options.StaticSamplerContracts.begin(),
+            options.StaticSamplerContracts.end(),
+            [shaderRegister, registerSpace](const PipelineStaticSamplerContract& contract)
+            {
+                return contract.ShaderRegister == shaderRegister &&
+                    contract.RegisterSpace == registerSpace;
+            });
+        return findResult != options.StaticSamplerContracts.end() ? &*findResult : nullptr;
     }
+
+    void ValidateStaticSamplerContracts(const PipelineLayoutReflectionOptions& options)
+    {
+        for (size_t contractIndex = 0; contractIndex < options.StaticSamplerContracts.size(); ++contractIndex)
+        {
+            const PipelineStaticSamplerContract& contract = options.StaticSamplerContracts[contractIndex];
+            const auto duplicateContract = std::find_if(
+                options.StaticSamplerContracts.begin() + static_cast<std::ptrdiff_t>(contractIndex + 1u),
+                options.StaticSamplerContracts.end(),
+                [&contract](const PipelineStaticSamplerContract& candidate)
+                {
+                    return candidate.ShaderRegister == contract.ShaderRegister &&
+                        candidate.RegisterSpace == contract.RegisterSpace;
+                });
+            if (duplicateContract != options.StaticSamplerContracts.end())
+            {
+                throw std::invalid_argument(
+                    "Static sampler contracts contain duplicate register and space coordinates.");
+            }
+        }
+    }
+    //Modify End
 
     void BuildDescriptorSetsFromRanges(PipelineLayoutDesc& desc)
     {
@@ -225,56 +254,128 @@ namespace
         return rootParameterCount;
     }
 
-    D3D12_TEXTURE_ADDRESS_MODE GetSamplerAddressMode(const std::string& name)
-    {
-        return name.find("Clamp") != std::string::npos ?
-            D3D12_TEXTURE_ADDRESS_MODE_CLAMP :
-            D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-    }
-
-    D3D12_FILTER GetSamplerFilter(const std::string& name)
-    {
-        const bool isPoint = name.find("Point") != std::string::npos;
-        const bool isComparison =
-            name.find("Comparison") != std::string::npos ||
-            name.find("Shadow") != std::string::npos;
-
-        if (isComparison)
-        {
-            return isPoint ?
-                D3D12_FILTER_COMPARISON_MIN_MAG_MIP_POINT :
-                D3D12_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR;
-        }
-
-        return isPoint ?
-            D3D12_FILTER_MIN_MAG_MIP_POINT :
-            D3D12_FILTER_MIN_MAG_MIP_LINEAR;
-    }
-
-    D3D12_STATIC_SAMPLER_DESC CreateStaticSamplerDesc(const ShaderUtils::SamplerMetadata& sampler)
+    D3D12_STATIC_SAMPLER_DESC CreateStaticSamplerDesc(
+        const UINT shaderRegister,
+        const UINT registerSpace,
+        const D3D12_FILTER filter,
+        const D3D12_TEXTURE_ADDRESS_MODE addressMode,
+        const D3D12_COMPARISON_FUNC comparisonFunc)
     {
         D3D12_STATIC_SAMPLER_DESC desc = {};
-        desc.Filter = GetSamplerFilter(sampler.Name);
-        desc.AddressU = GetSamplerAddressMode(sampler.Name);
-        desc.AddressV = desc.AddressU;
-        desc.AddressW = desc.AddressU;
+        desc.Filter = filter;
+        desc.AddressU = addressMode;
+        desc.AddressV = addressMode;
+        desc.AddressW = addressMode;
         desc.MipLODBias = 0.0f;
         desc.MaxAnisotropy = 16u;
-        desc.ComparisonFunc =
-            desc.Filter == D3D12_FILTER_COMPARISON_MIN_MAG_MIP_POINT ||
-            desc.Filter == D3D12_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR ?
-            D3D12_COMPARISON_FUNC_LESS_EQUAL :
-            D3D12_COMPARISON_FUNC_ALWAYS;
+        desc.ComparisonFunc = comparisonFunc;
         desc.BorderColor = D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK;
         desc.MinLOD = 0.0f;
         desc.MaxLOD = D3D12_FLOAT32_MAX;
-        desc.ShaderRegister = sampler.RegisterIndex;
-        desc.RegisterSpace = sampler.Space;
+        desc.ShaderRegister = shaderRegister;
+        desc.RegisterSpace = registerSpace;
         desc.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
         return desc;
     }
     //Modify End
 }
+
+//Modify Begin:2026-08-12 by BestHui
+PipelineStaticSamplerContract PipelineStaticSamplers::PointWrap(
+    const UINT shaderRegister,
+    const UINT registerSpace)
+{
+    return {
+        "PointWrap",
+        shaderRegister,
+        registerSpace,
+        CreateStaticSamplerDesc(
+            shaderRegister,
+            registerSpace,
+            D3D12_FILTER_MIN_MAG_MIP_POINT,
+            D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+            D3D12_COMPARISON_FUNC_ALWAYS)
+    };
+}
+
+PipelineStaticSamplerContract PipelineStaticSamplers::LinearWrap(
+    const UINT shaderRegister,
+    const UINT registerSpace)
+{
+    return {
+        "LinearWrap",
+        shaderRegister,
+        registerSpace,
+        CreateStaticSamplerDesc(
+            shaderRegister,
+            registerSpace,
+            D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+            D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+            D3D12_COMPARISON_FUNC_ALWAYS)
+    };
+}
+
+PipelineStaticSamplerContract PipelineStaticSamplers::PointClamp(
+    const UINT shaderRegister,
+    const UINT registerSpace)
+{
+    return {
+        "PointClamp",
+        shaderRegister,
+        registerSpace,
+        CreateStaticSamplerDesc(
+            shaderRegister,
+            registerSpace,
+            D3D12_FILTER_MIN_MAG_MIP_POINT,
+            D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+            D3D12_COMPARISON_FUNC_ALWAYS)
+    };
+}
+
+PipelineStaticSamplerContract PipelineStaticSamplers::LinearClamp(
+    const UINT shaderRegister,
+    const UINT registerSpace)
+{
+    return {
+        "LinearClamp",
+        shaderRegister,
+        registerSpace,
+        CreateStaticSamplerDesc(
+            shaderRegister,
+            registerSpace,
+            D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+            D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+            D3D12_COMPARISON_FUNC_ALWAYS)
+    };
+}
+
+PipelineStaticSamplerContract PipelineStaticSamplers::ShadowCompareClamp(
+    const UINT shaderRegister,
+    const UINT registerSpace)
+{
+    return {
+        "ShadowCompareClamp",
+        shaderRegister,
+        registerSpace,
+        CreateStaticSamplerDesc(
+            shaderRegister,
+            registerSpace,
+            D3D12_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR,
+            D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+            D3D12_COMPARISON_FUNC_LESS_EQUAL)
+    };
+}
+
+void PipelineStaticSamplers::AddCommonRootSignatureContracts(
+    std::vector<PipelineStaticSamplerContract>& contracts)
+{
+    contracts.push_back(PointWrap(0u));
+    contracts.push_back(LinearWrap(1u));
+    contracts.push_back(PointClamp(2u));
+    contracts.push_back(LinearClamp(3u));
+    contracts.push_back(ShadowCompareClamp(4u));
+}
+//Modify End
 
 //Modify Begin:2026-07-30 by BestHui
 PipelineLayout::PipelineLayout(FrameworkDeviceContext& deviceContext)
@@ -294,6 +395,9 @@ PipelineLayoutDesc PipelineLayout::CreateDescFromReflection(
     const ShaderReflectionMetadata& reflection,
     const PipelineLayoutReflectionOptions& options)
 {
+//Modify Begin:2026-08-12 by BestHui
+    ValidateStaticSamplerContracts(options);
+//Modify End
     PipelineLayoutDesc desc;
     //Modify Begin:2026-07-27 by BestHui
     desc.ShaderStages = options.ShaderStages;
@@ -378,7 +482,8 @@ PipelineLayoutDesc PipelineLayout::CreateDescFromReflection(
 
     for (const auto& srv : reflection.m_ShaderResourceViews)
     {
-        if (IsAccelerationStructureSrv(srv, options))
+//Modify Begin:2026-08-12 by BestHui
+        if (srv.InputType == D3D_SIT_RTACCELERATIONSTRUCTURE)
         {
             appendRootDescriptor(
                 srv.Name,
@@ -387,6 +492,7 @@ PipelineLayoutDesc PipelineLayout::CreateDescFromReflection(
                 srv.Space);
             continue;
         }
+//Modify End
 
         appendDescriptorSetRange(
             srv.Name,
@@ -408,20 +514,34 @@ PipelineLayoutDesc PipelineLayout::CreateDescFromReflection(
             PipelineDescriptorBindingMode::DescriptorTable);
     }
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-08-12 by BestHui
+    desc.RootSamplers.reserve(options.StaticSamplerContracts.size());
+    for (const PipelineStaticSamplerContract& contract : options.StaticSamplerContracts)
+    {
+        PipelineRootSamplerDesc rootSampler;
+        rootSampler.Name = contract.Name;
+        rootSampler.ShaderRegister = contract.ShaderRegister;
+        rootSampler.RegisterSpace = contract.RegisterSpace;
+        rootSampler.Desc = contract.Desc;
+        rootSampler.ShaderStages = options.ShaderStages;
+        desc.RootSamplers.push_back(std::move(rootSampler));
+    }
+
     for (const auto& sampler : reflection.m_Samplers)
     {
         const UINT samplerCount = DescriptorLayout::NormalizeDescriptorCount(sampler.BindCount, options.MaxDescriptorCount);
         for (UINT i = 0; i < samplerCount; ++i)
         {
-            PipelineRootSamplerDesc rootSampler;
-            rootSampler.Name = sampler.Name;
-            rootSampler.ShaderRegister = sampler.RegisterIndex + i;
-            rootSampler.RegisterSpace = sampler.Space;
-            rootSampler.Desc = CreateStaticSamplerDesc(sampler);
-            rootSampler.Desc.ShaderRegister = rootSampler.ShaderRegister;
-            rootSampler.ShaderStages = options.ShaderStages;
-            desc.RootSamplers.push_back(std::move(rootSampler));
+            const UINT shaderRegister = sampler.RegisterIndex + i;
+            const PipelineStaticSamplerContract* contract = FindStaticSamplerContract(
+                options,
+                shaderRegister,
+                sampler.Space);
+            if (contract == nullptr)
+            {
+                throw std::invalid_argument(
+                    "A reflected sampler requires an explicit static sampler contract.");
+            }
         }
     }
 //Modify End
@@ -634,11 +754,6 @@ const DescriptorBindingInfo& PipelineLayout::GetBinding(
     const DescriptorBindingKind expectedKind) const
 {
     return m_DescriptorLayout.GetBinding(name, expectedKind);
-}
-
-const DescriptorBindingInfo& PipelineLayout::GetFirstBinding(const DescriptorBindingKind expectedKind) const
-{
-    return m_DescriptorLayout.GetFirstBinding(expectedKind);
 }
 
 void PipelineLayout::AddDefaultShaderResourceViewTable(

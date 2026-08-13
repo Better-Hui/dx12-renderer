@@ -138,14 +138,6 @@ uint64_t RenderGraph::RenderGraphQueueScheduler::GetCrossQueueProducerFence(cons
     return producerFenceValue;
 }
 
-bool RenderGraph::RenderGraphQueueScheduler::WasLastWrittenBy(
-    const ResourceId resourceId,
-    const RenderPassQueue queue) const
-{
-    const auto writer = m_LastWriterQueues.find(resourceId);
-    return writer != m_LastWriterQueues.end() && writer->second == queue;
-}
-
 void RenderGraph::RenderGraphQueueScheduler::WaitForDirectSubmissionOnAsyncCompute(const uint64_t fenceValue) const
 {
     if (fenceValue != 0)
@@ -211,7 +203,9 @@ void RenderGraph::RenderGraphQueueScheduler::TrackExternalResource(
         return;
     }
 
-    Assert(false, "External async compute resource tracking requires an explicit fence value.");
+//Modify Begin:2026-07-30 by BestHui
+    throw std::invalid_argument("External async compute resource tracking requires an explicit fence value.");
+//Modify End
 }
 
 const std::map<RenderGraph::ResourceId, RenderGraph::RenderGraphQueueFenceValues>&

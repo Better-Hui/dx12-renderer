@@ -44,6 +44,7 @@ RayPayload MakeTrianglePayload(
     float2 hitBarycentrics,
     float3 worldRayDirection,
     float3x4 objectToWorld,
+    float3x4 worldToObject,
     float hitT)
 {
     const uint firstIndex = primitiveIndex * 3u;
@@ -69,23 +70,40 @@ RayPayload MakeTrianglePayload(
     const float3 p1Ws = mul(objectToWorld, float4(v1.Position.xyz, 1.0f));
     const float3 p2Ws = mul(objectToWorld, float4(v2.Position.xyz, 1.0f));
     const float3 positionError = ComputeTrianglePositionError(p0Ws, p1Ws, p2Ws, barycentrics);
-    float3 normalOs = normalize(v0.Normal.xyz * barycentrics.x + v1.Normal.xyz * barycentrics.y + v2.Normal.xyz * barycentrics.z);
-    float3 normalWs = normalize(mul((float3x3)objectToWorld, normalOs));
+//Modify Begin:2026-08-12 by BestHui
+    float3 geometricNormalWs = normalize(cross(p1Ws - p0Ws, p2Ws - p0Ws));
+    const bool isFrontFace = dot(geometricNormalWs, worldRayDirection) < 0.0f;
+    if (!isFrontFace)
+    {
+        geometricNormalWs = -geometricNormalWs;
+    }
+
+    const float3 normalOs = normalize(
+        v0.Normal.xyz * barycentrics.x +
+        v1.Normal.xyz * barycentrics.y +
+        v2.Normal.xyz * barycentrics.z);
+    float3 normalWs = normalize(mul(transpose((float3x3)worldToObject), normalOs));
+    normalWs = dot(normalWs, geometricNormalWs) >= 0.0f ? normalWs : -normalWs;
 
     if (material.HasNormalMap != 0u)
     {
         const float3 tangentOs = normalize(v0.Tangent.xyz * barycentrics.x + v1.Tangent.xyz * barycentrics.y + v2.Tangent.xyz * barycentrics.z);
         const float3 bitangentOs = normalize(v0.Bitangent.xyz * barycentrics.x + v1.Bitangent.xyz * barycentrics.y + v2.Bitangent.xyz * barycentrics.z);
-        const float3 tangentWs = normalize(mul((float3x3)objectToWorld, tangentOs));
+        float3 tangentWs = normalize(mul((float3x3)objectToWorld, tangentOs));
         const float3 bitangentWs = normalize(mul((float3x3)objectToWorld, bitangentOs));
-        const float3x3 tbn = float3x3(tangentWs, bitangentWs, normalWs);
+        tangentWs = isFrontFace ? tangentWs : -tangentWs;
+        const float3 tangent = normalize(tangentWs - normalWs * dot(normalWs, tangentWs));
+        const float tangentHandedness = dot(cross(normalWs, tangent), bitangentWs) < 0.0f ? -1.0f : 1.0f;
+        const float3 bitangent = cross(normalWs, tangent) * tangentHandedness;
+        const float3x3 tbn = float3x3(tangent, bitangent, normalWs);
 //Modify Begin:2026-07-30 by BestHui
         const float3 normalTs = UnpackNormalMap(SampleBindlessTexture2DLevel(material.NormalTextureIndex, LinearWrapSampler, uv, 0.0f).xyz);
 //Modify End
         normalWs = normalize(mul(normalTs, tbn));
     }
 
-    normalWs = dot(normalWs, worldRayDirection) > 0.0f ? -normalWs : normalWs;
+    normalWs = dot(normalWs, geometricNormalWs) >= 0.0f ? normalWs : geometricNormalWs;
+//Modify End
 
 //Modify Begin:2026-07-30 by BestHui
     const float4 texel = material.HasDiffuseMap != 0u ? SampleBindlessTexture2DLevel(material.DiffuseTextureIndex, LinearWrapSampler, uv, 0.0f) : 1.0f;

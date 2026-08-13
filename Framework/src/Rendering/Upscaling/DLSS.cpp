@@ -165,8 +165,9 @@ namespace
 DLSS::DLSS(FrameworkDeviceContext& deviceContext, DLSSInitializationDesc initializationDesc)
     : m_DeviceContext(deviceContext)
     , m_InternalState(std::make_unique<InternalState>())
+    , m_InitializationDesc(std::move(initializationDesc))
 {
-    (void)Initialize(initializationDesc);
+    m_StatusMessage = "DLSS Super Resolution has not been probed. Select a mode to query the active adapter.";
 }
 
 DLSS::~DLSS()
@@ -198,6 +199,12 @@ void DLSS::SetMode(const DLSSMode mode)
 {
     if (m_Mode == mode)
     {
+        return;
+    }
+
+    if (mode != DLSSMode::Disabled && !EnsureInitialized())
+    {
+        m_Mode = DLSSMode::Disabled;
         return;
     }
 
@@ -318,6 +325,11 @@ DLSSOptimalSettings DLSS::GetOptimalSettings(const uint32_t displayWidth, const 
         return settings;
     }
 
+    if (!EnsureInitialized())
+    {
+        return settings;
+    }
+
     unsigned int optimalWidth = settings.RenderWidth;
     unsigned int optimalHeight = settings.RenderHeight;
     unsigned int maximumWidth = optimalWidth;
@@ -379,7 +391,7 @@ void DLSS::OnResourcesRecreated()
 
 void DLSS::Execute(CommandList& commandList, const DLSSExecutionInputs& inputs)
 {
-    if (!IsEnabled())
+    if (!IsEnabled() || !EnsureInitialized())
     {
         throw std::runtime_error("DLSS execution was requested while the feature is disabled or unsupported.");
     }
@@ -415,11 +427,18 @@ void DLSS::Execute(CommandList& commandList, const DLSSExecutionInputs& inputs)
     evaluationParams.InPreExposure = 1.0f;
     evaluationParams.InExposureScale = 1.0f;
 
-    const NVSDK_NGX_Result result = NGX_D3D12_EVALUATE_DLSS_EXT(
-        commandList.GetGraphicsCommandList().Get(),
-        m_InternalState->Feature,
-        m_InternalState->EvaluationParameters,
-        &evaluationParams);
+    NVSDK_NGX_Result result = NVSDK_NGX_Result_Fail;
+//Modify Begin:2026-07-30 by BestHui
+    commandList.ExecuteExternalCommandRecording(
+        [&](ID3D12GraphicsCommandList2& nativeCommandList)
+        {
+            result = NGX_D3D12_EVALUATE_DLSS_EXT(
+                &nativeCommandList,
+                m_InternalState->Feature,
+                m_InternalState->EvaluationParameters,
+                &evaluationParams);
+        });
+//Modify End
     if (NVSDK_NGX_FAILED(result))
     {
         m_StatusMessage = GetResultMessage("NGX_D3D12_EVALUATE_DLSS_EXT", result);
@@ -538,13 +557,20 @@ void DLSS::TagFrameGenerationResources(CommandList& commandList, const DLSSFrame
         sl::ResourceTag{ &motionVectors, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &renderExtent },
         sl::ResourceTag{ &hudLessColor, sl::kBufferTypeHUDLessColor, sl::ResourceLifecycle::eValidUntilPresent, &displayExtent },
     };
-    const auto rawCommandList = reinterpret_cast<sl::CommandBuffer*>(commandList.GetGraphicsCommandList().Get());
-    const sl::Result tagResult = slSetTagForFrame(
-        *frameToken,
-        viewport,
-        tags.data(),
-        static_cast<uint32_t>(tags.size()),
-        rawCommandList);
+    sl::Result tagResult = sl::Result::eErrorInvalidState;
+//Modify Begin:2026-07-30 by BestHui
+    commandList.ExecuteExternalCommandRecording(
+        [&](ID3D12GraphicsCommandList2& nativeCommandList)
+        {
+            const auto rawCommandList = reinterpret_cast<sl::CommandBuffer*>(&nativeCommandList);
+            tagResult = slSetTagForFrame(
+                *frameToken,
+                viewport,
+                tags.data(),
+                static_cast<uint32_t>(tags.size()),
+                rawCommandList);
+        });
+//Modify End
     if (tagResult != sl::Result::eOk)
     {
         throw std::runtime_error(GetStreamlineResultMessage("slSetTagForFrame for DLSS Frame Generation", tagResult));
@@ -666,15 +692,31 @@ void DLSS::ExecuteRayReconstruction(CommandList& commandList, const DLSSExecutio
         sl::ResourceTag{ &specularAlbedo, sl::kBufferTypeSpecularAlbedo, sl::ResourceLifecycle::eValidUntilEvaluate, &renderExtent },
         sl::ResourceTag{ &normalRoughness, sl::kBufferTypeNormalRoughness, sl::ResourceLifecycle::eValidUntilEvaluate, &renderExtent },
     };
-    const auto rawCommandList = reinterpret_cast<sl::CommandBuffer*>(commandList.GetGraphicsCommandList().Get());
-    const sl::Result tagResult = slSetTagForFrame(*frameToken, viewport, tags.data(), static_cast<uint32_t>(tags.size()), rawCommandList);
+    sl::Result tagResult = sl::Result::eErrorInvalidState;
+    sl::Result evaluateResult = sl::Result::eErrorInvalidState;
+//Modify Begin:2026-07-30 by BestHui
+    commandList.ExecuteExternalCommandRecording(
+        [&](ID3D12GraphicsCommandList2& nativeCommandList)
+        {
+            const auto rawCommandList = reinterpret_cast<sl::CommandBuffer*>(&nativeCommandList);
+            tagResult = slSetTagForFrame(*frameToken, viewport, tags.data(), static_cast<uint32_t>(tags.size()), rawCommandList);
+            if (tagResult == sl::Result::eOk)
+            {
+                const sl::BaseStructure* evaluateInputs[] = { &viewport };
+                evaluateResult = slEvaluateFeature(
+                    sl::kFeatureDLSS_RR,
+                    *frameToken,
+                    evaluateInputs,
+                    _countof(evaluateInputs),
+                    rawCommandList);
+            }
+        });
+//Modify End
     if (tagResult != sl::Result::eOk)
     {
         throw std::runtime_error("slSetTagForFrame failed for DLSS Ray Reconstruction.");
     }
 
-    const sl::BaseStructure* evaluateInputs[] = { &viewport };
-    const sl::Result evaluateResult = slEvaluateFeature(sl::kFeatureDLSS_RR, *frameToken, evaluateInputs, _countof(evaluateInputs), rawCommandList);
     if (evaluateResult != sl::Result::eOk)
     {
         throw std::runtime_error("slEvaluateFeature(DLSS_RR) failed.");
@@ -711,16 +753,21 @@ void DLSS::ReleaseStreamlineFrameToken()
 }
 //Modify End
 
-bool DLSS::Initialize(const DLSSInitializationDesc& initializationDesc)
+bool DLSS::EnsureInitialized()
 {
-    const std::filesystem::path applicationDataPath = initializationDesc.ApplicationDataPath.empty()
+    return m_Initialized || Initialize();
+}
+
+bool DLSS::Initialize()
+{
+    const std::filesystem::path applicationDataPath = m_InitializationDesc.ApplicationDataPath.empty()
         ? std::filesystem::current_path()
-        : std::filesystem::path(initializationDesc.ApplicationDataPath);
+        : std::filesystem::path(m_InitializationDesc.ApplicationDataPath);
     std::error_code createDirectoryError;
     std::filesystem::create_directories(applicationDataPath, createDirectoryError);
 
     const NVSDK_NGX_Result initResult = NVSDK_NGX_D3D12_Init(
-        initializationDesc.ApplicationId,
+        m_InitializationDesc.ApplicationId,
         applicationDataPath.c_str(),
         m_DeviceContext.GetDevice().Get());
     if (NVSDK_NGX_FAILED(initResult))
@@ -805,13 +852,20 @@ bool DLSS::EnsureFeature(CommandList& commandList, const DLSSExecutionInputs& in
         NVSDK_NGX_DLSS_Feature_Flags_AutoExposure;
 
     NVSDK_NGX_Handle* createdFeature = nullptr;
-    const NVSDK_NGX_Result createResult = NGX_D3D12_CREATE_DLSS_EXT(
-        commandList.GetGraphicsCommandList().Get(),
-        1u,
-        1u,
-        &createdFeature,
-        m_InternalState->FeatureParameters,
-        &createParams);
+    NVSDK_NGX_Result createResult = NVSDK_NGX_Result_Fail;
+//Modify Begin:2026-07-30 by BestHui
+    commandList.ExecuteExternalCommandRecording(
+        [&](ID3D12GraphicsCommandList2& nativeCommandList)
+        {
+            createResult = NGX_D3D12_CREATE_DLSS_EXT(
+                &nativeCommandList,
+                1u,
+                1u,
+                &createdFeature,
+                m_InternalState->FeatureParameters,
+                &createParams);
+        });
+//Modify End
     if (NVSDK_NGX_FAILED(createResult))
     {
         std::ostringstream message;

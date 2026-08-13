@@ -3,6 +3,9 @@
 #include <imgui_impl_dx12.h>
 #include <imgui_impl_win32.h>
 
+//Modify Begin:2026-08-12 by BestHui
+#include <DX12Library/Application.h>
+//Modify End
 #include <DX12Library/CommandQueue.h>
 #include <DX12Library/Helpers.h>
 
@@ -83,6 +86,13 @@ ImGuiImpl::ImGuiImpl(FrameworkDeviceContext& deviceContext, CommandList& command
         m_DeviceContext,
         ShaderBlob(ShaderBytecode_Blit_VS, sizeof ShaderBytecode_Blit_VS),
         ShaderBlob(ShaderBytecode_ImGuiCombine_PS, sizeof ShaderBytecode_ImGuiCombine_PS),
+//Modify Begin:2026-07-30 by BestHui
+        PipelineLayoutReflectionOptions{
+            .StaticSamplerContracts = { PipelineStaticSamplers::LinearClamp(3u) },
+            .MaxDescriptorCount = 4096u,
+            .ShaderStages = PipelineShaderStageFlags::AllGraphics
+        },
+//Modify End
         [](RasterPipelineStateBuilder& psb)
         {
             psb.WithAlphaBlend();
@@ -187,14 +197,14 @@ void ImGuiImpl::Render() const
 
 void ImGuiImpl::DrawToRenderTarget(CommandList& commandList)
 {
-    commandList.CommitStagedDescriptors();
-    commandList.FlushResourceBarriers();
-
-    const auto pD3dCmd = commandList.GetGraphicsCommandList();
-    pD3dCmd->SetDescriptorHeaps(1, m_SrvDescHeap.GetAddressOf());
-    ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), pD3dCmd.Get());
 //Modify Begin:2026-07-30 by BestHui
-    commandList.InvalidateCachedNativeState();
+    commandList.ExecuteExternalCommandRecording(
+        [this](ID3D12GraphicsCommandList2& nativeCommandList)
+        {
+            ID3D12DescriptorHeap* descriptorHeap = m_SrvDescHeap.Get();
+            nativeCommandList.SetDescriptorHeaps(1u, &descriptorHeap);
+            ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), &nativeCommandList);
+        });
 //Modify End
 }
 

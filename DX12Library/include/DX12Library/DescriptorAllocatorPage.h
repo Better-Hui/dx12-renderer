@@ -10,6 +10,7 @@
 #include <queue>
 
 class DescriptorAllocation;
+class DescriptorRetirementClock;
 
 class DescriptorAllocatorPage : public std::enable_shared_from_this<DescriptorAllocatorPage>
 {
@@ -17,7 +18,8 @@ public:
 	explicit DescriptorAllocatorPage(
 		D3D12_DESCRIPTOR_HEAP_TYPE type,
 		uint32_t numDescriptors,
-		Microsoft::WRL::ComPtr<ID3D12Device2> device);
+		Microsoft::WRL::ComPtr<ID3D12Device2> device,
+		std::shared_ptr<DescriptorRetirementClock> retirementClock);
 
 	D3D12_DESCRIPTOR_HEAP_TYPE GetHeapType() const;
 
@@ -42,7 +44,7 @@ public:
 	 * \param frameNumber used to identify the descriptors later. They are not freed up immediately, but rather put on a stale allocations queue.
 	 * Stale descriptors are returned to the heap when using ReleaseStaleAllocations
 	 */
-	void Free(DescriptorAllocation&& descriptor, uint64_t frameNumber);
+	void Free(DescriptorAllocation&& descriptor);
 
 	/**
 	 * Returned the stale descriptors back to the descriptor heap.
@@ -112,6 +114,7 @@ private:
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> DescriptorHeap;
 //Modify Begin:2026-08-07 by BestHui
 	Microsoft::WRL::ComPtr<ID3D12Device2> Device;
+	std::shared_ptr<DescriptorRetirementClock> RetirementClock;
 //Modify End
 	D3D12_DESCRIPTOR_HEAP_TYPE HeapType;
 	D3D12_CPU_DESCRIPTOR_HANDLE BaseDescriptor;

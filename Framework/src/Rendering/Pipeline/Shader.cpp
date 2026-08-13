@@ -79,15 +79,6 @@ namespace
         return merged;
     }
 
-//Modify Begin:2026-07-31 by BestHui
-    PipelineLayoutReflectionOptions CreateDefaultGraphicsLayoutOptions()
-    {
-        PipelineLayoutReflectionOptions layoutOptions;
-        layoutOptions.MaxDescriptorCount = 4096u;
-        layoutOptions.ShaderStages = PipelineShaderStageFlags::AllGraphics;
-        return layoutOptions;
-    }
-//Modify End
 }
 //Modify End
 
@@ -97,9 +88,7 @@ Shader::Shader(
     const ShaderBlob& vertexShader,
     const ShaderBlob& pixelShader,
     const std::function<void(RasterPipelineStateBuilder&)> buildPipelineState)
-//Modify Begin:2026-07-31 by BestHui
-    : Shader(deviceContext, vertexShader, pixelShader, CreateDefaultGraphicsLayoutOptions(), buildPipelineState)
-//Modify End
+    : Shader(deviceContext, vertexShader, pixelShader, PipelineLayoutReflectionOptions{}, buildPipelineState)
 {
 }
 

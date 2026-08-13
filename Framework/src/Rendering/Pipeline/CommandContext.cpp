@@ -302,7 +302,7 @@ void CommandContext::BindPipeline(const RayTracingShader& shader) const
 void CommandContext::BindBindlessDescriptorHeap(
     BindlessDescriptorHeap& bindlessDescriptorHeap) const
 {
-    m_CommandList.BindShaderVisibleDescriptorHeap(
+    m_CommandList.BindExternalDescriptorHeap(
         D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
         bindlessDescriptorHeap.GetResourceDescriptorHeap());
     m_DescriptorAllocator.SetBindlessDescriptorHeap(&bindlessDescriptorHeap);
@@ -473,17 +473,6 @@ void CommandContext::SetTexture(const ComputeShader& shader, const std::string_v
 void CommandContext::SetUnorderedAccessView(const ComputeShader& shader, const std::string_view name, const UnorderedAccessView& unorderedAccessView) const
 {
     shader.m_DescriptorSet->SetUnorderedAccessView(name, unorderedAccessView);
-}
-
-void CommandContext::SetAccelerationStructure(const ComputeShader& shader, const RayTracingAccelerationStructure& accelerationStructure) const
-{
-    if (!shader.m_BindingSet->HasBinding(DescriptorBindingKind::AccelerationStructure))
-    {
-        return;
-    }
-
-    const PipelineDescriptorRangeDesc& accelerationStructureBinding = shader.m_BindingSet->GetFirstRange(DescriptorBindingKind::AccelerationStructure);
-    SetAccelerationStructure(shader, accelerationStructureBinding.Name, accelerationStructure);
 }
 
 void CommandContext::SetAccelerationStructure(const ComputeShader& shader, const std::string_view name, const RayTracingAccelerationStructure& accelerationStructure) const
@@ -852,14 +841,6 @@ void CommandContext::Draw(
     const uint32_t startVertex,
     const uint32_t startInstance) const
 {
-//Modify Begin:2026-07-30 by BestHui
-    if (m_DescriptorAllocator.HasBindlessDescriptorHeap())
-    {
-        m_CommandList.FlushResourceBarriers();
-        m_CommandList.GetGraphicsCommandList()->DrawInstanced(vertexCount, instanceCount, startVertex, startInstance);
-        return;
-    }
-//Modify End
     m_CommandList.Draw(vertexCount, instanceCount, startVertex, startInstance);
 }
 
@@ -871,12 +852,6 @@ void CommandContext::DrawIndexed(
     const int32_t baseVertex,
     const uint32_t startInstance) const
 {
-    if (m_DescriptorAllocator.HasBindlessDescriptorHeap())
-    {
-        m_CommandList.FlushResourceBarriers();
-        m_CommandList.GetGraphicsCommandList()->DrawIndexedInstanced(indexCount, instanceCount, startIndex, baseVertex, startInstance);
-        return;
-    }
     m_CommandList.DrawIndexed(indexCount, instanceCount, startIndex, baseVertex, startInstance);
 }
 //Modify End
@@ -893,19 +868,6 @@ void CommandContext::DrawIndirect(
         m_CommandList.TransitionBarrier(commandsBuffer.GetCounterBuffer(), D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
     }
 
-    if (m_DescriptorAllocator.HasBindlessDescriptorHeap())
-    {
-        m_CommandList.FlushResourceBarriers();
-        m_CommandList.GetGraphicsCommandList()->ExecuteIndirect(
-            commandSignature.GetD3D12CommandSignature().Get(),
-            maxCommandCount,
-            commandsBuffer.GetD3D12Resource().Get(),
-            0,
-            commandsBuffer.GetCounterBuffer().GetD3D12Resource().Get(),
-            0);
-        return;
-    }
-
     m_CommandList.DrawIndirect(
         commandSignature.GetD3D12CommandSignature(),
         maxCommandCount,
@@ -917,26 +879,12 @@ void CommandContext::DrawIndirect(
 
 void CommandContext::DispatchMesh(const uint32_t numGroupsX, const uint32_t numGroupsY, const uint32_t numGroupsZ) const
 {
-    if (m_DescriptorAllocator.HasBindlessDescriptorHeap())
-    {
-        m_CommandList.FlushResourceBarriers();
-        m_CommandList.GetGraphicsCommandList6()->DispatchMesh(numGroupsX, numGroupsY, numGroupsZ);
-        return;
-    }
     m_CommandList.DispatchMesh(numGroupsX, numGroupsY, numGroupsZ);
 }
 //Modify End
 
 void CommandContext::Dispatch(const uint32_t numGroupsX, const uint32_t numGroupsY, const uint32_t numGroupsZ) const
 {
-//Modify Begin:2026-07-30 by BestHui
-    if (m_DescriptorAllocator.HasBindlessDescriptorHeap())
-    {
-        m_CommandList.FlushResourceBarriers();
-        m_CommandList.GetGraphicsCommandList()->Dispatch(numGroupsX, numGroupsY, numGroupsZ);
-        return;
-    }
-//Modify End
     m_CommandList.Dispatch(numGroupsX, numGroupsY, numGroupsZ);
 }
 
@@ -966,14 +914,6 @@ void CommandContext::DispatchRays(const RayTracingDispatchDesc& dispatchDesc) co
         dispatchDesc.Width,
         dispatchDesc.Height,
         dispatchDesc.Depth);
-//Modify Begin:2026-07-30 by BestHui
-    if (m_DescriptorAllocator.HasBindlessDescriptorHeap())
-    {
-        m_CommandList.FlushResourceBarriers();
-        m_CommandList.GetGraphicsCommandList5()->DispatchRays(&d3d12DispatchDesc);
-        return;
-    }
-//Modify End
     m_CommandList.DispatchRays(d3d12DispatchDesc);
 }
 

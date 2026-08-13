@@ -29,6 +29,13 @@ public:
         D3D12_RESOURCE_STATES stateAfter,
         UINT subResource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
 
+//Modify Begin:2026-07-30 by BestHui
+    void NotifyResourceState(
+        ID3D12Resource* resource,
+        D3D12_RESOURCE_STATES state,
+        UINT subResource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
+//Modify End
+
     void UavBarrier(const Resource* resource = nullptr);
     void AliasBarrier(const Resource* beforeResource = nullptr, const Resource* afterResource = nullptr);
 //Modify Begin:2026-08-10 by BestHui

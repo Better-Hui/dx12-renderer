@@ -2,6 +2,8 @@
 
 //Modify Begin:2026-07-30 by BestHui
 #include <Framework/Rendering/Lighting/ReSTIRDI.h>
+#include <Framework/Rendering/Lighting/MaterialShadingModel.h>
+#include <Framework/Rendering/Pipeline/PipelineLayout.h>
 #include <Framework/Rendering/Pipeline/ShaderVariant.h>
 
 #include <array>
@@ -22,6 +24,9 @@ struct ReSTIRDIFrameState
 {
     bool Enabled = false;
     bool UseSoftShadowVariant = false;
+//Modify Begin:2026-07-30 by BestHui
+    MaterialShadingModel ShadingModel = MaterialShadingModel::Pbr;
+//Modify End
 //Modify Begin:2026-08-06 by BestHui
     uint32_t EnvironmentProjectionVariant = 0u;
 //Modify End
@@ -50,6 +55,9 @@ struct ReSTIRDIShaderSources
 //Modify Begin:2026-08-06 by BestHui
     std::string EnvironmentProjectionDefineName;
 //Modify End
+//Modify Begin:2026-08-12 by BestHui
+    std::vector<PipelineStaticSamplerContract> StaticSamplerContracts;
+//Modify End
 };
 
 class ReSTIRDIPass final
@@ -65,7 +73,8 @@ public:
     void EnsurePipelines(
         bool useSoftShadowVariant,
         uint32_t environmentProjectionVariant,
-        const ReSTIRDIFrameConstants& constants);
+        const ReSTIRDIFrameConstants& constants,
+        MaterialShadingModel shadingModel);
 //Modify End
     void Execute(
         CommandList& commandList,
@@ -88,15 +97,20 @@ private:
     static constexpr uint32_t PipelineVariantCount = EnvironmentProjectionVariantCount * 2u;
 
     static size_t GetPipelineVariantIndex(bool useSoftShadowVariant, uint32_t environmentProjectionVariant);
-    static uint32_t GetStageVariantKey(ReSTIRDIStage stage, const ReSTIRDIFrameConstants& constants);
+    static uint32_t GetStageVariantKey(
+        ReSTIRDIStage stage,
+        const ReSTIRDIFrameConstants& constants,
+        MaterialShadingModel shadingModel);
     static std::vector<ShaderVariantDefine> GetStageVariantDefines(
         ReSTIRDIStage stage,
-        const ReSTIRDIFrameConstants& constants);
+        const ReSTIRDIFrameConstants& constants,
+        MaterialShadingModel shadingModel);
     PipelineSet& GetPipelines(bool useSoftShadowVariant, uint32_t environmentProjectionVariant);
     ComputeShader& GetStageShader(
         PipelineSet& pipelines,
         ReSTIRDIStage stage,
-        const ReSTIRDIFrameConstants& constants);
+        const ReSTIRDIFrameConstants& constants,
+        MaterialShadingModel shadingModel);
 //Modify End
     void EnsureResources(uint32_t width, uint32_t height);
     void ExecuteInitialSampling(CommandContext& commandContext, const ReSTIRDIExecutionInputs& inputs, PipelineSet& pipelines);

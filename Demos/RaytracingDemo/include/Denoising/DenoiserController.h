@@ -35,8 +35,6 @@ public:
     bool IsEnabled() const { return m_Algorithm != Algorithm::Off; }
     bool IsNRDEnabled() const { return m_Algorithm == Algorithm::NRD; }
     bool IsSVGFEnabled() const { return m_Algorithm == Algorithm::SVGF; }
-    bool IsNRDAvailable() const;
-
     void ResetHistory();
     void FillCameraConstants(uint32_t& nrdDenoiserMode, DirectX::XMFLOAT4& nrdReblurHitDistanceParameters) const;
     bool DrawImGui();
@@ -48,8 +46,7 @@ public:
         const RaytracingDemoRenderGraph::LightingResources& lighting,
         const RaytracingDemoRenderGraph::NRDResources& nrdResources,
         uint32_t width,
-        uint32_t height,
-        const NRD::ResourceTransitionCallback& transitionResource = {});
+        uint32_t height);
 
 private:
     void ApplySelection();

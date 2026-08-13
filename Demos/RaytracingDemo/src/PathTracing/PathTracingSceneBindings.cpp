@@ -33,8 +33,16 @@ void RaytracingDemoPassBindings::BindInlinePathTracingInputs(
 {
     const RayTracingAccelerationStructure& accelerationStructure = resources.Scene.GetRayTracingAccelerationStructure();
 
-    commandContext.SetConstantBuffer(shader, "CameraConstants", sizeof(camera), &camera);
-    commandContext.SetAccelerationStructure(shader, accelerationStructure);
+    if (shader.HasConstantBuffer("CameraConstants"))
+    {
+        commandContext.SetConstantBuffer(shader, "CameraConstants", sizeof(camera), &camera);
+    }
+//Modify Begin:2026-07-30 by BestHui
+    if (shader.HasAccelerationStructure("g_InlineRayTracingScene"))
+    {
+        commandContext.SetAccelerationStructure(shader, "g_InlineRayTracingScene", accelerationStructure);
+    }
+//Modify End
     if (shader.HasShaderResourceView("GBufferTextures"))
     {
         commandContext.SetShaderResourceView(shader, "GBufferTextures", 0u, ShaderResourceView(gbuffer.AlbedoOcclusion));

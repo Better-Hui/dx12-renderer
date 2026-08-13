@@ -40,10 +40,8 @@
 #include <d3d12.h>
 #include <wrl.h>
 
-#include <map> // for std::map
 #include <functional>
 #include <memory> // for std::unique_ptr
-#include <mutex> // for std::mutex
 #include <string>
 #include <vector> // for std::vector
 
@@ -56,6 +54,9 @@
 class Buffer;
 class ByteAddressBuffer;
 class ConstantBuffer;
+//Modify Begin:2026-08-12 by BestHui
+class D3D12DeviceContext;
+//Modify End
 class DynamicDescriptorHeap;
 class IndexBuffer;
 class RenderTarget;
@@ -73,8 +74,7 @@ public:
 //Modify Begin:2026-08-07 by BestHui
     CommandList(
         D3D12_COMMAND_LIST_TYPE type,
-        Microsoft::WRL::ComPtr<ID3D12Device2> device,
-        std::shared_ptr<ResourceStateRegistry> resourceStateRegistry,
+        std::shared_ptr<D3D12DeviceContext> deviceContext,
         std::function<std::shared_ptr<CommandList>()> computeCommandListFactory = {});
 //Modify End
     virtual ~CommandList();
@@ -95,6 +95,16 @@ public:
         return m_D3d12CommandList;
     }
 
+//Modify Begin:2026-07-30 by BestHui
+    /**
+     * Execute a third-party command-recording callback against the native D3D12
+     * command list. The callback owns any state it changes. CommandList flushes
+     * its pending work before the call and invalidates its state cache afterwards.
+     */
+    void ExecuteExternalCommandRecording(
+        const std::function<void(ID3D12GraphicsCommandList2&)>& recordCommands);
+//Modify End
+
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList5> GetGraphicsCommandList5() const
     {
         return m_D3d12CommandList5;
@@ -104,6 +114,12 @@ public:
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList6> GetGraphicsCommandList6() const
     {
         return m_D3d12CommandList6;
+    }
+//Modify End
+//Modify Begin:2026-08-12 by BestHui
+    const std::shared_ptr<D3D12DeviceContext>& GetDeviceContext() const
+    {
+        return m_DeviceContext;
     }
 //Modify End
 
@@ -130,6 +146,9 @@ public:
      * to be in a particular state can run.
      */
     void UavBarrier(const Resource& resource, bool flushBarriers = false);
+//Modify Begin:2026-07-30 by BestHui
+    void UavBarrier(ID3D12Resource* resource, bool flushBarriers = false);
+//Modify End
 
     /**
      * Add an aliasing barrier to indicate a transition between usages of two
@@ -150,6 +169,19 @@ public:
      */
     void FlushResourceBarriers();
 
+//Modify Begin:2026-07-30 by BestHui
+    void NotifyResourceState(
+        const Resource& resource,
+        D3D12_RESOURCE_STATES state,
+        UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
+
+    void TrackResourceState(
+        Microsoft::WRL::ComPtr<ID3D12Resource> resource,
+        std::shared_ptr<ResourceStateRegistration> stateRegistration);
+    void RetireResourceState(Microsoft::WRL::ComPtr<ID3D12Resource> resource);
+    void RetireResource(Resource& resource);
+//Modify End
+
     void CommitStagedDescriptors();
 
     /**
@@ -157,6 +189,14 @@ public:
      */
     void CopyResource(const Resource& dstRes, const Resource& srcRes);
     void CopyResource(Microsoft::WRL::ComPtr<ID3D12Resource> dstRes, Microsoft::WRL::ComPtr<ID3D12Resource> srcRes, bool dstAutoBarriers = true, bool srcAutoBarriers = true);
+//Modify Begin:2026-08-12 by BestHui
+    void CopyBufferRegion(
+        const Resource& destination,
+        uint64_t destinationOffset,
+        Microsoft::WRL::ComPtr<ID3D12Resource> source,
+        uint64_t sourceOffset,
+        uint64_t sizeInBytes);
+//Modify End
 
     /**
      * Resolve a multisampled resource into a non-multisampled resource.
@@ -252,7 +292,7 @@ public:
     /**
      * Copy subresource data to a texture.
      */
-    void CopyTextureSubresource(const Texture& texture, uint32_t firstSubresource, uint32_t numSubresources,
+    void CopyTextureSubresource(Texture& texture, uint32_t firstSubresource, uint32_t numSubresources,
         D3D12_SUBRESOURCE_DATA* subresourceData);
 
     /**
@@ -600,7 +640,7 @@ public:
         D3D12_CPU_DESCRIPTOR_HANDLE srcDescriptor);
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
-    void BindShaderVisibleDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE heapType, ID3D12DescriptorHeap* heap);
+    void BindExternalDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE heapType, ID3D12DescriptorHeap* heap);
 //Modify End
 
     /***************************************************************************
@@ -641,10 +681,6 @@ public:
      * Should only be called by the DynamicDescriptorHeap class.
      */
     void SetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE heapType, ID3D12DescriptorHeap* heap);
-    //Modify Begin:2026-07-27 by BestHui
-    void InvalidateCachedNativeState();
-    //Modify End
-
     std::shared_ptr<CommandList> GetGenerateMipsCommandList() const
     {
         return m_ComputeCommandList;
@@ -653,6 +689,9 @@ public:
     void SetComputeRootUnorderedAccessView(UINT rootParameterIndex, const Resource& resource);
     void SetComputeRootShaderResourceView(UINT rootParameterIndex, D3D12_GPU_VIRTUAL_ADDRESS gpuAddress);
     void SetComputeRootConstantBufferView(UINT rootParameterIndex, D3D12_GPU_VIRTUAL_ADDRESS gpuAddress);
+//Modify Begin:2026-08-12 by BestHui
+    void SetGraphicsRootDescriptorTable(UINT rootParameterIndex, D3D12_GPU_DESCRIPTOR_HANDLE descriptorHandle);
+//Modify End
     void SetComputeRootDescriptorTable(UINT rootParameterIndex, D3D12_GPU_DESCRIPTOR_HANDLE descriptorHandle);
 
     void SetAutomaticViewportAndScissorRect(const RenderTarget& renderTarget, UINT mipLevel = 0);
@@ -675,6 +714,14 @@ public:
     void TrackResource(const Resource& res);
 
 private:
+//Modify Begin:2026-07-30 by BestHui
+    void InvalidateCachedNativeState();
+//Modify End
+//Modify Begin:2026-08-12 by BestHui
+    void CommitStagedDescriptorsForDraw();
+    void CommitStagedDescriptorsForDispatch();
+//Modify End
+
     // Generate mips for UAV compatible textures.
     void GenerateMipsUav(Texture& texture, DXGI_FORMAT format);
     //// Generate mips for BGR textures.
@@ -689,6 +736,9 @@ private:
 
     D3D12_COMMAND_LIST_TYPE m_D3d12CommandListType;
 //Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-12 by BestHui
+    std::shared_ptr<D3D12DeviceContext> m_DeviceContext;
+//Modify End
     Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;
 //Modify Begin:2026-07-30 by BestHui
     std::shared_ptr<ResourceStateRegistry> m_ResourceStateRegistry;
@@ -729,7 +779,6 @@ private:
     // Keep track of the currently bound descriptor heaps. Only change descriptor
     // heaps if they are different than the currently bound descriptor heaps.
     ID3D12DescriptorHeap* m_DescriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES];
-
     // Pipeline state object for Mip map generation.
     std::unique_ptr<GenerateMipsPso> m_GenerateMipsPso;
     //// Pipeline state object for converting panorama (equirectangular) to cubemaps
@@ -741,10 +790,10 @@ private:
     // is stored. The referenced objects are released when the command list is
     // reset.
     TrackedObjectsType m_TrackedObjects;
+//Modify Begin:2026-08-12 by BestHui
+    std::vector<std::shared_ptr<ResourceStateRegistration>> m_TrackedResourceStateRegistrations;
+//Modify End
 
     RenderTargetState m_LastRenderTargetState;
 
-    // Keep track of loaded textures to avoid loading the same texture multiple times.
-    static std::map<std::wstring, ID3D12Resource*> m_TextureCache;
-    static std::mutex m_TextureCacheMutex;
 };

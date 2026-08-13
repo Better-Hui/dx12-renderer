@@ -18,6 +18,7 @@ The upstream renderer remains the foundation. This fork adds framework and sampl
 | RenderGraph | Logical resources, compiled resource-state plans, centralized resource-state tracking, native/external state handoff, per-queue GPU timestamps/CSV export, and explicit Direct/Async Compute queue synchronization. |
 | RaytracingDemo | The maintained integration sample. It demonstrates this repository's framework APIs rather than treating raw D3D12 calls as normal sample-facing code. |
 | Ray tracing | Runtime-selectable inline ray-query and shader-table DXR paths sharing the same scene/resource model. |
+| Material shading | Framework-owned metallic/roughness GGX PBR evaluation, with an experimental `Stylized Comic` PBR-NPR variant selected by the sample UI. |
 | ReSTIR DI | Inline ray-query direct-lighting sample with RIS, temporal/boiling/spatial resampling, stage-specific visibility and bias-correction settings, and final shading. |
 | ReSTIR GI | Inline ray-query one-bounce indirect-lighting sample with initial BSDF sampling, temporal reuse, spatial reuse, Jacobian correction, and final visibility/shading. |
 | Scene workflow | Shared `Scene` data, Unity/JSON import, PBR material adaptation, emissive surface emitters, and incremental runtime instance add/remove used by the stress-scene controls. |
@@ -84,6 +85,7 @@ const Scene& scene = result.SceneData;
 | --- | --- |
 | Base resources | GBuffer-style normal/depth/material data, motion/world-position data, history/display resources, and raster or meshlet GBuffer generation. |
 | Ray tracing | Inline ray-query compute shaders and shader-table DXR. |
+| Material shading | Framework-owned GGX metallic/roughness PBR, plus the sample-selectable `Stylized Comic` PBR-NPR variant. |
 | Lighting | Separate direct and indirect lighting producers followed by composition, including ReSTIR DI for direct lighting and ReSTIR GI for inline-ray-query indirect lighting. |
 | Soft shadows | Precompiled hard/soft shader variants for directional and point lights; area lights retain their sampled emitter surface. |
 | Denoising | Optional NRD or SVGF integration. |
@@ -195,6 +197,7 @@ The startup compiler currently covers the shaders directly owned by `RaytracingD
 - The Unity importer is static and limited: prefab resolution, nested prefabs, skinned meshes, `LODGroup`, and an asset-database cache are not complete.
 - JSON scene import exists, but the stress-test spheres are still defined by sample C++ rather than scene data. They are enabled by default and can be added or removed incrementally from the runtime UI.
 - Meshlet rendering is an experimental GBuffer backend, not a complete visibility/streaming system or a claim of optimal meshlet performance.
+- `Stylized Comic` is an experimental stylized-PBR/PBR-NPR material evaluation. It retains metallic, roughness, and GGX material inputs while applying banded diffuse response, cool shadow tint, and graphic highlights. It is not a complete Spider-Verse reproduction: outlines, halftones, print misregistration, hatching, and temporal stylization are outside this material model.
 - ReSTIR DI is an experimental inline-ray-query direct-lighting sample. Its light sampling, emissive surface emitters, temporal/spatial reuse, and visibility-test options continue to evolve; image quality, stability, and performance have not been accepted as an RTXDI-equivalent implementation.
 - ReSTIR GI is an experimental inline-ray-query indirect-lighting sample adapted from the ReSTIR GI data flow in [DQLin/ReSTIR_PT](https://github.com/DQLin/ReSTIR_PT). It currently targets one-bounce transport, uses persistent packed reservoirs, and has build/automation coverage only; visual quality, temporal stability, memory use, and performance still require target-hardware validation.
 - Soft shadows currently use a fixed four-sample variant. Directional lights use angular radius, point lights use source radius, and adaptive sampling or quality presets are not implemented yet.

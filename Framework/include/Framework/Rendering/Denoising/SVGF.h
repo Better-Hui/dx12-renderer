@@ -123,6 +123,9 @@ private:
     std::unique_ptr<ComputeShader> m_TemporalShader;
     std::unique_ptr<ComputeShader> m_AtrousShader;
     std::unique_ptr<ComputeShader> m_CompositeShader;
+//Modify Begin:2026-08-12 by BestHui
+    FrameworkDeviceContext& m_DeviceContext;
+//Modify End
 
     Settings m_Settings = {};
     bool m_Enabled = false;

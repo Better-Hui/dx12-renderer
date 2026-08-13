@@ -40,6 +40,9 @@ SVGF::SVGF(FrameworkDeviceContext& deviceContext)
     : m_TemporalShader(CreateReflectedComputeShader(deviceContext, ShaderBytecode_SVGFTemporal_CS, sizeof ShaderBytecode_SVGFTemporal_CS))
     , m_AtrousShader(CreateReflectedComputeShader(deviceContext, ShaderBytecode_SVGFAtrous_CS, sizeof ShaderBytecode_SVGFAtrous_CS))
     , m_CompositeShader(CreateReflectedComputeShader(deviceContext, ShaderBytecode_SVGFComposite_CS, sizeof ShaderBytecode_SVGFComposite_CS))
+//Modify Begin:2026-08-12 by BestHui
+    , m_DeviceContext(deviceContext)
+//Modify End
 {
 }
 
@@ -63,15 +66,15 @@ bool SVGF::EnsureCreated(const uint32_t width, const uint32_t height)
     m_HistoryValid = false;
 
 //Modify Begin:2026-07-27 by BestHui
-    m_HistoryColor[0] = RenderTexture::CreateUav2D(DXGI_FORMAT_R16G16B16A16_FLOAT, width, height, L"SVGF History Color 0");
-    m_HistoryColor[1] = RenderTexture::CreateUav2D(DXGI_FORMAT_R16G16B16A16_FLOAT, width, height, L"SVGF History Color 1");
-    m_HistoryMoments[0] = RenderTexture::CreateUav2D(DXGI_FORMAT_R16G16_FLOAT, width, height, L"SVGF History Moments 0");
-    m_HistoryMoments[1] = RenderTexture::CreateUav2D(DXGI_FORMAT_R16G16_FLOAT, width, height, L"SVGF History Moments 1");
-    m_TemporalColor = RenderTexture::CreateUav2D(DXGI_FORMAT_R16G16B16A16_FLOAT, width, height, L"SVGF Temporal Color");
-    m_TemporalMoments = RenderTexture::CreateUav2D(DXGI_FORMAT_R16G16_FLOAT, width, height, L"SVGF Temporal Moments");
-    m_Variance = RenderTexture::CreateUav2D(DXGI_FORMAT_R16_FLOAT, width, height, L"SVGF Variance");
-    m_AtrousPing = RenderTexture::CreateUav2D(DXGI_FORMAT_R16G16B16A16_FLOAT, width, height, L"SVGF Atrous Ping");
-    m_AtrousPong = RenderTexture::CreateUav2D(DXGI_FORMAT_R16G16B16A16_FLOAT, width, height, L"SVGF Atrous Pong");
+    m_HistoryColor[0] = RenderTexture::CreateUav2D(m_DeviceContext, DXGI_FORMAT_R16G16B16A16_FLOAT, width, height, L"SVGF History Color 0");
+    m_HistoryColor[1] = RenderTexture::CreateUav2D(m_DeviceContext, DXGI_FORMAT_R16G16B16A16_FLOAT, width, height, L"SVGF History Color 1");
+    m_HistoryMoments[0] = RenderTexture::CreateUav2D(m_DeviceContext, DXGI_FORMAT_R16G16_FLOAT, width, height, L"SVGF History Moments 0");
+    m_HistoryMoments[1] = RenderTexture::CreateUav2D(m_DeviceContext, DXGI_FORMAT_R16G16_FLOAT, width, height, L"SVGF History Moments 1");
+    m_TemporalColor = RenderTexture::CreateUav2D(m_DeviceContext, DXGI_FORMAT_R16G16B16A16_FLOAT, width, height, L"SVGF Temporal Color");
+    m_TemporalMoments = RenderTexture::CreateUav2D(m_DeviceContext, DXGI_FORMAT_R16G16_FLOAT, width, height, L"SVGF Temporal Moments");
+    m_Variance = RenderTexture::CreateUav2D(m_DeviceContext, DXGI_FORMAT_R16_FLOAT, width, height, L"SVGF Variance");
+    m_AtrousPing = RenderTexture::CreateUav2D(m_DeviceContext, DXGI_FORMAT_R16G16B16A16_FLOAT, width, height, L"SVGF Atrous Ping");
+    m_AtrousPong = RenderTexture::CreateUav2D(m_DeviceContext, DXGI_FORMAT_R16G16B16A16_FLOAT, width, height, L"SVGF Atrous Pong");
 //Modify End
     return true;
 }

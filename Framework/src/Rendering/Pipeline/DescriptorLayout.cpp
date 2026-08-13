@@ -32,14 +32,6 @@ UINT DescriptorLayout::NormalizeDescriptorCount(const UINT descriptorCount, cons
     return descriptorCount == 0u || descriptorCount == UnboundedBindCount ? maxDescriptorCount : descriptorCount;
 }
 
-bool DescriptorLayout::IsRayTracingAccelerationStructureSrv(const ShaderUtils::ShaderResourceViewMetadata& srv, const char* fallbackName)
-{
-    constexpr int RayTracingAccelerationStructureSrvDimension = 11;
-    return srv.InputType == D3D_SIT_RTACCELERATIONSTRUCTURE ||
-        static_cast<int>(srv.Dimension) == RayTracingAccelerationStructureSrvDimension ||
-        (fallbackName != nullptr && srv.Name == fallbackName);
-}
-
 D3D12_SHADER_RESOURCE_VIEW_DESC DescriptorLayout::CreateNullShaderResourceViewDesc(const ShaderUtils::ShaderResourceViewMetadata& srv)
 {
     D3D12_SHADER_RESOURCE_VIEW_DESC desc = {};
@@ -81,12 +73,16 @@ D3D12_SHADER_RESOURCE_VIEW_DESC DescriptorLayout::CreateNullShaderResourceViewDe
         desc.Texture3D.MipLevels = 1;
         desc.Texture3D.MostDetailedMip = 0;
         break;
-    default:
+//Modify Begin:2026-07-30 by BestHui
+    case D3D_SRV_DIMENSION_TEXTURE2D:
         desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
         desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
         desc.Texture2D.MipLevels = 1;
         desc.Texture2D.MostDetailedMip = 0;
         break;
+    default:
+        throw std::invalid_argument("Cannot create a null SRV for the reflected resource dimension.");
+//Modify End
     }
 
     return desc;
@@ -121,10 +117,14 @@ D3D12_UNORDERED_ACCESS_VIEW_DESC DescriptorLayout::CreateNullUnorderedAccessView
         desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
         desc.Texture3D.WSize = 1;
         break;
-    default:
+//Modify Begin:2026-07-30 by BestHui
+    case D3D_SRV_DIMENSION_TEXTURE2D:
         desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
         desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
         break;
+    default:
+        throw std::invalid_argument("Cannot create a null UAV for the reflected resource dimension.");
+//Modify End
     }
 
     return desc;
@@ -147,24 +147,6 @@ const DescriptorBindingInfo& DescriptorLayout::GetBinding(const std::string& nam
     if (findResult->second.Kind != expectedKind)
     {
         throw std::runtime_error("Shader variable binding type does not match the setter: " + name);
-    }
-
-    return findResult->second;
-}
-
-const DescriptorBindingInfo& DescriptorLayout::GetFirstBinding(const DescriptorBindingKind expectedKind) const
-{
-    const auto findResult = std::find_if(
-        m_Bindings.begin(),
-        m_Bindings.end(),
-        [expectedKind](const auto& binding)
-        {
-            return binding.second.Kind == expectedKind;
-        });
-
-    if (findResult == m_Bindings.end())
-    {
-        throw std::runtime_error("Shader binding type was not found.");
     }
 
     return findResult->second;

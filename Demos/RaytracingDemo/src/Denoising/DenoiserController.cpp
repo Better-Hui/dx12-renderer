@@ -48,11 +48,6 @@ void DenoiserController::SetAlgorithmFromName(const char* algorithmName)
     SetAlgorithm(Algorithm::Off);
 }
 
-bool DenoiserController::IsNRDAvailable() const
-{
-    return m_NRD != nullptr && m_NRD->IsAvailable();
-}
-
 void DenoiserController::ResetHistory()
 {
     if (m_NRD != nullptr)
@@ -96,11 +91,6 @@ bool DenoiserController::DrawImGui()
         SetAlgorithm(static_cast<Algorithm>(selectedDenoiser));
         ResetHistory();
         changed = true;
-    }
-
-    if (m_NRD != nullptr && !m_NRD->IsAvailable())
-    {
-        ImGui::Text("NRD unavailable");
     }
 
     if (IsNRDEnabled() && m_NRD != nullptr && ImGui::CollapsingHeader("NRD Settings"))
@@ -209,8 +199,7 @@ void DenoiserController::Execute(
     const RaytracingDemoRenderGraph::LightingResources& lighting,
     const RaytracingDemoRenderGraph::NRDResources& nrdResources,
     const uint32_t width,
-    const uint32_t height,
-    const NRD::ResourceTransitionCallback& transitionResource)
+    const uint32_t height)
 {
     if (!IsEnabled())
     {
@@ -251,8 +240,7 @@ void DenoiserController::Execute(
             nrdResources.DenoisedRadiance,
             lighting.SceneColor,
             width,
-            height,
-            transitionResource);
+            height);
         return;
     }
 

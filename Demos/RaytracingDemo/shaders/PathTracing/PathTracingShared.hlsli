@@ -6,6 +6,9 @@
 #include "../../../../External/NRD/Shaders/NRD.hlsli"
 #include "PathTracingRandom.hlsli"
 //Modify Begin:2026-07-30 by BestHui
+#include <Lighting/MaterialEvaluation.hlsli>
+//Modify End
+//Modify Begin:2026-07-30 by BestHui
 #ifndef RAYTRACING_DEMO_SOFT_SHADOWS
 #define RAYTRACING_DEMO_SOFT_SHADOWS 0
 #endif
@@ -98,75 +101,44 @@ float2 SampleUniformDisk(inout uint rngState)
 }
 //Modify End
 
-float FresnelPow5(float value)
+//Modify Begin:2026-07-30 by BestHui
+FrameworkMaterialSurface MakeFrameworkMaterialSurface(const SurfaceData surface)
 {
-    const float value2 = value * value;
-    return value2 * value2 * value;
+    FrameworkMaterialSurface materialSurface;
+    materialSurface.BaseColor = surface.Diffuse;
+    materialSurface.SpecularColor = surface.Specular;
+    materialSurface.NormalWs = surface.NormalWs;
+    materialSurface.Metallic = surface.Metallic;
+    materialSurface.Roughness = surface.Roughness;
+    materialSurface.AmbientOcclusion = surface.AmbientOcclusion;
+    return materialSurface;
 }
 
-float3 FresnelSchlick(float cosTheta, float3 f0)
+float3 EvaluateMaterialLighting(
+    const SurfaceData surface,
+    const float3 viewDirectionWs,
+    const float3 lightDirectionWs,
+    const float3 radiance)
 {
-    return f0 + (1.0f - f0) * FresnelPow5(saturate(1.0f - cosTheta));
+    return FrameworkEvaluateMaterialLighting(
+        MakeFrameworkMaterialSurface(surface),
+        viewDirectionWs,
+        lightDirectionWs,
+        radiance);
 }
 
-float DistributionGGX(float3 normalWs, float3 halfVectorWs, float roughness)
+float3 EvaluateMaterialLighting(
+    const SurfaceData surface,
+    const float3 lightDirectionWs,
+    const float3 radiance)
 {
-    const float a = max(0.001f, roughness * roughness);
-    const float a2 = a * a;
-    const float nDotH = saturate(dot(normalWs, halfVectorWs));
-    const float nDotH2 = nDotH * nDotH;
-    const float denom = nDotH2 * (a2 - 1.0f) + 1.0f;
-    return a2 / max(0.0001f, PI * denom * denom);
-}
-
-float GeometrySchlickGGX(float nDotV, float roughness)
-{
-    const float r = roughness + 1.0f;
-    const float k = (r * r) * 0.125f;
-    return nDotV / max(0.0001f, nDotV * (1.0f - k) + k);
-}
-
-float GeometrySmith(float3 normalWs, float3 viewDirectionWs, float3 lightDirectionWs, float roughness)
-{
-    return GeometrySchlickGGX(saturate(dot(normalWs, viewDirectionWs)), roughness) *
-        GeometrySchlickGGX(saturate(dot(normalWs, lightDirectionWs)), roughness);
-}
-
-float3 EvaluatePbrLighting(
-    SurfaceData surface,
-    float3 viewDirectionWs,
-    float3 lightDirectionWs,
-    float3 radiance)
-{
-    const float3 normalWs = normalize(surface.NormalWs);
-    viewDirectionWs = normalize(viewDirectionWs);
-    const float3 halfVectorWs = normalize(viewDirectionWs + lightDirectionWs);
-    const float roughness = max(0.04f, surface.Roughness);
-    const float metallic = saturate(surface.Metallic);
-    const float nDotL = saturate(dot(normalWs, lightDirectionWs));
-    const float nDotV = saturate(dot(normalWs, viewDirectionWs));
-    if (nDotL <= 0.0f)
-    {
-        return 0.0f;
-    }
-
-    const float3 f0 = lerp(surface.Specular, surface.Diffuse, metallic);
-    const float3 f = FresnelSchlick(saturate(dot(halfVectorWs, viewDirectionWs)), f0);
-    const float d = DistributionGGX(normalWs, halfVectorWs, roughness);
-    const float g = GeometrySmith(normalWs, viewDirectionWs, lightDirectionWs, roughness);
-    const float3 specular = (d * g * f) / max(0.0001f, 4.0f * nDotV * nDotL);
-    const float3 kd = (1.0f - f) * (1.0f - metallic);
-    return (kd * surface.Diffuse * INV_PI + specular) * radiance * nDotL * surface.AmbientOcclusion;
-}
-
-float3 EvaluatePbrLighting(SurfaceData surface, float3 lightDirectionWs, float3 radiance)
-{
-    return EvaluatePbrLighting(
+    return EvaluateMaterialLighting(
         surface,
         Camera_Position.xyz - surface.PositionWs,
         lightDirectionWs,
         radiance);
 }
+//Modify End
 
 float Luminance(float3 color)
 {
@@ -180,99 +152,34 @@ float MaxComponent(float3 value)
 
 float3 GetSurfaceF0(SurfaceData surface)
 {
-    return lerp(surface.Specular, surface.Diffuse, saturate(surface.Metallic));
+    return FrameworkMaterialGetF0(MakeFrameworkMaterialSurface(surface));
 }
 
-float3 EvaluatePbrBrdf(SurfaceData surface, float3 viewDirectionWs, float3 lightDirectionWs)
+float3 EvaluateMaterialBrdf(SurfaceData surface, float3 viewDirectionWs, float3 lightDirectionWs)
 {
-    float3 normalWs = normalize(surface.NormalWs);
-    float3 halfVectorWs = normalize(viewDirectionWs + lightDirectionWs);
-    float roughness = max(0.04f, surface.Roughness);
-    float metallic = saturate(surface.Metallic);
-    float nDotV = saturate(dot(normalWs, viewDirectionWs));
-    float nDotL = saturate(dot(normalWs, lightDirectionWs));
-    float vDotH = saturate(dot(viewDirectionWs, halfVectorWs));
-    if (nDotV <= 0.0f || nDotL <= 0.0f || vDotH <= 0.0f)
-    {
-        return 0.0f;
-    }
-
-    float3 f0 = GetSurfaceF0(surface);
-    float3 f = FresnelSchlick(vDotH, f0);
-    float d = DistributionGGX(normalWs, halfVectorWs, roughness);
-    float g = GeometrySmith(normalWs, viewDirectionWs, lightDirectionWs, roughness);
-    float3 specular = (d * g * f) / max(0.0001f, 4.0f * nDotV * nDotL);
-    float3 kd = (1.0f - f) * (1.0f - metallic);
-    return kd * surface.Diffuse * INV_PI + specular;
+    return FrameworkEvaluateMaterialBrdf(
+        MakeFrameworkMaterialSurface(surface),
+        normalize(viewDirectionWs),
+        normalize(lightDirectionWs));
 }
 
 bool SamplePbrDirection(
-    SurfaceData surface,
-    float3 viewDirectionWs,
+    const SurfaceData surface,
+    const float3 viewDirectionWs,
     const float lobeSelection,
     const float2 directionalSample,
     out float3 directionWs,
     out float3 sampleWeight,
     out float sourcePdf)
 {
-    directionWs = 0.0f;
-    sampleWeight = 0.0f;
-    sourcePdf = 0.0f;
-
-    float3 normalWs = normalize(surface.NormalWs);
-    viewDirectionWs = normalize(viewDirectionWs);
-    float roughness = max(0.04f, surface.Roughness);
-    float nDotV = saturate(dot(normalWs, viewDirectionWs));
-    if (nDotV <= 0.0f)
-    {
-        return false;
-    }
-
-    float3 f0 = GetSurfaceF0(surface);
-    float3 fresnel = FresnelSchlick(nDotV, f0);
-    float diffuseWeight = Luminance(surface.Diffuse * (1.0f - saturate(surface.Metallic)));
-    float specularWeight = MaxComponent(fresnel);
-    float specularProbability = specularWeight / max(0.0001f, diffuseWeight + specularWeight);
-    specularProbability = clamp(specularProbability, 0.05f, 0.95f);
-
-    bool sampleSpecular = lobeSelection < specularProbability;
-    if (sampleSpecular)
-    {
-        float3 halfVectorWs = SampleGGXHalfVector(normalWs, roughness, directionalSample);
-        if (dot(halfVectorWs, viewDirectionWs) < 0.0f)
-        {
-            halfVectorWs = -halfVectorWs;
-        }
-        directionWs = normalize(reflect(-viewDirectionWs, halfVectorWs));
-    }
-    else
-    {
-        directionWs = SampleCosineHemisphere(normalWs, directionalSample);
-    }
-
-    float nDotL = saturate(dot(normalWs, directionWs));
-    if (nDotL <= 0.0f)
-    {
-        return false;
-    }
-
-    float3 halfVector = normalize(viewDirectionWs + directionWs);
-    float nDotH = saturate(dot(normalWs, halfVector));
-    float vDotH = saturate(dot(viewDirectionWs, halfVector));
-    float diffusePdf = nDotL * INV_PI;
-    float specularPdf = DistributionGGX(normalWs, halfVector, roughness) * nDotH / max(0.0001f, 4.0f * vDotH);
-    float pdf = lerp(diffusePdf, specularPdf, specularProbability);
-    if (pdf <= 0.00001f)
-    {
-        return false;
-    }
-
-    sourcePdf = pdf;
-    float3 brdf = EvaluatePbrBrdf(surface, viewDirectionWs, directionWs);
-    sampleWeight = brdf * nDotL / pdf;
-    sampleWeight *= surface.AmbientOcclusion;
-    sampleWeight = min(sampleWeight, 16.0f);
-    return MaxComponent(sampleWeight) > 0.0f;
+    return FrameworkSamplePbrDirection(
+        MakeFrameworkMaterialSurface(surface),
+        viewDirectionWs,
+        lobeSelection,
+        directionalSample,
+        directionWs,
+        sampleWeight,
+        sourcePdf);
 }
 
 //Modify Begin:2026-07-30 by BestHui
@@ -324,7 +231,7 @@ float3 EvaluateDirectionalLight(
         const float3 rayOrigin = OffsetRayOrigin(surface.PositionWs, surface.PositionError, surface.NormalWs, lightDirection);
         if (IsVisibleAlongRay(rayOrigin, lightDirection, 10000.0f))
         {
-            lighting += EvaluatePbrLighting(surface, viewDirectionWs, lightDirection, radiance);
+            lighting += EvaluateMaterialLighting(surface, viewDirectionWs, lightDirection, radiance);
         }
     }
 
@@ -346,7 +253,7 @@ float3 EvaluateDirectionalLight(
 
     hitDistance = 10000.0f;
     const float3 radiance = light.ColorAndIntensity.rgb * light.ColorAndIntensity.w;
-    return EvaluatePbrLighting(surface, viewDirectionWs, lightDirection, radiance);
+    return EvaluateMaterialLighting(surface, viewDirectionWs, lightDirection, radiance);
 #endif
 }
 
@@ -403,7 +310,7 @@ float3 EvaluatePointLight(
             attenuationTerms.x +
             attenuationTerms.y * distanceToLight +
             attenuationTerms.z * distanceToLight * distanceToLight));
-        lighting += EvaluatePbrLighting(surface, viewDirectionWs, lightDirection, baseRadiance * attenuation);
+        lighting += EvaluateMaterialLighting(surface, viewDirectionWs, lightDirection, baseRadiance * attenuation);
     }
 
     hitDistance = baseDistanceToLight;
@@ -435,7 +342,7 @@ float3 EvaluatePointLight(
         0.001f,
         attenuationTerms.x + attenuationTerms.y * distanceToLight + attenuationTerms.z * distanceToLight * distanceToLight));
     float3 radiance = light.ColorAndIntensity.rgb * light.ColorAndIntensity.w * attenuation;
-    return EvaluatePbrLighting(surface, viewDirectionWs, lightDirection, radiance);
+    return EvaluateMaterialLighting(surface, viewDirectionWs, lightDirection, radiance);
 #endif
 }
 //Modify End
@@ -595,7 +502,7 @@ float3 EvaluateSurfaceEmitter(
 //Modify Begin:2026-08-06 by BestHui
     float3 radiance = lightSample.Emission * lightSample.AreaOverTriangleSelectionPdf * lightFacing / max(0.001f, distanceToLight * distanceToLight);
 //Modify End
-    return EvaluatePbrLighting(surface, viewDirectionWs, lightDirection, radiance);
+    return EvaluateMaterialLighting(surface, viewDirectionWs, lightDirection, radiance);
 }
 
 //Modify Begin:2026-08-06 by BestHui
@@ -753,7 +660,7 @@ PathTracingDirectLightSample SamplePathTracingDirectLight(
 #endif
         sample.Distance = 10000.0f;
         sample.Radiance = light.ColorAndIntensity.rgb * light.ColorAndIntensity.w;
-        sample.UnshadowedContribution = EvaluatePbrLighting(
+        sample.UnshadowedContribution = EvaluateMaterialLighting(
             surface,
             sample.DirectionWs,
             sample.Radiance);
@@ -800,7 +707,7 @@ PathTracingDirectLightSample SamplePathTracingDirectLight(
             0.001f,
             attenuationTerms.x + attenuationTerms.y * distanceToLight + attenuationTerms.z * distanceToLight * distanceToLight));
         sample.Radiance = light.ColorAndIntensity.rgb * light.ColorAndIntensity.w * attenuation;
-        sample.UnshadowedContribution = EvaluatePbrLighting(
+        sample.UnshadowedContribution = EvaluateMaterialLighting(
             surface,
             sample.DirectionWs,
             sample.Radiance);
@@ -842,7 +749,7 @@ PathTracingDirectLightSample SamplePathTracingDirectLight(
     sample.Radiance = areaSample.Emission * areaSample.AreaOverTriangleSelectionPdf * lightFacing /
         max(0.001f, distanceToLight * distanceToLight);
 //Modify End
-    sample.UnshadowedContribution = EvaluatePbrLighting(surface, sample.DirectionWs, sample.Radiance);
+    sample.UnshadowedContribution = EvaluateMaterialLighting(surface, sample.DirectionWs, sample.Radiance);
 //Modify Begin:2026-07-30 by BestHui
     sample.TransportValid = MaxComponent(sample.Radiance) > 0.0f;
 //Modify End

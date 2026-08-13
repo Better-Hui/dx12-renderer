@@ -12,9 +12,6 @@ VertexBuffer::VertexBuffer(const std::wstring& name)
 	, NumVertices(0)
 	, VertexStride(0)
 	, VertexBufferView({})
-//Modify Begin:2026-07-21 by BestHui
-	, m_Srv(m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV))
-//Modify End
 {
 }
 
@@ -32,6 +29,12 @@ void VertexBuffer::CreateViews(const size_t numElements, const size_t elementSiz
 	VertexBufferView.StrideInBytes = static_cast<UINT>(VertexStride);
 
 //Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-08-12 by BestHui
+	if (m_Srv.IsNull())
+	{
+		m_Srv = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	}
+//Modify End
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
 	srvDesc.Format = DXGI_FORMAT_UNKNOWN;
@@ -47,8 +50,15 @@ D3D12_CPU_DESCRIPTOR_HANDLE VertexBuffer::GetShaderResourceView(const D3D12_SHAD
 {
 //Modify Begin:2026-07-21 by BestHui
 //Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-08-12 by BestHui
+	Assert(IsValid(), "Vertex-buffer SRV is requested before the buffer is initialized.");
+	Assert(m_DeviceContext != nullptr, "Vertex buffer has no D3D12 device context.");
+//Modify End
 	if (srvDesc == nullptr)
 	{
+//Modify Begin:2026-08-12 by BestHui
+		Assert(!m_Srv.IsNull(), "Vertex-buffer SRV is requested before the buffer is initialized.");
+//Modify End
 		return m_Srv.GetDescriptorHandle();
 	}
 

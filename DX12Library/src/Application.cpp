@@ -52,9 +52,17 @@ extern "C"
 // class are protected and not accessible by the std::make_shared method.
 struct MakeWindow : public Window
 {
-    MakeWindow(HWND hWnd, const std::wstring& windowName, int clientWidth, int clientHeight, bool vSync)
-        : Window(hWnd, windowName, clientWidth, clientHeight, vSync)
+//Modify Begin:2026-08-12 by BestHui
+    MakeWindow(
+        HWND hWnd,
+        const std::wstring& windowName,
+        int clientWidth,
+        int clientHeight,
+        bool vSync,
+        WindowD3D12Context d3d12Context)
+        : Window(hWnd, windowName, clientWidth, clientHeight, vSync, std::move(d3d12Context))
     {}
+//Modify End
 };
 
 //Modify Begin:2026-07-21 by BestHui
@@ -314,35 +322,6 @@ Microsoft::WRL::ComPtr<ID3D12Device2> Application::CreateDevice(Microsoft::WRL::
         pInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, TRUE);
         pInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, TRUE);
         pInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, TRUE);
-
-        // Suppress whole categories of messages
-        //D3D12_MESSAGE_CATEGORY Categories[] = {};
-
-        // Suppress messages based on their severity level
-        D3D12_MESSAGE_SEVERITY Severities[] =
-        {
-            D3D12_MESSAGE_SEVERITY_INFO
-        };
-
-        // Suppress individual messages by their ID
-        D3D12_MESSAGE_ID DenyIds[] = {
-            D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE,
-            // I'm really not sure how to avoid this message.
-            D3D12_MESSAGE_ID_MAP_INVALID_NULLRANGE,
-            // This warning occurs when using capture frame while graphics debugging.
-            D3D12_MESSAGE_ID_UNMAP_INVALID_NULLRANGE,
-            // This warning occurs when using capture frame while graphics debugging.
-        };
-
-        D3D12_INFO_QUEUE_FILTER NewFilter = {};
-        //NewFilter.DenyList.NumCategories = _countof(Categories);
-        //NewFilter.DenyList.pCategoryList = Categories;
-        NewFilter.DenyList.NumSeverities = _countof(Severities);
-        NewFilter.DenyList.pSeverityList = Severities;
-        NewFilter.DenyList.NumIDs = _countof(DenyIds);
-        NewFilter.DenyList.pIDList = DenyIds;
-
-        ThrowIfFailed(pInfoQueue->PushStorageFilter(&NewFilter));
     }
 #endif
 
@@ -451,7 +430,22 @@ std::shared_ptr<Window> Application::CreateRenderWindow(const std::wstring& wind
         return nullptr;
     }
 
-    WindowPtr pWindow = std::make_shared<MakeWindow>(hWnd, windowName, clientWidth, clientHeight, vSync);
+//Modify Begin:2026-08-12 by BestHui
+    WindowD3D12Context windowD3D12Context;
+    windowD3D12Context.DeviceContext = m_RenderContext.GetD3D12DeviceContext();
+    windowD3D12Context.DirectCommandQueue = m_RenderContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
+    windowD3D12Context.ComputeCommandQueue = m_RenderContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE);
+    windowD3D12Context.CopyCommandQueue = m_RenderContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COPY);
+    windowD3D12Context.StreamlineRuntime = m_RenderContext.GetStreamlineRuntime();
+    windowD3D12Context.IsTearingSupported = m_TearingSupported;
+    WindowPtr pWindow = std::make_shared<MakeWindow>(
+        hWnd,
+        windowName,
+        clientWidth,
+        clientHeight,
+        vSync,
+        std::move(windowD3D12Context));
+//Modify End
     pWindow->Initialize();
 
     gs_Windows.insert(WindowMap::value_type(hWnd, pWindow));
@@ -720,6 +714,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
         case WM_PAINT:
             {
                 ++Application::s_FrameCount;
+                pWindow->BeginFrame(Application::s_FrameCount);
 
                 // Delta time will be filled in by the Window.
                 UpdateEventArgs updateEventArgs(0.0f, 0.0f, Application::s_FrameCount);

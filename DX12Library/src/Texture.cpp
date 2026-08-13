@@ -2,11 +2,10 @@
 
 #include "Texture.h"
 
-#include "Application.h"
 #include "D3D12DeviceContext.h"
 #include "Helpers.h"
-#include "ResourceStateRegistry.h"
 #include "ResourceStateTracker.h"
+#include "CommandList.h"
 
 Texture::Texture(
     TextureUsageType textureUsage,
@@ -105,7 +104,7 @@ Texture::Texture(const Texture& copy)
 }
 
 Texture::Texture(Texture&& copy)
-    : Resource(copy)
+    : Resource(std::move(copy))
 {
     CreateViews();
 }
@@ -123,7 +122,7 @@ Texture& Texture::operator=(const Texture& other)
 
 Texture& Texture::operator=(Texture&& other)
 {
-    Resource::operator=(other);
+    Resource::operator=(std::move(other));
 
     CreateViews();
 
@@ -133,13 +132,11 @@ Texture& Texture::operator=(Texture&& other)
 Texture::~Texture()
 {}
 
-void Texture::Resize(uint32_t width, uint32_t height, uint32_t depthOrArraySize)
+void Texture::Resize(CommandList& commandList, uint32_t width, uint32_t height, uint32_t depthOrArraySize)
 {
     // Resource can't be resized if it was never created in the first place.
     if (m_d3d12Resource)
     {
-        m_DeviceContext->GetResourceStateRegistry()->RemoveResource(m_d3d12Resource.Get());
-
         CD3DX12_RESOURCE_DESC resDesc(m_d3d12Resource->GetDesc());
 
         resDesc.Width = std::max(width, 1u);
@@ -148,25 +145,19 @@ void Texture::Resize(uint32_t width, uint32_t height, uint32_t depthOrArraySize)
 
         const auto device = m_DeviceContext->GetDevice();
 
-        {
-            auto heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-            ThrowIfFailed(device->CreateCommittedResource(
-                &heapProperties,
-                D3D12_HEAP_FLAG_NONE,
-                &resDesc,
-                D3D12_RESOURCE_STATE_COMMON,
-                m_d3d12ClearValue.get(),
-                IID_PPV_ARGS(&m_d3d12Resource)
-            ));
-        }
+        Microsoft::WRL::ComPtr<ID3D12Resource> resizedResource;
+        auto heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+        ThrowIfFailed(device->CreateCommittedResource(
+            &heapProperties,
+            D3D12_HEAP_FLAG_NONE,
+            &resDesc,
+            D3D12_RESOURCE_STATE_COMMON,
+            m_d3d12ClearValue.get(),
+            IID_PPV_ARGS(&resizedResource)
+        ));
 
-
-        // Retain the name of the resource if one was already specified.
-        m_d3d12Resource->SetName(m_ResourceName.c_str());
-
-        m_DeviceContext->GetResourceStateRegistry()->RegisterResource(
-            m_d3d12Resource.Get(),
-            D3D12_RESOURCE_STATE_COMMON);
+        commandList.RetireResource(*this);
+        SetD3D12Resource(std::move(resizedResource), m_d3d12ClearValue.get());
 
         CreateViews();
     }

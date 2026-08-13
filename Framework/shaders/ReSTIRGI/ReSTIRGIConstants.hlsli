@@ -6,8 +6,8 @@
 #define RESTIR_GI_USE_TEMPORAL_REUSE 1
 #endif
 
-#ifndef RESTIR_GI_USE_UNBIASED_SPATIAL_REUSE
-#define RESTIR_GI_USE_UNBIASED_SPATIAL_REUSE 0
+#ifndef RESTIR_GI_USE_RAY_TRACED_SPATIAL_BIAS_CORRECTION
+#define RESTIR_GI_USE_RAY_TRACED_SPATIAL_BIAS_CORRECTION 0
 #endif
 
 #ifndef RESTIR_GI_USE_TEMPORAL_JACOBIAN
@@ -30,16 +30,11 @@ cbuffer ReSTIRGIConstants : register(b1)
 //Modify Begin:2026-07-30 by BestHui
     uint ReSTIRGI_InitialCandidateCount;
 //Modify End
-    uint ReSTIRGI_TemporalResamplingEnabled;
-    uint ReSTIRGI_SpatialResamplingEnabled;
-    uint ReSTIRGI_TemporalJacobianEnabled;
-
     uint ReSTIRGI_TemporalMaxHistoryLength;
     uint ReSTIRGI_SpatialMaxHistoryLength;
     uint ReSTIRGI_MaxSampleAge;
     uint ReSTIRGI_SpatialNeighborCount;
 //Modify Begin:2026-07-30 by BestHui
-    uint ReSTIRGI_SpatialUnbiasedResamplingEnabled;
     uint ReSTIRGI_PaddingUint;
     uint ReSTIRGI_PaddingUint1;
     uint ReSTIRGI_PaddingUint2;

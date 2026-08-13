@@ -2,6 +2,9 @@
 
 #include "cstdint"
 #include <functional>
+//Modify Begin:2026-07-30 by BestHui
+#include <stdexcept>
+//Modify End
 
 #include "dxgi.h"
 #include <d3d12.h>
@@ -204,8 +207,9 @@ namespace RenderGraph
             case ResourceType::Buffer:
                 return m_BufferDescription.m_InitAction;
             default:
-                Assert(false);
-                return Clear;
+//Modify Begin:2026-07-30 by BestHui
+                throw std::logic_error("Resource init action is undefined for this resource type.");
+//Modify End
             }
         }
 
@@ -216,8 +220,9 @@ namespace RenderGraph
             case ResourceType::Texture:
                 return m_TextureDescription.m_ClearValue;
             default:
-                Assert(false);
-                return m_TextureDescription.m_ClearValue;
+//Modify Begin:2026-07-30 by BestHui
+                throw std::logic_error("Clear value is undefined for this resource type.");
+//Modify End
             }
         }
     };

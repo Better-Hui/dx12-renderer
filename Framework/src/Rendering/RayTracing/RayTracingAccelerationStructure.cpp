@@ -2,6 +2,7 @@
 #include <Framework/Rendering/RayTracing/RayTracingAccelerationStructure.h>
 
 #include <DX12Library/CommandList.h>
+#include <DX12Library/D3D12DeviceContext.h>
 #include <DX12Library/Helpers.h>
 #include <Framework/Geometry/Mesh.h>
 
@@ -9,14 +10,19 @@
 
 #include <algorithm>
 #include <cstring>
+#include <unordered_set>
 
 using Microsoft::WRL::ComPtr;
 
-RayTracingAccelerationStructure::RayTracingAccelerationStructure(ComPtr<ID3D12Device5> device)
-    : m_Device(std::move(device))
+//Modify Begin:2026-07-30 by BestHui
+RayTracingAccelerationStructure::RayTracingAccelerationStructure(std::shared_ptr<D3D12DeviceContext> deviceContext)
+    : m_DeviceContext(std::move(deviceContext))
 {
+    Assert(m_DeviceContext != nullptr, "Ray tracing acceleration structure requires a D3D12 device context.");
+    ThrowIfFailed(m_DeviceContext->GetDevice().As(&m_Device));
     Assert(m_Device != nullptr, "Ray tracing acceleration structure requires a DXR-capable device.");
 }
+//Modify End
 
 RayTracingInstanceHandle RayTracingAccelerationStructure::AddInstance(const RayTracingInstanceDesc& instanceDesc)
 {
@@ -71,6 +77,48 @@ bool RayTracingAccelerationStructure::RemoveInstance(const RayTracingInstanceHan
     return true;
 }
 
+//Modify Begin:2026-07-30 by BestHui
+void RayTracingAccelerationStructure::RemoveInstances(const std::span<const RayTracingInstanceHandle> handles)
+{
+    if (handles.empty())
+    {
+        return;
+    }
+
+    std::unordered_set<RayTracingInstanceHandle> handlesToRemove(handles.begin(), handles.end());
+    Assert(handlesToRemove.size() == handles.size(), "Ray tracing instance removal contains duplicate handles.");
+    Assert(handlesToRemove.size() <= m_Instances.size(), "Ray tracing instance removal exceeds the instance count.");
+
+    for (const RayTracingInstanceHandle handle : handlesToRemove)
+    {
+        Assert(m_InstanceIndices.contains(handle), "Ray tracing instance handle is invalid.");
+    }
+
+    std::vector<RayTracingInstanceHandle> survivingHandles;
+    std::vector<RayTracingInstanceDesc> survivingInstances;
+    survivingHandles.reserve(m_Instances.size() - handlesToRemove.size());
+    survivingInstances.reserve(m_Instances.size() - handlesToRemove.size());
+    for (uint32_t instanceIndex = 0; instanceIndex < m_Instances.size(); ++instanceIndex)
+    {
+        if (!handlesToRemove.contains(m_InstanceHandles[instanceIndex]))
+        {
+            survivingHandles.push_back(m_InstanceHandles[instanceIndex]);
+            survivingInstances.push_back(std::move(m_Instances[instanceIndex]));
+        }
+    }
+
+    m_InstanceHandles = std::move(survivingHandles);
+    m_Instances = std::move(survivingInstances);
+    m_InstanceIndices.clear();
+    m_InstanceIndices.reserve(m_InstanceHandles.size());
+    for (uint32_t instanceIndex = 0; instanceIndex < m_InstanceHandles.size(); ++instanceIndex)
+    {
+        const bool inserted = m_InstanceIndices.emplace(m_InstanceHandles[instanceIndex], instanceIndex).second;
+        Assert(inserted, "Ray tracing instance handle is duplicated.");
+    }
+}
+//Modify End
+
 void RayTracingAccelerationStructure::ClearInstances()
 {
     m_InstanceHandles.clear();
@@ -93,19 +141,25 @@ void RayTracingAccelerationStructure::Build(CommandList& commandList, RayTracing
 
     for (const BottomLevelAccelerationStructure& bottomLevel : m_BottomLevelAccelerationStructures)
     {
-        commandList.TrackObject(bottomLevel.Resource);
+//Modify Begin:2026-07-30 by BestHui
+        commandList.RetireResourceState(bottomLevel.Resource.Resource);
+//Modify End
     }
-    if (m_TopLevelAccelerationStructure != nullptr)
+    if (m_TopLevelAccelerationStructure)
     {
-        commandList.TrackObject(m_TopLevelAccelerationStructure);
+//Modify Begin:2026-07-30 by BestHui
+        commandList.RetireResourceState(m_TopLevelAccelerationStructure.Resource);
+//Modify End
     }
-    if (m_InstanceDescUpload != nullptr)
+    if (m_InstanceDescUpload)
     {
-        commandList.TrackObject(m_InstanceDescUpload);
+//Modify Begin:2026-07-30 by BestHui
+        commandList.RetireResourceState(m_InstanceDescUpload.Resource);
+//Modify End
     }
     m_BottomLevelAccelerationStructures.clear();
-    m_TopLevelAccelerationStructure.Reset();
-    m_InstanceDescUpload.Reset();
+    m_TopLevelAccelerationStructure = {};
+    m_InstanceDescUpload = {};
     m_Meshes.clear();
     m_GeometryData.clear();
 
@@ -132,14 +186,20 @@ void RayTracingAccelerationStructure::Build(CommandList& commandList, const std:
 
 void RayTracingAccelerationStructure::Update(CommandList& commandList)
 {
-    if (!m_LastBuildSettings.AllowUpdate || m_TopLevelAccelerationStructure == nullptr)
+    if (!m_LastBuildSettings.AllowUpdate || !m_TopLevelAccelerationStructure)
     {
         Build(commandList, m_LastBuildSettings);
         return;
     }
 
     Assert(!m_Instances.empty(), "Ray tracing acceleration structure requires at least one instance.");
-    m_InstanceDescUpload.Reset();
+//Modify Begin:2026-08-12 by BestHui
+    if (m_InstanceDescUpload)
+    {
+        commandList.RetireResourceState(m_InstanceDescUpload.Resource);
+    }
+//Modify End
+    m_InstanceDescUpload = {};
     m_GeometryData.clear();
     const size_t previousBottomLevelCount = m_BottomLevelAccelerationStructures.size();
     const std::map<const Mesh*, uint32_t> meshToBlasIndex = BuildBottomLevelAccelerationStructures(commandList);
@@ -148,8 +208,8 @@ void RayTracingAccelerationStructure::Update(CommandList& commandList)
     const bool canPerformUpdate = !instanceCountChanged && !bottomLevelSetChanged && !m_InstanceMeshChanged;
     if (!canPerformUpdate)
     {
-        commandList.TrackObject(m_TopLevelAccelerationStructure);
-        m_TopLevelAccelerationStructure.Reset();
+        commandList.RetireResourceState(m_TopLevelAccelerationStructure.Resource);
+        m_TopLevelAccelerationStructure = {};
     }
 
     BuildTopLevelAccelerationStructure(commandList, meshToBlasIndex, canPerformUpdate);
@@ -159,12 +219,12 @@ void RayTracingAccelerationStructure::Update(CommandList& commandList)
 
 bool RayTracingAccelerationStructure::IsBuilt() const
 {
-    return m_TopLevelAccelerationStructure != nullptr;
+    return static_cast<bool>(m_TopLevelAccelerationStructure);
 }
 
 D3D12_GPU_VIRTUAL_ADDRESS RayTracingAccelerationStructure::GetGpuVirtualAddress() const
 {
-    return m_TopLevelAccelerationStructure->GetGPUVirtualAddress();
+    return m_TopLevelAccelerationStructure.Resource->GetGPUVirtualAddress();
 }
 
 const std::vector<std::shared_ptr<Mesh>>& RayTracingAccelerationStructure::GetMeshes() const
@@ -187,7 +247,8 @@ uint32_t RayTracingAccelerationStructure::GetInstanceCount() const
     return static_cast<uint32_t>(m_Instances.size());
 }
 
-ComPtr<ID3D12Resource> RayTracingAccelerationStructure::CreateAccelerationStructureBuffer(
+RayTracingAccelerationStructure::ManagedRayTracingResource
+RayTracingAccelerationStructure::CreateAccelerationStructureBuffer(
     const uint64_t size,
     const D3D12_RESOURCE_STATES initialState,
     const wchar_t* name) const
@@ -210,10 +271,15 @@ ComPtr<ID3D12Resource> RayTracingAccelerationStructure::CreateAccelerationStruct
         resource->SetName(name);
     }
 
-    return resource;
+//Modify Begin:2026-07-30 by BestHui
+    return {
+        resource,
+        m_DeviceContext->GetResourceStateRegistry()->AcquireResource(resource.Get(), initialState)
+    };
+//Modify End
 }
 
-ComPtr<ID3D12Resource> RayTracingAccelerationStructure::CreateUploadBuffer(
+RayTracingAccelerationStructure::ManagedRayTracingResource RayTracingAccelerationStructure::CreateUploadBuffer(
     const void* data,
     const uint64_t size,
     const wchar_t* name) const
@@ -236,12 +302,26 @@ ComPtr<ID3D12Resource> RayTracingAccelerationStructure::CreateUploadBuffer(
         resource->SetName(name);
     }
 
+//Modify Begin:2026-07-30 by BestHui
     void* mappedData = nullptr;
-    ThrowIfFailed(resource->Map(0, nullptr, &mappedData));
+//Modify Begin:2026-07-30 by BestHui
+    const D3D12_RANGE readRange = { 0, 0 };
+    ThrowIfFailed(resource->Map(0, &readRange, &mappedData));
+//Modify End
     std::memcpy(mappedData, data, size);
-    resource->Unmap(0, nullptr);
+//Modify Begin:2026-07-30 by BestHui
+    const D3D12_RANGE writeRange = { 0, static_cast<SIZE_T>(size) };
+    resource->Unmap(0, &writeRange);
+//Modify End
 
-    return resource;
+//Modify Begin:2026-08-12 by BestHui
+    return {
+        resource,
+        m_DeviceContext->GetResourceStateRegistry()->AcquireResource(
+            resource.Get(),
+            D3D12_RESOURCE_STATE_GENERIC_READ)
+    };
+//Modify End
 }
 
 D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO RayTracingAccelerationStructure::GetBottomLevelPrebuildInfo(
@@ -279,7 +359,7 @@ RayTracingAccelerationStructure::BottomLevelAccelerationStructure RayTracingAcce
     CommandList& commandList,
     const std::shared_ptr<Mesh>& mesh,
     const D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags,
-    const ComPtr<ID3D12Resource>& scratch) const
+    const ManagedRayTracingResource& scratch) const
 {
     const VertexBuffer& vertexBuffer = mesh->GetVertexBuffer();
     const IndexBuffer& indexBuffer = mesh->GetIndexBuffer();
@@ -307,9 +387,9 @@ RayTracingAccelerationStructure::BottomLevelAccelerationStructure RayTracingAcce
 
     const D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo =
         GetBottomLevelPrebuildInfo(*mesh, buildFlags);
-    Assert(scratch != nullptr, "BLAS scratch buffer must not be null.");
+    Assert(scratch.Resource != nullptr, "BLAS scratch buffer must not be null.");
     Assert(
-        scratch->GetDesc().Width >= prebuildInfo.ScratchDataSizeInBytes,
+        scratch.Resource->GetDesc().Width >= prebuildInfo.ScratchDataSizeInBytes,
         "BLAS scratch buffer is smaller than the required prebuild size.");
 
     auto result = CreateAccelerationStructureBuffer(
@@ -319,14 +399,15 @@ RayTracingAccelerationStructure::BottomLevelAccelerationStructure RayTracingAcce
 
     D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
     buildDesc.Inputs = inputs;
-    buildDesc.ScratchAccelerationStructureData = scratch->GetGPUVirtualAddress();
-    buildDesc.DestAccelerationStructureData = result->GetGPUVirtualAddress();
+    buildDesc.ScratchAccelerationStructureData = scratch.Resource->GetGPUVirtualAddress();
+    buildDesc.DestAccelerationStructureData = result.Resource->GetGPUVirtualAddress();
 
     commandList.BuildRaytracingAccelerationStructure(buildDesc);
-    const auto uavBarrier = CD3DX12_RESOURCE_BARRIER::UAV(result.Get());
-    commandList.GetGraphicsCommandList()->ResourceBarrier(1, &uavBarrier);
-    const auto scratchUavBarrier = CD3DX12_RESOURCE_BARRIER::UAV(scratch.Get());
-    commandList.GetGraphicsCommandList()->ResourceBarrier(1, &scratchUavBarrier);
+//Modify Begin:2026-07-30 by BestHui
+    commandList.UavBarrier(result.Resource.Get());
+    commandList.UavBarrier(scratch.Resource.Get());
+    commandList.TrackResourceState(result.Resource, result.StateRegistration);
+//Modify End
 
     return { mesh, result };
 }
@@ -355,14 +436,16 @@ std::map<const Mesh*, uint32_t> RayTracingAccelerationStructure::BuildBottomLeve
             GetBottomLevelPrebuildInfo(*mesh, m_LastBuildSettings.BottomLevelFlags).ScratchDataSizeInBytes);
     }
 
-    ComPtr<ID3D12Resource> scratch;
+    ManagedRayTracingResource scratch;
     if (scratchBufferSize > 0)
     {
         scratch = CreateAccelerationStructureBuffer(
             scratchBufferSize,
             D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
             L"Ray Tracing BLAS Scratch");
-        commandList.TrackObject(scratch);
+//Modify Begin:2026-07-30 by BestHui
+        commandList.TrackResourceState(scratch.Resource, scratch.StateRegistration);
+//Modify End
     }
 
     for (const auto& [meshPointer, mesh] : meshesToBuild)
@@ -410,7 +493,8 @@ void RayTracingAccelerationStructure::BuildTopLevelAccelerationStructure(
         instanceDesc.InstanceMask = instance.Mask;
         instanceDesc.InstanceContributionToHitGroupIndex = instance.InstanceContributionToHitGroupIndex;
         instanceDesc.Flags = instance.Flags;
-        instanceDesc.AccelerationStructure = m_BottomLevelAccelerationStructures[blasIndex].Resource->GetGPUVirtualAddress();
+        instanceDesc.AccelerationStructure =
+            m_BottomLevelAccelerationStructures[blasIndex].Resource.Resource->GetGPUVirtualAddress();
         instanceDescs.push_back(instanceDesc);
 
         m_GeometryData.push_back({
@@ -421,6 +505,12 @@ void RayTracingAccelerationStructure::BuildTopLevelAccelerationStructure(
         });
     }
 
+//Modify Begin:2026-07-30 by BestHui
+    if (m_InstanceDescUpload)
+    {
+        commandList.RetireResourceState(m_InstanceDescUpload.Resource);
+    }
+//Modify End
     m_InstanceDescUpload = CreateUploadBuffer(
         instanceDescs.data(),
         sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * instanceDescs.size(),
@@ -431,7 +521,7 @@ void RayTracingAccelerationStructure::BuildTopLevelAccelerationStructure(
     inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
     inputs.Flags = m_LastBuildSettings.TopLevelFlags;
     inputs.NumDescs = static_cast<UINT>(instanceDescs.size());
-    inputs.InstanceDescs = m_InstanceDescUpload->GetGPUVirtualAddress();
+    inputs.InstanceDescs = m_InstanceDescUpload.Resource->GetGPUVirtualAddress();
 
     if (update)
     {
@@ -444,9 +534,11 @@ void RayTracingAccelerationStructure::BuildTopLevelAccelerationStructure(
 
     if (!update)
     {
-        if (m_TopLevelAccelerationStructure != nullptr)
+        if (m_TopLevelAccelerationStructure)
         {
-            commandList.TrackObject(m_TopLevelAccelerationStructure);
+//Modify Begin:2026-07-30 by BestHui
+            commandList.RetireResourceState(m_TopLevelAccelerationStructure.Resource);
+//Modify End
         }
         m_TopLevelAccelerationStructure = CreateAccelerationStructureBuffer(
             prebuildInfo.ResultDataMaxSizeInBytes,
@@ -459,21 +551,29 @@ void RayTracingAccelerationStructure::BuildTopLevelAccelerationStructure(
         D3D12_RESOURCE_STATE_COMMON,
         update ? L"Ray Tracing TLAS Update Scratch" : L"Ray Tracing TLAS Scratch");
 
-    const D3D12_RESOURCE_BARRIER scratchBarrier =
-        CD3DX12_RESOURCE_BARRIER::Transition(scratch.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    commandList.GetGraphicsCommandList()->ResourceBarrier(1, &scratchBarrier);
+//Modify Begin:2026-07-30 by BestHui
+    commandList.TransitionBarrier(scratch.Resource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+//Modify End
 
     D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
     buildDesc.Inputs = inputs;
-    buildDesc.ScratchAccelerationStructureData = scratch->GetGPUVirtualAddress();
-    buildDesc.DestAccelerationStructureData = m_TopLevelAccelerationStructure->GetGPUVirtualAddress();
-    buildDesc.SourceAccelerationStructureData = update ? m_TopLevelAccelerationStructure->GetGPUVirtualAddress() : 0;
+    buildDesc.ScratchAccelerationStructureData = scratch.Resource->GetGPUVirtualAddress();
+    buildDesc.DestAccelerationStructureData = m_TopLevelAccelerationStructure.Resource->GetGPUVirtualAddress();
+    buildDesc.SourceAccelerationStructureData =
+        update ? m_TopLevelAccelerationStructure.Resource->GetGPUVirtualAddress() : 0;
 
     commandList.BuildRaytracingAccelerationStructure(buildDesc);
-    const auto uavBarrier = CD3DX12_RESOURCE_BARRIER::UAV(m_TopLevelAccelerationStructure.Get());
-    commandList.GetGraphicsCommandList()->ResourceBarrier(1, &uavBarrier);
-    commandList.TrackObject(scratch);
-    commandList.TrackObject(m_InstanceDescUpload);
-    commandList.TrackObject(m_TopLevelAccelerationStructure);
+//Modify Begin:2026-07-30 by BestHui
+    commandList.UavBarrier(m_TopLevelAccelerationStructure.Resource.Get());
+    commandList.TrackResourceState(scratch.Resource, scratch.StateRegistration);
+//Modify End
+//Modify Begin:2026-08-12 by BestHui
+    commandList.TrackResourceState(
+        m_InstanceDescUpload.Resource,
+        m_InstanceDescUpload.StateRegistration);
+    commandList.TrackResourceState(
+        m_TopLevelAccelerationStructure.Resource,
+        m_TopLevelAccelerationStructure.StateRegistration);
+//Modify End
 }
 //Modify End

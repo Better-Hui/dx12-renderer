@@ -312,7 +312,12 @@ std::shared_ptr<Animation> ModelLoader::LoadAnimation(const std::string& path, c
 
 std::shared_ptr<Texture> ModelLoader::LoadTexture(CommandList& commandList, const std::wstring& path, TextureUsageType usage /*= TextureUsageType::Albedo*/) const
 {
-    auto texture = std::make_shared<Texture>();
+//Modify Begin:2026-08-12 by BestHui
+    auto texture = std::make_shared<Texture>(
+        TextureUsageType::Other,
+        L"",
+        commandList.GetDeviceContext());
+//Modify End
     commandList.LoadTextureFromFile(*texture, path, usage);
     return texture;
 }

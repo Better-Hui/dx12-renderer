@@ -48,13 +48,11 @@ public:
     static std::string GetBaseResourceName(const std::string& name);
     static bool IsArrayIndexInBounds(UINT bindCount, UINT arrayIndex);
     static UINT NormalizeDescriptorCount(UINT descriptorCount, UINT maxDescriptorCount);
-    static bool IsRayTracingAccelerationStructureSrv(const ShaderUtils::ShaderResourceViewMetadata& srv, const char* fallbackName);
     static D3D12_SHADER_RESOURCE_VIEW_DESC CreateNullShaderResourceViewDesc(const ShaderUtils::ShaderResourceViewMetadata& srv);
     static D3D12_UNORDERED_ACCESS_VIEW_DESC CreateNullUnorderedAccessViewDesc(const ShaderUtils::UnorderedAccessViewMetadata& uav);
 
     void AddBinding(const std::string& name, DescriptorBindingInfo binding);
     const DescriptorBindingInfo& GetBinding(const std::string& name, DescriptorBindingKind expectedKind) const;
-    const DescriptorBindingInfo& GetFirstBinding(DescriptorBindingKind expectedKind) const;
     const BindingMap& GetBindings() const { return m_Bindings; }
 
     void AddDefaultShaderResourceViewTable(UINT rootParameterIndex, UINT descriptorCount, const ShaderUtils::ShaderResourceViewMetadata& srv);

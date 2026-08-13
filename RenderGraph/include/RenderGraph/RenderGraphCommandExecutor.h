@@ -8,6 +8,9 @@
 
 #include <map>
 #include <memory>
+//Modify Begin:2026-08-12 by BestHui
+#include <span>
+//Modify End
 #include <vector>
 
 class CommandList;
@@ -52,7 +55,10 @@ namespace RenderGraph
             const std::map<const RenderPass*, RenderTargetInfo>& renderTargets,
             const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
 //Modify End
-        void PrepareQueueDependency(
+        void PrepareDirectQueueDependencies(
+            std::span<RenderPass* const> passes,
+            std::shared_ptr<CommandList>& directCommandList);
+        void PrepareAsyncComputeDependency(
             const RenderPass& pass,
             std::shared_ptr<CommandList>& directCommandList,
             const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);

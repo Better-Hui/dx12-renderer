@@ -25,13 +25,16 @@ public:
     [[nodiscard]] const DirectX::XMMATRIX& GetPreviousViewProjectionMatrix() const;
 
     void Resolve(CommandList& commandList, const std::shared_ptr<Texture>& currentBuffer, const std::shared_ptr<Texture>& velocityBuffer, float modulationFactor = 0.9f);
-    void Resize(uint32_t width, uint32_t height);
+    void Resize(CommandList& commandList, uint32_t width, uint32_t height);
     [[nodiscard]] const std::shared_ptr<Texture>& GetResolvedTexture() const;
 
     [[nodiscard]] DirectX::XMFLOAT2 GetCurrentJitterOffset() const;
     void OnRenderedFrame(const DirectX::XMMATRIX& viewProjectionMatrix);
 
 private:
+//Modify Begin:2026-08-12 by BestHui
+    FrameworkDeviceContext& m_DeviceContext;
+//Modify End
     RenderTarget m_ResolveRenderTarget;
 
     std::shared_ptr<Mesh> m_BlitMesh;

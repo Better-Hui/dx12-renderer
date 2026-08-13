@@ -5,6 +5,7 @@
 #include "DescriptorAllocation.h"
 //Modify Begin:2026-08-07 by BestHui
 #include "DescriptorAllocator.h"
+#include "DescriptorRetirementClock.h"
 //Modify End
 
 #include <d3d12.h>
@@ -72,6 +73,8 @@ private:
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> m_PipelineState;
 //Modify Begin:2026-08-07 by BestHui
 	Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;
+	std::shared_ptr<DescriptorRetirementClock> m_DescriptorRetirementClock =
+		std::make_shared<DescriptorRetirementClock>();
 	std::unique_ptr<DescriptorAllocator> m_DescriptorAllocator;
 //Modify End
 

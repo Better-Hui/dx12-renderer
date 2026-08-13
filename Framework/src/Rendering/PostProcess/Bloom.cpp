@@ -1,4 +1,5 @@
 #include <Framework/Rendering/PostProcess/Bloom.h>
+#include <Framework/Core/FrameworkDeviceContext.h>
 #include "DX12Library/Helpers.h"
 
 namespace
@@ -28,7 +29,8 @@ Bloom::Bloom(FrameworkDeviceContext& deviceContext, CommandList& commandList, ui
 	{
 		for (size_t i = 0; i < pyramidSize - 1; ++i)
 		{
-			CreateIntermediateTexture(width,
+			CreateIntermediateTexture(deviceContext,
+				width,
 				height,
 				m_IntermediateTextures,
 				i,
@@ -38,7 +40,7 @@ Bloom::Bloom(FrameworkDeviceContext& deviceContext, CommandList& commandList, ui
 	}
 }
 
-void Bloom::Resize(uint32_t width, uint32_t height)
+void Bloom::Resize(CommandList& commandList, uint32_t width, uint32_t height)
 {
 	m_Width = width;
 	m_Height = height;
@@ -47,7 +49,7 @@ void Bloom::Resize(uint32_t width, uint32_t height)
 	{
 		uint32_t textureWidth = 0, textureHeight = 0;
 		GetIntermediateTextureSize(width, height, i, textureWidth, textureHeight);
-		m_IntermediateTextures[i].Resize(textureWidth, textureHeight);
+		m_IntermediateTextures[i].Resize(commandList, textureWidth, textureHeight);
 	}
 }
 
@@ -101,7 +103,9 @@ void Bloom::GetIntermediateTextureSize(uint32_t width,
 	}
 }
 
-void Bloom::CreateIntermediateTexture(uint32_t width,
+void Bloom::CreateIntermediateTexture(
+	const FrameworkDeviceContext& deviceContext,
+	uint32_t width,
 	uint32_t height,
 	std::vector<RenderTarget>& destinationList,
 	size_t index,
@@ -112,7 +116,14 @@ void Bloom::CreateIntermediateTexture(uint32_t width,
 	GetIntermediateTextureSize(width, height, index, textureWidth, textureHeight);
 
 	auto desc = CreateRenderTargetDesc(format, textureWidth, textureHeight);
-	auto intermediateTexture = std::make_shared<Texture>(desc, nullptr, TextureUsageType::RenderTarget, name);
+//Modify Begin:2026-08-12 by BestHui
+	auto intermediateTexture = std::make_shared<Texture>(
+		desc,
+		nullptr,
+		TextureUsageType::RenderTarget,
+		name,
+		deviceContext.GetD3D12DeviceContext());
+//Modify End
 
 	auto renderTarget = RenderTarget();
 	renderTarget.AttachTexture(Color0, intermediateTexture);

@@ -25,6 +25,9 @@ namespace DemoAutomation
 //Modify Begin:2026-07-30 by BestHui
         std::vector<Step> ReSTIRGIProfile;
 //Modify End
+//Modify Begin:2026-08-11 by BestHui
+        std::vector<Step> ReSTIRGIVariants;
+//Modify End
     };
 
     class RuntimeAutomationController final

@@ -10,6 +10,43 @@
 //Modify End
 
 #include <algorithm>
+//Modify Begin:2026-08-12 by BestHui
+#include <stdexcept>
+//Modify End
+
+namespace
+{
+//Modify Begin:2026-07-30 by BestHui
+    std::string ToUtf8(const std::wstring& value)
+    {
+        if (value.empty())
+        {
+            return {};
+        }
+
+        const int byteCount = WideCharToMultiByte(
+            CP_UTF8,
+            0,
+            value.data(),
+            static_cast<int>(value.size()),
+            nullptr,
+            0,
+            nullptr,
+            nullptr);
+        std::string result(static_cast<size_t>(byteCount), '\0');
+        WideCharToMultiByte(
+            CP_UTF8,
+            0,
+            value.data(),
+            static_cast<int>(value.size()),
+            result.data(),
+            byteCount,
+            nullptr,
+            nullptr);
+        return result;
+    }
+//Modify End
+}
 
 const RayTracingShaderPassDesc& RayTracingDispatchTables::ResolvePass(
     const RayTracingPipelineDesc& desc,
@@ -45,7 +82,15 @@ std::vector<RayTracingShaderRecord> RayTracingDispatchTables::BuildShaderRecords
     for (const RayTracingShaderRecordDesc& recordDesc : recordDescs)
     {
         const void* shaderIdentifier = pipelineState.GetShaderIdentifier(recordDesc.ExportName);
-        Assert(shaderIdentifier != nullptr, "Ray tracing shader identifier was not found.");
+//Modify Begin:2026-07-30 by BestHui
+        if (shaderIdentifier == nullptr)
+        {
+            throw std::runtime_error(
+                "Ray tracing pipeline does not expose the shader-table export '" +
+                ToUtf8(recordDesc.ExportName) +
+                "'.");
+        }
+//Modify End
         records.push_back({ shaderIdentifier, recordDesc.LocalRootArguments });
     }
     return records;

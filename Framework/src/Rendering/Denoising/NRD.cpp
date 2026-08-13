@@ -25,10 +25,6 @@
 #include <Extensions/NRIHelper.h>
 #include <Extensions/NRIWrapperD3D12.h>
 
-#include <d3dx12.h>
-
-#include <array>
-#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -162,91 +158,6 @@ namespace
 {
     constexpr nrd::Identifier DIFFUSE_DENOISER_ID = 0;
 
-//Modify Begin:2026-07-30 by BestHui
-    D3D12_RESOURCE_STATES GetD3D12ResourceStates(const nri::AccessBits accessBits)
-    {
-        D3D12_RESOURCE_STATES resourceStates = D3D12_RESOURCE_STATE_COMMON;
-
-        if (accessBits & nri::AccessBits::SHADER_RESOURCE)
-        {
-            resourceStates |= D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE |
-                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-        }
-
-        if (accessBits &
-            (nri::AccessBits::SHADER_RESOURCE_STORAGE |
-                nri::AccessBits::SCRATCH_BUFFER |
-                nri::AccessBits::CLEAR_STORAGE))
-        {
-            resourceStates |= D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-        }
-
-        if (accessBits & nri::AccessBits::COPY_SOURCE)
-        {
-            resourceStates |= D3D12_RESOURCE_STATE_COPY_SOURCE;
-        }
-
-        if (accessBits & nri::AccessBits::COPY_DESTINATION)
-        {
-            resourceStates |= D3D12_RESOURCE_STATE_COPY_DEST;
-        }
-
-        return resourceStates;
-    }
-
-    struct NrdResourceTransition
-    {
-        std::shared_ptr<Texture> TextureHandle;
-        D3D12_RESOURCE_STATES StateBefore = D3D12_RESOURCE_STATE_COMMON;
-        D3D12_RESOURCE_STATES StateAfter = D3D12_RESOURCE_STATE_COMMON;
-    };
-
-    void TransitionResources(
-        CommandList& commandList,
-        const std::span<const NrdResourceTransition> transitions,
-        const NRD::ResourceTransitionCallback& transitionResource)
-    {
-        std::vector<ResourceStateTransition> graphTransitions;
-        graphTransitions.reserve(transitions.size());
-        std::vector<D3D12_RESOURCE_BARRIER> rawBarriers;
-        rawBarriers.reserve(transitions.size());
-
-        for (const NrdResourceTransition& transition : transitions)
-        {
-            if (transition.TextureHandle == nullptr || transition.StateBefore == transition.StateAfter)
-            {
-                continue;
-            }
-
-            if (transitionResource)
-            {
-                graphTransitions.push_back({ transition.TextureHandle.get(), transition.StateAfter });
-            }
-            else
-            {
-                rawBarriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(
-                    transition.TextureHandle->GetD3D12Resource().Get(),
-                    transition.StateBefore,
-                    transition.StateAfter));
-            }
-        }
-
-        if (transitionResource)
-        {
-            if (!graphTransitions.empty())
-            {
-                transitionResource(commandList, graphTransitions);
-            }
-        }
-        else if (!rawBarriers.empty())
-        {
-            commandList.GetGraphicsCommandList()->ResourceBarrier(
-                static_cast<UINT>(rawBarriers.size()),
-                rawBarriers.data());
-        }
-    }
-//Modify End
-
     void StoreNRDColumnMajorMatrix(float* destination, const DirectX::XMMATRIX& matrix)
     {
         DirectX::XMFLOAT4X4 stored{};
@@ -264,25 +175,6 @@ namespace
         resource.userArg = userArg;
         return resource;
     }
-
-//Modify Begin:2026-07-30 by BestHui
-    void TransitionNrdAdapterTextures(
-        CommandList& commandList,
-        const std::shared_ptr<Texture>& nrdNormalRoughness,
-        const std::shared_ptr<Texture>& nrdViewZ,
-        const std::shared_ptr<Texture>& nrdMotion,
-        const D3D12_RESOURCE_STATES stateBefore,
-        const D3D12_RESOURCE_STATES stateAfter,
-        const NRD::ResourceTransitionCallback& transitionResource)
-    {
-        const std::array<NrdResourceTransition, 3> transitions = {
-            NrdResourceTransition{ nrdNormalRoughness, stateBefore, stateAfter },
-            NrdResourceTransition{ nrdViewZ, stateBefore, stateAfter },
-            NrdResourceTransition{ nrdMotion, stateBefore, stateAfter },
-        };
-        TransitionResources(commandList, transitions, transitionResource);
-    }
-//Modify End
 
     std::unique_ptr<ComputeShader> CreateReflectedComputeShader(
         FrameworkDeviceContext& deviceContext,
@@ -304,13 +196,6 @@ NRD::NRD(FrameworkDeviceContext& deviceContext)
     , m_CompositeShader(CreateReflectedComputeShader(deviceContext, ShaderBytecode_NRDOutputComposite_CS, sizeof ShaderBytecode_NRDOutputComposite_CS))
     , m_Impl(std::make_unique<NRDImpl>())
 {
-    char* bypass = nullptr;
-    size_t bypassLength = 0;
-    _dupenv_s(&bypass, &bypassLength, "RAYTRACING_DEMO_NRD_BYPASS");
-    m_BypassDenoise = bypass != nullptr && std::strcmp(bypass, "1") == 0;
-    std::free(bypass);
-
-    m_Available = true;
 }
 
 NRD::~NRD() = default;
@@ -323,11 +208,6 @@ void NRD::ResetHistory()
 
 bool NRD::EnsureCreated(const uint32_t width, const uint32_t height)
 {
-    if (!m_Available)
-    {
-        return false;
-    }
-
     if (m_Width == width && m_Height == height && m_CreatedMode == m_Settings.Mode)
     {
         return true;
@@ -339,10 +219,7 @@ bool NRD::EnsureCreated(const uint32_t width, const uint32_t height)
 
     if (!m_Impl->EnsureDevice(device.Get(), rawQueue))
     {
-        m_Available = false;
-        m_Width = 0;
-        m_Height = 0;
-        return false;
+        throw std::runtime_error("NRD failed to create its NRI device wrapper.");
     }
 
     m_DeviceContext.Flush();
@@ -368,12 +245,9 @@ bool NRD::EnsureCreated(const uint32_t width, const uint32_t height)
     instanceDesc.denoisersNum = 1;
 
     const nrd::Result result = m_Impl->Integration.Recreate(integrationDesc, instanceDesc, m_Impl->Device);
-    m_Available = result == nrd::Result::SUCCESS;
-    if (!m_Available)
+    if (result != nrd::Result::SUCCESS)
     {
-        m_Width = 0;
-        m_Height = 0;
-        return false;
+        throw std::runtime_error("NRD failed to recreate the requested denoiser instance.");
     }
 
     m_Width = width;
@@ -435,7 +309,7 @@ void NRD::PrepareDenoiserInputs(
     const uint32_t width,
     const uint32_t height)
 {
-    if (!IsEnabled() || !EnsureCreated(width, height) || m_BypassDenoise)
+    if (!IsEnabled() || !EnsureCreated(width, height))
     {
         return;
     }
@@ -452,8 +326,7 @@ void NRD::Denoise(
     const std::shared_ptr<Texture>& nrdMotion,
     const std::shared_ptr<Texture>& denoisedRadiance,
     const uint32_t width,
-    const uint32_t height,
-    const ResourceTransitionCallback& transitionResource)
+    const uint32_t height)
 {
     nrd::CommonSettings commonSettings = {};
     const XMMATRIX currentView = frameMatrices.WorldToView;
@@ -542,8 +415,14 @@ void NRD::Denoise(
     }
 
     nrd::ResourceSnapshot snapshot = {};
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-08-12 by BestHui
     snapshot.restoreInitialState = true;
+    commandList.TransitionBarrier(*noisyRadiance, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    commandList.TransitionBarrier(*nrdNormalRoughness, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    commandList.TransitionBarrier(*nrdViewZ, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    commandList.TransitionBarrier(*nrdMotion, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    commandList.TransitionBarrier(*denoisedRadiance, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    commandList.FlushResourceBarriers();
 //Modify End
 
     nri::Texture* noisyTexture = m_Impl->GetWrappedTexture(noisyRadiance, FrameworkNRD::RadianceFormat);
@@ -553,20 +432,8 @@ void NRD::Denoise(
     nri::Texture* denoisedTexture = m_Impl->GetWrappedTexture(denoisedRadiance, FrameworkNRD::RadianceFormat);
     if (noisyTexture == nullptr || normalRoughnessTexture == nullptr || viewZTexture == nullptr || motionTexture == nullptr || denoisedTexture == nullptr)
     {
-        m_Available = false;
-        return;
+        throw std::runtime_error("NRD failed to wrap one or more D3D12 denoiser resources.");
     }
-
-//Modify Begin:2026-07-30 by BestHui
-    TransitionNrdAdapterTextures(
-        commandList,
-        nrdNormalRoughness,
-        nrdViewZ,
-        nrdMotion,
-        D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-        transitionResource);
-//Modify End
 
     snapshot.SetResource(nrd::ResourceType::IN_DIFF_RADIANCE_HITDIST, MakeNRDResource(noisyTexture, false, noisyRadiance.get()));
     snapshot.SetResource(nrd::ResourceType::IN_NORMAL_ROUGHNESS, MakeNRDResource(normalRoughnessTexture, false, nrdNormalRoughness.get()));
@@ -581,56 +448,18 @@ void NRD::Denoise(
     nri::CommandBuffer* nriCommandBuffer = nullptr;
     if (m_Impl->WrapperD3D12.CreateCommandBufferD3D12(*m_Impl->Device, commandBufferDesc, nriCommandBuffer) != nri::Result::SUCCESS)
     {
-        m_Available = false;
-        return;
+        throw std::runtime_error("NRD failed to wrap the active D3D12 command list.");
     }
 
     const nrd::Identifier denoiser = DIFFUSE_DENOISER_ID;
-    m_Impl->Integration.Denoise(&denoiser, 1, *nriCommandBuffer, snapshot);
-    m_Impl->Core.DestroyCommandBuffer(nriCommandBuffer);
-
 //Modify Begin:2026-07-30 by BestHui
-    D3D12_RESOURCE_STATES noisyRadianceState = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-    D3D12_RESOURCE_STATES normalRoughnessState = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-    D3D12_RESOURCE_STATES viewZState = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-    D3D12_RESOURCE_STATES motionState = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-    D3D12_RESOURCE_STATES denoisedRadianceState = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-    for (size_t resourceIndex = 0; resourceIndex < snapshot.uniqueNum; ++resourceIndex)
-    {
-        const nrd::Resource& resource = snapshot.unique[resourceIndex];
-        const D3D12_RESOURCE_STATES resourceState = GetD3D12ResourceStates(resource.state.access);
-        if (resource.userArg == noisyRadiance.get())
+    commandList.ExecuteExternalCommandRecording(
+        [&](ID3D12GraphicsCommandList2&)
         {
-            noisyRadianceState = resourceState;
-        }
-        else if (resource.userArg == nrdNormalRoughness.get())
-        {
-            normalRoughnessState = resourceState;
-        }
-        else if (resource.userArg == nrdViewZ.get())
-        {
-            viewZState = resourceState;
-        }
-        else if (resource.userArg == nrdMotion.get())
-        {
-            motionState = resourceState;
-        }
-        else if (resource.userArg == denoisedRadiance.get())
-        {
-            denoisedRadianceState = resourceState;
-        }
-    }
-
-    const std::array<NrdResourceTransition, 5> transitions = {
-        NrdResourceTransition{ noisyRadiance, noisyRadianceState, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE },
-        NrdResourceTransition{ nrdNormalRoughness, normalRoughnessState, D3D12_RESOURCE_STATE_UNORDERED_ACCESS },
-        NrdResourceTransition{ nrdViewZ, viewZState, D3D12_RESOURCE_STATE_UNORDERED_ACCESS },
-        NrdResourceTransition{ nrdMotion, motionState, D3D12_RESOURCE_STATE_UNORDERED_ACCESS },
-        NrdResourceTransition{ denoisedRadiance, denoisedRadianceState, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE },
-    };
-    TransitionResources(commandList, transitions, transitionResource);
+            m_Impl->Integration.Denoise(&denoiser, 1, *nriCommandBuffer, snapshot);
+        });
 //Modify End
-    commandList.InvalidateCachedNativeState();
+    m_Impl->Core.DestroyCommandBuffer(nriCommandBuffer);
 }
 
 void NRD::Composite(
@@ -641,8 +470,7 @@ void NRD::Composite(
     const std::shared_ptr<Texture>& gBufferEmissionMetallic,
     const std::shared_ptr<Texture>& output,
     const uint32_t width,
-    const uint32_t height,
-    const ResourceTransitionCallback& transitionResource)
+    const uint32_t height)
 {
     CompositeConstants constants = {};
     constants.Width = width;
@@ -661,14 +489,6 @@ void NRD::Composite(
     commandContext.BindDescriptorSet(m_CompositeShader->GetDescriptorSet());
     commandContext.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
-    const NrdResourceTransition transition = {
-        denoisedRadiance,
-        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-        D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-    };
-    TransitionResources(commandList, std::span(&transition, 1), transitionResource);
-//Modify End
 }
 
 void NRD::Execute(
@@ -684,20 +504,14 @@ void NRD::Execute(
     const std::shared_ptr<Texture>& denoisedRadiance,
     const std::shared_ptr<Texture>& output,
     const uint32_t width,
-    const uint32_t height,
-    const ResourceTransitionCallback& transitionResource)
+    const uint32_t height)
 {
     if (!IsEnabled() || !EnsureCreated(width, height))
     {
         return;
     }
 
-    if (m_BypassDenoise)
-    {
-        return;
-    }
-
-    Denoise(commandList, frameMatrices, noisyRadiance, nrdNormalRoughness, nrdViewZ, nrdMotion, denoisedRadiance, width, height, transitionResource);
-    Composite(commandList, denoisedRadiance, depthTexture, gBufferAlbedoOcclusion, gBufferEmissionMetallic, output, width, height, transitionResource);
+    Denoise(commandList, frameMatrices, noisyRadiance, nrdNormalRoughness, nrdViewZ, nrdMotion, denoisedRadiance, width, height);
+    Composite(commandList, denoisedRadiance, depthTexture, gBufferAlbedoOcclusion, gBufferEmissionMetallic, output, width, height);
 }
 //Modify End

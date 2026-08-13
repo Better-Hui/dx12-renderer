@@ -24,11 +24,11 @@ const std::shared_ptr<Texture>& RenderTarget::GetTexture(AttachmentPoint attachm
 }
 
 // Resize all of the textures associated with the render target.
-void RenderTarget::Resize(uint32_t width, uint32_t height)
+void RenderTarget::Resize(CommandList& commandList, uint32_t width, uint32_t height)
 {
 	for (auto& texture : m_Textures)
 	{
-		texture->Resize(width, height);
+		texture->Resize(commandList, width, height);
 	}
 }
 

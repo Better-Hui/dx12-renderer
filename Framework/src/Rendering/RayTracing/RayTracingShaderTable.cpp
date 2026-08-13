@@ -42,7 +42,10 @@ void RayTracingShaderTable::Reset(
     }
 
     uint8_t* mappedData = nullptr;
-    ThrowIfFailed(m_Resource->Map(0, nullptr, reinterpret_cast<void**>(&mappedData)));
+//Modify Begin:2026-07-30 by BestHui
+    const D3D12_RANGE readRange = { 0, 0 };
+    ThrowIfFailed(m_Resource->Map(0, &readRange, reinterpret_cast<void**>(&mappedData)));
+//Modify End
 
     for (size_t i = 0; i < shaderRecords.size(); ++i)
     {
@@ -55,7 +58,10 @@ void RayTracingShaderTable::Reset(
         }
     }
 
-    m_Resource->Unmap(0, nullptr);
+//Modify Begin:2026-07-30 by BestHui
+    const D3D12_RANGE writeRange = { 0, static_cast<SIZE_T>(m_SizeInBytes) };
+    m_Resource->Unmap(0, &writeRange);
+//Modify End
 }
 
 D3D12_GPU_VIRTUAL_ADDRESS RayTracingShaderTable::GetGpuVirtualAddress() const

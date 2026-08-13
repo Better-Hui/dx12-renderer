@@ -119,7 +119,8 @@ public:
 private:
     struct InternalState;
 
-    [[nodiscard]] bool Initialize(const DLSSInitializationDesc& initializationDesc);
+    [[nodiscard]] bool Initialize();
+    [[nodiscard]] bool EnsureInitialized();
     [[nodiscard]] bool EnsureFeature(CommandList& commandList, const DLSSExecutionInputs& inputs);
     void ExecuteRayReconstruction(CommandList& commandList, const DLSSExecutionInputs& inputs);
 //Modify Begin:2026-08-07 by BestHui
@@ -131,6 +132,7 @@ private:
 
     FrameworkDeviceContext& m_DeviceContext;
     std::unique_ptr<InternalState> m_InternalState;
+    DLSSInitializationDesc m_InitializationDesc;
     DLSSMode m_Mode = DLSSMode::Disabled;
     bool m_Initialized = false;
     bool m_Supported = false;

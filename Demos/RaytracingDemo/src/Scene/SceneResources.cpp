@@ -4,6 +4,7 @@
 
 #include <DX12Library/CommandList.h>
 //Modify Begin:2026-07-30 by BestHui
+#include <DX12Library/D3D12DeviceContext.h>
 #include <DX12Library/Helpers.h>
 //Modify End
 #include <Framework/Geometry/Mesh.h>
@@ -121,11 +122,13 @@ namespace
 
 }
 
-RaytracingDemoSceneResources::RaytracingDemoSceneResources(Microsoft::WRL::ComPtr<ID3D12Device2> device)
-    : m_TextureMaterialResources(device)
-    , m_RayTracingResources(std::move(device))
+//Modify Begin:2026-07-30 by BestHui
+RaytracingDemoSceneResources::RaytracingDemoSceneResources(std::shared_ptr<D3D12DeviceContext> deviceContext)
+    : m_TextureMaterialResources(deviceContext->GetDevice())
+    , m_RayTracingResources(std::move(deviceContext))
 {
 }
+//Modify End
 
 void RaytracingDemoSceneResources::Clear()
 {

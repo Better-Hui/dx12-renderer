@@ -171,8 +171,7 @@ std::shared_ptr<CommandList> CommandQueue::GetCommandList()
 		//Modify Begin:2026-08-07 by BestHui
 		commandList = std::make_shared<CommandList>(
 			m_CommandListType,
-			m_DeviceContext->GetDevice(),
-			m_DeviceContext->GetResourceStateRegistry(),
+			m_DeviceContext,
 			m_ComputeCommandListFactory);
 		//Modify End
 	}

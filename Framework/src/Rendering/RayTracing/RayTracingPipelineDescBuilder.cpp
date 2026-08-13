@@ -6,6 +6,9 @@
 #include <Framework/Rendering/Pipeline/ShaderReflection.h>
 
 #include <algorithm>
+//Modify Begin:2026-08-12 by BestHui
+#include <stdexcept>
+//Modify End
 #include <utility>
 
 //Modify Begin:2026-07-24 by BestHui
@@ -15,11 +18,6 @@ namespace
     bool IsBufferSrvDimension(const D3D_SRV_DIMENSION dimension)
     {
         return dimension == D3D_SRV_DIMENSION_BUFFER;
-    }
-
-    bool IsRayTracingAccelerationStructureSrv(const ShaderUtils::ShaderResourceViewMetadata& srv)
-    {
-        return DescriptorLayout::IsRayTracingAccelerationStructureSrv(srv, "Scene");
     }
 
     D3D12_UNORDERED_ACCESS_VIEW_DESC CreateDefaultNullTextureUavDesc()
@@ -38,24 +36,11 @@ RayTracingPipelineDescBuilder::RayTracingPipelineDescBuilder(RayTracingPipelineD
 {
 }
 
-RayTracingPipelineDescBuilder RayTracingPipelineDescBuilder::Default()
-{
-    return RayTracingPipelineDescBuilder(RayTracingShader::CreateDefaultPipelineDesc());
-}
-
 RayTracingPipelineDescBuilder RayTracingPipelineDescBuilder::ReflectedDefault(const ShaderBlob& shaderLibrary)
 {
-    RayTracingPipelineDesc desc = RayTracingShader::CreateDefaultPipelineDesc();
-    desc.Bindings.clear();
+    RayTracingPipelineDesc desc;
 
     const ShaderReflectionMetadata reflection = ShaderReflection::CollectLibrary(shaderLibrary.GetBlob());
-//Modify Begin:2026-07-30 by BestHui
-    PipelineLayoutReflectionOptions layoutOptions;
-    layoutOptions.MaxDescriptorCount = desc.MaxDescriptorCount;
-    layoutOptions.AccelerationStructureFallbackName = "Scene";
-    layoutOptions.ShaderStages = PipelineShaderStageFlags::RayTracing;
-    desc.RootSamplers = PipelineLayout::CreateDescFromReflection(reflection, layoutOptions).RootSamplers;
-//Modify End
 
     for (const auto& cbuffer : reflection.m_ConstantBuffers)
     {
@@ -70,22 +55,16 @@ RayTracingPipelineDescBuilder RayTracingPipelineDescBuilder::ReflectedDefault(co
 
     for (const auto& srv : reflection.m_ShaderResourceViews)
     {
-        RayTracingShaderBindingType bindingType = RayTracingShaderBindingType::StructuredBuffer;
+//Modify Begin:2026-08-12 by BestHui
+        RayTracingShaderBindingType bindingType =
+            srv.InputType == D3D_SIT_RTACCELERATIONSTRUCTURE ?
+            RayTracingShaderBindingType::AccelerationStructure :
+            RayTracingShaderBindingType::StructuredBuffer;
+//Modify End
         const uint32_t descriptorCount = DescriptorLayout::NormalizeDescriptorCount(srv.BindCount, desc.MaxDescriptorCount);
 
-        if (IsRayTracingAccelerationStructureSrv(srv))
-        {
-            bindingType = RayTracingShaderBindingType::AccelerationStructure;
-        }
-        else if (srv.Name == "VertexBuffers")
-        {
-            bindingType = RayTracingShaderBindingType::VertexBufferArray;
-        }
-        else if (srv.Name == "IndexBuffers")
-        {
-            bindingType = RayTracingShaderBindingType::IndexBufferArray;
-        }
-        else if (srv.InputType == D3D_SIT_TEXTURE || !IsBufferSrvDimension(srv.Dimension) || descriptorCount > 1u)
+        if (bindingType != RayTracingShaderBindingType::AccelerationStructure &&
+            (srv.InputType == D3D_SIT_TEXTURE || !IsBufferSrvDimension(srv.Dimension) || descriptorCount > 1u))
         {
             bindingType = RayTracingShaderBindingType::TextureArray;
         }
@@ -112,12 +91,41 @@ RayTracingPipelineDescBuilder RayTracingPipelineDescBuilder::ReflectedDefault(co
         });
     }
 
-    return RayTracingPipelineDescBuilder(std::move(desc));
+//Modify Begin:2026-07-30 by BestHui
+    RayTracingPipelineDescBuilder builder(std::move(desc));
+    for (const auto& sampler : reflection.m_Samplers)
+    {
+        const uint32_t samplerCount = DescriptorLayout::NormalizeDescriptorCount(
+            sampler.BindCount,
+            builder.m_Desc.MaxDescriptorCount);
+        for (uint32_t samplerOffset = 0u; samplerOffset < samplerCount; ++samplerOffset)
+        {
+            builder.m_ReflectedStaticSamplerCoordinates.emplace_back(
+                sampler.RegisterIndex + samplerOffset,
+                sampler.Space);
+        }
+    }
+    return builder;
+//Modify End
 }
 
 RayTracingPipelineDescBuilder& RayTracingPipelineDescBuilder::WithExport(std::wstring exportName)
 {
-    m_Desc.Exports.push_back(std::move(exportName));
+//Modify Begin:2026-07-30 by BestHui
+    if (exportName.empty())
+    {
+        throw std::invalid_argument("Ray tracing export name must not be empty.");
+    }
+
+    const auto existingExport = std::find(
+        m_Desc.Exports.begin(),
+        m_Desc.Exports.end(),
+        exportName);
+    if (existingExport == m_Desc.Exports.end())
+    {
+        m_Desc.Exports.push_back(std::move(exportName));
+    }
+//Modify End
     return *this;
 }
 
@@ -127,13 +135,47 @@ RayTracingPipelineDescBuilder& RayTracingPipelineDescBuilder::WithTriangleHitGro
     std::wstring anyHitShader,
     std::wstring intersectionShader)
 {
-    m_Desc.HitGroups.push_back({
+//Modify Begin:2026-07-30 by BestHui
+    RayTracingHitGroupDesc hitGroup = {
         std::move(hitGroupName),
         std::move(closestHitShader),
         std::move(anyHitShader),
         std::move(intersectionShader),
         D3D12_HIT_GROUP_TYPE_TRIANGLES
-    });
+    };
+    if (hitGroup.Name.empty())
+    {
+        throw std::invalid_argument("Ray tracing hit group name must not be empty.");
+    }
+    if (hitGroup.ClosestHitShader.empty())
+    {
+        throw std::invalid_argument("Triangle ray tracing hit groups require a closest-hit shader.");
+    }
+
+    WithExport(hitGroup.ClosestHitShader);
+    if (!hitGroup.AnyHitShader.empty())
+    {
+        WithExport(hitGroup.AnyHitShader);
+    }
+    if (!hitGroup.IntersectionShader.empty())
+    {
+        WithExport(hitGroup.IntersectionShader);
+    }
+
+    const auto existingHitGroup = std::find_if(
+        m_Desc.HitGroups.begin(),
+        m_Desc.HitGroups.end(),
+        [&hitGroup](const RayTracingHitGroupDesc& candidate)
+        {
+            return candidate.Name == hitGroup.Name;
+        });
+    if (existingHitGroup != m_Desc.HitGroups.end())
+    {
+        throw std::invalid_argument("Ray tracing pipeline contains duplicate hit group names.");
+    }
+
+    m_Desc.HitGroups.push_back(std::move(hitGroup));
+//Modify End
     return *this;
 }
 
@@ -143,6 +185,18 @@ RayTracingPipelineDescBuilder& RayTracingPipelineDescBuilder::WithRayGenerationP
     std::vector<std::wstring> missShaders,
     std::vector<std::wstring> hitGroups)
 {
+//Modify Begin:2026-07-30 by BestHui
+    if (passName.empty() || rayGenerationShader.empty())
+    {
+        throw std::invalid_argument("Ray tracing pass name and ray-generation export must not be empty.");
+    }
+
+    WithExport(rayGenerationShader);
+    for (const std::wstring& missShader : missShaders)
+    {
+        WithExport(missShader);
+    }
+//Modify End
     RayTracingShaderPassDesc passDesc;
     passDesc.Name = std::move(passName);
     passDesc.RayGenerationShader = std::move(rayGenerationShader);
@@ -205,23 +259,36 @@ RayTracingPipelineDescBuilder& RayTracingPipelineDescBuilder::WithTextureArray(
     return WithBinding(std::move(name), RayTracingShaderBindingType::TextureArray, shaderRegister, registerSpace, descriptorCount);
 }
 
-RayTracingPipelineDescBuilder& RayTracingPipelineDescBuilder::WithVertexBufferArray(
-    std::string name,
-    const uint32_t shaderRegister,
-    const uint32_t registerSpace,
-    const uint32_t descriptorCount)
+//Modify Begin:2026-07-30 by BestHui
+RayTracingPipelineDescBuilder& RayTracingPipelineDescBuilder::WithStaticSamplerContract(
+    PipelineStaticSamplerContract contract)
 {
-    return WithBinding(std::move(name), RayTracingShaderBindingType::VertexBufferArray, shaderRegister, registerSpace, descriptorCount);
-}
+    const auto existingSampler = std::find_if(
+        m_Desc.RootSamplers.begin(),
+        m_Desc.RootSamplers.end(),
+        [&contract](const PipelineRootSamplerDesc& sampler)
+        {
+            return sampler.ShaderRegister == contract.ShaderRegister &&
+                sampler.RegisterSpace == contract.RegisterSpace;
+        });
 
-RayTracingPipelineDescBuilder& RayTracingPipelineDescBuilder::WithIndexBufferArray(
-    std::string name,
-    const uint32_t shaderRegister,
-    const uint32_t registerSpace,
-    const uint32_t descriptorCount)
-{
-    return WithBinding(std::move(name), RayTracingShaderBindingType::IndexBufferArray, shaderRegister, registerSpace, descriptorCount);
+    PipelineRootSamplerDesc rootSampler;
+    rootSampler.Name = std::move(contract.Name);
+    rootSampler.ShaderRegister = contract.ShaderRegister;
+    rootSampler.RegisterSpace = contract.RegisterSpace;
+    rootSampler.Desc = contract.Desc;
+    rootSampler.ShaderStages = PipelineShaderStageFlags::RayTracing;
+
+    if (existingSampler != m_Desc.RootSamplers.end())
+    {
+        *existingSampler = std::move(rootSampler);
+        return *this;
+    }
+
+    m_Desc.RootSamplers.push_back(std::move(rootSampler));
+    return *this;
 }
+//Modify End
 
 RayTracingPipelineDescBuilder& RayTracingPipelineDescBuilder::WithPayloadSize(const uint32_t payloadSizeInBytes)
 {
@@ -249,6 +316,78 @@ RayTracingPipelineDescBuilder& RayTracingPipelineDescBuilder::WithMaxDescriptorC
 
 RayTracingPipelineDesc RayTracingPipelineDescBuilder::Build() const
 {
+//Modify Begin:2026-07-30 by BestHui
+    for (const RayTracingShaderPassDesc& pass : m_Desc.Passes)
+    {
+        const auto findExport = [this](const std::wstring& exportName)
+        {
+            return std::find(m_Desc.Exports.begin(), m_Desc.Exports.end(), exportName);
+        };
+
+        if (pass.Name.empty() || pass.RayGenerationShader.empty() || findExport(pass.RayGenerationShader) == m_Desc.Exports.end())
+        {
+            throw std::invalid_argument("Ray tracing pass has an invalid ray-generation export contract.");
+        }
+
+        for (const RayTracingShaderRecordDesc& missRecord : pass.MissShaderRecords)
+        {
+            if (missRecord.ExportName.empty() || findExport(missRecord.ExportName) == m_Desc.Exports.end())
+            {
+                throw std::invalid_argument("Ray tracing pass references a miss shader that is not exported.");
+            }
+        }
+
+        for (const RayTracingShaderRecordDesc& hitGroupRecord : pass.HitGroupRecords)
+        {
+            const auto hitGroup = std::find_if(
+                m_Desc.HitGroups.begin(),
+                m_Desc.HitGroups.end(),
+                [&hitGroupRecord](const RayTracingHitGroupDesc& candidate)
+                {
+                    return candidate.Name == hitGroupRecord.ExportName;
+                });
+            if (hitGroupRecord.ExportName.empty() || hitGroup == m_Desc.HitGroups.end())
+            {
+                throw std::invalid_argument("Ray tracing pass references a hit group that was not declared.");
+            }
+        }
+    }
+
+    for (size_t samplerIndex = 0u; samplerIndex < m_Desc.RootSamplers.size(); ++samplerIndex)
+    {
+        const PipelineRootSamplerDesc& sampler = m_Desc.RootSamplers[samplerIndex];
+        const auto duplicateSampler = std::find_if(
+            m_Desc.RootSamplers.begin() + static_cast<std::ptrdiff_t>(samplerIndex + 1u),
+            m_Desc.RootSamplers.end(),
+            [&sampler](const PipelineRootSamplerDesc& candidate)
+            {
+                return candidate.ShaderRegister == sampler.ShaderRegister &&
+                    candidate.RegisterSpace == sampler.RegisterSpace;
+            });
+        if (duplicateSampler != m_Desc.RootSamplers.end())
+        {
+            throw std::invalid_argument(
+                "Ray tracing pipeline contains duplicate static sampler register and space coordinates.");
+        }
+    }
+
+    for (const auto& [shaderRegister, registerSpace] : m_ReflectedStaticSamplerCoordinates)
+    {
+        const auto sampler = std::find_if(
+            m_Desc.RootSamplers.begin(),
+            m_Desc.RootSamplers.end(),
+            [shaderRegister, registerSpace](const PipelineRootSamplerDesc& candidate)
+            {
+                return candidate.ShaderRegister == shaderRegister &&
+                    candidate.RegisterSpace == registerSpace;
+            });
+        if (sampler == m_Desc.RootSamplers.end())
+        {
+            throw std::invalid_argument(
+                "A reflected ray tracing sampler requires an explicit static sampler contract.");
+        }
+    }
+//Modify End
     return m_Desc;
 }
 

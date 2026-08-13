@@ -1,6 +1,8 @@
 #pragma once
 
 #include <Framework/Rendering/Lighting/ReSTIRGI.h>
+#include <Framework/Rendering/Lighting/MaterialShadingModel.h>
+#include <Framework/Rendering/Pipeline/PipelineLayout.h>
 #include <Framework/Rendering/Pipeline/ShaderVariant.h>
 
 #include <cstdint>
@@ -21,7 +23,13 @@ struct ReSTIRGIFrameState
 {
     bool Enabled = false;
     bool UseSoftShadowVariant = false;
+//Modify Begin:2026-07-30 by BestHui
+    MaterialShadingModel ShadingModel = MaterialShadingModel::Pbr;
+//Modify End
     uint32_t EnvironmentProjectionVariant = 0u;
+//Modify Begin:2026-08-11 by BestHui
+    ReSTIRGIVariantConfig VariantConfig = {};
+//Modify End
     ReSTIRGIFrameConstants Constants = {};
 };
 
@@ -46,6 +54,9 @@ struct ReSTIRGIShaderSources
     std::wstring Shade;
     std::vector<ShaderVariantDefine> SoftShadowDefines;
     std::string EnvironmentProjectionDefineName;
+//Modify Begin:2026-08-12 by BestHui
+    std::vector<PipelineStaticSamplerContract> StaticSamplerContracts;
+//Modify End
 };
 
 class ReSTIRGIPass final
@@ -60,8 +71,8 @@ public:
     void EnsurePipelines(
         bool useSoftShadowVariant,
         uint32_t environmentProjectionVariant,
-        const ReSTIRGIFrameConstants& constants,
-        uint32_t maxPathBounces);
+        const ReSTIRGIVariantConfig& variantConfig,
+        MaterialShadingModel shadingModel);
     void Execute(CommandList& commandList, const ReSTIRGIExecutionInputs& inputs);
 
 private:
@@ -81,24 +92,35 @@ private:
         uint32_t environmentProjectionVariant);
     uint32_t GetStageVariantKey(
         ReSTIRGIStage stage,
-        const ReSTIRGIFrameConstants& constants) const;
+        const ReSTIRGIVariantConfig& variantConfig,
+        MaterialShadingModel shadingModel) const;
     std::vector<ShaderVariantDefine> GetStageVariantDefines(
         ReSTIRGIStage stage,
-        const ReSTIRGIFrameConstants& constants) const;
+        const ReSTIRGIVariantConfig& variantConfig,
+        MaterialShadingModel shadingModel) const;
     PipelineSet& GetPipelines(
         bool useSoftShadowVariant,
         uint32_t environmentProjectionVariant);
     ComputeShader& GetStageShader(
         PipelineSet& pipelines,
         ReSTIRGIStage stage,
-        const ReSTIRGIFrameConstants& constants);
+        const ReSTIRGIVariantConfig& variantConfig,
+        MaterialShadingModel shadingModel);
 //Modify Begin:2026-07-30 by BestHui
     bool EnsureResources(uint32_t width, uint32_t height);
 //Modify End
 //Modify Begin:2026-08-11 by BestHui
     void ExecuteInitialSampling(CommandContext& commandContext, const ReSTIRGIExecutionInputs& inputs, PipelineSet& pipelines);
     void ExecuteTemporalResampling(CommandContext& commandContext, const ReSTIRGIExecutionInputs& inputs, PipelineSet& pipelines);
-    void ExecuteSpatialResampling(CommandContext& commandContext, const ReSTIRGIExecutionInputs& inputs, PipelineSet& pipelines);
+//Modify Begin:2026-08-11 by BestHui
+    void ExecuteSpatialResampling(
+        CommandContext& commandContext,
+        const ReSTIRGIExecutionInputs& inputs,
+        PipelineSet& pipelines,
+        const std::shared_ptr<Texture>& sourceCreation,
+        const std::shared_ptr<Texture>& sourceHit,
+        const std::shared_ptr<Texture>& sourceLight);
+//Modify End
 //Modify End
     void ExecuteFinalShading(
 //Modify Begin:2026-08-11 by BestHui
@@ -124,7 +146,6 @@ private:
     uint32_t m_ResourceWidth = 0;
     uint32_t m_ResourceHeight = 0;
     uint32_t m_HistoryReadIndex = 0;
-    uint32_t m_MaxPathBounces = 3;
 //Modify Begin:2026-07-30 by BestHui
     bool m_HistoryValid = false;
 //Modify End

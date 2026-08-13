@@ -52,6 +52,7 @@ RayPayload TraceScene(float3 origin, float3 direction, float tMax, uint flags)
         query.CommittedTriangleBarycentrics(),
         query.WorldRayDirection(),
         query.CommittedObjectToWorld3x4(),
+        query.CommittedWorldToObject3x4(),
         query.CommittedRayT());
 }
 

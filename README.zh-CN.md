@@ -18,6 +18,7 @@
 - **RenderGraph**：提供资源读写声明、依赖排序、编译后的状态计划、统一资源状态追踪、native/external 状态交接、GPU timing 记录和 CSV 导出。
 - **显式异步计算**：pass 可以指定使用 `Direct` 或 `AsyncCompute` queue；RenderGraph 负责跨 queue 的 GPU fence 等待与资源交接。
 - **光线追踪与降噪**：同一场景可在 inline ray query 和 shader-table DXR 之间切换，并可使用 NRD 或 SVGF。
+- **材质着色模型**：默认 GGX 金属度/粗糙度 PBR 评估已归入 Framework；sample UI 可选择实验性的 `Stylized Comic` 风格化 PBR-NPR 变体。
 - **场景工作流**：新增公共 `Scene` 和 `SceneImporter`，可以读取 Unity 文本序列化场景和 JSON 场景，适配 PBR 材质和自发光 surface emitter，并通过压力球开关验证增量增删实例。
 - **Meshlet 实验路径**：包含 Meshlet 构建、GPU 资源、task shader / compute-indirect 两种 GBuffer 后端，以及只更新实例数据的增量路径。
 - **ReSTIR DI 直接光**：提供 RIS、时域/Boiling/空域复用、各阶段的可见性与 bias correction 配置，以及最终着色。
@@ -66,6 +67,7 @@ auto pass = RenderGraph::RenderPass::Create(
 | --- | --- |
 | GBuffer | 常规 raster GBuffer，以及实验性的 Meshlet GBuffer 路径。 |
 | 光线追踪 | inline ray query compute shader 与 shader-table DXR，可在运行时切换。 |
+| 材质着色 | Framework 统一的 GGX 金属度/粗糙度 PBR，以及 sample 可选的 `Stylized Comic` 风格化 PBR-NPR 变体。 |
 | 光照 | direct lighting 与 indirect lighting 分离后再 composite；直接光可选 ReSTIR DI，Inline Ray Query 间接光可选 ReSTIR GI。 |
 | 软阴影 | 平行光和点光源使用预编译 Hard/Soft Shader 变体；面积光继续采样真实发光面。 |
 | 降噪 | NRD 与 SVGF 两条可选路径；NRD 的 native 状态变化会回写 RenderGraph。 |
@@ -196,6 +198,7 @@ cmake --build ..\build --config Release --target RaytracingDemo UnitySceneDump
 - Unity importer 是静态、有限的导入器；prefab / nested prefab、skinned mesh、`LODGroup` 与 asset-database cache 尚未覆盖。
 - JSON 场景已经可用，但压力球仍由 sample C++ 定义，不属于场景数据。它们默认开启，可以通过运行时 UI 走增量 Add/Remove 路径切换。
 - Meshlet 路径是实验性 GBuffer 后端，不是完整的 visibility / streaming 系统，也不代表已达到最优 Meshlet 性能。
+- `Stylized Comic` 是实验性的风格化 PBR/PBR-NPR 材质评估：它保留金属度、粗糙度和 GGX 材质输入，同时加入分段漫反射、冷色阴影和图形化高光；这不是完整的 Spider-Verse 复刻，线稿、网点、套印、hatching 与时间风格化仍不属于该材质模型。
 - ReSTIR DI 是实验性的 inline ray-query 直接光 sample。它的光源采样、自发光表面发射体、时空复用和可见性测试选项仍在演进；图像质量、稳定性和性能均未作为等价 RTXDI 的实现完成验收。
 - ReSTIR GI 是实验性的 inline ray-query 间接光 sample，参考 [DQLin/ReSTIR_PT](https://github.com/DQLin/ReSTIR_PT) 中 ReSTIR GI 的数据流实现。当前目标是 one-bounce transport，使用持久化 packed reservoir；现阶段只有构建与自动化覆盖，画质、时域稳定性、显存占用和性能仍需要在目标硬件上验收。
 - 软阴影当前使用固定 4 次采样的变体：平行光读取 angular radius，点光源读取 source radius；自适应采样和质量档位尚未实现。

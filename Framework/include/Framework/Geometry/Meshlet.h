@@ -10,6 +10,7 @@
 #include <d3d12.h>
 
 #include <cstdint>
+#include <span>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -177,6 +178,7 @@ public:
         const std::vector<MeshletSceneInstanceSource>& instances);
     MeshletSceneInstanceHandle AddInstance(const MeshletSceneInstanceSource& instance);
     bool RemoveInstance(MeshletSceneInstanceHandle handle);
+    void RemoveInstances(std::span<const MeshletSceneInstanceHandle> handles);
     void Upload(CommandList& commandList);
 
     MeshletGpuResources GetGpuResources();

@@ -2,9 +2,9 @@
 
 #include <functional>
 #include <memory>
-#include <vector>
 #include <map>
 #include <queue>
+#include <vector>
 
 #include <d3d12.h>
 #include <wrl.h>
@@ -17,6 +17,9 @@
 class Texture;
 class Buffer;
 class ByteAddressBuffer;
+//Modify Begin:2026-08-12 by BestHui
+class CommandQueue;
+//Modify End
 class StructuredBuffer;
 class Resource;
 class ResourceStateRegistry;
@@ -99,7 +102,9 @@ namespace RenderGraph
 
         ResourceInstance& AppendResourceInstance(ResourceId resourceId, const ResourceInstance& resourceInstance);
 
-        std::vector<ResourceInstance> m_ResourceInstances;
+//Modify Begin:2026-07-30 by BestHui
+        std::map<ResourceId, ResourceInstance> m_ResourceInstances;
+//Modify End
         std::map<ResourceId, ResourceDescription> m_ResourceDescriptions;
         std::vector<TransientResourceAllocator::HeapInfo> m_HeapInfos;
 //Modify Begin:2026-07-28 by BestHui
@@ -110,9 +115,9 @@ namespace RenderGraph
         struct DeferredDeletionBatch
         {
             RenderGraphQueueFenceValues FenceValues;
-            std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> Resources;
             std::vector<Microsoft::WRL::ComPtr<ID3D12Heap>> Heaps;
-            std::vector<ID3D12Resource*> ResourceStateEntries;
+            std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> Resources;
+            std::vector<std::shared_ptr<ResourceStateRegistration>> StateRegistrations;
         };
 
         bool IsRetirementComplete(const RenderGraphQueueFenceValues& fenceValues) const;

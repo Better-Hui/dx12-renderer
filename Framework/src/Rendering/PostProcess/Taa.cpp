@@ -1,4 +1,5 @@
 #include <Framework/Rendering/PostProcess/Taa.h>
+#include <Framework/Core/FrameworkDeviceContext.h>
 #include <Framework/Geometry/Mesh.h>
 #include <DX12Library/Helpers.h>
 #include <DX12Library/CommandList.h>
@@ -19,7 +20,10 @@ namespace
 //Modify Begin:2026-07-27 by BestHui
 TAA::TAA(FrameworkDeviceContext& deviceContext, CommandList& commandList, DXGI_FORMAT backBufferFormat, uint32_t width, uint32_t height)
 //Modify End
-    : m_BlitMesh(Mesh::CreateBlitTriangle(commandList))
+//Modify Begin:2026-08-12 by BestHui
+    : m_DeviceContext(deviceContext)
+    , m_BlitMesh(Mesh::CreateBlitTriangle(commandList))
+//Modify End
     , m_Width(width)
     , m_Height(height)
 {
@@ -27,17 +31,41 @@ TAA::TAA(FrameworkDeviceContext& deviceContext, CommandList& commandList, DXGI_F
     auto shader = std::make_shared<Shader>(
         deviceContext,
         ShaderBlob(ShaderBytecode_Blit_VS, sizeof ShaderBytecode_Blit_VS),
-        ShaderBlob(ShaderBytecode_TAA_Resolve_PS, sizeof ShaderBytecode_TAA_Resolve_PS)
+        ShaderBlob(ShaderBytecode_TAA_Resolve_PS, sizeof ShaderBytecode_TAA_Resolve_PS),
+//Modify Begin:2026-07-30 by BestHui
+        PipelineLayoutReflectionOptions{
+            .StaticSamplerContracts = {
+                PipelineStaticSamplers::PointClamp(2u),
+                PipelineStaticSamplers::LinearClamp(3u)
+            },
+            .MaxDescriptorCount = 4096u,
+            .ShaderStages = PipelineShaderStageFlags::AllGraphics
+        }
+//Modify End
         );
 //Modify End
     m_Material = Material::Create(shader);
 
     auto rtColorDesc = CD3DX12_RESOURCE_DESC::Tex2D(backBufferFormat, width, height, 1, 1, 1, 0, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);;
-    auto taaTempTexture = std::make_shared<Texture>(rtColorDesc, nullptr, TextureUsageType::RenderTarget, L"TAA Resolve RT");
+//Modify Begin:2026-08-12 by BestHui
+    auto taaTempTexture = std::make_shared<Texture>(
+        rtColorDesc,
+        nullptr,
+        TextureUsageType::RenderTarget,
+        L"TAA Resolve RT",
+        m_DeviceContext.GetD3D12DeviceContext());
+//Modify End
     m_ResolveRenderTarget.AttachTexture(Color0, taaTempTexture);
 
     auto historyBufferDesc = CD3DX12_RESOURCE_DESC::Tex2D(backBufferFormat, width, height, 1, 1);
-    m_HistoryBuffer = std::make_shared<Texture>(historyBufferDesc, nullptr, TextureUsageType::Other, L"TAA History Buffer");
+//Modify Begin:2026-08-12 by BestHui
+    m_HistoryBuffer = std::make_shared<Texture>(
+        historyBufferDesc,
+        nullptr,
+        TextureUsageType::Other,
+        L"TAA History Buffer",
+        m_DeviceContext.GetD3D12DeviceContext());
+//Modify End
 }
 
 DirectX::XMFLOAT2 TAA::ComputeJitterOffset() const
@@ -90,12 +118,12 @@ void TAA::Resolve(CommandList& commandList, const std::shared_ptr<Texture>& curr
     }
 }
 
-void TAA::Resize(uint32_t width, uint32_t height)
+void TAA::Resize(CommandList& commandList, uint32_t width, uint32_t height)
 {
     m_Width = width;
     m_Height = height;
-    m_HistoryBuffer->Resize(width, height);
-    m_ResolveRenderTarget.Resize(width, height);
+    m_HistoryBuffer->Resize(commandList, width, height);
+    m_ResolveRenderTarget.Resize(commandList, width, height);
 }
 
 const std::shared_ptr<Texture>& TAA::GetResolvedTexture() const

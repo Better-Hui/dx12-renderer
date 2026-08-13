@@ -69,7 +69,8 @@ GenerateMipsPso::GenerateMipsPso(Microsoft::WRL::ComPtr<ID3D12Device2> device)
 	// Create some default texture UAV's to pad any unused UAV's during mip map generation.
 	m_DescriptorAllocator = std::make_unique<DescriptorAllocator>(
 		D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-		m_Device);
+		m_Device,
+		m_DescriptorRetirementClock);
 	m_DefaultUav = m_DescriptorAllocator->Allocate(MAX_MIP_LEVELS_AT_ONCE);
 
 	for (UINT i = 0; i < MAX_MIP_LEVELS_AT_ONCE; ++i)

@@ -114,7 +114,6 @@ public:
     void SetTexture(const ComputeShader& shader, std::string_view name, const ShaderResourceView& shaderResourceView) const;
     void SetTexture(const ComputeShader& shader, std::string_view name, const std::shared_ptr<Resource>& texture) const;
     void SetUnorderedAccessView(const ComputeShader& shader, std::string_view name, const UnorderedAccessView& unorderedAccessView) const;
-    void SetAccelerationStructure(const ComputeShader& shader, const RayTracingAccelerationStructure& accelerationStructure) const;
     void SetAccelerationStructure(const ComputeShader& shader, std::string_view name, const RayTracingAccelerationStructure& accelerationStructure) const;
 //Modify End
 //Modify Begin:2026-07-27 by BestHui

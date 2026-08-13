@@ -18,6 +18,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 class CommandList;
@@ -42,9 +43,7 @@ enum class RayTracingShaderBindingType
     AccelerationStructure,
     ConstantBuffer,
     StructuredBuffer,
-    TextureArray,
-    VertexBufferArray,
-    IndexBufferArray
+    TextureArray
 };
 
 struct RayTracingShaderBindingDesc
@@ -105,7 +104,6 @@ public:
     RayTracingPipelineDescBuilder();
     explicit RayTracingPipelineDescBuilder(RayTracingPipelineDesc desc);
 
-    static RayTracingPipelineDescBuilder Default();
     static RayTracingPipelineDescBuilder ReflectedDefault(const ShaderBlob& shaderLibrary);
 
     RayTracingPipelineDescBuilder& WithExport(std::wstring exportName);
@@ -125,8 +123,9 @@ public:
     RayTracingPipelineDescBuilder& WithConstantBuffer(std::string name, uint32_t shaderRegister, uint32_t registerSpace = 0);
     RayTracingPipelineDescBuilder& WithStructuredBuffer(std::string name, uint32_t shaderRegister, uint32_t registerSpace = 0);
     RayTracingPipelineDescBuilder& WithTextureArray(std::string name, uint32_t shaderRegister, uint32_t registerSpace, uint32_t descriptorCount);
-    RayTracingPipelineDescBuilder& WithVertexBufferArray(std::string name, uint32_t shaderRegister, uint32_t registerSpace, uint32_t descriptorCount);
-    RayTracingPipelineDescBuilder& WithIndexBufferArray(std::string name, uint32_t shaderRegister, uint32_t registerSpace, uint32_t descriptorCount);
+//Modify Begin:2026-07-30 by BestHui
+    RayTracingPipelineDescBuilder& WithStaticSamplerContract(PipelineStaticSamplerContract contract);
+//Modify End
 
     RayTracingPipelineDescBuilder& WithPayloadSize(uint32_t payloadSizeInBytes);
     RayTracingPipelineDescBuilder& WithAttributeSize(uint32_t attributeSizeInBytes);
@@ -144,6 +143,9 @@ private:
         uint32_t descriptorCount);
 
     RayTracingPipelineDesc m_Desc;
+//Modify Begin:2026-07-30 by BestHui
+    std::vector<std::pair<uint32_t, uint32_t>> m_ReflectedStaticSamplerCoordinates;
+//Modify End
 };
 //Modify End
 
@@ -195,7 +197,6 @@ private:
 class RayTracingShader
 {
 public:
-    RayTracingShader(FrameworkDeviceContext& deviceContext, const ShaderBlob& shaderLibrary);
     RayTracingShader(
         FrameworkDeviceContext& deviceContext,
         const ShaderBlob& shaderLibrary,
@@ -208,7 +209,6 @@ public:
     RayTracingShader& operator=(RayTracingShader&&) noexcept;
 
     static bool IsSupported(const FrameworkDeviceContext& deviceContext);
-    static RayTracingPipelineDesc CreateDefaultPipelineDesc();
 
     const RayTracingPipelineDesc& GetDesc() const;
     const PipelineLayout& GetPipelineLayout() const;

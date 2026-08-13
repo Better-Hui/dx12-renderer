@@ -2,7 +2,6 @@
 
 #include "DescriptorAllocation.h"
 
-#include "Application.h"
 #include "DescriptorAllocatorPage.h"
 
 DescriptorAllocation::DescriptorAllocation() :
@@ -62,7 +61,7 @@ void DescriptorAllocation::Free()
 {
 	if (!IsNull() && Page)
 	{
-		Page->Free(std::move(*this), Application::GetFrameCount());
+		Page->Free(std::move(*this));
 
 		Descriptor.ptr = 0;
 		NumHandles = 0;

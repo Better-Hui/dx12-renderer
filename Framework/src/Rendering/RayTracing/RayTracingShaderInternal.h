@@ -30,8 +30,6 @@ namespace RayTracingShaderInternal
         {
         case RayTracingShaderBindingType::OutputTexture:
         case RayTracingShaderBindingType::TextureArray:
-        case RayTracingShaderBindingType::VertexBufferArray:
-        case RayTracingShaderBindingType::IndexBufferArray:
             return true;
         default:
             return false;
@@ -52,10 +50,6 @@ namespace RayTracingShaderInternal
             return "StructuredBuffer";
         case RayTracingShaderBindingType::TextureArray:
             return "TextureArray";
-        case RayTracingShaderBindingType::VertexBufferArray:
-            return "VertexBufferArray";
-        case RayTracingShaderBindingType::IndexBufferArray:
-            return "IndexBufferArray";
         default:
             return "Unknown";
         }

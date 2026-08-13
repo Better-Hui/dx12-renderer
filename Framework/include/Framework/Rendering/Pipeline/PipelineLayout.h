@@ -132,6 +132,27 @@ struct PipelineRootSamplerDesc
 };
 //Modify End
 
+//Modify Begin:2026-08-12 by BestHui
+struct PipelineStaticSamplerContract
+{
+    std::string Name;
+    UINT ShaderRegister = 0;
+    UINT RegisterSpace = 0;
+    D3D12_STATIC_SAMPLER_DESC Desc = {};
+};
+
+namespace PipelineStaticSamplers
+{
+    PipelineStaticSamplerContract PointWrap(UINT shaderRegister, UINT registerSpace = 0);
+    PipelineStaticSamplerContract LinearWrap(UINT shaderRegister, UINT registerSpace = 0);
+    PipelineStaticSamplerContract PointClamp(UINT shaderRegister, UINT registerSpace = 0);
+    PipelineStaticSamplerContract LinearClamp(UINT shaderRegister, UINT registerSpace = 0);
+    PipelineStaticSamplerContract ShadowCompareClamp(UINT shaderRegister, UINT registerSpace = 0);
+
+    void AddCommonRootSignatureContracts(std::vector<PipelineStaticSamplerContract>& contracts);
+}
+//Modify End
+
 struct PipelineLayoutBindingOverride
 {
     std::string Name;
@@ -141,11 +162,13 @@ struct PipelineLayoutBindingOverride
 struct PipelineLayoutReflectionOptions
 {
     std::vector<PipelineLayoutBindingOverride> BindingOverrides;
+//Modify Begin:2026-08-12 by BestHui
+    std::vector<PipelineStaticSamplerContract> StaticSamplerContracts;
+//Modify End
 //Modify Begin:2026-07-31 by BestHui
     std::vector<std::string> RootConstantBufferNames;
 //Modify End
     UINT MaxDescriptorCount = 1024;
-    std::string AccelerationStructureFallbackName;
 //Modify Begin:2026-07-27 by BestHui
     PipelineShaderStageFlags ShaderStages = PipelineShaderStageFlags::All;
 //Modify End
@@ -206,7 +229,6 @@ public:
     const PipelineDescriptorRangeDesc* FindRange(const std::string& name, DescriptorBindingKind expectedKind) const;
     const PipelineDescriptorRangeDesc* FindRangeByRootParameterIndex(UINT rootParameterIndex) const;
     const DescriptorBindingInfo& GetBinding(const std::string& name, DescriptorBindingKind expectedKind) const;
-    const DescriptorBindingInfo& GetFirstBinding(DescriptorBindingKind expectedKind) const;
 
     void AddDefaultShaderResourceViewTable(
         UINT rootParameterIndex,

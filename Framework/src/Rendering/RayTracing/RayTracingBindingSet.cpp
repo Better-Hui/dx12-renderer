@@ -5,12 +5,9 @@
 
 #include <DX12Library/CommandList.h>
 #include <DX12Library/Helpers.h>
-#include <DX12Library/IndexBuffer.h>
 #include <DX12Library/StructuredBuffer.h>
 #include <DX12Library/Texture.h>
-#include <DX12Library/VertexBuffer.h>
 #include <Framework/Rendering/Pipeline/CommandContext.h>
-#include <Framework/Geometry/Mesh.h>
 #include <Framework/Rendering/Pipeline/PipelineDescriptorSet.h>
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <Framework/Rendering/Texture/UnorderedAccessView.h>
@@ -38,28 +35,6 @@ namespace
         return findResult != desc.Bindings.end() ? &*findResult : nullptr;
     }
 
-    D3D12_SHADER_RESOURCE_VIEW_DESC CreateVertexBufferSrvDesc(const VertexBuffer& vertexBuffer)
-    {
-        D3D12_SHADER_RESOURCE_VIEW_DESC desc = {};
-        desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-        desc.Format = DXGI_FORMAT_UNKNOWN;
-        desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        desc.Buffer.NumElements = static_cast<UINT>(vertexBuffer.GetNumVertices());
-        desc.Buffer.StructureByteStride = static_cast<UINT>(vertexBuffer.GetVertexStride());
-        desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
-        return desc;
-    }
-
-    D3D12_SHADER_RESOURCE_VIEW_DESC CreateIndexBufferSrvDesc(const IndexBuffer& indexBuffer)
-    {
-        D3D12_SHADER_RESOURCE_VIEW_DESC desc = {};
-        desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-        desc.Format = indexBuffer.GetIndexFormat();
-        desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        desc.Buffer.NumElements = static_cast<UINT>(indexBuffer.GetNumIndices());
-        desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
-        return desc;
-    }
 //Modify End
 }
 
@@ -101,9 +76,7 @@ const RayTracingShaderBindingDesc& RayTracingBindingSet::Impl::GetShaderResource
     const RayTracingShaderBindingDesc* binding = FindBinding(Shader.GetDesc(), name);
     Assert(binding != nullptr, "Ray tracing shader binding was not found.");
 
-    if (binding->Type != RayTracingShaderBindingType::TextureArray &&
-        binding->Type != RayTracingShaderBindingType::VertexBufferArray &&
-        binding->Type != RayTracingShaderBindingType::IndexBufferArray)
+    if (binding->Type != RayTracingShaderBindingType::TextureArray)
     {
         const std::string message =
             "Ray tracing shader binding type does not match the SRV setter. Name=" +
@@ -202,44 +175,6 @@ void RayTracingBindingSet::SetAccelerationStructure(std::string_view name, const
 {
     m_Impl->GetBinding(name, RayTracingShaderBindingType::AccelerationStructure);
     m_Impl->DescriptorSet.SetAccelerationStructure(name, accelerationStructure);
-//Modify Begin:2026-07-27 by BestHui
-    const std::vector<std::shared_ptr<Mesh>>& meshes = accelerationStructure.GetMeshes();
-    for (const RayTracingShaderBindingDesc& binding : m_Impl->Shader.GetDesc().Bindings)
-    {
-        if (binding.Type != RayTracingShaderBindingType::VertexBufferArray &&
-            binding.Type != RayTracingShaderBindingType::IndexBufferArray)
-        {
-            continue;
-        }
-
-        Assert(meshes.size() <= binding.DescriptorCount, "Ray tracing mesh descriptor array exceeds binding descriptor count.");
-        m_Impl->DescriptorSet.ClearShaderResourceViews(binding.Name);
-        for (uint32_t i = 0; i < static_cast<uint32_t>(meshes.size()); ++i)
-        {
-            const Mesh& mesh = *meshes[i];
-            if (binding.Type == RayTracingShaderBindingType::VertexBufferArray)
-            {
-                const VertexBuffer& vertexBuffer = mesh.GetVertexBuffer();
-                m_Impl->DescriptorSet.SetShaderResource(
-                    binding.Name,
-                    i,
-                    vertexBuffer,
-                    D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE,
-                    CreateVertexBufferSrvDesc(vertexBuffer));
-            }
-            else
-            {
-                const IndexBuffer& indexBuffer = mesh.GetIndexBuffer();
-                m_Impl->DescriptorSet.SetShaderResource(
-                    binding.Name,
-                    i,
-                    indexBuffer,
-                    D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE,
-                    CreateIndexBufferSrvDesc(indexBuffer));
-            }
-        }
-    }
-//Modify End
 }
 
 void RayTracingBindingSet::SetConstantBufferData(std::string_view name, const void* data, const size_t size)

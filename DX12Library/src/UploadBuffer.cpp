@@ -84,13 +84,19 @@ UploadBuffer::Page::Page(Microsoft::WRL::ComPtr<ID3D12Device2> device, const siz
 	));
 
 	m_GpuPtr = m_Resource->GetGPUVirtualAddress();
-	m_Resource->Map(0, nullptr, &m_CpuPtr);
+//Modify Begin:2026-07-30 by BestHui
+	const D3D12_RANGE readRange = { 0, 0 };
+	ThrowIfFailed(m_Resource->Map(0, &readRange, &m_CpuPtr));
+//Modify End
 }
 //Modify End
 
 UploadBuffer::Page::~Page()
 {
-	m_Resource->Unmap(0, nullptr);
+//Modify Begin:2026-07-30 by BestHui
+	const D3D12_RANGE writeRange = { 0, m_SizeInBytes };
+	m_Resource->Unmap(0, &writeRange);
+//Modify End
 	m_CpuPtr = nullptr;
 	m_GpuPtr = static_cast<D3D12_GPU_VIRTUAL_ADDRESS>(0);
 }

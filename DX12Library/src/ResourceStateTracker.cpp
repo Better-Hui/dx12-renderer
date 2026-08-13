@@ -80,11 +80,11 @@ void ResourceStateTracker::ResourceBarrier(const D3D12_RESOURCE_BARRIER& barrier
 void ResourceStateTracker::TransitionResource(ID3D12Resource* resource, const D3D12_RESOURCE_STATES stateAfter,
 	const UINT subResource)
 {
-	if (resource)
-	{
-		ResourceBarrier(
-			CD3DX12_RESOURCE_BARRIER::Transition(resource, D3D12_RESOURCE_STATE_COMMON, stateAfter, subResource));
-	}
+//Modify Begin:2026-08-12 by BestHui
+	Assert(resource != nullptr, "Cannot track a transition for a null D3D12 resource.");
+	ResourceBarrier(
+		CD3DX12_RESOURCE_BARRIER::Transition(resource, D3D12_RESOURCE_STATE_COMMON, stateAfter, subResource));
+//Modify End
 }
 
 void ResourceStateTracker::TransitionResource(const Resource& resource, const D3D12_RESOURCE_STATES stateAfter,
@@ -92,6 +92,17 @@ void ResourceStateTracker::TransitionResource(const Resource& resource, const D3
 {
 	TransitionResource(resource.GetD3D12Resource().Get(), stateAfter, subResource);
 }
+
+//Modify Begin:2026-07-30 by BestHui
+void ResourceStateTracker::NotifyResourceState(
+    ID3D12Resource* resource,
+    const D3D12_RESOURCE_STATES state,
+    const UINT subResource)
+{
+    Assert(resource != nullptr, "Cannot notify a null D3D12 resource state.");
+    m_FinalResourceStates[resource].SetSubresourceState(subResource, state);
+}
+//Modify End
 
 
 void ResourceStateTracker::UavBarrier(const Resource* resource)
@@ -151,16 +162,13 @@ uint32_t ResourceStateTracker::FlushPendingResourceBarriers(
 		if (pendingBarrier.Type == D3D12_RESOURCE_BARRIER_TYPE_TRANSITION)
 		{
 			auto pendingTransition = pendingBarrier.Transition;
-            auto [iter, inserted] = resourceStates.try_emplace(
-                pendingTransition.pResource,
-                pendingTransition.StateBefore);
-            if (inserted)
-            {
-                resourceBarriers.push_back(pendingBarrier);
-            }
-            else
-            {
-				// If all subresources are being transitioned, and there are multiple
+//Modify Begin:2026-07-30 by BestHui
+            const auto iter = resourceStates.find(pendingTransition.pResource);
+            Assert(
+                iter != resourceStates.end(),
+                "D3D12 resource state was not registered before its first transition.");
+
+			// If all subresources are being transitioned, and there are multiple
 				// subresources of the resource that are in a different state...
 
                 auto& resourceState = iter->second;
@@ -191,7 +199,6 @@ uint32_t ResourceStateTracker::FlushPendingResourceBarriers(
 						resourceBarriers.push_back(pendingBarrier);
 					}
 				}
-			}
 		}
 	}
 
@@ -217,7 +224,13 @@ void ResourceStateTracker::CommitFinalResourceStates(
     ResourceStateMapType& resourceStates = submissionScope.GetStates();
 	for (const auto& resourceState : m_FinalResourceStates)
 	{
-		resourceStates[resourceState.first] = resourceState.second;
+//Modify Begin:2026-07-30 by BestHui
+        const auto iter = resourceStates.find(resourceState.first);
+        Assert(
+            iter != resourceStates.end(),
+            "D3D12 resource state was not registered before its final state was committed.");
+        iter->second = resourceState.second;
+//Modify End
 	}
 
 	m_FinalResourceStates.clear();

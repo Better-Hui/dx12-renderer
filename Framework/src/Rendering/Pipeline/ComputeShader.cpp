@@ -40,6 +40,36 @@ ComputePipelineDescBuilder& ComputePipelineDescBuilder::WithDescriptorArrayCount
     return *this;
 }
 
+//Modify Begin:2026-08-12 by BestHui
+ComputePipelineDescBuilder& ComputePipelineDescBuilder::WithStaticSamplerContract(
+    PipelineStaticSamplerContract contract)
+{
+    const auto existingContract = std::find_if(
+        m_Desc.StaticSamplerContracts.begin(),
+        m_Desc.StaticSamplerContracts.end(),
+        [&contract](const PipelineStaticSamplerContract& existing)
+        {
+            return existing.ShaderRegister == contract.ShaderRegister &&
+                existing.RegisterSpace == contract.RegisterSpace;
+        });
+
+    if (existingContract != m_Desc.StaticSamplerContracts.end())
+    {
+        *existingContract = std::move(contract);
+        return *this;
+    }
+
+    m_Desc.StaticSamplerContracts.push_back(std::move(contract));
+    return *this;
+}
+
+ComputePipelineDescBuilder& ComputePipelineDescBuilder::WithCommonRootSignatureStaticSamplers()
+{
+    PipelineStaticSamplers::AddCommonRootSignatureContracts(m_Desc.StaticSamplerContracts);
+    return *this;
+}
+//Modify End
+
 ComputePipelineDescBuilder& ComputePipelineDescBuilder::WithMaxDescriptorCount(UINT maxDescriptorCount)
 {
     m_Desc.MaxDescriptorCount = maxDescriptorCount;
@@ -104,6 +134,13 @@ bool ComputeShader::HasUnorderedAccessView(const std::string& variableName) cons
 {
     return m_BindingSet->HasBinding(variableName, DescriptorBindingKind::UnorderedAccessView);
 }
+
+//Modify Begin:2026-07-30 by BestHui
+bool ComputeShader::HasAccelerationStructure(const std::string& variableName) const
+{
+    return m_BindingSet->HasBinding(variableName, DescriptorBindingKind::AccelerationStructure);
+}
+//Modify End
 
 void ComputeShader::SetConstantBuffer(CommandList& commandList, const std::string& variableName, size_t size, const void* data) const
 {
@@ -174,11 +211,13 @@ void ComputeShader::SetUnorderedAccessView(CommandList& commandList, const std::
     m_DescriptorSet->SetUnorderedAccessView(variableName, unorderedAccessView);
 }
 
-void ComputeShader::SetAccelerationStructure(CommandList& commandList, const RayTracingAccelerationStructure& accelerationStructure) const
+void ComputeShader::SetAccelerationStructure(
+    CommandList& commandList,
+    const std::string& variableName,
+    const RayTracingAccelerationStructure& accelerationStructure) const
 {
-    const PipelineDescriptorRangeDesc& accelerationStructureBinding = m_BindingSet->GetFirstRange(DescriptorBindingKind::AccelerationStructure);
     (void)commandList;
-    m_DescriptorSet->SetAccelerationStructure(accelerationStructureBinding.Name, accelerationStructure);
+    m_DescriptorSet->SetAccelerationStructure(variableName, accelerationStructure);
 }
 
 Microsoft::WRL::ComPtr<ID3D12PipelineState> ComputeShader::GetPipelineState(const Microsoft::WRL::ComPtr<ID3D12Device2>& device) const
@@ -204,13 +243,15 @@ void ComputeShader::BuildReflectedRootSignature(const ComputePipelineDesc& desc)
     //Modify Begin:2026-07-24 by BestHui
     PipelineLayoutReflectionOptions layoutOptions;
     layoutOptions.MaxDescriptorCount = desc.MaxDescriptorCount;
-    layoutOptions.AccelerationStructureFallbackName = "g_InlineRayTracingScene";
     layoutOptions.ShaderStages = PipelineShaderStageFlags::Compute;
     layoutOptions.BindingOverrides.reserve(desc.BindingOverrides.size());
     for (const ComputePipelineDesc::BindingOverride& bindingOverride : desc.BindingOverrides)
     {
         layoutOptions.BindingOverrides.push_back({ bindingOverride.Name, bindingOverride.DescriptorCount });
     }
+//Modify Begin:2026-08-12 by BestHui
+    layoutOptions.StaticSamplerContracts = desc.StaticSamplerContracts;
+//Modify End
 
     m_PipelineLayout->Reset(PipelineLayout::CreateDescFromReflection(m_ShaderMetadata, layoutOptions));
     m_BindingSet = std::make_unique<PipelineBindingSet>(*m_PipelineLayout);

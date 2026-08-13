@@ -63,6 +63,7 @@ void ClosestHit(inout RayPayload payload, BuiltInTriangleIntersectionAttributes 
         attributes.barycentrics,
         WorldRayDirection(),
         ObjectToWorld3x4(),
+        WorldToObject3x4(),
         RayTCurrent());
     payload.BaseColor = trianglePayload.BaseColor;
     payload.HitT = trianglePayload.HitT;

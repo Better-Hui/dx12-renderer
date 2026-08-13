@@ -2,6 +2,7 @@
 #pragma once
 
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
+#include <Framework/Rendering/Lighting/MaterialShadingModel.h>
 #include <Framework/Rendering/RayTracing/RayTracingShader.h>
 #include <Framework/Rendering/Pipeline/ShaderVariant.h>
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
@@ -73,6 +74,7 @@ public:
     void EnsurePipelines(
         PathTracingBackend backend,
         PathTracingShadowMode shadowMode,
+        MaterialShadingModel shadingModel,
         const RayTracingSceneResourceLayout& layout,
         uint32_t maxPathBounces);
     //Modify End
@@ -85,6 +87,7 @@ public:
     PathTracingBackend GetBackend() const { return m_Backend; }
     //Modify Begin:2026-07-30 by BestHui
     PathTracingShadowMode GetShadowMode() const { return m_ShadowMode; }
+    MaterialShadingModel GetMaterialShadingModel() const { return m_MaterialShadingModel; }
     //Modify End
     ComputeShader& GetInlineDirectLightingShader() const;
     ComputeShader& GetInlineIndirectLightingShader() const;
@@ -128,6 +131,9 @@ private:
     PathTracingBackend m_Backend = PathTracingBackend::InlineRayQuery;
 //Modify Begin:2026-07-30 by BestHui
     PathTracingShadowMode m_ShadowMode = PathTracingShadowMode::HardShadows;
+//Modify End
+//Modify Begin:2026-07-30 by BestHui
+    MaterialShadingModel m_MaterialShadingModel = MaterialShadingModel::Pbr;
 //Modify End
     uint32_t m_MaxPathBounces = 3u;
     RayTracingSceneResourceLayout m_Layout;

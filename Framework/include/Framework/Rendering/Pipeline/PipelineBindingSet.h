@@ -19,12 +19,9 @@ public:
 
     bool HasBinding(std::string_view name) const;
     bool HasBinding(std::string_view name, DescriptorBindingKind expectedKind) const;
-    bool HasBinding(DescriptorBindingKind expectedKind) const;
     const PipelineDescriptorRangeDesc* FindRange(std::string_view name, DescriptorBindingKind expectedKind) const;
     const PipelineDescriptorRangeDesc& GetRange(std::string_view name, DescriptorBindingKind expectedKind) const;
-    const PipelineDescriptorRangeDesc& GetFirstRange(DescriptorBindingKind expectedKind) const;
     const DescriptorBindingInfo& GetBinding(std::string_view name, DescriptorBindingKind expectedKind) const;
-    const DescriptorBindingInfo& GetFirstBinding(DescriptorBindingKind expectedKind) const;
     UINT GetRootParameterIndex(std::string_view name, DescriptorBindingKind expectedKind) const;
     UINT GetDescriptorCount(std::string_view name, DescriptorBindingKind expectedKind) const;
     void ValidateArrayIndex(std::string_view name, DescriptorBindingKind expectedKind, UINT arrayIndex) const;

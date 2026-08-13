@@ -12,6 +12,9 @@ Cubemap::Cubemap(uint32_t size, DirectX::XMVECTOR position, CommandList& command
     , m_Viewport(CD3DX12_VIEWPORT(0.0f, 0.0f, static_cast<float>(size), static_cast<float>(size)))
     , m_ScissorRect(CD3DX12_RECT(0, 0, LONG_MAX, LONG_MAX))
 {
+//Modify Begin:2026-08-12 by BestHui
+    const std::shared_ptr<D3D12DeviceContext>& deviceContext = commandList.GetDeviceContext();
+//Modify End
     auto colorDesc = CD3DX12_RESOURCE_DESC::Tex2D(backBufferFormat,
         size, size,
         SIDES_COUNT,
@@ -23,7 +26,8 @@ Cubemap::Cubemap(uint32_t size, DirectX::XMVECTOR position, CommandList& command
     {
         auto colorTexture = std::make_shared<Texture>(colorDesc, &m_ClearColor,
             TextureUsageType::RenderTarget,
-            L"Cubemap Color Render Target");
+            L"Cubemap Color Render Target",
+            deviceContext);
 
         auto depthDesc = CD3DX12_RESOURCE_DESC::Tex2D(depthBufferFormat,
             size, size,
@@ -36,7 +40,8 @@ Cubemap::Cubemap(uint32_t size, DirectX::XMVECTOR position, CommandList& command
 
         auto depthTexture = std::make_shared<Texture>(depthDesc, &depthClearValue,
             TextureUsageType::Depth,
-            L"Cubemap Depth Render Target");
+            L"Cubemap Depth Render Target",
+            deviceContext);
 
         m_RenderedCubemap.AttachTexture(Color0, colorTexture);
         m_RenderedCubemap.AttachTexture(DepthStencil, depthTexture);
@@ -58,7 +63,14 @@ Cubemap::Cubemap(uint32_t size, DirectX::XMVECTOR position, CommandList& command
         auto fallbackColorDesc = colorDesc;
         fallbackColorDesc.Width = 1;
         fallbackColorDesc.Height = 1;
-        m_FallbackCubemap = std::make_shared<Texture>(colorDesc, &m_ClearColor, TextureUsageType::RenderTarget, L"Fallback Cubemap");
+//Modify Begin:2026-08-12 by BestHui
+        m_FallbackCubemap = std::make_shared<Texture>(
+            fallbackColorDesc,
+            &m_ClearColor,
+            TextureUsageType::RenderTarget,
+            L"Fallback Cubemap",
+            deviceContext);
+//Modify End
     }
 }
 
@@ -101,4 +113,3 @@ void Cubemap::ComputeViewProjectionMatrices(CommandList& commandList, uint32_t s
     *viewDest = DirectX::XMMatrixLookToLH(m_Position, orientation.Forward, orientation.Up);
     *projectionDest = DirectX::XMMatrixPerspectiveFovLH(DirectX::XMConvertToRadians(90.0f), 1, 0.01f, 100.0f);
 }
-

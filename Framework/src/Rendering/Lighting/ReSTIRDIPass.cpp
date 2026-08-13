@@ -75,13 +75,14 @@ ReSTIRDIPass::~ReSTIRDIPass() = default;
 void ReSTIRDIPass::EnsurePipelines(
     const bool useSoftShadowVariant,
     const uint32_t environmentProjectionVariant,
-    const ReSTIRDIFrameConstants& constants)
+    const ReSTIRDIFrameConstants& constants,
+    const MaterialShadingModel shadingModel)
 {
     PipelineSet& pipelines = GetPipelines(useSoftShadowVariant, environmentProjectionVariant);
-    GetStageShader(pipelines, ReSTIRDIStage::RIS, constants);
-    GetStageShader(pipelines, ReSTIRDIStage::Temporal, constants);
-    GetStageShader(pipelines, ReSTIRDIStage::Spatial, constants);
-    GetStageShader(pipelines, ReSTIRDIStage::Shade, constants);
+    GetStageShader(pipelines, ReSTIRDIStage::RIS, constants, shadingModel);
+    GetStageShader(pipelines, ReSTIRDIStage::Temporal, constants, shadingModel);
+    GetStageShader(pipelines, ReSTIRDIStage::Spatial, constants, shadingModel);
+    GetStageShader(pipelines, ReSTIRDIStage::Shade, constants, shadingModel);
 }
 
 void ReSTIRDIPass::Execute(
@@ -131,18 +132,20 @@ void ReSTIRDIPass::EnsureResources(const uint32_t width, const uint32_t height)
     }
 
     m_Resources = std::make_unique<InternalResources>();
-    const auto createReservoir = [width, height](const wchar_t* name)
+//Modify Begin:2026-08-12 by BestHui
+    const auto createReservoir = [this, width, height](const wchar_t* name)
     {
-        return RenderTexture::CreateUav2D(RESERVOIR_FORMAT, width, height, name);
+        return RenderTexture::CreateUav2D(m_DeviceContext, RESERVOIR_FORMAT, width, height, name);
     };
-    const auto createHistoryPosition = [width, height](const wchar_t* name)
+    const auto createHistoryPosition = [this, width, height](const wchar_t* name)
     {
-        return RenderTexture::CreateUav2D(HISTORY_POSITION_FORMAT, width, height, name);
+        return RenderTexture::CreateUav2D(m_DeviceContext, HISTORY_POSITION_FORMAT, width, height, name);
     };
-    const auto createHistoryShading = [width, height](const wchar_t* name)
+    const auto createHistoryShading = [this, width, height](const wchar_t* name)
     {
-        return RenderTexture::CreateUav2D(HISTORY_SHADING_FORMAT, width, height, name);
+        return RenderTexture::CreateUav2D(m_DeviceContext, HISTORY_SHADING_FORMAT, width, height, name);
     };
+//Modify End
 
     m_Resources->ReservoirA = createReservoir(L"ReSTIR DI Reservoir A");
     m_Resources->ReservoirB = createReservoir(L"ReSTIR DI Reservoir B");
@@ -171,7 +174,11 @@ void ReSTIRDIPass::ExecuteInitialSampling(
     const ReSTIRDIExecutionInputs& inputs,
     PipelineSet& pipelines)
 {
-    ComputeShader& shader = GetStageShader(pipelines, ReSTIRDIStage::RIS, inputs.FrameState.Constants);
+    ComputeShader& shader = GetStageShader(
+        pipelines,
+        ReSTIRDIStage::RIS,
+        inputs.FrameState.Constants,
+        inputs.FrameState.ShadingModel);
     inputs.BindSceneInputs(commandContext, shader);
     commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
     commandContext.SetUnorderedAccessView(shader, "ReSTIRDIRISReservoir", UnorderedAccessView(m_Resources->InitialReservoir));
@@ -186,7 +193,11 @@ void ReSTIRDIPass::ExecuteTemporalResampling(
     const ReSTIRDIExecutionInputs& inputs,
     PipelineSet& pipelines)
 {
-    ComputeShader& shader = GetStageShader(pipelines, ReSTIRDIStage::Temporal, inputs.FrameState.Constants);
+    ComputeShader& shader = GetStageShader(
+        pipelines,
+        ReSTIRDIStage::Temporal,
+        inputs.FrameState.Constants,
+        inputs.FrameState.ShadingModel);
     const bool writeReservoirA = (inputs.FrameState.FrameIndex & 1u) == 0u;
     inputs.BindSceneInputs(commandContext, shader);
     commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
@@ -211,7 +222,11 @@ void ReSTIRDIPass::ExecuteSpatialResampling(
     const ReSTIRDIExecutionInputs& inputs,
     PipelineSet& pipelines)
 {
-    ComputeShader& shader = GetStageShader(pipelines, ReSTIRDIStage::Spatial, inputs.FrameState.Constants);
+    ComputeShader& shader = GetStageShader(
+        pipelines,
+        ReSTIRDIStage::Spatial,
+        inputs.FrameState.Constants,
+        inputs.FrameState.ShadingModel);
     inputs.BindSceneInputs(commandContext, shader);
     commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
     commandContext.SetShaderResourceView(shader, "ReSTIRDITemporalReservoir", ShaderResourceView(m_Resources->TemporalReservoir));
@@ -228,7 +243,11 @@ void ReSTIRDIPass::ExecuteFinalShading(
     const ReSTIRDIExecutionInputs& inputs,
     PipelineSet& pipelines)
 {
-    ComputeShader& shader = GetStageShader(pipelines, ReSTIRDIStage::Shade, inputs.FrameState.Constants);
+    ComputeShader& shader = GetStageShader(
+        pipelines,
+        ReSTIRDIStage::Shade,
+        inputs.FrameState.Constants,
+        inputs.FrameState.ShadingModel);
     const bool writeReservoirA = (inputs.FrameState.FrameIndex & 1u) == 0u;
     inputs.BindSceneInputs(commandContext, shader);
     commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
@@ -260,93 +279,108 @@ size_t ReSTIRDIPass::GetPipelineVariantIndex(
 
 uint32_t ReSTIRDIPass::GetStageVariantKey(
     const ReSTIRDIStage stage,
-    const ReSTIRDIFrameConstants& constants)
+    const ReSTIRDIFrameConstants& constants,
+    const MaterialShadingModel shadingModel)
 {
+    uint32_t featureKey = 0u;
     switch (stage)
     {
     case ReSTIRDIStage::RIS:
-        return constants.InitialVisibilityEnabled != 0u ? 1u : 0u;
+        featureKey = constants.InitialVisibilityEnabled != 0u ? 1u : 0u;
+        break;
 
     case ReSTIRDIStage::Temporal:
         if (constants.TemporalResamplingEnabled == 0u)
         {
-            return (constants.BoilingFilterEnabled != 0u ? 1u : 0u) << 5u;
+            featureKey = (constants.BoilingFilterEnabled != 0u ? 1u : 0u) << 5u;
+            break;
         }
         Assert(constants.TemporalBiasCorrectionMode <= 2u, "Unsupported ReSTIR DI temporal bias correction mode.");
-        return 1u |
+        featureKey = 1u |
             ((constants.TemporalBiasCorrectionMode & 0x3u) << 1u) |
             ((constants.TemporalVisibilityShortcutEnabled != 0u ? 1u : 0u) << 3u) |
             ((constants.TemporalPermutationSamplingEnabled != 0u ? 1u : 0u) << 4u) |
             ((constants.BoilingFilterEnabled != 0u ? 1u : 0u) << 5u);
+        break;
 
     case ReSTIRDIStage::Spatial:
         if (constants.SpatialResamplingEnabled == 0u)
         {
-            return 0u;
+            break;
         }
         Assert(constants.SpatialBiasCorrectionMode <= 3u, "Unsupported ReSTIR DI spatial bias correction mode.");
-        return 1u |
+        featureKey = 1u |
             ((constants.SpatialBiasCorrectionMode & 0x3u) << 1u) |
             ((constants.SpatialMaterialSimilarityTestEnabled != 0u ? 1u : 0u) << 3u) |
             ((constants.SpatialDiscountNaiveSamples != 0u ? 1u : 0u) << 4u);
+        break;
 
     case ReSTIRDIStage::Shade:
         if (constants.FinalVisibilityEnabled == 0u)
         {
-            return 0u;
+            break;
         }
-        return 1u |
+        featureKey = 1u |
             ((constants.FinalVisibilityReuseEnabled != 0u ? 1u : 0u) << 1u) |
             ((constants.FinalVisibilityDiscardInvisibleSamples != 0u ? 1u : 0u) << 2u);
+        break;
     }
 
-    Assert(false, "Unsupported ReSTIR DI stage.");
-    return 0u;
+    return featureKey | (static_cast<uint32_t>(shadingModel) << 8u);
 }
 
 std::vector<ShaderVariantDefine> ReSTIRDIPass::GetStageVariantDefines(
     const ReSTIRDIStage stage,
-    const ReSTIRDIFrameConstants& constants)
+    const ReSTIRDIFrameConstants& constants,
+    const MaterialShadingModel shadingModel)
 {
     const auto booleanDefine = [](const char* name, const bool value)
     {
         return ShaderVariantDefine { name, value ? "1" : "0" };
     };
 
+    std::vector<ShaderVariantDefine> defines;
     switch (stage)
     {
     case ReSTIRDIStage::RIS:
-        return {
+        defines = {
             booleanDefine("RESTIR_DI_USE_INITIAL_VISIBILITY", constants.InitialVisibilityEnabled != 0u),
         };
+        break;
 
     case ReSTIRDIStage::Temporal:
-        return {
+        defines = {
             booleanDefine("RESTIR_DI_USE_TEMPORAL_REUSE", constants.TemporalResamplingEnabled != 0u),
             { "RESTIR_DI_TEMPORAL_BIAS_MODE", std::to_string(constants.TemporalBiasCorrectionMode) },
             booleanDefine("RESTIR_DI_USE_TEMPORAL_VISIBILITY_SHORTCUT", constants.TemporalVisibilityShortcutEnabled != 0u),
             booleanDefine("RESTIR_DI_USE_TEMPORAL_PERMUTATION_SAMPLING", constants.TemporalPermutationSamplingEnabled != 0u),
             booleanDefine("RESTIR_DI_USE_TEMPORAL_BOILING_FILTER", constants.BoilingFilterEnabled != 0u),
         };
+        break;
 
     case ReSTIRDIStage::Spatial:
-        return {
+        defines = {
             booleanDefine("RESTIR_DI_USE_SPATIAL_REUSE", constants.SpatialResamplingEnabled != 0u),
             { "RESTIR_DI_SPATIAL_BIAS_MODE", std::to_string(constants.SpatialBiasCorrectionMode) },
             booleanDefine("RESTIR_DI_USE_SPATIAL_MATERIAL_SIMILARITY", constants.SpatialMaterialSimilarityTestEnabled != 0u),
             booleanDefine("RESTIR_DI_USE_SPATIAL_NAIVE_SAMPLE_DISCOUNT", constants.SpatialDiscountNaiveSamples != 0u),
         };
+        break;
 
     case ReSTIRDIStage::Shade:
-        return {
+        defines = {
             booleanDefine("RESTIR_DI_USE_FINAL_VISIBILITY", constants.FinalVisibilityEnabled != 0u),
             booleanDefine("RESTIR_DI_USE_FINAL_VISIBILITY_REUSE", constants.FinalVisibilityReuseEnabled != 0u),
             booleanDefine("RESTIR_DI_DISCARD_INVISIBLE_FINAL_SAMPLES", constants.FinalVisibilityDiscardInvisibleSamples != 0u),
         };
+        break;
     }
 
-    Assert(false, "Unsupported ReSTIR DI stage.");
-    return {};
+    defines.push_back({
+        "FRAMEWORK_MATERIAL_SHADING_MODEL",
+        std::to_string(static_cast<uint32_t>(shadingModel))
+    });
+    return defines;
 }
 
 ReSTIRDIPass::PipelineSet& ReSTIRDIPass::GetPipelines(
@@ -369,7 +403,8 @@ ReSTIRDIPass::PipelineSet& ReSTIRDIPass::GetPipelines(
 ComputeShader& ReSTIRDIPass::GetStageShader(
     PipelineSet& pipelines,
     const ReSTIRDIStage stage,
-    const ReSTIRDIFrameConstants& constants)
+    const ReSTIRDIFrameConstants& constants,
+    const MaterialShadingModel shadingModel)
 {
     std::unordered_map<uint32_t, std::unique_ptr<ComputeShader>>* stagePipelines = nullptr;
     const std::wstring* sourceFileName = nullptr;
@@ -399,7 +434,7 @@ ComputeShader& ReSTIRDIPass::GetStageShader(
     }
 
     Assert(stagePipelines != nullptr && sourceFileName != nullptr, "Unsupported ReSTIR DI stage.");
-    const uint32_t variantKey = GetStageVariantKey(stage, constants);
+    const uint32_t variantKey = GetStageVariantKey(stage, constants, shadingModel);
     auto [shaderIt, inserted] = stagePipelines->try_emplace(variantKey);
     if (inserted)
     {
@@ -408,7 +443,7 @@ ComputeShader& ReSTIRDIPass::GetStageShader(
             *sourceFileName,
             pipelines.UseSoftShadowVariant,
             pipelines.EnvironmentProjectionVariant,
-            GetStageVariantDefines(stage, constants));
+            GetStageVariantDefines(stage, constants, shadingModel));
     }
 
     Assert(shaderIt->second != nullptr, "ReSTIR DI stage shader creation failed.");
@@ -452,11 +487,18 @@ std::unique_ptr<ComputeShader> ReSTIRDIPass::CreateComputeShader(
         std::make_move_iterator(featureDefines.end()));
 
     const std::shared_ptr<ShaderBlob> shaderBlob = m_ShaderVariants.GetOrCompile(shaderDesc);
+//Modify Begin:2026-08-12 by BestHui
+    ComputePipelineDescBuilder pipelineDescBuilder =
+        ComputePipelineDescBuilder::ReflectedDefault(*shaderBlob)
+            .WithDirectlyIndexedResourceHeap();
+    for (const PipelineStaticSamplerContract& contract : m_ShaderSources.StaticSamplerContracts)
+    {
+        pipelineDescBuilder.WithStaticSamplerContract(contract);
+    }
     return std::make_unique<ComputeShader>(
         m_DeviceContext,
         *shaderBlob,
-        ComputePipelineDescBuilder::ReflectedDefault(*shaderBlob)
-            .WithDirectlyIndexedResourceHeap()
-            .Build());
+        pipelineDescBuilder.Build());
+//Modify End
 }
 //Modify End

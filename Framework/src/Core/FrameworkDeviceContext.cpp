@@ -30,8 +30,9 @@ std::shared_ptr<CommandQueue> FrameworkDeviceContext::GetCommandQueue(
     case D3D12_COMMAND_LIST_TYPE_COPY:
         return m_Desc.CopyQueue;
     default:
-        Assert(false, "Unsupported command queue type.");
-        return nullptr;
+//Modify Begin:2026-07-30 by BestHui
+        throw std::invalid_argument("Unsupported framework command queue type.");
+//Modify End
     }
 }
 

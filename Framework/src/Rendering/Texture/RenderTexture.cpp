@@ -1,5 +1,6 @@
 #include <Framework/Rendering/Texture/RenderTexture.h>
 
+#include <Framework/Core/FrameworkDeviceContext.h>
 #include <DX12Library/Texture.h>
 #include <DX12Library/TextureUsageType.h>
 
@@ -7,6 +8,7 @@
 
 //Modify Begin:2026-07-23 by BestHui
 std::shared_ptr<Texture> RenderTexture::Create2D(
+    const FrameworkDeviceContext& deviceContext,
     DXGI_FORMAT format,
     uint32_t width,
     uint32_t height,
@@ -25,10 +27,18 @@ std::shared_ptr<Texture> RenderTexture::Create2D(
         0,
         flags);
 
-    return std::make_shared<Texture>(desc, nullptr, TextureUsageType::Other, name);
+//Modify Begin:2026-08-12 by BestHui
+    return std::make_shared<Texture>(
+        desc,
+        nullptr,
+        TextureUsageType::Other,
+        name,
+        deviceContext.GetD3D12DeviceContext());
+//Modify End
 }
 
 std::shared_ptr<Texture> RenderTexture::CreateUav2D(
+    const FrameworkDeviceContext& deviceContext,
     DXGI_FORMAT format,
     uint32_t width,
     uint32_t height,
@@ -37,6 +47,7 @@ std::shared_ptr<Texture> RenderTexture::CreateUav2D(
     uint16_t mipLevels)
 {
     return Create2D(
+        deviceContext,
         format,
         width,
         height,

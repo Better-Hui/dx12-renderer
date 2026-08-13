@@ -12,6 +12,8 @@
 #include "RenderPass.h"
 #include "ResourceDescription.h"
 
+#include <stdexcept>
+
 using namespace Microsoft::WRL;
 
 namespace
@@ -111,7 +113,6 @@ namespace
                 RenderGraph::ResourceIds::GetResourceName(desc.m_BufferDescription.m_Id),
                 deviceContext
             );
-            // TODO: add subresources for the Resource class, override it for the structured buffer
             pStructuredBuffer->GetCounterBuffer().SetAutoBarriersEnabled(false);
             pBuffer = pStructuredBuffer;
         }
@@ -156,12 +157,6 @@ void RenderGraph::ResourcePool::BeginFrame(CommandList& commandList)
         if (IsRetirementComplete(m_DeferredDeletionQueue.front().FenceValues))
 //Modify End
         {
-//Modify Begin:2026-07-30 by BestHui
-            for (ID3D12Resource* resource : m_DeferredDeletionQueue.front().ResourceStateEntries)
-            {
-                m_ResourceStateRegistry->RemoveResource(resource);
-            }
-//Modify End
             m_DeferredDeletionQueue.pop();
         }
         else
@@ -181,36 +176,37 @@ bool RenderGraph::ResourcePool::IsRetirementComplete(const RenderGraphQueueFence
 const Resource& RenderGraph::ResourcePool::GetResource(const ResourceId resourceId) const
 {
     Assert(IsRegistered(resourceId), "Resource is not registered.");
-
-    if (resourceId < m_ResourceInstances.size())
-    {
-        const ResourceInstance& resourceInstance = m_ResourceInstances[resourceId];
-        return resourceInstance.GetResource();
-    }
-
-    throw std::exception("Not implemented");
+//Modify Begin:2026-07-30 by BestHui
+    const auto resourceInstance = m_ResourceInstances.find(resourceId);
+    Assert(resourceInstance != m_ResourceInstances.end(), "Registered resource has not been created.");
+    return resourceInstance->second.GetResource();
+//Modify End
 }
 
 const std::shared_ptr<Texture>& RenderGraph::ResourcePool::GetTexture(const ResourceId resourceId) const
 {
     Assert(IsRegistered(resourceId), "Resource is not registered.");
-    Assert(resourceId < m_ResourceInstances.size(), "Resource ID out of range.");
     Assert(m_ResourceDescriptions.at(resourceId).m_ResourceType == ResourceType::Texture, "Invalid resource type.");
 
-    const ResourceInstance& resourceInstance = m_ResourceInstances[resourceId];
-    Assert(resourceInstance.m_Type == ResourceInstanceType::Texture, "Invalid resource type.");
-    return resourceInstance.m_Texture;
+//Modify Begin:2026-07-30 by BestHui
+    const auto resourceInstance = m_ResourceInstances.find(resourceId);
+    Assert(resourceInstance != m_ResourceInstances.end(), "Registered texture has not been created.");
+    Assert(resourceInstance->second.m_Type == ResourceInstanceType::Texture, "Invalid resource type.");
+    return resourceInstance->second.m_Texture;
+//Modify End
 }
 
 const std::shared_ptr<Buffer>& RenderGraph::ResourcePool::GetBuffer(const ResourceId resourceId) const
 {
     Assert(IsRegistered(resourceId), "Resource is not registered.");
-    Assert(resourceId < m_ResourceInstances.size(), "Resource ID out of range.");
     Assert(m_ResourceDescriptions.at(resourceId).m_ResourceType == ResourceType::Buffer, "Invalid resource type.");
 
-    const ResourceInstance& resourceInstance = m_ResourceInstances[resourceId];
-    Assert(resourceInstance.m_Type == ResourceInstanceType::Buffer, "Invalid resource type.");
-    return resourceInstance.m_Buffer;
+//Modify Begin:2026-07-30 by BestHui
+    const auto resourceInstance = m_ResourceInstances.find(resourceId);
+    Assert(resourceInstance != m_ResourceInstances.end(), "Registered buffer has not been created.");
+    Assert(resourceInstance->second.m_Type == ResourceInstanceType::Buffer, "Invalid resource type.");
+    return resourceInstance->second.m_Buffer;
+//Modify End
 }
 
 std::shared_ptr<StructuredBuffer> RenderGraph::ResourcePool::GetStructuredBuffer(const ResourceId resourceId) const
@@ -308,7 +304,7 @@ void RenderGraph::ResourcePool::Clear(
         {
             const Microsoft::WRL::ComPtr<ID3D12Resource> d3d12Resource = resource.GetD3D12Resource();
             deletionBatch->Resources.push_back(d3d12Resource);
-            deletionBatch->ResourceStateEntries.push_back(d3d12Resource.Get());
+            deletionBatch->StateRegistrations.push_back(resource.GetStateRegistration());
         });
         return true;
     });
@@ -346,18 +342,6 @@ void RenderGraph::ResourcePool::InitHeaps(
 //Modify End
 //Modify Begin:2026-07-28 by BestHui
     m_ResourceLifecycles = lifecycles;
-    const uint32_t lastPassIndex = renderPasses.empty()
-        ? 0u
-        : static_cast<uint32_t>(renderPasses.size()) - 1u;
-    for (const auto& [resourceId, resourceDescription] : m_ResourceDescriptions)
-    {
-        if (!resourceDescription.m_DedicatedResource && !m_ResourceLifecycles.contains(resourceId))
-        {
-            m_ResourceLifecycles.insert(std::pair{
-                resourceId,
-                TransientResourceAllocator::ResourceLifecycle{ resourceId, lastPassIndex, lastPassIndex, 1u } });
-        }
-    }
 //Modify End
 //Modify Begin:2026-07-28 by BestHui
     m_HeapInfos = TransientResourceAllocator::CreateHeaps(m_ResourceLifecycles, m_ResourceDescriptions, pDevice);
@@ -391,8 +375,9 @@ void RenderGraph::ResourcePool::CreateResources()
             CreateBuffer(resourceId);
             break;
         default:
-            Assert(false, "Unsupported render graph resource type.");
-            break;
+//Modify Begin:2026-07-30 by BestHui
+            throw std::logic_error("Unsupported render graph resource type.");
+//Modify End
         }
     }
 }
@@ -612,16 +597,17 @@ const Resource& RenderGraph::ResourcePool::ResourceInstance::GetResource() const
         return *m_Buffer;
     default:
         Assert(false, "Invalid resource type.");
-        return *m_Texture;
+//Modify Begin:2026-07-30 by BestHui
+        throw std::logic_error("Invalid render graph resource instance type.");
+//Modify End
     }
 }
 
 RenderGraph::ResourcePool::ResourceInstance& RenderGraph::ResourcePool::AppendResourceInstance(const ResourceId resourceId, const ResourceInstance& resourceInstance)
 {
-    if (resourceId >= m_ResourceInstances.size())
-    {
-        m_ResourceInstances.resize(resourceId + 1);
-    }
-
-    return m_ResourceInstances[resourceId] = resourceInstance;
+//Modify Begin:2026-07-30 by BestHui
+    const auto [instance, inserted] = m_ResourceInstances.emplace(resourceId, resourceInstance);
+    Assert(inserted, "Render graph resource instance was created more than once.");
+    return instance->second;
+//Modify End
 }

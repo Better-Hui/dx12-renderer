@@ -408,10 +408,10 @@ void RaytracingDemo::OnImGui()
             settingsChanged |= ImGui::Checkbox(
                 "Enable GI Spatial Resampling",
                 &restirSettings.EnableSpatialResampling);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-08-11 by BestHui
             settingsChanged |= ImGui::Checkbox(
-                "Enable GI Unbiased Spatial Reuse (extra shadow rays)",
-                &restirSettings.EnableUnbiasedSpatialResampling);
+                "Enable GI Spatial Ray-Traced Bias Correction",
+                &restirSettings.EnableRayTracedSpatialBiasCorrection);
 //Modify End
 //Modify Begin:2026-08-11 by BestHui
             settingsChanged |= ImGui::SliderInt("GI Spatial Neighbors", &spatialNeighborCount, 1, 16);
@@ -461,6 +461,9 @@ void RaytracingDemo::OnImGui()
             restirSettings.SpatialNeighborCount = static_cast<uint32_t>(
                 spatialNeighborCount < 1 ? 1 : spatialNeighborCount);
             m_IndirectLightingReSTIRGI.SetSettings(restirSettings);
+//Modify Begin:2026-08-11 by BestHui
+            EnsureRayTracingPipelines();
+//Modify End
             ResetAccumulation();
         }
     }
@@ -580,20 +583,20 @@ void RaytracingDemo::OnImGui()
 //Modify Begin:2026-08-07 by BestHui
     if (ImGui::CollapsingHeader("Upscaling"))
     {
+        const char* dlssModeNames[] = { "Off", "DLAA", "Quality", "Balanced", "Performance", "Ultra Performance" };
+        int dlssMode = static_cast<int>(m_DLSS.GetMode());
+        if (ImGui::Combo("DLSS Super Resolution", &dlssMode, dlssModeNames, IM_ARRAYSIZE(dlssModeNames)))
+        {
+            m_DLSS.SetMode(static_cast<DLSSMode>(dlssMode));
+            ResetAccumulation();
+        }
+
         if (!m_DLSS.IsSupported())
         {
             ImGui::TextDisabled("DLSS unavailable: %s", m_DLSS.GetStatusMessage().c_str());
         }
         else
         {
-            const char* dlssModeNames[] = { "Off", "DLAA", "Quality", "Balanced", "Performance", "Ultra Performance" };
-            int dlssMode = static_cast<int>(m_DLSS.GetMode());
-            if (ImGui::Combo("DLSS Super Resolution", &dlssMode, dlssModeNames, IM_ARRAYSIZE(dlssModeNames)))
-            {
-                m_DLSS.SetMode(static_cast<DLSSMode>(dlssMode));
-                ResetAccumulation();
-            }
-
             if (m_DLSS.IsRayReconstructionSupported())
             {
                 bool rayReconstructionEnabled = m_DLSS.IsRayReconstructionEnabled();
@@ -667,8 +670,28 @@ void RaytracingDemo::OnImGui()
         m_PathTracingBackend = static_cast<PathTracingBackend>(selectedMode);
         ResetAccumulation();
     }
-//Modify Begin:2026-08-10 by BestHui
-    const bool bouncesChanged = ImGui::SliderInt("Bounces", &m_MaxBounces, 1, 5);
+//Modify Begin:2026-07-30 by BestHui
+    const char* materialShadingModelNames[] = { "PBR", "Stylized Comic" };
+    int selectedMaterialShadingModel = static_cast<int>(m_MaterialShadingModel);
+    if (ImGui::Combo(
+        "Material Shading",
+        &selectedMaterialShadingModel,
+        materialShadingModelNames,
+        IM_ARRAYSIZE(materialShadingModelNames)))
+    {
+        SetMaterialShadingModel(static_cast<MaterialShadingModel>(selectedMaterialShadingModel));
+    }
+    ImGui::TextDisabled("Stylized Comic keeps GGX material inputs and applies PBR-NPR banding, shadow tint, and graphic highlights.");
+//Modify End
+//Modify Begin:2026-08-11 by BestHui
+    int requestedMaxBounces = m_MaxBounces;
+    const bool bouncesChanged = ImGui::SliderInt(
+        "Bounces",
+        &requestedMaxBounces,
+        1,
+        5,
+        "%d",
+        ImGuiSliderFlags_AlwaysClamp);
 //Modify End
 //Modify Begin:2026-08-05 by BestHui
     bool fovChanged = false;
@@ -706,7 +729,7 @@ void RaytracingDemo::OnImGui()
 
     if (bouncesChanged)
     {
-        ResetAccumulation();
+        SetMaxBounces(requestedMaxBounces);
     }
     if (fovChanged || nearClipChanged || farClipChanged)
     {

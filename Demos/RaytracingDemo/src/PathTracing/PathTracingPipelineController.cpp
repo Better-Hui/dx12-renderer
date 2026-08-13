@@ -57,6 +57,30 @@ namespace
         defines.push_back({ "RAYTRACING_DEMO_MAX_BOUNCES", std::to_string(maxPathBounces) });
     }
 //Modify End
+//Modify Begin:2026-07-30 by BestHui
+    void AddMaterialShadingModelDefine(
+        std::vector<ShaderVariantDefine>& defines,
+        const MaterialShadingModel shadingModel)
+    {
+        defines.push_back({
+            "FRAMEWORK_MATERIAL_SHADING_MODEL",
+            std::to_string(static_cast<uint32_t>(shadingModel))
+        });
+    }
+
+    std::wstring GetMaterialShadingModelShaderSuffix(const MaterialShadingModel shadingModel)
+    {
+        switch (shadingModel)
+        {
+        case MaterialShadingModel::Pbr:
+            return L".pbr";
+        case MaterialShadingModel::StylizedComic:
+            return L".stylizedcomic";
+        default:
+            throw std::invalid_argument("Unsupported material shading model.");
+        }
+    }
+//Modify End
 //Modify End
 }
 
@@ -132,6 +156,9 @@ void PathTracingPipelineController::Reset()
 //Modify Begin:2026-07-30 by BestHui
     m_ShadowMode = PathTracingShadowMode::HardShadows;
 //Modify End
+//Modify Begin:2026-07-30 by BestHui
+    m_MaterialShadingModel = MaterialShadingModel::Pbr;
+//Modify End
 //Modify Begin:2026-08-11 by BestHui
     m_MaxPathBounces = 3u;
 //Modify End
@@ -143,6 +170,7 @@ void PathTracingPipelineController::EnsurePipelines(
 //Modify Begin:2026-07-30 by BestHui
     const PathTracingShadowMode shadowMode,
 //Modify End
+    const MaterialShadingModel shadingModel,
     const RayTracingSceneResourceLayout& layout,
     const uint32_t maxPathBounces)
 {
@@ -157,6 +185,7 @@ void PathTracingPipelineController::EnsurePipelines(
 //Modify Begin:2026-07-30 by BestHui
     const bool shadowModeChanged = m_ShadowMode != shadowMode;
 //Modify End
+    const bool shadingModelChanged = m_MaterialShadingModel != shadingModel;
 //Modify Begin:2026-08-11 by BestHui
     const bool maxPathBouncesChanged = m_MaxPathBounces != clampedMaxPathBounces;
 //Modify End
@@ -167,6 +196,7 @@ void PathTracingPipelineController::EnsurePipelines(
 //Modify Begin:2026-07-30 by BestHui
         !shadowModeChanged &&
 //Modify End
+        !shadingModelChanged &&
         !maxPathBouncesChanged &&
         m_InlineDirectLightingShader != nullptr &&
         m_InlineIndirectLightingShader != nullptr &&
@@ -182,6 +212,7 @@ void PathTracingPipelineController::EnsurePipelines(
 //Modify Begin:2026-07-30 by BestHui
     m_ShadowMode = shadowMode;
 //Modify End
+    m_MaterialShadingModel = shadingModel;
 //Modify Begin:2026-08-11 by BestHui
     m_MaxPathBounces = clampedMaxPathBounces;
 //Modify End
@@ -190,7 +221,7 @@ void PathTracingPipelineController::EnsurePipelines(
 //Modify Begin:2026-07-27 by BestHui
     if (layoutChanged || backendChanged
 //Modify Begin:2026-07-30 by BestHui
-        || shadowModeChanged || maxPathBouncesChanged
+        || shadowModeChanged || shadingModelChanged || maxPathBouncesChanged
 //Modify End
         )
     {
@@ -224,6 +255,7 @@ void PathTracingPipelineController::CreateDxrPipeline(const RayTracingSceneResou
 //Modify Begin:2026-08-11 by BestHui
     shaderFileName += L".bounces" + std::to_wstring(m_MaxPathBounces);
 //Modify End
+    shaderFileName += GetMaterialShadingModelShaderSuffix(m_MaterialShadingModel);
     shaderFileName += L".rt.cso";
     std::vector<ShaderVariantDefine> defines;
     AddEnvironmentProjectionDefine(defines, layout.EnvironmentProjection);
@@ -234,6 +266,7 @@ void PathTracingPipelineController::CreateDxrPipeline(const RayTracingSceneResou
 //Modify Begin:2026-08-11 by BestHui
     AddMaxPathBouncesDefine(defines, m_MaxPathBounces);
 //Modify End
+    AddMaterialShadingModelDefine(defines, m_MaterialShadingModel);
     constexpr const char* targetProfile = ShaderTargetProfile::RayTracingLibrary();
     const std::shared_ptr<ShaderBlob> pathTracingShader = LoadShader(
         shaderFileName,
@@ -243,10 +276,11 @@ void PathTracingPipelineController::CreateDxrPipeline(const RayTracingSceneResou
         "");
 //Modify End
     const RayTracingPipelineDesc rayTracingDesc = RayTracingPipelineDescBuilder::ReflectedDefault(*pathTracingShader)
-        .WithExport(L"DirectLightingRayGen")
-        .WithExport(L"IndirectLightingRayGen")
+//Modify Begin:2026-07-30 by BestHui
+        .WithStaticSamplerContract(PipelineStaticSamplers::LinearWrap(0u))
+//Modify End
 //Modify Begin:2026-07-27 by BestHui
-        .WithExport(L"VisibilityClosestHit")
+        .WithTriangleHitGroup(L"HitGroup", L"ClosestHit")
         .WithTriangleHitGroup(L"VisibilityHitGroup", L"VisibilityClosestHit")
         .WithRayGenerationPass("DirectLightingRayGen", L"DirectLightingRayGen", { L"Miss" }, { L"HitGroup", L"VisibilityHitGroup" })
         .WithRayGenerationPass("IndirectLightingRayGen", L"IndirectLightingRayGen", { L"Miss" }, { L"HitGroup", L"VisibilityHitGroup" })
@@ -274,6 +308,8 @@ void PathTracingPipelineController::CreateInlinePipelines(const RayTracingSceneR
     std::vector<ShaderVariantDefine> indirectShaderDefines = directShaderDefines;
     AddMaxPathBouncesDefine(indirectShaderDefines, m_MaxPathBounces);
 //Modify End
+    AddMaterialShadingModelDefine(directShaderDefines, m_MaterialShadingModel);
+    AddMaterialShadingModelDefine(indirectShaderDefines, m_MaterialShadingModel);
     std::wstring directLightingShaderFileName = L"DirectLighting";
     std::wstring indirectLightingShaderFileName = L"IndirectLighting";
     const std::wstring environmentProjectionSuffix = GetEnvironmentProjectionShaderSuffix(layout.EnvironmentProjection);
@@ -287,6 +323,9 @@ void PathTracingPipelineController::CreateInlinePipelines(const RayTracingSceneR
 //Modify Begin:2026-08-11 by BestHui
     indirectLightingShaderFileName += L".bounces" + std::to_wstring(m_MaxPathBounces);
 //Modify End
+    const std::wstring materialShadingModelSuffix = GetMaterialShadingModelShaderSuffix(m_MaterialShadingModel);
+    directLightingShaderFileName += materialShadingModelSuffix;
+    indirectLightingShaderFileName += materialShadingModelSuffix;
     directLightingShaderFileName += L".cs.cso";
     indirectLightingShaderFileName += L".cs.cso";
     const std::shared_ptr<ShaderBlob> inlineDirectLightingShader = LoadShader(
@@ -299,6 +338,7 @@ void PathTracingPipelineController::CreateInlinePipelines(const RayTracingSceneR
 //Modify Begin:2026-07-30 by BestHui
         .WithDirectlyIndexedResourceHeap()
 //Modify End
+        .WithStaticSamplerContract(PipelineStaticSamplers::LinearWrap(1u))
         .Build();
     m_InlineDirectLightingShader = std::make_unique<ComputeShader>(m_DeviceContext, *inlineDirectLightingShader, inlineDirectLightingDesc);
 
@@ -313,6 +353,7 @@ void PathTracingPipelineController::CreateInlinePipelines(const RayTracingSceneR
 //Modify Begin:2026-07-30 by BestHui
         .WithDirectlyIndexedResourceHeap()
 //Modify End
+        .WithStaticSamplerContract(PipelineStaticSamplers::LinearWrap(1u))
         .Build();
     m_InlineIndirectLightingShader = std::make_unique<ComputeShader>(m_DeviceContext, *inlineIndirectLightingShader, inlineIndirectLightingDesc);
 

@@ -2,14 +2,10 @@
 #pragma once
 
 #include <cstdint>
-#include <functional>
 #include <memory>
-#include <span>
 
 #include <DirectXMath.h>
 #include <d3d12.h>
-
-#include <DX12Library/ResourceStateTransition.h>
 
 class CommandList;
 class ComputeShader;
@@ -22,8 +18,6 @@ class Texture;
 class NRD
 {
 public:
-    using ResourceTransitionCallback = std::function<void(CommandList&, std::span<const ResourceStateTransition>)>;
-
     struct FrameMatrices
     {
         DirectX::XMMATRIX WorldToView = DirectX::XMMatrixIdentity();
@@ -82,9 +76,8 @@ public:
     explicit NRD(FrameworkDeviceContext& deviceContext);
     ~NRD();
 
-    bool IsAvailable() const { return m_Available; }
     void SetEnabled(bool enabled) { m_Enabled = enabled; }
-    bool IsEnabled() const { return m_Enabled && m_Available; }
+    bool IsEnabled() const { return m_Enabled; }
     Settings& GetSettings() { return m_Settings; }
     const Settings& GetSettings() const { return m_Settings; }
     void ResetHistory();
@@ -116,8 +109,7 @@ public:
         const std::shared_ptr<Texture>& denoisedRadiance,
         const std::shared_ptr<Texture>& output,
         uint32_t width,
-        uint32_t height,
-        const ResourceTransitionCallback& transitionResource = {});
+        uint32_t height);
 
 private:
     struct PrepareConstants
@@ -161,8 +153,7 @@ private:
         const std::shared_ptr<Texture>& nrdMotion,
         const std::shared_ptr<Texture>& denoisedRadiance,
         uint32_t width,
-        uint32_t height,
-        const ResourceTransitionCallback& transitionResource);
+        uint32_t height);
     void Composite(
         CommandList& commandList,
         const std::shared_ptr<Texture>& denoisedRadiance,
@@ -171,8 +162,7 @@ private:
         const std::shared_ptr<Texture>& gBufferEmissionMetallic,
         const std::shared_ptr<Texture>& output,
         uint32_t width,
-        uint32_t height,
-        const ResourceTransitionCallback& transitionResource);
+        uint32_t height);
 
     //Modify Begin:2026-07-30 by BestHui
     FrameworkDeviceContext& m_DeviceContext;
@@ -187,9 +177,7 @@ private:
     DirectX::XMMATRIX m_PreviousProjection = DirectX::XMMatrixIdentity();
     DenoiserMode m_CreatedMode = DenoiserMode::ReblurDiffuse;
     Settings m_Settings = {};
-    bool m_Available = false;
     bool m_Enabled = false;
-    bool m_BypassDenoise = false;
     bool m_HasPreviousFrame = false;
 };
 //Modify End

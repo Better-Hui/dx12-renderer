@@ -11,6 +11,7 @@
 #include <vector>
 
 class DescriptorAllocatorPage;
+class DescriptorRetirementClock;
 
 /*
  * Allocates descriptors in a CPU visible heap for resources (thread safe)
@@ -21,6 +22,7 @@ public:
 	explicit DescriptorAllocator(
 		D3D12_DESCRIPTOR_HEAP_TYPE type,
 		Microsoft::WRL::ComPtr<ID3D12Device2> device,
+		std::shared_ptr<DescriptorRetirementClock> retirementClock,
 		uint32_t numDescriptorsPerHeap = 256);
 	virtual ~DescriptorAllocator();
 
@@ -50,6 +52,7 @@ private:
 	D3D12_DESCRIPTOR_HEAP_TYPE HeapType;
 //Modify Begin:2026-08-07 by BestHui
 	Microsoft::WRL::ComPtr<ID3D12Device2> Device;
+	std::shared_ptr<DescriptorRetirementClock> RetirementClock;
 //Modify End
 	uint32_t NumDescriptorsPerHeap;
 

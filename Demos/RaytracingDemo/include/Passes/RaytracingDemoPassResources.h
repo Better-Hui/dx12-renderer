@@ -10,6 +10,7 @@
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
 #include <Framework/Rendering/Lighting/ReSTIRDI.h>
 #include <Framework/Rendering/Lighting/ReSTIRDIPass.h>
+#include <Framework/Rendering/Lighting/MaterialShadingModel.h>
 //Modify Begin:2026-08-10 by BestHui
 #include <Framework/Rendering/Lighting/ReSTIRGI.h>
 #include <Framework/Rendering/Lighting/ReSTIRGIPass.h>
@@ -191,6 +192,9 @@ enum class RaytracingDemoLightingTechnique : uint32_t
 struct RaytracingDemoFrameState
 {
     PathTracingBackend Backend = PathTracingBackend::InlineRayQuery;
+//Modify Begin:2026-07-30 by BestHui
+    MaterialShadingModel ShadingModel = MaterialShadingModel::Pbr;
+//Modify End
     RaytracingDemoLightingTechnique DirectLightingTechnique = RaytracingDemoLightingTechnique::None;
     RaytracingDemoLightingTechnique IndirectLightingTechnique = RaytracingDemoLightingTechnique::None;
     bool AsyncComputeEnabled = false;

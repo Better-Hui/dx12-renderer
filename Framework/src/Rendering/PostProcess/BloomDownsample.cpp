@@ -29,7 +29,14 @@ BloomDownsample::BloomDownsample(FrameworkDeviceContext& deviceContext, CommandL
 	auto shader = std::make_shared<Shader>(
 		deviceContext,
 		ShaderBlob(ShaderBytecode_Blit_VS, sizeof ShaderBytecode_Blit_VS),
-		ShaderBlob(ShaderBytecode_Bloom_Downsample_PS, sizeof ShaderBytecode_Bloom_Downsample_PS)
+		ShaderBlob(ShaderBytecode_Bloom_Downsample_PS, sizeof ShaderBytecode_Bloom_Downsample_PS),
+//Modify Begin:2026-07-30 by BestHui
+        PipelineLayoutReflectionOptions{
+            .StaticSamplerContracts = { PipelineStaticSamplers::LinearClamp(3u) },
+            .MaxDescriptorCount = 4096u,
+            .ShaderStages = PipelineShaderStageFlags::AllGraphics
+        }
+//Modify End
 		);
 //Modify End
 	m_Material = Material::Create(shader);
