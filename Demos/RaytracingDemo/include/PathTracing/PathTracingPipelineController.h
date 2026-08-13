@@ -104,7 +104,8 @@ private:
 //Modify Begin:2026-07-27 by BestHui
     struct RetiredPipelines
     {
-        uint64_t FrameIndex = 0;
+        uint64_t DirectFenceValue = 0;
+        uint64_t ComputeFenceValue = 0;
         std::unique_ptr<RayTracingShader> RayTracingShader;
         std::unique_ptr<RayTracingBindingSet> DirectRayTracingBindingSet;
         std::unique_ptr<RayTracingBindingSet> IndirectRayTracingBindingSet;

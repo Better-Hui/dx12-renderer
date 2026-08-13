@@ -187,12 +187,9 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
                 CommandContext commandContext(cmd);
                 RaytracingDemoPassBindings::BindInlinePathTracingInputs(resources, commandContext, indirectLightingShader, gbuffer, camera);
 //Modify Begin:2026-07-28 by BestHui
-                if (queue != RenderPassQueue::AsyncCompute)
-                {
-                    resources.Scene.TransitionRayTracingShaderResources(
-                        cmd,
-                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-                }
+                resources.Scene.TransitionRayTracingShaderResources(
+                    cmd,
+                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
                 commandContext.SetUnorderedAccessView(indirectLightingShader, "IndirectLighting", UnorderedAccessView(context.GetTexture(DemoResourceIds::IndirectLighting)));
 //Modify Begin:2026-07-30 by BestHui
                 commandContext.BindBindlessDescriptorHeap(resources.Scene.GetBindlessDescriptorHeap());

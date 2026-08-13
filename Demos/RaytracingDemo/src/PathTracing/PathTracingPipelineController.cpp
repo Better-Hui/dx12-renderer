@@ -1,9 +1,8 @@
 //Modify Begin:2026-07-27 by BestHui
 #include <PathTracing/PathTracingPipelineController.h>
 
-#include <DX12Library/Application.h>
+#include <DX12Library/CommandQueue.h>
 #include <DX12Library/Helpers.h>
-#include <DX12Library/Window.h>
 //Modify Begin:2026-07-30 by BestHui
 #include <Framework/Core/FrameworkDeviceContext.h>
 //Modify End
@@ -115,7 +114,12 @@ void PathTracingPipelineController::RetireCurrentPipelines()
     }
 
     RetiredPipelines retired;
-    retired.FrameIndex = Application::GetFrameCount();
+    const std::shared_ptr<CommandQueue> directQueue =
+        m_DeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
+    const std::shared_ptr<CommandQueue> computeQueue =
+        m_DeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE);
+    retired.DirectFenceValue = directQueue->Signal();
+    retired.ComputeFenceValue = computeQueue->Signal();
     retired.RayTracingShader = std::move(m_RayTracingShader);
     retired.DirectRayTracingBindingSet = std::move(m_DirectRayTracingBindingSet);
     retired.IndirectRayTracingBindingSet = std::move(m_IndirectRayTracingBindingSet);
@@ -127,11 +131,15 @@ void PathTracingPipelineController::RetireCurrentPipelines()
 
 void PathTracingPipelineController::ReleaseExpiredRetiredPipelines()
 {
-    const uint64_t currentFrame = Application::GetFrameCount();
+    const std::shared_ptr<CommandQueue> directQueue =
+        m_DeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
+    const std::shared_ptr<CommandQueue> computeQueue =
+        m_DeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE);
     while (!m_RetiredPipelines.empty())
     {
         const RetiredPipelines& retired = m_RetiredPipelines.front();
-        if (currentFrame <= retired.FrameIndex + Window::BUFFER_COUNT)
+        if (!directQueue->IsFenceComplete(retired.DirectFenceValue) ||
+            !computeQueue->IsFenceComplete(retired.ComputeFenceValue))
         {
             break;
         }
