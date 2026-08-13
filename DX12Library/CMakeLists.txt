@@ -11,6 +11,9 @@ set(HEADER_FILES
         include/DX12Library/Camera.h
         include/DX12Library/CommandList.h
         include/DX12Library/CommandQueue.h
+        # Modify Begin:2026-07-30 by BestHui
+        include/DX12Library/CommandQueueFailure.h
+        # Modify End
         include/DX12Library/ConstantBuffer.h
         include/DX12Library/Cubemap.h
         # Modify Begin:2026-07-28 by BestHui
@@ -18,6 +21,9 @@ set(HEADER_FILES
         include/DX12Library/D3D12RenderContext.h
         # Modify End
         include/DX12Library/Defines.h
+        # Modify Begin:2026-07-30 by BestHui
+        include/DX12Library/DiagnosticReporter.h
+        # Modify End
         include/DX12Library/DescriptorAllocation.h
         include/DX12Library/DescriptorAllocator.h
         include/DX12Library/DescriptorAllocatorPage.h
@@ -75,6 +81,9 @@ set(SOURCE_FILES
         src/Cubemap.cpp
         # Modify Begin:2026-07-28 by BestHui
         src/D3D12RenderContext.cpp
+        # Modify End
+        # Modify Begin:2026-07-30 by BestHui
+        src/DiagnosticReporter.cpp
         # Modify End
         src/DescriptorAllocation.cpp
         src/DescriptorAllocator.cpp

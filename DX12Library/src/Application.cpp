@@ -4,6 +4,7 @@
 #include "ApplicationResources.h"
 
 #include "CommandQueue.h"
+#include "DiagnosticReporter.h"
 #include "Game.h"
 //Modify Begin:2026-08-07 by BestHui
 #include "StreamlineRuntime.h"
@@ -14,7 +15,7 @@
 //Modify Begin:2026-07-28 by BestHui
 #include <cstdlib>
 #include <cstring>
-#include <fstream>
+#include <sstream>
 #include <stdexcept>
 //Modify End
 
@@ -109,6 +110,9 @@ void Application::Initialize(
     const ApplicationCreateDesc& createDesc)
 //Modify End
 {
+//Modify Begin:2026-07-30 by BestHui
+    m_DiagnosticReporter = std::make_unique<DiagnosticReporter>(createDesc.DiagnosticsDirectory);
+//Modify End
 //Modify Begin:2026-07-21 by BestHui
     const bool useExternalDevice = externalContext != nullptr && externalContext->Device != nullptr;
 //Modify End
@@ -180,7 +184,16 @@ void Application::Initialize(
         }
     }
 //Modify Begin:2026-08-07 by BestHui
-    m_RenderContext.SetFatalErrorHandler([this](const int exitCode) { Quit(exitCode); });
+    m_RenderContext.SetFatalErrorHandler(
+        [this](const CommandQueueFailure& failure)
+        {
+            std::ostringstream report;
+            report << "QueueType=" << static_cast<uint32_t>(failure.QueueType) << std::endl;
+            report << "Stage=" << failure.Stage << std::endl;
+            report << "Error=" << failure.Message << std::endl;
+            WriteDiagnostic("CommandQueueException", report.str());
+            Quit(failure.ExitCode);
+        });
 //Modify End
     const auto device = m_RenderContext.GetDevice();
     D3D12_FEATURE_DATA_SHADER_MODEL shaderModel = { D3D_SHADER_MODEL_6_9 };
@@ -350,6 +363,18 @@ bool Application::CheckTearingSupport()
     return allowTearing == TRUE;
 }
 
+//Modify Begin:2026-07-30 by BestHui
+void Application::WriteDiagnostic(
+    const std::string_view reportName,
+    const std::string_view contents) const noexcept
+{
+    if (m_DiagnosticReporter != nullptr)
+    {
+        m_DiagnosticReporter->Write(reportName, contents);
+    }
+}
+//Modify End
+
 void Application::AddWndProcHandler(const WndProcHandler handler)
 {
     s_WndProcHandlers.push_back(handler);
@@ -483,12 +508,32 @@ std::shared_ptr<Window> Application::GetWindowByName(const std::wstring& windowN
 
 int Application::Run(std::shared_ptr<Game> pGame)
 {
-    if (!pGame->Initialize()) return 1;
-    if (!pGame->LoadContent()) return 2;
-
+//Modify Begin:2026-07-30 by BestHui
     MSG msg = { nullptr };
+    PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE);
+    m_MessageThreadId.store(GetCurrentThreadId(), std::memory_order_release);
+//Modify End
+    if (!pGame->Initialize())
+    {
+        m_MessageThreadId.store(0, std::memory_order_release);
+        return 1;
+    }
+    if (!pGame->LoadContent())
+    {
+        m_MessageThreadId.store(0, std::memory_order_release);
+        return 2;
+    }
+
     while (msg.message != WM_QUIT)
     {
+//Modify Begin:2026-07-30 by BestHui
+        if (m_QuitRequested.exchange(false, std::memory_order_acq_rel))
+        {
+            msg.message = WM_QUIT;
+            msg.wParam = static_cast<WPARAM>(m_RequestedExitCode.load(std::memory_order_acquire));
+            continue;
+        }
+//Modify End
         if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
         {
             TranslateMessage(&msg);
@@ -502,12 +547,30 @@ int Application::Run(std::shared_ptr<Game> pGame)
     pGame->UnloadContent();
     pGame->Destroy();
 
+    m_MessageThreadId.store(0, std::memory_order_release);
+    m_QuitRequested.store(false, std::memory_order_release);
     return static_cast<int>(msg.wParam);
 }
 
 void Application::Quit(int exitCode)
 {
-    PostQuitMessage(exitCode);
+//Modify Begin:2026-07-30 by BestHui
+    m_RequestedExitCode.store(exitCode, std::memory_order_release);
+    m_QuitRequested.store(true, std::memory_order_release);
+    const DWORD messageThreadId = m_MessageThreadId.load(std::memory_order_acquire);
+    if (messageThreadId == 0)
+    {
+        return;
+    }
+
+    if (messageThreadId == GetCurrentThreadId())
+    {
+        PostQuitMessage(exitCode);
+        return;
+    }
+
+    PostThreadMessageW(messageThreadId, WM_QUIT, static_cast<WPARAM>(exitCode), 0);
+//Modify End
 }
 
 Microsoft::WRL::ComPtr<ID3D12Device2> Application::GetDevice() const
@@ -917,46 +980,57 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
     }
     catch (const std::exception& exception)
     {
-        std::ofstream errorLog("C:\\Users\\minghuidai\\AppData\\Local\\Temp\\RaytracingDemo-WndProcException.log", std::ios::out | std::ios::trunc);
-        errorLog << "Message=" << message << std::endl;
-        errorLog << exception.what() << std::endl;
+        std::ostringstream report;
+        report << "Message=" << message << std::endl;
+        report << exception.what() << std::endl;
 //Modify Begin:2026-08-03 by BestHui
-        const auto device = Application::Get().GetDevice();
-        errorLog << "DeviceRemovedReason=" << device->GetDeviceRemovedReason() << std::endl;
-
-        Microsoft::WRL::ComPtr<ID3D12InfoQueue> infoQueue;
-        if (SUCCEEDED(device.As(&infoQueue)))
+        const auto device = gs_pSingelton != nullptr ? gs_pSingelton->GetDevice() : nullptr;
+        if (device != nullptr)
         {
-            const UINT64 messageCount = infoQueue->GetNumStoredMessages();
-            const UINT64 firstMessage = messageCount > 32u ? messageCount - 32u : 0u;
-            for (UINT64 messageIndex = firstMessage; messageIndex < messageCount; ++messageIndex)
-            {
-                SIZE_T messageLength = 0;
-                if (FAILED(infoQueue->GetMessage(messageIndex, nullptr, &messageLength)) || messageLength == 0u)
-                {
-                    continue;
-                }
+            report << "DeviceRemovedReason=" << device->GetDeviceRemovedReason() << std::endl;
 
-                std::vector<char> storage(messageLength);
-                auto* debugMessage = reinterpret_cast<D3D12_MESSAGE*>(storage.data());
-                if (SUCCEEDED(infoQueue->GetMessage(messageIndex, debugMessage, &messageLength)))
+            Microsoft::WRL::ComPtr<ID3D12InfoQueue> infoQueue;
+            if (SUCCEEDED(device.As(&infoQueue)))
+            {
+                const UINT64 messageCount = infoQueue->GetNumStoredMessages();
+                const UINT64 firstMessage = messageCount > 32u ? messageCount - 32u : 0u;
+                for (UINT64 messageIndex = firstMessage; messageIndex < messageCount; ++messageIndex)
                 {
-                    errorLog << "D3D12[" << messageIndex << "]="
-                        << (debugMessage->pDescription != nullptr ? debugMessage->pDescription : "")
-                        << std::endl;
+                    SIZE_T messageLength = 0;
+                    if (FAILED(infoQueue->GetMessage(messageIndex, nullptr, &messageLength)) || messageLength == 0u)
+                    {
+                        continue;
+                    }
+
+                    std::vector<char> storage(messageLength);
+                    auto* debugMessage = reinterpret_cast<D3D12_MESSAGE*>(storage.data());
+                    if (SUCCEEDED(infoQueue->GetMessage(messageIndex, debugMessage, &messageLength)))
+                    {
+                        report << "D3D12[" << messageIndex << "]="
+                            << (debugMessage->pDescription != nullptr ? debugMessage->pDescription : "")
+                            << std::endl;
+                    }
                 }
             }
         }
 //Modify End
+        if (gs_pSingelton != nullptr)
+        {
+            gs_pSingelton->WriteDiagnostic("WindowCallbackException", report.str());
+        }
         PostQuitMessage(4);
         return 0;
     }
 //Modify Begin:2026-08-07 by BestHui
     catch (...)
     {
-        std::ofstream errorLog("C:\\Users\\minghuidai\\AppData\\Local\\Temp\\RaytracingDemo-WndProcException.log", std::ios::out | std::ios::trunc);
-        errorLog << "Message=" << message << std::endl;
-        errorLog << "Unhandled non-std exception escaped the window callback." << std::endl;
+        std::ostringstream report;
+        report << "Message=" << message << std::endl;
+        report << "Unhandled non-std exception escaped the window callback." << std::endl;
+        if (gs_pSingelton != nullptr)
+        {
+            gs_pSingelton->WriteDiagnostic("WindowCallbackException", report.str());
+        }
         PostQuitMessage(4);
         return 0;
     }

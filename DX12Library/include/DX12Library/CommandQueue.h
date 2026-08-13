@@ -42,6 +42,7 @@
 #include <memory>
 #include <vector>
 
+#include "CommandQueueFailure.h"
 #include "ResourceStateRegistry.h"
 #include "ThreadSafeQueue.h"
 
@@ -66,7 +67,7 @@ public:
 //Modify End
 	void SetComputeCommandListFactory(std::function<std::shared_ptr<CommandList>()> factory);
 	void SetComputeCommandQueue(std::shared_ptr<CommandQueue> queue);
-	void SetFatalErrorHandler(std::function<void(int)> handler);
+	void SetFatalErrorHandler(CommandQueueFailureHandler handler);
 	//Modify End
 	virtual ~CommandQueue();
 
@@ -112,7 +113,7 @@ private:
 	std::shared_ptr<StreamlineRuntime> m_StreamlineRuntime;
 	std::function<std::shared_ptr<CommandList>()> m_ComputeCommandListFactory;
 	std::shared_ptr<CommandQueue> m_ComputeCommandQueue;
-	std::function<void(int)> m_FatalErrorHandler;
+	CommandQueueFailureHandler m_FatalErrorHandler;
 	//Modify End
 	Microsoft::WRL::ComPtr<ID3D12CommandQueue> m_D3d12CommandQueue;
 	Microsoft::WRL::ComPtr<ID3D12Fence> m_D3d12Fence;

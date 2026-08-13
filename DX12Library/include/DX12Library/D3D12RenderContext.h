@@ -3,6 +3,8 @@
 #include <d3d12.h>
 #include <wrl.h>
 
+#include "CommandQueueFailure.h"
+
 #include <memory>
 #include <functional>
 
@@ -53,7 +55,7 @@ public:
     std::shared_ptr<ResourceStateRegistry> GetResourceStateRegistry() const;
 //Modify End
 //Modify Begin:2026-08-07 by BestHui
-    void SetFatalErrorHandler(std::function<void(int)> handler);
+    void SetFatalErrorHandler(CommandQueueFailureHandler handler);
 //Modify End
 
 private:

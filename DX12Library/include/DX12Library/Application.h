@@ -42,12 +42,16 @@
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <wrl.h>
+#include <atomic>
+#include <filesystem>
 #include <memory>
 #include <string>
+#include <string_view>
 
 
 class CommandQueue;
 class D3D12DeviceContext;
+class DiagnosticReporter;
 class DescriptorAllocator;
 class Game;
 class ResourceStateRegistry;
@@ -58,6 +62,7 @@ class StreamlineRuntime;
 struct ApplicationCreateDesc
 {
     bool EnableStreamlineInterposer = false;
+    std::filesystem::path DiagnosticsDirectory;
 };
 //Modify End
 
@@ -216,6 +221,7 @@ protected:
     Microsoft::WRL::ComPtr<IDXGIAdapter4> GetAdapter(bool bUseWarp);
     Microsoft::WRL::ComPtr<ID3D12Device2> CreateDevice(Microsoft::WRL::ComPtr<IDXGIAdapter4> adapter);
     bool CheckTearingSupport();
+    void WriteDiagnostic(std::string_view reportName, std::string_view contents) const noexcept;
 
 private:
     friend LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
@@ -224,8 +230,12 @@ private:
 
     HINSTANCE m_hInstance;
 
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-30 by BestHui
+    std::unique_ptr<DiagnosticReporter> m_DiagnosticReporter;
     D3D12RenderContext m_RenderContext;
+    std::atomic<DWORD> m_MessageThreadId = 0;
+    std::atomic_bool m_QuitRequested = false;
+    std::atomic_int m_RequestedExitCode = 0;
 //Modify End
 
     bool m_TearingSupported;

@@ -133,7 +133,7 @@ void D3D12RenderContext::CreateDeviceContext()
 //Modify End
 
 //Modify Begin:2026-08-07 by BestHui
-void D3D12RenderContext::SetFatalErrorHandler(std::function<void(int)> handler)
+void D3D12RenderContext::SetFatalErrorHandler(CommandQueueFailureHandler handler)
 {
     m_DirectCommandQueue->SetFatalErrorHandler(handler);
     m_ComputeCommandQueue->SetFatalErrorHandler(handler);

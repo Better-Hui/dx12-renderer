@@ -102,7 +102,7 @@ void CommandQueue::SetComputeCommandQueue(std::shared_ptr<CommandQueue> queue)
 	m_ComputeCommandQueue = std::move(queue);
 }
 
-void CommandQueue::SetFatalErrorHandler(std::function<void(int)> handler)
+void CommandQueue::SetFatalErrorHandler(CommandQueueFailureHandler handler)
 {
 	m_FatalErrorHandler = std::move(handler);
 }
@@ -344,12 +344,14 @@ void CommandQueue::ProcessInFlightCommandLists()
 	}
 	catch (const std::exception& exception)
 	{
-		std::ofstream errorLog("C:\\Users\\minghuidai\\AppData\\Local\\Temp\\RaytracingDemo-CommandQueueException.log", std::ios::out | std::ios::trunc);
-		errorLog << "QueueType=" << static_cast<uint32_t>(m_CommandListType) << ", Stage=" << stage << ", Error=" << exception.what() << std::endl;
 		//Modify Begin:2026-08-07 by BestHui
 		if (m_FatalErrorHandler)
 		{
-			m_FatalErrorHandler(5);
+			m_FatalErrorHandler(CommandQueueFailure{
+				.QueueType = m_CommandListType,
+				.Stage = stage,
+				.Message = exception.what(),
+			});
 		}
 		else
 		{
