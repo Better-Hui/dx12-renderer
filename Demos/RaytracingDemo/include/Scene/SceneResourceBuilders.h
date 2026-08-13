@@ -15,6 +15,7 @@
 #include <wrl.h>
 
 #include <cstdint>
+#include <functional>
 #include <unordered_map>
 #include <memory>
 #include <span>
@@ -24,6 +25,7 @@
 class CommandList;
 class D3D12DeviceContext;
 class Model;
+class Resource;
 
 class SceneTextureMaterialResources final
 {
@@ -59,7 +61,10 @@ public:
         float roughness = 0.5f);
 
     void UploadMaterialBuffer(CommandList& commandList);
-    void TransitionTextures(CommandList& commandList, D3D12_RESOURCE_STATES stateAfter) const;
+//Modify Begin:2026-08-13 by BestHui
+    void ForEachBindlessTexture(const std::function<void(const Resource&)>& action) const;
+    void ForEachShaderResource(const std::function<void(const Resource&)>& action) const;
+//Modify End
 //Modify Begin:2026-08-11 by BestHui
     const std::vector<ShaderResourceView>& GetTextureShaderResourceViews() const;
 //Modify End
@@ -142,7 +147,9 @@ public:
         std::span<const RaytracingDemoSceneObject> objects);
     void RemoveStressInstances();
     void Update(CommandList& commandList, BindlessDescriptorHeap& bindlessDescriptorHeap);
-    void TransitionShaderResources(CommandList& commandList, D3D12_RESOURCE_STATES stateAfter) const;
+//Modify Begin:2026-08-13 by BestHui
+    void ForEachShaderResource(const std::function<void(const Resource&)>& action) const;
+//Modify End
 
     const StructuredBuffer& GetGeometryBuffer() const { return m_GeometryBuffer; }
     const RayTracingAccelerationStructure& GetAccelerationStructure() const { return m_AccelerationStructure; }

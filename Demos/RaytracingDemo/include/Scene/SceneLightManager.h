@@ -10,12 +10,14 @@
 #include <DirectXMath.h>
 
 #include <cstddef>
+#include <functional>
 #include <vector>
 
 class CommandList;
 class CommandContext;
 class ComputeShader;
 class RayTracingBindingSet;
+class Resource;
 
 class SceneLightManager final
 {
@@ -43,8 +45,8 @@ public:
     //Modify End
     void UpdateDynamicLights(float timeSeconds);
     void BindComputeResources(CommandContext& commandContext, ComputeShader& shader);
-//Modify Begin:2026-08-03 by BestHui
-    void PrepareAsyncComputeResources(CommandList& commandList) const;
+//Modify Begin:2026-08-13 by BestHui
+    void ForEachShaderResource(const std::function<void(const Resource&)>& action) const;
 //Modify End
     void BindRayTracingResources(RayTracingBindingSet& bindingSet);
 

@@ -92,6 +92,12 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
             };
             resources.IndirectLightingReSTIRGIPass.Execute(commandList, inputs);
         });
+//Modify Begin:2026-08-13 by BestHui
+    RaytracingDemoPassBindings::DeclareRayTracingExternalResourceAccesses(
+        *pass,
+        resources,
+        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+//Modify End
     return pass;
 }
 //Modify End

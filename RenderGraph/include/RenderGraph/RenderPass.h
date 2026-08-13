@@ -11,6 +11,8 @@
 #include "RenderContext.h"
 #include "ResourceId.h"
 
+class Resource;
+
 namespace RenderGraph
 {
 //Modify Begin:2026-08-03 by BestHui
@@ -63,13 +65,19 @@ namespace RenderGraph
         OutputType m_Type = OutputType::Invalid;
     };
 
+//Modify Begin:2026-08-13 by BestHui
+    struct ExternalResourceAccess
+    {
+        const Resource* Resource = nullptr;
+        D3D12_RESOURCE_STATES StateAfter = D3D12_RESOURCE_STATE_COMMON;
+        bool InsertUavBarrier = false;
+    };
+//Modify End
+
     class RenderPass
     {
     public:
         using ExecuteFuncT = std::function<void(const RenderContext&, CommandList&)>;
-//Modify Begin:2026-08-03 by BestHui
-        using AsyncComputePrepareFuncT = std::function<void(CommandList&)>;
-//Modify End
 //Modify Begin:2026-07-28 by BestHui
         using ExternalExecuteFuncT = std::function<void(const RenderContext&)>;
 //Modify End
@@ -93,10 +101,6 @@ namespace RenderGraph
         void Init(CommandList& commandList);
 
         void Execute(const RenderContext& context, CommandList& commandList);
-//Modify Begin:2026-08-03 by BestHui
-        void PrepareAsyncCompute(CommandList& commandList) const;
-        void SetAsyncComputePrepare(const AsyncComputePrepareFuncT& prepareFunc) { m_AsyncComputePrepareFunc = prepareFunc; }
-//Modify End
 //Modify Begin:2026-07-28 by BestHui
         void ExecuteExternal(const RenderContext& context);
         virtual bool IsExternal() const { return false; }
@@ -105,6 +109,16 @@ namespace RenderGraph
         const std::vector<Input>& GetInputs() const { return m_Inputs; }
         const std::vector<Output>& GetOutputs() const { return m_Outputs; }
         const std::wstring& GetPassName() const { return m_PassName; }
+//Modify Begin:2026-08-13 by BestHui
+        void AddExternalResourceAccess(
+            const Resource& resource,
+            D3D12_RESOURCE_STATES stateAfter,
+            bool insertUavBarrier = false);
+        const std::vector<ExternalResourceAccess>& GetExternalResourceAccesses() const
+        {
+            return m_ExternalResourceAccesses;
+        }
+//Modify End
 //Modify Begin:2026-08-03 by BestHui
         RenderPassQueue GetQueue() const { return m_Queue; }
 //Modify Begin:2026-07-30 by BestHui
@@ -137,7 +151,9 @@ namespace RenderGraph
         std::wstring m_PassName = L"Render Pass";
 //Modify Begin:2026-08-03 by BestHui
         RenderPassQueue m_Queue = RenderPassQueue::Direct;
-        AsyncComputePrepareFuncT m_AsyncComputePrepareFunc;
+//Modify End
+//Modify Begin:2026-08-13 by BestHui
+        std::vector<ExternalResourceAccess> m_ExternalResourceAccesses;
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
         bool m_ParallelRecordingEligible = false;

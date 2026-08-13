@@ -361,6 +361,18 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
                 resourceStatePlan.InputTransitions.push_back({ input.m_Id, stateAfter, insertUavBarrier });
             }
         }
+//Modify Begin:2026-08-13 by BestHui
+        for (const ExternalResourceAccess& access : renderPass->GetExternalResourceAccesses())
+        {
+            Assert(access.Resource != nullptr && access.Resource->IsValid(),
+                "Render pass external resource access must reference an initialized resource.");
+            resourceStatePlan.ExternalResourceTransitions.push_back({
+                access.Resource,
+                access.StateAfter,
+                access.InsertUavBarrier
+            });
+        }
+//Modify End
         for (const Output& output : renderPass->GetOutputs())
         {
             if (output.m_Type == OutputType::Token)
@@ -406,6 +418,9 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
                 }
             }
             resourceStatePlan.InputTransitions = std::move(computeInputTransitions);
+//Modify Begin:2026-08-13 by BestHui
+            directPreamble.ExternalResourceTransitions = std::move(resourceStatePlan.ExternalResourceTransitions);
+//Modify End
             directPreamble.AliasingOutputs = std::move(resourceStatePlan.AliasingOutputs);
             directPreamble.OutputTransitions = std::move(resourceStatePlan.OutputTransitions);
             resourceStatePlan.DirectPreamble = std::move(directPreamble);

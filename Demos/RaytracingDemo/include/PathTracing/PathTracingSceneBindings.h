@@ -12,11 +12,22 @@ class RayTracingBindingSet;
 
 namespace RenderGraph
 {
+    class RenderPass;
+}
+
+namespace RenderGraph
+{
     class FrameContext;
 }
 
 struct RaytracingDemoPassBindings
 {
+//Modify Begin:2026-08-13 by BestHui
+    static void DeclareRayTracingExternalResourceAccesses(
+        RenderGraph::RenderPass& renderPass,
+        const RaytracingDemoPassResources& resources,
+        D3D12_RESOURCE_STATES stateAfter);
+//Modify End
     static RaytracingDemoCameraConstants BuildPassCameraConstants(
         const RaytracingDemoPassResources& resources,
         const RaytracingDemoPassConfig& config,

@@ -11,6 +11,7 @@
 #include <wrl.h>
 
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <string>
@@ -19,6 +20,7 @@
 
 class CommandList;
 class D3D12DeviceContext;
+class Resource;
 class RaytracingDemoSceneResources final
 {
 public:
@@ -49,7 +51,10 @@ public:
 //Modify End
     const StructuredBuffer& GetMaterialBuffer() const { return m_TextureMaterialResources.GetMaterialBuffer(); }
     const StructuredBuffer& GetGeometryBuffer() const { return m_RayTracingResources.GetGeometryBuffer(); }
-    void TransitionRayTracingShaderResources(CommandList& commandList, D3D12_RESOURCE_STATES stateAfter) const;
+//Modify Begin:2026-08-13 by BestHui
+    void ForEachGBufferShaderResource(const std::function<void(const Resource&)>& action) const;
+    void ForEachRayTracingShaderResource(const std::function<void(const Resource&)>& action) const;
+//Modify End
 //Modify Begin:2026-07-30 by BestHui
     BindlessDescriptorHeap& GetBindlessDescriptorHeap() { return m_TextureMaterialResources.GetBindlessDescriptorHeap(); }
     const BindlessDescriptorHeap& GetBindlessDescriptorHeap() const { return m_TextureMaterialResources.GetBindlessDescriptorHeap(); }

@@ -11,6 +11,8 @@
 #include "RenderTargetInfo.h"
 #include "ResourceId.h"
 
+class Resource;
+
 namespace RenderGraph
 {
     class RenderGraphCompiler;
@@ -23,9 +25,21 @@ namespace RenderGraph
         bool InsertUavBarrier = false;
     };
 
+//Modify Begin:2026-08-13 by BestHui
+    struct PassExternalResourceTransition
+    {
+        const Resource* Resource = nullptr;
+        D3D12_RESOURCE_STATES StateAfter = D3D12_RESOURCE_STATE_COMMON;
+        bool InsertUavBarrier = false;
+    };
+//Modify End
+
     struct PassResourceStatePlan
     {
         std::vector<PassResourceTransition> InputTransitions;
+//Modify Begin:2026-08-13 by BestHui
+        std::vector<PassExternalResourceTransition> ExternalResourceTransitions;
+//Modify End
         std::vector<ResourceId> AliasingOutputs;
         std::vector<PassResourceTransition> OutputTransitions;
         std::vector<ResourceId> InitOutputs;
@@ -34,6 +48,9 @@ namespace RenderGraph
         struct AsyncComputeDirectPreamble
         {
             std::vector<PassResourceTransition> DirectProducerInputTransitions;
+//Modify Begin:2026-08-13 by BestHui
+            std::vector<PassExternalResourceTransition> ExternalResourceTransitions;
+//Modify End
             std::vector<ResourceId> AliasingOutputs;
             std::vector<PassResourceTransition> OutputTransitions;
         };

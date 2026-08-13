@@ -24,6 +24,25 @@ RaytracingDemoCameraConstants RaytracingDemoPassBindings::BuildPassCameraConstan
     return ::BuildPassCameraConstants(resources, config, context);
 }
 
+//Modify Begin:2026-08-13 by BestHui
+void RaytracingDemoPassBindings::DeclareRayTracingExternalResourceAccesses(
+    RenderGraph::RenderPass& renderPass,
+    const RaytracingDemoPassResources& resources,
+    const D3D12_RESOURCE_STATES stateAfter)
+{
+    const auto declareAccess = [&renderPass, stateAfter](const Resource& resource)
+    {
+        renderPass.AddExternalResourceAccess(resource, stateAfter);
+    };
+    resources.Scene.ForEachRayTracingShaderResource(declareAccess);
+    resources.Lights.ForEachShaderResource(declareAccess);
+    if (resources.SkyboxTexture != nullptr)
+    {
+        renderPass.AddExternalResourceAccess(*resources.SkyboxTexture, stateAfter);
+    }
+}
+//Modify End
+
 void RaytracingDemoPassBindings::BindInlinePathTracingInputs(
     const RaytracingDemoPassResources& resources,
     CommandContext& commandContext,

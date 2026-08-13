@@ -417,16 +417,19 @@ void LightingGpuResources::BindComputeResources(CommandContext& commandContext, 
     }
 }
 
-void LightingGpuResources::PrepareAsyncComputeResources(CommandList& commandList) const
+//Modify Begin:2026-08-13 by BestHui
+void LightingGpuResources::ForEachShaderResource(
+    const std::function<void(const Resource&)>& action) const
 {
-    commandList.TransitionBarrier(m_DirectionalLightBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    commandList.TransitionBarrier(m_PointLightBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    commandList.TransitionBarrier(m_SurfaceEmitterGeometryBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    commandList.TransitionBarrier(m_SurfaceEmitterInstanceBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    commandList.TransitionBarrier(m_SurfaceEmitterTriangleBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    commandList.TransitionBarrier(m_SurfaceEmitterTriangleCdfBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    commandList.TransitionBarrier(m_DirectLightCdfBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    action(m_DirectionalLightBuffer);
+    action(m_PointLightBuffer);
+    action(m_SurfaceEmitterGeometryBuffer);
+    action(m_SurfaceEmitterInstanceBuffer);
+    action(m_SurfaceEmitterTriangleBuffer);
+    action(m_SurfaceEmitterTriangleCdfBuffer);
+    action(m_DirectLightCdfBuffer);
 }
+//Modify End
 
 void LightingGpuResources::BindRayTracingResources(RayTracingBindingSet& bindingSet)
 {

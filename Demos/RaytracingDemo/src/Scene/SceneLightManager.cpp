@@ -302,10 +302,11 @@ void SceneLightManager::BindComputeResources(CommandContext& commandContext, Com
     m_GpuResources.BindComputeResources(commandContext, shader);
 }
 
-//Modify Begin:2026-08-03 by BestHui
-void SceneLightManager::PrepareAsyncComputeResources(CommandList& commandList) const
+//Modify Begin:2026-08-13 by BestHui
+void SceneLightManager::ForEachShaderResource(
+    const std::function<void(const Resource&)>& action) const
 {
-    m_GpuResources.PrepareAsyncComputeResources(commandList);
+    m_GpuResources.ForEachShaderResource(action);
 }
 //Modify End
 

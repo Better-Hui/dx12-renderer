@@ -81,10 +81,6 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
                 ComputeShader& directLightingShader = resources.Pipelines.GetInlineDirectLightingShader();
                 CommandContext commandContext(cmd);
                 RaytracingDemoPassBindings::BindInlinePathTracingInputs(resources, commandContext, directLightingShader, gbuffer, camera);
-//Modify Begin:2026-07-28 by BestHui
-                resources.Scene.TransitionRayTracingShaderResources(
-                    cmd,
-                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
                 commandContext.SetUnorderedAccessView(directLightingShader, "DirectLighting", UnorderedAccessView(context.GetTexture(DemoResourceIds::DirectLighting)));
 //Modify Begin:2026-07-30 by BestHui
                 commandContext.BindBindlessDescriptorHeap(resources.Scene.GetBindlessDescriptorHeap());
@@ -96,9 +92,6 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
             }
             else
             {
-                resources.Scene.TransitionRayTracingShaderResources(
-                    cmd,
-                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
                 RayTracingBindingSet& directBindingSet = resources.Pipelines.GetDirectRayTracingBindingSet();
                 directBindingSet.SetUnorderedAccessView("DirectLighting", UnorderedAccessView(context.GetTexture(DemoResourceIds::DirectLighting)));
                 RaytracingDemoPassBindings::BindDxrPathTracingInputs(resources, directBindingSet, gbuffer, camera);
@@ -116,6 +109,12 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
 //Modify End
             }
         });
+//Modify Begin:2026-08-13 by BestHui
+    RaytracingDemoPassBindings::DeclareRayTracingExternalResourceAccesses(
+        *pass,
+        resources,
+        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+//Modify End
 //Modify Begin:2026-07-30 by BestHui
     if (backend == PathTracingBackend::InlineRayQuery)
     {
@@ -168,10 +167,6 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
                 ComputeShader& indirectLightingShader = resources.Pipelines.GetInlineIndirectLightingShader();
                 CommandContext commandContext(cmd);
                 RaytracingDemoPassBindings::BindInlinePathTracingInputs(resources, commandContext, indirectLightingShader, gbuffer, camera);
-//Modify Begin:2026-07-28 by BestHui
-                resources.Scene.TransitionRayTracingShaderResources(
-                    cmd,
-                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
                 commandContext.SetUnorderedAccessView(indirectLightingShader, "IndirectLighting", UnorderedAccessView(context.GetTexture(DemoResourceIds::IndirectLighting)));
 //Modify Begin:2026-07-30 by BestHui
                 commandContext.BindBindlessDescriptorHeap(resources.Scene.GetBindlessDescriptorHeap());
@@ -183,9 +178,6 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
             }
             else
             {
-                resources.Scene.TransitionRayTracingShaderResources(
-                    cmd,
-                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
                 RayTracingBindingSet& indirectBindingSet = resources.Pipelines.GetIndirectRayTracingBindingSet();
                 indirectBindingSet.SetUnorderedAccessView("IndirectLighting", UnorderedAccessView(context.GetTexture(DemoResourceIds::IndirectLighting)));
                 RaytracingDemoPassBindings::BindDxrPathTracingInputs(resources, indirectBindingSet, gbuffer, camera);
@@ -205,29 +197,13 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
 //Modify Begin:2026-08-03 by BestHui
         },
         queue);
-    if (queue == RenderPassQueue::AsyncCompute)
-    {
-        pass->SetAsyncComputePrepare([resources](CommandList& commandList)
-        {
-            resources.Scene.TransitionRayTracingShaderResources(
-                commandList,
-                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-            commandList.TransitionBarrier(
-                resources.Scene.GetMaterialBuffer(),
-                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-            commandList.TransitionBarrier(
-                resources.Scene.GetGeometryBuffer(),
-                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-            if (resources.SkyboxTexture != nullptr)
-            {
-                commandList.TransitionBarrier(
-                    *resources.SkyboxTexture,
-                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-            }
-            resources.Lights.PrepareAsyncComputeResources(commandList);
-        });
-    }
-    else if (backend == PathTracingBackend::InlineRayQuery)
+//Modify Begin:2026-08-13 by BestHui
+    RaytracingDemoPassBindings::DeclareRayTracingExternalResourceAccesses(
+        *pass,
+        resources,
+        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+//Modify End
+    if (queue != RenderPassQueue::AsyncCompute && backend == PathTracingBackend::InlineRayQuery)
     {
         pass->SetParallelRecordingEligible(true);
     }

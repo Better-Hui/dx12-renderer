@@ -19,7 +19,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
     const RaytracingDemoPassConfig& config)
 {
     using namespace RenderGraph;
-    return RenderPass::Create(
+    auto pass = RenderPass::Create(
         L"ReSTIR DI",
         {
             { DemoResourceIds::BaseResourcesFinishedToken, InputType::Token },
@@ -64,9 +64,6 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
             inputs.MotionVector = gbuffer.MotionVector;
             inputs.PrepareCommandContext = [&resources](CommandContext& commandContext)
             {
-                resources.Scene.TransitionRayTracingShaderResources(
-                    commandContext.GetCommandList(),
-                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
                 commandContext.BindBindlessDescriptorHeap(resources.Scene.GetBindlessDescriptorHeap());
             };
             inputs.BindSceneInputs = [resources, gbuffer, camera](CommandContext& commandContext, ComputeShader& shader)
@@ -80,5 +77,12 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
             };
             resources.DirectLightingReSTIRDIPass.Execute(commandList, inputs);
         });
+//Modify Begin:2026-08-13 by BestHui
+    RaytracingDemoPassBindings::DeclareRayTracingExternalResourceAccesses(
+        *pass,
+        resources,
+        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+//Modify End
+    return pass;
 }
 //Modify End

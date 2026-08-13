@@ -210,13 +210,18 @@ uint32_t RaytracingDemoSceneResources::AddDiffuseMaterial(
         roughness);
 }
 
-//Modify Begin:2026-07-30 by BestHui
-void RaytracingDemoSceneResources::TransitionRayTracingShaderResources(
-    CommandList& commandList,
-    const D3D12_RESOURCE_STATES stateAfter) const
+//Modify Begin:2026-08-13 by BestHui
+void RaytracingDemoSceneResources::ForEachGBufferShaderResource(
+    const std::function<void(const Resource&)>& action) const
 {
-    m_TextureMaterialResources.TransitionTextures(commandList, stateAfter);
-    m_RayTracingResources.TransitionShaderResources(commandList, stateAfter);
+    m_TextureMaterialResources.ForEachBindlessTexture(action);
+}
+
+void RaytracingDemoSceneResources::ForEachRayTracingShaderResource(
+    const std::function<void(const Resource&)>& action) const
+{
+    m_TextureMaterialResources.ForEachShaderResource(action);
+    m_RayTracingResources.ForEachShaderResource(action);
 }
 //Modify End
 

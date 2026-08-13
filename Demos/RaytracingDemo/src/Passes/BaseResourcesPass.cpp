@@ -27,7 +27,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
     using namespace RenderGraph;
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
 
-    return RenderPass::Create(
+    auto pass = RenderPass::Create(
         L"Base Resources",
         {},
         {
@@ -56,7 +56,6 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
                     resources.SkyboxTexture);
             }
 //Modify End
-            resources.Scene.TransitionRayTracingShaderResources(cmd, D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
             CommandContext commandContext(cmd);
 //Modify Begin:2026-07-30 by BestHui
             commandContext.BindBindlessDescriptorHeap(resources.Scene.GetBindlessDescriptorHeap());
@@ -240,5 +239,13 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
 //Modify End
             }
         });
+//Modify Begin:2026-08-13 by BestHui
+    resources.Scene.ForEachGBufferShaderResource(
+        [&pass](const Resource& resource)
+        {
+            pass->AddExternalResourceAccess(resource, D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
+        });
+    return pass;
+//Modify End
 }
 //Modify End

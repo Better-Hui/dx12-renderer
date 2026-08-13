@@ -149,15 +149,23 @@ void SceneTextureMaterialResources::UploadMaterialBuffer(CommandList& commandLis
     commandList.CopyStructuredBuffer(m_MaterialBuffer, m_Materials);
 }
 
-void SceneTextureMaterialResources::TransitionTextures(
-    CommandList& commandList,
-    const D3D12_RESOURCE_STATES stateAfter) const
+//Modify Begin:2026-08-13 by BestHui
+void SceneTextureMaterialResources::ForEachBindlessTexture(
+    const std::function<void(const Resource&)>& action) const
 {
     for (const std::shared_ptr<Texture>& texture : m_Textures)
     {
-        commandList.TransitionBarrier(*texture, stateAfter);
+        action(*texture);
     }
 }
+
+void SceneTextureMaterialResources::ForEachShaderResource(
+    const std::function<void(const Resource&)>& action) const
+{
+    ForEachBindlessTexture(action);
+    action(m_MaterialBuffer);
+}
+//Modify End
 
 //Modify Begin:2026-08-11 by BestHui
 const std::vector<ShaderResourceView>& SceneTextureMaterialResources::GetTextureShaderResourceViews() const
@@ -321,16 +329,18 @@ void SceneRayTracingResources::Update(
     UploadGeometryBuffer(commandList, bindlessDescriptorHeap);
 }
 
-void SceneRayTracingResources::TransitionShaderResources(
-    CommandList& commandList,
-    const D3D12_RESOURCE_STATES stateAfter) const
+//Modify Begin:2026-08-13 by BestHui
+void SceneRayTracingResources::ForEachShaderResource(
+    const std::function<void(const Resource&)>& action) const
 {
+    action(m_GeometryBuffer);
     for (const std::shared_ptr<Mesh>& mesh : m_AccelerationStructure.GetMeshes())
     {
-        commandList.TransitionBarrier(mesh->GetVertexBuffer(), stateAfter);
-        commandList.TransitionBarrier(mesh->GetIndexBuffer(), stateAfter);
+        action(mesh->GetVertexBuffer());
+        action(mesh->GetIndexBuffer());
     }
 }
+//Modify End
 
 void SceneRayTracingResources::AddObjectInstances(
     const std::vector<RaytracingDemoSceneGeometry>& geometries,

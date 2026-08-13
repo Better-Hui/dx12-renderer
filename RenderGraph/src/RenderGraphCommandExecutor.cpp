@@ -420,6 +420,10 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareAsyncComputeDependency(
         });
     }
 
+//Modify Begin:2026-08-13 by BestHui
+    ApplyExternalResourceTransitions(commandList, directPreamble.ExternalResourceTransitions);
+//Modify End
+
     for (const ResourceId outputId : directPreamble.AliasingOutputs)
     {
         const auto& resource = m_ResourcePool->GetResource(outputId);
@@ -444,7 +448,6 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareAsyncComputeDependency(
         });
     }
 
-    pass.PrepareAsyncCompute(commandList);
     m_Profiler.WriteMarker(
         RenderPassQueue::Direct,
         commandList,
@@ -453,6 +456,24 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareAsyncComputeDependency(
     const uint64_t producerFenceValue = m_QueueScheduler.SubmitDirect(directCommandList);
     m_QueueScheduler.WaitForDirectSubmissionOnAsyncCompute(producerFenceValue);
 }
+
+//Modify Begin:2026-08-13 by BestHui
+void RenderGraph::RenderGraphCommandExecutor::ApplyExternalResourceTransitions(
+    CommandList& commandList,
+    const std::span<const PassExternalResourceTransition> transitions)
+{
+    for (const PassExternalResourceTransition& transition : transitions)
+    {
+        Assert(transition.Resource != nullptr && transition.Resource->IsValid(),
+            "Render pass external resource transition must reference an initialized resource.");
+        commandList.TransitionBarrier(*transition.Resource, transition.StateAfter);
+        if (transition.InsertUavBarrier)
+        {
+            commandList.UavBarrier(*transition.Resource);
+        }
+    }
+}
+//Modify End
 
 void RenderGraph::RenderGraphCommandExecutor::PrepareResourcesForRenderPass(
     CommandList& commandList,
@@ -479,6 +500,10 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareResourcesForRenderPass(
             }
         });
     }
+
+//Modify Begin:2026-08-13 by BestHui
+    ApplyExternalResourceTransitions(commandList, resourceStatePlan.ExternalResourceTransitions);
+//Modify End
 
     for (const ResourceId outputId : resourceStatePlan.AliasingOutputs)
     {

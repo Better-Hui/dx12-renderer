@@ -1,5 +1,8 @@
 #include "RenderPass.h"
 
+#include <DX12Library/Helpers.h>
+#include <DX12Library/Resource.h>
+
 namespace RenderGraph
 {
     class LambdaRenderPass final : public RenderPass
@@ -120,16 +123,6 @@ void RenderGraph::RenderPass::Execute(const RenderContext& context, CommandList&
     ExecuteImpl(context, commandList);
 }
 
-//Modify Begin:2026-08-03 by BestHui
-void RenderGraph::RenderPass::PrepareAsyncCompute(CommandList& commandList) const
-{
-    if (m_AsyncComputePrepareFunc)
-    {
-        m_AsyncComputePrepareFunc(commandList);
-    }
-}
-//Modify End
-
 //Modify Begin:2026-07-28 by BestHui
 void RenderGraph::RenderPass::ExecuteExternal(const RenderContext& context)
 {
@@ -167,3 +160,32 @@ void RenderGraph::RenderPass::SetPassName(const std::wstring& passName)
 {
     m_PassName = passName;
 }
+
+//Modify Begin:2026-08-13 by BestHui
+void RenderGraph::RenderPass::AddExternalResourceAccess(
+    const Resource& resource,
+    const D3D12_RESOURCE_STATES stateAfter,
+    const bool insertUavBarrier)
+{
+    resource.ForEachResourceRecursive(
+        [this, stateAfter, insertUavBarrier](const Resource& nestedResource)
+        {
+            Assert(nestedResource.IsValid(), "External render-pass resource must be initialized.");
+            const auto existingAccess = std::ranges::find_if(
+                m_ExternalResourceAccesses,
+                [&nestedResource](const ExternalResourceAccess& access)
+                {
+                    return access.Resource == &nestedResource;
+                });
+            Assert(
+                existingAccess == m_ExternalResourceAccesses.end() ||
+                    (existingAccess->StateAfter == stateAfter &&
+                     existingAccess->InsertUavBarrier == insertUavBarrier),
+                "A render pass cannot declare conflicting external resource states.");
+            if (existingAccess == m_ExternalResourceAccesses.end())
+            {
+                m_ExternalResourceAccesses.push_back({ &nestedResource, stateAfter, insertUavBarrier });
+            }
+        });
+}
+//Modify End

@@ -9,6 +9,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -17,6 +18,7 @@ class CommandList;
 class ComputeShader;
 class FrameworkDeviceContext;
 class RayTracingBindingSet;
+class Resource;
 class SharedUploadBuffer;
 
 struct LightingGpuInput
@@ -49,7 +51,9 @@ public:
     void Initialize(CommandList& commandList);
     bool Upload(CommandList& commandList, uint64_t frameIndex);
     void BindComputeResources(CommandContext& commandContext, ComputeShader& shader);
-    void PrepareAsyncComputeResources(CommandList& commandList) const;
+//Modify Begin:2026-08-13 by BestHui
+    void ForEachShaderResource(const std::function<void(const Resource&)>& action) const;
+//Modify End
     void BindRayTracingResources(RayTracingBindingSet& bindingSet);
 
     uint32_t GetDirectionalLightCount() const;

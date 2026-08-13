@@ -62,6 +62,11 @@ namespace RenderGraph
             const RenderPass& pass,
             std::shared_ptr<CommandList>& directCommandList,
             const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
+//Modify Begin:2026-08-13 by BestHui
+        static void ApplyExternalResourceTransitions(
+            CommandList& commandList,
+            std::span<const PassExternalResourceTransition> transitions);
+//Modify End
 
         std::shared_ptr<CommandQueue> m_DirectCommandQueue;
         std::shared_ptr<CommandQueue> m_AsyncComputeCommandQueue;
