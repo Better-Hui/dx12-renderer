@@ -124,10 +124,10 @@ bool ComputeShader::HasConstantBuffer(const std::string& variableName) const
     return m_BindingSet->HasBinding(variableName, DescriptorBindingKind::ConstantBuffer);
 }
 
+//Modify Begin:2026-07-30 by BestHui
 bool ComputeShader::HasShaderResourceView(const std::string& variableName) const
 {
-    return m_BindingSet->HasBinding(variableName, DescriptorBindingKind::ShaderResourceView) ||
-        m_BindingSet->HasBinding(variableName, DescriptorBindingKind::AccelerationStructure);
+    return m_BindingSet->HasBinding(variableName, DescriptorBindingKind::ShaderResourceView);
 }
 
 bool ComputeShader::HasUnorderedAccessView(const std::string& variableName) const
@@ -135,7 +135,6 @@ bool ComputeShader::HasUnorderedAccessView(const std::string& variableName) cons
     return m_BindingSet->HasBinding(variableName, DescriptorBindingKind::UnorderedAccessView);
 }
 
-//Modify Begin:2026-07-30 by BestHui
 bool ComputeShader::HasAccelerationStructure(const std::string& variableName) const
 {
     return m_BindingSet->HasBinding(variableName, DescriptorBindingKind::AccelerationStructure);
