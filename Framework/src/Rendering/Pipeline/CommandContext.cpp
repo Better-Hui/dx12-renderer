@@ -509,6 +509,65 @@ void CommandContext::SetRayTracingPipelineState(
     m_CommandList.SetComputeRootSignature(globalRootSignature);
 }
 
+//Modify Begin:2026-07-30 by BestHui
+void CommandContext::StageDefaultDescriptorTable(
+    const PipelineBindPoint bindPoint,
+    const PipelineDescriptorSet& descriptorSet,
+    const UINT rootParameterIndex) const
+{
+    if (const PipelineDescriptorTableAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
+    {
+        m_DescriptorAllocator.StageDescriptorTable(m_CommandList, bindPoint, rootParameterIndex, *allocation);
+    }
+}
+
+bool CommandContext::TryApplyDescriptorTableBinding(
+    const PipelineBindPoint bindPoint,
+    const PipelineDescriptorSet& descriptorSet,
+    const PipelineDescriptorRangeDesc& range,
+    const PipelineBoundResource& boundResource,
+    const UINT rootParameterIndex) const
+{
+    const PipelineDescriptorTableAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex);
+    if (allocation == nullptr)
+    {
+        return false;
+    }
+
+    switch (range.Kind)
+    {
+    case DescriptorBindingKind::ShaderResourceView:
+        for (const auto& shaderResource : boundResource.ShaderResources)
+        {
+            if (!shaderResource.has_value())
+            {
+                continue;
+            }
+
+            Assert(shaderResource->Resource != nullptr, "Pipeline SRV resource is not bound.");
+            if (shaderResource->AutoTransition && shaderResource->Resource->AreAutoBarriersEnabled())
+            {
+                TransitionShaderResourceBinding(m_CommandList, *shaderResource);
+            }
+        }
+        break;
+    case DescriptorBindingKind::UnorderedAccessView:
+        Assert(boundResource.UnorderedAccessView.has_value(), "Pipeline UAV resource is not bound.");
+        Assert(boundResource.UnorderedAccessView->m_Resource != nullptr, "Pipeline UAV resource is not bound.");
+        if (boundResource.UnorderedAccessView->m_Resource->AreAutoBarriersEnabled())
+        {
+            TransitionUnorderedAccessView(m_CommandList, *boundResource.UnorderedAccessView);
+        }
+        break;
+    default:
+        return false;
+    }
+
+    m_DescriptorAllocator.StageDescriptorTable(m_CommandList, bindPoint, rootParameterIndex, *allocation);
+    return true;
+}
+//Modify End
+
 void CommandContext::ApplyGraphicsBinding(const PipelineDescriptorSet& descriptorSet, const UINT rootParameterIndex) const
 {
     const PipelineLayout& layout = descriptorSet.GetLayout();
@@ -518,15 +577,10 @@ void CommandContext::ApplyGraphicsBinding(const PipelineDescriptorSet& descripto
     const PipelineBoundResource* boundResource = descriptorSet.FindBoundResource(rootParameterIndex);
     if (boundResource == nullptr)
     {
-//Modify Begin:2026-07-27 by BestHui
         if (range->BindingMode == PipelineDescriptorBindingMode::DescriptorTable)
         {
-            if (const PipelineDescriptorTableAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
-            {
-                m_DescriptorAllocator.StageDescriptorTable(m_CommandList, PipelineBindPoint::Graphics, rootParameterIndex, *allocation);
-            }
+            StageDefaultDescriptorTable(PipelineBindPoint::Graphics, descriptorSet, rootParameterIndex);
         }
-//Modify End
         return;
     }
 
@@ -546,26 +600,15 @@ void CommandContext::ApplyGraphicsBinding(const PipelineDescriptorSet& descripto
     {
         Assert(range->BindingMode == PipelineDescriptorBindingMode::DescriptorTable, "Graphics root SRV bindings are not supported yet.");
 
-//Modify Begin:2026-07-27 by BestHui
-        if (const PipelineDescriptorTableAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
+        if (TryApplyDescriptorTableBinding(
+                PipelineBindPoint::Graphics,
+                descriptorSet,
+                *range,
+                *boundResource,
+                rootParameterIndex))
         {
-            for (const auto& shaderResource : boundResource->ShaderResources)
-            {
-                if (!shaderResource.has_value() || shaderResource->Resource == nullptr)
-                {
-                    continue;
-                }
-
-                if (shaderResource->AutoTransition && shaderResource->Resource->AreAutoBarriersEnabled())
-                {
-                    TransitionShaderResourceBinding(m_CommandList, *shaderResource);
-                }
-            }
-
-            m_DescriptorAllocator.StageDescriptorTable(m_CommandList, PipelineBindPoint::Graphics, rootParameterIndex, *allocation);
             return;
         }
-//Modify End
 
         const size_t shaderResourceCount = boundResource->ShaderResources.size();
         for (UINT i = 0; i < static_cast<UINT>(shaderResourceCount); ++i)
@@ -607,18 +650,15 @@ void CommandContext::ApplyGraphicsBinding(const PipelineDescriptorSet& descripto
     {
         Assert(boundResource->UnorderedAccessView.has_value(), "Pipeline UAV resource is not bound.");
         const UnorderedAccessView& unorderedAccessView = *boundResource->UnorderedAccessView;
-//Modify Begin:2026-07-27 by BestHui
-        if (const PipelineDescriptorTableAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
+        if (TryApplyDescriptorTableBinding(
+                PipelineBindPoint::Graphics,
+                descriptorSet,
+                *range,
+                *boundResource,
+                rootParameterIndex))
         {
-            if (unorderedAccessView.m_Resource->AreAutoBarriersEnabled())
-            {
-                TransitionUnorderedAccessView(m_CommandList, unorderedAccessView);
-            }
-
-            m_DescriptorAllocator.StageDescriptorTable(m_CommandList, PipelineBindPoint::Graphics, rootParameterIndex, *allocation);
             return;
         }
-//Modify End
         if (unorderedAccessView.m_Resource->AreAutoBarriersEnabled())
         {
             m_CommandList.SetUnorderedAccessView(
@@ -652,15 +692,10 @@ void CommandContext::ApplyComputeBinding(const PipelineDescriptorSet& descriptor
     const PipelineBoundResource* boundResource = descriptorSet.FindBoundResource(rootParameterIndex);
     if (boundResource == nullptr)
     {
-//Modify Begin:2026-07-27 by BestHui
         if (range->BindingMode == PipelineDescriptorBindingMode::DescriptorTable)
         {
-            if (const PipelineDescriptorTableAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
-            {
-                m_DescriptorAllocator.StageDescriptorTable(m_CommandList, PipelineBindPoint::Compute, rootParameterIndex, *allocation);
-            }
+            StageDefaultDescriptorTable(PipelineBindPoint::Compute, descriptorSet, rootParameterIndex);
         }
-//Modify End
         return;
     }
 
@@ -700,26 +735,15 @@ void CommandContext::ApplyComputeBinding(const PipelineDescriptorSet& descriptor
             return;
         }
 
-//Modify Begin:2026-07-27 by BestHui
-        if (const PipelineDescriptorTableAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
+        if (TryApplyDescriptorTableBinding(
+                PipelineBindPoint::Compute,
+                descriptorSet,
+                *range,
+                *boundResource,
+                rootParameterIndex))
         {
-            for (const auto& shaderResource : boundResource->ShaderResources)
-            {
-                if (!shaderResource.has_value() || shaderResource->Resource == nullptr)
-                {
-                    continue;
-                }
-
-                if (shaderResource->AutoTransition && shaderResource->Resource->AreAutoBarriersEnabled())
-                {
-                    TransitionShaderResourceBinding(m_CommandList, *shaderResource);
-                }
-            }
-
-            m_DescriptorAllocator.StageDescriptorTable(m_CommandList, PipelineBindPoint::Compute, rootParameterIndex, *allocation);
             return;
         }
-//Modify End
 
         const size_t shaderResourceCount = boundResource->ShaderResources.size();
         for (UINT i = 0; i < static_cast<UINT>(shaderResourceCount); ++i)
@@ -761,18 +785,15 @@ void CommandContext::ApplyComputeBinding(const PipelineDescriptorSet& descriptor
     {
         Assert(boundResource->UnorderedAccessView.has_value(), "Pipeline UAV resource is not bound.");
         const UnorderedAccessView& unorderedAccessView = *boundResource->UnorderedAccessView;
-//Modify Begin:2026-07-27 by BestHui
-        if (const PipelineDescriptorTableAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
+        if (TryApplyDescriptorTableBinding(
+                PipelineBindPoint::Compute,
+                descriptorSet,
+                *range,
+                *boundResource,
+                rootParameterIndex))
         {
-            if (unorderedAccessView.m_Resource->AreAutoBarriersEnabled())
-            {
-                TransitionUnorderedAccessView(m_CommandList, unorderedAccessView);
-            }
-
-            m_DescriptorAllocator.StageDescriptorTable(m_CommandList, PipelineBindPoint::Compute, rootParameterIndex, *allocation);
             return;
         }
-//Modify End
         if (unorderedAccessView.m_Resource->AreAutoBarriersEnabled())
         {
             m_CommandList.SetUnorderedAccessView(

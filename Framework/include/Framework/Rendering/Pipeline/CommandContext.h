@@ -28,6 +28,8 @@ class MeshShader;
 class PipelineDescriptorPool;
 class PipelineDescriptorSet;
 class PipelineLayout;
+struct PipelineDescriptorRangeDesc;
+struct PipelineBoundResource;
 class RayTracingBindingSet;
 class RayTracingAccelerationStructure;
 class RayTracingShader;
@@ -155,6 +157,18 @@ private:
     void SetRayTracingPipelineState(
         const Microsoft::WRL::ComPtr<ID3D12StateObject>& stateObject,
         const RootSignature& globalRootSignature) const;
+//Modify Begin:2026-07-30 by BestHui
+    void StageDefaultDescriptorTable(
+        PipelineBindPoint bindPoint,
+        const PipelineDescriptorSet& descriptorSet,
+        UINT rootParameterIndex) const;
+    bool TryApplyDescriptorTableBinding(
+        PipelineBindPoint bindPoint,
+        const PipelineDescriptorSet& descriptorSet,
+        const PipelineDescriptorRangeDesc& range,
+        const PipelineBoundResource& boundResource,
+        UINT rootParameterIndex) const;
+//Modify End
     void ApplyGraphicsBinding(const PipelineDescriptorSet& descriptorSet, UINT rootParameterIndex) const;
     void ApplyComputeBinding(const PipelineDescriptorSet& descriptorSet, UINT rootParameterIndex) const;
     void StageDynamicDescriptors(
