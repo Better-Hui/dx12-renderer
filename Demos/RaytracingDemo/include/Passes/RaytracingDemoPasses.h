@@ -32,18 +32,12 @@ namespace RaytracingDemoPasses
         static std::unique_ptr<RenderGraph::RenderPass> CreateDirectLightingPass(
             const RaytracingDemoPassResources& resources,
             const RaytracingDemoPassConfig& config);
-//Modify Begin:2026-08-06 by BestHui
-        static std::unique_ptr<RenderGraph::RenderPass> CreateDisabledDirectLightingPass();
-//Modify End
         static std::unique_ptr<RenderGraph::RenderPass> CreateIndirectLightingPass(
             const RaytracingDemoPassResources& resources,
             const RaytracingDemoPassConfig& config);
-//Modify Begin:2026-08-10 by BestHui
-        static std::unique_ptr<RenderGraph::RenderPass> CreateDisabledIndirectLightingPass();
         static std::unique_ptr<RenderGraph::RenderPass> CreateReSTIRGIPass(
             const RaytracingDemoPassResources& resources,
             const RaytracingDemoPassConfig& config);
-//Modify End
         static std::unique_ptr<RenderGraph::RenderPass> CreateReSTIRDIPass(
             const RaytracingDemoPassResources& resources,
             const RaytracingDemoPassConfig& config);

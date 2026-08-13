@@ -20,12 +20,7 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
 //Modify End
     std::vector<std::unique_ptr<RenderGraph::RenderPass>> renderPasses;
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateBaseResourcesPass(resources, config));
-//Modify Begin:2026-08-10 by BestHui
-    if (frameState.MaxBounces <= 1)
-    {
-        renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDisabledIndirectLightingPass());
-    }
-    else
+    if (frameState.UsesIndirectLighting())
     {
         switch (frameState.IndirectLightingTechnique)
         {
@@ -38,33 +33,24 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
                 renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateReSTIRGIPass(resources, config));
                 break;
             }
-            [[fallthrough]];
-        case RaytracingDemoLightingTechnique::None:
         default:
-            renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDisabledIndirectLightingPass());
             break;
         }
     }
-//Modify End
-//Modify Begin:2026-08-06 by BestHui
-    switch (frameState.DirectLightingTechnique)
+    if (frameState.UsesDirectLighting())
     {
-    case RaytracingDemoLightingTechnique::PathTracing:
-        renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDirectLightingPass(resources, config));
-        break;
-    case RaytracingDemoLightingTechnique::ReSTIRDI:
-        if (frameState.Backend == PathTracingBackend::InlineRayQuery)
+        switch (frameState.DirectLightingTechnique)
         {
+        case RaytracingDemoLightingTechnique::PathTracing:
+            renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDirectLightingPass(resources, config));
+            break;
+        case RaytracingDemoLightingTechnique::ReSTIRDI:
             renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateReSTIRDIPass(resources, config));
             break;
+        default:
+            break;
         }
-        [[fallthrough]];
-    case RaytracingDemoLightingTechnique::None:
-    default:
-        renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDisabledDirectLightingPass());
-        break;
     }
-//Modify End
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateLightingCompositePass(resources, config));
 //Modify Begin:2026-07-28 by BestHui
     RenderGraph::ResourceId sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::RayTracingFinishedToken;
@@ -98,7 +84,7 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
 //Modify End
     {
 //Modify Begin:2026-07-30 by BestHui
-        if (resources.Denoisers.IsEnabled())
+        if (frameState.DenoiserEnabled)
         {
             renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDenoisePass(resources, config));
             sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::DenoiseFinishedToken;
@@ -109,13 +95,19 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
         switch (debugLightingTextureTarget)
         {
         case 1:
-            debugTarget = RaytracingDemoRenderGraph::ResourceIds::IndirectLighting;
+            if (frameState.UsesIndirectLighting())
+            {
+                debugTarget = RaytracingDemoRenderGraph::ResourceIds::IndirectLighting;
+            }
             break;
         case 2:
-            debugTarget = RaytracingDemoRenderGraph::ResourceIds::NRDNoisyRadiance;
+            if (frameState.DenoiserAlgorithm == DenoiserController::Algorithm::NRD)
+            {
+                debugTarget = RaytracingDemoRenderGraph::ResourceIds::NRDNoisyRadiance;
+            }
             break;
         case 3:
-            if (resources.Denoisers.IsNRDEnabled())
+            if (frameState.DenoiserAlgorithm == DenoiserController::Algorithm::NRD)
             {
                 debugTarget = RaytracingDemoRenderGraph::ResourceIds::NRDDenoisedRadiance;
             }

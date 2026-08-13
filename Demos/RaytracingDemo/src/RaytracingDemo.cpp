@@ -1864,6 +1864,9 @@ void RaytracingDemo::RebuildRenderGraph()
 //Modify End
 //Modify End
     m_RenderGraphDenoiserEnabled = IsDenoiserEnabled();
+    m_RenderGraphDenoiserAlgorithm = m_RenderGraphDenoiserEnabled
+        ? m_Denoisers.GetAlgorithm()
+        : DenoiserController::Algorithm::Off;
     m_RenderGraphCudaBloomEnabled = m_CudaBloom.IsEnabled();
 //Modify Begin:2026-08-07 by BestHui
     m_RenderGraphDLSSEnabled = m_DLSS.IsEnabled();
@@ -1896,6 +1899,9 @@ void RaytracingDemo::EnsureRenderGraphTopology()
 {
     if (m_RenderGraph == nullptr ||
         m_RenderGraphDenoiserEnabled != IsDenoiserEnabled() ||
+        m_RenderGraphDenoiserAlgorithm != (IsDenoiserEnabled()
+            ? m_Denoisers.GetAlgorithm()
+            : DenoiserController::Algorithm::Off) ||
         m_RenderGraphCudaBloomEnabled != m_CudaBloom.IsEnabled()
 //Modify Begin:2026-08-07 by BestHui
         || m_RenderGraphDLSSEnabled != m_DLSS.IsEnabled()
@@ -2067,6 +2073,10 @@ void RaytracingDemo::UpdateRenderGraphFrameState()
     state.DebugLightingTextureTarget = m_DebugLightingTextureTarget;
     state.DebugTextureTarget = m_DebugTextureTarget;
     state.MaxBounces = m_MaxBounces;
+    state.DenoiserEnabled = IsDenoiserEnabled();
+    state.DenoiserAlgorithm = state.DenoiserEnabled
+        ? m_Denoisers.GetAlgorithm()
+        : DenoiserController::Algorithm::Off;
 //Modify Begin:2026-08-07 by BestHui
     const uint32_t displayWidth = static_cast<uint32_t>((std::max)(m_Width, 1));
     const uint32_t displayHeight = static_cast<uint32_t>((std::max)(m_Height, 1));

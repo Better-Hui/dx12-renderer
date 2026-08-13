@@ -13,6 +13,7 @@
 //Modify End
 
 #include <string_view>
+#include <vector>
 
 namespace
 {
@@ -124,25 +125,6 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
 //Modify End
 }
 
-//Modify Begin:2026-08-06 by BestHui
-std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDisabledDirectLightingPass()
-{
-    using namespace RenderGraph;
-    return RenderPass::Create(
-        L"Direct Lighting Disabled",
-        {},
-        {
-//Modify Begin:2026-08-11 by BestHui
-            { DemoResourceIds::DirectLighting, OutputType::RenderTarget },
-//Modify End
-            { DemoResourceIds::DirectLightingFinishedToken, OutputType::Token },
-        },
-        [](const RenderContext&, CommandList&)
-        {
-        });
-}
-//Modify End
-
 std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIndirectLightingPass(
     const RaytracingDemoPassResources& resources,
     const RaytracingDemoPassConfig& config)
@@ -253,53 +235,53 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
 //Modify End
 }
 
-//Modify Begin:2026-08-10 by BestHui
-std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDisabledIndirectLightingPass()
-{
-    using namespace RenderGraph;
-    return RenderPass::Create(
-        L"Indirect Lighting Disabled",
-        {},
-        {
-//Modify Begin:2026-08-11 by BestHui
-            { DemoResourceIds::IndirectLighting, OutputType::RenderTarget },
-//Modify End
-            { DemoResourceIds::IndirectLightingFinishedToken, OutputType::Token },
-        },
-        [](const RenderContext&, CommandList&)
-        {
-        });
-}
-//Modify End
-
 std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateLightingCompositePass(
     const RaytracingDemoPassResources& resources,
     const RaytracingDemoPassConfig& config)
 {
     using namespace RenderGraph;
+    const PathTracingCompositeFeatures features = config.FrameState->GetCompositeFeatures();
+    std::vector<Input> inputs = {
+        { DemoResourceIds::GBufferAlbedoOcclusion, InputType::ShaderResource },
+        { DemoResourceIds::GBufferSpecularSmoothness, InputType::ShaderResource },
+        { DemoResourceIds::GBufferNormal, InputType::ShaderResource },
+        { DemoResourceIds::GBufferEmissionMetallic, InputType::ShaderResource },
+        { DemoResourceIds::GBufferPosition, InputType::ShaderResource },
+        { DemoResourceIds::DepthBuffer, InputType::ShaderResource },
+    };
+    if (features.DirectLightingEnabled)
+    {
+        inputs.emplace_back(DemoResourceIds::DirectLightingFinishedToken, InputType::Token);
+        inputs.emplace_back(DemoResourceIds::DirectLighting, InputType::ShaderResource);
+    }
+    if (features.IndirectLightingEnabled)
+    {
+        inputs.emplace_back(DemoResourceIds::IndirectLightingFinishedToken, InputType::Token);
+        inputs.emplace_back(DemoResourceIds::IndirectLighting, InputType::ShaderResource);
+    }
+
+    std::vector<Output> outputs = {
+        { DemoResourceIds::SceneColor, OutputType::UnorderedAccess },
+        { DemoResourceIds::RayTracingFinishedToken, OutputType::Token },
+    };
+    if (features.AccumulationEnabled)
+    {
+        outputs.emplace_back(DemoResourceIds::HistoryColor, OutputType::UnorderedAccess);
+    }
+    if (features.DenoiserMode == static_cast<uint32_t>(DenoiserController::Algorithm::SVGF))
+    {
+        outputs.emplace_back(DemoResourceIds::NoisyRadiance, OutputType::UnorderedAccess);
+    }
+    if (features.DenoiserMode == static_cast<uint32_t>(DenoiserController::Algorithm::NRD))
+    {
+        outputs.emplace_back(DemoResourceIds::NRDNoisyRadiance, OutputType::UnorderedAccess);
+    }
 
     auto pass = RenderPass::Create(
         L"Lighting Composite",
-        {
-            { DemoResourceIds::DirectLightingFinishedToken, InputType::Token },
-            { DemoResourceIds::IndirectLightingFinishedToken, InputType::Token },
-            { DemoResourceIds::DirectLighting, InputType::ShaderResource },
-            { DemoResourceIds::IndirectLighting, InputType::ShaderResource },
-            { DemoResourceIds::GBufferAlbedoOcclusion, InputType::ShaderResource },
-            { DemoResourceIds::GBufferSpecularSmoothness, InputType::ShaderResource },
-            { DemoResourceIds::GBufferNormal, InputType::ShaderResource },
-            { DemoResourceIds::GBufferEmissionMetallic, InputType::ShaderResource },
-            { DemoResourceIds::GBufferPosition, InputType::ShaderResource },
-            { DemoResourceIds::DepthBuffer, InputType::ShaderResource },
-        },
-        {
-            { DemoResourceIds::SceneColor, OutputType::UnorderedAccess },
-            { DemoResourceIds::HistoryColor, OutputType::UnorderedAccess },
-            { DemoResourceIds::NoisyRadiance, OutputType::UnorderedAccess },
-            { DemoResourceIds::NRDNoisyRadiance, OutputType::UnorderedAccess },
-            { DemoResourceIds::RayTracingFinishedToken, OutputType::Token },
-        },
-        [resources, config](const RenderContext& context, CommandList& cmd)
+        inputs,
+        outputs,
+        [resources, config, features](const RenderContext& context, CommandList& cmd)
         {
             const RaytracingDemoRenderGraph::FrameGBufferResources gbuffer = RaytracingDemoRenderGraph::GetFrameGBufferResources(context);
             const RaytracingDemoCameraConstants camera = RaytracingDemoPassBindings::BuildPassCameraConstants(resources, config, context);
@@ -308,7 +290,8 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateLi
                 cmd,
                 context,
                 gbuffer,
-                camera);
+                camera,
+                features);
 //Modify Begin:2026-07-28 by BestHui
             CommandContext commandContext(cmd);
             commandContext.BindPipeline(compositeShader);

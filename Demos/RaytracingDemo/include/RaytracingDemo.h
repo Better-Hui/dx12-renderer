@@ -181,6 +181,7 @@ private:
 //Modify End
 //Modify Begin:2026-07-28 by BestHui
     bool m_RenderGraphDenoiserEnabled = false;
+    DenoiserController::Algorithm m_RenderGraphDenoiserAlgorithm = DenoiserController::Algorithm::Off;
     bool m_RenderGraphCudaBloomEnabled = false;
 //Modify Begin:2026-08-07 by BestHui
     bool m_RenderGraphDLSSEnabled = false;

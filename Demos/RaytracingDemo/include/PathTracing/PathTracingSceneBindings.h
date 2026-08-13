@@ -40,5 +40,6 @@ struct RaytracingDemoPassBindings
         CommandList& cmd,
         const RenderGraph::FrameContext& context,
         const RaytracingDemoRenderGraph::FrameGBufferResources& gbuffer,
-        const RaytracingDemoCameraConstants& camera);
+        const RaytracingDemoCameraConstants& camera,
+        const PathTracingCompositeFeatures& features);
 };

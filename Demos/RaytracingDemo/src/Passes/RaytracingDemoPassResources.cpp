@@ -35,36 +35,10 @@ RaytracingDemoCameraConstants BuildPassCameraConstants(
         camera.SurfaceEmitterCount,
         camera.SkyLight);
     camera.FrameIndex = frameState.FrameIndex;
-    const RaytracingDemoLightingTechnique directLightingTechnique = frameState.DirectLightingTechnique;
-    const RaytracingDemoLightingTechnique indirectLightingTechnique = frameState.IndirectLightingTechnique;
-//Modify Begin:2026-08-06 by BestHui
-    const PathTracingBackend backend = frameState.Backend;
-    const bool restirDIEnabled =
-        directLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRDI &&
-        backend == PathTracingBackend::InlineRayQuery;
     const bool accumulationEnabled = frameState.AccumulationEnabled;
-//Modify End
     camera.AccumulationFrameIndex = accumulationEnabled ? frameState.AccumulationFrameIndex : 0u;
     camera.AccumulationEnabled = accumulationEnabled ? 1u : 0u;
     resources.Denoisers.FillCameraConstants(camera.NRDDenoiserMode, camera.NRDReblurHitDistanceParameters);
-//Modify Begin:2026-08-07 by BestHui
-    camera.DenoiserEnabled = frameState.RayReconstructionEnabled
-        ? 0u
-        : static_cast<uint32_t>(resources.Denoisers.GetAlgorithm());
-//Modify End
-    const bool directLightingUsesReSTIRDI = restirDIEnabled;
-    camera.DirectLightingActive =
-        (directLightingTechnique == RaytracingDemoLightingTechnique::PathTracing || directLightingUsesReSTIRDI) ? 1u : 0u;
-//Modify Begin:2026-08-10 by BestHui
-    const bool indirectLightingUsesReSTIRGI =
-        indirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRGI &&
-        backend == PathTracingBackend::InlineRayQuery;
-    camera.IndirectLightingActive =
-        frameState.MaxBounces > 1 &&
-        (indirectLightingTechnique == RaytracingDemoLightingTechnique::PathTracing || indirectLightingUsesReSTIRGI)
-            ? 1u
-            : 0u;
-//Modify End
 //Modify Begin:2026-08-05 by BestHui
     camera.ReSTIRDIHistoryValid = frameState.ReSTIRDIHistoryValid ? 1u : 0u;
 //Modify End

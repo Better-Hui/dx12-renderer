@@ -59,15 +59,16 @@ struct RaytracingDemoCameraConstants
     uint32_t AccumulationFrameIndex = 0;
     uint32_t AccumulationEnabled = 1;
     uint32_t NRDDenoiserMode = 0;
-    uint32_t DenoiserEnabled = 0;
-    DirectX::XMFLOAT4 NRDReblurHitDistanceParameters = { 3.0f, 0.1f, 20.0f, 0.0f };
-//Modify Begin:2026-08-06 by BestHui
-    uint32_t DirectLightingActive = 1;
-    uint32_t IndirectLightingActive = 1;
+//Modify Begin:2026-08-13 by BestHui
+    uint32_t PaddingBeforeNrdParameters0 = 0;
+    uint32_t PaddingBeforeNrdParameters1 = 0;
 //Modify End
+    DirectX::XMFLOAT4 NRDReblurHitDistanceParameters = { 3.0f, 0.1f, 20.0f, 0.0f };
 //Modify Begin:2026-08-05 by BestHui
     uint32_t ReSTIRDIHistoryValid = 0;
 //Modify End
+    uint32_t Padding0 = 0;
+    uint32_t Padding1 = 0;
     uint32_t Padding2 = 0;
     SkyLightData SkyLight = {};
 };
@@ -211,6 +212,10 @@ struct RaytracingDemoFrameState
     int DebugLightingTextureTarget = 0;
     int DebugTextureTarget = 0;
     int MaxBounces = 1;
+//Modify Begin:2026-08-13 by BestHui
+    bool DenoiserEnabled = false;
+    DenoiserController::Algorithm DenoiserAlgorithm = DenoiserController::Algorithm::Off;
+//Modify End
     uint32_t Width = 1;
     uint32_t Height = 1;
 //Modify Begin:2026-08-07 by BestHui
@@ -234,6 +239,34 @@ struct RaytracingDemoFrameState
 //Modify End
     bool HasPreviousViewProjection = false;
     DirectX::XMMATRIX PreviousViewProjection = DirectX::XMMatrixIdentity();
+
+//Modify Begin:2026-08-13 by BestHui
+    bool UsesDirectLighting() const
+    {
+        return DirectLightingTechnique == RaytracingDemoLightingTechnique::PathTracing ||
+            (DirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRDI &&
+                Backend == PathTracingBackend::InlineRayQuery);
+    }
+
+    bool UsesIndirectLighting() const
+    {
+        return MaxBounces > 1 &&
+            (IndirectLightingTechnique == RaytracingDemoLightingTechnique::PathTracing ||
+                (IndirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRGI &&
+                    Backend == PathTracingBackend::InlineRayQuery));
+    }
+
+    PathTracingCompositeFeatures GetCompositeFeatures() const
+    {
+        return {
+            .DirectLightingEnabled = UsesDirectLighting(),
+            .IndirectLightingEnabled = UsesIndirectLighting(),
+            .AccumulationEnabled = AccumulationEnabled,
+            .DenoiserMode = DenoiserEnabled ? static_cast<uint32_t>(DenoiserAlgorithm) : 0u,
+            .UseNrdReblur = false,
+        };
+    }
+//Modify End
 };
 
 struct RaytracingDemoPassConfig

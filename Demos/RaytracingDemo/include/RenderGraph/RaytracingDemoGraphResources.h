@@ -88,9 +88,6 @@ namespace RaytracingDemoRenderGraph
 
     struct LightingResources
     {
-        std::shared_ptr<Texture> Direct;
-        std::shared_ptr<Texture> Indirect;
-        std::shared_ptr<Texture> HistoryColor;
         std::shared_ptr<Texture> NoisyRadiance;
         std::shared_ptr<Texture> NRDNoisyRadiance;
         std::shared_ptr<Texture> SceneColor;
@@ -106,7 +103,6 @@ namespace RaytracingDemoRenderGraph
     };
 
     FrameGBufferResources GetFrameGBufferResources(const RenderGraph::RenderContext& context);
-    LightingResources GetLightingResources(const RenderGraph::RenderContext& context);
     NRDResources GetNRDResources(const RenderGraph::RenderContext& context);
 
 //Modify Begin:2026-08-07 by BestHui

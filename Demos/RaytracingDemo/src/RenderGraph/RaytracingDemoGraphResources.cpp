@@ -135,19 +135,6 @@ namespace RaytracingDemoRenderGraph
         };
     }
 
-    LightingResources GetLightingResources(const RenderGraph::RenderContext& context)
-    {
-        return {
-            context.GetTexture(ResourceIds::DirectLighting),
-            context.GetTexture(ResourceIds::IndirectLighting),
-            context.GetTexture(ResourceIds::HistoryColor),
-            context.GetTexture(ResourceIds::NoisyRadiance),
-            context.GetTexture(ResourceIds::NRDNoisyRadiance),
-            context.GetTexture(ResourceIds::SceneColor),
-        };
-    }
-
-
     NRDResources GetNRDResources(const RenderGraph::RenderContext& context)
     {
         return {

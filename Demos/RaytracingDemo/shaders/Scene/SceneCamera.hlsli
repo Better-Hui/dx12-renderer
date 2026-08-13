@@ -18,17 +18,16 @@ cbuffer CameraConstants : register(b0, space0)
     uint Camera_AccumulationFrameIndex;
     uint Camera_AccumulationEnabled;
     uint Camera_NRDDenoiserMode;
-//Modify Begin:2026-08-02 by BestHui
-    uint Camera_DenoiserEnabled;
+//Modify Begin:2026-08-13 by BestHui
+    uint Camera_PaddingBeforeNrdParameters0;
+    uint Camera_PaddingBeforeNrdParameters1;
 //Modify End
     float4 Camera_NRDReblurHitDistanceParameters;
-//Modify Begin:2026-08-06 by BestHui
-    uint Camera_DirectLightingActive;
-    uint Camera_IndirectLightingActive;
-//Modify End
 //Modify Begin:2026-08-05 by BestHui
     uint Camera_ReSTIRDIHistoryValid;
 //Modify End
+    uint Camera_Padding0;
+    uint Camera_Padding1;
     uint Camera_Padding2;
     SkyLightData Camera_SkyLight;
 };
