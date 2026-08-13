@@ -6,13 +6,21 @@
 #include "Window.h"
 #include "Helpers.h"
 
-Game::Game(const std::wstring& name, const int width, const int height, const bool vSync)
-	: Name(name)
+//Modify Begin:2026-07-30 by BestHui
+Game::Game(
+	Application& application,
+	const std::wstring& name,
+	const int width,
+	const int height,
+	const bool vSync)
+	: m_Application(application)
+	, Name(name)
 	, Width(width)
 	, Height(height)
 	, VSync(vSync)
 {
 }
+//Modify End
 
 Game::~Game()
 {
@@ -28,7 +36,7 @@ bool Game::Initialize()
 		return false;
 	}
 
-	PWindow = Application::Get().CreateRenderWindow(Name, Width, Height, VSync);
+	PWindow = m_Application.CreateRenderWindow(Name, Width, Height, VSync);
 	PWindow->RegisterCallbacks(shared_from_this());
 	PWindow->Show();
 
@@ -37,7 +45,7 @@ bool Game::Initialize()
 
 void Game::Destroy()
 {
-	Application::Get().DestroyWindow(PWindow);
+	m_Application.DestroyWindow(PWindow);
 	PWindow.reset();
 }
 

@@ -679,11 +679,17 @@ namespace
 
 }
 
-RaytracingDemo::RaytracingDemo(const std::wstring& name, const int width, const int height, GraphicsSettings graphicsSettings)
-    : Base(name, width, height, false)
+//Modify Begin:2026-07-30 by BestHui
+RaytracingDemo::RaytracingDemo(
+    Application& application,
+    const std::wstring& name,
+    const int width,
+    const int height,
+    GraphicsSettings graphicsSettings)
+    : Base(application, name, width, height, false)
     , m_Width(width)
     , m_Height(height)
-    , m_FrameworkDeviceContext(CreateFrameworkDeviceContext(Application::Get()))
+    , m_FrameworkDeviceContext(CreateFrameworkDeviceContext(application))
 //Modify Begin:2026-08-07 by BestHui
     , m_DLSS(m_FrameworkDeviceContext)
 //Modify End
@@ -921,6 +927,7 @@ RaytracingDemo::RaytracingDemo(const std::wstring& name, const int width, const 
 //Modify End
 
 }
+//Modify End
 
 //Modify Begin:2026-07-30 by BestHui
 //Modify Begin:2026-08-03 by BestHui
@@ -1045,9 +1052,9 @@ void RaytracingDemo::UpdateRuntimeAutomation(const double totalTime)
         {
             ApplyRuntimeAutomationAction(action, value);
         },
-        []()
+        [this]()
         {
-            Application::Get().Quit(0);
+            GetApplication().Quit(0);
         });
 }
 

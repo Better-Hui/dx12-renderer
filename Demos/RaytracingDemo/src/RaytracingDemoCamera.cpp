@@ -1,7 +1,9 @@
 //Modify Begin:2026-07-27 by BestHui
 #include <RaytracingDemo.h>
 
+//Modify Begin:2026-07-30 by BestHui
 #include <DX12Library/Application.h>
+//Modify End
 #include <DX12Library/Events.h>
 
 #include <algorithm>
@@ -77,7 +79,7 @@ void RaytracingDemo::OnKeyPressed(KeyEventArgs& e)
     switch (e.Key)
     {
     case KeyCode::Escape:
-        Application::Get().Quit(0);
+        GetApplication().Quit(0);
         break;
     case KeyCode::Up:
     case KeyCode::W:

@@ -90,15 +90,17 @@ void ParseCommandLineArguments(Parameters& parameters)
 	LocalFree(argv);
 }
 
-std::shared_ptr<Game> CreateGame(const Parameters& parameters)
+//Modify Begin:2026-07-30 by BestHui
+std::shared_ptr<Game> CreateGame(Application& application, const Parameters& parameters)
 {
 #ifdef DEMO_TYPE
-	return std::make_shared<DEMO_TYPE>(DEMO_NAME, parameters.m_ClientWidth, parameters.m_ClientHeight,
+	return std::make_shared<DEMO_TYPE>(application, DEMO_NAME, parameters.m_ClientWidth, parameters.m_ClientHeight,
 		parameters.m_GraphicsSettings);
 #else
 	throw std::exception("DEMO_TYPE was not defined.");
 #endif
 }
+//Modify End
 
 //Modify Begin:2026-07-28 by BestHui
 std::string NarrowDredName(const wchar_t* value)
@@ -117,11 +119,12 @@ std::string NarrowDredName(const wchar_t* value)
 	return result;
 }
 
-void WriteDeviceRemovedDetails(std::ostream& stream)
+//Modify Begin:2026-07-30 by BestHui
+void WriteDeviceRemovedDetails(Application& application, std::ostream& stream)
 {
 	try
 	{
-		auto device = Application::Get().GetDevice();
+		auto device = application.GetDevice();
 		stream << "DeviceRemovedReason=" << device->GetDeviceRemovedReason() << std::endl;
 
 		Microsoft::WRL::ComPtr<ID3D12InfoQueue> infoQueue;
@@ -225,28 +228,32 @@ int CALLBACK wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR lpCmdL
 	const char* applicationStage = "Create";
 	const HRESULT coInitializeResult = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 	const bool shouldUninitializeCom = SUCCEEDED(coInitializeResult);
+	Application* application = nullptr;
 	try
 	{
 		ApplicationCreateDesc applicationCreateDesc;
 		applicationCreateDesc.EnableStreamlineInterposer = parameters.m_EnableStreamlineInterposer;
 		Application::Create(hInstance, applicationCreateDesc);
+		application = &Application::Get();
 		{
 			applicationStage = "CreateGame";
-			const auto demo = CreateGame(parameters);
+			const auto demo = CreateGame(*application, parameters);
 			applicationStage = "Run";
-			retCode = Application::Get().Run(demo);
+			retCode = application->Run(demo);
 		}
 		applicationStage = "Destroy";
 		Application::Destroy();
+		application = nullptr;
 	}
 	catch (const std::exception& exception)
 	{
 		std::ofstream errorLog("DemoException.log", std::ios::out | std::ios::trunc);
 		errorLog << "Stage=" << applicationStage << std::endl;
 		errorLog << exception.what() << std::endl;
-//Modify Begin:2026-07-28 by BestHui
-		WriteDeviceRemovedDetails(errorLog);
-//Modify End
+		if (application != nullptr)
+		{
+			WriteDeviceRemovedDetails(*application, errorLog);
+		}
 		retCode = 3;
 	}
 	if (shouldUninitializeCom)

@@ -10,6 +10,7 @@
 #include <string> // for std::wstring
 
 class Window; // forward-declared in order to avoid including the header file for that class
+class Application;
 
 class Game : public std::enable_shared_from_this<Game>
 {
@@ -17,7 +18,9 @@ public:
 	/**
 	 * Create the DirectX demo using the specified window dimensions.
 	 */
-	Game(const std::wstring& name, int width, int height, bool vSync);
+//Modify Begin:2026-07-30 by BestHui
+	Game(Application& application, const std::wstring& name, int width, int height, bool vSync);
+//Modify End
 	virtual ~Game();
 
 	/**
@@ -44,6 +47,9 @@ public:
 	int GetClientHeight() const;
 
 protected:
+	//Modify Begin:2026-07-30 by BestHui
+	Application& GetApplication() const { return m_Application; }
+	//Modify End
 	friend class Window;
 
 	/**
@@ -100,6 +106,9 @@ protected:
 	std::shared_ptr<Window> PWindow;
 
 private:
+	//Modify Begin:2026-07-30 by BestHui
+	Application& m_Application;
+	//Modify End
 	std::wstring Name;
 	int Width;
 	int Height;

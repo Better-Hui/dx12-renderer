@@ -68,7 +68,9 @@ class RaytracingDemo final : public Game
 public:
     using Base = Game;
 
-    RaytracingDemo(const std::wstring& name, int width, int height, GraphicsSettings graphicsSettings);
+//Modify Begin:2026-07-30 by BestHui
+    RaytracingDemo(Application& application, const std::wstring& name, int width, int height, GraphicsSettings graphicsSettings);
+//Modify End
 
     bool LoadContent() override;
     void UnloadContent() override;
