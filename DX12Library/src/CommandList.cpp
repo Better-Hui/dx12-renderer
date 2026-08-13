@@ -366,13 +366,16 @@ void CommandList::CopyBuffer(Buffer& buffer, const size_t numElements, const siz
 
     if (bufferData != nullptr)
     {
-        // Create an upload resource to use as an intermediate buffer to copy the buffer resource
         const auto& uploadResource = buffer.GetUploadResource(bufferSize);
 
-        D3D12_SUBRESOURCE_DATA subresourceData = {};
-        subresourceData.pData = bufferData;
-        subresourceData.RowPitch = static_cast<LONG_PTR>(bufferSize);
-        subresourceData.SlicePitch = subresourceData.RowPitch;
+//Modify Begin:2026-07-30 by BestHui
+        void* mappedData = nullptr;
+        const D3D12_RANGE readRange = { 0, 0 };
+        ThrowIfFailed(uploadResource->Map(0, &readRange, &mappedData));
+        std::memcpy(mappedData, bufferData, bufferSize);
+        const D3D12_RANGE writeRange = { 0, static_cast<SIZE_T>(bufferSize) };
+        uploadResource->Unmap(0, &writeRange);
+//Modify End
 
         if (buffer.AreAutoBarriersEnabled())
         {
@@ -380,10 +383,13 @@ void CommandList::CopyBuffer(Buffer& buffer, const size_t numElements, const siz
             FlushResourceBarriers();
         }
 
-        UpdateSubresources(m_D3d12CommandList.Get(), d3d12Resource.Get(),
-            uploadResource.Get(), 0, 0, 1, &subresourceData);
+        m_D3d12CommandList->CopyBufferRegion(
+            d3d12Resource.Get(),
+            0,
+            uploadResource.Get(),
+            0,
+            bufferSize);
 
-        // Add references to resources so they stay in scope until the command list is reset.
         TrackObject(uploadResource);
     }
     TrackObject(d3d12Resource);
