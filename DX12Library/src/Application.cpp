@@ -196,14 +196,14 @@ void Application::Initialize(
         });
 //Modify End
     const auto device = m_RenderContext.GetDevice();
-    D3D12_FEATURE_DATA_SHADER_MODEL shaderModel = { D3D_SHADER_MODEL_6_9 };
+    D3D12_FEATURE_DATA_SHADER_MODEL shaderModel = { D3D_SHADER_MODEL_6_8 };
     ThrowIfFailed(device->CheckFeatureSupport(
         D3D12_FEATURE_SHADER_MODEL,
         &shaderModel,
         sizeof(shaderModel)));
-    if (shaderModel.HighestShaderModel < D3D_SHADER_MODEL_6_9)
+    if (shaderModel.HighestShaderModel < D3D_SHADER_MODEL_6_8)
     {
-        throw std::runtime_error("DX12 renderer requires Shader Model 6.9 support from the active D3D12 driver.");
+        throw std::runtime_error("DX12 renderer requires Shader Model 6.8 support from the active D3D12 driver.");
     }
 //Modify End
 

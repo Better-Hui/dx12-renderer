@@ -5,32 +5,32 @@ namespace ShaderTargetProfile
 {
     constexpr const char* Vertex() noexcept
     {
-        return "vs_6_9";
+        return "vs_6_8";
     }
 
     constexpr const char* Pixel() noexcept
     {
-        return "ps_6_9";
+        return "ps_6_8";
     }
 
     constexpr const char* Compute() noexcept
     {
-        return "cs_6_9";
+        return "cs_6_8";
     }
 
     constexpr const char* Amplification() noexcept
     {
-        return "as_6_9";
+        return "as_6_8";
     }
 
     constexpr const char* Mesh() noexcept
     {
-        return "ms_6_9";
+        return "ms_6_8";
     }
 
     constexpr const char* RayTracingLibrary() noexcept
     {
-        return "lib_6_9";
+        return "lib_6_8";
     }
 }
 //Modify End
