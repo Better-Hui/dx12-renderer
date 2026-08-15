@@ -112,15 +112,35 @@ void ReSTIRDIPass::Execute(
     InsertUavBarrier(commandList, m_Resources->InitialReservoir);
     InsertUavBarrier(commandList, m_Resources->InitialReservoirState);
 
-    ExecuteTemporalResampling(commandContext, inputs, pipelines);
-    InsertUavBarrier(commandList, m_Resources->TemporalReservoir);
-    InsertUavBarrier(commandList, m_Resources->TemporalReservoirState);
+    const bool temporalResamplingEnabled = inputs.FrameState.Constants.TemporalResamplingEnabled != 0u;
+    const bool spatialResamplingEnabled = inputs.FrameState.Constants.SpatialResamplingEnabled != 0u;
+    std::shared_ptr<Texture> finalReservoir = m_Resources->InitialReservoir;
+    std::shared_ptr<Texture> finalReservoirState = m_Resources->InitialReservoirState;
 
-    ExecuteSpatialResampling(commandContext, inputs, pipelines);
-    InsertUavBarrier(commandList, m_Resources->SpatialReservoir);
-    InsertUavBarrier(commandList, m_Resources->SpatialReservoirState);
+    if (temporalResamplingEnabled)
+    {
+        ExecuteTemporalResampling(commandContext, inputs, pipelines);
+        InsertUavBarrier(commandList, m_Resources->TemporalReservoir);
+        InsertUavBarrier(commandList, m_Resources->TemporalReservoirState);
+        finalReservoir = m_Resources->TemporalReservoir;
+        finalReservoirState = m_Resources->TemporalReservoirState;
+    }
 
-    ExecuteFinalShading(commandContext, inputs, pipelines);
+    if (spatialResamplingEnabled)
+    {
+        ExecuteSpatialResampling(
+            commandContext,
+            inputs,
+            pipelines,
+            finalReservoir,
+            finalReservoirState);
+        InsertUavBarrier(commandList, m_Resources->SpatialReservoir);
+        InsertUavBarrier(commandList, m_Resources->SpatialReservoirState);
+        finalReservoir = m_Resources->SpatialReservoir;
+        finalReservoirState = m_Resources->SpatialReservoirState;
+    }
+
+    ExecuteFinalShading(commandContext, inputs, pipelines, finalReservoir, finalReservoirState);
     InsertUavBarrier(commandList, inputs.DirectLighting);
 }
 
@@ -220,7 +240,9 @@ void ReSTIRDIPass::ExecuteTemporalResampling(
 void ReSTIRDIPass::ExecuteSpatialResampling(
     CommandContext& commandContext,
     const ReSTIRDIExecutionInputs& inputs,
-    PipelineSet& pipelines)
+    PipelineSet& pipelines,
+    const std::shared_ptr<Texture>& inputReservoir,
+    const std::shared_ptr<Texture>& inputReservoirState)
 {
     ComputeShader& shader = GetStageShader(
         pipelines,
@@ -229,8 +251,8 @@ void ReSTIRDIPass::ExecuteSpatialResampling(
         inputs.FrameState.ShadingModel);
     inputs.BindSceneInputs(commandContext, shader);
     commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
-    commandContext.SetShaderResourceView(shader, "ReSTIRDITemporalReservoir", ShaderResourceView(m_Resources->TemporalReservoir));
-    commandContext.SetShaderResourceView(shader, "ReSTIRDITemporalReservoirState", ShaderResourceView(m_Resources->TemporalReservoirState));
+    commandContext.SetShaderResourceView(shader, "ReSTIRDITemporalReservoir", ShaderResourceView(inputReservoir));
+    commandContext.SetShaderResourceView(shader, "ReSTIRDITemporalReservoirState", ShaderResourceView(inputReservoirState));
     commandContext.SetUnorderedAccessView(shader, "ReSTIRDISpatialReservoir", UnorderedAccessView(m_Resources->SpatialReservoir));
     commandContext.SetUnorderedAccessView(shader, "ReSTIRDISpatialReservoirState", UnorderedAccessView(m_Resources->SpatialReservoirState));
     commandContext.BindPipeline(shader);
@@ -241,7 +263,9 @@ void ReSTIRDIPass::ExecuteSpatialResampling(
 void ReSTIRDIPass::ExecuteFinalShading(
     CommandContext& commandContext,
     const ReSTIRDIExecutionInputs& inputs,
-    PipelineSet& pipelines)
+    PipelineSet& pipelines,
+    const std::shared_ptr<Texture>& finalReservoir,
+    const std::shared_ptr<Texture>& finalReservoirState)
 {
     ComputeShader& shader = GetStageShader(
         pipelines,
@@ -251,8 +275,8 @@ void ReSTIRDIPass::ExecuteFinalShading(
     const bool writeReservoirA = (inputs.FrameState.FrameIndex & 1u) == 0u;
     inputs.BindSceneInputs(commandContext, shader);
     commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
-    commandContext.SetShaderResourceView(shader, "ReSTIRDIFinalReservoir", ShaderResourceView(m_Resources->SpatialReservoir));
-    commandContext.SetShaderResourceView(shader, "ReSTIRDIFinalReservoirState", ShaderResourceView(m_Resources->SpatialReservoirState));
+    commandContext.SetShaderResourceView(shader, "ReSTIRDIFinalReservoir", ShaderResourceView(finalReservoir));
+    commandContext.SetShaderResourceView(shader, "ReSTIRDIFinalReservoirState", ShaderResourceView(finalReservoirState));
     commandContext.SetUnorderedAccessView(shader, "DirectLighting", UnorderedAccessView(inputs.DirectLighting));
     commandContext.SetUnorderedAccessView(shader, "ReSTIRDICurrentReservoir", UnorderedAccessView(writeReservoirA ? m_Resources->ReservoirA : m_Resources->ReservoirB));
     commandContext.SetUnorderedAccessView(shader, "ReSTIRDICurrentReservoirState", UnorderedAccessView(writeReservoirA ? m_Resources->ReservoirAState : m_Resources->ReservoirBState));

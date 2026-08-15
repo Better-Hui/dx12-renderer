@@ -115,8 +115,18 @@ private:
     void EnsureResources(uint32_t width, uint32_t height);
     void ExecuteInitialSampling(CommandContext& commandContext, const ReSTIRDIExecutionInputs& inputs, PipelineSet& pipelines);
     void ExecuteTemporalResampling(CommandContext& commandContext, const ReSTIRDIExecutionInputs& inputs, PipelineSet& pipelines);
-    void ExecuteSpatialResampling(CommandContext& commandContext, const ReSTIRDIExecutionInputs& inputs, PipelineSet& pipelines);
-    void ExecuteFinalShading(CommandContext& commandContext, const ReSTIRDIExecutionInputs& inputs, PipelineSet& pipelines);
+    void ExecuteSpatialResampling(
+        CommandContext& commandContext,
+        const ReSTIRDIExecutionInputs& inputs,
+        PipelineSet& pipelines,
+        const std::shared_ptr<Texture>& inputReservoir,
+        const std::shared_ptr<Texture>& inputReservoirState);
+    void ExecuteFinalShading(
+        CommandContext& commandContext,
+        const ReSTIRDIExecutionInputs& inputs,
+        PipelineSet& pipelines,
+        const std::shared_ptr<Texture>& finalReservoir,
+        const std::shared_ptr<Texture>& finalReservoirState);
     std::unique_ptr<ComputeShader> CreateComputeShader(
         const std::wstring& compiledFileName,
         const std::wstring& sourceFileName,
