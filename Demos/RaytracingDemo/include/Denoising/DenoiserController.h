@@ -53,6 +53,6 @@ private:
 
     std::unique_ptr<NRD> m_NRD;
     std::unique_ptr<SVGF> m_SVGF;
-    Algorithm m_Algorithm = Algorithm::Off;
+    Algorithm m_Algorithm = Algorithm::NRD;
 };
 //Modify End

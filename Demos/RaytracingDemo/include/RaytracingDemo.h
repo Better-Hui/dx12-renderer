@@ -301,7 +301,7 @@ private:
 //Modify End
 //Modify Begin:2026-08-05 by BestHui
 //Modify Begin:2026-08-11 by BestHui
-    RaytracingDemoLightingTechnique m_DirectLightingTechnique = RaytracingDemoLightingTechnique::None;
+    RaytracingDemoLightingTechnique m_DirectLightingTechnique = RaytracingDemoLightingTechnique::ReSTIRDI;
     RaytracingDemoLightingTechnique m_IndirectLightingTechnique = RaytracingDemoLightingTechnique::ReSTIRGI;
 //Modify End
     ReSTIRDI m_DirectLightingReSTIRDI;

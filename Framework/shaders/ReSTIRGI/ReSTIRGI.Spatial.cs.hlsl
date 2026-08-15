@@ -67,7 +67,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
                 result,
                 temporal,
                 temporal.AverageWeight * float(temporal.M) * temporalTarget,
-                FrameworkInterleavedGradientNoise2D(pixel, ReSTIRGI_FrameIndex, 0x47524933u).x,
+                ReSTIRGI_SampleNoise(pixel, ReSTIRGI_FrameIndex, 0x47524933u).x,
                 weightSum))
             {
                 creationVisibilityKnown = ReSTIRGIHasCreationVisibility(temporal);
@@ -75,7 +75,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
             }
         }
 
-        const uint offsetStart = uint(FrameworkInterleavedGradientNoise2D(
+        const uint offsetStart = uint(ReSTIRGI_SampleNoise(
             pixel,
             ReSTIRGI_FrameIndex,
             0x739c52d1u).x * 16.0f);
@@ -121,7 +121,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
                 result,
                 neighbor,
                 neighbor.AverageWeight * float(neighbor.M) * target * jacobian,
-                FrameworkInterleavedGradientNoise2D(
+                ReSTIRGI_SampleNoise(
                     pixel,
                     ReSTIRGI_FrameIndex,
                     0x1ac5473du + sampleIndex * 0x9e3779b9u).x,

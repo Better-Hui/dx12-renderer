@@ -54,7 +54,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
             result,
             initial,
             initial.AverageWeight * float(initial.M) * initialTarget,
-            FrameworkInterleavedGradientNoise2D(pixel, ReSTIRGI_FrameIndex, 0x47524932u).x,
+            ReSTIRGI_SampleNoise(pixel, ReSTIRGI_FrameIndex, 0x47524932u).x,
             weightSum);
         bool creationVisibilityKnown = selectedInitial && ReSTIRGIHasCreationVisibility(initial);
 //Modify End
@@ -91,7 +91,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
                         result,
                         history,
                         history.AverageWeight * float(history.M) * historyTarget,
-                        FrameworkInterleavedGradientNoise2D(pixel, ReSTIRGI_FrameIndex, 0x22f6d7a1u).x,
+                        ReSTIRGI_SampleNoise(pixel, ReSTIRGI_FrameIndex, 0x22f6d7a1u).x,
                         weightSum))
                     {
                         creationVisibilityKnown = false;

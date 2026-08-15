@@ -781,6 +781,8 @@ RaytracingDemo::RaytracingDemo(
 //Modify End
 
 //Modify Begin:2026-08-10 by BestHui
+    // Default to the full demo path; environment variables below can override it.
+    m_DLSS.SetMode(DLSSMode::Quality);
     TryGetEnvironmentLightingTechnique("RAYTRACING_DEMO_DIRECT_LIGHTING", m_DirectLightingTechnique);
     TryGetEnvironmentLightingTechnique("RAYTRACING_DEMO_INDIRECT_LIGHTING", m_IndirectLightingTechnique);
     TryGetEnvironmentBoolean("RAYTRACING_DEMO_ACCUMULATION", m_AccumulationEnabled);

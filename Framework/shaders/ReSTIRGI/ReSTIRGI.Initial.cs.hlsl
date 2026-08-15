@@ -30,11 +30,11 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         for (uint candidateIndex = 0u; candidateIndex < candidateCount; ++candidateIndex)
         {
             const uint candidateSalt = 0x47524931u + candidateIndex * 0x9e3779b9u;
-            const float2 directionalSample = FrameworkInterleavedGradientNoise2D(
+            const float2 directionalSample = ReSTIRGI_SampleNoise(
                 pixel,
                 ReSTIRGI_FrameIndex,
                 candidateSalt ^ 0x68bc21ebu);
-            const float reservoirRandom = FrameworkInterleavedGradientNoise2D(
+            const float reservoirRandom = ReSTIRGI_SampleNoise(
                 pixel,
                 ReSTIRGI_FrameIndex,
                 candidateSalt ^ 0x02e5be93u).x;
