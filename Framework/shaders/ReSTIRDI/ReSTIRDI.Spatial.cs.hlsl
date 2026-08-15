@@ -206,7 +206,6 @@ ReSTIRDIReservoir ReSTIRDIStandardSpatialResampling(
             continue;
         }
 
-        validNeighborMask |= 1u << neighborIndex;
         ReSTIRDIReservoir neighborReservoir = ReSTIRDIUnpackReservoir(
             ReSTIRDITemporalReservoir.Load(int3(neighborPixel, 0)),
             ReSTIRDITemporalReservoirState.Load(int3(neighborPixel, 0)));
@@ -219,6 +218,11 @@ ReSTIRDIReservoir ReSTIRDIStandardSpatialResampling(
             continue;
         }
 #endif
+
+        // The normalization pass must cover exactly the neighbors merged into
+        // the reservoir. Counting discarded naive samples darkens the result
+        // as the spatial sample count grows.
+        validNeighborMask |= 1u << neighborIndex;
 
         const float neighborTargetPdf = ReSTIRDIGetTargetPdf(neighborReservoir, centerSurface);
         if (ReSTIRDICombineReservoirs(result, neighborReservoir, ReSTIRDI_Random01(rngState), neighborTargetPdf))

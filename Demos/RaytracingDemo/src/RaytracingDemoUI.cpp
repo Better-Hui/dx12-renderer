@@ -160,7 +160,7 @@ void RaytracingDemo::OnImGui()
 //Modify Begin:2026-08-06 by BestHui
                 settingsChanged |= ImGui::Checkbox("RIS Initial Visibility", &restirSettings.EnableInitialVisibility);
 //Modify End
-                settingsChanged |= ImGui::SliderInt("Local Light Samples", &candidateCount, 1, 64);
+                settingsChanged |= ImGui::SliderInt("Local Light Samples", &candidateCount, 1, 32);
             }
 
             if (ImGui::CollapsingHeader("Temporal Resampling"))
@@ -275,7 +275,7 @@ void RaytracingDemo::OnImGui()
 //Modify End
                 settingsChanged |= ImGui::Checkbox(
                     "Discard Invisible Samples",
-                    &restirSettings.EnableTemporalVisibilityShortcut);
+                    &restirSettings.DiscardInvisibleFinalSamples);
                 settingsChanged |= ImGui::Checkbox(
                     "Reuse Final Visibility",
                     &restirSettings.ReuseFinalVisibility);
@@ -303,7 +303,7 @@ void RaytracingDemo::OnImGui()
                 spatialTargetHistoryLength < 0 ? 0 : spatialTargetHistoryLength);
             restirSettings.FinalVisibilityMaxAge = static_cast<uint32_t>(finalVisibilityMaxAge < 0 ? 0 : finalVisibilityMaxAge);
             m_DirectLightingReSTIRDI.SetSettings(restirSettings);
-            ResetAccumulation();
+            ResetAccumulation(false, true);
         }
     }
 //Modify Begin:2026-08-10 by BestHui

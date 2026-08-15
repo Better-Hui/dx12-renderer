@@ -27,16 +27,16 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
             const uint candidateSalt = 0x4d3a2b1cu + candidateIndex * 0x9e3779b9u;
             const float2 lightSelectionNoise = FrameworkInterleavedGradientNoise2D(
                 pixel,
-                ReSTIRDI_FrameIndex,
-                candidateSalt);
+                0u,
+                candidateSalt ^ (ReSTIRDI_FrameIndex * 0x9e3779b9u));
             const float2 sampleNoise = FrameworkInterleavedGradientNoise2D(
                 pixel,
-                ReSTIRDI_FrameIndex,
-                candidateSalt ^ 0x68bc21ebu);
+                0u,
+                (candidateSalt ^ 0x68bc21ebu) ^ (ReSTIRDI_FrameIndex * 0x85ebca6bu));
             const float reservoirRandom = FrameworkInterleavedGradientNoise2D(
                 pixel,
-                ReSTIRDI_FrameIndex,
-                candidateSalt ^ 0x02e5be93u).x;
+                0u,
+                (candidateSalt ^ 0x02e5be93u) ^ (ReSTIRDI_FrameIndex * 0xc2b2ae35u)).x;
             const float lightSelectionRandom = (lightSelectionNoise.x + float(candidateIndex)) /
                 float(ReSTIRDI_CandidateCount);
 //Modify End

@@ -57,7 +57,7 @@ ReSTIRDIFrameConstants ReSTIRDI::GetFrameConstants(const bool historyValid) cons
 
         m_Settings.EnableFinalVisibility ? 1u : 0u,
         m_Settings.ReuseFinalVisibility ? 1u : 0u,
-        m_Settings.EnableTemporalVisibilityShortcut ? 1u : 0u,
+        m_Settings.DiscardInvisibleFinalSamples ? 1u : 0u,
         m_Settings.FinalVisibilityMaxAge,
 
         m_Settings.BoilingFilterStrength,

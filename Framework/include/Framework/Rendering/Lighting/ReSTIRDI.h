@@ -48,6 +48,7 @@ struct ReSTIRDISettings
 
     bool EnableFinalVisibility = true;
     bool ReuseFinalVisibility = true;
+    bool DiscardInvisibleFinalSamples = false;
     uint32_t FinalVisibilityMaxAge = 4;
     float FinalVisibilityMaxDistance = 16.0f;
 };
