@@ -641,7 +641,7 @@ namespace
         // Exercise every boolean ReSTIR DI feature combination in a stable
         // inline-ray-query configuration. The external runner can stop on the
         // first non-zero process exit or fresh DemoException.log.
-        for (uint32_t config = 0u; config < (1u << 10u); ++config)
+        for (uint32_t config = 0u; config < (1u << 11u); ++config)
         {
             testSuites.ReSTIRDIVariants.push_back(makeStep(
                 Action::ReSTIRDIConfig,
@@ -1262,7 +1262,7 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         // Final discard is only meaningful when final visibility is enabled;
         // keep it off in the disabled branch to isolate that branch itself.
         settings.DiscardInvisibleFinalSamples = settings.EnableFinalVisibility &&
-            ((value & (1u << 7u)) != 0u);
+            ((value & (1u << 10u)) != 0u);
         m_DirectLightingReSTIRDI.SetSettings(settings);
         EnsureRayTracingPipelines();
         ResetAccumulation(false, true);
