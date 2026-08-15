@@ -347,8 +347,7 @@ uint32_t ReSTIRDIPass::GetStageVariantKey(
         Assert(constants.SpatialBiasCorrectionMode <= 3u, "Unsupported ReSTIR DI spatial bias correction mode.");
         featureKey = 1u |
             ((constants.SpatialBiasCorrectionMode & 0x3u) << 1u) |
-            ((constants.SpatialMaterialSimilarityTestEnabled != 0u ? 1u : 0u) << 3u) |
-            ((constants.SpatialDiscountNaiveSamples != 0u ? 1u : 0u) << 4u);
+            ((constants.SpatialMaterialSimilarityTestEnabled != 0u ? 1u : 0u) << 3u);
         break;
 
     case ReSTIRDIStage::Shade:
@@ -399,7 +398,6 @@ std::vector<ShaderVariantDefine> ReSTIRDIPass::GetStageVariantDefines(
             booleanDefine("RESTIR_DI_USE_SPATIAL_REUSE", constants.SpatialResamplingEnabled != 0u),
             { "RESTIR_DI_SPATIAL_BIAS_MODE", std::to_string(constants.SpatialBiasCorrectionMode) },
             booleanDefine("RESTIR_DI_USE_SPATIAL_MATERIAL_SIMILARITY", constants.SpatialMaterialSimilarityTestEnabled != 0u),
-            booleanDefine("RESTIR_DI_USE_SPATIAL_NAIVE_SAMPLE_DISCOUNT", constants.SpatialDiscountNaiveSamples != 0u),
         };
         break;
 

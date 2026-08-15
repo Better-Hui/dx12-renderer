@@ -22,7 +22,6 @@ static const uint ReSTIRDIVisibilityChannelMask = 0x3fu;
 static const uint ReSTIRDIVisibilityChannelShift = 6u;
 static const uint ReSTIRDIMShift = 18u;
 static const uint ReSTIRDIMaxM = 0x3fffu;
-static const float ReSTIRDINaiveSamplingMThreshold = 1.0f;
 
 ReSTIRDIReservoir ReSTIRDIEmptyReservoir()
 {

@@ -141,13 +141,6 @@ ReSTIRDIReservoir ReSTIRDIPairwiseSpatialResampling(
         ReSTIRDIReservoir neighborReservoir = ReSTIRDIUnpackReservoir(
             ReSTIRDITemporalReservoir.Load(int3(neighborPixel, 0)),
             ReSTIRDITemporalReservoirState.Load(int3(neighborPixel, 0)));
-#if RESTIR_DI_USE_SPATIAL_NAIVE_SAMPLE_DISCOUNT
-        if (ReSTIRDIIsValid(neighborReservoir) &&
-            neighborReservoir.M <= ReSTIRDINaiveSamplingMThreshold)
-        {
-            continue;
-        }
-#endif
 
         const int2 spatialOffset = int2(ReSTIRDISpatialOffsets[offsetIndex] * ReSTIRDI_SpatialSamplingRadius);
         neighborReservoir.SpatialDistance += spatialOffset;
@@ -211,14 +204,6 @@ ReSTIRDIReservoir ReSTIRDIStandardSpatialResampling(
             ReSTIRDITemporalReservoirState.Load(int3(neighborPixel, 0)));
         const int2 spatialOffset = int2(ReSTIRDISpatialOffsets[offsetIndex] * ReSTIRDI_SpatialSamplingRadius);
         neighborReservoir.SpatialDistance += spatialOffset;
-#if RESTIR_DI_USE_SPATIAL_NAIVE_SAMPLE_DISCOUNT
-        if (ReSTIRDIIsValid(neighborReservoir) &&
-            neighborReservoir.M <= ReSTIRDINaiveSamplingMThreshold)
-        {
-            continue;
-        }
-#endif
-
         // The normalization pass must cover exactly the neighbors merged into
         // the reservoir. Counting discarded naive samples darkens the result
         // as the spatial sample count grows.

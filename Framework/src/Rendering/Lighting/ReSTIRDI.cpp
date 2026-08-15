@@ -53,8 +53,6 @@ ReSTIRDIFrameConstants ReSTIRDI::GetFrameConstants(const bool historyValid) cons
         m_Settings.SpatialTargetHistoryLength,
         static_cast<uint32_t>(m_Settings.SpatialBiasCorrection),
         m_Settings.EnableSpatialMaterialSimilarityTest ? 1u : 0u,
-        m_Settings.DiscountNaiveSpatialSamples ? 1u : 0u,
-
         m_Settings.EnableFinalVisibility ? 1u : 0u,
         m_Settings.ReuseFinalVisibility ? 1u : 0u,
         m_Settings.DiscardInvisibleFinalSamples ? 1u : 0u,

@@ -44,7 +44,6 @@ struct ReSTIRDISettings
     float SpatialDepthSimilarityThreshold = 0.1f;
     bool EnableSpatialMaterialSimilarityTest = true;
     float SpatialMaterialSimilarityThreshold = 0.5f;
-    bool DiscountNaiveSpatialSamples = true;
 
     bool EnableFinalVisibility = true;
     bool ReuseFinalVisibility = true;
@@ -73,7 +72,6 @@ struct ReSTIRDIFrameConstants
     uint32_t SpatialTargetHistoryLength = 0;
     uint32_t SpatialBiasCorrectionMode = 0;
     uint32_t SpatialMaterialSimilarityTestEnabled = 0;
-    uint32_t SpatialDiscountNaiveSamples = 0;
 
     uint32_t FinalVisibilityEnabled = 1;
     uint32_t FinalVisibilityReuseEnabled = 0;

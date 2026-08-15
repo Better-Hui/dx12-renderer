@@ -28,11 +28,26 @@
 #include <Framework/Rendering/Texture/UnorderedAccessView.h>
 
 #include <cstring>
+#include <mutex>
 #include <set>
+#include <unordered_set>
 
 //Modify Begin:2026-07-27 by BestHui
 namespace
 {
+    void LogMissingConstantBufferOnce(const std::string_view name)
+    {
+        static std::mutex mutex;
+        static std::unordered_set<std::string> reported;
+        const std::string key(name);
+        std::lock_guard<std::mutex> lock(mutex);
+        if (reported.insert(key).second)
+        {
+            const std::string message = "CommandContext: skipped missing constant buffer '" + key + "'.\n";
+            OutputDebugStringA(message.c_str());
+        }
+    }
+
     void TransitionShaderResourceBinding(CommandList& commandList, const PipelineShaderResourceBinding& shaderResource)
     {
 //Modify Begin:2026-07-28 by BestHui
@@ -325,6 +340,11 @@ void CommandContext::BindDescriptorSet(const PipelineDescriptorSet& descriptorSe
 //Modify Begin:2026-07-31 by BestHui
 void CommandContext::SetConstantBuffer(Shader& shader, const std::string_view name, const size_t size, const void* data) const
 {
+    if (!shader.HasConstantBuffer(std::string(name)))
+    {
+        LogMissingConstantBufferOnce(name);
+        return;
+    }
     shader.m_DescriptorSet->SetConstantBufferData(name, data, size);
 }
 
@@ -415,6 +435,11 @@ void CommandContext::SetStructuredBuffer(const ComputeShader& shader, const std:
 
 void CommandContext::SetConstantBuffer(const ComputeShader& shader, const std::string_view name, const size_t size, const void* data) const
 {
+    if (!shader.HasConstantBuffer(std::string(name)))
+    {
+        LogMissingConstantBufferOnce(name);
+        return;
+    }
     shader.m_DescriptorSet->SetConstantBufferData(name, data, size);
 }
 

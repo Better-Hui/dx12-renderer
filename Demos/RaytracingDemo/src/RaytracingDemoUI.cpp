@@ -262,9 +262,6 @@ void RaytracingDemo::OnImGui()
                             0.0f,
                             2.0f);
                     }
-                    settingsChanged |= ImGui::Checkbox(
-                        "Discount Naive Spatial Samples",
-                        &restirSettings.DiscountNaiveSpatialSamples);
                 }
             }
 

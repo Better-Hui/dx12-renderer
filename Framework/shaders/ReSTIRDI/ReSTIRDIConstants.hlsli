@@ -38,10 +38,6 @@
 #define RESTIR_DI_USE_SPATIAL_MATERIAL_SIMILARITY 0
 #endif
 
-#ifndef RESTIR_DI_USE_SPATIAL_NAIVE_SAMPLE_DISCOUNT
-#define RESTIR_DI_USE_SPATIAL_NAIVE_SAMPLE_DISCOUNT 0
-#endif
-
 #ifndef RESTIR_DI_USE_FINAL_VISIBILITY
 #define RESTIR_DI_USE_FINAL_VISIBILITY 0
 #endif
@@ -76,8 +72,6 @@ cbuffer ReSTIRDIConstants : register(b1)
     uint ReSTIRDI_SpatialTargetHistoryLength;
     uint ReSTIRDI_SpatialBiasCorrectionMode;
     uint ReSTIRDI_SpatialMaterialSimilarityTestEnabled;
-    uint ReSTIRDI_SpatialDiscountNaiveSamples;
-
     uint ReSTIRDI_FinalVisibilityEnabled;
     uint ReSTIRDI_FinalVisibilityReuseEnabled;
     uint ReSTIRDI_FinalVisibilityDiscardInvisibleSamples;
