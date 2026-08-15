@@ -25,18 +25,16 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         {
 //Modify Begin:2026-08-06 by BestHui
             const uint candidateSalt = 0x4d3a2b1cu + candidateIndex * 0x9e3779b9u;
-            const float2 lightSelectionNoise = FrameworkInterleavedGradientNoise2D(
-                pixel,
-                0u,
-                candidateSalt ^ (ReSTIRDI_FrameIndex * 0x9e3779b9u));
-            const float2 sampleNoise = FrameworkInterleavedGradientNoise2D(
-                pixel,
-                0u,
-                (candidateSalt ^ 0x68bc21ebu) ^ (ReSTIRDI_FrameIndex * 0x85ebca6bu));
-            const float reservoirRandom = FrameworkInterleavedGradientNoise2D(
-                pixel,
-                0u,
-                (candidateSalt ^ 0x02e5be93u) ^ (ReSTIRDI_FrameIndex * 0xc2b2ae35u)).x;
+            const uint frameSalt = ReSTIRDI_FrameIndex * 0x9e3779b9u;
+            const float2 lightSelectionNoise = FrameworkNoiseHash02(
+                pixel ^ uint2(frameSalt, frameSalt * 0x85ebca6bu),
+                candidateSalt);
+            const float2 sampleNoise = FrameworkNoiseHash02(
+                pixel ^ uint2(frameSalt, frameSalt * 0xc2b2ae35u),
+                candidateSalt ^ 0x68bc21ebu);
+            const float reservoirRandom = FrameworkNoiseHash02(
+                pixel ^ uint2(frameSalt, frameSalt * 0xd1b54a35u),
+                candidateSalt ^ 0x02e5be93u).x;
             const float lightSelectionRandom = (lightSelectionNoise.x + float(candidateIndex)) /
                 float(ReSTIRDI_CandidateCount);
 //Modify End
