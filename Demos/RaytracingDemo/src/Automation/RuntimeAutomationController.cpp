@@ -108,12 +108,33 @@ void DemoAutomation::RuntimeAutomationController::Initialize(const TestSuites& t
     {
         m_Steps = testSuites.ReSTIRGIVariants;
     }
+    else if (mode == "restirdi-variants")
+    {
+        m_Steps = testSuites.ReSTIRDIVariants;
+        if (stepMilliseconds.empty())
+        {
+            m_StepIntervalSeconds = 0.5;
+        }
+
+        const size_t startCase = GetEnvironmentSize("RAYTRACING_DEMO_AUTOTEST_START_CASE");
+        if (startCase > 0)
+        {
+            const size_t firstStep = std::min(startCase - 1, m_Steps.size());
+            m_Steps.erase(m_Steps.begin(), m_Steps.begin() + static_cast<std::ptrdiff_t>(firstStep));
+        }
+
+        const size_t maxCases = GetEnvironmentSize("RAYTRACING_DEMO_AUTOTEST_MAX_CASES");
+        if (maxCases > 0 && m_Steps.size() > maxCases)
+        {
+            m_Steps.resize(maxCases);
+        }
+    }
 //Modify End
     else
     {
 //Modify Begin:2026-07-30 by BestHui
         throw std::runtime_error(
-            "RAYTRACING_DEMO_AUTOTEST must be 'core', 'stress', 'matrix', 'restirgi-profile', or 'restirgi-variants'.");
+            "RAYTRACING_DEMO_AUTOTEST must be 'core', 'stress', 'matrix', 'restirgi-profile', 'restirgi-variants', or 'restirdi-variants'.");
 //Modify End
     }
 

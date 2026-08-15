@@ -200,7 +200,10 @@ void ReSTIRDIPass::ExecuteInitialSampling(
         inputs.FrameState.Constants,
         inputs.FrameState.ShadingModel);
     inputs.BindSceneInputs(commandContext, shader);
-    commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
+    if (shader.HasConstantBuffer("ReSTIRDIConstants"))
+    {
+        commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
+    }
     commandContext.SetUnorderedAccessView(shader, "ReSTIRDIRISReservoir", UnorderedAccessView(m_Resources->InitialReservoir));
     commandContext.SetUnorderedAccessView(shader, "ReSTIRDIRISReservoirState", UnorderedAccessView(m_Resources->InitialReservoirState));
     commandContext.BindPipeline(shader);
@@ -220,7 +223,10 @@ void ReSTIRDIPass::ExecuteTemporalResampling(
         inputs.FrameState.ShadingModel);
     const bool writeReservoirA = (inputs.FrameState.FrameIndex & 1u) == 0u;
     inputs.BindSceneInputs(commandContext, shader);
-    commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
+    if (shader.HasConstantBuffer("ReSTIRDIConstants"))
+    {
+        commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
+    }
     commandContext.SetShaderResourceView(shader, "ReSTIRDIRISReservoir", ShaderResourceView(m_Resources->InitialReservoir));
     commandContext.SetShaderResourceView(shader, "ReSTIRDIRISReservoirState", ShaderResourceView(m_Resources->InitialReservoirState));
     commandContext.SetShaderResourceView(shader, "MotionVectorTexture", ShaderResourceView(inputs.MotionVector));
@@ -250,7 +256,10 @@ void ReSTIRDIPass::ExecuteSpatialResampling(
         inputs.FrameState.Constants,
         inputs.FrameState.ShadingModel);
     inputs.BindSceneInputs(commandContext, shader);
-    commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
+    if (shader.HasConstantBuffer("ReSTIRDIConstants"))
+    {
+        commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
+    }
     commandContext.SetShaderResourceView(shader, "ReSTIRDITemporalReservoir", ShaderResourceView(inputReservoir));
     commandContext.SetShaderResourceView(shader, "ReSTIRDITemporalReservoirState", ShaderResourceView(inputReservoirState));
     commandContext.SetUnorderedAccessView(shader, "ReSTIRDISpatialReservoir", UnorderedAccessView(m_Resources->SpatialReservoir));
@@ -274,7 +283,10 @@ void ReSTIRDIPass::ExecuteFinalShading(
         inputs.FrameState.ShadingModel);
     const bool writeReservoirA = (inputs.FrameState.FrameIndex & 1u) == 0u;
     inputs.BindSceneInputs(commandContext, shader);
-    commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
+    if (shader.HasConstantBuffer("ReSTIRDIConstants"))
+    {
+        commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
+    }
     commandContext.SetShaderResourceView(shader, "ReSTIRDIFinalReservoir", ShaderResourceView(finalReservoir));
     commandContext.SetShaderResourceView(shader, "ReSTIRDIFinalReservoirState", ShaderResourceView(finalReservoirState));
     commandContext.SetUnorderedAccessView(shader, "DirectLighting", UnorderedAccessView(inputs.DirectLighting));

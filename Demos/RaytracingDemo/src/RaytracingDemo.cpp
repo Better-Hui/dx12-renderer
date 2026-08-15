@@ -255,6 +255,7 @@ namespace
 //Modify Begin:2026-08-12 by BestHui
         MaterialShading,
 //Modify End
+        ReSTIRDIConfig,
 //Modify Begin:2026-07-30 by BestHui
         MaxBounces,
         Wait,
@@ -637,6 +638,16 @@ namespace
             makeStep(Action::GpuTiming, 0u, "timing=0"),
         };
 //Modify End
+        // Exercise every boolean ReSTIR DI feature combination in a stable
+        // inline-ray-query configuration. The external runner can stop on the
+        // first non-zero process exit or fresh DemoException.log.
+        for (uint32_t config = 0u; config < (1u << 10u); ++config)
+        {
+            testSuites.ReSTIRDIVariants.push_back(makeStep(
+                Action::ReSTIRDIConfig,
+                config,
+                "restirdi-config=" + std::to_string(config)));
+        }
         const auto& matrixCases = GetRuntimeAutomationMatrixCases();
         testSuites.Matrix.reserve(matrixCases.size());
         for (uint32_t caseIndex = 0; caseIndex < matrixCases.size(); ++caseIndex)
@@ -1231,6 +1242,32 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         SetMaterialShadingModel(static_cast<MaterialShadingModel>(value));
         break;
 //Modify End
+    case RuntimeAutomationAction::ReSTIRDIConfig:
+    {
+        m_PathTracingBackend = PathTracingBackend::InlineRayQuery;
+        m_DirectLightingTechnique = RaytracingDemoLightingTechnique::ReSTIRDI;
+        m_IndirectLightingTechnique = RaytracingDemoLightingTechnique::None;
+        m_MaxBounces = 1;
+        ReSTIRDISettings settings = m_DirectLightingReSTIRDI.GetSettings();
+        settings.EnableInitialVisibility = (value & (1u << 0u)) != 0u;
+        settings.EnableTemporalResampling = (value & (1u << 1u)) != 0u;
+        settings.EnableTemporalVisibilityShortcut = (value & (1u << 2u)) != 0u;
+        settings.EnableTemporalPermutationSampling = (value & (1u << 3u)) != 0u;
+        settings.EnableBoilingFilter = (value & (1u << 4u)) != 0u;
+        settings.EnableSpatialResampling = (value & (1u << 5u)) != 0u;
+        settings.EnableSpatialMaterialSimilarityTest = (value & (1u << 6u)) != 0u;
+        settings.DiscountNaiveSpatialSamples = (value & (1u << 7u)) != 0u;
+        settings.EnableFinalVisibility = (value & (1u << 8u)) != 0u;
+        settings.ReuseFinalVisibility = (value & (1u << 9u)) != 0u;
+        // Final discard is only meaningful when final visibility is enabled;
+        // keep it off in the disabled branch to isolate that branch itself.
+        settings.DiscardInvisibleFinalSamples = settings.EnableFinalVisibility &&
+            ((value & (1u << 7u)) != 0u);
+        m_DirectLightingReSTIRDI.SetSettings(settings);
+        EnsureRayTracingPipelines();
+        ResetAccumulation(false, true);
+        break;
+    }
     case RuntimeAutomationAction::MatrixCase:
         ApplyRuntimeAutomationMatrixCase(value);
         break;

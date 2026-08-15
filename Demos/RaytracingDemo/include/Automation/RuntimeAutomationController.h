@@ -27,6 +27,7 @@ namespace DemoAutomation
 //Modify End
 //Modify Begin:2026-08-11 by BestHui
         std::vector<Step> ReSTIRGIVariants;
+        std::vector<Step> ReSTIRDIVariants;
 //Modify End
     };
 
