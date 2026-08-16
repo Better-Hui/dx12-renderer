@@ -133,48 +133,37 @@ set(SHADER_FILES_PIXEL
         )
 # Modify End
 
-set(RESTIR_DI_CORE_SHADER_FILES
-        ../../Framework/shaders/ReSTIRDI/ReSTIRDI.RIS.cs.hlsl
-        ../../Framework/shaders/ReSTIRDI/ReSTIRDI.Temporal.cs.hlsl
-        ../../Framework/shaders/ReSTIRDI/ReSTIRDI.Spatial.cs.hlsl
-        ../../Framework/shaders/ReSTIRDI/ReSTIRDI.Shade.cs.hlsl
-        )
-
-# Modify Begin:2026-08-10 by BestHui
-set(RESTIR_GI_CORE_SHADER_FILES
-        ../../Framework/shaders/ReSTIRGI/ReSTIRGI.Initial.cs.hlsl
-        ../../Framework/shaders/ReSTIRGI/ReSTIRGI.Temporal.cs.hlsl
-        ../../Framework/shaders/ReSTIRGI/ReSTIRGI.Spatial.cs.hlsl
-        ../../Framework/shaders/ReSTIRGI/ReSTIRGI.Shade.cs.hlsl
-        )
-# Modify End
-
-# Modify Begin:2026-08-06 by BestHui
+# Modify Begin:2026-08-16 by BestHui
+# These files only bind RaytracingDemo scene data to Framework ReSTIR code.
+# Keep that boundary explicit in the IDE instead of displaying them as ReSTIR
+# implementations owned by the demo.
 set(RESTIR_DI_SHADER_FILES
         shaders/ReSTIRDI/ReSTIRDI.RIS.cs.hlsl
         shaders/ReSTIRDI/ReSTIRDI.Temporal.cs.hlsl
         shaders/ReSTIRDI/ReSTIRDI.Spatial.cs.hlsl
         shaders/ReSTIRDI/ReSTIRDI.Shade.cs.hlsl
         )
-list(APPEND SHADERS_HEADER_FILES
-        ${RESTIR_DI_CORE_SHADER_FILES}
+set(RESTIR_DI_DEMO_INTEGRATION_FILES
+        ${RESTIR_DI_SHADER_FILES}
         shaders/ReSTIRDI/ReSTIRDISceneAdapter.hlsli
         )
-set_source_files_properties(${RESTIR_DI_CORE_SHADER_FILES} PROPERTIES HEADER_FILE_ONLY TRUE)
-# Modify End
+list(APPEND SHADERS_HEADER_FILES
+        shaders/ReSTIRDI/ReSTIRDISceneAdapter.hlsli
+        )
 
-# Modify Begin:2026-08-10 by BestHui
 set(RESTIR_GI_SHADER_FILES
         shaders/ReSTIRGI/ReSTIRGI.Initial.cs.hlsl
         shaders/ReSTIRGI/ReSTIRGI.Temporal.cs.hlsl
         shaders/ReSTIRGI/ReSTIRGI.Spatial.cs.hlsl
         shaders/ReSTIRGI/ReSTIRGI.Shade.cs.hlsl
         )
-list(APPEND SHADERS_HEADER_FILES
-        ${RESTIR_GI_CORE_SHADER_FILES}
+set(RESTIR_GI_DEMO_INTEGRATION_FILES
+        ${RESTIR_GI_SHADER_FILES}
         shaders/ReSTIRGI/ReSTIRGISceneAdapter.hlsli
         )
-set_source_files_properties(${RESTIR_GI_CORE_SHADER_FILES} PROPERTIES HEADER_FILE_ONLY TRUE)
+list(APPEND SHADERS_HEADER_FILES
+        shaders/ReSTIRGI/ReSTIRGISceneAdapter.hlsli
+        )
 # Modify End
 
 set(SHADER_FILES_COMPUTE
@@ -225,15 +214,11 @@ set(DEMO_SHADER_FILES
         ${SHADER_FILES_COMPUTE}
         ${CUDA_SHADER_FILES}
         )
-list(REMOVE_ITEM DEMO_SHADER_FILES ${RESTIR_DI_CORE_SHADER_FILES})
-# Modify Begin:2026-08-10 by BestHui
-list(REMOVE_ITEM DEMO_SHADER_FILES ${RESTIR_GI_CORE_SHADER_FILES})
-# Modify End
+list(REMOVE_ITEM DEMO_SHADER_FILES ${RESTIR_DI_DEMO_INTEGRATION_FILES})
+list(REMOVE_ITEM DEMO_SHADER_FILES ${RESTIR_GI_DEMO_INTEGRATION_FILES})
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/shaders" PREFIX "shaders" FILES ${DEMO_SHADER_FILES})
-source_group(TREE "${CMAKE_SOURCE_DIR}/Framework/shaders/ReSTIRDI" PREFIX "Framework\\ReSTIRDI" FILES ${RESTIR_DI_CORE_SHADER_FILES})
-# Modify Begin:2026-08-10 by BestHui
-source_group(TREE "${CMAKE_SOURCE_DIR}/Framework/shaders/ReSTIRGI" PREFIX "Framework\\ReSTIRGI" FILES ${RESTIR_GI_CORE_SHADER_FILES})
-# Modify End
+source_group("Demo Integration\\ReSTIR DI Adapters" FILES ${RESTIR_DI_DEMO_INTEGRATION_FILES})
+source_group("Demo Integration\\ReSTIR GI Adapters" FILES ${RESTIR_GI_DEMO_INTEGRATION_FILES})
 # Modify End
 
 set_source_files_properties(${SHADER_FILES_RAYTRACING} PROPERTIES HEADER_FILE_ONLY TRUE)

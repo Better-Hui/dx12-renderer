@@ -29,6 +29,35 @@ set(SHADER_FILES_COMPUTE
 # Modify End
         )
 
+# Modify Begin:2026-08-16 by BestHui
+# ReSTIR shader implementations belong to Framework. They are listed here for
+# IDE ownership; RaytracingDemo only compiles its scene-specific adapters.
+set(FRAMEWORK_RESTIR_DI_SHADER_FILES
+        "shaders/ReSTIRDI/ReSTIRDI.RIS.cs.hlsl"
+        "shaders/ReSTIRDI/ReSTIRDI.Temporal.cs.hlsl"
+        "shaders/ReSTIRDI/ReSTIRDI.Spatial.cs.hlsl"
+        "shaders/ReSTIRDI/ReSTIRDI.Shade.cs.hlsl"
+        )
+set(FRAMEWORK_RESTIR_GI_SHADER_FILES
+        "shaders/ReSTIRGI/ReSTIRGI.Initial.cs.hlsl"
+        "shaders/ReSTIRGI/ReSTIRGI.Temporal.cs.hlsl"
+        "shaders/ReSTIRGI/ReSTIRGI.Spatial.cs.hlsl"
+        "shaders/ReSTIRGI/ReSTIRGI.Shade.cs.hlsl"
+        )
+set(FRAMEWORK_RESTIR_DI_ALL_SHADER_FILES
+        ${FRAMEWORK_RESTIR_DI_SHADER_FILES}
+        "shaders/ReSTIRDI/ReSTIRDI.hlsli"
+        "shaders/ReSTIRDI/ReSTIRDIConstants.hlsli"
+        "shaders/ReSTIRDI/ReSTIRDISceneContract.hlsli"
+        )
+set(FRAMEWORK_RESTIR_GI_ALL_SHADER_FILES
+        ${FRAMEWORK_RESTIR_GI_SHADER_FILES}
+        "shaders/ReSTIRGI/ReSTIRGI.hlsli"
+        "shaders/ReSTIRGI/ReSTIRGIConstants.hlsli"
+        "shaders/ReSTIRGI/ReSTIRGISceneContract.hlsli"
+        )
+# Modify End
+
 # Modify Begin:2026-07-27 by BestHui
 set(SHADERS_HEADER_FILES
 # Modify Begin:2026-08-06 by BestHui
@@ -44,20 +73,8 @@ set(SHADERS_HEADER_FILES
 # Modify Begin:2026-07-31 by BestHui
         "shaders/Meshlet/MeshletCommon.hlsli"
 # Modify End
-# Modify Begin:2026-08-05 by BestHui
-        "shaders/ReSTIRDI/ReSTIRDI.hlsli"
-# Modify End
-# Modify Begin:2026-07-30 by BestHui
-        "shaders/ReSTIRDI/ReSTIRDIConstants.hlsli"
-# Modify End
-        # Modify Begin:2026-08-06 by BestHui
-        "shaders/ReSTIRDI/ReSTIRDISceneContract.hlsli"
-        # Modify End
-        # Modify Begin:2026-08-10 by BestHui
-        "shaders/ReSTIRGI/ReSTIRGI.hlsli"
-        "shaders/ReSTIRGI/ReSTIRGIConstants.hlsli"
-        "shaders/ReSTIRGI/ReSTIRGISceneContract.hlsli"
-        # Modify End
+        ${FRAMEWORK_RESTIR_DI_ALL_SHADER_FILES}
+        ${FRAMEWORK_RESTIR_GI_ALL_SHADER_FILES}
         )
 # Modify End
 
@@ -65,10 +82,19 @@ set(TARGET_NAME Framework)
 set(SHADERS_OUTPUT_HEADERS TRUE)
 include(${CMAKE_SOURCE_DIR}/CMakeIncludes/ProjectBase.cmake)
 
-# Modify Begin:2026-07-30 by BestHui
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/include/Framework" PREFIX "include" FILES ${HEADER_FILES})
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "src" FILES ${SOURCE_FILES})
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/shaders" PREFIX "shaders" FILES ${SHADERS_HEADER_FILES})
+# Modify Begin:2026-08-16 by BestHui
+set_source_files_properties(
+        ${FRAMEWORK_RESTIR_DI_SHADER_FILES}
+        ${FRAMEWORK_RESTIR_GI_SHADER_FILES}
+        PROPERTIES HEADER_FILE_ONLY TRUE)
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/include/Framework" PREFIX "Include" FILES ${HEADER_FILES})
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "Source" FILES ${SOURCE_FILES})
+set(FRAMEWORK_GENERAL_SHADER_FILES ${SHADER_FILES} ${SHADERS_HEADER_FILES})
+list(REMOVE_ITEM FRAMEWORK_GENERAL_SHADER_FILES ${FRAMEWORK_RESTIR_DI_ALL_SHADER_FILES})
+list(REMOVE_ITEM FRAMEWORK_GENERAL_SHADER_FILES ${FRAMEWORK_RESTIR_GI_ALL_SHADER_FILES})
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/shaders" PREFIX "Shaders" FILES ${FRAMEWORK_GENERAL_SHADER_FILES})
+source_group("Shaders\\ReSTIR DI" FILES ${FRAMEWORK_RESTIR_DI_ALL_SHADER_FILES})
+source_group("Shaders\\ReSTIR GI" FILES ${FRAMEWORK_RESTIR_GI_ALL_SHADER_FILES})
 # Modify End
 
 # Add source to this project's executable.
@@ -85,7 +111,7 @@ set(DX12_RENDERER_IMGUI_SOURCES
         "${DX12_RENDERER_IMGUI_SOURCE_DIRECTORY}/backends/imgui_impl_win32.cpp"
         )
 target_sources(${TARGET_NAME} PRIVATE ${DX12_RENDERER_IMGUI_SOURCES})
-source_group("External\\ImGui" FILES ${DX12_RENDERER_IMGUI_SOURCES})
+source_group("Third Party\\Dear ImGui" FILES ${DX12_RENDERER_IMGUI_SOURCES})
 # Modify End
 
 # Modify Begin:2026-07-28 by BestHui

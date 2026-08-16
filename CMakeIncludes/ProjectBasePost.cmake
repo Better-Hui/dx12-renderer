@@ -2,13 +2,12 @@ target_include_directories(${TARGET_NAME}
         PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
         )
 
-# Modify Begin:2026-07-30 by BestHui
-if (DX12_RENDERER_GENERATED_SHADER_OUTPUTS)
-    set_source_files_properties(
-            ${DX12_RENDERER_GENERATED_SHADER_OUTPUTS}
-            PROPERTIES GENERATED TRUE HEADER_FILE_ONLY TRUE)
-    source_group("Generated\\ShaderBytecode" FILES ${DX12_RENDERER_GENERATED_SHADER_OUTPUTS})
-    target_sources(${TARGET_NAME} PRIVATE ${DX12_RENDERER_GENERATED_SHADER_OUTPUTS})
+# Modify Begin:2026-08-16 by BestHui
+if (DX12_RENDERER_HAS_SHADER_ASSETS)
+    add_custom_command(TARGET ${TARGET_NAME} PRE_BUILD
+            COMMAND ${CMAKE_COMMAND} -P "${DX12_RENDERER_SHADER_PRE_BUILD_SCRIPT}"
+            COMMENT "Compiling ${TARGET_NAME} shader assets"
+            VERBATIM)
 endif()
 # Modify End
 

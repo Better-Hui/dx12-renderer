@@ -45,7 +45,12 @@ set(DX12_RENDERER_SHADER_INCLUDE_ARGS
         -I "${CMAKE_SOURCE_DIR}/Framework/shaders"
         -I "${CMAKE_CURRENT_SOURCE_DIR}/shaders"
         )
-set(DX12_RENDERER_GENERATED_SHADER_OUTPUTS)
+# Modify Begin:2026-08-16 by BestHui
+# Keep shader compilation out of the Visual Studio file tree. CMake otherwise
+# materializes one hashed .rule file for every shader output under CMakeFiles.
+set(DX12_RENDERER_SHADER_PRE_BUILD_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${TARGET_NAME}_CompileShaders.cmake")
+set(DX12_RENDERER_SHADER_PRE_BUILD_SCRIPT_CONTENT "cmake_minimum_required(VERSION 3.8.0)\n")
+set(DX12_RENDERER_HAS_SHADER_ASSETS FALSE)
 
 function(dx12_renderer_add_shader_compile source_path target_profile)
     get_filename_component(shader_absolute_path "${source_path}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -61,16 +66,27 @@ function(dx12_renderer_add_shader_compile source_path target_profile)
         set(shader_output_args -Fo "${shader_output_path}")
     endif()
 
-    add_custom_command(
-            OUTPUT "${shader_output_path}"
-            COMMAND ${CMAKE_COMMAND} -E make_directory "${shader_output_directory}"
-            COMMAND "${DX12_RENDERER_DXC_EXECUTABLE}" -E main -T "${target_profile}" -HV 2021 -WX ${DX12_RENDERER_SHADER_INCLUDE_ARGS} ${shader_output_args} "${shader_absolute_path}"
-            DEPENDS "${shader_absolute_path}"
-            COMMENT "DXC ${target_profile}: ${shader_absolute_path}"
-            VERBATIM
-            )
-    list(APPEND DX12_RENDERER_GENERATED_SHADER_OUTPUTS "${shader_output_path}")
-    set(DX12_RENDERER_GENERATED_SHADER_OUTPUTS "${DX12_RENDERER_GENERATED_SHADER_OUTPUTS}" PARENT_SCOPE)
+    set(shader_script_include_arguments)
+    foreach(shader_include_argument IN LISTS DX12_RENDERER_SHADER_INCLUDE_ARGS)
+        string(APPEND shader_script_include_arguments " \"${shader_include_argument}\"")
+    endforeach()
+    set(shader_script_output_arguments)
+    foreach(shader_output_argument IN LISTS shader_output_args)
+        string(APPEND shader_script_output_arguments " \"${shader_output_argument}\"")
+    endforeach()
+    string(APPEND DX12_RENDERER_SHADER_PRE_BUILD_SCRIPT_CONTENT
+            "if (NOT EXISTS \"${shader_output_path}\" OR \"${shader_absolute_path}\" IS_NEWER_THAN \"${shader_output_path}\")\n"
+            "    message(STATUS \"DXC ${target_profile}: ${shader_file_name}\")\n"
+            "    file(MAKE_DIRECTORY \"${shader_output_directory}\")\n"
+            "    execute_process(\n"
+            "            COMMAND \"${DX12_RENDERER_DXC_EXECUTABLE}\" -E main -T \"${target_profile}\" -HV 2021 -WX${shader_script_include_arguments}${shader_script_output_arguments} \"${shader_absolute_path}\"\n"
+            "            RESULT_VARIABLE DX12_RENDERER_SHADER_COMPILE_RESULT)\n"
+            "    if (NOT DX12_RENDERER_SHADER_COMPILE_RESULT EQUAL 0)\n"
+            "        message(FATAL_ERROR \"DXC ${target_profile} failed: ${shader_absolute_path}\")\n"
+            "    endif()\n"
+            "endif()\n")
+    set(DX12_RENDERER_SHADER_PRE_BUILD_SCRIPT_CONTENT "${DX12_RENDERER_SHADER_PRE_BUILD_SCRIPT_CONTENT}" PARENT_SCOPE)
+    set(DX12_RENDERER_HAS_SHADER_ASSETS TRUE PARENT_SCOPE)
 endfunction()
 
 foreach(shader_file IN LISTS SHADER_FILES_VERTEX)
@@ -83,4 +99,9 @@ foreach(shader_file IN LISTS SHADER_FILES_COMPUTE)
     dx12_renderer_add_shader_compile("${shader_file}" "cs_${DX12_RENDERER_SHADER_MODEL_SUFFIX}")
 endforeach()
 
+if (DX12_RENDERER_HAS_SHADER_ASSETS)
+    file(WRITE "${DX12_RENDERER_SHADER_PRE_BUILD_SCRIPT}" "${DX12_RENDERER_SHADER_PRE_BUILD_SCRIPT_CONTENT}")
+endif()
+
+# Modify End
 # Modify End

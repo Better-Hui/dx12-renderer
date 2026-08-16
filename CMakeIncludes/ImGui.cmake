@@ -29,7 +29,9 @@ set(DX12_RENDERER_IMGUI_SLIDER_INPUT_REPLACEMENT [=[        // Tabbing, CTRL+cli
         if (clicked && !double_clicked && g.ActiveId != id)
         {
             ImRect initial_grab_bb;
-            SliderBehavior(frame_bb, id, data_type, p_data, p_min, p_max, format, flags, &initial_grab_bb);
+            ImU64 initial_value_copy = 0;
+            memcpy(&initial_value_copy, p_data, DataTypeGetInfo(data_type)->Size);
+            SliderBehavior(frame_bb, id, data_type, &initial_value_copy, p_min, p_max, format, flags, &initial_grab_bb);
             drag_clicked = initial_grab_bb.Contains(g.IO.MousePos);
         }
         const bool make_active = (drag_clicked || ctrl_clicked || double_clicked || g.NavActivateId == id);
@@ -96,7 +98,9 @@ set(DX12_RENDERER_IMGUI_VSLIDER_INPUT_REPLACEMENT [=[    const bool temp_input_a
         if (clicked && !double_clicked && g.ActiveId != id)
         {
             ImRect initial_grab_bb;
-            SliderBehavior(frame_bb, id, data_type, p_data, p_min, p_max, format, flags | ImGuiSliderFlags_Vertical, &initial_grab_bb);
+            ImU64 initial_value_copy = 0;
+            memcpy(&initial_value_copy, p_data, DataTypeGetInfo(data_type)->Size);
+            SliderBehavior(frame_bb, id, data_type, &initial_value_copy, p_min, p_max, format, flags | ImGuiSliderFlags_Vertical, &initial_grab_bb);
             drag_clicked = initial_grab_bb.Contains(g.IO.MousePos);
         }
         const bool make_active = (drag_clicked || ctrl_clicked || double_clicked || g.NavActivateId == id);
