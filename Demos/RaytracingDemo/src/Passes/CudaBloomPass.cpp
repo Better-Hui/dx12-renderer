@@ -1,8 +1,10 @@
 #include <Passes/CudaBloomPass.h>
 
 #include <DX12Library/Helpers.h>
+#include <DX12Library/RenderTarget.h>
 #include <DX12Library/Texture.h>
 #include <Framework/Core/FrameworkDeviceContext.h>
+#include <Framework/Rendering/PostProcess/Bloom.h>
 
 #include <imgui.h>
 
@@ -55,6 +57,12 @@ CudaBloomPass::~CudaBloomPass()
 
 void CudaBloomPass::Shutdown()
 {
+//Modify Begin:2026-08-16 by BestHui
+    m_FrameworkBloom.reset();
+    m_FrameworkBloomWidth = 0;
+    m_FrameworkBloomHeight = 0;
+    m_FrameworkBloomPyramidLevels = 0;
+//Modify End
     ReleaseInteropResource();
 //Modify Begin:2026-07-30 by BestHui
     ReleaseCudaTimingFrames();
@@ -91,7 +99,8 @@ bool CudaBloomPass::DrawImGui(const uint32_t width, const uint32_t height)
         const char* bloomMethodNames[] = {
             "Classic Additive Pyramid",
             "Box Filter Approximation (optimized)",
-            "Box Filter Approximation (original paper)"
+            "Box Filter Approximation (original paper)",
+            "Built-in Raster Bloom"
         };
         int bloomMethod = static_cast<int>(m_Method);
         if (ImGui::Combo("Bloom Method", &bloomMethod, bloomMethodNames, IM_ARRAYSIZE(bloomMethodNames)))
@@ -108,12 +117,21 @@ bool CudaBloomPass::DrawImGui(const uint32_t width, const uint32_t height)
             "10-Tap Non-Cascaded",
             "15-Tap Non-Cascaded"
         };
+        const bool frameworkRaster = IsFrameworkRaster();
+        if (frameworkRaster)
+        {
+            ImGui::BeginDisabled();
+        }
         int downsampleMode = static_cast<int>(m_DownsampleMode);
         if (ImGui::Combo("Bloom Downsample", &downsampleMode, downsampleModeNames, IM_ARRAYSIZE(downsampleModeNames)))
         {
             downsampleMode = std::clamp(downsampleMode, 0, IM_ARRAYSIZE(downsampleModeNames) - 1);
             m_DownsampleMode = static_cast<DownsampleMode>(downsampleMode);
             changed = true;
+        }
+        if (frameworkRaster)
+        {
+            ImGui::EndDisabled();
         }
 //Modify End
         changed |= ImGui::SliderFloat("Bloom Threshold", &m_Threshold, 0.0f, 5.0f, "%.2f");
@@ -146,6 +164,56 @@ bool CudaBloomPass::DrawImGui(const uint32_t width, const uint32_t height)
         ImGui::TextWrapped("%s", m_Status.c_str());
     }
     return changed;
+}
+//Modify End
+
+//Modify Begin:2026-08-16 by BestHui
+bool CudaBloomPass::ExecuteFrameworkBloom(
+    const std::shared_ptr<Texture>& source,
+    const std::shared_ptr<Texture>& destination,
+    CommandList& commandList,
+    const uint32_t width,
+    const uint32_t height)
+{
+    if (!m_Enabled || !IsFrameworkRaster() || source == nullptr || destination == nullptr)
+    {
+        return false;
+    }
+
+    const uint32_t maxPyramidLevels = ComputeMaxPyramidLevels(width, height);
+    const int pyramidLevels = std::clamp(m_PyramidLevels, 1, static_cast<int>(maxPyramidLevels));
+    if (m_FrameworkBloom == nullptr ||
+        m_FrameworkBloomWidth != width ||
+        m_FrameworkBloomHeight != height ||
+        m_FrameworkBloomPyramidLevels != pyramidLevels)
+    {
+        m_FrameworkBloom = std::make_unique<Bloom>(
+            m_DeviceContext,
+            commandList,
+            width,
+            height,
+            DXGI_FORMAT_R32G32B32A32_FLOAT,
+            static_cast<size_t>(pyramidLevels) + 1u);
+        m_FrameworkBloomWidth = width;
+        m_FrameworkBloomHeight = height;
+        m_FrameworkBloomPyramidLevels = pyramidLevels;
+    }
+
+    // The graph marks SceneColor as a render-target output so the resource has RTV support.
+    // Framework Bloom first samples it, then transitions it back to a render target for the final additive pass.
+    commandList.TransitionBarrier(*source, D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
+    commandList.FlushResourceBarriers();
+
+    RenderTarget destinationRenderTarget;
+    destinationRenderTarget.AttachTexture(Color0, destination);
+
+    BloomParameters parameters = {};
+    parameters.Intensity = m_Intensity;
+    parameters.Threshold = m_Threshold;
+    parameters.SoftThreshold = m_SoftThreshold;
+    m_FrameworkBloom->Draw(commandList, source, destinationRenderTarget, parameters);
+    m_Status = "Built-in raster bloom is active.";
+    return true;
 }
 //Modify End
 

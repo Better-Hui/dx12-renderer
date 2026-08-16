@@ -90,6 +90,36 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateCu
         });
 }
 
+//Modify Begin:2026-08-16 by BestHui
+std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateFrameworkBloomPass(
+    const RaytracingDemoPassResources& resources,
+    const RenderGraph::ResourceId sceneReadyToken)
+{
+    using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
+
+    return RenderGraph::RenderPass::Create(
+        L"Built-in Raster Bloom",
+        {
+            { sceneReadyToken, RenderGraph::InputType::Token },
+            { DemoResourceIds::SceneColor, RenderGraph::InputType::ShaderResource },
+        },
+        {
+            { DemoResourceIds::SceneColor, RenderGraph::OutputType::RenderTarget },
+            { DemoResourceIds::CudaBloomFinishedToken, RenderGraph::OutputType::Token },
+        },
+        [resources](const RenderGraph::RenderContext& context, CommandList& commandList)
+        {
+            const auto& sceneColor = context.GetTexture(DemoResourceIds::SceneColor);
+            resources.CudaBloom.ExecuteFrameworkBloom(
+                sceneColor,
+                sceneColor,
+                commandList,
+                context.GetMetadata().m_ScreenWidth,
+                context.GetMetadata().m_ScreenHeight);
+        });
+}
+//Modify End
+
 //Modify Begin:2026-08-07 by BestHui
 std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateFrameGenerationHudLessPass(
     const RaytracingDemoPassResources& resources,

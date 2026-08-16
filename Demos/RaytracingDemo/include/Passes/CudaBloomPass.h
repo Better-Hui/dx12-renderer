@@ -12,6 +12,8 @@
 
 class Texture;
 class FrameworkDeviceContext;
+class CommandList;
+class Bloom;
 
 class CudaBloomPass final
 {
@@ -22,6 +24,7 @@ public:
         Classic = 0,
         BoxFilterApproximation = 1,
         BoxFilterOriginalPaper = 2,
+        FrameworkRaster = 3,
     };
     enum class DownsampleMode : uint32_t
     {
@@ -42,6 +45,14 @@ public:
 //Modify End
 //Modify Begin:2026-07-28 by BestHui
     bool ExecuteInPlace(Texture& postProcessColor, uint32_t width, uint32_t height, ID3D12CommandQueue* d3d12CommandQueue);
+//Modify Begin:2026-08-16 by BestHui
+    bool ExecuteFrameworkBloom(
+        const std::shared_ptr<Texture>& source,
+        const std::shared_ptr<Texture>& destination,
+        CommandList& commandList,
+        uint32_t width,
+        uint32_t height);
+//Modify End
     void ReleaseInteropResource();
 //Modify End
     void Shutdown();
@@ -52,6 +63,8 @@ public:
 
     bool IsEnabled() const { return m_Enabled; }
     void SetEnabled(bool enabled) { m_Enabled = enabled; }
+    Method GetMethod() const { return m_Method; }
+    bool IsFrameworkRaster() const { return m_Method == Method::FrameworkRaster; }
     const std::string& GetStatus() const { return m_Status; }
 //Modify Begin:2026-08-16 by BestHui
     void SetMethod(Method method) { m_Method = method; }
@@ -122,6 +135,10 @@ private:
     Method m_Method = Method::Classic;
     float m_BoxFilterSigma = 1.0f;
     DownsampleMode m_DownsampleMode = DownsampleMode::Cascaded2x2;
+    std::unique_ptr<Bloom> m_FrameworkBloom;
+    uint32_t m_FrameworkBloomWidth = 0;
+    uint32_t m_FrameworkBloomHeight = 0;
+    int m_FrameworkBloomPyramidLevels = 0;
 //Modify End
     std::string m_Status = "CUDA bloom is not initialized.";
 

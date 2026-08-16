@@ -133,7 +133,14 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
     }
     if (resources.CudaBloom.IsEnabled())
     {
-        renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateCudaBloomPass(resources, sceneReadyToken));
+        if (resources.CudaBloom.IsFrameworkRaster())
+        {
+            renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateFrameworkBloomPass(resources, sceneReadyToken));
+        }
+        else
+        {
+            renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateCudaBloomPass(resources, sceneReadyToken));
+        }
         sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::CudaBloomFinishedToken;
     }
 //Modify End

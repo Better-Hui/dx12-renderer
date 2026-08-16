@@ -56,6 +56,11 @@ namespace RaytracingDemoPasses
         static std::unique_ptr<RenderGraph::RenderPass> CreateCudaBloomPass(
             const RaytracingDemoPassResources& resources,
             RenderGraph::ResourceId sceneReadyToken);
+//Modify Begin:2026-08-16 by BestHui
+        static std::unique_ptr<RenderGraph::RenderPass> CreateFrameworkBloomPass(
+            const RaytracingDemoPassResources& resources,
+            RenderGraph::ResourceId sceneReadyToken);
+//Modify End
 //Modify Begin:2026-08-07 by BestHui
         static std::unique_ptr<RenderGraph::RenderPass> CreateDLSSPass(
             const RaytracingDemoPassResources& resources,

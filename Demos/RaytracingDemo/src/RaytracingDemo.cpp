@@ -1501,6 +1501,10 @@ void RaytracingDemo::LoadStartupConfiguration()
         {
             m_CudaBloom.SetMethod(CudaBloomPass::Method::Classic);
         }
+        else if (stringValue == "builtin" || stringValue == "framework" || stringValue == "framework-raster" || stringValue == "raster")
+        {
+            m_CudaBloom.SetMethod(CudaBloomPass::Method::FrameworkRaster);
+        }
     }
     if (configuration.TryGetFloat("CudaBloom", "Threshold", floatValue))
     {
@@ -2416,6 +2420,9 @@ void RaytracingDemo::RebuildRenderGraph()
         ? m_Denoisers.GetAlgorithm()
         : DenoiserController::Algorithm::Off;
     m_RenderGraphCudaBloomEnabled = m_CudaBloom.IsEnabled();
+//Modify Begin:2026-08-16 by BestHui
+    m_RenderGraphCudaBloomMethod = m_CudaBloom.GetMethod();
+//Modify End
 //Modify Begin:2026-08-07 by BestHui
     m_RenderGraphDLSSEnabled = m_DLSS.IsEnabled();
     m_RenderGraphRayReconstructionEnabled = m_DLSS.IsEnabled() && m_DLSS.IsRayReconstructionEnabled();
@@ -2451,6 +2458,9 @@ void RaytracingDemo::EnsureRenderGraphTopology()
             ? m_Denoisers.GetAlgorithm()
             : DenoiserController::Algorithm::Off) ||
         m_RenderGraphCudaBloomEnabled != m_CudaBloom.IsEnabled()
+//Modify Begin:2026-08-16 by BestHui
+        || m_RenderGraphCudaBloomMethod != m_CudaBloom.GetMethod()
+//Modify End
 //Modify Begin:2026-08-07 by BestHui
         || m_RenderGraphDLSSEnabled != m_DLSS.IsEnabled()
         || m_RenderGraphRayReconstructionEnabled != (m_DLSS.IsEnabled() && m_DLSS.IsRayReconstructionEnabled())
