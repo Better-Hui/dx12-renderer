@@ -103,12 +103,7 @@ add_library(${TARGET_NAME} STATIC ${HEADER_FILES} ${SOURCE_FILES} ${SHADER_FILES
 # Modify Begin:2026-08-16 by BestHui
 # Dear ImGui is compiled into Framework so every ImGui::Slider* call shares the same double-click input behavior.
 set(DX12_RENDERER_IMGUI_SOURCES
-        "${DX12_RENDERER_IMGUI_SOURCE_DIRECTORY}/imgui.cpp"
-        "${DX12_RENDERER_IMGUI_SOURCE_DIRECTORY}/imgui_draw.cpp"
-        "${DX12_RENDERER_IMGUI_SOURCE_DIRECTORY}/imgui_tables.cpp"
-        "${DX12_RENDERER_IMGUI_PATCHED_WIDGETS_SOURCE}"
-        "${DX12_RENDERER_IMGUI_SOURCE_DIRECTORY}/backends/imgui_impl_dx12.cpp"
-        "${DX12_RENDERER_IMGUI_SOURCE_DIRECTORY}/backends/imgui_impl_win32.cpp"
+        ${DX12_RENDERER_IMGUI_COMPILED_SOURCES}
         )
 target_sources(${TARGET_NAME} PRIVATE ${DX12_RENDERER_IMGUI_SOURCES})
 source_group("Third Party\\Dear ImGui" FILES ${DX12_RENDERER_IMGUI_SOURCES})
