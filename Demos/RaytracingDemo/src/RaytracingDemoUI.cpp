@@ -16,6 +16,12 @@ void RaytracingDemo::OnImGui()
     ImGui::Text("Resolution: %d x %d", m_Width, m_Height);
     ImGui::Text("Frame: %u", m_FrameIndex);
     ImGui::Text("Accumulation: %u", m_AccumulationFrameIndex);
+//Modify Begin:2026-07-30 by BestHui
+    if (!m_StartupConfigurationStatus.empty())
+    {
+        ImGui::TextDisabled("%s", m_StartupConfigurationStatus.c_str());
+    }
+//Modify End
     if (ImGui::Button("Save Scene"))
     {
         try
@@ -652,7 +658,9 @@ void RaytracingDemo::OnImGui()
         ResetAccumulation();
     }
 //Modify Begin:2026-07-27 by BestHui
-    if (m_CudaBloom.DrawImGui())
+    if (m_CudaBloom.DrawImGui(
+        static_cast<uint32_t>((std::max)(m_Width, 1)),
+        static_cast<uint32_t>((std::max)(m_Height, 1))))
     {
         ResetAccumulation(false);
     }

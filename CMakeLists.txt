@@ -87,29 +87,10 @@ foreach(DX12_RENDERER_STREAMLINE_FILE
 endforeach()
 # Modify End
 
-# Modify Begin:2026-08-10 by BestHui
-# Build NRD/NRI from their pinned source submodules. Only the D3D12 backend is required by Framework.
-set(NRI_STATIC_LIBRARY OFF CACHE BOOL "Build NRI as a shared library." FORCE)
-set(NRI_ENABLE_NVTX_SUPPORT OFF CACHE BOOL "Disable unused NRI NVTX support." FORCE)
-set(NRI_ENABLE_NONE_SUPPORT OFF CACHE BOOL "Disable unused NRI NONE backend." FORCE)
-set(NRI_ENABLE_VK_SUPPORT OFF CACHE BOOL "Disable unused NRI Vulkan backend." FORCE)
-set(NRI_ENABLE_VALIDATION_SUPPORT OFF CACHE BOOL "Disable unused NRI validation backend." FORCE)
-set(NRI_ENABLE_D3D11_SUPPORT OFF CACHE BOOL "Disable unused NRI D3D11 backend." FORCE)
-set(NRI_ENABLE_D3D12_SUPPORT ON CACHE BOOL "Enable the NRI D3D12 backend." FORCE)
-set(NRI_ENABLE_AMDAGS OFF CACHE BOOL "Disable unused NRI AMD AGS support." FORCE)
-set(NRI_ENABLE_NVAPI OFF CACHE BOOL "Disable unused NRI NVAPI support." FORCE)
-set(NRI_ENABLE_AGILITY_SDK_SUPPORT OFF CACHE BOOL "Use this project's Agility SDK integration." FORCE)
-add_subdirectory("${CMAKE_SOURCE_DIR}/External/NRI" "${CMAKE_BINARY_DIR}/External/NRI" EXCLUDE_FROM_ALL)
-
-set(NRD_STATIC_LIBRARY OFF CACHE BOOL "Build NRD as a shared library." FORCE)
-set(NRD_NRI OFF CACHE BOOL "Use the pinned top-level NRI target." FORCE)
-set(NRD_EMBEDS_SPIRV_SHADERS OFF CACHE BOOL "Disable unused NRD SPIR-V shader blobs." FORCE)
-set(NRD_EMBEDS_DXBC_SHADERS OFF CACHE BOOL "Disable unused NRD DXBC shader blobs." FORCE)
-set(NRD_EMBEDS_DXIL_SHADERS ON CACHE BOOL "Embed NRD DXIL shader blobs." FORCE)
-set(DX12_RENDERER_NRD_SHADER_INCLUDE_DIRECTORY "${CMAKE_BINARY_DIR}/External/NRD/Shaders")
-set(NRD_SHADERS_PATH "${DX12_RENDERER_NRD_SHADER_INCLUDE_DIRECTORY}" CACHE PATH "NRD generated shader directory." FORCE)
-file(MAKE_DIRECTORY "${DX12_RENDERER_NRD_SHADER_INCLUDE_DIRECTORY}")
-add_subdirectory("${CMAKE_SOURCE_DIR}/External/NRD" "${CMAKE_BINARY_DIR}/External/NRD" EXCLUDE_FROM_ALL)
+# Modify Begin:2026-08-16 by BestHui
+# Keep third-party targets out of the primary solution while retaining source builds.
+include(${CMAKE_SOURCE_DIR}/CMakeIncludes/ThirdPartyDependencies.cmake)
+include(${CMAKE_SOURCE_DIR}/CMakeIncludes/ImGui.cmake)
 # Modify End
 
 # Libraries

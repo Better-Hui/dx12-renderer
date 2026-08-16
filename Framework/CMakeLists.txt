@@ -74,6 +74,20 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/shaders" PREFIX "shaders" FILES $
 # Add source to this project's executable.
 add_library(${TARGET_NAME} STATIC ${HEADER_FILES} ${SOURCE_FILES} ${SHADER_FILES} ${SHADERS_HEADER_FILES})
 
+# Modify Begin:2026-08-16 by BestHui
+# Dear ImGui is compiled into Framework so every ImGui::Slider* call shares the same double-click input behavior.
+set(DX12_RENDERER_IMGUI_SOURCES
+        "${DX12_RENDERER_IMGUI_SOURCE_DIRECTORY}/imgui.cpp"
+        "${DX12_RENDERER_IMGUI_SOURCE_DIRECTORY}/imgui_draw.cpp"
+        "${DX12_RENDERER_IMGUI_SOURCE_DIRECTORY}/imgui_tables.cpp"
+        "${DX12_RENDERER_IMGUI_PATCHED_WIDGETS_SOURCE}"
+        "${DX12_RENDERER_IMGUI_SOURCE_DIRECTORY}/backends/imgui_impl_dx12.cpp"
+        "${DX12_RENDERER_IMGUI_SOURCE_DIRECTORY}/backends/imgui_impl_win32.cpp"
+        )
+target_sources(${TARGET_NAME} PRIVATE ${DX12_RENDERER_IMGUI_SOURCES})
+source_group("External\\ImGui" FILES ${DX12_RENDERER_IMGUI_SOURCES})
+# Modify End
+
 # Modify Begin:2026-07-28 by BestHui
 target_compile_options(${TARGET_NAME} PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 # Modify End
@@ -85,6 +99,10 @@ target_include_directories(${TARGET_NAME}
 # Modify Begin:2026-08-07 by BestHui
         PRIVATE "${DX12_RENDERER_DLSS_INCLUDE_DIRECTORY}"
         PRIVATE "${DX12_RENDERER_STREAMLINE_INCLUDE_DIRECTORY}"
+# Modify End
+# Modify Begin:2026-08-16 by BestHui
+        PUBLIC "${DX12_RENDERER_IMGUI_SOURCE_DIRECTORY}"
+        PUBLIC "${DX12_RENDERER_IMGUI_SOURCE_DIRECTORY}/backends"
 # Modify End
         )
 
@@ -130,20 +148,23 @@ target_link_libraries(${TARGET_NAME}
         PUBLIC NRI
 # Modify End
         )
-        
-# imgui
-find_package(imgui CONFIG REQUIRED)
-target_link_libraries(${TARGET_NAME} PUBLIC imgui::imgui)
+
+# Modify Begin:2026-08-16 by BestHui
+target_link_libraries(${TARGET_NAME} PRIVATE d3d12 dxgi dxguid imm32)
+# Modify End
 
 # Modify Begin:2026-07-30 by BestHui
 find_package(meshoptimizer CONFIG REQUIRED)
 target_link_libraries(${TARGET_NAME} PUBLIC meshoptimizer::meshoptimizer)
 # Modify End
 
-# Modify Begin:2026-07-29 by BestHui
-add_executable(UnitySceneDump "tools/UnitySceneDump.cpp")
-target_compile_options(UnitySceneDump PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
-target_compile_features(UnitySceneDump PRIVATE cxx_std_20)
-target_link_libraries(UnitySceneDump PRIVATE Framework)
-set_target_properties(UnitySceneDump PROPERTIES FOLDER "Tools")
+# Modify Begin:2026-08-16 by BestHui
+option(DX12_RENDERER_BUILD_DEVELOPER_TOOLS "Build developer-only command-line tools." OFF)
+if (DX12_RENDERER_BUILD_DEVELOPER_TOOLS)
+        add_executable(UnitySceneDump "tools/UnitySceneDump.cpp")
+        target_compile_options(UnitySceneDump PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+        target_compile_features(UnitySceneDump PRIVATE cxx_std_20)
+        target_link_libraries(UnitySceneDump PRIVATE Framework)
+        set_target_properties(UnitySceneDump PROPERTIES FOLDER "Tools")
+endif()
 # Modify End

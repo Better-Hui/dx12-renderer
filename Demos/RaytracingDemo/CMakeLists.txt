@@ -249,9 +249,13 @@ target_link_libraries(${TARGET_NAME}
         PUBLIC RenderGraph
         )
 
+# Modify Begin:2026-08-16 by BestHui
+# Build NRI and NRD in their own generated solution before shaders or linking need their artifacts.
+dx12_renderer_add_third_party_prebuild(${TARGET_NAME})
+# Modify End
+
 # Modify Begin:2026-07-27 by BestHui
 target_compile_options(${TARGET_NAME} PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
-target_link_options(${TARGET_NAME} PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/NODEFAULTLIB:LIBCMT>")
 
 # Modify Begin:2026-07-30 by BestHui
 set(DX12_RENDERER_CUDA_TOOLKIT_ROOT "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.8" CACHE PATH "CUDA Toolkit 12.8 root used by DX12 renderer CUDA interop.")
@@ -292,6 +296,14 @@ add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/Config/sl.interposer.json" "$<TARGET_FILE_DIR:${TARGET_NAME}>/sl.interposer.json"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DX12_RENDERER_STREAMLINE_ROOT}/sl.common.json" "$<TARGET_FILE_DIR:${TARGET_NAME}>/sl.common.json"
         # Modify End
+# Modify Begin:2026-08-16 by BestHui
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:NRI>" "$<TARGET_FILE_DIR:${TARGET_NAME}>/NRI.dll"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:NRD>" "$<TARGET_FILE_DIR:${TARGET_NAME}>/NRD.dll"
+# Modify End
+# Modify Begin:2026-07-30 by BestHui
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${TARGET_NAME}>/Config"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/Config/RaytracingDemo.ini" "$<TARGET_FILE_DIR:${TARGET_NAME}>/Config/RaytracingDemo.ini"
+# Modify End
         # Modify Begin:2026-08-03 by BestHui
         COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${TARGET_NAME}>/Assets/Scenes"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/Assets/Scenes/DefaultScene.json" "$<TARGET_FILE_DIR:${TARGET_NAME}>/Assets/Scenes/DefaultScene.json"

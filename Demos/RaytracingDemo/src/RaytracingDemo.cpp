@@ -27,14 +27,17 @@
 #include <imgui.h>
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <random>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -132,20 +135,50 @@ namespace
         return true;
     }
 
-    bool TryGetEnvironmentLightingTechnique(
-        const char* variableName,
+//Modify Begin:2026-08-16 by BestHui
+    std::string Trim(std::string value)
+    {
+        const auto first = std::find_if_not(value.begin(), value.end(), [](unsigned char character)
+        {
+            return std::isspace(character) != 0;
+        });
+        const auto last = std::find_if_not(value.rbegin(), value.rend(), [](unsigned char character)
+        {
+            return std::isspace(character) != 0;
+        }).base();
+        return first >= last ? std::string() : std::string(first, last);
+    }
+
+    std::string ToLower(std::string value)
+    {
+        std::transform(value.begin(), value.end(), value.begin(), [](unsigned char character)
+        {
+            return static_cast<char>(std::tolower(character));
+        });
+        return value;
+    }
+
+    bool TryParseBoolean(const std::string& text, bool& value)
+    {
+        const std::string normalized = ToLower(Trim(text));
+        if (normalized == "1" || normalized == "true" || normalized == "on" || normalized == "yes")
+        {
+            value = true;
+            return true;
+        }
+        if (normalized == "0" || normalized == "false" || normalized == "off" || normalized == "no")
+        {
+            value = false;
+            return true;
+        }
+        return false;
+    }
+
+    bool TryParseLightingTechnique(
+        const std::string& text,
         RaytracingDemoLightingTechnique& technique)
     {
-        char* environmentValue = nullptr;
-        size_t environmentValueLength = 0;
-        _dupenv_s(&environmentValue, &environmentValueLength, variableName);
-        if (environmentValue == nullptr)
-        {
-            return false;
-        }
-
-        const std::string value(environmentValue);
-        std::free(environmentValue);
+        const std::string value = ToLower(Trim(text));
         if (value == "none")
         {
             technique = RaytracingDemoLightingTechnique::None;
@@ -168,6 +201,141 @@ namespace
         }
         return false;
     }
+
+    bool TryGetEnvironmentLightingTechnique(
+        const char* variableName,
+        RaytracingDemoLightingTechnique& technique)
+    {
+        char* environmentValue = nullptr;
+        size_t environmentValueLength = 0;
+        _dupenv_s(&environmentValue, &environmentValueLength, variableName);
+        if (environmentValue == nullptr)
+        {
+            return false;
+        }
+
+        const std::string value(environmentValue);
+        std::free(environmentValue);
+        return TryParseLightingTechnique(value, technique);
+    }
+
+    class StartupIni final
+    {
+    public:
+        bool TryGetString(const char* section, const char* key, std::string& value) const
+        {
+            const auto iterator = m_Values.find(MakeKey(section, key));
+            if (iterator == m_Values.end())
+            {
+                return false;
+            }
+            value = iterator->second;
+            return true;
+        }
+
+        bool TryGetBoolean(const char* section, const char* key, bool& value) const
+        {
+            std::string text;
+            return TryGetString(section, key, text) && TryParseBoolean(text, value);
+        }
+
+        bool TryGetInt(const char* section, const char* key, int& value) const
+        {
+            std::string text;
+            if (!TryGetString(section, key, text))
+            {
+                return false;
+            }
+
+            char* parseEnd = nullptr;
+            const long parsed = std::strtol(text.c_str(), &parseEnd, 10);
+            if (parseEnd == text.c_str() || *parseEnd != '\0')
+            {
+                return false;
+            }
+            value = static_cast<int>(parsed);
+            return true;
+        }
+
+        bool TryGetFloat(const char* section, const char* key, float& value) const
+        {
+            std::string text;
+            if (!TryGetString(section, key, text))
+            {
+                return false;
+            }
+
+            char* parseEnd = nullptr;
+            const float parsed = std::strtof(text.c_str(), &parseEnd);
+            if (parseEnd == text.c_str() || *parseEnd != '\0' || !std::isfinite(parsed))
+            {
+                return false;
+            }
+            value = parsed;
+            return true;
+        }
+
+        const std::string& GetStatus() const { return m_Status; }
+
+        static StartupIni Load(const std::filesystem::path& path)
+        {
+            StartupIni ini;
+            std::ifstream stream(path);
+            if (!stream)
+            {
+                ini.m_Status = "Startup config not found; using built-in defaults.";
+                return ini;
+            }
+
+            std::string section;
+            std::string line;
+            while (std::getline(stream, line))
+            {
+                const size_t comment = line.find_first_of(";#");
+                if (comment != std::string::npos)
+                {
+                    line.erase(comment);
+                }
+
+                line = Trim(std::move(line));
+                if (line.empty())
+                {
+                    continue;
+                }
+                if (line.front() == '[' && line.back() == ']')
+                {
+                    section = ToLower(Trim(line.substr(1, line.size() - 2)));
+                    continue;
+                }
+
+                const size_t separator = line.find('=');
+                if (separator == std::string::npos || section.empty())
+                {
+                    continue;
+                }
+
+                const std::string key = Trim(line.substr(0, separator));
+                const std::string value = Trim(line.substr(separator + 1));
+                if (!key.empty())
+                {
+                    ini.m_Values[MakeKey(section.c_str(), key.c_str())] = value;
+                }
+            }
+
+            ini.m_Status = "Startup config loaded: " + path.string();
+            return ini;
+        }
+
+    private:
+        static std::string MakeKey(const char* section, const char* key)
+        {
+            return ToLower(std::string(section) + "." + key);
+        }
+
+        std::unordered_map<std::string, std::string> m_Values;
+        std::string m_Status;
+    };
+//Modify End
 //Modify End
 
 //Modify Begin:2026-08-03 by BestHui
@@ -758,12 +926,25 @@ RaytracingDemo::RaytracingDemo(
 //Modify End
     GetSceneCamera().SetProjection(m_CameraFov, static_cast<float>(m_Width) / static_cast<float>(m_Height), 0.1f, 1000.0f);
 
+//Modify Begin:2026-07-30 by BestHui
+    m_DLSS.SetMode(DLSSMode::Quality);
+    LoadStartupConfiguration();
+//Modify End
+
     char* mode = nullptr;
     size_t modeLength = 0;
     _dupenv_s(&mode, &modeLength, "RAYTRACING_DEMO_MODE");
-    if (mode != nullptr && std::strcmp(mode, "shader-table") == 0)
+    if (mode != nullptr)
     {
-        m_PathTracingBackend = PathTracingBackend::ShaderTableDxr;
+        const std::string environmentMode = ToLower(mode);
+        if (environmentMode == "shader-table" || environmentMode == "shader-table-dxr" || environmentMode == "dxr")
+        {
+            m_PathTracingBackend = PathTracingBackend::ShaderTableDxr;
+        }
+        else if (environmentMode == "inline" || environmentMode == "inline-ray-query")
+        {
+            m_PathTracingBackend = PathTracingBackend::InlineRayQuery;
+        }
     }
     std::free(mode);
 
@@ -787,13 +968,15 @@ RaytracingDemo::RaytracingDemo(
     char* materialShadingModel = nullptr;
     size_t materialShadingModelLength = 0;
     _dupenv_s(&materialShadingModel, &materialShadingModelLength, "RAYTRACING_DEMO_MATERIAL_SHADING");
-    m_MaterialShadingModel = ParseMaterialShadingModel(materialShadingModel);
+    if (materialShadingModel != nullptr)
+    {
+        m_MaterialShadingModel = ParseMaterialShadingModel(materialShadingModel);
+    }
     std::free(materialShadingModel);
 //Modify End
 
 //Modify Begin:2026-08-10 by BestHui
-    // Default to the full demo path; environment variables below can override it.
-    m_DLSS.SetMode(DLSSMode::Quality);
+    // Environment variables override startup configuration values.
     TryGetEnvironmentLightingTechnique("RAYTRACING_DEMO_DIRECT_LIGHTING", m_DirectLightingTechnique);
     TryGetEnvironmentLightingTechnique("RAYTRACING_DEMO_INDIRECT_LIGHTING", m_IndirectLightingTechnique);
     TryGetEnvironmentBoolean("RAYTRACING_DEMO_ACCUMULATION", m_AccumulationEnabled);
@@ -1050,6 +1233,307 @@ void RaytracingDemo::ResetCameraToInitialSceneState()
     m_HasPreviousViewProjection = false;
     ResetAccumulation();
 }
+
+//Modify Begin:2026-07-30 by BestHui
+void RaytracingDemo::LoadStartupConfiguration()
+{
+    const std::filesystem::path configurationPath = std::filesystem::current_path() / "Config" / "RaytracingDemo.ini";
+    const StartupIni configuration = StartupIni::Load(configurationPath);
+    m_StartupConfigurationStatus = configuration.GetStatus();
+
+    auto applyBackend = [&](const char* section, const char* key)
+    {
+        std::string value;
+        if (!configuration.TryGetString(section, key, value))
+        {
+            return;
+        }
+
+        value = ToLower(value);
+        if (value == "shader-table" || value == "shader-table-dxr" || value == "dxr")
+        {
+            m_PathTracingBackend = PathTracingBackend::ShaderTableDxr;
+        }
+        else if (value == "inline" || value == "inline-ray-query")
+        {
+            m_PathTracingBackend = PathTracingBackend::InlineRayQuery;
+        }
+    };
+
+    auto applyLightingTechnique = [&](const char* section, const char* key, RaytracingDemoLightingTechnique& technique)
+    {
+        std::string value;
+        RaytracingDemoLightingTechnique parsedTechnique = technique;
+        if (configuration.TryGetString(section, key, value) && TryParseLightingTechnique(value, parsedTechnique))
+        {
+            technique = parsedTechnique;
+        }
+    };
+
+    applyBackend("Renderer", "PathTracingBackend");
+    applyLightingTechnique("Renderer", "DirectLighting", m_DirectLightingTechnique);
+    applyLightingTechnique("Renderer", "IndirectLighting", m_IndirectLightingTechnique);
+
+    bool boolValue = false;
+    int intValue = 0;
+    float floatValue = 0.0f;
+    if (configuration.TryGetInt("Renderer", "MaxBounces", intValue))
+    {
+        m_MaxBounces = std::clamp(intValue, 1, 5);
+    }
+    if (configuration.TryGetBoolean("Renderer", "Accumulation", boolValue))
+    {
+        m_AccumulationEnabled = boolValue;
+    }
+    if (configuration.TryGetBoolean("Renderer", "SoftShadows", boolValue))
+    {
+        m_SoftShadowsEnabled = boolValue;
+    }
+    if (configuration.TryGetBoolean("Renderer", "AsyncCompute", boolValue))
+    {
+        m_AsyncComputeEnabled = boolValue;
+    }
+    if (configuration.TryGetBoolean("Renderer", "ParallelDirectCommandRecording", boolValue))
+    {
+        m_ParallelDirectCommandRecordingEnabled = boolValue;
+    }
+    if (configuration.TryGetBoolean("Renderer", "MeshletGBuffer", boolValue))
+    {
+        m_UseMeshletGBuffer = boolValue;
+    }
+    if (configuration.TryGetBoolean("Renderer", "MeshletDebug", boolValue))
+    {
+        m_DebugMeshletClusters = boolValue;
+        if (boolValue)
+        {
+            m_UseMeshletGBuffer = true;
+        }
+    }
+    std::string stringValue;
+    if (configuration.TryGetString("Renderer", "MeshletBackend", stringValue))
+    {
+        stringValue = ToLower(stringValue);
+        if (stringValue == "task" || stringValue == "task-shader")
+        {
+            m_UseTaskShaderMeshlets = true;
+        }
+        else if (stringValue == "indirect" || stringValue == "compute-indirect")
+        {
+            m_UseTaskShaderMeshlets = false;
+        }
+    }
+    if (configuration.TryGetString("Renderer", "MaterialShading", stringValue))
+    {
+        stringValue = ToLower(stringValue);
+        m_MaterialShadingModel = ParseMaterialShadingModel(stringValue.c_str());
+    }
+
+    if (configuration.TryGetString("Denoiser", "Algorithm", stringValue))
+    {
+        stringValue = ToLower(stringValue);
+        m_Denoisers.SetAlgorithmFromName(stringValue.c_str());
+    }
+
+    if (configuration.TryGetString("DLSS", "Mode", stringValue))
+    {
+        stringValue = ToLower(stringValue);
+        m_DLSS.SetMode(ParseDLSSMode(stringValue.c_str()));
+    }
+    if (configuration.TryGetBoolean("DLSS", "RayReconstruction", boolValue))
+    {
+        m_DLSS.SetRayReconstructionEnabled(boolValue);
+    }
+    if (configuration.TryGetBoolean("DLSS", "FrameGeneration", boolValue))
+    {
+        m_DLSS.SetFrameGenerationEnabled(boolValue);
+    }
+
+    ReSTIRDISettings restirDISettings = m_DirectLightingReSTIRDI.GetSettings();
+    if (configuration.TryGetInt("ReSTIRDI", "CandidateCount", intValue))
+    {
+        restirDISettings.CandidateCount = static_cast<uint32_t>(std::clamp(intValue, 1, 32));
+    }
+    if (configuration.TryGetBoolean("ReSTIRDI", "InitialVisibility", boolValue))
+    {
+        restirDISettings.EnableInitialVisibility = boolValue;
+    }
+    if (configuration.TryGetBoolean("ReSTIRDI", "TemporalResampling", boolValue))
+    {
+        restirDISettings.EnableTemporalResampling = boolValue;
+    }
+    if (configuration.TryGetString("ReSTIRDI", "TemporalBiasCorrection", stringValue))
+    {
+        stringValue = ToLower(stringValue);
+        if (stringValue == "off")
+        {
+            restirDISettings.TemporalBiasCorrection = ReSTIRDITemporalBiasCorrectionMode::Off;
+        }
+        else if (stringValue == "basic")
+        {
+            restirDISettings.TemporalBiasCorrection = ReSTIRDITemporalBiasCorrectionMode::Basic;
+        }
+        else if (stringValue == "raytraced" || stringValue == "ray-traced")
+        {
+            restirDISettings.TemporalBiasCorrection = ReSTIRDITemporalBiasCorrectionMode::RayTraced;
+        }
+    }
+    if (configuration.TryGetBoolean("ReSTIRDI", "TemporalVisibilityShortcut", boolValue))
+    {
+        restirDISettings.EnableTemporalVisibilityShortcut = boolValue;
+    }
+    if (configuration.TryGetBoolean("ReSTIRDI", "TemporalPermutationSampling", boolValue))
+    {
+        restirDISettings.EnableTemporalPermutationSampling = boolValue;
+    }
+    if (configuration.TryGetBoolean("ReSTIRDI", "BoilingFilter", boolValue))
+    {
+        restirDISettings.EnableBoilingFilter = boolValue;
+    }
+    if (configuration.TryGetFloat("ReSTIRDI", "BoilingFilterStrength", floatValue))
+    {
+        restirDISettings.BoilingFilterStrength = std::max(0.0f, floatValue);
+    }
+    if (configuration.TryGetBoolean("ReSTIRDI", "SpatialResampling", boolValue))
+    {
+        restirDISettings.EnableSpatialResampling = boolValue;
+    }
+    if (configuration.TryGetString("ReSTIRDI", "SpatialBiasCorrection", stringValue))
+    {
+        stringValue = ToLower(stringValue);
+        if (stringValue == "off")
+        {
+            restirDISettings.SpatialBiasCorrection = ReSTIRDISpatialBiasCorrectionMode::Off;
+        }
+        else if (stringValue == "basic")
+        {
+            restirDISettings.SpatialBiasCorrection = ReSTIRDISpatialBiasCorrectionMode::Basic;
+        }
+        else if (stringValue == "pairwise")
+        {
+            restirDISettings.SpatialBiasCorrection = ReSTIRDISpatialBiasCorrectionMode::Pairwise;
+        }
+        else if (stringValue == "raytraced" || stringValue == "ray-traced")
+        {
+            restirDISettings.SpatialBiasCorrection = ReSTIRDISpatialBiasCorrectionMode::RayTraced;
+        }
+    }
+    if (configuration.TryGetInt("ReSTIRDI", "SpatialNeighborCount", intValue))
+    {
+        restirDISettings.SpatialNeighborCount = static_cast<uint32_t>(std::clamp(intValue, 1, 32));
+    }
+    if (configuration.TryGetInt("ReSTIRDI", "SpatialDisocclusionBoostSampleCount", intValue))
+    {
+        restirDISettings.SpatialDisocclusionBoostSampleCount = static_cast<uint32_t>(std::clamp(intValue, 1, 32));
+    }
+    if (configuration.TryGetInt("ReSTIRDI", "SpatialTargetHistoryLength", intValue))
+    {
+        restirDISettings.SpatialTargetHistoryLength = static_cast<uint32_t>(std::clamp(intValue, 0, 64));
+    }
+    if (configuration.TryGetBoolean("ReSTIRDI", "SpatialMaterialSimilarityTest", boolValue))
+    {
+        restirDISettings.EnableSpatialMaterialSimilarityTest = boolValue;
+    }
+    if (configuration.TryGetBoolean("ReSTIRDI", "FinalVisibility", boolValue))
+    {
+        restirDISettings.EnableFinalVisibility = boolValue;
+    }
+    if (configuration.TryGetBoolean("ReSTIRDI", "ReuseFinalVisibility", boolValue))
+    {
+        restirDISettings.ReuseFinalVisibility = boolValue;
+    }
+    if (configuration.TryGetBoolean("ReSTIRDI", "DiscardInvisibleFinalSamples", boolValue))
+    {
+        restirDISettings.DiscardInvisibleFinalSamples = boolValue;
+    }
+    if (configuration.TryGetInt("ReSTIRDI", "FinalVisibilityMaxAge", intValue))
+    {
+        restirDISettings.FinalVisibilityMaxAge = static_cast<uint32_t>(std::clamp(intValue, 0, 16));
+    }
+    if (configuration.TryGetFloat("ReSTIRDI", "FinalVisibilityMaxDistance", floatValue))
+    {
+        restirDISettings.FinalVisibilityMaxDistance = std::max(0.0f, floatValue);
+    }
+    m_DirectLightingReSTIRDI.SetSettings(restirDISettings);
+
+    ReSTIRGISettings restirGISettings = m_IndirectLightingReSTIRGI.GetSettings();
+    if (configuration.TryGetInt("ReSTIRGI", "InitialCandidateCount", intValue))
+    {
+        restirGISettings.InitialCandidateCount = static_cast<uint32_t>(std::clamp(intValue, 1, 32));
+    }
+    if (configuration.TryGetBoolean("ReSTIRGI", "TemporalResampling", boolValue))
+    {
+        restirGISettings.EnableTemporalResampling = boolValue;
+    }
+    if (configuration.TryGetBoolean("ReSTIRGI", "SpatialResampling", boolValue))
+    {
+        restirGISettings.EnableSpatialResampling = boolValue;
+    }
+    if (configuration.TryGetBoolean("ReSTIRGI", "TemporalJacobian", boolValue))
+    {
+        restirGISettings.EnableTemporalJacobian = boolValue;
+    }
+    if (configuration.TryGetBoolean("ReSTIRGI", "RayTracedSpatialBiasCorrection", boolValue))
+    {
+        restirGISettings.EnableRayTracedSpatialBiasCorrection = boolValue;
+    }
+    if (configuration.TryGetInt("ReSTIRGI", "SpatialNeighborCount", intValue))
+    {
+        restirGISettings.SpatialNeighborCount = static_cast<uint32_t>(std::clamp(intValue, 1, 16));
+    }
+    m_IndirectLightingReSTIRGI.SetSettings(restirGISettings);
+
+    if (configuration.TryGetBoolean("CudaBloom", "Enabled", boolValue))
+    {
+        m_CudaBloom.SetEnabled(boolValue);
+    }
+    if (configuration.TryGetString("CudaBloom", "Method", stringValue))
+    {
+        stringValue = ToLower(stringValue);
+        if (stringValue == "boxfilter" || stringValue == "box-filter" || stringValue == "box-filter-approximation")
+        {
+            m_CudaBloom.SetMethod(CudaBloomPass::Method::BoxFilterApproximation);
+        }
+        else if (stringValue == "boxfilter-original" || stringValue == "box-filter-original" || stringValue == "box-filter-original-paper")
+        {
+            m_CudaBloom.SetMethod(CudaBloomPass::Method::BoxFilterOriginalPaper);
+        }
+        else if (stringValue == "classic")
+        {
+            m_CudaBloom.SetMethod(CudaBloomPass::Method::Classic);
+        }
+    }
+    if (configuration.TryGetFloat("CudaBloom", "Threshold", floatValue))
+    {
+        m_CudaBloom.SetThreshold(std::max(0.0f, floatValue));
+    }
+    if (configuration.TryGetFloat("CudaBloom", "SoftThreshold", floatValue))
+    {
+        m_CudaBloom.SetSoftThreshold(std::max(0.0f, floatValue));
+    }
+    if (configuration.TryGetFloat("CudaBloom", "Intensity", floatValue))
+    {
+        m_CudaBloom.SetIntensity(std::max(0.0f, floatValue));
+    }
+    if (configuration.TryGetInt("CudaBloom", "PyramidLevels", intValue))
+    {
+        m_CudaBloom.SetPyramidLevels(std::clamp(
+            intValue,
+            1,
+            static_cast<int>(CudaBloomPass::ComputeMaxPyramidLevels(
+                static_cast<uint32_t>((std::max)(m_Width, 1)),
+                static_cast<uint32_t>((std::max)(m_Height, 1))))));
+    }
+    if (configuration.TryGetFloat("CudaBloom", "BoxFilterSigma", floatValue))
+    {
+        m_CudaBloom.SetBoxFilterSigma(std::max(0.001f, floatValue));
+    }
+
+    if (configuration.TryGetBoolean("Debug", "GpuTiming", boolValue))
+    {
+        m_GpuTimingEnabled = boolValue;
+    }
+}
+//Modify End
 
 //Modify Begin:2026-08-07 by BestHui
 void RaytracingDemo::InitializeRuntimeAutomation()

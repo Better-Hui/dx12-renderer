@@ -165,6 +165,9 @@ private:
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
     void ResetCameraToInitialSceneState();
+//Modify Begin:2026-08-16 by BestHui
+    void LoadStartupConfiguration();
+//Modify End
     void InitializeRuntimeAutomation();
     void UpdateRuntimeAutomation(double totalTime);
     void ApplyRuntimeAutomationAction(uint32_t action, uint32_t value);
@@ -370,6 +373,9 @@ private:
     Scene m_Scene;
     bool m_HasSceneCamera = false;
     std::string m_CameraSaveStatus;
+//Modify Begin:2026-08-16 by BestHui
+    std::string m_StartupConfigurationStatus;
+//Modify End
 //Modify End
 
     struct

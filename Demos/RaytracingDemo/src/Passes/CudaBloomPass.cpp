@@ -22,6 +22,26 @@ namespace
 }
 
 //Modify Begin:2026-07-30 by BestHui
+uint32_t CudaBloomPass::ComputeMaxPyramidLevels(const uint32_t width, const uint32_t height)
+{
+    uint32_t levelWidth = HalfSize(width);
+    uint32_t levelHeight = HalfSize(height);
+    uint32_t levelCount = 0u;
+    do
+    {
+        ++levelCount;
+        if (levelWidth == 1u && levelHeight == 1u)
+        {
+            break;
+        }
+        levelWidth = HalfSize(levelWidth);
+        levelHeight = HalfSize(levelHeight);
+    } while (true);
+    return levelCount;
+}
+//Modify End
+
+//Modify Begin:2026-07-30 by BestHui
 CudaBloomPass::CudaBloomPass(FrameworkDeviceContext& deviceContext)
     : m_DeviceContext(deviceContext)
 {
@@ -39,6 +59,10 @@ void CudaBloomPass::Shutdown()
 //Modify Begin:2026-07-30 by BestHui
     ReleaseCudaTimingFrames();
     m_PyramidTextures.Release(&m_CudaContext);
+//Modify Begin:2026-07-30 by BestHui
+    m_PyramidWidth.clear();
+    m_PyramidHeight.clear();
+//Modify End
 //Modify End
     m_CudaContext.UnloadModule(m_Module);
     m_CudaContext.Shutdown();
@@ -56,16 +80,42 @@ void CudaBloomPass::ReleaseInteropResource()
     m_Height = 0;
 }
 
-bool CudaBloomPass::DrawImGui()
+//Modify Begin:2026-08-16 by BestHui
+bool CudaBloomPass::DrawImGui(const uint32_t width, const uint32_t height)
 {
     bool changed = false;
     if (ImGui::CollapsingHeader("CUDA Bloom"))
     {
         changed |= ImGui::Checkbox("Enable CUDA Bloom", &m_Enabled);
+//Modify Begin:2026-08-16 by BestHui
+        const char* bloomMethodNames[] = {
+            "Classic Additive Pyramid",
+            "Box Filter Approximation (optimized)",
+            "Box Filter Approximation (original paper)"
+        };
+        int bloomMethod = static_cast<int>(m_Method);
+        if (ImGui::Combo("Bloom Method", &bloomMethod, bloomMethodNames, IM_ARRAYSIZE(bloomMethodNames)))
+        {
+            m_Method = static_cast<Method>(bloomMethod);
+            changed = true;
+        }
+//Modify End
         changed |= ImGui::SliderFloat("Bloom Threshold", &m_Threshold, 0.0f, 5.0f, "%.2f");
         changed |= ImGui::SliderFloat("Bloom Soft Knee", &m_SoftThreshold, 0.0f, 2.0f, "%.2f");
         changed |= ImGui::SliderFloat("Bloom Intensity", &m_Intensity, 0.0f, 5.0f, "%.2f");
-        changed |= ImGui::SliderInt("Bloom Pyramid Levels", &m_PyramidLevels, 1, static_cast<int>(MaxBloomPyramidLevels));
+//Modify Begin:2026-07-30 by BestHui
+        const uint32_t pyramidWidth = m_Width > 0u ? m_Width : width;
+        const uint32_t pyramidHeight = m_Height > 0u ? m_Height : height;
+        const int maxPyramidLevels = static_cast<int>(ComputeMaxPyramidLevels(pyramidWidth, pyramidHeight));
+        m_PyramidLevels = std::clamp(m_PyramidLevels, 1, maxPyramidLevels);
+        changed |= ImGui::SliderInt("Bloom Pyramid Levels", &m_PyramidLevels, 1, maxPyramidLevels);
+//Modify End
+//Modify Begin:2026-08-16 by BestHui
+        if (m_Method != Method::Classic)
+        {
+            changed |= ImGui::SliderFloat("Box Filter Sigma", &m_BoxFilterSigma, 0.1f, 16.0f, "%.2f");
+        }
+//Modify End
 //Modify Begin:2026-07-30 by BestHui
         if (m_LastCudaTiming.Valid)
         {
@@ -81,6 +131,7 @@ bool CudaBloomPass::DrawImGui()
     }
     return changed;
 }
+//Modify End
 
 bool CudaBloomPass::InitializeCuda()
 {
@@ -107,7 +158,11 @@ bool CudaBloomPass::InitializeCuda()
 
     if (!m_CudaContext.GetFunction(m_Module, "PrefilterDownsampleCascadeKernel", m_PrefilterDownsampleCascadeKernel, error) ||
         !m_CudaContext.GetFunction(m_Module, "DownsampleCascadeKernel", m_DownsampleCascadeKernel, error) ||
-        !m_CudaContext.GetFunction(m_Module, "UpsampleAddKernel", m_UpsampleAddKernel, error) ||
+//Modify Begin:2026-07-30 by BestHui
+        !m_CudaContext.GetFunction(m_Module, "UpsampleClassicKernel", m_UpsampleClassicKernel, error) ||
+        !m_CudaContext.GetFunction(m_Module, "UpsampleBoxFilterKernel", m_UpsampleBoxFilterKernel, error) ||
+        !m_CudaContext.GetFunction(m_Module, "UpsampleBoxFilterOriginalKernel", m_UpsampleBoxFilterOriginalKernel, error) ||
+//Modify End
         !m_CudaContext.GetFunction(m_Module, "CompositeBloomKernel", m_CompositeBloomKernel, error))
     {
         m_Status = error;
@@ -243,6 +298,10 @@ bool CudaBloomPass::EnsureCudaPyramidTextures(const uint32_t width, const uint32
 
     uint32_t levelWidth = HalfSize(width);
     uint32_t levelHeight = HalfSize(height);
+//Modify Begin:2026-07-30 by BestHui
+    m_PyramidWidth.resize(levelCount);
+    m_PyramidHeight.resize(levelCount);
+//Modify End
     for (uint32_t level = 0; level < levelCount; ++level)
     {
         std::string error;
@@ -425,7 +484,9 @@ void CudaBloomPass::RecordCudaTimingEvent(CUevent cudaEvent)
 
 bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
 {
-    const uint32_t levelCount = static_cast<uint32_t>(std::clamp(m_PyramidLevels, 1, static_cast<int>(MaxBloomPyramidLevels)));
+    const uint32_t maxPyramidLevels = ComputeMaxPyramidLevels(width, height);
+    m_PyramidLevels = std::clamp(m_PyramidLevels, 1, static_cast<int>(maxPyramidLevels));
+    const uint32_t levelCount = static_cast<uint32_t>(m_PyramidLevels);
 //Modify Begin:2026-07-30 by BestHui
     if (!EnsureCudaPyramidTextures(width, height, levelCount))
 //Modify End
@@ -469,6 +530,9 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
     float threshold = m_Threshold;
     float softThreshold = m_SoftThreshold;
     float intensity = m_Intensity;
+//Modify Begin:2026-08-16 by BestHui
+    float boxFilterSigma = (std::max)(m_BoxFilterSigma, 0.001f);
+//Modify End
 
 //Modify Begin:2026-07-30 by BestHui
     if (m_ActiveCudaTimingFrameIndex >= 0)
@@ -594,7 +658,10 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
 //Modify End
         uint32_t highWidth = m_PyramidWidth[level - 1u];
         uint32_t highHeight = m_PyramidHeight[level - 1u];
-        void* upsampleArgs[] = {
+//Modify Begin:2026-08-16 by BestHui
+        uint32_t highLevel = level - 1u;
+//Modify End
+        void* classicUpsampleArgs[] = {
             &low,
             &high,
 //Modify Begin:2026-07-30 by BestHui
@@ -603,8 +670,33 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
             &highWidth,
             &highHeight,
         };
+        void* boxFilterUpsampleArgs[] = {
+            &low,
+            &high,
+            &highOutput,
+            &highWidth,
+            &highHeight,
+            &highLevel,
+            &boxFilterSigma,
+        };
+        CUfunction upsampleKernel = m_UpsampleClassicKernel;
+        void** upsampleArgs = classicUpsampleArgs;
+        switch (m_Method)
+        {
+        case Method::BoxFilterApproximation:
+            upsampleKernel = m_UpsampleBoxFilterKernel;
+            upsampleArgs = boxFilterUpsampleArgs;
+            break;
+        case Method::BoxFilterOriginalPaper:
+            upsampleKernel = m_UpsampleBoxFilterOriginalKernel;
+            upsampleArgs = boxFilterUpsampleArgs;
+            break;
+        case Method::Classic:
+        default:
+            break;
+        }
         result = cuLaunchKernel(
-            m_UpsampleAddKernel,
+            upsampleKernel,
             DivideRoundUp(highWidth, blockX),
             DivideRoundUp(highHeight, blockY),
             1u,

@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 #include <array>
+#include <vector>
 
 #include <d3d12.h>
 
@@ -15,27 +16,48 @@ class FrameworkDeviceContext;
 class CudaBloomPass final
 {
 public:
+//Modify Begin:2026-08-16 by BestHui
+    enum class Method : uint32_t
+    {
+        Classic = 0,
+        BoxFilterApproximation = 1,
+        BoxFilterOriginalPaper = 2,
+    };
+//Modify End
 //Modify Begin:2026-07-30 by BestHui
     explicit CudaBloomPass(FrameworkDeviceContext& deviceContext);
 //Modify End
     ~CudaBloomPass();
 
-    bool DrawImGui();
+//Modify Begin:2026-07-30 by BestHui
+    bool DrawImGui(uint32_t width, uint32_t height);
+//Modify End
 //Modify Begin:2026-07-28 by BestHui
     bool ExecuteInPlace(Texture& postProcessColor, uint32_t width, uint32_t height, ID3D12CommandQueue* d3d12CommandQueue);
     void ReleaseInteropResource();
 //Modify End
     void Shutdown();
 
+//Modify Begin:2026-07-30 by BestHui
+    static uint32_t ComputeMaxPyramidLevels(uint32_t width, uint32_t height);
+//Modify End
+
     bool IsEnabled() const { return m_Enabled; }
     void SetEnabled(bool enabled) { m_Enabled = enabled; }
     const std::string& GetStatus() const { return m_Status; }
+//Modify Begin:2026-08-16 by BestHui
+    void SetMethod(Method method) { m_Method = method; }
+    void SetThreshold(float threshold) { m_Threshold = threshold; }
+    void SetSoftThreshold(float softThreshold) { m_SoftThreshold = softThreshold; }
+    void SetIntensity(float intensity) { m_Intensity = intensity; }
+    void SetPyramidLevels(int pyramidLevels) { m_PyramidLevels = pyramidLevels; }
+    void SetBoxFilterSigma(float sigma) { m_BoxFilterSigma = sigma; }
+//Modify End
 
 private:
 //Modify Begin:2026-07-30 by BestHui
     FrameworkDeviceContext& m_DeviceContext;
 //Modify End
-    static constexpr uint32_t MaxBloomPyramidLevels = 8;
 //Modify Begin:2026-07-30 by BestHui
     static constexpr uint32_t CudaTimingFrameCount = 3;
 
@@ -87,6 +109,10 @@ private:
     float m_SoftThreshold = 0.30f;
     float m_Intensity = 0.75f;
     int m_PyramidLevels = 5;
+//Modify Begin:2026-08-16 by BestHui
+    Method m_Method = Method::Classic;
+    float m_BoxFilterSigma = 1.0f;
+//Modify End
     std::string m_Status = "CUDA bloom is not initialized.";
 
     CudaContext m_CudaContext;
@@ -98,10 +124,16 @@ private:
     CUmodule m_Module = nullptr;
     CUfunction m_PrefilterDownsampleCascadeKernel = nullptr;
     CUfunction m_DownsampleCascadeKernel = nullptr;
-    CUfunction m_UpsampleAddKernel = nullptr;
+//Modify Begin:2026-07-30 by BestHui
+    CUfunction m_UpsampleClassicKernel = nullptr;
+    CUfunction m_UpsampleBoxFilterKernel = nullptr;
+    CUfunction m_UpsampleBoxFilterOriginalKernel = nullptr;
+//Modify End
     CUfunction m_CompositeBloomKernel = nullptr;
-    std::array<uint32_t, MaxBloomPyramidLevels> m_PyramidWidth = {};
-    std::array<uint32_t, MaxBloomPyramidLevels> m_PyramidHeight = {};
+//Modify Begin:2026-07-30 by BestHui
+    std::vector<uint32_t> m_PyramidWidth;
+    std::vector<uint32_t> m_PyramidHeight;
+//Modify End
 //Modify Begin:2026-07-30 by BestHui
     std::array<CudaTimingFrame, CudaTimingFrameCount> m_CudaTimingFrames = {};
     CudaTimingStats m_LastCudaTiming = {};

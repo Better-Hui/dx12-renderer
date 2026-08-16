@@ -83,7 +83,4 @@ foreach(shader_file IN LISTS SHADER_FILES_COMPUTE)
     dx12_renderer_add_shader_compile("${shader_file}" "cs_${DX12_RENDERER_SHADER_MODEL_SUFFIX}")
 endforeach()
 
-if (DX12_RENDERER_GENERATED_SHADER_OUTPUTS)
-    add_custom_target(${TARGET_NAME}_ShaderBytecode DEPENDS ${DX12_RENDERER_GENERATED_SHADER_OUTPUTS})
-endif()
 # Modify End

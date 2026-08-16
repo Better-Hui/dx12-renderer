@@ -3,8 +3,12 @@ target_include_directories(${TARGET_NAME}
         )
 
 # Modify Begin:2026-07-30 by BestHui
-if (TARGET ${TARGET_NAME}_ShaderBytecode)
-    add_dependencies(${TARGET_NAME} ${TARGET_NAME}_ShaderBytecode)
+if (DX12_RENDERER_GENERATED_SHADER_OUTPUTS)
+    set_source_files_properties(
+            ${DX12_RENDERER_GENERATED_SHADER_OUTPUTS}
+            PROPERTIES GENERATED TRUE HEADER_FILE_ONLY TRUE)
+    source_group("Generated\\ShaderBytecode" FILES ${DX12_RENDERER_GENERATED_SHADER_OUTPUTS})
+    target_sources(${TARGET_NAME} PRIVATE ${DX12_RENDERER_GENERATED_SHADER_OUTPUTS})
 endif()
 # Modify End
 

@@ -14,6 +14,18 @@ __device__ float3 SampleLinear(cudaTextureObject_t texture, float u, float v)
 }
 //Modify End
 
+//Modify Begin:2026-08-16 by BestHui
+__device__ float MipGaussianBlendWeight(float sigma, unsigned int level)
+{
+    constexpr float pi = 3.14159265358979323846f;
+    const float sigmaSquared = fmaxf(sigma * sigma, 1.0e-6f);
+    const float c = 2.0f * pi * sigmaSquared;
+    const float fourToLevel = exp2f(2.0f * static_cast<float>(level));
+    const float sixteenToLevel = fourToLevel * fourToLevel;
+    return fminf(fmaxf((sixteenToLevel * logf(4.0f)) / (c * (fourToLevel + c)), 0.0f), 1.0f);
+}
+//Modify End
+
 __device__ void StoreRgb(cudaSurfaceObject_t surface, unsigned int x, unsigned int y, float3 color)
 {
 //Modify Begin:2026-07-28 by BestHui
@@ -319,15 +331,18 @@ void DownsampleCascadeKernel(
 }
 //Modify End
 
-extern "C" __global__
-void UpsampleAddKernel(
+//Modify Begin:2026-07-30 by BestHui
+template <bool BoxFilterApproximation, bool AddBaseMip>
+__device__ void UpsampleKernelBody(
 //Modify Begin:2026-07-30 by BestHui
     cudaTextureObject_t low,
     cudaTextureObject_t high,
     cudaSurfaceObject_t highOutput,
 //Modify End
     unsigned int highWidth,
-    unsigned int highHeight)
+    unsigned int highHeight,
+    unsigned int level,
+    float sigma)
 {
     const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
     const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -341,9 +356,64 @@ void UpsampleAddKernel(
 //Modify Begin:2026-07-30 by BestHui
     const float3 base = LoadRgb(high, x, y);
     const float3 bloom = SampleLinear(low, u, v);
-    StoreOptional(highOutput, highWidth, highHeight, x, y, make_float3(base.x + bloom.x, base.y + bloom.y, base.z + bloom.z));
 //Modify End
+    if constexpr (!BoxFilterApproximation)
+    {
+        StoreOptional(highOutput, highWidth, highHeight, x, y, make_float3(base.x + bloom.x, base.y + bloom.y, base.z + bloom.z));
+        return;
+    }
+
+    const float weight = MipGaussianBlendWeight(sigma, level);
+    float3 fitted = make_float3(
+        bloom.x + (base.x - bloom.x) * weight,
+        bloom.y + (base.y - bloom.y) * weight,
+        bloom.z + (base.z - bloom.z) * weight);
+    if constexpr (AddBaseMip)
+    {
+        fitted = make_float3(fitted.x + base.x, fitted.y + base.y, fitted.z + base.z);
+    }
+    StoreOptional(highOutput, highWidth, highHeight, x, y, fitted);
 }
+//Modify End
+
+//Modify Begin:2026-07-30 by BestHui
+extern "C" __global__
+void UpsampleClassicKernel(
+    cudaTextureObject_t low,
+    cudaTextureObject_t high,
+    cudaSurfaceObject_t highOutput,
+    unsigned int highWidth,
+    unsigned int highHeight)
+{
+    UpsampleKernelBody<false, false>(low, high, highOutput, highWidth, highHeight, 0u, 0.0f);
+}
+
+extern "C" __global__
+void UpsampleBoxFilterKernel(
+    cudaTextureObject_t low,
+    cudaTextureObject_t high,
+    cudaSurfaceObject_t highOutput,
+    unsigned int highWidth,
+    unsigned int highHeight,
+    unsigned int level,
+    float sigma)
+{
+    UpsampleKernelBody<true, true>(low, high, highOutput, highWidth, highHeight, level, sigma);
+}
+
+extern "C" __global__
+void UpsampleBoxFilterOriginalKernel(
+    cudaTextureObject_t low,
+    cudaTextureObject_t high,
+    cudaSurfaceObject_t highOutput,
+    unsigned int highWidth,
+    unsigned int highHeight,
+    unsigned int level,
+    float sigma)
+{
+    UpsampleKernelBody<true, false>(low, high, highOutput, highWidth, highHeight, level, sigma);
+}
+//Modify End
 
 extern "C" __global__
 void CompositeBloomKernel(
