@@ -292,6 +292,22 @@ bool CudaDx12InteropTexture::Import(
             Release(&context);
             return false;
         }
+
+//Modify Begin:2026-08-16 by BestHui
+        CUDA_TEXTURE_DESC linearTextureDesc = {};
+        linearTextureDesc.addressMode[0] = CU_TR_ADDRESS_MODE_CLAMP;
+        linearTextureDesc.addressMode[1] = CU_TR_ADDRESS_MODE_CLAMP;
+        linearTextureDesc.addressMode[2] = CU_TR_ADDRESS_MODE_CLAMP;
+        linearTextureDesc.filterMode = CU_TR_FILTER_MODE_LINEAR;
+        linearTextureDesc.flags = CU_TRSF_NORMALIZED_COORDINATES;
+        result = cuTexObjectCreate(&m_LinearTextureObject, &cudaResourceDesc, &linearTextureDesc, nullptr);
+        if (result != CUDA_SUCCESS)
+        {
+            outError = "CUDA failed to create linear texture object: " + CudaContext::GetError(result);
+            Release(&context);
+            return false;
+        }
+//Modify End
     }
 
     if (createSurfaceObject)
@@ -325,6 +341,13 @@ void CudaDx12InteropTexture::Release(const CudaContext* context)
         cuTexObjectDestroy(m_TextureObject);
         m_TextureObject = 0;
     }
+//Modify Begin:2026-08-16 by BestHui
+    if (m_LinearTextureObject != 0)
+    {
+        cuTexObjectDestroy(m_LinearTextureObject);
+        m_LinearTextureObject = 0;
+    }
+//Modify End
     if (m_MipmappedArray != nullptr)
     {
         cuMipmappedArrayDestroy(m_MipmappedArray);

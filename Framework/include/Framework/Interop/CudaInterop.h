@@ -50,6 +50,9 @@ public:
 
     ID3D12Resource* GetD3D12Resource() const { return m_D3D12Resource; }
     CUtexObject GetTextureObject() const { return m_TextureObject; }
+//Modify Begin:2026-08-16 by BestHui
+    CUtexObject GetLinearTextureObject() const { return m_LinearTextureObject; }
+//Modify End
     CUsurfObject GetSurfaceObject() const { return m_SurfaceObject; }
     bool IsImported() const { return m_Memory != nullptr; }
 
@@ -58,6 +61,9 @@ private:
     CUmipmappedArray m_MipmappedArray = nullptr;
     CUarray m_Array = nullptr;
     CUtexObject m_TextureObject = 0;
+//Modify Begin:2026-08-16 by BestHui
+    CUtexObject m_LinearTextureObject = 0;
+//Modify End
     CUsurfObject m_SurfaceObject = 0;
     ID3D12Resource* m_D3D12Resource = nullptr;
 };

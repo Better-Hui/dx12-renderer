@@ -23,6 +23,14 @@ public:
         BoxFilterApproximation = 1,
         BoxFilterOriginalPaper = 2,
     };
+    enum class DownsampleMode : uint32_t
+    {
+        Cascaded2x2 = 0,
+        NonCascaded5Tap = 1,
+        NonCascaded5TapShared = 2,
+        NonCascaded10Tap = 3,
+        NonCascaded15Tap = 4,
+    };
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
     explicit CudaBloomPass(FrameworkDeviceContext& deviceContext);
@@ -52,6 +60,7 @@ public:
     void SetIntensity(float intensity) { m_Intensity = intensity; }
     void SetPyramidLevels(int pyramidLevels) { m_PyramidLevels = pyramidLevels; }
     void SetBoxFilterSigma(float sigma) { m_BoxFilterSigma = sigma; }
+    void SetDownsampleMode(DownsampleMode mode) { m_DownsampleMode = mode; }
 //Modify End
 
 private:
@@ -112,6 +121,7 @@ private:
 //Modify Begin:2026-08-16 by BestHui
     Method m_Method = Method::Classic;
     float m_BoxFilterSigma = 1.0f;
+    DownsampleMode m_DownsampleMode = DownsampleMode::Cascaded2x2;
 //Modify End
     std::string m_Status = "CUDA bloom is not initialized.";
 
@@ -124,6 +134,14 @@ private:
     CUmodule m_Module = nullptr;
     CUfunction m_PrefilterDownsampleCascadeKernel = nullptr;
     CUfunction m_DownsampleCascadeKernel = nullptr;
+    CUfunction m_PrefilterDownsample5TapKernel = nullptr;
+    CUfunction m_PrefilterDownsample5TapSharedKernel = nullptr;
+    CUfunction m_PrefilterDownsample10TapKernel = nullptr;
+    CUfunction m_PrefilterDownsample15TapKernel = nullptr;
+    CUfunction m_Downsample5TapKernel = nullptr;
+    CUfunction m_Downsample5TapSharedKernel = nullptr;
+    CUfunction m_Downsample10TapKernel = nullptr;
+    CUfunction m_Downsample15TapKernel = nullptr;
 //Modify Begin:2026-07-30 by BestHui
     CUfunction m_UpsampleClassicKernel = nullptr;
     CUfunction m_UpsampleBoxFilterKernel = nullptr;

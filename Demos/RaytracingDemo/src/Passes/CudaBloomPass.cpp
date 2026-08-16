@@ -100,6 +100,22 @@ bool CudaBloomPass::DrawImGui(const uint32_t width, const uint32_t height)
             changed = true;
         }
 //Modify End
+//Modify Begin:2026-08-16 by BestHui
+        const char* downsampleModeNames[] = {
+            "2x2 Cascade",
+            "5-Tap Diagonal Bilinear Non-Cascaded",
+            "5-Tap Diagonal Bilinear Shared Memory",
+            "10-Tap Non-Cascaded",
+            "15-Tap Non-Cascaded"
+        };
+        int downsampleMode = static_cast<int>(m_DownsampleMode);
+        if (ImGui::Combo("Bloom Downsample", &downsampleMode, downsampleModeNames, IM_ARRAYSIZE(downsampleModeNames)))
+        {
+            downsampleMode = std::clamp(downsampleMode, 0, IM_ARRAYSIZE(downsampleModeNames) - 1);
+            m_DownsampleMode = static_cast<DownsampleMode>(downsampleMode);
+            changed = true;
+        }
+//Modify End
         changed |= ImGui::SliderFloat("Bloom Threshold", &m_Threshold, 0.0f, 5.0f, "%.2f");
         changed |= ImGui::SliderFloat("Bloom Soft Knee", &m_SoftThreshold, 0.0f, 2.0f, "%.2f");
         changed |= ImGui::SliderFloat("Bloom Intensity", &m_Intensity, 0.0f, 5.0f, "%.2f");
@@ -158,6 +174,16 @@ bool CudaBloomPass::InitializeCuda()
 
     if (!m_CudaContext.GetFunction(m_Module, "PrefilterDownsampleCascadeKernel", m_PrefilterDownsampleCascadeKernel, error) ||
         !m_CudaContext.GetFunction(m_Module, "DownsampleCascadeKernel", m_DownsampleCascadeKernel, error) ||
+//Modify Begin:2026-08-16 by BestHui
+        !m_CudaContext.GetFunction(m_Module, "PrefilterDownsample5TapKernel", m_PrefilterDownsample5TapKernel, error) ||
+        !m_CudaContext.GetFunction(m_Module, "PrefilterDownsample5TapSharedKernel", m_PrefilterDownsample5TapSharedKernel, error) ||
+        !m_CudaContext.GetFunction(m_Module, "PrefilterDownsample10TapKernel", m_PrefilterDownsample10TapKernel, error) ||
+        !m_CudaContext.GetFunction(m_Module, "PrefilterDownsample15TapKernel", m_PrefilterDownsample15TapKernel, error) ||
+        !m_CudaContext.GetFunction(m_Module, "Downsample5TapKernel", m_Downsample5TapKernel, error) ||
+        !m_CudaContext.GetFunction(m_Module, "Downsample5TapSharedKernel", m_Downsample5TapSharedKernel, error) ||
+        !m_CudaContext.GetFunction(m_Module, "Downsample10TapKernel", m_Downsample10TapKernel, error) ||
+        !m_CudaContext.GetFunction(m_Module, "Downsample15TapKernel", m_Downsample15TapKernel, error) ||
+//Modify End
 //Modify Begin:2026-07-30 by BestHui
         !m_CudaContext.GetFunction(m_Module, "UpsampleClassicKernel", m_UpsampleClassicKernel, error) ||
         !m_CudaContext.GetFunction(m_Module, "UpsampleBoxFilterKernel", m_UpsampleBoxFilterKernel, error) ||
@@ -499,6 +525,11 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
     constexpr uint32_t cascadeBlockX = 8;
     constexpr uint32_t cascadeBlockY = 8;
     constexpr uint32_t cascadeSharedBytes = cascadeBlockX * cascadeBlockY * sizeof(float) * 4u;
+    constexpr uint32_t shared5BlockX = 16;
+    constexpr uint32_t shared5BlockY = 8;
+    constexpr uint32_t shared5TileWidth = shared5BlockX * 2u + 2u;
+    constexpr uint32_t shared5TileHeight = shared5BlockY * 2u + 2u;
+    constexpr uint32_t shared5SharedBytes = shared5TileWidth * shared5TileHeight * sizeof(float) * 4u;
 
 //Modify Begin:2026-07-30 by BestHui
     auto getPyramidPointTexture = [this, levelCount](const uint32_t level) -> CUtexObject
@@ -541,114 +572,235 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
     }
 //Modify End
 
-//Modify Begin:2026-07-30 by BestHui
-    CUsurfObject level0 = getPyramidSurface(0u);
-    CUsurfObject level1 = getPyramidSurface(1u);
-    CUsurfObject level2 = getPyramidSurface(2u);
-    CUsurfObject level3 = getPyramidSurface(3u);
-//Modify End
-    uint32_t level0Width = getPyramidWidth(0u);
-    uint32_t level0Height = getPyramidHeight(0u);
-    uint32_t level1Width = getPyramidWidth(1u);
-    uint32_t level1Height = getPyramidHeight(1u);
-    uint32_t level2Width = getPyramidWidth(2u);
-    uint32_t level2Height = getPyramidHeight(2u);
-    uint32_t level3Width = getPyramidWidth(3u);
-    uint32_t level3Height = getPyramidHeight(3u);
-
-    void* prefilterCascadeArgs[] = {
-        &input,
-        &level0,
-        &level1,
-        &level2,
-        &level3,
-        &cudaWidth,
-        &cudaHeight,
-        &level0Width,
-        &level0Height,
-        &level1Width,
-        &level1Height,
-        &level2Width,
-        &level2Height,
-        &level3Width,
-        &level3Height,
-        &threshold,
-        &softThreshold,
-        &intensity,
-    };
-    CUresult result = cuLaunchKernel(
-        m_PrefilterDownsampleCascadeKernel,
-        DivideRoundUp(level0Width, cascadeBlockX),
-        DivideRoundUp(level0Height, cascadeBlockY),
-        1u,
-        cascadeBlockX,
-        cascadeBlockY,
-        1u,
-        cascadeSharedBytes,
-        m_CudaContext.GetStream(),
-        prefilterCascadeArgs,
-        nullptr);
-    if (result != CUDA_SUCCESS)
-    {
-        m_Status = "CUDA bloom prefilter launch failed: " + CudaContext::GetError(result);
-        return false;
-    }
-
-    for (uint32_t baseLevel = 3u; baseLevel + 1u < levelCount; baseLevel += 4u)
+//Modify Begin:2026-08-16 by BestHui
+    CUresult result = CUDA_SUCCESS;
+    if (m_DownsampleMode == DownsampleMode::Cascaded2x2)
     {
 //Modify Begin:2026-07-30 by BestHui
-        CUtexObject source = m_PyramidTextures.GetPointTextureObject(baseLevel);
-        CUsurfObject output0 = getPyramidSurface(baseLevel + 1u);
-        CUsurfObject output1 = getPyramidSurface(baseLevel + 2u);
-        CUsurfObject output2 = getPyramidSurface(baseLevel + 3u);
-        CUsurfObject output3 = getPyramidSurface(baseLevel + 4u);
+        CUsurfObject level0 = getPyramidSurface(0u);
+        CUsurfObject level1 = getPyramidSurface(1u);
+        CUsurfObject level2 = getPyramidSurface(2u);
+        CUsurfObject level3 = getPyramidSurface(3u);
 //Modify End
-        uint32_t sourceWidth = m_PyramidWidth[baseLevel];
-        uint32_t sourceHeight = m_PyramidHeight[baseLevel];
-        uint32_t output0Width = getPyramidWidth(baseLevel + 1u);
-        uint32_t output0Height = getPyramidHeight(baseLevel + 1u);
-        uint32_t output1Width = getPyramidWidth(baseLevel + 2u);
-        uint32_t output1Height = getPyramidHeight(baseLevel + 2u);
-        uint32_t output2Width = getPyramidWidth(baseLevel + 3u);
-        uint32_t output2Height = getPyramidHeight(baseLevel + 3u);
-        uint32_t output3Width = getPyramidWidth(baseLevel + 4u);
-        uint32_t output3Height = getPyramidHeight(baseLevel + 4u);
-        void* downsampleCascadeArgs[] = {
-            &source,
-            &output0,
-            &output1,
-            &output2,
-            &output3,
-            &sourceWidth,
-            &sourceHeight,
-            &output0Width,
-            &output0Height,
-            &output1Width,
-            &output1Height,
-            &output2Width,
-            &output2Height,
-            &output3Width,
-            &output3Height,
+        uint32_t level0Width = getPyramidWidth(0u);
+        uint32_t level0Height = getPyramidHeight(0u);
+        uint32_t level1Width = getPyramidWidth(1u);
+        uint32_t level1Height = getPyramidHeight(1u);
+        uint32_t level2Width = getPyramidWidth(2u);
+        uint32_t level2Height = getPyramidHeight(2u);
+        uint32_t level3Width = getPyramidWidth(3u);
+        uint32_t level3Height = getPyramidHeight(3u);
+
+        void* prefilterCascadeArgs[] = {
+            &input,
+            &level0,
+            &level1,
+            &level2,
+            &level3,
+            &cudaWidth,
+            &cudaHeight,
+            &level0Width,
+            &level0Height,
+            &level1Width,
+            &level1Height,
+            &level2Width,
+            &level2Height,
+            &level3Width,
+            &level3Height,
+            &threshold,
+            &softThreshold,
+            &intensity,
         };
         result = cuLaunchKernel(
-            m_DownsampleCascadeKernel,
-            DivideRoundUp(output0Width, cascadeBlockX),
-            DivideRoundUp(output0Height, cascadeBlockY),
+            m_PrefilterDownsampleCascadeKernel,
+            DivideRoundUp(level0Width, cascadeBlockX),
+            DivideRoundUp(level0Height, cascadeBlockY),
             1u,
             cascadeBlockX,
             cascadeBlockY,
             1u,
             cascadeSharedBytes,
             m_CudaContext.GetStream(),
-            downsampleCascadeArgs,
+            prefilterCascadeArgs,
             nullptr);
         if (result != CUDA_SUCCESS)
         {
-            m_Status = "CUDA bloom downsample launch failed: " + CudaContext::GetError(result);
+            m_Status = "CUDA bloom prefilter launch failed: " + CudaContext::GetError(result);
             return false;
+        }
+
+        for (uint32_t baseLevel = 3u; baseLevel + 1u < levelCount; baseLevel += 4u)
+        {
+//Modify Begin:2026-07-30 by BestHui
+            CUtexObject source = m_PyramidTextures.GetPointTextureObject(baseLevel);
+            CUsurfObject output0 = getPyramidSurface(baseLevel + 1u);
+            CUsurfObject output1 = getPyramidSurface(baseLevel + 2u);
+            CUsurfObject output2 = getPyramidSurface(baseLevel + 3u);
+            CUsurfObject output3 = getPyramidSurface(baseLevel + 4u);
+//Modify End
+            uint32_t sourceWidth = m_PyramidWidth[baseLevel];
+            uint32_t sourceHeight = m_PyramidHeight[baseLevel];
+            uint32_t output0Width = getPyramidWidth(baseLevel + 1u);
+            uint32_t output0Height = getPyramidHeight(baseLevel + 1u);
+            uint32_t output1Width = getPyramidWidth(baseLevel + 2u);
+            uint32_t output1Height = getPyramidHeight(baseLevel + 2u);
+            uint32_t output2Width = getPyramidWidth(baseLevel + 3u);
+            uint32_t output2Height = getPyramidHeight(baseLevel + 3u);
+            uint32_t output3Width = getPyramidWidth(baseLevel + 4u);
+            uint32_t output3Height = getPyramidHeight(baseLevel + 4u);
+            void* downsampleCascadeArgs[] = {
+                &source,
+                &output0,
+                &output1,
+                &output2,
+                &output3,
+                &sourceWidth,
+                &sourceHeight,
+                &output0Width,
+                &output0Height,
+                &output1Width,
+                &output1Height,
+                &output2Width,
+                &output2Height,
+                &output3Width,
+                &output3Height,
+            };
+            result = cuLaunchKernel(
+                m_DownsampleCascadeKernel,
+                DivideRoundUp(output0Width, cascadeBlockX),
+                DivideRoundUp(output0Height, cascadeBlockY),
+                1u,
+                cascadeBlockX,
+                cascadeBlockY,
+                1u,
+                cascadeSharedBytes,
+                m_CudaContext.GetStream(),
+                downsampleCascadeArgs,
+                nullptr);
+            if (result != CUDA_SUCCESS)
+            {
+                m_Status = "CUDA bloom downsample launch failed: " + CudaContext::GetError(result);
+                return false;
+            }
+        }
+    }
+    else
+    {
+        uint32_t firstWidth = getPyramidWidth(0u);
+        uint32_t firstHeight = getPyramidHeight(0u);
+        CUsurfObject firstOutput = getPyramidSurface(0u);
+        CUfunction prefilterKernel = m_PrefilterDownsample5TapKernel;
+        CUfunction downsampleKernel = m_Downsample5TapKernel;
+        switch (m_DownsampleMode)
+        {
+        case DownsampleMode::NonCascaded10Tap:
+            prefilterKernel = m_PrefilterDownsample10TapKernel;
+            downsampleKernel = m_Downsample10TapKernel;
+            break;
+        case DownsampleMode::NonCascaded15Tap:
+            prefilterKernel = m_PrefilterDownsample15TapKernel;
+            downsampleKernel = m_Downsample15TapKernel;
+            break;
+        case DownsampleMode::NonCascaded5TapShared:
+        case DownsampleMode::NonCascaded5Tap:
+        default:
+            break;
+        }
+        const bool shared5Mode = m_DownsampleMode == DownsampleMode::NonCascaded5TapShared;
+        const auto isStrictHalf = [](const uint32_t sourceSize, const uint32_t outputSize) -> bool
+        {
+            return outputSize > 0u && sourceSize == outputSize * 2u;
+        };
+        const bool shared5Prefilter = shared5Mode &&
+            isStrictHalf(cudaWidth, firstWidth) &&
+            isStrictHalf(cudaHeight, firstHeight);
+        CUtexObject inputDownsample = shared5Prefilter
+            ? m_InputTexture.GetTextureObject()
+            : m_InputTexture.GetLinearTextureObject();
+        const uint32_t prefilterBlockWidth = shared5Prefilter ? shared5BlockX : blockX;
+        const uint32_t prefilterBlockHeight = shared5Prefilter ? shared5BlockY : blockY;
+        const uint32_t prefilterSharedMemory = shared5Prefilter ? shared5SharedBytes : 0u;
+        if (shared5Prefilter)
+        {
+            prefilterKernel = m_PrefilterDownsample5TapSharedKernel;
+        }
+        void* prefilterArgs[] = {
+            &inputDownsample,
+            &firstOutput,
+            &cudaWidth,
+            &cudaHeight,
+            &firstWidth,
+            &firstHeight,
+            &threshold,
+            &softThreshold,
+            &intensity,
+        };
+        result = cuLaunchKernel(
+            prefilterKernel,
+            DivideRoundUp(firstWidth, prefilterBlockWidth),
+            DivideRoundUp(firstHeight, prefilterBlockHeight),
+            1u,
+            prefilterBlockWidth,
+            prefilterBlockHeight,
+            1u,
+            prefilterSharedMemory,
+            m_CudaContext.GetStream(),
+            prefilterArgs,
+            nullptr);
+        if (result != CUDA_SUCCESS)
+        {
+            m_Status = "CUDA bloom prefilter launch failed: " + CudaContext::GetError(result);
+            return false;
+        }
+
+        for (uint32_t level = 1u; level < levelCount; ++level)
+        {
+            CUsurfObject outputLevel = m_PyramidTextures.GetSurfaceObject(level);
+            uint32_t sourceWidth = m_PyramidWidth[level - 1u];
+            uint32_t sourceHeight = m_PyramidHeight[level - 1u];
+            uint32_t outputWidth = m_PyramidWidth[level];
+            uint32_t outputHeight = m_PyramidHeight[level];
+            const bool shared5Downsample = shared5Mode &&
+                isStrictHalf(sourceWidth, outputWidth) &&
+                isStrictHalf(sourceHeight, outputHeight);
+            CUfunction levelDownsampleKernel = shared5Downsample
+                ? m_Downsample5TapSharedKernel
+                : downsampleKernel;
+            CUtexObject source = shared5Downsample
+                ? m_PyramidTextures.GetPointTextureObject(level - 1u)
+                : m_PyramidTextures.GetLinearTextureObject(level - 1u);
+            const uint32_t levelBlockWidth = shared5Downsample ? shared5BlockX : blockX;
+            const uint32_t levelBlockHeight = shared5Downsample ? shared5BlockY : blockY;
+            const uint32_t levelSharedMemory = shared5Downsample ? shared5SharedBytes : 0u;
+            void* downsampleArgs[] = {
+                &source,
+                &outputLevel,
+                &sourceWidth,
+                &sourceHeight,
+                &outputWidth,
+                &outputHeight,
+            };
+            result = cuLaunchKernel(
+                levelDownsampleKernel,
+                DivideRoundUp(outputWidth, levelBlockWidth),
+                DivideRoundUp(outputHeight, levelBlockHeight),
+                1u,
+                levelBlockWidth,
+                levelBlockHeight,
+                1u,
+                levelSharedMemory,
+                m_CudaContext.GetStream(),
+                downsampleArgs,
+                nullptr);
+            if (result != CUDA_SUCCESS)
+            {
+                m_Status = "CUDA bloom non-cascaded downsample launch failed: " + CudaContext::GetError(result);
+                return false;
+            }
         }
     }
 
+//Modify End
     for (uint32_t level = levelCount - 1u; level > 0u; --level)
     {
 //Modify Begin:2026-07-30 by BestHui

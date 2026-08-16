@@ -1527,6 +1527,32 @@ void RaytracingDemo::LoadStartupConfiguration()
     {
         m_CudaBloom.SetBoxFilterSigma(std::max(0.001f, floatValue));
     }
+//Modify Begin:2026-08-16 by BestHui
+    if (configuration.TryGetString("CudaBloom", "DownsampleMode", stringValue))
+    {
+        stringValue = ToLower(stringValue);
+        if (stringValue == "5tap" || stringValue == "5-tap" || stringValue == "non-cascaded-5tap")
+        {
+            m_CudaBloom.SetDownsampleMode(CudaBloomPass::DownsampleMode::NonCascaded5Tap);
+        }
+        else if (stringValue == "5tap-shared" || stringValue == "5-tap-shared" || stringValue == "5tap-shared-memory")
+        {
+            m_CudaBloom.SetDownsampleMode(CudaBloomPass::DownsampleMode::NonCascaded5TapShared);
+        }
+        else if (stringValue == "10tap" || stringValue == "10-tap" || stringValue == "non-cascaded-10tap")
+        {
+            m_CudaBloom.SetDownsampleMode(CudaBloomPass::DownsampleMode::NonCascaded10Tap);
+        }
+        else if (stringValue == "15tap" || stringValue == "15-tap" || stringValue == "non-cascaded-15tap")
+        {
+            m_CudaBloom.SetDownsampleMode(CudaBloomPass::DownsampleMode::NonCascaded15Tap);
+        }
+        else if (stringValue == "2x2-cascade" || stringValue == "cascade" || stringValue == "cascaded")
+        {
+            m_CudaBloom.SetDownsampleMode(CudaBloomPass::DownsampleMode::Cascaded2x2);
+        }
+    }
+//Modify End
 
     if (configuration.TryGetBoolean("Debug", "GpuTiming", boolValue))
     {
