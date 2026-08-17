@@ -153,6 +153,9 @@ private:
     CUmodule m_Module = nullptr;
 //Modify Begin:2026-08-17 by Hui
     CUfunction m_BloomPrefilterDownsampleKernel = nullptr;
+    CUfunction m_BloomOneLevelSharedDownsampleKernel = nullptr;
+    CUfunction m_BloomTwoLevelSharedDownsampleKernel = nullptr;
+    CUfunction m_BloomThreeLevelSharedDownsampleKernel = nullptr;
     CUfunction m_BloomFourLevelSharedDownsampleKernel = nullptr;
     CUfunction m_BloomFourTapDownsampleKernel = nullptr;
 //Modify End

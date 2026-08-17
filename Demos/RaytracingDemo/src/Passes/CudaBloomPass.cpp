@@ -21,6 +21,7 @@ namespace
     {
         return value > 1u ? value >> 1u : 1u;
     }
+
 }
 
 //Modify Begin:2026-07-30 by BestHui
@@ -230,6 +231,9 @@ bool CudaBloomPass::InitializeCuda()
 
 //Modify Begin:2026-08-17 by Hui
     if (!m_CudaContext.GetFunction(m_Module, "BloomPrefilterDownsampleKernel", m_BloomPrefilterDownsampleKernel, error) ||
+        !m_CudaContext.GetFunction(m_Module, "BloomOneLevelSharedDownsampleKernel", m_BloomOneLevelSharedDownsampleKernel, error) ||
+        !m_CudaContext.GetFunction(m_Module, "BloomTwoLevelSharedDownsampleKernel", m_BloomTwoLevelSharedDownsampleKernel, error) ||
+        !m_CudaContext.GetFunction(m_Module, "BloomThreeLevelSharedDownsampleKernel", m_BloomThreeLevelSharedDownsampleKernel, error) ||
         !m_CudaContext.GetFunction(m_Module, "BloomFourLevelSharedDownsampleKernel", m_BloomFourLevelSharedDownsampleKernel, error) ||
         !m_CudaContext.GetFunction(m_Module, "BloomFourTapDownsampleKernel", m_BloomFourTapDownsampleKernel, error) ||
         !m_CudaContext.GetFunction(m_Module, "BloomBoxFilterAdditiveUpsampleKernel", m_BloomBoxFilterAdditiveUpsampleKernel, error) ||
@@ -641,31 +645,156 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
         return false;
     }
 
-    const bool canUseSharedCascade = m_UseSharedMemoryDownsampling && levelCount >= 5u;
-
-    for (uint32_t level = 1u; level < levelCount;)
+    const auto launchFourTapDownsample = [&](const uint32_t sourceLevel, const uint32_t outputLevel) -> bool
     {
-        const uint32_t sourceLevel = canUseSharedCascade
-            ? std::min<uint32_t>(level - 1u, levelCount - 5u)
-            : level - 1u;
-        if (canUseSharedCascade)
+        CUsurfObject output = getPyramidSurface(outputLevel);
+        uint32_t sourceWidth = getPyramidWidth(sourceLevel);
+        uint32_t sourceHeight = getPyramidHeight(sourceLevel);
+        uint32_t outputWidth = getPyramidWidth(outputLevel);
+        uint32_t outputHeight = getPyramidHeight(outputLevel);
+        CUtexObject source = m_PyramidTextures.GetLinearTextureObject(sourceLevel);
+        void* downsampleArgs[] = {
+            &source,
+            &output,
+            &sourceWidth,
+            &sourceHeight,
+            &outputWidth,
+            &outputHeight,
+        };
+        result = cuLaunchKernel(
+            m_BloomFourTapDownsampleKernel,
+            DivideRoundUp(outputWidth, blockX),
+            DivideRoundUp(outputHeight, blockY),
+            1u,
+            blockX,
+            blockY,
+            1u,
+            0u,
+            m_CudaContext.GetStream(),
+            downsampleArgs,
+            nullptr);
+        if (result != CUDA_SUCCESS)
         {
-            CUtexObject source = m_PyramidTextures.GetPointTextureObject(sourceLevel);
-            CUsurfObject output1 = getPyramidSurface(level);
-            CUsurfObject output2 = getPyramidSurface(level + 1u);
-            CUsurfObject output3 = getPyramidSurface(level + 2u);
-            CUsurfObject output4 = getPyramidSurface(level + 3u);
-            uint32_t sourceWidth = getPyramidWidth(sourceLevel);
-            uint32_t sourceHeight = getPyramidHeight(sourceLevel);
-            uint32_t output1Width = getPyramidWidth(level);
-            uint32_t output1Height = getPyramidHeight(level);
-            uint32_t output2Width = getPyramidWidth(level + 1u);
-            uint32_t output2Height = getPyramidHeight(level + 1u);
-            uint32_t output3Width = getPyramidWidth(level + 2u);
-            uint32_t output3Height = getPyramidHeight(level + 2u);
-            uint32_t output4Width = getPyramidWidth(level + 3u);
-            uint32_t output4Height = getPyramidHeight(level + 3u);
-            void* sharedCascadeArgs[] = {
+            m_Status = "CUDA bloom downsample launch failed: " + CudaContext::GetError(result);
+            return false;
+        }
+        return true;
+    };
+
+    const auto launchSharedCascade = [&](const uint32_t sourceLevel, const uint32_t cascadeLevelCount) -> bool
+    {
+        const uint32_t firstOutputLevel = sourceLevel + 1u;
+        CUtexObject source = m_PyramidTextures.GetPointTextureObject(sourceLevel);
+        CUsurfObject output1 = getPyramidSurface(firstOutputLevel);
+        uint32_t sourceWidth = getPyramidWidth(sourceLevel);
+        uint32_t sourceHeight = getPyramidHeight(sourceLevel);
+        uint32_t output1Width = getPyramidWidth(firstOutputLevel);
+        uint32_t output1Height = getPyramidHeight(firstOutputLevel);
+
+        switch (cascadeLevelCount)
+        {
+        case 1u:
+        {
+            void* args[] = {
+                &source,
+                &output1,
+                &sourceWidth,
+                &sourceHeight,
+                &output1Width,
+                &output1Height,
+            };
+            result = cuLaunchKernel(
+                m_BloomOneLevelSharedDownsampleKernel,
+                DivideRoundUp(output1Width, 8u),
+                DivideRoundUp(output1Height, 8u),
+                1u,
+                blockX,
+                blockY,
+                1u,
+                0u,
+                m_CudaContext.GetStream(),
+                args,
+                nullptr);
+            break;
+        }
+        case 2u:
+        {
+            CUsurfObject output2 = getPyramidSurface(firstOutputLevel + 1u);
+            uint32_t output2Width = getPyramidWidth(firstOutputLevel + 1u);
+            uint32_t output2Height = getPyramidHeight(firstOutputLevel + 1u);
+            void* args[] = {
+                &source,
+                &output1,
+                &output2,
+                &sourceWidth,
+                &sourceHeight,
+                &output1Width,
+                &output1Height,
+                &output2Width,
+                &output2Height,
+            };
+            result = cuLaunchKernel(
+                m_BloomTwoLevelSharedDownsampleKernel,
+                DivideRoundUp(output1Width, 8u),
+                DivideRoundUp(output1Height, 8u),
+                1u,
+                blockX,
+                blockY,
+                1u,
+                0u,
+                m_CudaContext.GetStream(),
+                args,
+                nullptr);
+            break;
+        }
+        case 3u:
+        {
+            CUsurfObject output2 = getPyramidSurface(firstOutputLevel + 1u);
+            CUsurfObject output3 = getPyramidSurface(firstOutputLevel + 2u);
+            uint32_t output2Width = getPyramidWidth(firstOutputLevel + 1u);
+            uint32_t output2Height = getPyramidHeight(firstOutputLevel + 1u);
+            uint32_t output3Width = getPyramidWidth(firstOutputLevel + 2u);
+            uint32_t output3Height = getPyramidHeight(firstOutputLevel + 2u);
+            void* args[] = {
+                &source,
+                &output1,
+                &output2,
+                &output3,
+                &sourceWidth,
+                &sourceHeight,
+                &output1Width,
+                &output1Height,
+                &output2Width,
+                &output2Height,
+                &output3Width,
+                &output3Height,
+            };
+            result = cuLaunchKernel(
+                m_BloomThreeLevelSharedDownsampleKernel,
+                DivideRoundUp(output1Width, 8u),
+                DivideRoundUp(output1Height, 8u),
+                1u,
+                blockX,
+                blockY,
+                1u,
+                0u,
+                m_CudaContext.GetStream(),
+                args,
+                nullptr);
+            break;
+        }
+        case 4u:
+        {
+            CUsurfObject output2 = getPyramidSurface(firstOutputLevel + 1u);
+            CUsurfObject output3 = getPyramidSurface(firstOutputLevel + 2u);
+            CUsurfObject output4 = getPyramidSurface(firstOutputLevel + 3u);
+            uint32_t output2Width = getPyramidWidth(firstOutputLevel + 1u);
+            uint32_t output2Height = getPyramidHeight(firstOutputLevel + 1u);
+            uint32_t output3Width = getPyramidWidth(firstOutputLevel + 2u);
+            uint32_t output3Height = getPyramidHeight(firstOutputLevel + 2u);
+            uint32_t output4Width = getPyramidWidth(firstOutputLevel + 3u);
+            uint32_t output4Height = getPyramidHeight(firstOutputLevel + 3u);
+            void* args[] = {
                 &source,
                 &output1,
                 &output2,
@@ -692,49 +821,50 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
                 1u,
                 0u,
                 m_CudaContext.GetStream(),
-                sharedCascadeArgs,
+                args,
                 nullptr);
-            if (result != CUDA_SUCCESS)
-            {
-                m_Status = "CUDA bloom four-level shared-memory downsample launch failed: " + CudaContext::GetError(result);
-                return false;
-            }
-            level = sourceLevel + 5u;
-            continue;
+            break;
         }
-
-        CUsurfObject outputLevel = m_PyramidTextures.GetSurfaceObject(level);
-        uint32_t sourceWidth = getPyramidWidth(sourceLevel);
-        uint32_t sourceHeight = getPyramidHeight(sourceLevel);
-        uint32_t outputWidth = getPyramidWidth(level);
-        uint32_t outputHeight = getPyramidHeight(level);
-        CUtexObject source = m_PyramidTextures.GetLinearTextureObject(sourceLevel);
-        void* downsampleArgs[] = {
-            &source,
-            &outputLevel,
-            &sourceWidth,
-            &sourceHeight,
-            &outputWidth,
-            &outputHeight,
-        };
-        result = cuLaunchKernel(
-            m_BloomFourTapDownsampleKernel,
-            DivideRoundUp(outputWidth, blockX),
-            DivideRoundUp(outputHeight, blockY),
-            1u,
-            blockX,
-            blockY,
-            1u,
-            0u,
-            m_CudaContext.GetStream(),
-            downsampleArgs,
-            nullptr);
-        if (result != CUDA_SUCCESS)
-        {
-            m_Status = "CUDA bloom downsample launch failed: " + CudaContext::GetError(result);
+        default:
+            m_Status = "Invalid CUDA bloom shared cascade level count.";
             return false;
         }
-        ++level;
+
+        if (result != CUDA_SUCCESS)
+        {
+            m_Status = "CUDA bloom shared-memory downsample launch failed: " + CudaContext::GetError(result);
+            return false;
+        }
+        return true;
+    };
+
+    const bool canUseSharedCascade = m_UseSharedMemoryDownsampling && levelCount >= 5u;
+    if (canUseSharedCascade)
+    {
+        uint32_t sourceLevel = 0u;
+        while (sourceLevel + 4u < levelCount)
+        {
+            if (!launchSharedCascade(sourceLevel, 4u))
+            {
+                return false;
+            }
+            sourceLevel += 4u;
+        }
+        const uint32_t remainingLevelCount = levelCount - sourceLevel - 1u;
+        if (remainingLevelCount > 0u && !launchSharedCascade(sourceLevel, remainingLevelCount))
+        {
+            return false;
+        }
+    }
+    else
+    {
+        for (uint32_t level = 1u; level < levelCount; ++level)
+        {
+            if (!launchFourTapDownsample(level - 1u, level))
+            {
+                return false;
+            }
+        }
     }
 
 //Modify End
