@@ -1,4 +1,4 @@
-# Modify Begin:2026-08-16 by BestHui
+# Modify Begin:2026-08-17 by BestHui
 set(DX12_RENDERER_THIRD_PARTY_BUILD_DIRECTORY "${CMAKE_BINARY_DIR}/ThirdParty")
 set(DX12_RENDERER_NRD_SHADER_INCLUDE_DIRECTORY "${DX12_RENDERER_THIRD_PARTY_BUILD_DIRECTORY}/NRD/Shaders")
 
@@ -25,19 +25,11 @@ set_target_properties(NRDIntegration PROPERTIES
         )
 
 function(dx12_renderer_add_third_party_prebuild target_name)
-        set(DX12_RENDERER_THIRD_PARTY_TARGET DX12RendererThirdPartyPrebuild)
-        if (NOT TARGET ${DX12_RENDERER_THIRD_PARTY_TARGET})
-                add_custom_target(${DX12_RENDERER_THIRD_PARTY_TARGET}
-                        COMMAND "${CMAKE_COMMAND}" "-DDX12_RENDERER_SOURCE_ROOT=${CMAKE_SOURCE_DIR}" "-DDX12_RENDERER_THIRD_PARTY_BUILD_DIRECTORY=${DX12_RENDERER_THIRD_PARTY_BUILD_DIRECTORY}" "-DDX12_RENDERER_CONFIGURATION=$<CONFIG>" "-DDX12_RENDERER_GENERATOR=${CMAKE_GENERATOR}" "-DDX12_RENDERER_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}" "-DDX12_RENDERER_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}" "-DDX12_RENDERER_DXC_EXECUTABLE=${DX12_RENDERER_DXC_EXECUTABLE}" "-DDX12_RENDERER_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}" -P "${CMAKE_SOURCE_DIR}/CMakeIncludes/BuildThirdParty.cmake"
-                        BYPRODUCTS
-                        "${DX12_RENDERER_THIRD_PARTY_BUILD_DIRECTORY}/bin/$<CONFIG>/NRI.lib"
-                        "${DX12_RENDERER_THIRD_PARTY_BUILD_DIRECTORY}/bin/$<CONFIG>/NRI.dll"
-                        "${DX12_RENDERER_THIRD_PARTY_BUILD_DIRECTORY}/bin/$<CONFIG>/NRD.lib"
-                        "${DX12_RENDERER_THIRD_PARTY_BUILD_DIRECTORY}/bin/$<CONFIG>/NRD.dll"
-                        COMMENT "Updating isolated NRI and NRD dependencies"
-                        VERBATIM
-                        )
-        endif()
-        add_dependencies(${target_name} ${DX12_RENDERER_THIRD_PARTY_TARGET})
+        # Keep the third-party refresh private to its consuming target. A custom
+        # target would otherwise materialize as a developer-visible VS project.
+        add_custom_command(TARGET ${target_name} PRE_BUILD
+                COMMAND "${CMAKE_COMMAND}" "-DDX12_RENDERER_SOURCE_ROOT=${CMAKE_SOURCE_DIR}" "-DDX12_RENDERER_THIRD_PARTY_BUILD_DIRECTORY=${DX12_RENDERER_THIRD_PARTY_BUILD_DIRECTORY}" "-DDX12_RENDERER_CONFIGURATION=$<CONFIG>" "-DDX12_RENDERER_GENERATOR=${CMAKE_GENERATOR}" "-DDX12_RENDERER_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}" "-DDX12_RENDERER_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}" "-DDX12_RENDERER_DXC_EXECUTABLE=${DX12_RENDERER_DXC_EXECUTABLE}" "-DDX12_RENDERER_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}" -P "${CMAKE_SOURCE_DIR}/CMakeIncludes/BuildThirdParty.cmake"
+                COMMENT "Updating isolated NRI and NRD dependencies"
+                VERBATIM)
 endfunction()
 # Modify End
