@@ -72,6 +72,7 @@ public:
     void SetIntensity(float intensity) { m_Intensity = intensity; }
     void SetPyramidLevels(int pyramidLevels) { m_PyramidLevels = pyramidLevels; }
     void SetBoxFilterSigma(float sigma) { m_BoxFilterSigma = sigma; }
+    void SetUseSharedMemoryDownsampling(bool enabled) { m_UseSharedMemoryDownsampling = enabled; }
 //Modify End
 
 private:
@@ -128,11 +129,14 @@ private:
     float m_Threshold = 0.55f;
     float m_SoftThreshold = 0.30f;
     float m_Intensity = 0.75f;
-    int m_PyramidLevels = 5;
+//Modify Begin:2026-08-17 by Hui
+    int m_PyramidLevels = 16;
+//Modify End
 //Modify Begin:2026-08-17 by Hui
     Backend m_Backend = Backend::Cuda;
     CudaMethod m_CudaMethod = CudaMethod::ClassicPyramid;
     float m_BoxFilterSigma = 1.0f;
+    bool m_UseSharedMemoryDownsampling = false;
     std::unique_ptr<Bloom> m_FrameworkBloom;
     uint32_t m_FrameworkBloomWidth = 0;
     uint32_t m_FrameworkBloomHeight = 0;
@@ -148,14 +152,15 @@ private:
 //Modify End
     CUmodule m_Module = nullptr;
 //Modify Begin:2026-08-17 by Hui
-    CUfunction m_PrefilterDownsampleRasterBloomKernel = nullptr;
-    CUfunction m_DownsampleRasterBloomKernel = nullptr;
+    CUfunction m_BloomPrefilterDownsampleKernel = nullptr;
+    CUfunction m_BloomFourLevelSharedDownsampleKernel = nullptr;
+    CUfunction m_BloomFourTapDownsampleKernel = nullptr;
 //Modify End
 //Modify Begin:2026-08-17 by Hui
-    CUfunction m_UpsampleBoxFilterKernel = nullptr;
-    CUfunction m_UpsampleBoxFilterOriginalKernel = nullptr;
-    CUfunction m_UpsampleRasterBloomKernel = nullptr;
-    CUfunction m_CompositeRasterBloomKernel = nullptr;
+    CUfunction m_BloomBoxFilterAdditiveUpsampleKernel = nullptr;
+    CUfunction m_BloomBoxFilterInterpolatedUpsampleKernel = nullptr;
+    CUfunction m_BloomAdditiveUpsampleKernel = nullptr;
+    CUfunction m_BloomCompositeKernel = nullptr;
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
     std::vector<uint32_t> m_PyramidWidth;

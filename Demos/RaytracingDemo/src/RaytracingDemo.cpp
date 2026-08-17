@@ -1540,6 +1540,10 @@ void RaytracingDemo::LoadStartupConfiguration()
     {
         m_CudaBloom.SetBoxFilterSigma(std::max(0.001f, floatValue));
     }
+    if (configuration.TryGetBoolean("CudaBloom", "SharedMemoryDownsampling", boolValue))
+    {
+        m_CudaBloom.SetUseSharedMemoryDownsampling(boolValue);
+    }
 //Modify End
 
     if (configuration.TryGetBoolean("Debug", "GpuTiming", boolValue))

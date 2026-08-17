@@ -119,6 +119,8 @@ bool CudaBloomPass::DrawImGui(const uint32_t width, const uint32_t height)
             }
 
             ImGui::TextDisabled("Fixed pyramid: 5-tap prefilter, 4-tap downsample, 4-tap upsample and composite.");
+            changed |= ImGui::Checkbox("Shared-Memory Downsampling", &m_UseSharedMemoryDownsampling);
+            ImGui::TextDisabled("Experimental: cascades four downsample levels per dispatch.");
         }
 //Modify End
         changed |= ImGui::SliderFloat("Bloom Threshold", &m_Threshold, 0.0f, 5.0f, "%.2f");
@@ -227,12 +229,13 @@ bool CudaBloomPass::InitializeCuda()
     }
 
 //Modify Begin:2026-08-17 by Hui
-    if (!m_CudaContext.GetFunction(m_Module, "PrefilterDownsampleRasterBloomKernel", m_PrefilterDownsampleRasterBloomKernel, error) ||
-        !m_CudaContext.GetFunction(m_Module, "DownsampleRasterBloomKernel", m_DownsampleRasterBloomKernel, error) ||
-        !m_CudaContext.GetFunction(m_Module, "UpsampleBoxFilterKernel", m_UpsampleBoxFilterKernel, error) ||
-        !m_CudaContext.GetFunction(m_Module, "UpsampleBoxFilterOriginalKernel", m_UpsampleBoxFilterOriginalKernel, error) ||
-        !m_CudaContext.GetFunction(m_Module, "UpsampleRasterBloomKernel", m_UpsampleRasterBloomKernel, error) ||
-        !m_CudaContext.GetFunction(m_Module, "CompositeRasterBloomKernel", m_CompositeRasterBloomKernel, error))
+    if (!m_CudaContext.GetFunction(m_Module, "BloomPrefilterDownsampleKernel", m_BloomPrefilterDownsampleKernel, error) ||
+        !m_CudaContext.GetFunction(m_Module, "BloomFourLevelSharedDownsampleKernel", m_BloomFourLevelSharedDownsampleKernel, error) ||
+        !m_CudaContext.GetFunction(m_Module, "BloomFourTapDownsampleKernel", m_BloomFourTapDownsampleKernel, error) ||
+        !m_CudaContext.GetFunction(m_Module, "BloomBoxFilterAdditiveUpsampleKernel", m_BloomBoxFilterAdditiveUpsampleKernel, error) ||
+        !m_CudaContext.GetFunction(m_Module, "BloomBoxFilterInterpolatedUpsampleKernel", m_BloomBoxFilterInterpolatedUpsampleKernel, error) ||
+        !m_CudaContext.GetFunction(m_Module, "BloomAdditiveUpsampleKernel", m_BloomAdditiveUpsampleKernel, error) ||
+        !m_CudaContext.GetFunction(m_Module, "BloomCompositeKernel", m_BloomCompositeKernel, error))
     {
         m_Status = error;
         Shutdown();
@@ -621,7 +624,7 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
         &intensity,
     };
     result = cuLaunchKernel(
-        m_PrefilterDownsampleRasterBloomKernel,
+        m_BloomPrefilterDownsampleKernel,
         DivideRoundUp(firstWidth, blockX),
         DivideRoundUp(firstHeight, blockY),
         1u,
@@ -638,14 +641,74 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
         return false;
     }
 
-    for (uint32_t level = 1u; level < levelCount; ++level)
+    const bool canUseSharedCascade = m_UseSharedMemoryDownsampling && levelCount >= 5u;
+
+    for (uint32_t level = 1u; level < levelCount;)
     {
+        const uint32_t sourceLevel = canUseSharedCascade
+            ? std::min<uint32_t>(level - 1u, levelCount - 5u)
+            : level - 1u;
+        if (canUseSharedCascade)
+        {
+            CUtexObject source = m_PyramidTextures.GetPointTextureObject(sourceLevel);
+            CUsurfObject output1 = getPyramidSurface(level);
+            CUsurfObject output2 = getPyramidSurface(level + 1u);
+            CUsurfObject output3 = getPyramidSurface(level + 2u);
+            CUsurfObject output4 = getPyramidSurface(level + 3u);
+            uint32_t sourceWidth = getPyramidWidth(sourceLevel);
+            uint32_t sourceHeight = getPyramidHeight(sourceLevel);
+            uint32_t output1Width = getPyramidWidth(level);
+            uint32_t output1Height = getPyramidHeight(level);
+            uint32_t output2Width = getPyramidWidth(level + 1u);
+            uint32_t output2Height = getPyramidHeight(level + 1u);
+            uint32_t output3Width = getPyramidWidth(level + 2u);
+            uint32_t output3Height = getPyramidHeight(level + 2u);
+            uint32_t output4Width = getPyramidWidth(level + 3u);
+            uint32_t output4Height = getPyramidHeight(level + 3u);
+            void* sharedCascadeArgs[] = {
+                &source,
+                &output1,
+                &output2,
+                &output3,
+                &output4,
+                &sourceWidth,
+                &sourceHeight,
+                &output1Width,
+                &output1Height,
+                &output2Width,
+                &output2Height,
+                &output3Width,
+                &output3Height,
+                &output4Width,
+                &output4Height,
+            };
+            result = cuLaunchKernel(
+                m_BloomFourLevelSharedDownsampleKernel,
+                DivideRoundUp(output1Width, 8u),
+                DivideRoundUp(output1Height, 8u),
+                1u,
+                blockX,
+                blockY,
+                1u,
+                0u,
+                m_CudaContext.GetStream(),
+                sharedCascadeArgs,
+                nullptr);
+            if (result != CUDA_SUCCESS)
+            {
+                m_Status = "CUDA bloom four-level shared-memory downsample launch failed: " + CudaContext::GetError(result);
+                return false;
+            }
+            level = sourceLevel + 5u;
+            continue;
+        }
+
         CUsurfObject outputLevel = m_PyramidTextures.GetSurfaceObject(level);
-        uint32_t sourceWidth = m_PyramidWidth[level - 1u];
-        uint32_t sourceHeight = m_PyramidHeight[level - 1u];
-        uint32_t outputWidth = m_PyramidWidth[level];
-        uint32_t outputHeight = m_PyramidHeight[level];
-        CUtexObject source = m_PyramidTextures.GetLinearTextureObject(level - 1u);
+        uint32_t sourceWidth = getPyramidWidth(sourceLevel);
+        uint32_t sourceHeight = getPyramidHeight(sourceLevel);
+        uint32_t outputWidth = getPyramidWidth(level);
+        uint32_t outputHeight = getPyramidHeight(level);
+        CUtexObject source = m_PyramidTextures.GetLinearTextureObject(sourceLevel);
         void* downsampleArgs[] = {
             &source,
             &outputLevel,
@@ -655,7 +718,7 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
             &outputHeight,
         };
         result = cuLaunchKernel(
-            m_DownsampleRasterBloomKernel,
+            m_BloomFourTapDownsampleKernel,
             DivideRoundUp(outputWidth, blockX),
             DivideRoundUp(outputHeight, blockY),
             1u,
@@ -671,6 +734,7 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
             m_Status = "CUDA bloom downsample launch failed: " + CudaContext::GetError(result);
             return false;
         }
+        ++level;
     }
 
 //Modify End
@@ -712,18 +776,18 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
             &lowHeight,
         };
 //Modify End
-        CUfunction upsampleKernel = m_UpsampleRasterBloomKernel;
+        CUfunction upsampleKernel = m_BloomAdditiveUpsampleKernel;
         void** upsampleArgs = rasterBloomUpsampleArgs;
         if (!classicPyramid)
         {
             switch (m_CudaMethod)
             {
             case CudaMethod::BoxFilterApproximation:
-                upsampleKernel = m_UpsampleBoxFilterKernel;
+                upsampleKernel = m_BloomBoxFilterAdditiveUpsampleKernel;
                 upsampleArgs = boxFilterUpsampleArgs;
                 break;
             case CudaMethod::BoxFilterOriginalPaper:
-                upsampleKernel = m_UpsampleBoxFilterOriginalKernel;
+                upsampleKernel = m_BloomBoxFilterInterpolatedUpsampleKernel;
                 upsampleArgs = boxFilterUpsampleArgs;
                 break;
             case CudaMethod::ClassicPyramid:
@@ -767,7 +831,7 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
     };
 //Modify End
     result = cuLaunchKernel(
-        m_CompositeRasterBloomKernel,
+        m_BloomCompositeKernel,
         DivideRoundUp(width, blockX),
         DivideRoundUp(height, blockY),
         1u,
