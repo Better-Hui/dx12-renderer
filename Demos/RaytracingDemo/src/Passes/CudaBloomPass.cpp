@@ -106,47 +106,38 @@ bool CudaBloomPass::DrawImGui(const uint32_t width, const uint32_t height)
 
         if (!IsFrameworkRaster())
         {
-            const char* filterModelNames[] = { "Custom Tap Pyramid", "Raster-Matched" };
-            int filterModel = static_cast<int>(m_CudaFilterModel);
-            if (ImGui::Combo("CUDA Filter Model", &filterModel, filterModelNames, IM_ARRAYSIZE(filterModelNames)))
+            const char* methodNames[] = {
+                "Classic Additive Pyramid",
+                "Box Filter Approximation (optimized)",
+                "Box Filter Approximation (original paper)",
+                "Raster-Matched",
+            };
+            int method = static_cast<int>(m_CudaMethod);
+            if (ImGui::Combo("CUDA Method", &method, methodNames, IM_ARRAYSIZE(methodNames)))
             {
-                m_CudaFilterModel = static_cast<CudaFilterModel>(filterModel);
+                m_CudaMethod = static_cast<CudaMethod>(method);
                 changed = true;
             }
 
-            if (m_CudaFilterModel == CudaFilterModel::CustomTapPyramid)
+            const char* tapCountNames[] = { "5 Tap", "10 Tap", "15 Tap" };
+            constexpr std::array<DownsampleTapCount, IM_ARRAYSIZE(tapCountNames)> tapCounts = {
+                DownsampleTapCount::Five,
+                DownsampleTapCount::Ten,
+                DownsampleTapCount::Fifteen,
+            };
+            const auto tapCountIterator = std::find(tapCounts.begin(), tapCounts.end(), m_DownsampleTapCount);
+            int tapCount = tapCountIterator == tapCounts.end()
+                ? 0
+                : static_cast<int>(std::distance(tapCounts.begin(), tapCountIterator));
+            if (ImGui::Combo("CUDA Downsample Taps", &tapCount, tapCountNames, IM_ARRAYSIZE(tapCountNames)))
             {
-                const char* tapCountNames[] = { "5 Tap", "10 Tap", "15 Tap" };
-                constexpr std::array<DownsampleTapCount, IM_ARRAYSIZE(tapCountNames)> tapCounts = {
-                    DownsampleTapCount::Five,
-                    DownsampleTapCount::Ten,
-                    DownsampleTapCount::Fifteen,
-                };
-                const auto tapCountIterator = std::find(tapCounts.begin(), tapCounts.end(), m_DownsampleTapCount);
-                int tapCount = tapCountIterator == tapCounts.end()
-                    ? 0
-                    : static_cast<int>(std::distance(tapCounts.begin(), tapCountIterator));
-                if (ImGui::Combo("CUDA Downsample Taps", &tapCount, tapCountNames, IM_ARRAYSIZE(tapCountNames)))
-                {
-                    m_DownsampleTapCount = tapCounts[static_cast<size_t>(tapCount)];
-                    changed = true;
-                }
-
-                const char* upsampleMethodNames[] = {
-                    "Classic Additive Pyramid",
-                    "Box Filter Approximation (optimized)",
-                    "Box Filter Approximation (original paper)",
-                };
-                int upsampleMethod = static_cast<int>(m_CudaUpsampleMethod);
-                if (ImGui::Combo("CUDA Upsample Method", &upsampleMethod, upsampleMethodNames, IM_ARRAYSIZE(upsampleMethodNames)))
-                {
-                    m_CudaUpsampleMethod = static_cast<CudaUpsampleMethod>(upsampleMethod);
-                    changed = true;
-                }
+                m_DownsampleTapCount = tapCounts[static_cast<size_t>(tapCount)];
+                changed = true;
             }
-            else
+
+            if (m_CudaMethod == CudaMethod::RasterMatched)
             {
-                ImGui::TextDisabled("Fixed: 5-tap prefilter, 4-tap downsample, 4-tap upsample and composite.");
+                ImGui::TextDisabled("5 Tap matches raster sampling; 10/15 Tap retain raster reconstruction with denser downsampling.");
             }
         }
 //Modify End
@@ -162,9 +153,8 @@ bool CudaBloomPass::DrawImGui(const uint32_t width, const uint32_t height)
 //Modify End
 //Modify Begin:2026-08-17 by BestHui
         if (!IsFrameworkRaster() &&
-            m_CudaFilterModel == CudaFilterModel::CustomTapPyramid &&
-            (m_CudaUpsampleMethod == CudaUpsampleMethod::BoxFilterApproximation ||
-                m_CudaUpsampleMethod == CudaUpsampleMethod::BoxFilterOriginalPaper))
+            (m_CudaMethod == CudaMethod::BoxFilterApproximation ||
+                m_CudaMethod == CudaMethod::BoxFilterOriginalPaper))
         {
             changed |= ImGui::SliderFloat("Box Filter Sigma", &m_BoxFilterSigma, 0.1f, 16.0f, "%.2f");
         }
@@ -651,13 +641,14 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
     uint32_t firstWidth = getPyramidWidth(0u);
     uint32_t firstHeight = getPyramidHeight(0u);
     CUsurfObject firstOutput = getPyramidSurface(0u);
-    CUfunction prefilterKernel = rasterMatched
+    const bool rasterMatchedSampling = rasterMatched && m_DownsampleTapCount == DownsampleTapCount::Five;
+    CUfunction prefilterKernel = rasterMatchedSampling
         ? m_PrefilterDownsampleRasterMatchedKernel
         : m_PrefilterDownsample5TapKernel;
-    CUfunction downsampleKernel = rasterMatched
+    CUfunction downsampleKernel = rasterMatchedSampling
         ? m_DownsampleRasterMatchedKernel
         : m_Downsample5TapKernel;
-    if (!rasterMatched)
+    if (!rasterMatchedSampling)
     {
         switch (m_DownsampleTapCount)
         {
@@ -795,17 +786,18 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
         }
         else
         {
-            switch (m_CudaUpsampleMethod)
+            switch (m_CudaMethod)
             {
-            case CudaUpsampleMethod::BoxFilterApproximation:
+            case CudaMethod::BoxFilterApproximation:
                 upsampleKernel = m_UpsampleBoxFilterKernel;
                 upsampleArgs = boxFilterUpsampleArgs;
                 break;
-            case CudaUpsampleMethod::BoxFilterOriginalPaper:
+            case CudaMethod::BoxFilterOriginalPaper:
                 upsampleKernel = m_UpsampleBoxFilterOriginalKernel;
                 upsampleArgs = boxFilterUpsampleArgs;
                 break;
-            case CudaUpsampleMethod::Classic:
+            case CudaMethod::Classic:
+            case CudaMethod::RasterMatched:
             default:
                 break;
             }

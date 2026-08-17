@@ -1499,32 +1499,24 @@ void RaytracingDemo::LoadStartupConfiguration()
             m_CudaBloom.SetBackend(CudaBloomPass::Backend::Cuda);
         }
     }
-    if (configuration.TryGetString("CudaBloom", "CudaFilterModel", stringValue))
-    {
-        stringValue = ToLower(stringValue);
-        if (stringValue == "raster-matched" || stringValue == "rastermatched")
-        {
-            m_CudaBloom.SetCudaFilterModel(CudaBloomPass::CudaFilterModel::RasterMatched);
-        }
-        else if (stringValue == "custom" || stringValue == "custom-tap-pyramid")
-        {
-            m_CudaBloom.SetCudaFilterModel(CudaBloomPass::CudaFilterModel::CustomTapPyramid);
-        }
-    }
-    if (configuration.TryGetString("CudaBloom", "CudaUpsampleMethod", stringValue))
+    if (configuration.TryGetString("CudaBloom", "CudaMethod", stringValue))
     {
         stringValue = ToLower(stringValue);
         if (stringValue == "boxfilter" || stringValue == "box-filter" || stringValue == "box-filter-approximation")
         {
-            m_CudaBloom.SetCudaUpsampleMethod(CudaBloomPass::CudaUpsampleMethod::BoxFilterApproximation);
+            m_CudaBloom.SetCudaMethod(CudaBloomPass::CudaMethod::BoxFilterApproximation);
         }
         else if (stringValue == "boxfilter-original" || stringValue == "box-filter-original" || stringValue == "box-filter-original-paper")
         {
-            m_CudaBloom.SetCudaUpsampleMethod(CudaBloomPass::CudaUpsampleMethod::BoxFilterOriginalPaper);
+            m_CudaBloom.SetCudaMethod(CudaBloomPass::CudaMethod::BoxFilterOriginalPaper);
+        }
+        else if (stringValue == "raster-matched" || stringValue == "rastermatched")
+        {
+            m_CudaBloom.SetCudaMethod(CudaBloomPass::CudaMethod::RasterMatched);
         }
         else if (stringValue == "classic")
         {
-            m_CudaBloom.SetCudaUpsampleMethod(CudaBloomPass::CudaUpsampleMethod::Classic);
+            m_CudaBloom.SetCudaMethod(CudaBloomPass::CudaMethod::Classic);
         }
     }
     if (configuration.TryGetFloat("CudaBloom", "Threshold", floatValue))

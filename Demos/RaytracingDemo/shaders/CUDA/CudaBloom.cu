@@ -282,7 +282,7 @@ __device__ float3 SampleBloomRingDownsample(
         1.0f / static_cast<float>(sourceWidth),
         1.0f / static_cast<float>(sourceHeight));
     const float ringStart = 2.0f / static_cast<float>(ringPointCount);
-    const float sampleScale = 0.66f * 4.0f;
+    constexpr float sampleScale = 1.41421356237f;
 
     if constexpr (ApplyPrefilter)
     {

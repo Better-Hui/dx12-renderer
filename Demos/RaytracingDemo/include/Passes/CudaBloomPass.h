@@ -25,17 +25,12 @@ public:
         FrameworkRaster = 1,
     };
 
-    enum class CudaFilterModel : uint32_t
-    {
-        CustomTapPyramid = 0,
-        RasterMatched = 1,
-    };
-
-    enum class CudaUpsampleMethod : uint32_t
+    enum class CudaMethod : uint32_t
     {
         Classic = 0,
         BoxFilterApproximation = 1,
         BoxFilterOriginalPaper = 2,
+        RasterMatched = 3,
     };
 
     enum class DownsampleTapCount : uint32_t
@@ -78,13 +73,13 @@ public:
 //Modify Begin:2026-08-17 by BestHui
     bool IsCudaRasterMatched() const
     {
-        return m_Backend == Backend::Cuda && m_CudaFilterModel == CudaFilterModel::RasterMatched;
+        return m_Backend == Backend::Cuda && m_CudaMethod == CudaMethod::RasterMatched;
     }
 //Modify End
     const std::string& GetStatus() const { return m_Status; }
+//Modify Begin:2026-08-17 by BestHui
     void SetBackend(Backend backend) { m_Backend = backend; }
-    void SetCudaFilterModel(CudaFilterModel filterModel) { m_CudaFilterModel = filterModel; }
-    void SetCudaUpsampleMethod(CudaUpsampleMethod method) { m_CudaUpsampleMethod = method; }
+    void SetCudaMethod(CudaMethod method) { m_CudaMethod = method; }
     void SetThreshold(float threshold) { m_Threshold = threshold; }
     void SetSoftThreshold(float softThreshold) { m_SoftThreshold = softThreshold; }
     void SetIntensity(float intensity) { m_Intensity = intensity; }
@@ -150,8 +145,7 @@ private:
     int m_PyramidLevels = 5;
 //Modify Begin:2026-08-17 by BestHui
     Backend m_Backend = Backend::Cuda;
-    CudaFilterModel m_CudaFilterModel = CudaFilterModel::CustomTapPyramid;
-    CudaUpsampleMethod m_CudaUpsampleMethod = CudaUpsampleMethod::Classic;
+    CudaMethod m_CudaMethod = CudaMethod::Classic;
     float m_BoxFilterSigma = 1.0f;
     DownsampleTapCount m_DownsampleTapCount = DownsampleTapCount::Five;
     std::unique_ptr<Bloom> m_FrameworkBloom;
