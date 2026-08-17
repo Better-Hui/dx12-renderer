@@ -2,16 +2,15 @@ target_include_directories(${TARGET_NAME}
         PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
         )
 
-# Modify Begin:2026-08-16 by BestHui
+# Modify Begin:2026-08-17 by BestHui
 if (DX12_RENDERER_HAS_SHADER_ASSETS)
-    set(DX12_RENDERER_SHADER_ASSET_TARGET "${TARGET_NAME}ShaderAssets")
-    if (NOT TARGET ${DX12_RENDERER_SHADER_ASSET_TARGET})
-        add_custom_target(${DX12_RENDERER_SHADER_ASSET_TARGET}
-                COMMAND ${CMAKE_COMMAND} -P "${DX12_RENDERER_SHADER_PRE_BUILD_SCRIPT}"
-                COMMENT "Compiling ${TARGET_NAME} shader assets"
-                VERBATIM)
-    endif()
-    add_dependencies(${TARGET_NAME} ${DX12_RENDERER_SHADER_ASSET_TARGET})
+    # Keep shader compilation coupled to its owning target. A separate custom
+    # target becomes a visible Visual Studio project even though it is not a
+    # developer-facing build unit.
+    add_custom_command(TARGET ${TARGET_NAME} PRE_BUILD
+            COMMAND ${CMAKE_COMMAND} -P "${DX12_RENDERER_SHADER_PRE_BUILD_SCRIPT}"
+            COMMENT "Compiling ${TARGET_NAME} shader assets"
+            VERBATIM)
 endif()
 # Modify End
 
