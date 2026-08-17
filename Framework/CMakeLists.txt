@@ -14,6 +14,9 @@ set(SHADER_FILES_PIXEL
         "shaders/Blit_PS.hlsl"
         "shaders/Bloom_Prefilter_PS.hlsl"
         "shaders/Bloom_Downsample_PS.hlsl"
+# Modify Begin:2026-08-17 by BestHui
+        "shaders/Bloom_Composite_PS.hlsl"
+# Modify End
         "shaders/TAA_Resolve_PS.hlsl"
         "shaders/ImGuiCombine_PS.hlsl"
         )

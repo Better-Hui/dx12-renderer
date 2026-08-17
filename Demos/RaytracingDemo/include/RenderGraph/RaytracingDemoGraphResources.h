@@ -45,6 +45,9 @@ namespace RaytracingDemoRenderGraph
         static inline const RenderGraph::ResourceId DirectLighting = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DirectLighting");
         static inline const RenderGraph::ResourceId IndirectLighting = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.IndirectLighting");
         static inline const RenderGraph::ResourceId SceneColor = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.SceneColor");
+//Modify Begin:2026-08-17 by BestHui
+        static inline const RenderGraph::ResourceId BloomOutput = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.BloomOutput");
+//Modify End
 //Modify Begin:2026-08-07 by BestHui
         static inline const RenderGraph::ResourceId DLSSOutput = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DLSSOutput");
         static inline const RenderGraph::ResourceId DLSSNormalRoughness = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DLSSNormalRoughness");
@@ -109,7 +112,8 @@ namespace RaytracingDemoRenderGraph
     std::vector<RenderGraph::TextureDescription> CreateTextureDescriptions(
         bool includeDLSS,
         bool includeFrameGeneration,
-        bool includeRayReconstruction);
+        bool includeRayReconstruction,
+        bool includeFrameworkBloom);
 //Modify End
     std::vector<RenderGraph::BufferDescription> CreateBufferDescriptions();
 //Modify Begin:2026-08-07 by BestHui

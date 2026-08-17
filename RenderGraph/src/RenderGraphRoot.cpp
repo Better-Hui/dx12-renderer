@@ -23,7 +23,7 @@ RenderGraph::RenderGraphRoot::RenderGraphRoot(
     std::vector<BufferDescription>&& buffers,
     std::vector<TokenDescription>&& tokens
 //Modify Begin:2026-07-28 by BestHui
-    , std::vector<ResourceId> externalOutputs
+    , RenderGraphOutputResources outputs
 //Modify End
 )
 //Modify Begin:2026-07-30 by BestHui
@@ -42,7 +42,8 @@ RenderGraph::RenderGraphRoot::RenderGraphRoot(
     , m_BufferDescriptions(std::move(buffers))
     , m_TokenDescriptions(std::move(tokens))
 //Modify Begin:2026-07-28 by BestHui
-    , m_ExternalOutputIds(std::move(externalOutputs))
+    , m_ExternalOutputIds(std::move(outputs.External))
+    , m_PresentationResourceId(outputs.Presentation)
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
     , m_ResourcePool(std::make_shared<ResourcePool>(m_DeviceContext, m_DirectCommandQueue, m_AsyncComputeCommandQueue))
@@ -55,6 +56,10 @@ RenderGraph::RenderGraphRoot::RenderGraphRoot(
     Assert(m_AsyncComputeCommandQueue != nullptr, "Render graph requires an async compute command queue.");
 //Modify End
 //Modify Begin:2026-07-28 by BestHui
+    if (std::ranges::find(m_ExternalOutputIds, m_PresentationResourceId) == m_ExternalOutputIds.end())
+    {
+        m_ExternalOutputIds.push_back(m_PresentationResourceId);
+    }
     if (std::ranges::find(m_ExternalOutputIds, ResourceIds::GRAPH_OUTPUT) == m_ExternalOutputIds.end())
     {
         m_ExternalOutputIds.push_back(ResourceIds::GRAPH_OUTPUT);

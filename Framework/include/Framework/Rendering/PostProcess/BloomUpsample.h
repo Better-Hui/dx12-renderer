@@ -21,10 +21,18 @@ public:
 		const std::shared_ptr<Texture>& source,
 		const RenderTarget& destination);
 
-	void Begin(CommandList& commandList);
-	void End(CommandList& commandList);
+//Modify Begin:2026-08-17 by BestHui
+	void ExecuteComposite(CommandList& commandList,
+		const BloomParameters& parameters,
+		const std::shared_ptr<Texture>& sourceColor,
+		const std::shared_ptr<Texture>& bloom,
+		const RenderTarget& destination);
+//Modify End
 
 private:
-	std::shared_ptr<Material> m_Material;
+//Modify Begin:2026-08-17 by BestHui
+	std::shared_ptr<Material> m_UpsampleMaterial;
+	std::shared_ptr<Material> m_CompositeMaterial;
+//Modify End
 	std::shared_ptr<Mesh> m_BlitMesh;
 };

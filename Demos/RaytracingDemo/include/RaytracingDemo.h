@@ -187,7 +187,9 @@ private:
     DenoiserController::Algorithm m_RenderGraphDenoiserAlgorithm = DenoiserController::Algorithm::Off;
     bool m_RenderGraphCudaBloomEnabled = false;
 //Modify Begin:2026-08-16 by BestHui
-    CudaBloomPass::Method m_RenderGraphCudaBloomMethod = CudaBloomPass::Method::Classic;
+//Modify Begin:2026-08-17 by BestHui
+    CudaBloomPass::Backend m_RenderGraphCudaBloomBackend = CudaBloomPass::Backend::Cuda;
+//Modify End
 //Modify End
 //Modify Begin:2026-08-07 by BestHui
     bool m_RenderGraphDLSSEnabled = false;

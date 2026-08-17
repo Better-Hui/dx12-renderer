@@ -5,7 +5,8 @@ namespace RaytracingDemoRenderGraph
     std::vector<RenderGraph::TextureDescription> CreateTextureDescriptions(
         const bool includeDLSS,
         const bool includeFrameGeneration,
-        const bool includeRayReconstruction)
+        const bool includeRayReconstruction,
+        const bool includeFrameworkBloom)
     {
         const RenderGraph::RenderMetadataExpression<uint32_t> renderWidthExpression = [](const RenderGraph::RenderMetadata& metadata) { return metadata.m_ScreenWidth; };
         const RenderGraph::RenderMetadataExpression<uint32_t> renderHeightExpression = [](const RenderGraph::RenderMetadata& metadata) { return metadata.m_ScreenHeight; };
@@ -45,6 +46,21 @@ namespace RaytracingDemoRenderGraph
             { ResourceIds::NRDMotion, renderWidthExpression, renderHeightExpression, NRD_MOTION_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Discard },
             { ResourceIds::DepthBuffer, renderWidthExpression, renderHeightExpression, DEPTH_FORMAT, { 1.0f, 0u }, RenderGraph::ResourceInitAction::Clear },
         };
+//Modify Begin:2026-08-17 by BestHui
+        if (includeFrameworkBloom)
+        {
+            textureDescriptions.emplace_back(
+                ResourceIds::BloomOutput,
+                renderWidthExpression,
+                renderHeightExpression,
+                SCENE_COLOR_FORMAT,
+                OUTPUT_CLEAR_COLOR,
+                RenderGraph::ResourceInitAction::Discard,
+                D3D12_RESOURCE_FLAG_NONE,
+                D3D12_HEAP_FLAG_NONE,
+                true);
+        }
+//Modify End
         if (includeDLSS)
         {
             textureDescriptions.emplace_back(

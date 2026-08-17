@@ -46,7 +46,11 @@ void BloomDownsample::Execute(CommandList& commandList, const BloomParameters& p
 {
 	PIXScope(commandList, "Bloom Downsample");
 
+	//Modify Begin:2026-08-17 by BestHui
+	commandList.TransitionBarrier(*source, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 	commandList.SetRenderTarget(destination);
+	commandList.FlushResourceBarriers();
+	//Modify End
 	commandList.SetAutomaticViewportAndScissorRect(destination);
 
 	m_Material->SetShaderResourceView("sourceColorTexture", ShaderResourceView(source));
@@ -59,16 +63,8 @@ void BloomDownsample::Execute(CommandList& commandList, const BloomParameters& p
 	parametersCb.TexelSize = { 1 / fSourceWidth , 1 / fSourceHeight };
 	m_Material->SetAllVariables(parametersCb);
 
-	m_Material->UploadUniforms(commandList);
+	//Modify Begin:2026-08-17 by BestHui
+	m_Material->Bind(commandList);
+	//Modify End
 	m_BlitMesh->Draw(commandList);
-}
-
-void BloomDownsample::Begin(CommandList& commandList)
-{
-	m_Material->BeginBatch(commandList);
-}
-
-void BloomDownsample::End(CommandList& commandList)
-{
-	m_Material->EndBatch(commandList);
 }

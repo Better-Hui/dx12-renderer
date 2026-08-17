@@ -1486,24 +1486,45 @@ void RaytracingDemo::LoadStartupConfiguration()
     {
         m_CudaBloom.SetEnabled(boolValue);
     }
-    if (configuration.TryGetString("CudaBloom", "Method", stringValue))
+//Modify Begin:2026-08-17 by BestHui
+    if (configuration.TryGetString("CudaBloom", "Backend", stringValue))
+    {
+        stringValue = ToLower(stringValue);
+        if (stringValue == "builtin" || stringValue == "framework" || stringValue == "framework-raster" || stringValue == "raster")
+        {
+            m_CudaBloom.SetBackend(CudaBloomPass::Backend::FrameworkRaster);
+        }
+        else if (stringValue == "cuda")
+        {
+            m_CudaBloom.SetBackend(CudaBloomPass::Backend::Cuda);
+        }
+    }
+    if (configuration.TryGetString("CudaBloom", "CudaFilterModel", stringValue))
+    {
+        stringValue = ToLower(stringValue);
+        if (stringValue == "raster-matched" || stringValue == "rastermatched")
+        {
+            m_CudaBloom.SetCudaFilterModel(CudaBloomPass::CudaFilterModel::RasterMatched);
+        }
+        else if (stringValue == "custom" || stringValue == "custom-tap-pyramid")
+        {
+            m_CudaBloom.SetCudaFilterModel(CudaBloomPass::CudaFilterModel::CustomTapPyramid);
+        }
+    }
+    if (configuration.TryGetString("CudaBloom", "CudaUpsampleMethod", stringValue))
     {
         stringValue = ToLower(stringValue);
         if (stringValue == "boxfilter" || stringValue == "box-filter" || stringValue == "box-filter-approximation")
         {
-            m_CudaBloom.SetMethod(CudaBloomPass::Method::BoxFilterApproximation);
+            m_CudaBloom.SetCudaUpsampleMethod(CudaBloomPass::CudaUpsampleMethod::BoxFilterApproximation);
         }
         else if (stringValue == "boxfilter-original" || stringValue == "box-filter-original" || stringValue == "box-filter-original-paper")
         {
-            m_CudaBloom.SetMethod(CudaBloomPass::Method::BoxFilterOriginalPaper);
+            m_CudaBloom.SetCudaUpsampleMethod(CudaBloomPass::CudaUpsampleMethod::BoxFilterOriginalPaper);
         }
         else if (stringValue == "classic")
         {
-            m_CudaBloom.SetMethod(CudaBloomPass::Method::Classic);
-        }
-        else if (stringValue == "builtin" || stringValue == "framework" || stringValue == "framework-raster" || stringValue == "raster")
-        {
-            m_CudaBloom.SetMethod(CudaBloomPass::Method::FrameworkRaster);
+            m_CudaBloom.SetCudaUpsampleMethod(CudaBloomPass::CudaUpsampleMethod::Classic);
         }
     }
     if (configuration.TryGetFloat("CudaBloom", "Threshold", floatValue))
@@ -1531,29 +1552,20 @@ void RaytracingDemo::LoadStartupConfiguration()
     {
         m_CudaBloom.SetBoxFilterSigma(std::max(0.001f, floatValue));
     }
-//Modify Begin:2026-08-16 by BestHui
-    if (configuration.TryGetString("CudaBloom", "DownsampleMode", stringValue))
+    if (configuration.TryGetString("CudaBloom", "DownsampleTapCount", stringValue))
     {
         stringValue = ToLower(stringValue);
-        if (stringValue == "5tap" || stringValue == "5-tap" || stringValue == "non-cascaded-5tap")
+        if (stringValue == "5" || stringValue == "5tap" || stringValue == "5-tap")
         {
-            m_CudaBloom.SetDownsampleMode(CudaBloomPass::DownsampleMode::NonCascaded5Tap);
+            m_CudaBloom.SetDownsampleTapCount(CudaBloomPass::DownsampleTapCount::Five);
         }
-        else if (stringValue == "5tap-shared" || stringValue == "5-tap-shared" || stringValue == "5tap-shared-memory")
+        else if (stringValue == "10" || stringValue == "10tap" || stringValue == "10-tap")
         {
-            m_CudaBloom.SetDownsampleMode(CudaBloomPass::DownsampleMode::NonCascaded5TapShared);
+            m_CudaBloom.SetDownsampleTapCount(CudaBloomPass::DownsampleTapCount::Ten);
         }
-        else if (stringValue == "10tap" || stringValue == "10-tap" || stringValue == "non-cascaded-10tap")
+        else if (stringValue == "15" || stringValue == "15tap" || stringValue == "15-tap")
         {
-            m_CudaBloom.SetDownsampleMode(CudaBloomPass::DownsampleMode::NonCascaded10Tap);
-        }
-        else if (stringValue == "15tap" || stringValue == "15-tap" || stringValue == "non-cascaded-15tap")
-        {
-            m_CudaBloom.SetDownsampleMode(CudaBloomPass::DownsampleMode::NonCascaded15Tap);
-        }
-        else if (stringValue == "2x2-cascade" || stringValue == "cascade" || stringValue == "cascaded")
-        {
-            m_CudaBloom.SetDownsampleMode(CudaBloomPass::DownsampleMode::Cascaded2x2);
+            m_CudaBloom.SetDownsampleTapCount(CudaBloomPass::DownsampleTapCount::Fifteen);
         }
     }
 //Modify End
@@ -2421,7 +2433,7 @@ void RaytracingDemo::RebuildRenderGraph()
         : DenoiserController::Algorithm::Off;
     m_RenderGraphCudaBloomEnabled = m_CudaBloom.IsEnabled();
 //Modify Begin:2026-08-16 by BestHui
-    m_RenderGraphCudaBloomMethod = m_CudaBloom.GetMethod();
+    m_RenderGraphCudaBloomBackend = m_CudaBloom.GetBackend();
 //Modify End
 //Modify Begin:2026-08-07 by BestHui
     m_RenderGraphDLSSEnabled = m_DLSS.IsEnabled();
@@ -2459,7 +2471,7 @@ void RaytracingDemo::EnsureRenderGraphTopology()
             : DenoiserController::Algorithm::Off) ||
         m_RenderGraphCudaBloomEnabled != m_CudaBloom.IsEnabled()
 //Modify Begin:2026-08-16 by BestHui
-        || m_RenderGraphCudaBloomMethod != m_CudaBloom.GetMethod()
+        || m_RenderGraphCudaBloomBackend != m_CudaBloom.GetBackend()
 //Modify End
 //Modify Begin:2026-08-07 by BestHui
         || m_RenderGraphDLSSEnabled != m_DLSS.IsEnabled()

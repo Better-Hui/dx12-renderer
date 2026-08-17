@@ -131,9 +131,11 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
         renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateSkyboxPass(resources, config, sceneReadyToken));
         sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::SkyboxFinishedToken;
     }
+//Modify Begin:2026-08-17 by BestHui
+    const bool useFrameworkRasterBloom = resources.CudaBloom.IsEnabled() && resources.CudaBloom.IsFrameworkRaster();
     if (resources.CudaBloom.IsEnabled())
     {
-        if (resources.CudaBloom.IsFrameworkRaster())
+        if (useFrameworkRasterBloom)
         {
             renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateFrameworkBloomPass(resources, sceneReadyToken));
         }
@@ -146,14 +148,20 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
 //Modify End
 
 //Modify Begin:2026-08-07 by BestHui
-    RenderGraph::ResourceId displayColor = RaytracingDemoRenderGraph::ResourceIds::SceneColor;
+    RenderGraph::ResourceId displayColor = useFrameworkRasterBloom
+        ? RaytracingDemoRenderGraph::ResourceIds::BloomOutput
+        : RaytracingDemoRenderGraph::ResourceIds::SceneColor;
     if (frameState.DLSSEnabled)
     {
         if (frameState.RayReconstructionEnabled)
         {
             renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDLSSRayReconstructionPreparationPass(resources));
         }
-        renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDLSSPass(resources, config, sceneReadyToken));
+        renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDLSSPass(
+            resources,
+            config,
+            displayColor,
+            sceneReadyToken));
         sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::DLSSFinishedToken;
         displayColor = RaytracingDemoRenderGraph::ResourceIds::DLSSOutput;
     }
@@ -188,7 +196,8 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
         RaytracingDemoRenderGraph::CreateTextureDescriptions(
             frameState.DLSSEnabled,
             frameState.FrameGenerationEnabled,
-            frameState.DLSSEnabled && frameState.RayReconstructionEnabled),
+            frameState.DLSSEnabled && frameState.RayReconstructionEnabled,
+            useFrameworkRasterBloom),
 //Modify End
         RaytracingDemoRenderGraph::CreateBufferDescriptions(),
 //Modify Begin:2026-08-07 by BestHui
@@ -196,6 +205,9 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
             frameState.DLSSEnabled,
             frameState.FrameGenerationEnabled),
 //Modify End
-        std::move(externalOutputs));
+        RenderGraph::RenderGraphOutputResources{
+            .Presentation = displayColor,
+            .External = std::move(externalOutputs),
+        });
 }
 //Modify End

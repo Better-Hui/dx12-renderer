@@ -15,6 +15,7 @@
 std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDLSSPass(
     const RaytracingDemoPassResources& resources,
     const RaytracingDemoPassConfig& config,
+    const RenderGraph::ResourceId inputColor,
     const RenderGraph::ResourceId sceneReadyToken)
 {
     using namespace RenderGraph;
@@ -22,7 +23,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDL
 
     std::vector<Input> inputs = {
         { sceneReadyToken, InputType::Token },
-        { DemoResourceIds::SceneColor, InputType::NonPixelShaderResource },
+        { inputColor, InputType::NonPixelShaderResource },
         { DemoResourceIds::DepthBuffer, InputType::NonPixelShaderResource },
         { DemoResourceIds::MotionVector, InputType::NonPixelShaderResource },
     };
@@ -40,11 +41,11 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDL
             { DemoResourceIds::DLSSOutput, OutputType::UnorderedAccess },
             { DemoResourceIds::DLSSFinishedToken, OutputType::Token },
         },
-        [resources, config](const RenderContext& context, CommandList& commandList)
+        [resources, config, inputColor](const RenderContext& context, CommandList& commandList)
         {
             const RaytracingDemoFrameState& frameState = *config.FrameState;
             DLSSExecutionInputs inputs{};
-            inputs.Color = context.GetTexture(DemoResourceIds::SceneColor);
+            inputs.Color = context.GetTexture(inputColor);
             inputs.Depth = context.GetTexture(DemoResourceIds::DepthBuffer);
             inputs.MotionVectors = context.GetTexture(DemoResourceIds::MotionVector);
             inputs.Output = context.GetTexture(DemoResourceIds::DLSSOutput);

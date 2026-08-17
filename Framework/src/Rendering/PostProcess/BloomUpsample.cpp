@@ -1,5 +1,6 @@
 #include <Framework/Rendering/PostProcess/BloomUpsample.h>
 #include <Framework/Blit_VS.h>
+#include <Framework/Bloom_Composite_PS.h>
 #include <Framework/Bloom_Downsample_PS.h>
 #include <Framework/Geometry/Mesh.h>
 #include <DirectXMath.h>
@@ -27,40 +28,51 @@ namespace
 	}
 }
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-08-17 by BestHui
 BloomUpsample::BloomUpsample(FrameworkDeviceContext& deviceContext, CommandList& commandList)
-//Modify End
 	: m_BlitMesh(Mesh::CreateBlitTriangle(commandList))
 {
-//Modify Begin:2026-07-27 by BestHui
-	auto shader = std::make_shared<Shader>(
+	auto upsampleShader = std::make_shared<Shader>(
 		deviceContext,
 		ShaderBlob(ShaderBytecode_Blit_VS, sizeof ShaderBytecode_Blit_VS),
 		ShaderBlob(ShaderBytecode_Bloom_Downsample_PS, sizeof ShaderBytecode_Bloom_Downsample_PS),
-//Modify Begin:2026-07-30 by BestHui
         PipelineLayoutReflectionOptions{
             .StaticSamplerContracts = { PipelineStaticSamplers::LinearClamp(3u) },
             .MaxDescriptorCount = 4096u,
             .ShaderStages = PipelineShaderStageFlags::AllGraphics
         },
-//Modify End
 		[](RasterPipelineStateBuilder& builder)
 		{
 			builder.WithAdditiveBlend();
 		}
 	);
+	m_UpsampleMaterial = Material::Create(upsampleShader);
+
+	auto compositeShader = std::make_shared<Shader>(
+		deviceContext,
+		ShaderBlob(ShaderBytecode_Blit_VS, sizeof ShaderBytecode_Blit_VS),
+		ShaderBlob(ShaderBytecode_Bloom_Composite_PS, sizeof ShaderBytecode_Bloom_Composite_PS),
+		PipelineLayoutReflectionOptions{
+			.StaticSamplerContracts = { PipelineStaticSamplers::LinearClamp(3u) },
+			.MaxDescriptorCount = 4096u,
+			.ShaderStages = PipelineShaderStageFlags::AllGraphics
+		});
+	m_CompositeMaterial = Material::Create(compositeShader);
 //Modify End
-	m_Material = Material::Create(shader);
 }
 
 void BloomUpsample::Execute(CommandList& commandList, const BloomParameters& parameters, const std::shared_ptr<Texture>& source, const RenderTarget& destination)
 {
 	PIXScope(commandList, "Bloom Upsample");
 
+	//Modify Begin:2026-08-17 by BestHui
+	commandList.TransitionBarrier(*source, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 	commandList.SetRenderTarget(destination);
+	commandList.FlushResourceBarriers();
+	//Modify End
 	commandList.SetAutomaticViewportAndScissorRect(destination);
 
-	m_Material->SetShaderResourceView("sourceColorTexture", ShaderResourceView(source));
+	m_UpsampleMaterial->SetShaderResourceView("sourceColorTexture", ShaderResourceView(source));
 
 	RootParameters::ParametersCb parametersCb{};
 	parametersCb.Intensity = parameters.Intensity;
@@ -68,18 +80,42 @@ void BloomUpsample::Execute(CommandList& commandList, const BloomParameters& par
 	auto fSourceWidth = static_cast<float>(sourceDesc.Width);
 	auto fSourceHeight = static_cast<float>(sourceDesc.Height);
 	parametersCb.TexelSize = { 0.5f / fSourceWidth , 0.5f / fSourceHeight }; // 0.5 is for more focused blur
-	m_Material->SetAllVariables(parametersCb);
+	m_UpsampleMaterial->SetAllVariables(parametersCb);
 
-	m_Material->UploadUniforms(commandList);
+	//Modify Begin:2026-08-17 by BestHui
+	m_UpsampleMaterial->Bind(commandList);
+	//Modify End
 	m_BlitMesh->Draw(commandList);
 }
 
-void BloomUpsample::Begin(CommandList& commandList)
+//Modify Begin:2026-08-17 by BestHui
+void BloomUpsample::ExecuteComposite(
+	CommandList& commandList,
+	const BloomParameters& parameters,
+	const std::shared_ptr<Texture>& sourceColor,
+	const std::shared_ptr<Texture>& bloom,
+	const RenderTarget& destination)
 {
-	m_Material->BeginBatch(commandList);
-}
+	PIXScope(commandList, "Bloom Composite");
 
-void BloomUpsample::End(CommandList& commandList)
-{
-	m_Material->EndBatch(commandList);
+	commandList.TransitionBarrier(*sourceColor, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+	commandList.TransitionBarrier(*bloom, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+	commandList.SetRenderTarget(destination);
+	commandList.FlushResourceBarriers();
+	commandList.SetAutomaticViewportAndScissorRect(destination);
+
+	m_CompositeMaterial->SetShaderResourceView("sourceColorTexture", ShaderResourceView(sourceColor));
+	m_CompositeMaterial->SetShaderResourceView("bloomTexture", ShaderResourceView(bloom));
+
+	RootParameters::ParametersCb parametersCb{};
+	parametersCb.Intensity = parameters.Intensity;
+	const auto bloomDesc = bloom->GetD3D12ResourceDesc();
+	parametersCb.TexelSize = {
+		0.5f / static_cast<float>(bloomDesc.Width),
+		0.5f / static_cast<float>(bloomDesc.Height)
+	};
+	m_CompositeMaterial->SetAllVariables(parametersCb);
+	m_CompositeMaterial->Bind(commandList);
+	m_BlitMesh->Draw(commandList);
 }
+//Modify End

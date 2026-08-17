@@ -95,43 +95,59 @@ bool CudaBloomPass::DrawImGui(const uint32_t width, const uint32_t height)
     if (ImGui::CollapsingHeader("CUDA Bloom"))
     {
         changed |= ImGui::Checkbox("Enable CUDA Bloom", &m_Enabled);
-//Modify Begin:2026-08-16 by BestHui
-        const char* bloomMethodNames[] = {
-            "Classic Additive Pyramid",
-            "Box Filter Approximation (optimized)",
-            "Box Filter Approximation (original paper)",
-            "Built-in Raster Bloom"
-        };
-        int bloomMethod = static_cast<int>(m_Method);
-        if (ImGui::Combo("Bloom Method", &bloomMethod, bloomMethodNames, IM_ARRAYSIZE(bloomMethodNames)))
+//Modify Begin:2026-08-17 by BestHui
+        const char* backendNames[] = { "CUDA", "Built-in Raster" };
+        int backend = static_cast<int>(m_Backend);
+        if (ImGui::Combo("Bloom Backend", &backend, backendNames, IM_ARRAYSIZE(backendNames)))
         {
-            m_Method = static_cast<Method>(bloomMethod);
+            m_Backend = static_cast<Backend>(backend);
             changed = true;
         }
-//Modify End
-//Modify Begin:2026-08-16 by BestHui
-        const char* downsampleModeNames[] = {
-            "2x2 Cascade",
-            "5-Tap Diagonal Bilinear Non-Cascaded",
-            "5-Tap Diagonal Bilinear Shared Memory",
-            "10-Tap Non-Cascaded",
-            "15-Tap Non-Cascaded"
-        };
-        const bool frameworkRaster = IsFrameworkRaster();
-        if (frameworkRaster)
+
+        if (!IsFrameworkRaster())
         {
-            ImGui::BeginDisabled();
-        }
-        int downsampleMode = static_cast<int>(m_DownsampleMode);
-        if (ImGui::Combo("Bloom Downsample", &downsampleMode, downsampleModeNames, IM_ARRAYSIZE(downsampleModeNames)))
-        {
-            downsampleMode = std::clamp(downsampleMode, 0, IM_ARRAYSIZE(downsampleModeNames) - 1);
-            m_DownsampleMode = static_cast<DownsampleMode>(downsampleMode);
-            changed = true;
-        }
-        if (frameworkRaster)
-        {
-            ImGui::EndDisabled();
+            const char* filterModelNames[] = { "Custom Tap Pyramid", "Raster-Matched" };
+            int filterModel = static_cast<int>(m_CudaFilterModel);
+            if (ImGui::Combo("CUDA Filter Model", &filterModel, filterModelNames, IM_ARRAYSIZE(filterModelNames)))
+            {
+                m_CudaFilterModel = static_cast<CudaFilterModel>(filterModel);
+                changed = true;
+            }
+
+            if (m_CudaFilterModel == CudaFilterModel::CustomTapPyramid)
+            {
+                const char* tapCountNames[] = { "5 Tap", "10 Tap", "15 Tap" };
+                constexpr std::array<DownsampleTapCount, IM_ARRAYSIZE(tapCountNames)> tapCounts = {
+                    DownsampleTapCount::Five,
+                    DownsampleTapCount::Ten,
+                    DownsampleTapCount::Fifteen,
+                };
+                const auto tapCountIterator = std::find(tapCounts.begin(), tapCounts.end(), m_DownsampleTapCount);
+                int tapCount = tapCountIterator == tapCounts.end()
+                    ? 0
+                    : static_cast<int>(std::distance(tapCounts.begin(), tapCountIterator));
+                if (ImGui::Combo("CUDA Downsample Taps", &tapCount, tapCountNames, IM_ARRAYSIZE(tapCountNames)))
+                {
+                    m_DownsampleTapCount = tapCounts[static_cast<size_t>(tapCount)];
+                    changed = true;
+                }
+
+                const char* upsampleMethodNames[] = {
+                    "Classic Additive Pyramid",
+                    "Box Filter Approximation (optimized)",
+                    "Box Filter Approximation (original paper)",
+                };
+                int upsampleMethod = static_cast<int>(m_CudaUpsampleMethod);
+                if (ImGui::Combo("CUDA Upsample Method", &upsampleMethod, upsampleMethodNames, IM_ARRAYSIZE(upsampleMethodNames)))
+                {
+                    m_CudaUpsampleMethod = static_cast<CudaUpsampleMethod>(upsampleMethod);
+                    changed = true;
+                }
+            }
+            else
+            {
+                ImGui::TextDisabled("Fixed: 5-tap prefilter, 4-tap downsample, 4-tap upsample and composite.");
+            }
         }
 //Modify End
         changed |= ImGui::SliderFloat("Bloom Threshold", &m_Threshold, 0.0f, 5.0f, "%.2f");
@@ -144,8 +160,11 @@ bool CudaBloomPass::DrawImGui(const uint32_t width, const uint32_t height)
         m_PyramidLevels = std::clamp(m_PyramidLevels, 1, maxPyramidLevels);
         changed |= ImGui::SliderInt("Bloom Pyramid Levels", &m_PyramidLevels, 1, maxPyramidLevels);
 //Modify End
-//Modify Begin:2026-08-16 by BestHui
-        if (m_Method != Method::Classic)
+//Modify Begin:2026-08-17 by BestHui
+        if (!IsFrameworkRaster() &&
+            m_CudaFilterModel == CudaFilterModel::CustomTapPyramid &&
+            (m_CudaUpsampleMethod == CudaUpsampleMethod::BoxFilterApproximation ||
+                m_CudaUpsampleMethod == CudaUpsampleMethod::BoxFilterOriginalPaper))
         {
             changed |= ImGui::SliderFloat("Box Filter Sigma", &m_BoxFilterSigma, 0.1f, 16.0f, "%.2f");
         }
@@ -180,6 +199,8 @@ bool CudaBloomPass::ExecuteFrameworkBloom(
         return false;
     }
 
+    Assert(source.get() != destination.get(), "Framework raster bloom requires distinct source and destination textures.");
+
     const uint32_t maxPyramidLevels = ComputeMaxPyramidLevels(width, height);
     const int pyramidLevels = std::clamp(m_PyramidLevels, 1, static_cast<int>(maxPyramidLevels));
     if (m_FrameworkBloom == nullptr ||
@@ -198,11 +219,6 @@ bool CudaBloomPass::ExecuteFrameworkBloom(
         m_FrameworkBloomHeight = height;
         m_FrameworkBloomPyramidLevels = pyramidLevels;
     }
-
-    // The graph marks SceneColor as a render-target output so the resource has RTV support.
-    // Framework Bloom first samples it, then transitions it back to a render target for the final additive pass.
-    commandList.TransitionBarrier(*source, D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
-    commandList.FlushResourceBarriers();
 
     RenderTarget destinationRenderTarget;
     destinationRenderTarget.AttachTexture(Color0, destination);
@@ -240,24 +256,27 @@ bool CudaBloomPass::InitializeCuda()
         return false;
     }
 
-    if (!m_CudaContext.GetFunction(m_Module, "PrefilterDownsampleCascadeKernel", m_PrefilterDownsampleCascadeKernel, error) ||
-        !m_CudaContext.GetFunction(m_Module, "DownsampleCascadeKernel", m_DownsampleCascadeKernel, error) ||
-//Modify Begin:2026-08-16 by BestHui
-        !m_CudaContext.GetFunction(m_Module, "PrefilterDownsample5TapKernel", m_PrefilterDownsample5TapKernel, error) ||
-        !m_CudaContext.GetFunction(m_Module, "PrefilterDownsample5TapSharedKernel", m_PrefilterDownsample5TapSharedKernel, error) ||
+//Modify Begin:2026-08-17 by BestHui
+    if (!m_CudaContext.GetFunction(m_Module, "PrefilterDownsample5TapKernel", m_PrefilterDownsample5TapKernel, error) ||
         !m_CudaContext.GetFunction(m_Module, "PrefilterDownsample10TapKernel", m_PrefilterDownsample10TapKernel, error) ||
         !m_CudaContext.GetFunction(m_Module, "PrefilterDownsample15TapKernel", m_PrefilterDownsample15TapKernel, error) ||
         !m_CudaContext.GetFunction(m_Module, "Downsample5TapKernel", m_Downsample5TapKernel, error) ||
-        !m_CudaContext.GetFunction(m_Module, "Downsample5TapSharedKernel", m_Downsample5TapSharedKernel, error) ||
         !m_CudaContext.GetFunction(m_Module, "Downsample10TapKernel", m_Downsample10TapKernel, error) ||
         !m_CudaContext.GetFunction(m_Module, "Downsample15TapKernel", m_Downsample15TapKernel, error) ||
+//Modify Begin:2026-08-17 by BestHui
+        !m_CudaContext.GetFunction(m_Module, "PrefilterDownsampleRasterMatchedKernel", m_PrefilterDownsampleRasterMatchedKernel, error) ||
+        !m_CudaContext.GetFunction(m_Module, "DownsampleRasterMatchedKernel", m_DownsampleRasterMatchedKernel, error) ||
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
         !m_CudaContext.GetFunction(m_Module, "UpsampleClassicKernel", m_UpsampleClassicKernel, error) ||
         !m_CudaContext.GetFunction(m_Module, "UpsampleBoxFilterKernel", m_UpsampleBoxFilterKernel, error) ||
         !m_CudaContext.GetFunction(m_Module, "UpsampleBoxFilterOriginalKernel", m_UpsampleBoxFilterOriginalKernel, error) ||
 //Modify End
-        !m_CudaContext.GetFunction(m_Module, "CompositeBloomKernel", m_CompositeBloomKernel, error))
+        !m_CudaContext.GetFunction(m_Module, "CompositeBloomKernel", m_CompositeBloomKernel, error) ||
+//Modify Begin:2026-08-17 by BestHui
+        !m_CudaContext.GetFunction(m_Module, "UpsampleRasterMatchedKernel", m_UpsampleRasterMatchedKernel, error) ||
+        !m_CudaContext.GetFunction(m_Module, "CompositeRasterMatchedBloomKernel", m_CompositeRasterMatchedBloomKernel, error))
+//Modify End
     {
         m_Status = error;
         Shutdown();
@@ -590,24 +609,8 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
 
     constexpr uint32_t blockX = 16;
     constexpr uint32_t blockY = 16;
-    constexpr uint32_t cascadeBlockX = 8;
-    constexpr uint32_t cascadeBlockY = 8;
-    constexpr uint32_t cascadeSharedBytes = cascadeBlockX * cascadeBlockY * sizeof(float) * 4u;
-    constexpr uint32_t shared5BlockX = 16;
-    constexpr uint32_t shared5BlockY = 8;
-    constexpr uint32_t shared5TileWidth = shared5BlockX * 2u + 2u;
-    constexpr uint32_t shared5TileHeight = shared5BlockY * 2u + 2u;
-    constexpr uint32_t shared5SharedBytes = shared5TileWidth * shared5TileHeight * sizeof(float) * 4u;
 
 //Modify Begin:2026-07-30 by BestHui
-    auto getPyramidPointTexture = [this, levelCount](const uint32_t level) -> CUtexObject
-    {
-        return level < levelCount ? m_PyramidTextures.GetPointTextureObject(level) : 0;
-    };
-    auto getPyramidLinearTexture = [this, levelCount](const uint32_t level) -> CUtexObject
-    {
-        return level < levelCount ? m_PyramidTextures.GetLinearTextureObject(level) : 0;
-    };
     auto getPyramidSurface = [this, levelCount](const uint32_t level) -> CUsurfObject
     {
         return level < levelCount ? m_PyramidTextures.GetSurfaceObject(level) : 0;
@@ -629,6 +632,9 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
     float threshold = m_Threshold;
     float softThreshold = m_SoftThreshold;
     float intensity = m_Intensity;
+//Modify Begin:2026-08-17 by BestHui
+    const bool rasterMatched = IsCudaRasterMatched();
+//Modify End
 //Modify Begin:2026-08-16 by BestHui
     float boxFilterSigma = (std::max)(m_BoxFilterSigma, 0.001f);
 //Modify End
@@ -640,231 +646,97 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
     }
 //Modify End
 
-//Modify Begin:2026-08-16 by BestHui
+//Modify Begin:2026-08-17 by BestHui
     CUresult result = CUDA_SUCCESS;
-    if (m_DownsampleMode == DownsampleMode::Cascaded2x2)
+    uint32_t firstWidth = getPyramidWidth(0u);
+    uint32_t firstHeight = getPyramidHeight(0u);
+    CUsurfObject firstOutput = getPyramidSurface(0u);
+    CUfunction prefilterKernel = rasterMatched
+        ? m_PrefilterDownsampleRasterMatchedKernel
+        : m_PrefilterDownsample5TapKernel;
+    CUfunction downsampleKernel = rasterMatched
+        ? m_DownsampleRasterMatchedKernel
+        : m_Downsample5TapKernel;
+    if (!rasterMatched)
     {
-//Modify Begin:2026-07-30 by BestHui
-        CUsurfObject level0 = getPyramidSurface(0u);
-        CUsurfObject level1 = getPyramidSurface(1u);
-        CUsurfObject level2 = getPyramidSurface(2u);
-        CUsurfObject level3 = getPyramidSurface(3u);
-//Modify End
-        uint32_t level0Width = getPyramidWidth(0u);
-        uint32_t level0Height = getPyramidHeight(0u);
-        uint32_t level1Width = getPyramidWidth(1u);
-        uint32_t level1Height = getPyramidHeight(1u);
-        uint32_t level2Width = getPyramidWidth(2u);
-        uint32_t level2Height = getPyramidHeight(2u);
-        uint32_t level3Width = getPyramidWidth(3u);
-        uint32_t level3Height = getPyramidHeight(3u);
-
-        void* prefilterCascadeArgs[] = {
-            &input,
-            &level0,
-            &level1,
-            &level2,
-            &level3,
-            &cudaWidth,
-            &cudaHeight,
-            &level0Width,
-            &level0Height,
-            &level1Width,
-            &level1Height,
-            &level2Width,
-            &level2Height,
-            &level3Width,
-            &level3Height,
-            &threshold,
-            &softThreshold,
-            &intensity,
-        };
-        result = cuLaunchKernel(
-            m_PrefilterDownsampleCascadeKernel,
-            DivideRoundUp(level0Width, cascadeBlockX),
-            DivideRoundUp(level0Height, cascadeBlockY),
-            1u,
-            cascadeBlockX,
-            cascadeBlockY,
-            1u,
-            cascadeSharedBytes,
-            m_CudaContext.GetStream(),
-            prefilterCascadeArgs,
-            nullptr);
-        if (result != CUDA_SUCCESS)
+        switch (m_DownsampleTapCount)
         {
-            m_Status = "CUDA bloom prefilter launch failed: " + CudaContext::GetError(result);
-            return false;
-        }
-
-        for (uint32_t baseLevel = 3u; baseLevel + 1u < levelCount; baseLevel += 4u)
-        {
-//Modify Begin:2026-07-30 by BestHui
-            CUtexObject source = m_PyramidTextures.GetPointTextureObject(baseLevel);
-            CUsurfObject output0 = getPyramidSurface(baseLevel + 1u);
-            CUsurfObject output1 = getPyramidSurface(baseLevel + 2u);
-            CUsurfObject output2 = getPyramidSurface(baseLevel + 3u);
-            CUsurfObject output3 = getPyramidSurface(baseLevel + 4u);
-//Modify End
-            uint32_t sourceWidth = m_PyramidWidth[baseLevel];
-            uint32_t sourceHeight = m_PyramidHeight[baseLevel];
-            uint32_t output0Width = getPyramidWidth(baseLevel + 1u);
-            uint32_t output0Height = getPyramidHeight(baseLevel + 1u);
-            uint32_t output1Width = getPyramidWidth(baseLevel + 2u);
-            uint32_t output1Height = getPyramidHeight(baseLevel + 2u);
-            uint32_t output2Width = getPyramidWidth(baseLevel + 3u);
-            uint32_t output2Height = getPyramidHeight(baseLevel + 3u);
-            uint32_t output3Width = getPyramidWidth(baseLevel + 4u);
-            uint32_t output3Height = getPyramidHeight(baseLevel + 4u);
-            void* downsampleCascadeArgs[] = {
-                &source,
-                &output0,
-                &output1,
-                &output2,
-                &output3,
-                &sourceWidth,
-                &sourceHeight,
-                &output0Width,
-                &output0Height,
-                &output1Width,
-                &output1Height,
-                &output2Width,
-                &output2Height,
-                &output3Width,
-                &output3Height,
-            };
-            result = cuLaunchKernel(
-                m_DownsampleCascadeKernel,
-                DivideRoundUp(output0Width, cascadeBlockX),
-                DivideRoundUp(output0Height, cascadeBlockY),
-                1u,
-                cascadeBlockX,
-                cascadeBlockY,
-                1u,
-                cascadeSharedBytes,
-                m_CudaContext.GetStream(),
-                downsampleCascadeArgs,
-                nullptr);
-            if (result != CUDA_SUCCESS)
-            {
-                m_Status = "CUDA bloom downsample launch failed: " + CudaContext::GetError(result);
-                return false;
-            }
-        }
-    }
-    else
-    {
-        uint32_t firstWidth = getPyramidWidth(0u);
-        uint32_t firstHeight = getPyramidHeight(0u);
-        CUsurfObject firstOutput = getPyramidSurface(0u);
-        CUfunction prefilterKernel = m_PrefilterDownsample5TapKernel;
-        CUfunction downsampleKernel = m_Downsample5TapKernel;
-        switch (m_DownsampleMode)
-        {
-        case DownsampleMode::NonCascaded10Tap:
+        case DownsampleTapCount::Ten:
             prefilterKernel = m_PrefilterDownsample10TapKernel;
             downsampleKernel = m_Downsample10TapKernel;
             break;
-        case DownsampleMode::NonCascaded15Tap:
+        case DownsampleTapCount::Fifteen:
             prefilterKernel = m_PrefilterDownsample15TapKernel;
             downsampleKernel = m_Downsample15TapKernel;
             break;
-        case DownsampleMode::NonCascaded5TapShared:
-        case DownsampleMode::NonCascaded5Tap:
+        case DownsampleTapCount::Five:
         default:
             break;
         }
-        const bool shared5Mode = m_DownsampleMode == DownsampleMode::NonCascaded5TapShared;
-        const auto isStrictHalf = [](const uint32_t sourceSize, const uint32_t outputSize) -> bool
-        {
-            return outputSize > 0u && sourceSize == outputSize * 2u;
-        };
-        const bool shared5Prefilter = shared5Mode &&
-            isStrictHalf(cudaWidth, firstWidth) &&
-            isStrictHalf(cudaHeight, firstHeight);
-        CUtexObject inputDownsample = shared5Prefilter
-            ? m_InputTexture.GetTextureObject()
-            : m_InputTexture.GetLinearTextureObject();
-        const uint32_t prefilterBlockWidth = shared5Prefilter ? shared5BlockX : blockX;
-        const uint32_t prefilterBlockHeight = shared5Prefilter ? shared5BlockY : blockY;
-        const uint32_t prefilterSharedMemory = shared5Prefilter ? shared5SharedBytes : 0u;
-        if (shared5Prefilter)
-        {
-            prefilterKernel = m_PrefilterDownsample5TapSharedKernel;
-        }
-        void* prefilterArgs[] = {
-            &inputDownsample,
-            &firstOutput,
-            &cudaWidth,
-            &cudaHeight,
-            &firstWidth,
-            &firstHeight,
-            &threshold,
-            &softThreshold,
-            &intensity,
+    }
+
+    CUtexObject inputDownsample = m_InputTexture.GetLinearTextureObject();
+    void* prefilterArgs[] = {
+        &inputDownsample,
+        &firstOutput,
+        &cudaWidth,
+        &cudaHeight,
+        &firstWidth,
+        &firstHeight,
+        &threshold,
+        &softThreshold,
+        &intensity,
+    };
+    result = cuLaunchKernel(
+        prefilterKernel,
+        DivideRoundUp(firstWidth, blockX),
+        DivideRoundUp(firstHeight, blockY),
+        1u,
+        blockX,
+        blockY,
+        1u,
+        0u,
+        m_CudaContext.GetStream(),
+        prefilterArgs,
+        nullptr);
+    if (result != CUDA_SUCCESS)
+    {
+        m_Status = "CUDA bloom prefilter launch failed: " + CudaContext::GetError(result);
+        return false;
+    }
+
+    for (uint32_t level = 1u; level < levelCount; ++level)
+    {
+        CUsurfObject outputLevel = m_PyramidTextures.GetSurfaceObject(level);
+        uint32_t sourceWidth = m_PyramidWidth[level - 1u];
+        uint32_t sourceHeight = m_PyramidHeight[level - 1u];
+        uint32_t outputWidth = m_PyramidWidth[level];
+        uint32_t outputHeight = m_PyramidHeight[level];
+        CUtexObject source = m_PyramidTextures.GetLinearTextureObject(level - 1u);
+        void* downsampleArgs[] = {
+            &source,
+            &outputLevel,
+            &sourceWidth,
+            &sourceHeight,
+            &outputWidth,
+            &outputHeight,
         };
         result = cuLaunchKernel(
-            prefilterKernel,
-            DivideRoundUp(firstWidth, prefilterBlockWidth),
-            DivideRoundUp(firstHeight, prefilterBlockHeight),
+            downsampleKernel,
+            DivideRoundUp(outputWidth, blockX),
+            DivideRoundUp(outputHeight, blockY),
             1u,
-            prefilterBlockWidth,
-            prefilterBlockHeight,
+            blockX,
+            blockY,
             1u,
-            prefilterSharedMemory,
+            0u,
             m_CudaContext.GetStream(),
-            prefilterArgs,
+            downsampleArgs,
             nullptr);
         if (result != CUDA_SUCCESS)
         {
-            m_Status = "CUDA bloom prefilter launch failed: " + CudaContext::GetError(result);
+            m_Status = "CUDA bloom downsample launch failed: " + CudaContext::GetError(result);
             return false;
-        }
-
-        for (uint32_t level = 1u; level < levelCount; ++level)
-        {
-            CUsurfObject outputLevel = m_PyramidTextures.GetSurfaceObject(level);
-            uint32_t sourceWidth = m_PyramidWidth[level - 1u];
-            uint32_t sourceHeight = m_PyramidHeight[level - 1u];
-            uint32_t outputWidth = m_PyramidWidth[level];
-            uint32_t outputHeight = m_PyramidHeight[level];
-            const bool shared5Downsample = shared5Mode &&
-                isStrictHalf(sourceWidth, outputWidth) &&
-                isStrictHalf(sourceHeight, outputHeight);
-            CUfunction levelDownsampleKernel = shared5Downsample
-                ? m_Downsample5TapSharedKernel
-                : downsampleKernel;
-            CUtexObject source = shared5Downsample
-                ? m_PyramidTextures.GetPointTextureObject(level - 1u)
-                : m_PyramidTextures.GetLinearTextureObject(level - 1u);
-            const uint32_t levelBlockWidth = shared5Downsample ? shared5BlockX : blockX;
-            const uint32_t levelBlockHeight = shared5Downsample ? shared5BlockY : blockY;
-            const uint32_t levelSharedMemory = shared5Downsample ? shared5SharedBytes : 0u;
-            void* downsampleArgs[] = {
-                &source,
-                &outputLevel,
-                &sourceWidth,
-                &sourceHeight,
-                &outputWidth,
-                &outputHeight,
-            };
-            result = cuLaunchKernel(
-                levelDownsampleKernel,
-                DivideRoundUp(outputWidth, levelBlockWidth),
-                DivideRoundUp(outputHeight, levelBlockHeight),
-                1u,
-                levelBlockWidth,
-                levelBlockHeight,
-                1u,
-                levelSharedMemory,
-                m_CudaContext.GetStream(),
-                downsampleArgs,
-                nullptr);
-            if (result != CUDA_SUCCESS)
-            {
-                m_Status = "CUDA bloom non-cascaded downsample launch failed: " + CudaContext::GetError(result);
-                return false;
-            }
         }
     }
 
@@ -878,6 +750,10 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
 //Modify End
         uint32_t highWidth = m_PyramidWidth[level - 1u];
         uint32_t highHeight = m_PyramidHeight[level - 1u];
+//Modify Begin:2026-08-17 by BestHui
+        uint32_t lowWidth = m_PyramidWidth[level];
+        uint32_t lowHeight = m_PyramidHeight[level];
+//Modify End
 //Modify Begin:2026-08-16 by BestHui
         uint32_t highLevel = level - 1u;
 //Modify End
@@ -899,21 +775,40 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
             &highLevel,
             &boxFilterSigma,
         };
+//Modify Begin:2026-08-17 by BestHui
+        void* rasterMatchedUpsampleArgs[] = {
+            &low,
+            &high,
+            &highOutput,
+            &highWidth,
+            &highHeight,
+            &lowWidth,
+            &lowHeight,
+        };
+//Modify End
         CUfunction upsampleKernel = m_UpsampleClassicKernel;
         void** upsampleArgs = classicUpsampleArgs;
-        switch (m_Method)
+        if (rasterMatched)
         {
-        case Method::BoxFilterApproximation:
-            upsampleKernel = m_UpsampleBoxFilterKernel;
-            upsampleArgs = boxFilterUpsampleArgs;
-            break;
-        case Method::BoxFilterOriginalPaper:
-            upsampleKernel = m_UpsampleBoxFilterOriginalKernel;
-            upsampleArgs = boxFilterUpsampleArgs;
-            break;
-        case Method::Classic:
-        default:
-            break;
+            upsampleKernel = m_UpsampleRasterMatchedKernel;
+            upsampleArgs = rasterMatchedUpsampleArgs;
+        }
+        else
+        {
+            switch (m_CudaUpsampleMethod)
+            {
+            case CudaUpsampleMethod::BoxFilterApproximation:
+                upsampleKernel = m_UpsampleBoxFilterKernel;
+                upsampleArgs = boxFilterUpsampleArgs;
+                break;
+            case CudaUpsampleMethod::BoxFilterOriginalPaper:
+                upsampleKernel = m_UpsampleBoxFilterOriginalKernel;
+                upsampleArgs = boxFilterUpsampleArgs;
+                break;
+            case CudaUpsampleMethod::Classic:
+            default:
+                break;
+            }
         }
         result = cuLaunchKernel(
             upsampleKernel,
@@ -946,8 +841,27 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
         &cudaWidth,
         &cudaHeight,
     };
+//Modify Begin:2026-08-17 by BestHui
+    uint32_t bloomWidth = m_PyramidWidth[0u];
+    uint32_t bloomHeight = m_PyramidHeight[0u];
+    void* rasterMatchedCompositeArgs[] = {
+        &input,
+        &bloom,
+        &output,
+        &cudaWidth,
+        &cudaHeight,
+        &bloomWidth,
+        &bloomHeight,
+    };
+    const CUfunction compositeKernel = rasterMatched
+        ? m_CompositeRasterMatchedBloomKernel
+        : m_CompositeBloomKernel;
+    void** selectedCompositeArgs = rasterMatched
+        ? rasterMatchedCompositeArgs
+        : compositeArgs;
+//Modify End
     result = cuLaunchKernel(
-        m_CompositeBloomKernel,
+        compositeKernel,
         DivideRoundUp(width, blockX),
         DivideRoundUp(height, blockY),
         1u,
@@ -956,7 +870,7 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
         1u,
         0u,
         m_CudaContext.GetStream(),
-        compositeArgs,
+        selectedCompositeArgs,
         nullptr);
     if (result != CUDA_SUCCESS)
     {
@@ -1018,6 +932,10 @@ bool CudaBloomPass::ExecuteInPlace(Texture& postProcessColor, const uint32_t wid
         return false;
     }
 
-    m_Status = "CUDA bloom enqueued with shared Framework CUDA interop tools.";
+//Modify Begin:2026-08-17 by BestHui
+    m_Status = IsCudaRasterMatched()
+        ? "CUDA raster-matched bloom enqueued with shared Framework CUDA interop tools."
+        : "CUDA bloom enqueued with shared Framework CUDA interop tools.";
+//Modify End
     return true;
 }

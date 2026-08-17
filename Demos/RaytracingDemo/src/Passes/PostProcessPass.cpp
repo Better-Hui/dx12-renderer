@@ -104,15 +104,16 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateFr
             { DemoResourceIds::SceneColor, RenderGraph::InputType::ShaderResource },
         },
         {
-            { DemoResourceIds::SceneColor, RenderGraph::OutputType::RenderTarget },
+            { DemoResourceIds::BloomOutput, RenderGraph::OutputType::RenderTarget },
             { DemoResourceIds::CudaBloomFinishedToken, RenderGraph::OutputType::Token },
         },
         [resources](const RenderGraph::RenderContext& context, CommandList& commandList)
         {
             const auto& sceneColor = context.GetTexture(DemoResourceIds::SceneColor);
+            const auto& bloomOutput = context.GetTexture(DemoResourceIds::BloomOutput);
             resources.CudaBloom.ExecuteFrameworkBloom(
                 sceneColor,
-                sceneColor,
+                bloomOutput,
                 commandList,
                 context.GetMetadata().m_ScreenWidth,
                 context.GetMetadata().m_ScreenHeight);
@@ -161,7 +162,7 @@ void RaytracingDemo::PresentDisplayOutput()
         DLSSFrameGenerationProcessor frameProcessor(m_DLSS, m_FrameGenerationInputs);
         m_RenderGraph->PresentWithExternalFrameProcessor(
             PWindow,
-            DemoResourceIds::FrameGenerationHudLess,
+            m_RenderGraph->GetPresentationResourceId(),
             frameProcessor,
             [this](CommandList& commandList)
             {
@@ -170,9 +171,7 @@ void RaytracingDemo::PresentDisplayOutput()
         return;
     }
 
-    const RenderGraph::ResourceId displayColor = m_RenderGraphFrameState->DLSSEnabled
-        ? DemoResourceIds::DLSSOutput
-        : DemoResourceIds::SceneColor;
+    const RenderGraph::ResourceId displayColor = m_RenderGraph->GetPresentationResourceId();
 //Modify End
 
 //Modify Begin:2026-07-28 by BestHui

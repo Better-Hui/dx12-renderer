@@ -47,7 +47,11 @@ void BloomPrefilter::Execute(CommandList& commandList, const BloomParameters& pa
 {
 	PIXScope(commandList, "Bloom Prefilter");
 
+	//Modify Begin:2026-08-17 by BestHui
+	commandList.TransitionBarrier(*source, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 	commandList.SetRenderTarget(destination);
+	commandList.FlushResourceBarriers();
+	//Modify End
 	commandList.SetAutomaticViewportAndScissorRect(destination);
 
 	m_Material->SetShaderResourceView("sourceColorTexture", ShaderResourceView(source));

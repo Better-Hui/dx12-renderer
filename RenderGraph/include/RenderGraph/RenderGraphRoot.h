@@ -34,6 +34,14 @@ class D3D12DeviceContext;
 
 namespace RenderGraph
 {
+//Modify Begin:2026-08-17 by BestHui
+    struct RenderGraphOutputResources
+    {
+        ResourceId Presentation = ResourceIds::GRAPH_OUTPUT;
+        std::vector<ResourceId> External = { ResourceIds::GRAPH_OUTPUT };
+    };
+//Modify End
+
     class RenderGraphRoot
     {
     public:
@@ -49,7 +57,7 @@ namespace RenderGraph
             std::vector<BufferDescription>&& buffers,
             std::vector<TokenDescription>&& tokens
 //Modify Begin:2026-07-28 by BestHui
-            , std::vector<ResourceId> externalOutputs = { ResourceIds::GRAPH_OUTPUT }
+            , RenderGraphOutputResources outputs = {}
 //Modify End
         );
 
@@ -89,6 +97,9 @@ namespace RenderGraph
 //Modify Begin:2026-07-27 by BestHui
         const std::shared_ptr<Texture>& GetTexture(ResourceId resourceId) const;
 //Modify End
+//Modify Begin:2026-08-17 by BestHui
+        [[nodiscard]] ResourceId GetPresentationResourceId() const { return m_PresentationResourceId; }
+//Modify End
 //Modify Begin:2026-08-10 by BestHui
         const RenderGraphQueueFenceValues& GetFrameSubmissionFences() const;
 //Modify End
@@ -120,6 +131,9 @@ namespace RenderGraph
         std::vector<TokenDescription> m_TokenDescriptions;
 //Modify Begin:2026-07-28 by BestHui
         std::vector<ResourceId> m_ExternalOutputIds;
+//Modify End
+//Modify Begin:2026-08-17 by BestHui
+        ResourceId m_PresentationResourceId = ResourceIds::GRAPH_OUTPUT;
 //Modify End
 
         std::shared_ptr<ResourcePool> m_ResourcePool;
