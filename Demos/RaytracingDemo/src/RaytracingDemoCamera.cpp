@@ -1,7 +1,7 @@
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 #include <RaytracingDemo.h>
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <DX12Library/Application.h>
 //Modify End
 #include <DX12Library/Events.h>
@@ -22,7 +22,7 @@ namespace
 void RaytracingDemo::OnUpdate(UpdateEventArgs& e)
 {
     Base::OnUpdate(e);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     UpdateRuntimeAutomation(e.TotalTime);
 //Modify End
     m_DeltaTime = static_cast<float>(e.ElapsedTime);
@@ -161,7 +161,7 @@ void RaytracingDemo::OnMouseMoved(MouseMotionEventArgs& e)
     {
         if (e.RelX != 0 || e.RelY != 0)
         {
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
             m_LeftMouseDragSincePress = true;
 //Modify End
             m_CameraController.Pitch = ClampCameraValue(m_CameraController.Pitch + e.RelY * m_MouseRotateSpeed, -90.0f, 90.0f);
@@ -201,7 +201,7 @@ void RaytracingDemo::OnMouseMoved(MouseMotionEventArgs& e)
     }
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 void RaytracingDemo::OnMouseButtonPressed(MouseButtonEventArgs& e)
 {
     if (m_ImGui != nullptr && m_ImGui->WantsToCaptureMouse())
@@ -215,7 +215,7 @@ void RaytracingDemo::OnMouseButtonPressed(MouseButtonEventArgs& e)
         return;
     }
 
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
     m_LeftMouseDragSincePress = false;
     m_LeftMouseNativeDoubleClick = e.DoubleClick;
     m_LeftMousePressX = e.X;
@@ -224,7 +224,7 @@ void RaytracingDemo::OnMouseButtonPressed(MouseButtonEventArgs& e)
 }
 //Modify End
 
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
 void RaytracingDemo::OnMouseButtonReleased(MouseButtonEventArgs& e)
 {
     if (m_ImGui != nullptr && m_ImGui->WantsToCaptureMouse())
@@ -295,7 +295,7 @@ void RaytracingDemo::OnResize(ResizeEventArgs& e)
 
     if (m_RenderGraph != nullptr)
     {
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
         m_FrameworkDeviceContext.Flush();
         m_CudaBloom.ReleaseInteropResource();
 //Modify End

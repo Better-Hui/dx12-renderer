@@ -11,7 +11,7 @@
 class Bloom
 {
 public:
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 	explicit Bloom(FrameworkDeviceContext& deviceContext, CommandList& commandList, uint32_t width, uint32_t height, DXGI_FORMAT backBufferFormat, size_t pyramidSize = 8);
 //Modify End
 
@@ -21,7 +21,7 @@ public:
 
 private:
 	static void GetIntermediateTextureSize(uint32_t width, uint32_t height, size_t index, uint32_t& outWidth, uint32_t& outHeight);
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
 	static void CreateIntermediateTexture(
 		const FrameworkDeviceContext& deviceContext,
 		uint32_t width,

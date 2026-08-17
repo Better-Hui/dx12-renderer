@@ -2,7 +2,7 @@ struct PixelShaderInput
 {
     float2 Uv : TEXCOORD0;
     float4 ColorAndAlpha : COLOR0;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     float4 TypeAndParams : TEXCOORD1;
 //Modify End
 };
@@ -11,7 +11,7 @@ float4 main(PixelShaderInput IN) : SV_TARGET
 {
     const float2 centeredUv = IN.Uv * 2.0f - 1.0f;
     const float distanceToCenter = length(centeredUv);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const uint lightType = (uint)round(IN.TypeAndParams.x);
 
     float innerAlpha = 0.0f;

@@ -1,6 +1,6 @@
 #include "ShaderUtils.h"
 #include <dxcapi.h>
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
 #include <d3dcompiler.h>
 //Modify End
 #include "Helpers.h"
@@ -88,7 +88,7 @@ namespace
         }
     }
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     bool IsSamplerType(const D3D_SHADER_INPUT_TYPE inputType)
     {
         return inputType == D3D_SIT_SAMPLER;
@@ -103,7 +103,7 @@ Microsoft::WRL::ComPtr<ID3DBlob> ShaderUtils::LoadShaderFromFile(const std::wstr
     const auto completePath = L"Shaders/" + fileName;
 
     Microsoft::WRL::ComPtr<ID3DBlob> result;
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     ThrowIfFailed(D3DReadFileToBlob(completePath.c_str(), &result));
 //Modify End
 
@@ -119,7 +119,7 @@ Microsoft::WRL::ComPtr<ID3D12ShaderReflection> ShaderUtils::Reflect(const Micros
     UINT32 shaderIdx;
     ThrowIfFailed(DxcCreateInstance(CLSID_DxcContainerReflection, IID_PPV_ARGS(&pReflection)));
     ThrowIfFailed(pReflection->Load(shaderSourceDxc.Get()));
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
     const HRESULT findDxilResult = pReflection->FindFirstPartKind(hlsl::DFCC_DXIL, &shaderIdx);
     if (FAILED(findDxilResult))
     {
@@ -138,7 +138,7 @@ Microsoft::WRL::ComPtr<ID3D12ShaderReflection> ShaderUtils::Reflect(const Micros
     return reflection;
 }
 
-//Modify Begin:2026-07-23 by BestHui
+//Modify Begin:2026-07-23 by Hui
 Microsoft::WRL::ComPtr<ID3D12LibraryReflection> ShaderUtils::ReflectLibrary(const Microsoft::WRL::ComPtr<ID3DBlob>& shaderSource)
 {
     Microsoft::WRL::ComPtr<IDxcBlob> shaderSourceDxc;
@@ -171,10 +171,10 @@ std::vector<ShaderUtils::ConstantBufferMetadata> ShaderUtils::GetConstantBuffers
         D3D12_SHADER_BUFFER_DESC cbufferDesc;
         ThrowIfFailed(constantBuffer->GetDesc(&cbufferDesc));
 
-//Modify Begin:2026-07-23 by BestHui
+//Modify Begin:2026-07-23 by Hui
         D3D12_SHADER_INPUT_BIND_DESC inputBindDesc{};
         HRESULT bindingResult = shaderReflection->GetResourceBindingDescByName(cbufferDesc.Name, &inputBindDesc);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         if (SUCCEEDED(bindingResult) && inputBindDesc.Type != D3D_SIT_CBUFFER)
         {
             bindingResult = E_FAIL;
@@ -245,7 +245,7 @@ std::vector<ShaderUtils::ConstantBufferMetadata> ShaderUtils::GetConstantBuffers
     return result;
 }
 
-//Modify Begin:2026-07-23 by BestHui
+//Modify Begin:2026-07-23 by Hui
 std::vector<ShaderUtils::ConstantBufferMetadata> ShaderUtils::GetConstantBuffers(const Microsoft::WRL::ComPtr<ID3D12LibraryReflection>& libraryReflection)
 {
     D3D12_LIBRARY_DESC libraryDesc{};
@@ -337,7 +337,7 @@ std::vector<ShaderUtils::ShaderResourceViewMetadata> ShaderUtils::GetShaderResou
             resourceMetadata.Name = GetBaseResourceName(inputBindDesc.Name);
             resourceMetadata.RegisterIndex = inputBindDesc.BindPoint;
             resourceMetadata.Space = inputBindDesc.Space;
-//Modify Begin:2026-07-23 by BestHui
+//Modify Begin:2026-07-23 by Hui
             resourceMetadata.BindCount = inputBindDesc.BindCount;
             resourceMetadata.InputType = inputBindDesc.Type;
             resourceMetadata.Dimension = inputBindDesc.Dimension;
@@ -349,7 +349,7 @@ std::vector<ShaderUtils::ShaderResourceViewMetadata> ShaderUtils::GetShaderResou
     return result;
 }
 
-//Modify Begin:2026-07-23 by BestHui
+//Modify Begin:2026-07-23 by Hui
 std::vector<ShaderUtils::ShaderResourceViewMetadata> ShaderUtils::GetShaderResourceViews(const Microsoft::WRL::ComPtr<ID3D12LibraryReflection>& libraryReflection)
 {
     D3D12_LIBRARY_DESC libraryDesc{};
@@ -478,7 +478,7 @@ std::vector<ShaderUtils::UnorderedAccessViewMetadata> ShaderUtils::GetUnorderedA
 }
 //Modify End
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 std::vector<ShaderUtils::SamplerMetadata> ShaderUtils::GetSamplers(const Microsoft::WRL::ComPtr<ID3D12ShaderReflection>& shaderReflection)
 {
     D3D12_SHADER_DESC shaderDesc;

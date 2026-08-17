@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 #include <Denoising/DenoiserController.h>
 
 #include <DX12Library/Texture.h>

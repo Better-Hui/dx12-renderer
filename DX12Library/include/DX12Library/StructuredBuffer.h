@@ -74,7 +74,7 @@ public:
     void ForEachResourceRecursive(const std::function<void(const Resource&)>& action) const override
     {
         action(*this);
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
         if (m_CounterBuffer != nullptr)
         {
             m_CounterBuffer->ForEachResourceRecursive(action);

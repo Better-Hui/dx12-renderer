@@ -1,7 +1,7 @@
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 #pragma once
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 #include <DX12Library/FrameFeaturesRuntime.h>
 //Modify End
 

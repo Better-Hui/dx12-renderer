@@ -23,12 +23,12 @@ namespace RenderGraph
             ResourceId m_Id;
             uint32_t m_BeginPassIndex;
             uint32_t m_EndPassIndex;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
             uint8_t m_QueueMask = 0;
 //Modify End
 
             static bool Intersect(const ResourceLifecycle& lifecycle1, const ResourceLifecycle& lifecycle2);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
             static bool CanAlias(const ResourceLifecycle& lifecycle1, const ResourceLifecycle& lifecycle2);
 //Modify End
         };
@@ -41,7 +41,7 @@ namespace RenderGraph
             Microsoft::WRL::ComPtr<ID3D12Heap> m_Heap;
         };
 
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
         static std::map<ResourceId, ResourceLifecycle> GetResourceLifecycles(
             const std::vector<RenderPass*>& renderPasses,
             const std::map<ResourceId, ResourceDescription>& resourceDescriptions,

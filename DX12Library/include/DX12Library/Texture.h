@@ -63,7 +63,7 @@ public:
         TextureUsageType textureUsage = TextureUsageType::Albedo,
         const std::wstring& name = L"",
         std::shared_ptr<D3D12DeviceContext> deviceContext = nullptr);
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     explicit Texture(const D3D12_RESOURCE_DESC& resourceDesc,
         D3D12_HEAP_FLAGS heapFlags,
         const ClearValue& clearValue = {},

@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-17 by BestHui
+//Modify Begin:2026-08-17 by Hui
 #include <ShaderLibrary/Common/RootSignature.hlsli>
 
 struct PixelShaderInput

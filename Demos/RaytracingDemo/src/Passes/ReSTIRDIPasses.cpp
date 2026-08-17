@@ -1,6 +1,6 @@
 #include <Passes/RaytracingDemoPasses.h>
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <PathTracing/PathTracingSceneBindings.h>
 #include <RenderGraph/RaytracingDemoGraphResources.h>
 
@@ -33,7 +33,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
         },
         {
             { DemoResourceIds::DirectLighting, OutputType::UnorderedAccess },
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
             { DemoResourceIds::DirectLightingFinishedToken, OutputType::Token },
 //Modify End
         },
@@ -48,10 +48,10 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
             inputs.FrameState.Enabled = true;
             inputs.FrameState.UseSoftShadowVariant =
                 resources.Pipelines.GetShadowMode() == PathTracingShadowMode::SoftShadows;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
             inputs.FrameState.ShadingModel = config.FrameState->ShadingModel;
 //Modify End
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
             inputs.FrameState.EnvironmentProjectionVariant =
                 static_cast<uint32_t>(resources.Pipelines.GetLayout().EnvironmentProjection);
 //Modify End
@@ -77,7 +77,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
             };
             resources.DirectLightingReSTIRDIPass.Execute(commandList, inputs);
         });
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
     RaytracingDemoPassBindings::DeclareRayTracingExternalResourceAccesses(
         *pass,
         resources,

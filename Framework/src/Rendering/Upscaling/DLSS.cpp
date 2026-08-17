@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 #include <Framework/Rendering/Upscaling/DLSS.h>
 
 #include <DX12Library/CommandList.h>
@@ -115,7 +115,7 @@ namespace
         };
     }
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     std::string GetStreamlineResultMessage(const char* operation, const sl::Result result)
     {
         std::ostringstream message;
@@ -175,7 +175,7 @@ DLSS::~DLSS()
     Shutdown();
 }
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 bool DLSS::IsStreamlineRuntimeInitialized() const
 {
     const std::shared_ptr<FrameFeaturesRuntime> frameFeaturesRuntime = m_DeviceContext.GetFrameFeaturesRuntime();
@@ -428,7 +428,7 @@ void DLSS::Execute(CommandList& commandList, const DLSSExecutionInputs& inputs)
     evaluationParams.InExposureScale = 1.0f;
 
     NVSDK_NGX_Result result = NVSDK_NGX_Result_Fail;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     commandList.ExecuteExternalCommandRecording(
         [&](ID3D12GraphicsCommandList2& nativeCommandList)
         {
@@ -448,7 +448,7 @@ void DLSS::Execute(CommandList& commandList, const DLSSExecutionInputs& inputs)
     m_HistoryReset = false;
 }
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 void DLSS::BeginFrameGeneration(const uint32_t frameIndex)
 {
     if (!m_FrameGenerationEnabled)
@@ -558,7 +558,7 @@ void DLSS::TagFrameGenerationResources(CommandList& commandList, const DLSSFrame
         sl::ResourceTag{ &hudLessColor, sl::kBufferTypeHUDLessColor, sl::ResourceLifecycle::eValidUntilPresent, &displayExtent },
     };
     sl::Result tagResult = sl::Result::eErrorInvalidState;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     commandList.ExecuteExternalCommandRecording(
         [&](ID3D12GraphicsCommandList2& nativeCommandList)
         {
@@ -634,7 +634,7 @@ void DLSS::ExecuteRayReconstruction(CommandList& commandList, const DLSSExecutio
         throw std::runtime_error("DLSS Ray Reconstruction requires an initialized Streamline runtime.");
     }
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     auto* frameToken = static_cast<sl::FrameToken*>(AcquireStreamlineFrameToken(inputs.FrameIndex));
 
     const DirectX::XMMATRIX inverseView = DirectX::XMMatrixInverse(nullptr, inputs.View);
@@ -694,7 +694,7 @@ void DLSS::ExecuteRayReconstruction(CommandList& commandList, const DLSSExecutio
     };
     sl::Result tagResult = sl::Result::eErrorInvalidState;
     sl::Result evaluateResult = sl::Result::eErrorInvalidState;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     commandList.ExecuteExternalCommandRecording(
         [&](ID3D12GraphicsCommandList2& nativeCommandList)
         {
@@ -725,7 +725,7 @@ void DLSS::ExecuteRayReconstruction(CommandList& commandList, const DLSSExecutio
     m_HistoryReset = false;
 }
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 void* DLSS::AcquireStreamlineFrameToken(const uint32_t frameIndex)
 {
     if (m_ActiveStreamlineFrameToken != nullptr && m_ActiveStreamlineFrameIndex == frameIndex)
@@ -853,7 +853,7 @@ bool DLSS::EnsureFeature(CommandList& commandList, const DLSSExecutionInputs& in
 
     NVSDK_NGX_Handle* createdFeature = nullptr;
     NVSDK_NGX_Result createResult = NVSDK_NGX_Result_Fail;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     commandList.ExecuteExternalCommandRecording(
         [&](ID3D12GraphicsCommandList2& nativeCommandList)
         {

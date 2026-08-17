@@ -1,10 +1,10 @@
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include "RenderContext.h"
 
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Resource.h>
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 const std::shared_ptr<Texture>& RenderGraph::FrameContext::GetTexture(const ResourceId resourceId) const
 {
     Assert(m_ResourcePool != nullptr, "Render context has no resource pool.");

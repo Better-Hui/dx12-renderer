@@ -1,8 +1,8 @@
 #pragma once
-//Modify Begin:2026-07-23 by BestHui
+//Modify Begin:2026-07-23 by Hui
 
 #include <DX12Library/RootSignature.h>
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 #include <Framework/Rendering/Pipeline/PipelineStateKey.h>
 //Modify End
 
@@ -19,7 +19,7 @@ public:
     explicit ComputePipelineStateBuilder(std::shared_ptr<RootSignature> rootSignature);
 
     Microsoft::WRL::ComPtr<ID3D12PipelineState> Build(Microsoft::WRL::ComPtr<ID3D12Device2> device) const;
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     ComputePipelineStateKey CreateKey(
         size_t definesHash = 0,
         uint32_t shaderModelMajor = 0,

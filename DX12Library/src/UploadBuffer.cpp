@@ -10,7 +10,7 @@
 
 #include <new>
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 UploadBuffer::UploadBuffer(Microsoft::WRL::ComPtr<ID3D12Device2> device, const size_t pageSize) :
 	m_Device(std::move(device)),
 	m_PageSize(pageSize)
@@ -84,7 +84,7 @@ UploadBuffer::Page::Page(Microsoft::WRL::ComPtr<ID3D12Device2> device, const siz
 	));
 
 	m_GpuPtr = m_Resource->GetGPUVirtualAddress();
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 	const D3D12_RANGE readRange = { 0, 0 };
 	ThrowIfFailed(m_Resource->Map(0, &readRange, &m_CpuPtr));
 //Modify End
@@ -93,7 +93,7 @@ UploadBuffer::Page::Page(Microsoft::WRL::ComPtr<ID3D12Device2> device, const siz
 
 UploadBuffer::Page::~Page()
 {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 	const D3D12_RANGE writeRange = { 0, m_SizeInBytes };
 	m_Resource->Unmap(0, &writeRange);
 //Modify End

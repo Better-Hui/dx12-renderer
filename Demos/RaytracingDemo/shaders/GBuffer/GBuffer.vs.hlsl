@@ -38,7 +38,7 @@ struct VertexShaderOutput
     float2 Uv : TEXCOORD0;
     float4 CurrentPositionCs : TEXCOORD1;
     float4 PreviousPositionCs : TEXCOORD2;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     nointerpolation uint MeshletDebugId : TEXCOORD3;
 //Modify End
     float4 PositionCs : SV_POSITION;
@@ -56,7 +56,7 @@ VertexShaderOutput main(VertexAttributes IN)
     OUT.PositionCs = mul(g_Model_ModelViewProjection, float4(IN.PositionOs, 1.0f));
     OUT.CurrentPositionCs = OUT.PositionCs;
     OUT.PreviousPositionCs = mul(g_Model_PreviousModelViewProjection, float4(IN.PositionOs, 1.0f));
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     OUT.MeshletDebugId = 0;
 //Modify End
     return OUT;

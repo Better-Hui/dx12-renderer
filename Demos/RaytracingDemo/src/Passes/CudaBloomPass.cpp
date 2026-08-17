@@ -24,7 +24,7 @@ namespace
 
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 uint32_t CudaBloomPass::ComputeMaxPyramidLevels(const uint32_t width, const uint32_t height)
 {
     uint32_t levelWidth = HalfSize(width);
@@ -44,7 +44,7 @@ uint32_t CudaBloomPass::ComputeMaxPyramidLevels(const uint32_t width, const uint
 }
 //Modify End
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 CudaBloomPass::CudaBloomPass(FrameworkDeviceContext& deviceContext)
     : m_DeviceContext(deviceContext)
 {
@@ -58,17 +58,17 @@ CudaBloomPass::~CudaBloomPass()
 
 void CudaBloomPass::Shutdown()
 {
-//Modify Begin:2026-08-16 by BestHui
+//Modify Begin:2026-08-16 by Hui
     m_FrameworkBloom.reset();
     m_FrameworkBloomWidth = 0;
     m_FrameworkBloomHeight = 0;
     m_FrameworkBloomPyramidLevels = 0;
 //Modify End
     ReleaseInteropResource();
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     ReleaseCudaTimingFrames();
     m_PyramidTextures.Release(&m_CudaContext);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     m_PyramidWidth.clear();
     m_PyramidHeight.clear();
 //Modify End
@@ -89,7 +89,7 @@ void CudaBloomPass::ReleaseInteropResource()
     m_Height = 0;
 }
 
-//Modify Begin:2026-08-16 by BestHui
+//Modify Begin:2026-08-16 by Hui
 bool CudaBloomPass::DrawImGui(const uint32_t width, const uint32_t height)
 {
     bool changed = false;
@@ -127,14 +127,14 @@ bool CudaBloomPass::DrawImGui(const uint32_t width, const uint32_t height)
         changed |= ImGui::SliderFloat("Bloom Threshold", &m_Threshold, 0.0f, 5.0f, "%.2f");
         changed |= ImGui::SliderFloat("Bloom Soft Knee", &m_SoftThreshold, 0.0f, 2.0f, "%.2f");
         changed |= ImGui::SliderFloat("Bloom Intensity", &m_Intensity, 0.0f, 5.0f, "%.2f");
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         const uint32_t pyramidWidth = m_Width > 0u ? m_Width : width;
         const uint32_t pyramidHeight = m_Height > 0u ? m_Height : height;
         const int maxPyramidLevels = static_cast<int>(ComputeMaxPyramidLevels(pyramidWidth, pyramidHeight));
         m_PyramidLevels = std::clamp(m_PyramidLevels, 1, maxPyramidLevels);
         changed |= ImGui::SliderInt("Bloom Pyramid Levels", &m_PyramidLevels, 1, maxPyramidLevels);
 //Modify End
-//Modify Begin:2026-08-17 by BestHui
+//Modify Begin:2026-08-17 by Hui
         if (!IsFrameworkRaster() &&
             (m_CudaMethod == CudaMethod::BoxFilterApproximation ||
                 m_CudaMethod == CudaMethod::BoxFilterOriginalPaper))
@@ -142,7 +142,7 @@ bool CudaBloomPass::DrawImGui(const uint32_t width, const uint32_t height)
             changed |= ImGui::SliderFloat("Box Filter Sigma", &m_BoxFilterSigma, 0.1f, 16.0f, "%.2f");
         }
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         if (m_LastCudaTiming.Valid)
         {
             ImGui::Text(
@@ -159,7 +159,7 @@ bool CudaBloomPass::DrawImGui(const uint32_t width, const uint32_t height)
 }
 //Modify End
 
-//Modify Begin:2026-08-16 by BestHui
+//Modify Begin:2026-08-16 by Hui
 bool CudaBloomPass::ExecuteFrameworkBloom(
     const std::shared_ptr<Texture>& source,
     const std::shared_ptr<Texture>& destination,
@@ -313,7 +313,7 @@ bool CudaBloomPass::SignalD3D12AndWaitInCuda(ID3D12CommandQueue* d3d12CommandQue
     }
 
     std::string error;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     if (m_ActiveCudaTimingFrameIndex >= 0)
     {
         RecordCudaTimingEvent(m_CudaTimingFrames[static_cast<size_t>(m_ActiveCudaTimingFrameIndex)].D3DWaitBegin);
@@ -324,7 +324,7 @@ bool CudaBloomPass::SignalD3D12AndWaitInCuda(ID3D12CommandQueue* d3d12CommandQue
         m_Status = error;
         return false;
     }
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     if (m_ActiveCudaTimingFrameIndex >= 0)
     {
         RecordCudaTimingEvent(m_CudaTimingFrames[static_cast<size_t>(m_ActiveCudaTimingFrameIndex)].D3DWaitEnd);
@@ -341,7 +341,7 @@ bool CudaBloomPass::SignalCudaAndWaitInD3D12(ID3D12CommandQueue* d3d12CommandQue
     }
 
     std::string error;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     if (m_ActiveCudaTimingFrameIndex >= 0)
     {
         RecordCudaTimingEvent(m_CudaTimingFrames[static_cast<size_t>(m_ActiveCudaTimingFrameIndex)].SignalBegin);
@@ -352,7 +352,7 @@ bool CudaBloomPass::SignalCudaAndWaitInD3D12(ID3D12CommandQueue* d3d12CommandQue
         m_Status = error;
         return false;
     }
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     if (m_ActiveCudaTimingFrameIndex >= 0)
     {
         CudaTimingFrame& timingFrame = m_CudaTimingFrames[static_cast<size_t>(m_ActiveCudaTimingFrameIndex)];
@@ -364,7 +364,7 @@ bool CudaBloomPass::SignalCudaAndWaitInD3D12(ID3D12CommandQueue* d3d12CommandQue
     return true;
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 bool CudaBloomPass::EnsureCudaPyramidTextures(const uint32_t width, const uint32_t height, const uint32_t levelCount)
 {
     if (!InitializeCuda())
@@ -374,7 +374,7 @@ bool CudaBloomPass::EnsureCudaPyramidTextures(const uint32_t width, const uint32
 
     uint32_t levelWidth = HalfSize(width);
     uint32_t levelHeight = HalfSize(height);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     m_PyramidWidth.resize(levelCount);
     m_PyramidHeight.resize(levelCount);
 //Modify End
@@ -396,7 +396,7 @@ bool CudaBloomPass::EnsureCudaPyramidTextures(const uint32_t width, const uint32
 }
 //Modify End
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 bool CudaBloomPass::EnsureCudaTimingFrames()
 {
     if (!InitializeCuda())
@@ -563,7 +563,7 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
     const uint32_t maxPyramidLevels = ComputeMaxPyramidLevels(width, height);
     m_PyramidLevels = std::clamp(m_PyramidLevels, 1, static_cast<int>(maxPyramidLevels));
     const uint32_t levelCount = static_cast<uint32_t>(m_PyramidLevels);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     if (!EnsureCudaPyramidTextures(width, height, levelCount))
 //Modify End
     {
@@ -573,7 +573,7 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
     constexpr uint32_t blockX = 16;
     constexpr uint32_t blockY = 16;
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     auto getPyramidSurface = [this, levelCount](const uint32_t level) -> CUsurfObject
     {
         return level < levelCount ? m_PyramidTextures.GetSurfaceObject(level) : 0;
@@ -598,11 +598,11 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
 //Modify Begin:2026-08-17 by Hui
     const bool classicPyramid = m_CudaMethod == CudaMethod::ClassicPyramid;
 //Modify End
-//Modify Begin:2026-08-16 by BestHui
+//Modify Begin:2026-08-16 by Hui
     float boxFilterSigma = (std::max)(m_BoxFilterSigma, 0.001f);
 //Modify End
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     if (m_ActiveCudaTimingFrameIndex >= 0)
     {
         RecordCudaTimingEvent(m_CudaTimingFrames[static_cast<size_t>(m_ActiveCudaTimingFrameIndex)].KernelsBegin);
@@ -870,18 +870,18 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
 //Modify End
     for (uint32_t level = levelCount - 1u; level > 0u; --level)
     {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         CUtexObject low = m_PyramidTextures.GetLinearTextureObject(level);
         CUtexObject high = m_PyramidTextures.GetPointTextureObject(level - 1u);
         CUsurfObject highOutput = m_PyramidTextures.GetSurfaceObject(level - 1u);
 //Modify End
         uint32_t highWidth = m_PyramidWidth[level - 1u];
         uint32_t highHeight = m_PyramidHeight[level - 1u];
-//Modify Begin:2026-08-17 by BestHui
+//Modify Begin:2026-08-17 by Hui
         uint32_t lowWidth = m_PyramidWidth[level];
         uint32_t lowHeight = m_PyramidHeight[level];
 //Modify End
-//Modify Begin:2026-08-16 by BestHui
+//Modify Begin:2026-08-16 by Hui
         uint32_t highLevel = level - 1u;
 //Modify End
         void* boxFilterUpsampleArgs[] = {
@@ -944,7 +944,7 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
         }
     }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     CUtexObject bloom = m_PyramidTextures.GetLinearTextureObject(0u);
 //Modify End
 //Modify Begin:2026-08-17 by Hui
@@ -978,7 +978,7 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
         return false;
     }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     if (m_ActiveCudaTimingFrameIndex >= 0)
     {
         RecordCudaTimingEvent(m_CudaTimingFrames[static_cast<size_t>(m_ActiveCudaTimingFrameIndex)].KernelsEnd);
@@ -998,27 +998,27 @@ bool CudaBloomPass::ExecuteInPlace(Texture& postProcessColor, const uint32_t wid
     {
         return false;
     }
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     CollectCompletedCudaTimingFrames();
     BeginCudaTimingFrame();
 //Modify End
     if (!EnsureD3D12InteropResource(postProcessColor, width, height))
     {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         m_ActiveCudaTimingFrameIndex = -1;
 //Modify End
         return false;
     }
     if (!SignalD3D12AndWaitInCuda(d3d12CommandQueue))
     {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         m_ActiveCudaTimingFrameIndex = -1;
 //Modify End
         return false;
     }
     if (!RunCudaBloom(width, height))
     {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         m_ActiveCudaTimingFrameIndex = -1;
 //Modify End
         m_CudaContext.Synchronize();
@@ -1026,7 +1026,7 @@ bool CudaBloomPass::ExecuteInPlace(Texture& postProcessColor, const uint32_t wid
     }
     if (!SignalCudaAndWaitInD3D12(d3d12CommandQueue))
     {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         m_ActiveCudaTimingFrameIndex = -1;
 //Modify End
         return false;

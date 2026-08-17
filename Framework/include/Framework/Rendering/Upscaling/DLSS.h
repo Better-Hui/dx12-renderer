@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 #pragma once
 
 #include <DirectXMath.h>
@@ -58,7 +58,7 @@ struct DLSSExecutionInputs
     DirectX::XMMATRIX PreviousViewProjection = DirectX::XMMatrixIdentity();
 };
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 struct DLSSFrameGenerationInputs
 {
     std::shared_ptr<Texture> Depth;
@@ -89,7 +89,7 @@ public:
 
     [[nodiscard]] bool IsSupported() const { return m_Supported; }
     [[nodiscard]] bool IsEnabled() const { return m_Supported && m_Mode != DLSSMode::Disabled; }
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     [[nodiscard]] bool IsStreamlineRuntimeInitialized() const;
 //Modify End
     [[nodiscard]] bool IsRayReconstructionSupported() const;
@@ -107,7 +107,7 @@ public:
     void InvalidateHistory();
     void OnResourcesRecreated();
     void Execute(CommandList& commandList, const DLSSExecutionInputs& inputs);
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     void BeginFrameGeneration(uint32_t frameIndex);
     void PrepareFrameGeneration(const DLSSFrameGenerationInputs& inputs);
     void TagFrameGenerationResources(CommandList& commandList, const DLSSFrameGenerationInputs& inputs);
@@ -123,7 +123,7 @@ private:
     [[nodiscard]] bool EnsureInitialized();
     [[nodiscard]] bool EnsureFeature(CommandList& commandList, const DLSSExecutionInputs& inputs);
     void ExecuteRayReconstruction(CommandList& commandList, const DLSSExecutionInputs& inputs);
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     void* AcquireStreamlineFrameToken(uint32_t frameIndex);
     void ReleaseStreamlineFrameToken();
 //Modify End
@@ -139,7 +139,7 @@ private:
     bool m_HistoryReset = true;
     bool m_RayReconstructionEnabled = false;
     bool m_FrameGenerationEnabled = false;
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     bool m_FrameGenerationPrepared = false;
     uint32_t m_ActiveStreamlineFrameIndex = UINT32_MAX;
     void* m_ActiveStreamlineFrameToken = nullptr;

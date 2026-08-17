@@ -10,10 +10,10 @@
 
 #include <Framework/Core/GraphicsSettings.h>
 
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
 #include <fstream>
 //Modify End
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
 #include <sstream>
 #include <vector>
 #include <wrl.h>
@@ -30,7 +30,7 @@
 void ReportLiveObjects()
 {
 	IDXGIDebug1* dxgiDebug = nullptr;
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
 	if (FAILED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&dxgiDebug))) || dxgiDebug == nullptr)
 	{
 		return;
@@ -45,7 +45,7 @@ struct Parameters
 {
 	int m_ClientWidth = 1280;
 	int m_ClientHeight = 720;
-	//Modify Begin:2026-08-07 by BestHui
+	//Modify Begin:2026-08-07 by Hui
 	bool m_EnableStreamlineInterposer = false;
 	//Modify End
 
@@ -79,7 +79,7 @@ void ParseCommandLineArguments(Parameters& parameters)
 			parameters.m_GraphicsSettings.DirectionalLightShadows.m_PoissonSpread = wcstof(argv[++i], nullptr);
 		}
 
-		//Modify Begin:2026-08-07 by BestHui
+		//Modify Begin:2026-08-07 by Hui
 		if (wcscmp(argv[i], L"--streamline-interposer") == 0)
 		{
 			parameters.m_EnableStreamlineInterposer = true;
@@ -90,7 +90,7 @@ void ParseCommandLineArguments(Parameters& parameters)
 	LocalFree(argv);
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 std::shared_ptr<Game> CreateGame(Application& application, const Parameters& parameters)
 {
 #ifdef DEMO_TYPE
@@ -102,7 +102,7 @@ std::shared_ptr<Game> CreateGame(Application& application, const Parameters& par
 }
 //Modify End
 
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
 std::string NarrowDredName(const wchar_t* value)
 {
 	if (value == nullptr)
@@ -119,7 +119,7 @@ std::string NarrowDredName(const wchar_t* value)
 	return result;
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 void WriteDeviceRemovedDetails(Application& application, std::ostream& stream)
 {
 	try
@@ -224,7 +224,7 @@ int CALLBACK wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR lpCmdL
 	Parameters parameters;
 	ParseCommandLineArguments(parameters);
 
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
 	const char* applicationStage = "Create";
 	const HRESULT coInitializeResult = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 	const bool shouldUninitializeCom = SUCCEEDED(coInitializeResult);

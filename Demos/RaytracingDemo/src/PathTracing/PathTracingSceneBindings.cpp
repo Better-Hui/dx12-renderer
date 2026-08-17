@@ -9,13 +9,13 @@
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <Framework/Rendering/Texture/UnorderedAccessView.h>
 #include <RenderGraph/RenderPass.h>
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <Scene/SceneLightManager.h>
 //Modify End
 
 #include <vector>
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 RaytracingDemoCameraConstants RaytracingDemoPassBindings::BuildPassCameraConstants(
     const RaytracingDemoPassResources& resources,
     const RaytracingDemoPassConfig& config,
@@ -24,7 +24,7 @@ RaytracingDemoCameraConstants RaytracingDemoPassBindings::BuildPassCameraConstan
     return ::BuildPassCameraConstants(resources, config, context);
 }
 
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
 void RaytracingDemoPassBindings::DeclareRayTracingExternalResourceAccesses(
     RenderGraph::RenderPass& renderPass,
     const RaytracingDemoPassResources& resources,
@@ -56,7 +56,7 @@ void RaytracingDemoPassBindings::BindInlinePathTracingInputs(
     {
         commandContext.SetConstantBuffer(shader, "CameraConstants", sizeof(camera), &camera);
     }
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     if (shader.HasAccelerationStructure("g_InlineRayTracingScene"))
     {
         commandContext.SetAccelerationStructure(shader, "g_InlineRayTracingScene", accelerationStructure);
@@ -74,7 +74,7 @@ void RaytracingDemoPassBindings::BindInlinePathTracingInputs(
     {
         commandContext.SetShaderResourceView(shader, "DepthTexture", ShaderResourceView::DepthAsFloat(gbuffer.Depth));
     }
-//Modify Begin:2026-08-05 by BestHui
+//Modify Begin:2026-08-05 by Hui
     if (shader.HasShaderResourceView("MotionVectorTexture"))
     {
         commandContext.SetShaderResourceView(shader, "MotionVectorTexture", ShaderResourceView(gbuffer.MotionVector));
@@ -94,7 +94,7 @@ void RaytracingDemoPassBindings::BindInlinePathTracingInputs(
     }
     if (shader.HasShaderResourceView("BindlessTextures"))
     {
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
         const std::vector<ShaderResourceView>& sceneTextures = resources.Scene.GetTextureShaderResourceViews();
 //Modify End
         commandContext.SetShaderResourceViews(shader, "BindlessTextures", sceneTextures);
@@ -122,7 +122,7 @@ void RaytracingDemoPassBindings::BindDxrPathTracingInputs(
     }
     if (shader.HasBinding("BindlessTextures"))
     {
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
         shader.SetTextureArray("BindlessTextures", resources.Scene.GetTextureShaderResourceViews());
 //Modify End
     }

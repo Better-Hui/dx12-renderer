@@ -8,7 +8,7 @@
 #include <d3d12.h>
 #include <d3dx12.h>
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 ResourceStateTracker::ResourceStateTracker(std::shared_ptr<ResourceStateRegistry> resourceStateRegistry)
     : m_ResourceStateRegistry(std::move(resourceStateRegistry))
 {
@@ -80,7 +80,7 @@ void ResourceStateTracker::ResourceBarrier(const D3D12_RESOURCE_BARRIER& barrier
 void ResourceStateTracker::TransitionResource(ID3D12Resource* resource, const D3D12_RESOURCE_STATES stateAfter,
 	const UINT subResource)
 {
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
 	Assert(resource != nullptr, "Cannot track a transition for a null D3D12 resource.");
 	ResourceBarrier(
 		CD3DX12_RESOURCE_BARRIER::Transition(resource, D3D12_RESOURCE_STATE_COMMON, stateAfter, subResource));
@@ -93,7 +93,7 @@ void ResourceStateTracker::TransitionResource(const Resource& resource, const D3
 	TransitionResource(resource.GetD3D12Resource().Get(), stateAfter, subResource);
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 void ResourceStateTracker::NotifyResourceState(
     ID3D12Resource* resource,
     const D3D12_RESOURCE_STATES state,
@@ -118,7 +118,7 @@ void ResourceStateTracker::AliasBarrier(const Resource* beforeResource, const Re
 	ResourceBarrier(CD3DX12_RESOURCE_BARRIER::Aliasing(pResourceBefore, pResourceAfter));
 }
 
-//Modify Begin:2026-08-10 by BestHui
+//Modify Begin:2026-08-10 by Hui
 void ResourceStateTracker::QueueAliasingBarrier(const Resource* beforeResource, const Resource* afterResource)
 {
     ID3D12Resource* pResourceBefore = beforeResource != nullptr ? beforeResource->GetD3D12Resource().Get() : nullptr;
@@ -140,7 +140,7 @@ void ResourceStateTracker::FlushResourceBarriers(const CommandList& commandList)
 	m_ResourceBarriers.clear();
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 uint32_t ResourceStateTracker::FlushPendingResourceBarriers(
     const CommandList& commandList,
     ResourceStateRegistry::SubmissionScope& submissionScope)
@@ -149,7 +149,7 @@ uint32_t ResourceStateTracker::FlushPendingResourceBarriers(
 	ResourceBarriersType resourceBarriers;
 	resourceBarriers.reserve(m_PendingAliasingBarriers.size() + m_PendingResourceBarriers.size());
 
-//Modify Begin:2026-08-10 by BestHui
+//Modify Begin:2026-08-10 by Hui
     resourceBarriers.insert(
         resourceBarriers.end(),
         m_PendingAliasingBarriers.begin(),
@@ -162,7 +162,7 @@ uint32_t ResourceStateTracker::FlushPendingResourceBarriers(
 		if (pendingBarrier.Type == D3D12_RESOURCE_BARRIER_TYPE_TRANSITION)
 		{
 			auto pendingTransition = pendingBarrier.Transition;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
             const auto iter = resourceStates.find(pendingTransition.pResource);
             Assert(
                 iter != resourceStates.end(),
@@ -210,21 +210,21 @@ uint32_t ResourceStateTracker::FlushPendingResourceBarriers(
 	}
 
 	m_PendingResourceBarriers.clear();
-//Modify Begin:2026-08-10 by BestHui
+//Modify Begin:2026-08-10 by Hui
     m_PendingAliasingBarriers.clear();
 //Modify End
 	return numBarriers;
 }
 //Modify End
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 void ResourceStateTracker::CommitFinalResourceStates(
     ResourceStateRegistry::SubmissionScope& submissionScope)
 {
     ResourceStateMapType& resourceStates = submissionScope.GetStates();
 	for (const auto& resourceState : m_FinalResourceStates)
 	{
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         const auto iter = resourceStates.find(resourceState.first);
         Assert(
             iter != resourceStates.end(),
@@ -240,7 +240,7 @@ void ResourceStateTracker::CommitFinalResourceStates(
 void ResourceStateTracker::Reset()
 {
 	m_PendingResourceBarriers.clear();
-//Modify Begin:2026-08-10 by BestHui
+//Modify Begin:2026-08-10 by Hui
     m_PendingAliasingBarriers.clear();
 //Modify End
 	m_ResourceBarriers.clear();

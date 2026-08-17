@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 #pragma once
 
 #include <Framework/Rendering/Denoising/NRD.h>
@@ -11,7 +11,7 @@
 #include <memory>
 
 class CommandList;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 class FrameworkDeviceContext;
 //Modify End
 

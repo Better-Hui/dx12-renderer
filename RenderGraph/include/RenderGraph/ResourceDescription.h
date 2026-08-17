@@ -2,7 +2,7 @@
 
 #include "cstdint"
 #include <functional>
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <stdexcept>
 //Modify End
 
@@ -24,7 +24,7 @@ namespace RenderGraph
         Clear,
         Discard,
         CopyDestination,
-//Modify Begin:2026-08-05 by BestHui
+//Modify Begin:2026-08-05 by Hui
         Preserve,
 //Modify End
     };
@@ -41,7 +41,7 @@ namespace RenderGraph
         uint32_t m_ArraySize = 1;
         uint32_t m_MipLevels = 1;
         uint32_t m_SampleCount = 1;
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
         D3D12_RESOURCE_FLAGS m_ExtraResourceFlags = D3D12_RESOURCE_FLAG_NONE;
         D3D12_HEAP_FLAGS m_HeapFlags = D3D12_HEAP_FLAG_NONE;
         bool m_DedicatedResource = false;
@@ -58,7 +58,7 @@ namespace RenderGraph
         TextureDescription(const ResourceId id,
             const RenderMetadataExpression<uint32_t>& widthExpression, const RenderMetadataExpression<uint32_t>& heightExpression,
             const DXGI_FORMAT format, const ClearValue::COLOR clearColor, ResourceInitAction initAction
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
             , D3D12_RESOURCE_FLAGS extraResourceFlags = D3D12_RESOURCE_FLAG_NONE,
             D3D12_HEAP_FLAGS heapFlags = D3D12_HEAP_FLAG_NONE,
             bool dedicatedResource = false
@@ -70,7 +70,7 @@ namespace RenderGraph
             , m_Format(format)
             , m_ClearValue(format, clearColor)
             , m_InitAction(initAction)
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
             , m_ExtraResourceFlags(extraResourceFlags)
             , m_HeapFlags(heapFlags)
             , m_DedicatedResource(dedicatedResource)
@@ -80,7 +80,7 @@ namespace RenderGraph
         TextureDescription(const ResourceId id,
             const RenderMetadataExpression<uint32_t>& widthExpression, const RenderMetadataExpression<uint32_t>& heightExpression,
             const DXGI_FORMAT format, const ClearValue::DEPTH_STENCIL_VALUE clearDepthStencilValue, ResourceInitAction initAction
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
             , D3D12_RESOURCE_FLAGS extraResourceFlags = D3D12_RESOURCE_FLAG_NONE,
             D3D12_HEAP_FLAGS heapFlags = D3D12_HEAP_FLAG_NONE,
             bool dedicatedResource = false
@@ -92,7 +92,7 @@ namespace RenderGraph
             , m_Format(format)
             , m_ClearValue(format, clearDepthStencilValue)
             , m_InitAction(initAction)
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
             , m_ExtraResourceFlags(extraResourceFlags)
             , m_HeapFlags(heapFlags)
             , m_DedicatedResource(dedicatedResource)
@@ -100,7 +100,7 @@ namespace RenderGraph
         { }
     };
 
-    //Modify Begin:2026-08-07 by BestHui
+    //Modify Begin:2026-08-07 by Hui
     enum class BufferKind : uint8_t
     {
         Structured,
@@ -132,7 +132,7 @@ namespace RenderGraph
         RenderMetadataExpression<size_t> m_SizeExpression;
         size_t m_Stride;
         ResourceInitAction m_InitAction;
-        //Modify Begin:2026-08-07 by BestHui
+        //Modify Begin:2026-08-07 by Hui
         BufferKind m_Kind;
         BufferUsage m_Usage;
         //Modify End
@@ -142,7 +142,7 @@ namespace RenderGraph
             , m_SizeExpression(nullptr)
             , m_Stride(0)
             , m_InitAction(Clear)
-            //Modify Begin:2026-08-07 by BestHui
+            //Modify Begin:2026-08-07 by Hui
             , m_Kind(BufferKind::Structured)
             , m_Usage(BufferUsage::ShaderResource)
             //Modify End
@@ -159,7 +159,7 @@ namespace RenderGraph
             , m_SizeExpression(sizeExpression)
             , m_Stride(stride)
             , m_InitAction(initAction)
-            //Modify Begin:2026-08-07 by BestHui
+            //Modify Begin:2026-08-07 by Hui
             , m_Kind(kind)
             , m_Usage(usage)
             //Modify End
@@ -189,7 +189,7 @@ namespace RenderGraph
 
         TextureDescription m_TextureDescription;
         TextureUsageType m_TextureUsageType;
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
         D3D12_HEAP_FLAGS m_HeapFlags = D3D12_HEAP_FLAG_NONE;
         bool m_DedicatedResource = false;
 //Modify End
@@ -207,7 +207,7 @@ namespace RenderGraph
             case ResourceType::Buffer:
                 return m_BufferDescription.m_InitAction;
             default:
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
                 throw std::logic_error("Resource init action is undefined for this resource type.");
 //Modify End
             }
@@ -220,7 +220,7 @@ namespace RenderGraph
             case ResourceType::Texture:
                 return m_TextureDescription.m_ClearValue;
             default:
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
                 throw std::logic_error("Clear value is undefined for this resource type.");
 //Modify End
             }

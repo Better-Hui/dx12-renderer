@@ -1,16 +1,16 @@
 #include <Framework/Rendering/Pipeline/Shader.h>
 #include <DX12Library/Helpers.h>
 #include <DX12Library/ShaderUtils.h>
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
 #include <Framework/Rendering/Pipeline/IndirectDrawCommandSignature.h>
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
 //Modify End
 
-//Modify Begin:2026-07-24 by BestHui
+//Modify Begin:2026-07-24 by Hui
 #include <algorithm>
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
 #include <utility>
 //Modify End
 
@@ -71,7 +71,7 @@ namespace
         AppendUniqueMetadata(vertexShaderMetadata.m_UnorderedAccessViews, merged.m_UnorderedAccessViews, merged.m_UnorderedAccessViewsNameCache);
         AppendUniqueMetadata(pixelShaderMetadata.m_UnorderedAccessViews, merged.m_UnorderedAccessViews, merged.m_UnorderedAccessViewsNameCache);
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
         AppendUniqueMetadata(vertexShaderMetadata.m_Samplers, merged.m_Samplers, merged.m_SamplersNameCache);
         AppendUniqueMetadata(pixelShaderMetadata.m_Samplers, merged.m_Samplers, merged.m_SamplersNameCache);
 //Modify End
@@ -82,7 +82,7 @@ namespace
 }
 //Modify End
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 Shader::Shader(
     FrameworkDeviceContext& deviceContext,
     const ShaderBlob& vertexShader,
@@ -122,7 +122,7 @@ void Shader::StageDefaultDescriptorTables(CommandList& commandList) const
     }
 }
 
-//Modify Begin:2026-07-24 by BestHui
+//Modify Begin:2026-07-24 by Hui
 bool Shader::HasConstantBuffer(const std::string& variableName) const
 {
     if (m_PipelineLayout != nullptr)
@@ -157,7 +157,7 @@ bool Shader::HasUnorderedAccessView(const std::string& variableName) const
 }
 //Modify End
 
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
 std::unique_ptr<IndirectDrawCommandSignature> Shader::CreateIndirectDrawCommandSignature(
     const std::string& rootConstantBufferName,
     const UINT byteStride) const
@@ -176,7 +176,7 @@ std::unique_ptr<IndirectDrawCommandSignature> Shader::CreateIndirectDrawCommandS
 
 void Shader::SetConstantBuffer(CommandList& commandList, const std::string& variableName, size_t size, const void* data)
 {
-//Modify Begin:2026-07-24 by BestHui
+//Modify Begin:2026-07-24 by Hui
     (void)commandList;
     m_DescriptorSet->SetConstantBufferData(variableName, data, size);
 //Modify End
@@ -184,13 +184,13 @@ void Shader::SetConstantBuffer(CommandList& commandList, const std::string& vari
 
 void Shader::SetShaderResourceView(CommandList& commandList, const std::string& variableName, const ShaderResourceView& shaderResourceView)
 {
-//Modify Begin:2026-07-24 by BestHui
+//Modify Begin:2026-07-24 by Hui
     (void)commandList;
     m_DescriptorSet->SetShaderResourceView(variableName, 0u, shaderResourceView);
 //Modify End
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 void Shader::SetShaderResourceViews(CommandList& commandList, const std::string& variableName, std::span<const ShaderResourceView> shaderResourceViews)
 {
     (void)commandList;
@@ -208,10 +208,10 @@ void Shader::SetTexture(CommandList& commandList, const std::string& variableNam
     SetTexture(commandList, variableName, ShaderResourceView(texture));
 }
 
-//Modify Begin:2026-07-23 by BestHui
+//Modify Begin:2026-07-23 by Hui
 void Shader::SetUnorderedAccessView(CommandList& commandList, const std::string& variableName, const UnorderedAccessView& unorderedAccessView)
 {
-    //Modify Begin:2026-07-24 by BestHui
+    //Modify Begin:2026-07-24 by Hui
     (void)commandList;
     m_DescriptorSet->SetUnorderedAccessView(variableName, unorderedAccessView);
     //Modify End
@@ -220,7 +220,7 @@ void Shader::SetUnorderedAccessView(CommandList& commandList, const std::string&
 
 Microsoft::WRL::ComPtr<ID3D12PipelineState> Shader::GetPipelineState(const Microsoft::WRL::ComPtr<ID3D12Device2>& device, const RenderTargetState& renderTargetState)
 {
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     const auto& formats = renderTargetState.GetFormats();
     std::vector<DXGI_FORMAT> renderTargetFormats(formats.GetCount());
     memcpy(renderTargetFormats.data(), formats.GetFormats(), sizeof(DXGI_FORMAT) * renderTargetFormats.size());
@@ -242,7 +242,7 @@ void Shader::CollectShaderMetadata(const Microsoft::WRL::ComPtr<ID3DBlob>& shade
     *outMetadata = ShaderReflection::CollectShader(shader);
 }
 
-//Modify Begin:2026-07-24 by BestHui
+//Modify Begin:2026-07-24 by Hui
 void Shader::BuildPipelineLayout()
 {
     const ShaderReflectionMetadata mergedReflection = MergeGraphicsReflection(m_VertexShaderMetadata, m_PixelShaderMetadata);
@@ -281,13 +281,13 @@ void Shader::BuildReflectedRootSignature()
     }
 
     PipelineRootSignatureBuildDesc rootSignatureBuildDesc;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     rootSignatureBuildDesc.Flags =
         D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |
         D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED;
 //Modify End
     m_RootSignature = m_PipelineLayout->CreateRootSignature(rootSignatureBuildDesc);
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     m_PipelineLayout->SetRootSignature(m_RootSignature);
     m_DescriptorSet = m_DescriptorPool.AllocateDescriptorSet(*m_PipelineLayout);
 //Modify End

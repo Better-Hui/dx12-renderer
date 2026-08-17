@@ -5,14 +5,14 @@
 #include <Framework/Scene/Material.h>
 
 class Mesh;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 class FrameworkDeviceContext;
 //Modify End
 
 class BloomUpsample
 {
 public:
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 	explicit BloomUpsample(FrameworkDeviceContext& deviceContext, CommandList& commandList);
 //Modify End
 
@@ -21,7 +21,7 @@ public:
 		const std::shared_ptr<Texture>& source,
 		const RenderTarget& destination);
 
-//Modify Begin:2026-08-17 by BestHui
+//Modify Begin:2026-08-17 by Hui
 	void ExecuteComposite(CommandList& commandList,
 		const BloomParameters& parameters,
 		const std::shared_ptr<Texture>& sourceColor,
@@ -30,7 +30,7 @@ public:
 //Modify End
 
 private:
-//Modify Begin:2026-08-17 by BestHui
+//Modify Begin:2026-08-17 by Hui
 	std::shared_ptr<Material> m_UpsampleMaterial;
 	std::shared_ptr<Material> m_CompositeMaterial;
 //Modify End

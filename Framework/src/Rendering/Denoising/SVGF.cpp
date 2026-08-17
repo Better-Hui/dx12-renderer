@@ -1,13 +1,13 @@
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 #include <Framework/Rendering/Denoising/SVGF.h>
 
 #include <DX12Library/CommandList.h>
 #include <DX12Library/Texture.h>
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 //Modify End
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
 //Modify End
 #include <Framework/Rendering/Texture/RenderTexture.h>
@@ -40,7 +40,7 @@ SVGF::SVGF(FrameworkDeviceContext& deviceContext)
     : m_TemporalShader(CreateReflectedComputeShader(deviceContext, ShaderBytecode_SVGFTemporal_CS, sizeof ShaderBytecode_SVGFTemporal_CS))
     , m_AtrousShader(CreateReflectedComputeShader(deviceContext, ShaderBytecode_SVGFAtrous_CS, sizeof ShaderBytecode_SVGFAtrous_CS))
     , m_CompositeShader(CreateReflectedComputeShader(deviceContext, ShaderBytecode_SVGFComposite_CS, sizeof ShaderBytecode_SVGFComposite_CS))
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     , m_DeviceContext(deviceContext)
 //Modify End
 {
@@ -65,7 +65,7 @@ bool SVGF::EnsureCreated(const uint32_t width, const uint32_t height)
     m_HistoryIndex = 0;
     m_HistoryValid = false;
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     m_HistoryColor[0] = RenderTexture::CreateUav2D(m_DeviceContext, DXGI_FORMAT_R16G16B16A16_FLOAT, width, height, L"SVGF History Color 0");
     m_HistoryColor[1] = RenderTexture::CreateUav2D(m_DeviceContext, DXGI_FORMAT_R16G16B16A16_FLOAT, width, height, L"SVGF History Color 1");
     m_HistoryMoments[0] = RenderTexture::CreateUav2D(m_DeviceContext, DXGI_FORMAT_R16G16_FLOAT, width, height, L"SVGF History Moments 0");
@@ -101,21 +101,21 @@ void SVGF::Temporal(
     constants.PhiNormal = m_Settings.PhiNormal;
     constants.PhiDepth = m_Settings.PhiDepth;
 
-    m_TemporalShader->SetConstantBuffer(commandList, "SVGFTemporalConstants", constants);
-    commandList.SetTexture(*m_TemporalShader, "NoisyRadiance", ShaderResourceView(noisyRadiance));
-    commandList.SetTexture(*m_TemporalShader, "GBufferNormal", ShaderResourceView(gBufferNormal));
-    commandList.SetTexture(*m_TemporalShader, "GBufferPosition", ShaderResourceView(gBufferPosition));
-    commandList.SetTexture(*m_TemporalShader, "DepthTexture", ShaderResourceView::DepthAsFloat(depthTexture));
-    commandList.SetTexture(*m_TemporalShader, "MotionVector", ShaderResourceView(motionVector));
-    commandList.SetTexture(*m_TemporalShader, "HistoryColor", ShaderResourceView(m_HistoryColor[previousIndex]));
-    commandList.SetTexture(*m_TemporalShader, "HistoryMoments", ShaderResourceView(m_HistoryMoments[previousIndex]));
-    m_TemporalShader->SetUnorderedAccessView(commandList, "TemporalColor", UnorderedAccessView(m_TemporalColor));
-    m_TemporalShader->SetUnorderedAccessView(commandList, "TemporalMoments", UnorderedAccessView(m_TemporalMoments));
-    m_TemporalShader->SetUnorderedAccessView(commandList, "Variance", UnorderedAccessView(m_Variance));
-    m_TemporalShader->SetUnorderedAccessView(commandList, "OutHistoryColor", UnorderedAccessView(m_HistoryColor[nextIndex]));
-    m_TemporalShader->SetUnorderedAccessView(commandList, "OutHistoryMoments", UnorderedAccessView(m_HistoryMoments[nextIndex]));
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
     const CommandContext commandContext(commandList);
+    commandContext.SetConstantBuffer(*m_TemporalShader, "SVGFTemporalConstants", constants);
+    commandContext.SetTexture(*m_TemporalShader, "NoisyRadiance", ShaderResourceView(noisyRadiance));
+    commandContext.SetTexture(*m_TemporalShader, "GBufferNormal", ShaderResourceView(gBufferNormal));
+    commandContext.SetTexture(*m_TemporalShader, "GBufferPosition", ShaderResourceView(gBufferPosition));
+    commandContext.SetTexture(*m_TemporalShader, "DepthTexture", ShaderResourceView::DepthAsFloat(depthTexture));
+    commandContext.SetTexture(*m_TemporalShader, "MotionVector", ShaderResourceView(motionVector));
+    commandContext.SetTexture(*m_TemporalShader, "HistoryColor", ShaderResourceView(m_HistoryColor[previousIndex]));
+    commandContext.SetTexture(*m_TemporalShader, "HistoryMoments", ShaderResourceView(m_HistoryMoments[previousIndex]));
+    commandContext.SetUnorderedAccessView(*m_TemporalShader, "TemporalColor", UnorderedAccessView(m_TemporalColor));
+    commandContext.SetUnorderedAccessView(*m_TemporalShader, "TemporalMoments", UnorderedAccessView(m_TemporalMoments));
+    commandContext.SetUnorderedAccessView(*m_TemporalShader, "Variance", UnorderedAccessView(m_Variance));
+    commandContext.SetUnorderedAccessView(*m_TemporalShader, "OutHistoryColor", UnorderedAccessView(m_HistoryColor[nextIndex]));
+    commandContext.SetUnorderedAccessView(*m_TemporalShader, "OutHistoryMoments", UnorderedAccessView(m_HistoryMoments[nextIndex]));
     commandContext.BindPipeline(*m_TemporalShader);
     commandContext.BindDescriptorSet(m_TemporalShader->GetDescriptorSet());
     commandContext.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
@@ -125,7 +125,7 @@ void SVGF::Temporal(
     m_HistoryValid = true;
 }
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 void SVGF::AtrousPass(
     CommandList& commandList,
     const std::shared_ptr<Texture>& input,
@@ -147,15 +147,15 @@ void SVGF::AtrousPass(
     constants.PhiNormal = m_Settings.PhiNormal;
     constants.PhiDepth = m_Settings.PhiDepth;
 
-    m_AtrousShader->SetConstantBuffer(commandList, "SVGFAtrousConstants", constants);
-    commandList.SetTexture(*m_AtrousShader, "InputColor", ShaderResourceView(input));
-    commandList.SetTexture(*m_AtrousShader, "Variance", ShaderResourceView(m_Variance));
-    commandList.SetTexture(*m_AtrousShader, "GBufferNormal", ShaderResourceView(gBufferNormal));
-    commandList.SetTexture(*m_AtrousShader, "GBufferPosition", ShaderResourceView(gBufferPosition));
-    commandList.SetTexture(*m_AtrousShader, "DepthTexture", ShaderResourceView::DepthAsFloat(depthTexture));
-    m_AtrousShader->SetUnorderedAccessView(commandList, "OutputColor", UnorderedAccessView(output));
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
     const CommandContext commandContext(commandList);
+    commandContext.SetConstantBuffer(*m_AtrousShader, "SVGFAtrousConstants", constants);
+    commandContext.SetTexture(*m_AtrousShader, "InputColor", ShaderResourceView(input));
+    commandContext.SetTexture(*m_AtrousShader, "Variance", ShaderResourceView(m_Variance));
+    commandContext.SetTexture(*m_AtrousShader, "GBufferNormal", ShaderResourceView(gBufferNormal));
+    commandContext.SetTexture(*m_AtrousShader, "GBufferPosition", ShaderResourceView(gBufferPosition));
+    commandContext.SetTexture(*m_AtrousShader, "DepthTexture", ShaderResourceView::DepthAsFloat(depthTexture));
+    commandContext.SetUnorderedAccessView(*m_AtrousShader, "OutputColor", UnorderedAccessView(output));
     commandContext.BindPipeline(*m_AtrousShader);
     commandContext.BindDescriptorSet(m_AtrousShader->GetDescriptorSet());
     commandContext.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
@@ -200,12 +200,12 @@ void SVGF::Composite(
     constants.Width = width;
     constants.Height = height;
 
-    m_CompositeShader->SetConstantBuffer(commandList, "SVGFCompositeConstants", constants);
-    commandList.SetTexture(*m_CompositeShader, "FilteredColor", ShaderResourceView(input));
-    commandList.SetTexture(*m_CompositeShader, "DepthTexture", ShaderResourceView::DepthAsFloat(depthTexture));
-    m_CompositeShader->SetUnorderedAccessView(commandList, "Output", UnorderedAccessView(output));
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
     const CommandContext commandContext(commandList);
+    commandContext.SetConstantBuffer(*m_CompositeShader, "SVGFCompositeConstants", constants);
+    commandContext.SetTexture(*m_CompositeShader, "FilteredColor", ShaderResourceView(input));
+    commandContext.SetTexture(*m_CompositeShader, "DepthTexture", ShaderResourceView::DepthAsFloat(depthTexture));
+    commandContext.SetUnorderedAccessView(*m_CompositeShader, "Output", UnorderedAccessView(output));
     commandContext.BindPipeline(*m_CompositeShader);
     commandContext.BindDescriptorSet(m_CompositeShader->GetDescriptorSet());
     commandContext.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);

@@ -6,6 +6,7 @@
 #include "Helpers.h"
 #include "ResourceStateTracker.h"
 #include "CommandList.h"
+#include "CommandListInternalAccess.h"
 
 Texture::Texture(
     TextureUsageType textureUsage,
@@ -29,7 +30,7 @@ Texture::Texture(
         std::move(deviceContext))
 {}
 
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
 Texture::Texture(
     const D3D12_RESOURCE_DESC& resourceDesc,
     const D3D12_HEAP_FLAGS heapFlags,
@@ -156,7 +157,7 @@ void Texture::Resize(CommandList& commandList, uint32_t width, uint32_t height, 
             IID_PPV_ARGS(&resizedResource)
         ));
 
-        commandList.RetireResource(*this);
+        CommandListInternalAccess::RetireResource(commandList, *this);
         SetD3D12Resource(std::move(resizedResource), m_d3d12ClearValue.get());
 
         CreateViews();

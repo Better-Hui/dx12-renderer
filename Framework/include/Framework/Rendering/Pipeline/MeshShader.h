@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 
 #include <Framework/Rendering/Pipeline/PipelineBindingSet.h>
 #include <Framework/Rendering/Pipeline/PipelineDescriptorPool.h>
@@ -18,7 +18,7 @@
 #include <string>
 
 class CommandContext;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 class FrameworkDeviceContext;
 //Modify End
 
@@ -31,7 +31,7 @@ public:
         const ShaderBlob& pixelShader,
         PipelineLayoutReflectionOptions layoutOptions = {},
         const std::function<void(RasterPipelineStateBuilder&)> buildPipelineState = [](RasterPipelineStateBuilder&) {});
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
     explicit MeshShader(
 		FrameworkDeviceContext& deviceContext,
         const ShaderBlob& amplificationShader,
@@ -48,7 +48,7 @@ public:
 
 private:
     friend class CommandContext;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     FrameworkDeviceContext& GetDeviceContext() const { return m_DeviceContext; }
 //Modify End
 
@@ -63,7 +63,7 @@ private:
 
     FrameworkDeviceContext& m_DeviceContext;
     std::shared_ptr<RootSignature> m_RootSignature;
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
     ShaderReflectionMetadata m_AmplificationShaderMetadata;
 //Modify End
     ShaderReflectionMetadata m_MeshShaderMetadata;

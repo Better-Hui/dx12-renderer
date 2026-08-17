@@ -11,7 +11,7 @@ RootSignature::RootSignature()
 {
 }
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 RootSignature::RootSignature(
 	const D3D12_ROOT_SIGNATURE_DESC1& rootSignatureDesc,
 	const D3D_ROOT_SIGNATURE_VERSION rootSignatureVersion,
@@ -55,7 +55,7 @@ void RootSignature::Destroy()
 	memset(NumDescriptorsPerTable, 0, sizeof NumDescriptorsPerTable);
 }
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 void RootSignature::SetRootSignatureDesc(
 	const D3D12_ROOT_SIGNATURE_DESC1& rootSignatureDesc,
 	const D3D_ROOT_SIGNATURE_VERSION rootSignatureVersion,
@@ -141,7 +141,7 @@ void RootSignature::SetRootSignatureDesc(
 		rootSignatureVersion, &rootSignatureBlob, &errorBlob);
 	if (FAILED(hResult))
 	{
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
 		if (errorBlob)
 		{
 			throw std::exception(static_cast<const char*>(errorBlob->GetBufferPointer()));

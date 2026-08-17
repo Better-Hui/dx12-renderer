@@ -63,7 +63,7 @@ namespace
         return texture;
     }
 
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     std::shared_ptr<Texture> CreateDedicatedTextureImpl(
         const RenderGraph::ResourceDescription& desc,
         const std::shared_ptr<D3D12DeviceContext>& deviceContext)
@@ -123,7 +123,7 @@ namespace
     }
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 RenderGraph::ResourcePool::ResourcePool(
     std::shared_ptr<D3D12DeviceContext> deviceContext,
     std::shared_ptr<CommandQueue> directCommandQueue,
@@ -153,7 +153,7 @@ void RenderGraph::ResourcePool::BeginFrame(CommandList& commandList)
 
     while (!m_DeferredDeletionQueue.empty())
     {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         if (IsRetirementComplete(m_DeferredDeletionQueue.front().FenceValues))
 //Modify End
         {
@@ -166,7 +166,7 @@ void RenderGraph::ResourcePool::BeginFrame(CommandList& commandList)
     }
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 bool RenderGraph::ResourcePool::IsRetirementComplete(const RenderGraphQueueFenceValues& fenceValues) const
 {
     return (fenceValues.Direct == 0 || m_DirectCommandQueue->IsFenceComplete(fenceValues.Direct)) &&
@@ -176,7 +176,7 @@ bool RenderGraph::ResourcePool::IsRetirementComplete(const RenderGraphQueueFence
 const Resource& RenderGraph::ResourcePool::GetResource(const ResourceId resourceId) const
 {
     Assert(IsRegistered(resourceId), "Resource is not registered.");
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const auto resourceInstance = m_ResourceInstances.find(resourceId);
     Assert(resourceInstance != m_ResourceInstances.end(), "Registered resource has not been created.");
     return resourceInstance->second.GetResource();
@@ -188,7 +188,7 @@ const std::shared_ptr<Texture>& RenderGraph::ResourcePool::GetTexture(const Reso
     Assert(IsRegistered(resourceId), "Resource is not registered.");
     Assert(m_ResourceDescriptions.at(resourceId).m_ResourceType == ResourceType::Texture, "Invalid resource type.");
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const auto resourceInstance = m_ResourceInstances.find(resourceId);
     Assert(resourceInstance != m_ResourceInstances.end(), "Registered texture has not been created.");
     Assert(resourceInstance->second.m_Type == ResourceInstanceType::Texture, "Invalid resource type.");
@@ -201,7 +201,7 @@ const std::shared_ptr<Buffer>& RenderGraph::ResourcePool::GetBuffer(const Resour
     Assert(IsRegistered(resourceId), "Resource is not registered.");
     Assert(m_ResourceDescriptions.at(resourceId).m_ResourceType == ResourceType::Buffer, "Invalid resource type.");
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const auto resourceInstance = m_ResourceInstances.find(resourceId);
     Assert(resourceInstance != m_ResourceInstances.end(), "Registered buffer has not been created.");
     Assert(resourceInstance->second.m_Type == ResourceInstanceType::Buffer, "Invalid resource type.");
@@ -211,7 +211,7 @@ const std::shared_ptr<Buffer>& RenderGraph::ResourcePool::GetBuffer(const Resour
 
 std::shared_ptr<StructuredBuffer> RenderGraph::ResourcePool::GetStructuredBuffer(const ResourceId resourceId) const
 {
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     Assert(
         GetDescription(resourceId).m_BufferDescription.m_Kind == BufferKind::Structured,
         "Render graph buffer is not declared as structured.");
@@ -224,7 +224,7 @@ std::shared_ptr<StructuredBuffer> RenderGraph::ResourcePool::GetStructuredBuffer
 
 std::shared_ptr<ByteAddressBuffer> RenderGraph::ResourcePool::GetByteAddressBuffer(ResourceId resourceId) const
 {
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     Assert(
         GetDescription(resourceId).m_BufferDescription.m_Kind == BufferKind::Raw,
         "Render graph buffer is not declared as raw.");
@@ -248,12 +248,12 @@ void RenderGraph::ResourcePool::ForEachResource(const std::function<bool(const R
 
 const RenderGraph::TransientResourceAllocator::ResourceLifecycle& RenderGraph::ResourcePool::GetResourceLifecycle(ResourceId resourceId)
 {
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     return m_ResourceLifecycles.at(resourceId);
 //Modify End
 }
 
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
 bool RenderGraph::ResourcePool::HasResourceLifecycle(const ResourceId resourceId) const
 {
     return m_ResourceLifecycles.contains(resourceId);
@@ -274,7 +274,7 @@ const RenderGraph::ResourceDescription& RenderGraph::ResourcePool::GetDescriptio
 void RenderGraph::ResourcePool::Clear(
     const std::map<ResourceId, RenderGraphQueueFenceValues>& resourceRetirements)
 {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     std::map<uint32_t, DeferredDeletionBatch> heapBatches;
     std::vector<DeferredDeletionBatch> dedicatedBatches;
 
@@ -322,7 +322,7 @@ void RenderGraph::ResourcePool::Clear(
 
     m_ResourceDescriptions.clear();
     m_HeapInfos.clear();
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     m_ResourceLifecycles.clear();
 //Modify End
     m_ResourceHeapInfo.clear();
@@ -330,20 +330,20 @@ void RenderGraph::ResourcePool::Clear(
     m_ResourceInstances.clear();
 }
 
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
 void RenderGraph::ResourcePool::InitHeaps(
     const std::vector<RenderPass*>& renderPasses,
     const ComPtr<ID3D12Device2>& pDevice,
     const std::vector<ResourceId>& externalOutputIds)
 //Modify End
 {
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     const auto lifecycles = TransientResourceAllocator::GetResourceLifecycles(renderPasses, m_ResourceDescriptions, externalOutputIds);
 //Modify End
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     m_ResourceLifecycles = lifecycles;
 //Modify End
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     m_HeapInfos = TransientResourceAllocator::CreateHeaps(m_ResourceLifecycles, m_ResourceDescriptions, pDevice);
 //Modify End
 
@@ -359,7 +359,7 @@ void RenderGraph::ResourcePool::InitHeaps(
     }
 }
 
-//Modify Begin:2026-08-10 by BestHui
+//Modify Begin:2026-08-10 by Hui
 void RenderGraph::ResourcePool::CreateResources()
 {
     Assert(m_ResourceInstances.empty(), "Render graph resources must be cleared before recreation.");
@@ -375,7 +375,7 @@ void RenderGraph::ResourcePool::CreateResources()
             CreateBuffer(resourceId);
             break;
         default:
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
             throw std::logic_error("Unsupported render graph resource type.");
 //Modify End
         }
@@ -385,7 +385,7 @@ void RenderGraph::ResourcePool::CreateResources()
 
 void RenderGraph::ResourcePool::RegisterTexture(const TextureDescription& desc, const std::vector<RenderPass*>& renderPasses, const RenderMetadata& renderMetadata, const ComPtr<ID3D12Device2>& pDevice)
 {
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     D3D12_RESOURCE_FLAGS resourceFlags = desc.m_ExtraResourceFlags;
 //Modify End
     auto textureUsageType = TextureUsageType::Other;
@@ -412,7 +412,7 @@ void RenderGraph::ResourcePool::RegisterTexture(const TextureDescription& desc, 
                     case OutputType::UnorderedAccess:
                         unorderedAccess = true;
                         break;
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
                     case OutputType::ExternalAccess:
                         break;
 //Modify End
@@ -444,7 +444,7 @@ void RenderGraph::ResourcePool::RegisterTexture(const TextureDescription& desc, 
             resourceFlags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
             textureUsageType = TextureUsageType::RenderTarget;
         }
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
         if ((resourceFlags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET) != 0 && !depth)
         {
             textureUsageType = TextureUsageType::RenderTarget;
@@ -469,7 +469,7 @@ void RenderGraph::ResourcePool::RegisterTexture(const TextureDescription& desc, 
     description.m_DxDesc = dxDesc;
     description.m_ResourceType = ResourceType::Texture;
     description.m_TextureUsageType = textureUsageType;
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     description.m_HeapFlags = desc.m_HeapFlags;
     description.m_DedicatedResource = desc.m_DedicatedResource || desc.m_HeapFlags != D3D12_HEAP_FLAG_NONE;
 //Modify End
@@ -485,7 +485,7 @@ void RenderGraph::ResourcePool::RegisterBuffer(const BufferDescription& desc, co
 {
     D3D12_RESOURCE_FLAGS resourceFlags = D3D12_RESOURCE_FLAG_NONE;
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     Assert(desc.m_Stride > 0, "Render graph buffer stride must be positive.");
     Assert(
         desc.m_Kind != BufferKind::Raw || desc.m_Stride == 1,
@@ -505,7 +505,7 @@ void RenderGraph::ResourcePool::RegisterBuffer(const BufferDescription& desc, co
                 case OutputType::UnorderedAccess:
                     unorderedAccess = true;
                     break;
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
                 case OutputType::ExternalAccess:
                     break;
 //Modify End
@@ -536,7 +536,7 @@ void RenderGraph::ResourcePool::RegisterBuffer(const BufferDescription& desc, co
     description.m_ElementsCount = elementsCount;
     description.m_ResourceType = ResourceType::Buffer;
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     const auto allocationInfo = desc.m_Kind == BufferKind::Structured
         ? GetStructuredBufferResourceAllocationInfo(pDevice, dxDesc, StructuredBuffer::COUNTER_DESC)
         : GetResourceAllocationInfo(pDevice, dxDesc);
@@ -552,7 +552,7 @@ const std::shared_ptr<Texture>& RenderGraph::ResourcePool::CreateTexture(const R
     Assert(IsRegistered(resourceId), "The resource is not registered.");
 
     const ResourceDescription& resourceDescription = m_ResourceDescriptions[resourceId];
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     Assert(resourceDescription.m_DedicatedResource || m_ResourceHeapInfo.contains(resourceId), "Transient texture has no lifecycle heap.");
     const std::shared_ptr<Texture> pTexture = resourceDescription.m_DedicatedResource
         ? CreateDedicatedTextureImpl(resourceDescription, m_DeviceContext)
@@ -571,7 +571,7 @@ const std::shared_ptr<Buffer>& RenderGraph::ResourcePool::CreateBuffer(const Res
     Assert(IsRegistered(resourceId), "The resource is not registered.");
 
     const ResourceDescription& resourceMetadata = m_ResourceDescriptions[resourceId];
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     Assert(m_ResourceHeapInfo.contains(resourceId), "Transient buffer has no lifecycle heap.");
 //Modify End
     const uint32_t heapIndex = m_ResourceHeapInfo[resourceId].m_HeapIndex;
@@ -597,7 +597,7 @@ const Resource& RenderGraph::ResourcePool::ResourceInstance::GetResource() const
         return *m_Buffer;
     default:
         Assert(false, "Invalid resource type.");
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         throw std::logic_error("Invalid render graph resource instance type.");
 //Modify End
     }
@@ -605,7 +605,7 @@ const Resource& RenderGraph::ResourcePool::ResourceInstance::GetResource() const
 
 RenderGraph::ResourcePool::ResourceInstance& RenderGraph::ResourcePool::AppendResourceInstance(const ResourceId resourceId, const ResourceInstance& resourceInstance)
 {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const auto [instance, inserted] = m_ResourceInstances.emplace(resourceId, resourceInstance);
     Assert(inserted, "Render graph resource instance was created more than once.");
     return instance->second;

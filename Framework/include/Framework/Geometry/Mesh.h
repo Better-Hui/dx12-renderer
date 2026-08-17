@@ -129,7 +129,7 @@ using IndexCollectionType = std::vector<uint16_t>;
 
 struct MeshPrototype
 {
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
     std::string m_Name;
 //Modify End
     VertexCollectionType m_Vertices;
@@ -171,7 +171,7 @@ public:
 
     static std::shared_ptr<Mesh> CreateBlitTriangle(CommandList& commandList);
 
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
     static MeshPrototype CreateCubePrototype(float size = 1, bool rhCoords = false);
     static MeshPrototype CreatePlanePrototype(float width = 1, float height = 1, bool rhCoords = false);
 //Modify End

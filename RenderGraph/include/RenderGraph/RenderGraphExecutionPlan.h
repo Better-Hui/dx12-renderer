@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #pragma once
 
 #include <d3d12.h>
@@ -25,7 +25,7 @@ namespace RenderGraph
         bool InsertUavBarrier = false;
     };
 
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
     struct PassExternalResourceTransition
     {
         const Resource* Resource = nullptr;
@@ -37,18 +37,18 @@ namespace RenderGraph
     struct PassResourceStatePlan
     {
         std::vector<PassResourceTransition> InputTransitions;
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
         std::vector<PassExternalResourceTransition> ExternalResourceTransitions;
 //Modify End
         std::vector<ResourceId> AliasingOutputs;
         std::vector<PassResourceTransition> OutputTransitions;
         std::vector<ResourceId> InitOutputs;
 
-        //Modify Begin:2026-08-07 by BestHui
+        //Modify Begin:2026-08-07 by Hui
         struct AsyncComputeDirectPreamble
         {
             std::vector<PassResourceTransition> DirectProducerInputTransitions;
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
             std::vector<PassExternalResourceTransition> ExternalResourceTransitions;
 //Modify End
             std::vector<ResourceId> AliasingOutputs;

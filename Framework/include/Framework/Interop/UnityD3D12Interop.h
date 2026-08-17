@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
 #include <DX12Library/D3D12RenderContext.h>
 
 #include <d3d12.h>

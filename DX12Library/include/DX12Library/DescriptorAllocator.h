@@ -50,7 +50,7 @@ private:
 	std::shared_ptr<DescriptorAllocatorPage> CreateAllocatorPage();
 
 	D3D12_DESCRIPTOR_HEAP_TYPE HeapType;
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 	Microsoft::WRL::ComPtr<ID3D12Device2> Device;
 	std::shared_ptr<DescriptorRetirementClock> RetirementClock;
 //Modify End

@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <Framework/Rendering/Pipeline/BindlessDescriptorHeap.h>
 
 #include <DX12Library/CommandQueue.h>
@@ -119,7 +119,7 @@ uint32_t BindlessDescriptorHeap::AddShaderResourceView(
 {
     std::lock_guard lock(m_Mutex);
     Assert(!m_FrameActive, "Bindless resource descriptors must be created before BeginFrame.");
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     if (srvDesc == nullptr)
     {
         const auto cachedDescriptor = m_DefaultShaderResourceDescriptors.find(&resource);
@@ -143,7 +143,7 @@ uint32_t BindlessDescriptorHeap::AddShaderResourceView(
 
     const uint32_t descriptorIndex = m_NextResourceDescriptorIndex++;
     UpdateShaderResourceViewLocked(descriptorIndex, resource, srvDesc);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     if (srvDesc == nullptr)
     {
         m_DefaultShaderResourceDescriptors.emplace(
@@ -164,7 +164,7 @@ void BindlessDescriptorHeap::UpdateShaderResourceView(
     UpdateShaderResourceViewLocked(descriptorIndex, resource, srvDesc);
 }
 
-//Modify Begin:2026-08-10 by BestHui
+//Modify Begin:2026-08-10 by Hui
 void BindlessDescriptorHeap::UpdateShaderResourceViewLocked(
     const uint32_t descriptorIndex,
     const Resource& resource,

@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 #pragma once
 
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
@@ -13,7 +13,7 @@
 #include <unordered_map>
 
 class RayTracingAccelerationStructure;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 class FrameworkDeviceContext;
 //Modify End
 class SceneLightManager;
@@ -26,7 +26,7 @@ enum class PathTracingBackend
     ShaderTableDxr = 1,
 };
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 enum class PathTracingShadowMode
 {
     HardShadows = 0,
@@ -40,7 +40,7 @@ struct RayTracingSceneResourceLayout
 
     uint32_t TextureDescriptorCapacity = MinDescriptorArrayCapacity;
     uint32_t GeometryDescriptorCapacity = MinDescriptorArrayCapacity;
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
     EnvironmentTextureProjection EnvironmentProjection = EnvironmentTextureProjection::Cubemap;
 //Modify End
 
@@ -70,7 +70,7 @@ public:
     }
 
     void Reset();
-    //Modify Begin:2026-07-30 by BestHui
+    //Modify Begin:2026-07-30 by Hui
     void EnsurePipelines(
         PathTracingBackend backend,
         PathTracingShadowMode shadowMode,
@@ -85,14 +85,14 @@ public:
         const std::shared_ptr<Texture>& skyboxTexture);
 
     PathTracingBackend GetBackend() const { return m_Backend; }
-    //Modify Begin:2026-07-30 by BestHui
+    //Modify Begin:2026-07-30 by Hui
     PathTracingShadowMode GetShadowMode() const { return m_ShadowMode; }
     MaterialShadingModel GetMaterialShadingModel() const { return m_MaterialShadingModel; }
     //Modify End
     ComputeShader& GetInlineDirectLightingShader() const;
     ComputeShader& GetInlineIndirectLightingShader() const;
     ComputeShader& GetLightingCompositeShader(const PathTracingCompositeFeatures& features);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     RayTracingShader& GetRayTracingShader() const;
 //Modify End
     RayTracingBindingSet& GetDirectRayTracingBindingSet() const;
@@ -101,7 +101,7 @@ public:
     const RayTracingSceneResourceLayout& GetLayout() const { return m_Layout; }
 
 private:
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     struct RetiredPipelines
     {
         uint64_t DirectFenceValue = 0;
@@ -130,10 +130,10 @@ private:
     FrameworkDeviceContext& m_DeviceContext;
     ShaderVariantManager m_ShaderVariants;
     PathTracingBackend m_Backend = PathTracingBackend::InlineRayQuery;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     PathTracingShadowMode m_ShadowMode = PathTracingShadowMode::HardShadows;
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     MaterialShadingModel m_MaterialShadingModel = MaterialShadingModel::Pbr;
 //Modify End
     uint32_t m_MaxPathBounces = 3u;
@@ -144,7 +144,7 @@ private:
     std::unique_ptr<ComputeShader> m_InlineDirectLightingShader;
     std::unique_ptr<ComputeShader> m_InlineIndirectLightingShader;
     std::unordered_map<uint32_t, std::unique_ptr<ComputeShader>> m_LightingCompositeShaders;
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     std::deque<RetiredPipelines> m_RetiredPipelines;
 //Modify End
 };

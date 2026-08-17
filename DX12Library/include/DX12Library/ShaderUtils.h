@@ -13,7 +13,7 @@ namespace ShaderUtils
 	Microsoft::WRL::ComPtr<ID3DBlob> LoadShaderFromFile(const std::wstring& fileName);
 
 	Microsoft::WRL::ComPtr<ID3D12ShaderReflection> Reflect(const Microsoft::WRL::ComPtr<ID3DBlob>& shaderSource);
-//Modify Begin:2026-07-23 by BestHui
+//Modify Begin:2026-07-23 by Hui
 	Microsoft::WRL::ComPtr<ID3D12LibraryReflection> ReflectLibrary(const Microsoft::WRL::ComPtr<ID3DBlob>& shaderSource);
 //Modify End
 
@@ -36,7 +36,7 @@ namespace ShaderUtils
 
 
 	std::vector<ConstantBufferMetadata> GetConstantBuffers(const Microsoft::WRL::ComPtr<ID3D12ShaderReflection>& shaderReflection);
-//Modify Begin:2026-07-23 by BestHui
+//Modify Begin:2026-07-23 by Hui
 	std::vector<ConstantBufferMetadata> GetConstantBuffers(const Microsoft::WRL::ComPtr<ID3D12LibraryReflection>& libraryReflection);
 //Modify End
 
@@ -44,7 +44,7 @@ namespace ShaderUtils
 	{
 		UINT RegisterIndex;
 		UINT Space;
-//Modify Begin:2026-07-23 by BestHui
+//Modify Begin:2026-07-23 by Hui
 		UINT BindCount;
 		D3D_SHADER_INPUT_TYPE InputType;
 		D3D_SRV_DIMENSION Dimension;
@@ -53,11 +53,11 @@ namespace ShaderUtils
 	};
 
 	std::vector<ShaderResourceViewMetadata> GetShaderResourceViews(const Microsoft::WRL::ComPtr<ID3D12ShaderReflection>& shaderReflection);
-//Modify Begin:2026-07-23 by BestHui
+//Modify Begin:2026-07-23 by Hui
 	std::vector<ShaderResourceViewMetadata> GetShaderResourceViews(const Microsoft::WRL::ComPtr<ID3D12LibraryReflection>& libraryReflection);
 //Modify End
 
-//Modify Begin:2026-07-23 by BestHui
+//Modify Begin:2026-07-23 by Hui
 	struct UnorderedAccessViewMetadata
 	{
 		UINT RegisterIndex;
@@ -72,7 +72,7 @@ namespace ShaderUtils
 	std::vector<UnorderedAccessViewMetadata> GetUnorderedAccessViews(const Microsoft::WRL::ComPtr<ID3D12LibraryReflection>& libraryReflection);
 //Modify End
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 	struct SamplerMetadata
 	{
 		UINT RegisterIndex;

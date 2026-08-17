@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 #ifndef FRAMEWORK_SVGF_COMMON_HLSLI
 #define FRAMEWORK_SVGF_COMMON_HLSLI
 

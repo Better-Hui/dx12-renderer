@@ -1,6 +1,6 @@
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <ShaderLibrary/Common/RootSignature.hlsli>
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
 #include <Bindless/BindlessResources.hlsli>
 #include "../Scene/SceneGeometry.hlsli"
 //Modify End
@@ -29,7 +29,7 @@ struct PixelShaderOutput
     float2 MotionVector : SV_TARGET5;
 };
 
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
 StructuredBuffer<MaterialData> MeshletMaterials : register(t5, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
 //Modify End
 
@@ -77,7 +77,7 @@ PixelShaderOutput main(PixelShaderInput IN)
     const float3 outputBaseColor = IN.DebugMeshletClusters != 0u ? HashClusterColor(IN.MeshletDebugId) : baseColor;
 
     float3 normalWs = normalize(IN.NormalWs);
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
     // Meshlet GBuffer keeps authored vertex normals as shading normals. Front-face based flipping
     // can invert generated meshlet topology and break shadow-ray offsets on closed meshes.
 //Modify End
@@ -112,7 +112,7 @@ PixelShaderOutput main(PixelShaderInput IN)
     OUT.AlbedoOcclusion = float4(outputBaseColor, ambientOcclusion);
     OUT.SpecularSmoothness = float4(specularColor, 1.0f - roughness);
     OUT.Normal = float4(EncodeNormal(normalWs), 1.0f);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const float3 emission = material.Emission.rgb * (material.HasEmissionMap != 0u
         ? SampleBindlessTexture2D(material.EmissionTextureIndex, g_Common_LinearWrapSampler, uv).rgb
         : 1.0f);

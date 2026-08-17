@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 #include <RaytracingDemo.h>
 
 #include <imgui.h>
@@ -8,7 +8,7 @@
 void RaytracingDemo::OnImGui()
 {
     ImGui::SetNextWindowSize(ImVec2(520.0f, 680.0f), ImGuiCond_FirstUseEver);
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
     ImGui::Begin("Raytracing");
 //Modify End
     ImGui::Text("GBuffer Path Tracing");
@@ -16,7 +16,7 @@ void RaytracingDemo::OnImGui()
     ImGui::Text("Resolution: %d x %d", m_Width, m_Height);
     ImGui::Text("Frame: %u", m_FrameIndex);
     ImGui::Text("Accumulation: %u", m_AccumulationFrameIndex);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     if (!m_StartupConfigurationStatus.empty())
     {
         ImGui::TextDisabled("%s", m_StartupConfigurationStatus.c_str());
@@ -37,18 +37,18 @@ void RaytracingDemo::OnImGui()
     {
         ImGui::TextWrapped("%s", m_CameraSaveStatus.c_str());
     }
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
     if (m_GpuTimestampProfiler.IsAvailable())
     {
         if (ImGui::Checkbox("Enable RG Timing", &m_GpuTimingEnabled))
         {
             m_GpuTimestampSamples.clear();
             m_GpuTimestampDisplaySamples.clear();
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
             m_AsyncComputeGpuTimestampSamples.clear();
             m_AsyncComputeGpuTimestampDisplaySamples.clear();
 //Modify End
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
             if (!m_GpuTimingEnabled)
             {
                 m_RenderGraphTimingCaptureEnabled = false;
@@ -58,7 +58,7 @@ void RaytracingDemo::OnImGui()
         }
         if (m_GpuTimingEnabled)
         {
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
             if (ImGui::Checkbox("Capture RG Timing History", &m_RenderGraphTimingCaptureEnabled))
             {
                 m_RenderGraphTimingHistory.Clear();
@@ -88,7 +88,7 @@ void RaytracingDemo::OnImGui()
                 ImGui::TextWrapped("%s", m_RenderGraphTimingHistory.GetStatus().c_str());
             }
 //Modify End
-//Modify Begin:2026-08-02 by BestHui
+//Modify Begin:2026-08-02 by Hui
             ImGui::Text(
                 "RG Direct Queue: gpu %.3f ms, cpu %.3f ms",
                 m_GpuTimestampProfiler.GetLastFrameGpuMilliseconds(),
@@ -99,7 +99,7 @@ void RaytracingDemo::OnImGui()
                 m_AsyncComputeGpuTimestampProfiler.GetLastFrameGpuMilliseconds());
             if (!m_GpuTimestampDisplaySamples.empty() && ImGui::CollapsingHeader("GPU RG Timing: Direct"))
             {
-//Modify Begin:2026-08-02 by BestHui
+//Modify Begin:2026-08-02 by Hui
                 ImGui::Text("gpu/cpu delta: since previous marker, gpu/cpu total: since RG begin");
                 for (const GpuTimestampSample& sample : m_GpuTimestampDisplaySamples)
                 {
@@ -131,8 +131,8 @@ void RaytracingDemo::OnImGui()
     }
 //Modify End
 
-//Modify Begin:2026-08-05 by BestHui
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-08-05 by Hui
+//Modify Begin:2026-07-30 by Hui
     if (ImGui::CollapsingHeader("Lighting Algorithms"))
     {
     const char* directLightingTechniqueNames[] = { "None", "PathTracing", "ReSTIR DI" };
@@ -163,7 +163,7 @@ void RaytracingDemo::OnImGui()
         {
             if (ImGui::CollapsingHeader("Initial Sampling"))
             {
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
                 settingsChanged |= ImGui::Checkbox("RIS Initial Visibility", &restirSettings.EnableInitialVisibility);
 //Modify End
                 settingsChanged |= ImGui::SliderInt("Local Light Samples", &candidateCount, 1, 32);
@@ -174,7 +174,7 @@ void RaytracingDemo::OnImGui()
                 settingsChanged |= ImGui::Checkbox("Enable Temporal Resampling", &restirSettings.EnableTemporalResampling);
                 if (restirSettings.EnableTemporalResampling)
                 {
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
                     bool temporalRayTracedBiasCorrection = temporalBiasCorrection == static_cast<int>(ReSTIRDITemporalBiasCorrectionMode::RayTraced);
                     if (ImGui::Checkbox("Temporal Ray-Traced Bias Correction", &temporalRayTracedBiasCorrection))
                     {
@@ -217,7 +217,7 @@ void RaytracingDemo::OnImGui()
                 settingsChanged |= ImGui::Checkbox("Enable Spatial Resampling", &restirSettings.EnableSpatialResampling);
                 if (restirSettings.EnableSpatialResampling)
                 {
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
                     bool spatialRayTracedBiasCorrection = spatialBiasCorrection == static_cast<int>(ReSTIRDISpatialBiasCorrectionMode::RayTraced);
                     if (ImGui::Checkbox("Spatial Ray-Traced Bias Correction", &spatialRayTracedBiasCorrection))
                     {
@@ -273,7 +273,7 @@ void RaytracingDemo::OnImGui()
 
             if (ImGui::CollapsingHeader("Final Shading"))
             {
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
                 settingsChanged |= ImGui::Checkbox("Final Shading Visibility", &restirSettings.EnableFinalVisibility);
 //Modify End
                 settingsChanged |= ImGui::Checkbox(
@@ -309,9 +309,9 @@ void RaytracingDemo::OnImGui()
             ResetAccumulation(false, true);
         }
     }
-//Modify Begin:2026-08-10 by BestHui
+//Modify Begin:2026-08-10 by Hui
     const char* indirectLightingTechniqueNames[] = { "None", "PathTracing", "ReSTIR GI" };
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     int indirectLightingTechnique = 0;
     switch (m_IndirectLightingTechnique)
     {
@@ -328,7 +328,7 @@ void RaytracingDemo::OnImGui()
 //Modify End
     if (ImGui::Combo("Indirect Lighting", &indirectLightingTechnique, indirectLightingTechniqueNames, IM_ARRAYSIZE(indirectLightingTechniqueNames)))
     {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         switch (indirectLightingTechnique)
         {
         case 1:
@@ -354,7 +354,7 @@ void RaytracingDemo::OnImGui()
         ImGui::CollapsingHeader("ReSTIR GI Settings"))
     {
         ReSTIRGISettings restirSettings = m_IndirectLightingReSTIRGI.GetSettings();
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         int initialCandidateCount = static_cast<int>(restirSettings.InitialCandidateCount);
 //Modify End
         int temporalMaxHistoryLength = static_cast<int>(restirSettings.TemporalMaxHistoryLength);
@@ -363,12 +363,12 @@ void RaytracingDemo::OnImGui()
         int spatialNeighborCount = static_cast<int>(restirSettings.SpatialNeighborCount);
         bool settingsChanged = false;
 
-//Modify Begin:2026-07-30 by BestHui
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-11 by Hui
         settingsChanged |= ImGui::SliderInt("GI Initial Candidates", &initialCandidateCount, 1, 32);
 //Modify End
 //Modify End
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
         if (m_GpuTimingEnabled)
         {
             ImGui::Checkbox("Capture ReSTIR GI Stage Timings", &m_ReSTIRGIStageTimingEnabled);
@@ -386,7 +386,7 @@ void RaytracingDemo::OnImGui()
             settingsChanged |= ImGui::Checkbox(
                 "Enable GI Temporal Jacobian",
                 &restirSettings.EnableTemporalJacobian);
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
             settingsChanged |= ImGui::SliderInt(
                 "GI Temporal Max History",
                 &temporalMaxHistoryLength,
@@ -411,12 +411,12 @@ void RaytracingDemo::OnImGui()
             settingsChanged |= ImGui::Checkbox(
                 "Enable GI Spatial Resampling",
                 &restirSettings.EnableSpatialResampling);
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
             settingsChanged |= ImGui::Checkbox(
                 "Enable GI Spatial Ray-Traced Bias Correction",
                 &restirSettings.EnableRayTracedSpatialBiasCorrection);
 //Modify End
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
             settingsChanged |= ImGui::SliderInt("GI Spatial Neighbors", &spatialNeighborCount, 1, 16);
             settingsChanged |= ImGui::SliderInt(
                 "GI Spatial Max History",
@@ -453,7 +453,7 @@ void RaytracingDemo::OnImGui()
 
         if (settingsChanged)
         {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
             restirSettings.InitialCandidateCount = static_cast<uint32_t>(initialCandidateCount < 1 ? 1 : initialCandidateCount);
 //Modify End
             restirSettings.TemporalMaxHistoryLength = static_cast<uint32_t>(
@@ -464,7 +464,7 @@ void RaytracingDemo::OnImGui()
             restirSettings.SpatialNeighborCount = static_cast<uint32_t>(
                 spatialNeighborCount < 1 ? 1 : spatialNeighborCount);
             m_IndirectLightingReSTIRGI.SetSettings(restirSettings);
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
             EnsureRayTracingPipelines();
 //Modify End
             ResetAccumulation();
@@ -474,7 +474,7 @@ void RaytracingDemo::OnImGui()
     }
 //Modify End
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     if (ImGui::CollapsingHeader("Runtime Options"))
     {
     if (ImGui::Checkbox("Enable Accumulation", &m_AccumulationEnabled))
@@ -488,21 +488,21 @@ void RaytracingDemo::OnImGui()
     }
     ImGui::TextDisabled("Directional and point lights use soft-shadow variants; area lights already sample their surface.");
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     if (ImGui::Checkbox("Enable Stress Test Spheres (12,288)", &m_StressTestSpheresEnabled))
     {
         m_StressTestSpheresStateDirty = true;
     }
     ImGui::TextDisabled("Adds or removes instances; BLAS and static meshlet geometry stay resident.");
 //Modify End
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
     if (m_PathTracingBackend == PathTracingBackend::InlineRayQuery)
     {
         if (ImGui::Checkbox("Use Async Compute for Indirect Lighting", &m_AsyncComputeEnabled))
         {
             ResetAccumulation();
         }
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         ImGui::Checkbox("Debug: CPU Serialize Async Compute", &m_DebugSerializeAsyncCompute);
         ImGui::TextDisabled("Diagnostic only: waits on the CPU after each async submission.");
 //Modify End
@@ -511,11 +511,11 @@ void RaytracingDemo::OnImGui()
     {
         ImGui::TextDisabled("Async Compute: Inline Ray Query only");
     }
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     ImGui::Checkbox("Enable Parallel Direct Command Recording", &m_ParallelDirectCommandRecordingEnabled);
     ImGui::TextDisabled("Current batch: Inline Ray Query direct and indirect lighting. GPU execution remains ordered.");
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const char* lightingDebugTargetNames[] = {
         "Off",
         "Indirect Lighting",
@@ -536,7 +536,7 @@ void RaytracingDemo::OnImGui()
     }
 //Modify End
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     if (ImGui::Checkbox("Use Meshlet GBuffer", &m_UseMeshletGBuffer))
     {
         ResetAccumulation();
@@ -549,7 +549,7 @@ void RaytracingDemo::OnImGui()
         }
         ResetAccumulation();
     }
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
     if (m_DebugMeshletClusters)
     {
         const char* debugTargetNames[] = { "GBuffer Albedo", "GBuffer Normal", "GBuffer Position", "Motion Vector" };
@@ -559,7 +559,7 @@ void RaytracingDemo::OnImGui()
         }
     }
 //Modify End
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
     const char* meshletBackendNames[] = { "Task Shader", "Compute Indirect" };
     int selectedMeshletBackend = m_UseTaskShaderMeshlets ? 0 : 1;
     if (ImGui::Combo("Meshlet Backend", &selectedMeshletBackend, meshletBackendNames, 2))
@@ -573,7 +573,7 @@ void RaytracingDemo::OnImGui()
     }
 //Modify End
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     if (ImGui::CollapsingHeader("Lights"))
     {
         if (m_LightEditor.Draw(m_Lights))
@@ -583,7 +583,7 @@ void RaytracingDemo::OnImGui()
     }
 //Modify End
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     if (ImGui::CollapsingHeader("Upscaling"))
     {
         const char* dlssModeNames[] = { "Off", "DLAA", "Quality", "Balanced", "Performance", "Ultra Performance" };
@@ -650,14 +650,14 @@ void RaytracingDemo::OnImGui()
     }
 //Modify End
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     if (ImGui::CollapsingHeader("Post-Processing"))
     {
     if (m_Denoisers.DrawImGui())
     {
         ResetAccumulation();
     }
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     if (m_CudaBloom.DrawImGui(
         static_cast<uint32_t>((std::max)(m_Width, 1)),
         static_cast<uint32_t>((std::max)(m_Height, 1))))
@@ -675,7 +675,7 @@ void RaytracingDemo::OnImGui()
         m_PathTracingBackend = static_cast<PathTracingBackend>(selectedMode);
         ResetAccumulation();
     }
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const char* materialShadingModelNames[] = { "PBR", "Stylized Comic" };
     int selectedMaterialShadingModel = static_cast<int>(m_MaterialShadingModel);
     if (ImGui::Combo(
@@ -688,7 +688,7 @@ void RaytracingDemo::OnImGui()
     }
     ImGui::TextDisabled("Stylized Comic keeps GGX material inputs and applies PBR-NPR banding, shadow tint, and graphic highlights.");
 //Modify End
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
     int requestedMaxBounces = m_MaxBounces;
     const bool bouncesChanged = ImGui::SliderInt(
         "Bounces",
@@ -698,7 +698,7 @@ void RaytracingDemo::OnImGui()
         "%d",
         ImGuiSliderFlags_AlwaysClamp);
 //Modify End
-//Modify Begin:2026-08-05 by BestHui
+//Modify Begin:2026-08-05 by Hui
     bool fovChanged = false;
     bool nearClipChanged = false;
     bool farClipChanged = false;
@@ -709,14 +709,14 @@ void RaytracingDemo::OnImGui()
     if (ImGui::CollapsingHeader("Camera"))
     {
         fovChanged = ImGui::SliderFloat("FOV", &m_CameraFov, 12.0f, 90.0f, "%.1f");
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
         nearClipChanged = ImGui::SliderFloat("Near Clip", &m_CameraNearClipPlane, 0.001f, 100.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
 //Modify End
         if (m_CameraFarClipPlane <= m_CameraNearClipPlane)
         {
             m_CameraFarClipPlane = m_CameraNearClipPlane + 0.001f;
         }
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
         farClipChanged = ImGui::SliderFloat(
             "Far Clip",
             &m_CameraFarClipPlane,

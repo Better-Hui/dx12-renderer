@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
 #pragma once
 
 #include <cstdint>
@@ -101,7 +101,7 @@ struct UnityLightInfo
     float Intensity = 1.0f;
     float Range = 10.0f;
     float SpotAngle = 30.0f;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     float AngularRadius = 0.009f;
     float SourceRadius = 0.25f;
 //Modify End
@@ -146,7 +146,7 @@ struct UnitySceneData
     std::filesystem::path ProjectRoot;
     std::filesystem::path AssetsRoot;
     UnityRenderSettings RenderSettings;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     UnityMaterialInfo SkyboxMaterial;
     bool HasSkyboxMaterial = false;
 //Modify End
@@ -162,7 +162,7 @@ struct UnitySceneParseOptions
     bool ParseMaterialAssets = true;
 };
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 struct UnityCameraWriteInfo
 {
     int64_t GameObjectId = 0;
@@ -179,7 +179,7 @@ public:
     static UnitySceneData ParseFromFile(
         const std::filesystem::path& scenePath,
         const UnitySceneParseOptions& options = {});
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     static void WriteCameraToFile(
         const std::filesystem::path& scenePath,
         const UnityCameraWriteInfo& camera);

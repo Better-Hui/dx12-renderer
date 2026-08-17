@@ -1,4 +1,4 @@
-# Modify Begin:2026-07-21 by BestHui
+# Modify Begin:2026-07-21 by Hui
 # Copy shared runtime DLLs as a build event on the real demo target.
 add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${TARGET_NAME}>"
@@ -8,7 +8,7 @@ add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
         VERBATIM
         )
 
-# Modify Begin:2026-07-30 by BestHui
+# Modify Begin:2026-07-30 by Hui
 if (DX12_RENDERER_ENABLE_D3D12_AGILITY)
         add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${TARGET_NAME}>/D3D12"

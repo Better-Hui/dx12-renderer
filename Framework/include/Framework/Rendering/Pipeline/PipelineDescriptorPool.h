@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 #pragma once
 
 #include <Framework/Rendering/Pipeline/PipelineDescriptorSet.h>
@@ -8,14 +8,14 @@
 #include <memory>
 
 class PipelineLayout;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 class FrameworkDeviceContext;
 //Modify End
 
 struct PipelineDescriptorPoolDesc
 {
     uint32_t DescriptorSetMaxNum = 1024;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     uint32_t ResourceDescriptorMaxNum = 65536;
 //Modify End
     uint32_t SamplerDescriptorMaxNum = 0;
@@ -25,7 +25,7 @@ struct PipelineDescriptorPoolDesc
 class PipelineDescriptorPool final
 {
 public:
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     explicit PipelineDescriptorPool(
         FrameworkDeviceContext& deviceContext,
         PipelineDescriptorPoolDesc desc = {});
@@ -46,25 +46,25 @@ public:
     uint32_t GetAllocatedDescriptorSetCount() const { return m_AllocatedDescriptorSetCount; }
     uint32_t GetAllocatedResourceDescriptorCount() const { return m_AllocatedResourceDescriptorCount; }
     uint32_t GetAllocatedSamplerDescriptorCount() const { return m_AllocatedSamplerDescriptorCount; }
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
     uint32_t GetAllocatedDescriptorCount(PipelineDescriptorHeapType heapType) const;
 //Modify End
 
 private:
     uint32_t CountResourceDescriptors(const PipelineLayout& layout, uint32_t variableDescriptorNum) const;
     uint32_t CountSamplerDescriptors(const PipelineLayout& layout) const;
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
     PipelineDescriptorTableAllocation AllocateResourceDescriptorTable(uint32_t descriptorCount);
 //Modify End
 
     PipelineDescriptorPoolDesc m_Desc;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     FrameworkDeviceContext* m_DeviceContext = nullptr;
 //Modify End
     uint32_t m_AllocatedDescriptorSetCount = 0;
     uint32_t m_AllocatedResourceDescriptorCount = 0;
     uint32_t m_AllocatedSamplerDescriptorCount = 0;
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
     std::array<uint32_t, static_cast<size_t>(PipelineDescriptorHeapType::Count)> m_AllocatedDescriptorCounts = {};
 //Modify End
 };

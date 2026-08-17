@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
 #include <Scene/SceneStressTestFactory.h>
 
 #include <DX12Library/CommandList.h>

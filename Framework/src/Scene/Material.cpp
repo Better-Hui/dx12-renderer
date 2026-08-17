@@ -1,5 +1,5 @@
 #include <Framework/Scene/Material.h>
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 //Modify End
 
@@ -43,7 +43,7 @@ Material::Material(const std::shared_ptr<Shader>& shader)
         return;
     }
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     m_ConstantBufferName = m_Metadata->Name;
 //Modify End
     m_ConstantBuffer.reset(new uint8_t[cbufferSize]);
@@ -64,7 +64,7 @@ Material::Material(const std::shared_ptr<Shader>& shader)
 Material::Material(const Material& materialPreset)
     : m_Shader(materialPreset.m_Shader)
     , m_Metadata(materialPreset.m_Metadata)
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     , m_ConstantBufferName(materialPreset.m_ConstantBufferName)
 //Modify End
     , m_ConstantBuffer()
@@ -139,7 +139,7 @@ void Material::SetTexture(CommandList&, const std::string& name, const ShaderRes
 
 void Material::Bind(CommandList& commandList)
 {
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
     CommandContext commandContext(commandList);
     commandContext.BindPipeline(*m_Shader);
     UploadUniforms(commandList);
@@ -151,27 +151,6 @@ void Material::UploadUniforms(CommandList& commandList)
 {
     UploadConstantBuffer(commandList);
     UploadShaderResourceViews(commandList);
-}
-
-void Material::Unbind(CommandList& commandList)
-{
-//Modify Begin:2026-07-29 by BestHui
-    (void)commandList;
-//Modify End
-}
-
-void Material::BeginBatch(CommandList& commandList)
-{
-//Modify Begin:2026-07-29 by BestHui
-    CommandContext(commandList).BindPipeline(*m_Shader);
-//Modify End
-}
-
-void Material::EndBatch(CommandList& commandList)
-{
-//Modify Begin:2026-07-29 by BestHui
-    (void)commandList;
-//Modify End
 }
 
 std::shared_ptr<Material> Material::Create(const std::shared_ptr<Shader>& shader)
@@ -191,7 +170,7 @@ void Material::UploadConstantBuffer(CommandList& commandList)
         return;
     }
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     m_Shader->SetConstantBuffer(commandList, m_ConstantBufferName, m_ConstantBufferSize, m_ConstantBuffer.get());
 //Modify End
 }

@@ -1,11 +1,11 @@
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
 #include <Framework/Rendering/RayTracing/RayTracingPipelineStateBuilder.h>
 
 #include <DX12Library/Helpers.h>
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
 //Modify End
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 #include <Framework/Rendering/Pipeline/PipelineLayout.h>
 #include <Framework/Rendering/Pipeline/PipelineStateCache.h>
 //Modify End
@@ -59,7 +59,7 @@ namespace
         return device5;
     }
 
-    //Modify Begin:2026-07-27 by BestHui
+    //Modify Begin:2026-07-27 by Hui
     PipelineStateCache<RayTracingPipelineStateKey, std::shared_ptr<RayTracingPipelineState>> GPipelineStateCache;
     //Modify End
 }
@@ -69,7 +69,7 @@ RootSignature& RayTracingPipelineState::GetGlobalRootSignature() const
     return *m_GlobalRootSignature;
 }
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 const std::shared_ptr<RootSignature>& RayTracingPipelineState::GetGlobalRootSignaturePtr() const
 {
     return m_GlobalRootSignature;
@@ -110,7 +110,7 @@ std::shared_ptr<RayTracingPipelineState> RayTracingPipelineStateBuilder::Build()
         });
 }
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 RayTracingPipelineStateKey RayTracingPipelineStateBuilder::CreateKey() const
 {
     RayTracingPipelineStateKey key;
@@ -146,7 +146,7 @@ RayTracingPipelineStateKey RayTracingPipelineStateBuilder::CreateKey() const
                 sizeof(binding.NullUnorderedAccessViewDesc));
         }
     }
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     for (const PipelineRootSamplerDesc& sampler : m_Desc.RootSamplers)
     {
         PipelineHashString(key.LayoutHash, sampler.Name);
@@ -169,7 +169,7 @@ std::shared_ptr<RootSignature> RayTracingPipelineStateBuilder::BuildGlobalRootSi
 {
     PipelineLayoutDesc layoutDesc;
     layoutDesc.ShaderStages = PipelineShaderStageFlags::RayTracing;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     layoutDesc.RootSamplers = m_Desc.RootSamplers;
 //Modify End
     layoutDesc.DescriptorRanges.reserve(m_Desc.Bindings.size());
@@ -193,7 +193,7 @@ std::shared_ptr<RootSignature> RayTracingPipelineStateBuilder::BuildGlobalRootSi
     PipelineLayout layout(m_DeviceContext, std::move(layoutDesc));
 
     PipelineRootSignatureBuildDesc rootSignatureBuildDesc;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     rootSignatureBuildDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED;
 //Modify End
     return layout.CreateRootSignature(rootSignatureBuildDesc);

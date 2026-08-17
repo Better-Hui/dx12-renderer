@@ -50,7 +50,7 @@ public:
 
     ID3D12Resource* GetD3D12Resource() const { return m_D3D12Resource; }
     CUtexObject GetTextureObject() const { return m_TextureObject; }
-//Modify Begin:2026-08-16 by BestHui
+//Modify Begin:2026-08-16 by Hui
     CUtexObject GetLinearTextureObject() const { return m_LinearTextureObject; }
 //Modify End
     CUsurfObject GetSurfaceObject() const { return m_SurfaceObject; }
@@ -61,7 +61,7 @@ private:
     CUmipmappedArray m_MipmappedArray = nullptr;
     CUarray m_Array = nullptr;
     CUtexObject m_TextureObject = 0;
-//Modify Begin:2026-08-16 by BestHui
+//Modify Begin:2026-08-16 by Hui
     CUtexObject m_LinearTextureObject = 0;
 //Modify End
     CUsurfObject m_SurfaceObject = 0;
@@ -100,7 +100,7 @@ private:
     std::vector<size_t> m_Capacities;
 };
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 struct CudaDeviceTexture2D
 {
     CUarray Array = nullptr;

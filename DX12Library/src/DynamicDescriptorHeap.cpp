@@ -8,7 +8,7 @@
 
 #include "RootSignature.h"
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 DynamicDescriptorHeap::DynamicDescriptorHeap(
 	Microsoft::WRL::ComPtr<ID3D12Device2> device,
 	const D3D12_DESCRIPTOR_HEAP_TYPE heapType,
@@ -133,7 +133,7 @@ ComPtr<ID3D12DescriptorHeap> DynamicDescriptorHeap::RequestDescriptorHeap()
 
 ComPtr<ID3D12DescriptorHeap> DynamicDescriptorHeap::CreateDescriptorHeap() const
 {
-	//Modify Begin:2026-08-07 by BestHui
+	//Modify Begin:2026-08-07 by Hui
 	const auto& device = m_Device;
 	//Modify End
 
@@ -156,7 +156,7 @@ void DynamicDescriptorHeap::CommitStagedDescriptors(CommandList& commandList,
 
 	if (numDescriptorsToCommit > 0)
 	{
-		//Modify Begin:2026-08-07 by BestHui
+		//Modify Begin:2026-08-07 by Hui
 		auto device = m_Device;
 		//Modify End
 		auto graphicsCommandList = commandList.GetGraphicsCommandList().Get();
@@ -174,7 +174,7 @@ void DynamicDescriptorHeap::CommitStagedDescriptors(CommandList& commandList,
 			// the stale descriptor tables).
 			m_StaleDescriptorTableBitMask = m_DescriptorTableBitMask;
 		}
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
 		// The command list may currently reference an external bindless heap. Bind
 		// this heap even when it still has space so staged descriptor tables always
 		// point into the heap copied below.
@@ -239,13 +239,13 @@ D3D12_GPU_DESCRIPTOR_HANDLE DynamicDescriptorHeap::CopyDescriptor(CommandList& c
 		m_StaleDescriptorTableBitMask = m_DescriptorTableBitMask;
 	}
 
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
 	// CopyDescriptor may follow bindless work on the same command list. Its GPU
 	// handle is valid only while this dynamic heap is the bound heap.
 	commandList.SetDescriptorHeap(m_DescriptorHeapType, m_CurrentDescriptorHeap.Get());
 //Modify End
 
-	//Modify Begin:2026-08-07 by BestHui
+	//Modify Begin:2026-08-07 by Hui
 	const auto& device = m_Device;
 	//Modify End
 

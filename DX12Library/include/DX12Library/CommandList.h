@@ -53,8 +53,9 @@
 
 class Buffer;
 class ByteAddressBuffer;
+class CommandListInternalAccess;
 class ConstantBuffer;
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
 class D3D12DeviceContext;
 //Modify End
 class DynamicDescriptorHeap;
@@ -71,7 +72,7 @@ class VertexBuffer;
 class CommandList
 {
 public:
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     CommandList(
         D3D12_COMMAND_LIST_TYPE type,
         std::shared_ptr<D3D12DeviceContext> deviceContext,
@@ -95,7 +96,7 @@ public:
         return m_D3d12CommandList;
     }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     /**
      * Execute a third-party command-recording callback against the native D3D12
      * command list. The callback owns any state it changes. CommandList flushes
@@ -110,13 +111,13 @@ public:
         return m_D3d12CommandList5;
     }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList6> GetGraphicsCommandList6() const
     {
         return m_D3d12CommandList6;
     }
 //Modify End
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     const std::shared_ptr<D3D12DeviceContext>& GetDeviceContext() const
     {
         return m_DeviceContext;
@@ -146,7 +147,7 @@ public:
      * to be in a particular state can run.
      */
     void UavBarrier(const Resource& resource, bool flushBarriers = false);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     void UavBarrier(ID3D12Resource* resource, bool flushBarriers = false);
 //Modify End
 
@@ -160,36 +161,16 @@ public:
     void AliasingBarrier(const Resource& beforeResource, const Resource& afterResource, bool flushBarriers = false);
     void AliasingBarrier(Microsoft::WRL::ComPtr<ID3D12Resource> beforeResource,
         Microsoft::WRL::ComPtr<ID3D12Resource> afterResource, bool flushBarriers = false);
-//Modify Begin:2026-08-10 by BestHui
+//Modify Begin:2026-08-10 by Hui
     void AliasingBarrierBeforeFirstUse(const Resource& resourceAfter);
 //Modify End
-
-    /**
-     * Flush any barriers that have been pushed to the command list.
-     */
-    void FlushResourceBarriers();
-
-//Modify Begin:2026-07-30 by BestHui
-    void NotifyResourceState(
-        const Resource& resource,
-        D3D12_RESOURCE_STATES state,
-        UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
-
-    void TrackResourceState(
-        Microsoft::WRL::ComPtr<ID3D12Resource> resource,
-        std::shared_ptr<ResourceStateRegistration> stateRegistration);
-    void RetireResourceState(Microsoft::WRL::ComPtr<ID3D12Resource> resource);
-    void RetireResource(Resource& resource);
-//Modify End
-
-    void CommitStagedDescriptors();
 
     /**
      * Copy resources.
      */
     void CopyResource(const Resource& dstRes, const Resource& srcRes);
     void CopyResource(Microsoft::WRL::ComPtr<ID3D12Resource> dstRes, Microsoft::WRL::ComPtr<ID3D12Resource> srcRes, bool dstAutoBarriers = true, bool srcAutoBarriers = true);
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     void CopyBufferRegion(
         const Resource& destination,
         uint64_t destinationOffset,
@@ -451,7 +432,7 @@ public:
         const D3D12_SHADER_RESOURCE_VIEW_DESC* srv = nullptr
     );
 
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
     void SetGlobalTexture(
         uint32_t rootParameterIndex,
         uint32_t descriptorOffset,
@@ -516,7 +497,7 @@ public:
         shader->SetTexture(*this, variableName, texture);
     }
 
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     template <typename ShaderLike, typename BufferLike>
     void SetConstantBuffer(ShaderLike& shader, const std::string& variableName, const BufferLike& data)
     {
@@ -624,11 +605,11 @@ public:
      */
     void Dispatch(uint32_t numGroupsX, uint32_t numGroupsY = 1, uint32_t numGroupsZ = 1);
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     void DispatchMesh(uint32_t numGroupsX, uint32_t numGroupsY = 1, uint32_t numGroupsZ = 1);
 //Modify End
 
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
     void SetRaytracingPipelineState(const Microsoft::WRL::ComPtr<ID3D12StateObject>& stateObject);
     void DispatchRays(const D3D12_DISPATCH_RAYS_DESC& dispatchRaysDesc);
     void BuildRaytracingAccelerationStructure(const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC& buildDesc);
@@ -639,7 +620,7 @@ public:
         UINT numDescriptors,
         D3D12_CPU_DESCRIPTOR_HANDLE srcDescriptor);
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     void BindExternalDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE heapType, ID3D12DescriptorHeap* heap);
 //Modify End
 
@@ -657,7 +638,7 @@ public:
      * @return true if there are any pending resource barriers that need to be
      * processed.
      */
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     bool Close(
         CommandList& pendingCommandList,
         ResourceStateRegistry::SubmissionScope& submissionScope);
@@ -689,7 +670,7 @@ public:
     void SetComputeRootUnorderedAccessView(UINT rootParameterIndex, const Resource& resource);
     void SetComputeRootShaderResourceView(UINT rootParameterIndex, D3D12_GPU_VIRTUAL_ADDRESS gpuAddress);
     void SetComputeRootConstantBufferView(UINT rootParameterIndex, D3D12_GPU_VIRTUAL_ADDRESS gpuAddress);
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     void SetGraphicsRootDescriptorTable(UINT rootParameterIndex, D3D12_GPU_DESCRIPTOR_HANDLE descriptorHandle);
 //Modify End
     void SetComputeRootDescriptorTable(UINT rootParameterIndex, D3D12_GPU_DESCRIPTOR_HANDLE descriptorHandle);
@@ -714,10 +695,25 @@ public:
     void TrackResource(const Resource& res);
 
 private:
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-08-17 by Hui
+    friend class CommandListInternalAccess;
+
+    void FlushResourceBarriers();
+    void NotifyResourceState(
+        const Resource& resource,
+        D3D12_RESOURCE_STATES state,
+        UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
+    void TrackResourceState(
+        Microsoft::WRL::ComPtr<ID3D12Resource> resource,
+        std::shared_ptr<ResourceStateRegistration> stateRegistration);
+    void RetireResourceState(Microsoft::WRL::ComPtr<ID3D12Resource> resource);
+    void RetireResource(Resource& resource);
+    void CommitStagedDescriptors();
+//Modify End
+//Modify Begin:2026-07-30 by Hui
     void InvalidateCachedNativeState();
 //Modify End
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     void CommitStagedDescriptorsForDraw();
     void CommitStagedDescriptorsForDispatch();
 //Modify End
@@ -735,19 +731,19 @@ private:
     using TrackedObjectsType = std::vector<Microsoft::WRL::ComPtr<ID3D12Object>>;
 
     D3D12_COMMAND_LIST_TYPE m_D3d12CommandListType;
-//Modify Begin:2026-08-07 by BestHui
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-08-12 by Hui
     std::shared_ptr<D3D12DeviceContext> m_DeviceContext;
 //Modify End
     Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     std::shared_ptr<ResourceStateRegistry> m_ResourceStateRegistry;
 //Modify End
     std::function<std::shared_ptr<CommandList>()> m_ComputeCommandListFactory;
 //Modify End
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList2> m_D3d12CommandList;
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList5> m_D3d12CommandList5;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList6> m_D3d12CommandList6;
 //Modify End
     Microsoft::WRL::ComPtr<ID3D12CommandAllocator> m_D3d12CommandAllocator;
@@ -790,7 +786,7 @@ private:
     // is stored. The referenced objects are released when the command list is
     // reset.
     TrackedObjectsType m_TrackedObjects;
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     std::vector<std::shared_ptr<ResourceStateRegistration>> m_TrackedResourceStateRegistrations;
 //Modify End
 

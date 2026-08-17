@@ -15,7 +15,7 @@ class Resource;
 
 namespace RenderGraph
 {
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
     enum class RenderPassQueue
     {
         Direct,
@@ -28,10 +28,10 @@ namespace RenderGraph
         Invalid,
         Token,
         ShaderResource,
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
         NonPixelShaderResource,
 //Modify End
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
         UnorderedAccess,
         ExternalAccess,
 //Modify End
@@ -53,7 +53,7 @@ namespace RenderGraph
         DepthRead,
         DepthWrite,
         UnorderedAccess,
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
         ExternalAccess,
 //Modify End
         CopyDestination,
@@ -65,7 +65,7 @@ namespace RenderGraph
         OutputType m_Type = OutputType::Invalid;
     };
 
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
     enum class ExternalResourceAccessMode
     {
         Read,
@@ -85,7 +85,7 @@ namespace RenderGraph
     {
     public:
         using ExecuteFuncT = std::function<void(const RenderContext&, CommandList&)>;
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
         using ExternalExecuteFuncT = std::function<void(const RenderContext&)>;
 //Modify End
 
@@ -96,7 +96,7 @@ namespace RenderGraph
             const ExecuteFuncT& executeFunc,
             RenderPassQueue queue = RenderPassQueue::Direct
         );
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
         static std::unique_ptr<RenderPass> CreateExternal(
             const wchar_t* passName,
             const std::vector<Input>& inputs,
@@ -108,7 +108,7 @@ namespace RenderGraph
         void Init(CommandList& commandList);
 
         void Execute(const RenderContext& context, CommandList& commandList);
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
         void ExecuteExternal(const RenderContext& context);
         virtual bool IsExternal() const { return false; }
 //Modify End
@@ -116,7 +116,7 @@ namespace RenderGraph
         const std::vector<Input>& GetInputs() const { return m_Inputs; }
         const std::vector<Output>& GetOutputs() const { return m_Outputs; }
         const std::wstring& GetPassName() const { return m_PassName; }
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
         void AddExternalResourceAccess(
             const Resource& resource,
             D3D12_RESOURCE_STATES stateAfter,
@@ -127,9 +127,9 @@ namespace RenderGraph
             return m_ExternalResourceAccesses;
         }
 //Modify End
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
         RenderPassQueue GetQueue() const { return m_Queue; }
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         void SetParallelRecordingEligible(bool enabled) { m_ParallelRecordingEligible = enabled; }
         bool IsParallelRecordingEligible() const { return m_ParallelRecordingEligible; }
 //Modify End
@@ -140,7 +140,7 @@ namespace RenderGraph
     protected:
         virtual void InitImpl(CommandList& commandList) = 0;
         virtual void ExecuteImpl(const RenderContext& context, CommandList& commandList) = 0;
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
         virtual void ExecuteExternalImpl(const RenderContext& context);
 //Modify End
 
@@ -149,7 +149,7 @@ namespace RenderGraph
 
         void SetPassName(const wchar_t* passName);
         void SetPassName(const std::wstring& passName);
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
         void SetQueue(RenderPassQueue queue) { m_Queue = queue; }
 //Modify End
 
@@ -157,13 +157,13 @@ namespace RenderGraph
         std::vector<Input> m_Inputs;
         std::vector<Output> m_Outputs;
         std::wstring m_PassName = L"Render Pass";
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
         RenderPassQueue m_Queue = RenderPassQueue::Direct;
 //Modify End
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
         std::vector<ExternalResourceAccess> m_ExternalResourceAccesses;
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         bool m_ParallelRecordingEligible = false;
 //Modify End
     };

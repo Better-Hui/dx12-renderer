@@ -1,11 +1,11 @@
 #include "ReSTIRGI/ReSTIRGISceneContract.hlsli"
 #include "ReSTIRGI/ReSTIRGI.hlsli"
 #include "ReSTIRGI/ReSTIRGIConstants.hlsli"
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <Common/Noise.hlsli>
 //Modify End
 
-//Modify Begin:2026-08-10 by BestHui
+//Modify Begin:2026-08-10 by Hui
 Texture2D<uint4> ReSTIRGIInitialCreation : register(t12, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
 Texture2D<uint4> ReSTIRGIInitialHit : register(t13, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
 Texture2D<uint4> ReSTIRGIInitialLight : register(t14, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
@@ -49,7 +49,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         const float initialTarget = ReSTIRGIIsValid(initial)
             ? max(0.0f, ReSTIRGI_Luminance(ReSTIRGI_EvaluateContribution(surface, initial)))
             : 0.0f;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         const bool selectedInitial = ReSTIRGIUpdateReservoir(
             result,
             initial,
@@ -59,7 +59,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         bool creationVisibilityKnown = selectedInitial && ReSTIRGIHasCreationVisibility(initial);
 //Modify End
 
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
 #if RESTIR_GI_USE_TEMPORAL_REUSE
         if (ReSTIRGI_HistoryValid != 0u)
         {
@@ -86,7 +86,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
                             surface.NormalWs,
                             ReSTIRGI_MaxJacobian);
 #endif
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
                     if (ReSTIRGIUpdateReservoir(
                         result,
                         history,
@@ -106,7 +106,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         const uint unboundedM = result.M;
         result.M = min(result.M, ReSTIRGI_TemporalMaxHistoryLength);
         ReSTIRGISetCreationSurface(result, surface.PositionWs, surface.NormalWs);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         ReSTIRGISetCreationVisibility(result, creationVisibilityKnown);
 //Modify End
         const float selectedTarget = ReSTIRGIIsValid(result)

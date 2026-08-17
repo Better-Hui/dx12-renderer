@@ -56,7 +56,7 @@ std::shared_ptr<Texture> SSAOUtils::GenerateNoiseTexture(CommandList& commandLis
     }
 
     auto noiseTextureDesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R32G32_FLOAT, noiseTextureWidth, noiseTextureHeight, 1, 1);
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     auto noiseTexture = std::make_shared<Texture>(
         noiseTextureDesc,
         nullptr,

@@ -1,7 +1,7 @@
 #ifndef FRAMEWORK_RESTIR_GI_CONSTANTS_HLSLI
 #define FRAMEWORK_RESTIR_GI_CONSTANTS_HLSLI
 
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
 #ifndef RESTIR_GI_USE_TEMPORAL_REUSE
 #define RESTIR_GI_USE_TEMPORAL_REUSE 1
 #endif
@@ -19,7 +19,7 @@
 #endif
 //Modify End
 
-//Modify Begin:2026-08-10 by BestHui
+//Modify Begin:2026-08-10 by Hui
 cbuffer ReSTIRGIConstants : register(b1)
 {
     uint ReSTIRGI_Width;
@@ -27,14 +27,14 @@ cbuffer ReSTIRGIConstants : register(b1)
     uint ReSTIRGI_FrameIndex;
     uint ReSTIRGI_HistoryValid;
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     uint ReSTIRGI_InitialCandidateCount;
 //Modify End
     uint ReSTIRGI_TemporalMaxHistoryLength;
     uint ReSTIRGI_SpatialMaxHistoryLength;
     uint ReSTIRGI_MaxSampleAge;
     uint ReSTIRGI_SpatialNeighborCount;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     uint ReSTIRGI_PaddingUint;
     uint ReSTIRGI_PaddingUint1;
     uint ReSTIRGI_PaddingUint2;
@@ -48,7 +48,7 @@ cbuffer ReSTIRGIConstants : register(b1)
     float ReSTIRGI_SpatialSamplingRadius;
     float ReSTIRGI_MaxJacobian;
     float ReSTIRGI_MaxSpatialWeight;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     float ReSTIRGI_PaddingFloat;
 //Modify End
 };

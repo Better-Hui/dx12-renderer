@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 #include <algorithm>
 #include <condition_variable>
 #include <cstdint>

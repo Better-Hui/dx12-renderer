@@ -1,4 +1,4 @@
-# Modify Begin:2026-08-17 by BestHui
+# Modify Begin:2026-08-17 by Hui
 # DemoMain.h supplies wWinMain, so use CMake's Windows-executable model instead of conflicting linker flags.
 add_executable(${TARGET_NAME} WIN32 ${HEADER_FILES} ${SOURCE_FILES} ${SHADER_FILES} ${SHADERS_HEADER_FILES})
 # Modify End

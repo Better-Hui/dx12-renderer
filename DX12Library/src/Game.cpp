@@ -6,7 +6,7 @@
 #include "Window.h"
 #include "Helpers.h"
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 Game::Game(
 	Application& application,
 	const std::wstring& name,
@@ -106,7 +106,7 @@ void Game::OnResize(ResizeEventArgs& e)
 	Height = e.Height;
 }
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 void Game::OnWindowDestroy()
 {
 	// Application::Run flushes the queues and unloads content after the message loop exits.

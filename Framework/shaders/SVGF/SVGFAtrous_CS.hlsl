@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 #include <ShaderLibrary/Common/RootSignature.hlsli>
 #include "SVGFCommon.hlsli"
 
@@ -7,7 +7,7 @@ cbuffer SVGFAtrousConstants : register(b0)
     uint Width;
     uint Height;
     uint StepSize;
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     uint Direction;
 //Modify End
     float PhiColor;
@@ -56,7 +56,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     float3 colorSum = 0.0f;
     float weightSum = 0.0f;
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     [unroll]
     for (int tap = -2; tap <= 2; ++tap)
     {

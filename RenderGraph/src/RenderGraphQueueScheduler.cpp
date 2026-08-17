@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include "RenderGraphQueueScheduler.h"
 
 #include <algorithm>
@@ -27,7 +27,7 @@ void RenderGraph::RenderGraphQueueScheduler::BeginFrame()
 
     m_LastWriterQueues.clear();
     m_LastWriterFenceValues.clear();
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
     m_ExternalResourceUsages.clear();
 //Modify End
     m_ResourceRetirements.clear();
@@ -45,14 +45,14 @@ uint64_t RenderGraph::RenderGraphQueueScheduler::SubmitDirect(std::shared_ptr<Co
     }
 
     const uint64_t fenceValue = m_DirectCommandQueue->ExecuteCommandList(commandList);
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
     FinalizeDirectSubmission(fenceValue);
 //Modify End
     commandList.reset();
     return fenceValue;
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 uint64_t RenderGraph::RenderGraphQueueScheduler::SubmitDirect(
     std::vector<std::shared_ptr<CommandList>>& commandLists)
 {
@@ -62,7 +62,7 @@ uint64_t RenderGraph::RenderGraphQueueScheduler::SubmitDirect(
     }
 
     const uint64_t fenceValue = m_DirectCommandQueue->ExecuteCommandLists(commandLists);
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
     FinalizeDirectSubmission(fenceValue);
 //Modify End
     commandLists.clear();
@@ -114,7 +114,7 @@ uint64_t RenderGraph::RenderGraphQueueScheduler::GetCrossQueueProducerFence(cons
     {
         inspectResource(output.m_Id);
     }
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
     const auto inspectFence = [&pass, &producerFenceValue](
         const RenderPassQueue queue,
         const uint64_t fenceValue)
@@ -211,7 +211,7 @@ void RenderGraph::RenderGraphQueueScheduler::TrackPassResources(
         m_LastWriterFenceValues[output.m_Id] = fenceValue;
     }
 
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
     for (const ExternalResourceAccess& access : pass.GetExternalResourceAccesses())
     {
         TrackExternalResourceAccess(access, pass.GetQueue(), fenceValue);
@@ -219,7 +219,7 @@ void RenderGraph::RenderGraphQueueScheduler::TrackPassResources(
 //Modify End
 }
 
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
 void RenderGraph::RenderGraphQueueScheduler::FinalizeDirectSubmission(const uint64_t fenceValue)
 {
     m_FrameSubmissionFences.Direct = (std::max)(m_FrameSubmissionFences.Direct, fenceValue);
@@ -297,7 +297,7 @@ void RenderGraph::RenderGraphQueueScheduler::TrackExternalResource(
         return;
     }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     throw std::invalid_argument("External async compute resource tracking requires an explicit fence value.");
 //Modify End
 }

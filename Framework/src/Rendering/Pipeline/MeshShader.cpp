@@ -1,14 +1,14 @@
 #include <Framework/Rendering/Pipeline/MeshShader.h>
 
 #include <DX12Library/Helpers.h>
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
 //Modify End
 
 #include <algorithm>
 #include <cstring>
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 namespace
 {
     template <typename Metadata>
@@ -52,14 +52,14 @@ namespace
     }
 
     ShaderReflectionMetadata MergeMeshGraphicsReflection(
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
         const ShaderReflectionMetadata* amplificationShaderMetadata,
 //Modify End
         const ShaderReflectionMetadata& meshShaderMetadata,
         const ShaderReflectionMetadata& pixelShaderMetadata)
     {
         ShaderReflectionMetadata merged;
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
         if (amplificationShaderMetadata != nullptr)
         {
             AppendUniqueMetadata(amplificationShaderMetadata->m_ConstantBuffers, merged.m_ConstantBuffers, merged.m_ConstantBuffersNameCache);
@@ -101,7 +101,7 @@ MeshShader::MeshShader(
     buildPipelineState(m_PipelineStateBuilder);
 }
 
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
 MeshShader::MeshShader(
     FrameworkDeviceContext& deviceContext,
     const ShaderBlob& amplificationShader,
@@ -152,7 +152,7 @@ void MeshShader::CollectShaderMetadata(const Microsoft::WRL::ComPtr<ID3DBlob>& s
 
 void MeshShader::BuildPipelineLayout()
 {
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
     if (m_PipelineLayoutOptions.MaxDescriptorCount == 1024u)
     {
         m_PipelineLayoutOptions.MaxDescriptorCount = 4096u;
@@ -179,7 +179,7 @@ void MeshShader::BuildReflectedRootSignature()
 {
     Assert(m_PipelineLayout != nullptr, "Pipeline layout must be built before creating a reflected root signature.");
 
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
     const ShaderReflectionMetadata* amplificationReflection = m_AmplificationShaderMetadata.m_ConstantBuffers.empty() &&
         m_AmplificationShaderMetadata.m_ShaderResourceViews.empty() &&
         m_AmplificationShaderMetadata.m_UnorderedAccessViews.empty() &&
@@ -211,7 +211,7 @@ void MeshShader::BuildReflectedRootSignature()
     }
 
     PipelineRootSignatureBuildDesc rootSignatureBuildDesc;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     rootSignatureBuildDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED;
 //Modify End
     m_RootSignature = m_PipelineLayout->CreateRootSignature(rootSignatureBuildDesc);

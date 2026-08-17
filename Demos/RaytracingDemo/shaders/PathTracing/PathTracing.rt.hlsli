@@ -8,7 +8,7 @@ RayPayload TraceScene(float3 origin, float3 direction, float tMax, uint flags)
     RayDesc ray;
     ray.Origin = origin;
     ray.Direction = direction;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     ray.TMin = 0.0001f;
 //Modify End
     ray.TMax = tMax;
@@ -22,12 +22,12 @@ RayPayload TraceScene(float3 origin, float3 direction, float tMax, uint flags)
     payload.Metallic = 0.0f;
     payload.Roughness = 1.0f;
     payload.AmbientOcclusion = 1.0f;
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
     payload.Emission = 0.0f;
 //Modify End
     payload.Padding0 = 0u;
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     const uint hitGroupIndex = (flags & RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH) != 0u ? 1u : 0u;
     TraceRay(RAYTRACING_DEMO_SCENE, flags, 0xFF, hitGroupIndex, 0, 0, ray, payload);
 //Modify End

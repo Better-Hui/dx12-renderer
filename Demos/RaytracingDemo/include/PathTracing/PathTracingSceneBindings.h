@@ -1,7 +1,7 @@
 #pragma once
 
 #include <RenderGraph/RaytracingDemoGraphResources.h>
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <Passes/RaytracingDemoPassResources.h>
 //Modify End
 
@@ -22,7 +22,7 @@ namespace RenderGraph
 
 struct RaytracingDemoPassBindings
 {
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
     static void DeclareRayTracingExternalResourceAccesses(
         RenderGraph::RenderPass& renderPass,
         const RaytracingDemoPassResources& resources,

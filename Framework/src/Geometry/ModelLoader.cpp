@@ -152,7 +152,7 @@ std::vector<MeshPrototype> ModelLoader::LoadAsMeshPrototypes(const std::string& 
         }
 
         MeshPrototype& meshPrototype = outputMeshes.emplace_back(std::move(outputVertices), std::move(outputIndices), true, false);
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
         meshPrototype.m_Name = mesh->mName.C_Str();
 //Modify End
 
@@ -312,7 +312,7 @@ std::shared_ptr<Animation> ModelLoader::LoadAnimation(const std::string& path, c
 
 std::shared_ptr<Texture> ModelLoader::LoadTexture(CommandList& commandList, const std::wstring& path, TextureUsageType usage /*= TextureUsageType::Albedo*/) const
 {
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     auto texture = std::make_shared<Texture>(
         TextureUsageType::Other,
         L"",

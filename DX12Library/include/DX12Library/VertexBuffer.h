@@ -32,10 +32,10 @@
 
 
 #include "Buffer.h"
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
 #include "DescriptorAllocation.h"
 //Modify End
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 #include <mutex>
 #include <unordered_map>
 //Modify End
@@ -85,10 +85,10 @@ private:
 	size_t VertexStride;
 
 	D3D12_VERTEX_BUFFER_VIEW VertexBufferView;
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
 	DescriptorAllocation m_Srv;
 //Modify End
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 	mutable std::unordered_map<size_t, DescriptorAllocation> m_CustomSrvs;
 	mutable std::mutex m_CustomSrvsMutex;
 //Modify End

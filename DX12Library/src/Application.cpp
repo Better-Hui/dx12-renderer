@@ -6,13 +6,13 @@
 #include "CommandQueue.h"
 #include "DiagnosticReporter.h"
 #include "Game.h"
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 #include "StreamlineRuntime.h"
 #include "D3D12DeviceContext.h"
 //Modify End
 #include "Window.h"
 #include <ctime>
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
 #include <cstdlib>
 #include <cstring>
 #include <sstream>
@@ -33,7 +33,7 @@ uint64_t Application::s_FrameCount = 0;
 
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
 
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
 #if defined(DX12_RENDERER_ENABLE_D3D12_AGILITY) && DX12_RENDERER_ENABLE_D3D12_AGILITY
 #if !defined(DX12_RENDERER_AGILITY_SDK_VERSION)
 #error "DX12_RENDERER_AGILITY_SDK_VERSION must match the distributed Agility SDK."
@@ -53,7 +53,7 @@ extern "C"
 // class are protected and not accessible by the std::make_shared method.
 struct MakeWindow : public Window
 {
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     MakeWindow(
         HWND hWnd,
         const std::wstring& windowName,
@@ -66,7 +66,7 @@ struct MakeWindow : public Window
 //Modify End
 };
 
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
 Application::Application(HINSTANCE hInst)
     : Application(hInst, nullptr)
 {
@@ -86,7 +86,7 @@ Application::Application(HINSTANCE hInst, const ExternalD3D12Context* externalCo
     WNDCLASSEXW wndClass = { 0 };
 
     wndClass.cbSize = sizeof(WNDCLASSEX);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     wndClass.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
 //Modify End
     wndClass.lpfnWndProc = &WndProc;
@@ -104,19 +104,19 @@ Application::Application(HINSTANCE hInst, const ExternalD3D12Context* externalCo
     }
 }
 
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
 void Application::Initialize(
     const ExternalD3D12Context* externalContext,
     const ApplicationCreateDesc& createDesc)
 //Modify End
 {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     m_DiagnosticReporter = std::make_unique<DiagnosticReporter>(createDesc.DiagnosticsDirectory);
 //Modify End
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
     const bool useExternalDevice = externalContext != nullptr && externalContext->Device != nullptr;
 //Modify End
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     char* enableDred = nullptr;
     size_t enableDredLength = 0;
     _dupenv_s(&enableDred, &enableDredLength, "DX12_RENDERER_ENABLE_DRED");
@@ -140,7 +140,7 @@ void Application::Initialize(
     }
 //Modify End
 #if defined(_DEBUG)
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
     if (!useExternalDevice)
     {
 //Modify End
@@ -153,12 +153,12 @@ void Application::Initialize(
     // Enable these if you want full validation (will slow down rendering a lot).
     //debugInterface->SetEnableGPUBasedValidation(TRUE);
     //debugInterface->SetEnableSynchronizedCommandQueueValidation(TRUE);
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
     }
 //Modify End
 #endif
 
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
     D3D12RenderContextInitializationDesc renderContextDesc;
     renderContextDesc.EnableStreamlineInterposer = createDesc.EnableStreamlineInterposer;
     if (useExternalDevice)
@@ -183,7 +183,7 @@ void Application::Initialize(
             throw std::exception("DXGI adapter enumeration failed.");
         }
     }
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     m_RenderContext.SetFatalErrorHandler(
         [this](const CommandQueueFailure& failure)
         {
@@ -221,7 +221,7 @@ void Application::Create(HINSTANCE hInst)
     Create(hInst, createDesc);
 }
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 void Application::Create(HINSTANCE hInst, const ApplicationCreateDesc& createDesc)
 {
     if (!gs_pSingelton)
@@ -232,7 +232,7 @@ void Application::Create(HINSTANCE hInst, const ApplicationCreateDesc& createDes
 }
 //Modify End
 
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
 void Application::Create(HINSTANCE hInst, const ExternalD3D12Context& externalContext)
 {
     ApplicationCreateDesc createDesc;
@@ -240,7 +240,7 @@ void Application::Create(HINSTANCE hInst, const ExternalD3D12Context& externalCo
 }
 //Modify End
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 void Application::Create(
     HINSTANCE hInst,
     const ExternalD3D12Context& externalContext,
@@ -363,7 +363,7 @@ bool Application::CheckTearingSupport()
     return allowTearing == TRUE;
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 void Application::WriteDiagnostic(
     const std::string_view reportName,
     const std::string_view contents) const noexcept
@@ -411,7 +411,7 @@ DXGI_SAMPLE_DESC Application::GetMultisampleQualityLevels(DXGI_FORMAT format, UI
     qualityLevels.Flags = flags;
     qualityLevels.NumQualityLevels = 0;
 
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     const auto device = m_RenderContext.GetDevice();
     while (qualityLevels.SampleCount <= numSamples && SUCCEEDED(
         device->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS, &qualityLevels, sizeof(
@@ -455,7 +455,7 @@ std::shared_ptr<Window> Application::CreateRenderWindow(const std::wstring& wind
         return nullptr;
     }
 
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     WindowD3D12Context windowD3D12Context;
     windowD3D12Context.DeviceContext = m_RenderContext.GetD3D12DeviceContext();
     windowD3D12Context.DirectCommandQueue = m_RenderContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
@@ -508,7 +508,7 @@ std::shared_ptr<Window> Application::GetWindowByName(const std::wstring& windowN
 
 int Application::Run(std::shared_ptr<Game> pGame)
 {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     MSG msg = { nullptr };
     PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE);
     m_MessageThreadId.store(GetCurrentThreadId(), std::memory_order_release);
@@ -526,7 +526,7 @@ int Application::Run(std::shared_ptr<Game> pGame)
 
     while (msg.message != WM_QUIT)
     {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         if (m_QuitRequested.exchange(false, std::memory_order_acq_rel))
         {
             msg.message = WM_QUIT;
@@ -554,7 +554,7 @@ int Application::Run(std::shared_ptr<Game> pGame)
 
 void Application::Quit(int exitCode)
 {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     m_RequestedExitCode.store(exitCode, std::memory_order_release);
     m_QuitRequested.store(true, std::memory_order_release);
     const DWORD messageThreadId = m_MessageThreadId.load(std::memory_order_acquire);
@@ -575,15 +575,15 @@ void Application::Quit(int exitCode)
 
 Microsoft::WRL::ComPtr<ID3D12Device2> Application::GetDevice() const
 {
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     return m_RenderContext.GetDevice();
 //Modify End
 }
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 std::shared_ptr<D3D12DeviceContext> Application::GetD3D12DeviceContext() const
 {
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     return m_RenderContext.GetD3D12DeviceContext();
 //Modify End
 }
@@ -594,14 +594,14 @@ std::shared_ptr<StreamlineRuntime> Application::GetStreamlineRuntime() const
     return m_RenderContext.GetStreamlineRuntime();
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 std::shared_ptr<ResourceStateRegistry> Application::GetResourceStateRegistry() const
 {
     return m_RenderContext.GetResourceStateRegistry();
 }
 //Modify End
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 std::shared_ptr<FrameFeaturesRuntime> Application::GetFrameFeaturesRuntime() const
 {
     return m_RenderContext.GetStreamlineRuntime();
@@ -643,10 +643,10 @@ bool Application::SetFrameGenerationEnabled(const bool enabled)
     return true;
 }
 
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
 bool Application::UsesExternalDevice() const
 {
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     return m_RenderContext.UsesExternalDevice();
 //Modify End
 }
@@ -654,14 +654,14 @@ bool Application::UsesExternalDevice() const
 
 std::shared_ptr<CommandQueue> Application::GetCommandQueue(D3D12_COMMAND_LIST_TYPE type) const
 {
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     return m_RenderContext.GetCommandQueue(type);
 //Modify End
 }
 
 void Application::Flush()
 {
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     m_RenderContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT)->Flush();
     m_RenderContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE)->Flush();
     m_RenderContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COPY)->Flush();
@@ -688,7 +688,7 @@ Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> Application::CreateDescriptorHeap(
     desc.NodeMask = 0;
 
     Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descriptorHeap;
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     ThrowIfFailed(m_RenderContext.GetDevice()->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&descriptorHeap)));
 //Modify End
 
@@ -697,7 +697,7 @@ Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> Application::CreateDescriptorHeap(
 
 UINT Application::GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE type) const
 {
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     return m_RenderContext.GetDevice()->GetDescriptorHandleIncrementSize(type);
 //Modify End
 }
@@ -749,7 +749,7 @@ MouseButtonEventArgs::MouseButton DecodeMouseButton(UINT messageID)
 
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     try
     {
 //Modify End
@@ -866,15 +866,15 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
             }
             break;
         case WM_LBUTTONDOWN:
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         case WM_LBUTTONDBLCLK:
 //Modify End
         case WM_RBUTTONDOWN:
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         case WM_RBUTTONDBLCLK:
 //Modify End
         case WM_MBUTTONDOWN:
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         case WM_MBUTTONDBLCLK:
 //Modify End
             {
@@ -887,7 +887,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
                 int x = static_cast<short>(LOWORD(lParam));
                 int y = static_cast<short>(HIWORD(lParam));
 
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
                 const bool doubleClick =
                     message == WM_LBUTTONDBLCLK ||
                     message == WM_RBUTTONDBLCLK ||
@@ -976,14 +976,14 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
     }
 
     return 0;
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     }
     catch (const std::exception& exception)
     {
         std::ostringstream report;
         report << "Message=" << message << std::endl;
         report << exception.what() << std::endl;
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
         const auto device = gs_pSingelton != nullptr ? gs_pSingelton->GetDevice() : nullptr;
         if (device != nullptr)
         {
@@ -1021,7 +1021,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
         PostQuitMessage(4);
         return 0;
     }
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     catch (...)
     {
         std::ostringstream report;

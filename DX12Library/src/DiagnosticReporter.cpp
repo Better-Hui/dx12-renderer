@@ -7,7 +7,7 @@
 
 namespace
 {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 std::filesystem::path ResolveDiagnosticDirectory(std::filesystem::path outputDirectory)
 {
     if (!outputDirectory.empty())
@@ -44,7 +44,7 @@ std::string SanitizeReportName(const std::string_view reportName)
 //Modify End
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 DiagnosticReporter::DiagnosticReporter(std::filesystem::path outputDirectory)
     : m_OutputDirectory(ResolveDiagnosticDirectory(std::move(outputDirectory)))
 {

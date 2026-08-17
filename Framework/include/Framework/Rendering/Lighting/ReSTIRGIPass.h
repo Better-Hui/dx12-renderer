@@ -18,16 +18,16 @@ class ComputeShader;
 class FrameworkDeviceContext;
 class Texture;
 
-//Modify Begin:2026-08-10 by BestHui
+//Modify Begin:2026-08-10 by Hui
 struct ReSTIRGIFrameState
 {
     bool Enabled = false;
     bool UseSoftShadowVariant = false;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     MaterialShadingModel ShadingModel = MaterialShadingModel::Pbr;
 //Modify End
     uint32_t EnvironmentProjectionVariant = 0u;
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
     ReSTIRGIVariantConfig VariantConfig = {};
 //Modify End
     ReSTIRGIFrameConstants Constants = {};
@@ -38,7 +38,7 @@ struct ReSTIRGIExecutionInputs
     ReSTIRGIFrameState FrameState;
     std::shared_ptr<Texture> IndirectLighting;
     std::shared_ptr<Texture> MotionVector;
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
     std::function<void(CommandContext&)> PrepareCommandContext;
 //Modify End
     std::function<void(CommandContext&, ComputeShader&)> BindSceneInputs;
@@ -54,7 +54,7 @@ struct ReSTIRGIShaderSources
     std::wstring Shade;
     std::vector<ShaderVariantDefine> SoftShadowDefines;
     std::string EnvironmentProjectionDefineName;
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     std::vector<PipelineStaticSamplerContract> StaticSamplerContracts;
 //Modify End
 };
@@ -106,13 +106,13 @@ private:
         ReSTIRGIStage stage,
         const ReSTIRGIVariantConfig& variantConfig,
         MaterialShadingModel shadingModel);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     bool EnsureResources(uint32_t width, uint32_t height);
 //Modify End
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
     void ExecuteInitialSampling(CommandContext& commandContext, const ReSTIRGIExecutionInputs& inputs, PipelineSet& pipelines);
     void ExecuteTemporalResampling(CommandContext& commandContext, const ReSTIRGIExecutionInputs& inputs, PipelineSet& pipelines);
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
     void ExecuteSpatialResampling(
         CommandContext& commandContext,
         const ReSTIRGIExecutionInputs& inputs,
@@ -123,7 +123,7 @@ private:
 //Modify End
 //Modify End
     void ExecuteFinalShading(
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
         CommandContext& commandContext,
 //Modify End
         const ReSTIRGIExecutionInputs& inputs,
@@ -146,7 +146,7 @@ private:
     uint32_t m_ResourceWidth = 0;
     uint32_t m_ResourceHeight = 0;
     uint32_t m_HistoryReadIndex = 0;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     bool m_HistoryValid = false;
 //Modify End
 };

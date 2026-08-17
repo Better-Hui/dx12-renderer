@@ -1,7 +1,7 @@
 #include <Framework/Rendering/PostProcess/MSAADepthResolvePass.h>
 #include <DX12Library/Helpers.h>
 
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 //Modify End
 #include <Framework/MSAADepthResolve_CS.h>
@@ -11,7 +11,7 @@ namespace
     static constexpr uint32_t THREAD_GROUP_SIZE = 16u;
 }
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 MSAADepthResolvePass::MSAADepthResolvePass(FrameworkDeviceContext& deviceContext)
 //Modify End
     : m_ComputeShader(
@@ -35,11 +35,10 @@ void MSAADepthResolvePass::Resolve(CommandList& commandList, const std::shared_p
     sourceSrvDesc.Format = DXGI_FORMAT_R32_FLOAT;
     sourceSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 
-    m_ComputeShader.SetShaderResourceView(commandList, "input", ShaderResourceView(source, sourceSrvDesc));
-    m_ComputeShader.SetUnorderedAccessView(commandList, "output", UnorderedAccessView(destination));
-
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
     CommandContext commandContext(commandList);
+    commandContext.SetShaderResourceView(m_ComputeShader, "input", ShaderResourceView(source, sourceSrvDesc));
+    commandContext.SetUnorderedAccessView(m_ComputeShader, "output", UnorderedAccessView(destination));
     commandContext.BindPipeline(m_ComputeShader);
     commandContext.BindDescriptorSet(m_ComputeShader.GetDescriptorSet());
     commandContext.Dispatch(

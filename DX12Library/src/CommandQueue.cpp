@@ -3,19 +3,19 @@
 #include "CommandQueue.h"
 
 #include "CommandList.h"
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 #include "D3D12DeviceContext.h"
 #include "StreamlineRuntime.h"
 //Modify End
 
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
 #include <fstream>
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
 #include <chrono>
 //Modify End
 //Modify End
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 CommandQueue::CommandQueue(
 	const D3D12_COMMAND_LIST_TYPE type,
 	std::shared_ptr<D3D12DeviceContext> deviceContext,
@@ -46,12 +46,12 @@ CommandQueue::CommandQueue(
 	{
 		ThrowIfFailed(device->CreateCommandQueue(&desc, IID_PPV_ARGS(&m_D3d12CommandQueue)));
 	}
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
 	InitializeFenceAndWorker();
 //Modify End
 }
 
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
 CommandQueue::CommandQueue(
 	const D3D12_COMMAND_LIST_TYPE type,
 	std::shared_ptr<D3D12DeviceContext> deviceContext,
@@ -91,7 +91,7 @@ void CommandQueue::InitializeFenceAndWorker()
 }
 //Modify End
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 void CommandQueue::SetComputeCommandListFactory(std::function<std::shared_ptr<CommandList>()> factory)
 {
 	m_ComputeCommandListFactory = std::move(factory);
@@ -157,7 +157,7 @@ std::shared_ptr<CommandList> CommandQueue::GetCommandList()
 {
 	std::shared_ptr<CommandList> commandList;
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 	// TryPop is the atomic availability check. Empty followed by TryPop is racy
 	// when multiple recording workers request command lists concurrently.
 	if (m_AvailableCommandLists.TryPop(commandList))
@@ -168,7 +168,7 @@ std::shared_ptr<CommandList> CommandQueue::GetCommandList()
 	else
 	{
 		// Otherwise create a new command list.
-		//Modify Begin:2026-08-07 by BestHui
+		//Modify Begin:2026-08-07 by Hui
 		commandList = std::make_shared<CommandList>(
 			m_CommandListType,
 			m_DeviceContext,
@@ -188,7 +188,7 @@ uint64_t CommandQueue::ExecuteCommandList(std::shared_ptr<CommandList> commandLi
 
 uint64_t CommandQueue::ExecuteCommandLists(const std::vector<std::shared_ptr<CommandList>>& commandLists)
 {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 	auto submissionScope = m_DeviceContext->GetResourceStateRegistry()->AcquireSubmissionScope();
 //Modify End
 
@@ -236,7 +236,7 @@ uint64_t CommandQueue::ExecuteCommandLists(const std::vector<std::shared_ptr<Com
 	{
 		m_InFlightCommandLists.Push({ fenceValue, commandList });
 	}
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
 	m_ProcessInFlightCommandListsThreadCv.notify_one();
 //Modify End
 
@@ -244,7 +244,7 @@ uint64_t CommandQueue::ExecuteCommandLists(const std::vector<std::shared_ptr<Com
 	// after the initial resource command lists have finished.
 	if (generateMipsCommandLists.size() > 0)
 	{
-		//Modify Begin:2026-08-07 by BestHui
+		//Modify Begin:2026-08-07 by Hui
 		Assert(m_ComputeCommandQueue != nullptr, "Compute command queue is unavailable.");
 		m_ComputeCommandQueue->Wait(*this);
 		m_ComputeCommandQueue->ExecuteCommandLists(generateMipsCommandLists);
@@ -259,7 +259,7 @@ void CommandQueue::Wait(const CommandQueue& other)
 	Wait(other, other.m_FenceValue.load());
 }
 
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
 void CommandQueue::Wait(const CommandQueue& other, const uint64_t fenceValue)
 {
 	if (fenceValue != 0u)
@@ -274,7 +274,7 @@ ComPtr<ID3D12CommandQueue> CommandQueue::GetD3D12CommandQueue() const
 	return m_D3d12CommandQueue;
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 std::shared_ptr<ResourceStateRegistry> CommandQueue::GetResourceStateRegistry() const
 {
 	return m_DeviceContext->GetResourceStateRegistry();
@@ -284,11 +284,11 @@ std::shared_ptr<ResourceStateRegistry> CommandQueue::GetResourceStateRegistry() 
 void CommandQueue::ProcessInFlightCommandLists()
 {
 	std::unique_lock lock(m_ProcessInFlightCommandListsThreadMutex, std::defer_lock);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 	const char* stage = "initialization";
 //Modify End
 
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
 	try
 	{
 //Modify End
@@ -297,7 +297,7 @@ void CommandQueue::ProcessInFlightCommandLists()
 		stage = "dequeue in-flight command list";
 		CommandListEntry commandListEntry;
 
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
 		if (!m_InFlightCommandLists.TryPop(commandListEntry))
 		{
 			lock.lock();
@@ -340,11 +340,11 @@ void CommandQueue::ProcessInFlightCommandLists()
 		m_ProcessInFlightCommandListsThreadCv.notify_one();
 //Modify End
 	}
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
 	}
 	catch (const std::exception& exception)
 	{
-		//Modify Begin:2026-08-07 by BestHui
+		//Modify Begin:2026-08-07 by Hui
 		if (m_FatalErrorHandler)
 		{
 			m_FatalErrorHandler(CommandQueueFailure{

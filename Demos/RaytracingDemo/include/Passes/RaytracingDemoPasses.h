@@ -2,7 +2,7 @@
 
 #include <RenderGraph/ResourceId.h>
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <Passes/RaytracingDemoPassResources.h>
 //Modify End
 
@@ -19,11 +19,11 @@ namespace RaytracingDemoPasses
     class Builder
     {
     public:
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         static std::unique_ptr<RenderGraph::RenderPass> CreateBaseResourcesPass(
             const RaytracingDemoPassResources& resources,
             const RaytracingDemoPassConfig& config);
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
         static std::unique_ptr<RenderGraph::RenderPass> CreateSkyboxPass(
             const RaytracingDemoPassResources& resources,
             const RaytracingDemoPassConfig& config,
@@ -44,7 +44,7 @@ namespace RaytracingDemoPasses
         static std::unique_ptr<RenderGraph::RenderPass> CreateLightingCompositePass(
             const RaytracingDemoPassResources& resources,
             const RaytracingDemoPassConfig& config);
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
         static std::unique_ptr<RenderGraph::RenderPass> CreateDebugTexturePass(
             const RaytracingDemoPassResources& resources,
             RenderGraph::ResourceId debugTarget,
@@ -56,12 +56,12 @@ namespace RaytracingDemoPasses
         static std::unique_ptr<RenderGraph::RenderPass> CreateCudaBloomPass(
             const RaytracingDemoPassResources& resources,
             RenderGraph::ResourceId sceneReadyToken);
-//Modify Begin:2026-08-16 by BestHui
+//Modify Begin:2026-08-16 by Hui
         static std::unique_ptr<RenderGraph::RenderPass> CreateFrameworkBloomPass(
             const RaytracingDemoPassResources& resources,
             RenderGraph::ResourceId sceneReadyToken);
 //Modify End
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
         static std::unique_ptr<RenderGraph::RenderPass> CreateDLSSPass(
             const RaytracingDemoPassResources& resources,
             const RaytracingDemoPassConfig& config,

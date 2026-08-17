@@ -1,7 +1,7 @@
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #pragma once
 
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
 #include "Helpers.h"
 //Modify End
 
@@ -100,7 +100,7 @@ public:
         ID3D12Resource* resource,
         D3D12_RESOURCE_STATES initialState)
     {
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
         Assert(resource != nullptr, "Cannot register a null D3D12 resource state.");
 //Modify End
 

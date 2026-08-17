@@ -39,11 +39,11 @@
 #include <memory>
 #include <vector>
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 class D3D12DeviceContext;
 class ResourceStateRegistration;
 //Modify End
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
 class CommandList;
 class Window;
 //Modify End
@@ -60,7 +60,7 @@ public:
         const D3D12_CLEAR_VALUE* clearValue = nullptr,
         const std::wstring& name = L"",
         std::shared_ptr<D3D12DeviceContext> deviceContext = nullptr);
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     explicit Resource(const D3D12_RESOURCE_DESC& resourceDesc,
         D3D12_HEAP_FLAGS heapFlags,
         const D3D12_CLEAR_VALUE* clearValue = nullptr,
@@ -140,7 +140,7 @@ public:
     void SetName(const std::wstring& name);
 
     const std::wstring& GetName() const;
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     const std::shared_ptr<D3D12DeviceContext>& GetDeviceContext() const { return m_DeviceContext; }
     const std::shared_ptr<ResourceStateRegistration>& GetStateRegistration() const
     {
@@ -159,7 +159,7 @@ public:
      */
     bool CheckFormatSupport(D3D12_FORMAT_SUPPORT1 formatSupport) const;
     bool CheckFormatSupport(D3D12_FORMAT_SUPPORT2 formatSupport) const;
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     bool SupportsUnorderedAccess() const
     {
         return m_d3d12Resource != nullptr &&
@@ -181,13 +181,13 @@ protected:
     D3D12_FEATURE_DATA_FORMAT_SUPPORT m_FormatSupport;
     std::unique_ptr<D3D12_CLEAR_VALUE> m_d3d12ClearValue;
     std::wstring m_ResourceName;
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     std::shared_ptr<D3D12DeviceContext> m_DeviceContext;
     std::shared_ptr<ResourceStateRegistration> m_StateRegistration;
 //Modify End
 
 protected:
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     friend class CommandList;
     friend class Window;
 

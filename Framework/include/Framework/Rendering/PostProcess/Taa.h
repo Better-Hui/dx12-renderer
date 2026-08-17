@@ -9,7 +9,7 @@
 #include <Framework/Scene/Material.h>
 
 class CommandList;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 class FrameworkDeviceContext;
 //Modify End
 class Mesh;
@@ -17,7 +17,7 @@ class Mesh;
 class TAA
 {
 public:
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     explicit TAA(FrameworkDeviceContext& deviceContext, CommandList& commandList, DXGI_FORMAT backBufferFormat, uint32_t width, uint32_t height);
 //Modify End
 
@@ -32,7 +32,7 @@ public:
     void OnRenderedFrame(const DirectX::XMMATRIX& viewProjectionMatrix);
 
 private:
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     FrameworkDeviceContext& m_DeviceContext;
 //Modify End
     RenderTarget m_ResolveRenderTarget;

@@ -7,7 +7,7 @@ using namespace RenderGraph;
 
 namespace
 {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     constexpr uint8_t DirectQueueMask = 1u << 0u;
     constexpr uint8_t AsyncComputeQueueMask = 1u << 1u;
 
@@ -51,7 +51,7 @@ bool TransientResourceAllocator::ResourceLifecycle::Intersect(const ResourceLife
     return IntersectHelper(lifecycle1, lifecycle2) || IntersectHelper(lifecycle2, lifecycle1);
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 bool TransientResourceAllocator::ResourceLifecycle::CanAlias(
     const ResourceLifecycle& lifecycle1,
     const ResourceLifecycle& lifecycle2)
@@ -62,7 +62,7 @@ bool TransientResourceAllocator::ResourceLifecycle::CanAlias(
 }
 //Modify End
 
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
 std::map<ResourceId, TransientResourceAllocator::ResourceLifecycle> TransientResourceAllocator::GetResourceLifecycles(
     const std::vector<RenderPass*>& renderPasses,
     const std::map<ResourceId, ResourceDescription>& resourceDescriptions,
@@ -74,7 +74,7 @@ std::map<ResourceId, TransientResourceAllocator::ResourceLifecycle> TransientRes
     for (uint32_t passIndex = 0; passIndex < renderPasses.size(); ++passIndex)
     {
         const auto& pass = *renderPasses[passIndex];
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         const uint8_t queueMask = GetQueueMask(pass.GetQueue());
 //Modify End
 
@@ -99,7 +99,7 @@ std::map<ResourceId, TransientResourceAllocator::ResourceLifecycle> TransientRes
         }
     }
 
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     {
         const uint32_t lastPassIndex = renderPasses.empty()
             ? 0u
@@ -125,7 +125,7 @@ std::vector<TransientResourceAllocator::HeapInfo> TransientResourceAllocator::Cr
         // actually used resources should always be registered at this point
         if (const auto findResult = resourceDescriptions.find(id); findResult != resourceDescriptions.end())
         {
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
             if (findResult->second.m_DedicatedResource)
             {
                 continue;

@@ -40,7 +40,7 @@ namespace RenderGraph
         ExecuteFuncT m_ExecuteFunc;
     };
 
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     class LambdaExternalRenderPass final : public RenderPass
     {
     public:
@@ -94,13 +94,13 @@ std::unique_ptr<RenderGraph::RenderPass> RenderGraph::RenderPass::Create(
 {
     const auto pRenderPass = new LambdaRenderPass(inputs, outputs, executeFunc);
     pRenderPass->SetPassName(passName);
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
     pRenderPass->SetQueue(queue);
 //Modify End
     return std::unique_ptr<RenderPass>(pRenderPass);
 }
 
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
 std::unique_ptr<RenderGraph::RenderPass> RenderGraph::RenderPass::CreateExternal(
     const wchar_t* passName,
     const std::vector<Input>& inputs,
@@ -123,7 +123,7 @@ void RenderGraph::RenderPass::Execute(const RenderContext& context, CommandList&
     ExecuteImpl(context, commandList);
 }
 
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
 void RenderGraph::RenderPass::ExecuteExternal(const RenderContext& context)
 {
     ExecuteExternalImpl(context);
@@ -161,7 +161,7 @@ void RenderGraph::RenderPass::SetPassName(const std::wstring& passName)
     m_PassName = passName;
 }
 
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
 void RenderGraph::RenderPass::AddExternalResourceAccess(
     const Resource& resource,
     const D3D12_RESOURCE_STATES stateAfter,

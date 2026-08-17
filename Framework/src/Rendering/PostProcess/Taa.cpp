@@ -17,22 +17,22 @@ namespace
     };
 }
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 TAA::TAA(FrameworkDeviceContext& deviceContext, CommandList& commandList, DXGI_FORMAT backBufferFormat, uint32_t width, uint32_t height)
 //Modify End
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     : m_DeviceContext(deviceContext)
     , m_BlitMesh(Mesh::CreateBlitTriangle(commandList))
 //Modify End
     , m_Width(width)
     , m_Height(height)
 {
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     auto shader = std::make_shared<Shader>(
         deviceContext,
         ShaderBlob(ShaderBytecode_Blit_VS, sizeof ShaderBytecode_Blit_VS),
         ShaderBlob(ShaderBytecode_TAA_Resolve_PS, sizeof ShaderBytecode_TAA_Resolve_PS),
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         PipelineLayoutReflectionOptions{
             .StaticSamplerContracts = {
                 PipelineStaticSamplers::PointClamp(2u),
@@ -47,7 +47,7 @@ TAA::TAA(FrameworkDeviceContext& deviceContext, CommandList& commandList, DXGI_F
     m_Material = Material::Create(shader);
 
     auto rtColorDesc = CD3DX12_RESOURCE_DESC::Tex2D(backBufferFormat, width, height, 1, 1, 1, 0, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);;
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     auto taaTempTexture = std::make_shared<Texture>(
         rtColorDesc,
         nullptr,
@@ -58,7 +58,7 @@ TAA::TAA(FrameworkDeviceContext& deviceContext, CommandList& commandList, DXGI_F
     m_ResolveRenderTarget.AttachTexture(Color0, taaTempTexture);
 
     auto historyBufferDesc = CD3DX12_RESOURCE_DESC::Tex2D(backBufferFormat, width, height, 1, 1);
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     m_HistoryBuffer = std::make_shared<Texture>(
         historyBufferDesc,
         nullptr,
@@ -108,7 +108,6 @@ void TAA::Resolve(CommandList& commandList, const std::shared_ptr<Texture>& curr
 
         m_Material->Bind(commandList);
         m_BlitMesh->Draw(commandList);
-        m_Material->Unbind(commandList);
     }
 
     {

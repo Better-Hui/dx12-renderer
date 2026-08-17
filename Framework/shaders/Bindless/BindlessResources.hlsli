@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
 #ifndef FRAMEWORK_BINDLESS_RESOURCES_HLSLI
 #define FRAMEWORK_BINDLESS_RESOURCES_HLSLI
 

@@ -101,7 +101,7 @@ void StructuredBuffer::CreateViews(size_t numElements, size_t elementSize)
 
     m_NumElements = numElements;
     m_ElementSize = elementSize;
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     if (m_Srv.IsNull())
     {
         m_Srv = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
@@ -157,7 +157,7 @@ D3D12_CPU_DESCRIPTOR_HANDLE StructuredBuffer::GetShaderResourceView(const D3D12_
 
 D3D12_CPU_DESCRIPTOR_HANDLE StructuredBuffer::GetUnorderedAccessView(const D3D12_UNORDERED_ACCESS_VIEW_DESC* uavDesc /*= nullptr*/) const
 {
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     Assert(SupportsUnorderedAccess(), "Structured buffer was not created with unordered-access usage.");
     if (uavDesc != nullptr)
     {
@@ -173,7 +173,7 @@ D3D12_CPU_DESCRIPTOR_HANDLE StructuredBuffer::GetUnorderedAccessView(const D3D12
 
 ByteAddressBuffer& StructuredBuffer::GetCounterBuffer()
 {
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     Assert(m_CounterBuffer != nullptr, "Structured-buffer counter is unavailable before buffer initialization.");
 //Modify End
     return *m_CounterBuffer;
@@ -181,7 +181,7 @@ ByteAddressBuffer& StructuredBuffer::GetCounterBuffer()
 
 const std::shared_ptr<ByteAddressBuffer>& StructuredBuffer::GetCounterBufferPtr() const
 {
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     Assert(m_CounterBuffer != nullptr, "Structured-buffer counter is unavailable before buffer initialization.");
 //Modify End
     return m_CounterBuffer;

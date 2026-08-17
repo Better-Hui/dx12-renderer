@@ -4,14 +4,14 @@
 #include <RenderGraph/RaytracingDemoGraphResources.h>
 
 #include <DX12Library/CommandList.h>
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
 #include <DX12Library/GpuTimestampProfiler.h>
 //Modify End
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 #include <RenderGraph/RenderContext.h>
 #include <RenderGraph/RenderPass.h>
 
-//Modify Begin:2026-08-10 by BestHui
+//Modify Begin:2026-08-10 by Hui
 namespace
 {
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
@@ -49,12 +49,12 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
             inputs.FrameState.Enabled = true;
             inputs.FrameState.UseSoftShadowVariant =
                 resources.Pipelines.GetShadowMode() == PathTracingShadowMode::SoftShadows;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
             inputs.FrameState.ShadingModel = config.FrameState->ShadingModel;
 //Modify End
             inputs.FrameState.EnvironmentProjectionVariant =
                 static_cast<uint32_t>(resources.Pipelines.GetLayout().EnvironmentProjection);
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
             inputs.FrameState.VariantConfig = resources.IndirectLightingReSTIRGI.GetVariantConfig(
                 static_cast<uint32_t>(config.FrameState->MaxBounces));
 //Modify End
@@ -65,7 +65,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
                 config.FrameState->ReSTIRGIHistoryValid);
             inputs.IndirectLighting = context.GetTexture(DemoResourceIds::IndirectLighting);
             inputs.MotionVector = gbuffer.MotionVector;
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
             inputs.EnableStageTiming = config.FrameState->ReSTIRGIStageTimingEnabled;
             inputs.WriteTimestamp = [profiler = resources.DirectGpuTimestampProfiler](
                 CommandList& timestampCommandList,
@@ -92,7 +92,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
             };
             resources.IndirectLightingReSTIRGIPass.Execute(commandList, inputs);
         });
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
     RaytracingDemoPassBindings::DeclareRayTracingExternalResourceAccesses(
         *pass,
         resources,

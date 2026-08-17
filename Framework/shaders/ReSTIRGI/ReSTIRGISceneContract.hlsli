@@ -1,7 +1,7 @@
 #ifndef FRAMEWORK_RESTIR_GI_SCENE_CONTRACT_HLSLI
 #define FRAMEWORK_RESTIR_GI_SCENE_CONTRACT_HLSLI
 
-//Modify Begin:2026-08-10 by BestHui
+//Modify Begin:2026-08-10 by Hui
 #if !defined(FRAMEWORK_RESTIR_GI_SCENE_ADAPTER) || \
     !defined(ReSTIRGI_Surface) || \
     !defined(ReSTIRGI_LoadSurface) || \

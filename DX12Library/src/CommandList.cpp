@@ -25,20 +25,20 @@
 
 namespace fs = std::filesystem;
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 CommandList::CommandList(
     const D3D12_COMMAND_LIST_TYPE type,
     std::shared_ptr<D3D12DeviceContext> deviceContext,
     std::function<std::shared_ptr<CommandList>()> computeCommandListFactory)
     : m_D3d12CommandListType(type)
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     , m_DeviceContext(std::move(deviceContext))
     , m_Device(m_DeviceContext != nullptr ? m_DeviceContext->GetDevice() : nullptr)
     , m_ResourceStateRegistry(m_DeviceContext != nullptr ? m_DeviceContext->GetResourceStateRegistry() : nullptr)
 //Modify End
     , m_ComputeCommandListFactory(std::move(computeCommandListFactory))
 {
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     Assert(m_DeviceContext != nullptr, "D3D12 device context is null.");
 //Modify End
     Assert(m_Device != nullptr, "D3D12 device is null.");
@@ -50,7 +50,7 @@ CommandList::CommandList(
         nullptr, IID_PPV_ARGS(&m_D3d12CommandList)));
 
     ThrowIfFailed(m_D3d12CommandList.As(&m_D3d12CommandList5));
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     ThrowIfFailed(m_D3d12CommandList.As(&m_D3d12CommandList6));
 //Modify End
 
@@ -60,7 +60,7 @@ CommandList::CommandList(
 
     for (int i = 0; i < D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES; ++i)
     {
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
         const uint32_t numDescriptorsPerHeap =
             i == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV ? 8192u : 1024u;
         m_DynamicDescriptorHeaps[i] = std::make_unique<DynamicDescriptorHeap>(
@@ -75,7 +75,7 @@ CommandList::CommandList(
 
 CommandList::~CommandList() = default;
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 void CommandList::ExecuteExternalCommandRecording(
     const std::function<void(ID3D12GraphicsCommandList2&)>& recordCommands)
 {
@@ -108,7 +108,7 @@ void CommandList::TransitionBarrier(const ComPtr<ID3D12Resource> resource, const
     const UINT subresource,
     const bool flushBarriers)
 {
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     Assert(resource != nullptr, "Cannot transition a null D3D12 resource.");
     const auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(resource.Get(), D3D12_RESOURCE_STATE_COMMON,
         stateAfter, subresource);
@@ -126,7 +126,7 @@ void CommandList::UavBarrier(const Resource& resource, const bool flushBarriers)
     UavBarrier(resource.GetD3D12Resource().Get(), flushBarriers);
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 void CommandList::UavBarrier(ID3D12Resource* resource, const bool flushBarriers)
 {
     Assert(resource != nullptr, "Cannot add a UAV barrier for a null D3D12 resource.");
@@ -161,7 +161,7 @@ void CommandList::AliasingBarrier(const ComPtr<ID3D12Resource> beforeResource,
     }
 }
 
-//Modify Begin:2026-08-10 by BestHui
+//Modify Begin:2026-08-10 by Hui
 void CommandList::AliasingBarrierBeforeFirstUse(const Resource& resourceAfter)
 {
     m_PResourceStateTracker->QueueAliasingBarrier(nullptr, &resourceAfter);
@@ -173,7 +173,7 @@ void CommandList::FlushResourceBarriers()
     m_PResourceStateTracker->FlushResourceBarriers(*this);
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 void CommandList::NotifyResourceState(
     const Resource& resource,
     const D3D12_RESOURCE_STATES state,
@@ -220,7 +220,7 @@ void CommandList::CommitStagedDescriptors()
     CommitStagedDescriptorsForDispatch();
 }
 
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
 void CommandList::CommitStagedDescriptorsForDraw()
 {
     for (uint32_t heapIndex = 0; heapIndex < D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES; ++heapIndex)
@@ -263,7 +263,7 @@ void CommandList::CopyResource(const ComPtr<ID3D12Resource> dstRes, const ComPtr
     TrackObject(srcRes);
 }
 
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
 void CommandList::CopyBufferRegion(
     const Resource& destination,
     const uint64_t destinationOffset,
@@ -317,10 +317,10 @@ void CommandList::ResolveSubresource(const Resource& dstRes, const Resource& src
 void CommandList::CopyBuffer(Buffer& buffer, const size_t numElements, const size_t elementSize, const void* bufferData,
     const D3D12_RESOURCE_FLAGS flags)
 {
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     const auto& device = m_Device;
 //Modify End
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     buffer.AttachDeviceContext(m_DeviceContext);
 //Modify End
 
@@ -333,7 +333,7 @@ void CommandList::CopyBuffer(Buffer& buffer, const size_t numElements, const siz
         throw std::exception();
     }
     const auto desc = buffer.GetD3D12ResourceDesc();
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const ComPtr<ID3D12Resource> previousResource = buffer.GetD3D12Resource();
 //Modify End
 
@@ -368,7 +368,7 @@ void CommandList::CopyBuffer(Buffer& buffer, const size_t numElements, const siz
     {
         const auto& uploadResource = buffer.GetUploadResource(bufferSize);
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         void* mappedData = nullptr;
         const D3D12_RANGE readRange = { 0, 0 };
         ThrowIfFailed(uploadResource->Map(0, &readRange, &mappedData));
@@ -393,7 +393,7 @@ void CommandList::CopyBuffer(Buffer& buffer, const size_t numElements, const siz
         TrackObject(uploadResource);
     }
     TrackObject(d3d12Resource);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     if (previousResource != nullptr && previousResource.Get() != d3d12Resource.Get())
     {
         RetireResource(buffer);
@@ -539,7 +539,7 @@ namespace
 bool CommandList::LoadTextureFromFile(Texture& texture, const std::wstring& fileName,
     const TextureUsageType textureUsage, bool throwOnNotFound)
 {
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     texture.AttachDeviceContext(m_DeviceContext);
 //Modify End
     std::wstring effectiveFileName = fileName;
@@ -564,11 +564,11 @@ bool CommandList::LoadTextureFromFile(Texture& texture, const std::wstring& file
         return false;
     }
 
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     effectiveFileName = fs::weakly_canonical(filePath).wstring();
 //Modify End
 
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     ComPtr<ID3D12Resource> cachedTexture;
     const D3D12TextureCacheKey textureCacheKey = {
         effectiveFileName,
@@ -613,7 +613,7 @@ bool CommandList::LoadTextureFromFile(Texture& texture, const std::wstring& file
             throw std::exception("Invalid texture dimension.");
         }
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
         const auto& device = m_Device;
 //Modify End
         ComPtr<ID3D12Resource> textureResource;
@@ -659,7 +659,7 @@ bool CommandList::LoadTextureFromFile(Texture& texture, const std::wstring& file
             GenerateMips(texture);
         }
 
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
         m_DeviceContext->CacheTexture(textureCacheKey, textureResource);
 //Modify End
     }
@@ -703,7 +703,7 @@ void CommandList::GenerateMips(Texture& texture)
     {
         if (!m_ComputeCommandList)
         {
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
             Assert(static_cast<bool>(m_ComputeCommandListFactory), "Compute command-list factory is unavailable.");
             m_ComputeCommandList = m_ComputeCommandListFactory();
 //Modify End
@@ -714,7 +714,7 @@ void CommandList::GenerateMips(Texture& texture)
 
     const auto resource = texture.GetD3D12Resource();
 
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     Assert(resource != nullptr, "Cannot generate mipmaps for an uninitialized texture.");
 //Modify End
     const auto resourceDesc = resource->GetDesc();
@@ -743,7 +743,7 @@ void CommandList::GenerateMips(Texture& texture)
     if (!texture.CheckUavSupport() ||
         (resourceDesc.Flags & D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS) == 0)
     {
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
         const auto& device = m_Device;
 //Modify End
 
@@ -826,7 +826,7 @@ void CommandList::GenerateMips(Texture& texture)
     }
 
     // Generate mips with the UAV compatible resource.
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     auto uavTexture = Texture(uavResource, texture.GetTextureUsage(), L"", m_DeviceContext);
 //Modify End
     GenerateMipsUav(uavTexture, resourceDesc.Format);
@@ -843,16 +843,16 @@ void CommandList::CopyTextureSubresource(Texture& texture, const uint32_t firstS
     const uint32_t numSubresources,
     D3D12_SUBRESOURCE_DATA* subresourceData)
 {
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     const auto& device = m_Device;
 //Modify End
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     texture.AttachDeviceContext(m_DeviceContext);
     Assert(numSubresources > 0, "Texture upload requires at least one subresource.");
     Assert(subresourceData != nullptr, "Texture upload data is null.");
 //Modify End
     const auto destinationResource = texture.GetD3D12Resource();
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     Assert(destinationResource != nullptr, "Texture upload destination has not been created.");
 //Modify End
 
@@ -1073,7 +1073,7 @@ void CommandList::SetUnorderedAccessView(const uint32_t rootParameterIndex, cons
     const UINT firstSubresource, const UINT numSubresources,
     const D3D12_UNORDERED_ACCESS_VIEW_DESC* uavDesc)
 {
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     Assert(resource.SupportsUnorderedAccess(), "Cannot bind a resource without unordered-access usage as a UAV.");
 //Modify End
     Assert(resource.AreAutoBarriersEnabled(), "Auto barriers are disabled.");
@@ -1103,7 +1103,7 @@ void CommandList::SetShaderResourceView(const uint32_t rootParameterIndex, const
 {
     if (resource.AreAutoBarriersEnabled())
     {
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
         const D3D12_RESOURCE_STATES stateAfter =
             m_D3d12CommandListType == D3D12_COMMAND_LIST_TYPE_COMPUTE
             ? D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE
@@ -1132,7 +1132,7 @@ void CommandList::SetUnorderedAccessView(const uint32_t rootParameterIndex, cons
     const UINT firstSubresource, const UINT numSubresources,
     const D3D12_UNORDERED_ACCESS_VIEW_DESC* uavDesc)
 {
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     Assert(resource.SupportsUnorderedAccess(), "Cannot bind a resource without unordered-access usage as a UAV.");
 //Modify End
     if (resource.AreAutoBarriersEnabled())
@@ -1158,7 +1158,7 @@ void CommandList::SetUnorderedAccessView(const uint32_t rootParameterIndex, cons
     TrackResource(resource);
 }
 
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
 void CommandList::SetGlobalTexture(
     const uint32_t rootParameterIndex,
     const uint32_t descriptorOffset,
@@ -1343,7 +1343,7 @@ void CommandList::Dispatch(const uint32_t numGroupsX, const uint32_t numGroupsY,
     m_D3d12CommandList->Dispatch(numGroupsX, numGroupsY, numGroupsZ);
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 void CommandList::DispatchMesh(const uint32_t numGroupsX, const uint32_t numGroupsY, const uint32_t numGroupsZ)
 {
     FlushResourceBarriers();
@@ -1354,7 +1354,7 @@ void CommandList::DispatchMesh(const uint32_t numGroupsX, const uint32_t numGrou
 }
 //Modify End
 
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
 void CommandList::SetRaytracingPipelineState(const ComPtr<ID3D12StateObject>& stateObject)
 {
     m_D3d12CommandList5->SetPipelineState1(stateObject.Get());
@@ -1386,7 +1386,7 @@ void CommandList::StageDynamicDescriptors(
     m_DynamicDescriptorHeaps[heapType]->StageDescriptors(rootParameterIndex, descriptorOffset, numDescriptors, srcDescriptor);
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 void CommandList::BindExternalDescriptorHeap(
     const D3D12_DESCRIPTOR_HEAP_TYPE heapType,
     ID3D12DescriptorHeap* heap)
@@ -1400,7 +1400,7 @@ void CommandList::BindExternalDescriptorHeap(
 //Modify End
 //Modify End
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 bool CommandList::Close(
     CommandList& pendingCommandList,
     ResourceStateRegistry::SubmissionScope& submissionScope)
@@ -1461,7 +1461,7 @@ void CommandList::GenerateMipsUav(Texture& texture, DXGI_FORMAT format)
 {
     if (!m_GenerateMipsPso)
     {
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
         m_GenerateMipsPso = std::make_unique<GenerateMipsPso>(m_Device);
 //Modify End
     }
@@ -1568,7 +1568,7 @@ void CommandList::SetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE heapType, ID3D12D
     }
 }
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 void CommandList::InvalidateCachedNativeState()
 {
     m_RootSignature = nullptr;
@@ -1601,7 +1601,7 @@ void CommandList::SetComputeRootConstantBufferView(UINT rootParameterIndex, D3D1
     m_D3d12CommandList->SetComputeRootConstantBufferView(rootParameterIndex, gpuAddress);
 }
 
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
 void CommandList::SetGraphicsRootDescriptorTable(UINT rootParameterIndex, D3D12_GPU_DESCRIPTOR_HANDLE descriptorHandle)
 {
     m_D3d12CommandList->SetGraphicsRootDescriptorTable(rootParameterIndex, descriptorHandle);

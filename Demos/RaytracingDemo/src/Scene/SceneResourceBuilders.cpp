@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <Scene/SceneResourceBuilders.h>
 
 #include <DX12Library/CommandList.h>
@@ -25,7 +25,7 @@ void SceneTextureMaterialResources::Clear()
     m_BindlessDescriptorHeap.Reset();
     m_Materials.clear();
     m_Textures.clear();
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
     m_TextureShaderResourceViews.clear();
 //Modify End
     m_TextureIndices.clear();
@@ -42,7 +42,7 @@ uint32_t SceneTextureMaterialResources::AddTexture(
         return existing->second;
     }
 
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     auto texture = std::make_shared<Texture>(
         TextureUsageType::Other,
         L"",
@@ -51,7 +51,7 @@ uint32_t SceneTextureMaterialResources::AddTexture(
     commandList.LoadTextureFromFile(*texture, path, usage);
     const uint32_t textureIndex = m_BindlessDescriptorHeap.AddShaderResourceView(*texture);
     m_Textures.push_back(texture);
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
     m_TextureShaderResourceViews.emplace_back(texture);
 //Modify End
     m_TextureIndices.emplace(cacheKey, textureIndex);
@@ -149,7 +149,7 @@ void SceneTextureMaterialResources::UploadMaterialBuffer(CommandList& commandLis
     commandList.CopyStructuredBuffer(m_MaterialBuffer, m_Materials);
 }
 
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
 void SceneTextureMaterialResources::ForEachBindlessTexture(
     const std::function<void(const Resource&)>& action) const
 {
@@ -167,7 +167,7 @@ void SceneTextureMaterialResources::ForEachShaderResource(
 }
 //Modify End
 
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
 const std::vector<ShaderResourceView>& SceneTextureMaterialResources::GetTextureShaderResourceViews() const
 {
     return m_TextureShaderResourceViews;
@@ -265,7 +265,7 @@ void SceneMeshletResources::Upload(CommandList& commandList)
     m_Resources.Upload(commandList);
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 SceneRayTracingResources::SceneRayTracingResources(std::shared_ptr<D3D12DeviceContext> deviceContext)
     : m_GeometryBuffer(L"Ray Tracing Geometry Data")
     , m_AccelerationStructure(std::move(deviceContext))
@@ -329,7 +329,7 @@ void SceneRayTracingResources::Update(
     UploadGeometryBuffer(commandList, bindlessDescriptorHeap);
 }
 
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
 void SceneRayTracingResources::ForEachShaderResource(
     const std::function<void(const Resource&)>& action) const
 {

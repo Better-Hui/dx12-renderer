@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-07-24 by BestHui
+//Modify Begin:2026-07-24 by Hui
 
 #include <d3d12.h>
 #include <wrl.h>

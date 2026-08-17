@@ -15,7 +15,7 @@
 #include <string_view>
 #include <variant>
 
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
 namespace
 {
     struct JsonValue
@@ -469,7 +469,7 @@ namespace
                     }
                     DirectX::XMStoreFloat3(&direction, DirectX::XMVector3Normalize(DirectX::XMLoadFloat3(&direction)));
                     DirectionalLight light;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
                     const float angularRadius = Find(lightObject, "angularRadius") != nullptr
                         ? ReadNumber(*Find(lightObject, "angularRadius"), "light.angularRadius")
                         : 0.009f;
@@ -511,7 +511,7 @@ namespace
                     const float range = Find(lightObject, "range") != nullptr ? ReadNumber(*Find(lightObject, "range"), "light.range") : 20.0f;
                     PointLight light({ position.x, position.y, position.z, 1.0f }, std::max(0.1f, range));
                     light.Color = { color.x, color.y, color.z, intensity };
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
                     if (const JsonValue* sourceRadius = Find(lightObject, "sourceRadius"))
                     {
                         light.SourceRadius = std::max(0.0f, ReadNumber(*sourceRadius, "light.sourceRadius"));
@@ -624,7 +624,7 @@ void SceneImporter::ApplyJsonRuntimeState(
         scene.SetSkybox(skybox);
     }
 
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
     if (const JsonValue* lightGroupsValue = Find(root, "lightGroups"))
     {
         const JsonValue::Object& lightGroups = lightGroupsValue->AsObject("lightGroups");
@@ -729,7 +729,7 @@ void SceneImporter::WriteJsonRuntimeState(
     writeFloat4(scene.GetSkybox().AmbientColorAndIntensity);
     output << " },\n";
 
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
     const SceneLightGroupSettings& lightGroups = scene.GetLightGroupSettings();
     output << "  \"lightGroups\": { \"directionalEnabled\": "
         << (lightGroups.DirectionalLightsEnabled ? "true" : "false")

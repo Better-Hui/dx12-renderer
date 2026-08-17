@@ -44,17 +44,15 @@ public:
 	void SetTexture(CommandList& commandList, const std::string& name, const ShaderResourceView& shaderResourceView);
 
 	void Bind(CommandList& commandList);
-	void UploadUniforms(CommandList& commandList);
-	void Unbind(CommandList& commandList);
-
-	void BeginBatch(CommandList& commandList);
-	void EndBatch(CommandList& commandList);
 
 	static std::shared_ptr<Material> Create(const std::shared_ptr<Shader>& shader);
 	static std::shared_ptr<Material> Create(const Material& materialPreset);
 
 private:
 
+	//Modify Begin:2026-08-17 by Hui
+	void UploadUniforms(CommandList& commandList);
+	//Modify End
     void SetVariable(const std::string& name, size_t size, const void* data, bool array = false, bool throwOnNotFound = true);
 
 	void UploadConstantBuffer(CommandList& commandList);
@@ -62,7 +60,7 @@ private:
 
 	std::shared_ptr<Shader> m_Shader;
 	const ShaderUtils::ConstantBufferMetadata* m_Metadata;
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 	std::string m_ConstantBufferName;
 //Modify End
 	std::unique_ptr<uint8_t[]> m_ConstantBuffer = nullptr;

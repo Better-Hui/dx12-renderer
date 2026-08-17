@@ -13,7 +13,7 @@ class D3D12DeviceContext;
 class ResourceStateRegistry;
 class StreamlineRuntime;
 
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
 struct ExternalD3D12Context
 {
     ID3D12Device* Device = nullptr;
@@ -22,7 +22,7 @@ struct ExternalD3D12Context
     ID3D12CommandQueue* CopyCommandQueue = nullptr;
 };
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 struct D3D12RenderContextInitializationDesc
 {
     bool EnableStreamlineInterposer = false;
@@ -46,36 +46,36 @@ public:
     bool UsesExternalDevice() const;
 
     Microsoft::WRL::ComPtr<ID3D12Device2> GetDevice() const;
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     std::shared_ptr<D3D12DeviceContext> GetD3D12DeviceContext() const;
 //Modify End
     std::shared_ptr<CommandQueue> GetCommandQueue(D3D12_COMMAND_LIST_TYPE type) const;
     std::shared_ptr<StreamlineRuntime> GetStreamlineRuntime() const;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     std::shared_ptr<ResourceStateRegistry> GetResourceStateRegistry() const;
 //Modify End
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     void SetFatalErrorHandler(CommandQueueFailureHandler handler);
 //Modify End
 
 private:
     void CreateOwnedQueues();
     void WrapExternalQueues(const ExternalD3D12Context& externalContext);
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     void CreateDeviceContext();
 //Modify End
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     void InitializeStreamlineIfRequested(const D3D12RenderContextInitializationDesc& initializationDesc);
 //Modify End
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     void ConfigureCommandListDependencies();
 //Modify End
 
     Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     std::shared_ptr<ResourceStateRegistry> m_ResourceStateRegistry;
 //Modify End
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     std::shared_ptr<D3D12DeviceContext> m_DeviceContext;
 //Modify End
     std::shared_ptr<StreamlineRuntime> m_StreamlineRuntime;

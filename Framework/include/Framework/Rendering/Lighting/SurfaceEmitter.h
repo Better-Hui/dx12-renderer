@@ -7,7 +7,7 @@
 #include <limits>
 #include <vector>
 
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
 inline constexpr uint32_t SurfaceEmitterInvalidMaterialIndex = (std::numeric_limits<uint32_t>::max)();
 inline constexpr uint32_t SurfaceEmitterInstanceFlagUseMaterialEmission = 1u << 0u;
 

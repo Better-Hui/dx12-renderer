@@ -1,7 +1,8 @@
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <Framework/Rendering/RayTracing/RayTracingAccelerationStructure.h>
 
 #include <DX12Library/CommandList.h>
+#include <DX12Library/CommandListInternalAccess.h>
 #include <DX12Library/D3D12DeviceContext.h>
 #include <DX12Library/Helpers.h>
 #include <Framework/Geometry/Mesh.h>
@@ -14,7 +15,7 @@
 
 using Microsoft::WRL::ComPtr;
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 RayTracingAccelerationStructure::RayTracingAccelerationStructure(std::shared_ptr<D3D12DeviceContext> deviceContext)
     : m_DeviceContext(std::move(deviceContext))
 {
@@ -70,14 +71,14 @@ bool RayTracingAccelerationStructure::RemoveInstance(const RayTracingInstanceHan
 
     m_InstanceHandles.pop_back();
     m_Instances.pop_back();
-    // Modify Begin:2026-08-07 by BestHui
+    // Modify Begin:2026-08-07 by Hui
     // Updating the moved instance may rehash the unordered map and invalidate indexResult.
     m_InstanceIndices.erase(handle);
     // Modify End
     return true;
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 void RayTracingAccelerationStructure::RemoveInstances(const std::span<const RayTracingInstanceHandle> handles)
 {
     if (handles.empty())
@@ -141,20 +142,20 @@ void RayTracingAccelerationStructure::Build(CommandList& commandList, RayTracing
 
     for (const BottomLevelAccelerationStructure& bottomLevel : m_BottomLevelAccelerationStructures)
     {
-//Modify Begin:2026-07-30 by BestHui
-        commandList.RetireResourceState(bottomLevel.Resource.Resource);
+//Modify Begin:2026-07-30 by Hui
+        CommandListInternalAccess::RetireResourceState(commandList, bottomLevel.Resource.Resource);
 //Modify End
     }
     if (m_TopLevelAccelerationStructure)
     {
-//Modify Begin:2026-07-30 by BestHui
-        commandList.RetireResourceState(m_TopLevelAccelerationStructure.Resource);
+//Modify Begin:2026-07-30 by Hui
+        CommandListInternalAccess::RetireResourceState(commandList, m_TopLevelAccelerationStructure.Resource);
 //Modify End
     }
     if (m_InstanceDescUpload)
     {
-//Modify Begin:2026-07-30 by BestHui
-        commandList.RetireResourceState(m_InstanceDescUpload.Resource);
+//Modify Begin:2026-07-30 by Hui
+        CommandListInternalAccess::RetireResourceState(commandList, m_InstanceDescUpload.Resource);
 //Modify End
     }
     m_BottomLevelAccelerationStructures.clear();
@@ -193,10 +194,10 @@ void RayTracingAccelerationStructure::Update(CommandList& commandList)
     }
 
     Assert(!m_Instances.empty(), "Ray tracing acceleration structure requires at least one instance.");
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     if (m_InstanceDescUpload)
     {
-        commandList.RetireResourceState(m_InstanceDescUpload.Resource);
+        CommandListInternalAccess::RetireResourceState(commandList, m_InstanceDescUpload.Resource);
     }
 //Modify End
     m_InstanceDescUpload = {};
@@ -208,7 +209,7 @@ void RayTracingAccelerationStructure::Update(CommandList& commandList)
     const bool canPerformUpdate = !instanceCountChanged && !bottomLevelSetChanged && !m_InstanceMeshChanged;
     if (!canPerformUpdate)
     {
-        commandList.RetireResourceState(m_TopLevelAccelerationStructure.Resource);
+        CommandListInternalAccess::RetireResourceState(commandList, m_TopLevelAccelerationStructure.Resource);
         m_TopLevelAccelerationStructure = {};
     }
 
@@ -271,7 +272,7 @@ RayTracingAccelerationStructure::CreateAccelerationStructureBuffer(
         resource->SetName(name);
     }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     return {
         resource,
         m_DeviceContext->GetResourceStateRegistry()->AcquireResource(resource.Get(), initialState)
@@ -302,19 +303,19 @@ RayTracingAccelerationStructure::ManagedRayTracingResource RayTracingAcceleratio
         resource->SetName(name);
     }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     void* mappedData = nullptr;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const D3D12_RANGE readRange = { 0, 0 };
     ThrowIfFailed(resource->Map(0, &readRange, &mappedData));
 //Modify End
     std::memcpy(mappedData, data, size);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const D3D12_RANGE writeRange = { 0, static_cast<SIZE_T>(size) };
     resource->Unmap(0, &writeRange);
 //Modify End
 
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     return {
         resource,
         m_DeviceContext->GetResourceStateRegistry()->AcquireResource(
@@ -403,10 +404,10 @@ RayTracingAccelerationStructure::BottomLevelAccelerationStructure RayTracingAcce
     buildDesc.DestAccelerationStructureData = result.Resource->GetGPUVirtualAddress();
 
     commandList.BuildRaytracingAccelerationStructure(buildDesc);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     commandList.UavBarrier(result.Resource.Get());
     commandList.UavBarrier(scratch.Resource.Get());
-    commandList.TrackResourceState(result.Resource, result.StateRegistration);
+    CommandListInternalAccess::TrackResourceState(commandList, result.Resource, result.StateRegistration);
 //Modify End
 
     return { mesh, result };
@@ -443,8 +444,8 @@ std::map<const Mesh*, uint32_t> RayTracingAccelerationStructure::BuildBottomLeve
             scratchBufferSize,
             D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
             L"Ray Tracing BLAS Scratch");
-//Modify Begin:2026-07-30 by BestHui
-        commandList.TrackResourceState(scratch.Resource, scratch.StateRegistration);
+//Modify Begin:2026-07-30 by Hui
+        CommandListInternalAccess::TrackResourceState(commandList, scratch.Resource, scratch.StateRegistration);
 //Modify End
     }
 
@@ -505,10 +506,10 @@ void RayTracingAccelerationStructure::BuildTopLevelAccelerationStructure(
         });
     }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     if (m_InstanceDescUpload)
     {
-        commandList.RetireResourceState(m_InstanceDescUpload.Resource);
+        CommandListInternalAccess::RetireResourceState(commandList, m_InstanceDescUpload.Resource);
     }
 //Modify End
     m_InstanceDescUpload = CreateUploadBuffer(
@@ -536,8 +537,8 @@ void RayTracingAccelerationStructure::BuildTopLevelAccelerationStructure(
     {
         if (m_TopLevelAccelerationStructure)
         {
-//Modify Begin:2026-07-30 by BestHui
-            commandList.RetireResourceState(m_TopLevelAccelerationStructure.Resource);
+//Modify Begin:2026-07-30 by Hui
+            CommandListInternalAccess::RetireResourceState(commandList, m_TopLevelAccelerationStructure.Resource);
 //Modify End
         }
         m_TopLevelAccelerationStructure = CreateAccelerationStructureBuffer(
@@ -551,7 +552,7 @@ void RayTracingAccelerationStructure::BuildTopLevelAccelerationStructure(
         D3D12_RESOURCE_STATE_COMMON,
         update ? L"Ray Tracing TLAS Update Scratch" : L"Ray Tracing TLAS Scratch");
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     commandList.TransitionBarrier(scratch.Resource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 //Modify End
 
@@ -563,15 +564,17 @@ void RayTracingAccelerationStructure::BuildTopLevelAccelerationStructure(
         update ? m_TopLevelAccelerationStructure.Resource->GetGPUVirtualAddress() : 0;
 
     commandList.BuildRaytracingAccelerationStructure(buildDesc);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     commandList.UavBarrier(m_TopLevelAccelerationStructure.Resource.Get());
-    commandList.TrackResourceState(scratch.Resource, scratch.StateRegistration);
+    CommandListInternalAccess::TrackResourceState(commandList, scratch.Resource, scratch.StateRegistration);
 //Modify End
-//Modify Begin:2026-08-12 by BestHui
-    commandList.TrackResourceState(
+//Modify Begin:2026-08-12 by Hui
+    CommandListInternalAccess::TrackResourceState(
+        commandList,
         m_InstanceDescUpload.Resource,
         m_InstanceDescUpload.StateRegistration);
-    commandList.TrackResourceState(
+    CommandListInternalAccess::TrackResourceState(
+        commandList,
         m_TopLevelAccelerationStructure.Resource,
         m_TopLevelAccelerationStructure.StateRegistration);
 //Modify End

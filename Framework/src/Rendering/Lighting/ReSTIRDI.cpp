@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <Framework/Rendering/Lighting/ReSTIRDI.h>
 
 #include <algorithm>

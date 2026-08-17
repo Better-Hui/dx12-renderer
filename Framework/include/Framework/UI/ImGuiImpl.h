@@ -1,7 +1,7 @@
 #pragma once
 
 #include <memory>
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
 #include <vector>
 //Modify End
 
@@ -14,7 +14,7 @@
 #include <Framework/Geometry/Mesh.h>
 #include <Framework/Rendering/Pipeline/Shader.h>
 
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
 struct ImGui_ImplDX12_InitInfo;
 class FrameworkDeviceContext;
 //Modify End
@@ -36,7 +36,7 @@ public:
     void BlitCombine(CommandList& commandList, const std::shared_ptr<Texture>& pSourceTexture) const;
 
 private:
-    //Modify Begin:2026-07-21 by BestHui
+    //Modify Begin:2026-07-21 by Hui
     static constexpr UINT ImGuiSrvDescriptorCount = 64;
 
     static void AllocateSrvDescriptor(

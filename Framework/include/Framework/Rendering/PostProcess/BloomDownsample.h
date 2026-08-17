@@ -9,14 +9,14 @@
 #include <Framework/Scene/Material.h>
 
 class Mesh;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 class FrameworkDeviceContext;
 //Modify End
 
 class BloomDownsample
 {
 public:
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 	explicit BloomDownsample(FrameworkDeviceContext& deviceContext, CommandList& commandList);
 //Modify End
 

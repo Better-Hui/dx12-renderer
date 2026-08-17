@@ -6,12 +6,12 @@
 #include <Framework/Rendering/Pipeline/ShaderReflection.h>
 
 #include <algorithm>
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
 #include <stdexcept>
 //Modify End
 #include <utility>
 
-//Modify Begin:2026-07-24 by BestHui
+//Modify Begin:2026-07-24 by Hui
 
 namespace
 {
@@ -55,7 +55,7 @@ RayTracingPipelineDescBuilder RayTracingPipelineDescBuilder::ReflectedDefault(co
 
     for (const auto& srv : reflection.m_ShaderResourceViews)
     {
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
         RayTracingShaderBindingType bindingType =
             srv.InputType == D3D_SIT_RTACCELERATIONSTRUCTURE ?
             RayTracingShaderBindingType::AccelerationStructure :
@@ -91,7 +91,7 @@ RayTracingPipelineDescBuilder RayTracingPipelineDescBuilder::ReflectedDefault(co
         });
     }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     RayTracingPipelineDescBuilder builder(std::move(desc));
     for (const auto& sampler : reflection.m_Samplers)
     {
@@ -111,7 +111,7 @@ RayTracingPipelineDescBuilder RayTracingPipelineDescBuilder::ReflectedDefault(co
 
 RayTracingPipelineDescBuilder& RayTracingPipelineDescBuilder::WithExport(std::wstring exportName)
 {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     if (exportName.empty())
     {
         throw std::invalid_argument("Ray tracing export name must not be empty.");
@@ -135,7 +135,7 @@ RayTracingPipelineDescBuilder& RayTracingPipelineDescBuilder::WithTriangleHitGro
     std::wstring anyHitShader,
     std::wstring intersectionShader)
 {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     RayTracingHitGroupDesc hitGroup = {
         std::move(hitGroupName),
         std::move(closestHitShader),
@@ -185,7 +185,7 @@ RayTracingPipelineDescBuilder& RayTracingPipelineDescBuilder::WithRayGenerationP
     std::vector<std::wstring> missShaders,
     std::vector<std::wstring> hitGroups)
 {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     if (passName.empty() || rayGenerationShader.empty())
     {
         throw std::invalid_argument("Ray tracing pass name and ray-generation export must not be empty.");
@@ -259,7 +259,7 @@ RayTracingPipelineDescBuilder& RayTracingPipelineDescBuilder::WithTextureArray(
     return WithBinding(std::move(name), RayTracingShaderBindingType::TextureArray, shaderRegister, registerSpace, descriptorCount);
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 RayTracingPipelineDescBuilder& RayTracingPipelineDescBuilder::WithStaticSamplerContract(
     PipelineStaticSamplerContract contract)
 {
@@ -316,7 +316,7 @@ RayTracingPipelineDescBuilder& RayTracingPipelineDescBuilder::WithMaxDescriptorC
 
 RayTracingPipelineDesc RayTracingPipelineDescBuilder::Build() const
 {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     for (const RayTracingShaderPassDesc& pass : m_Desc.Passes)
     {
         const auto findExport = [this](const std::wstring& exportName)

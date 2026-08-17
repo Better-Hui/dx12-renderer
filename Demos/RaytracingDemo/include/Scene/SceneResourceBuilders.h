@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #pragma once
 
 #include <Scene/SceneResourceTypes.h>
@@ -61,11 +61,11 @@ public:
         float roughness = 0.5f);
 
     void UploadMaterialBuffer(CommandList& commandList);
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
     void ForEachBindlessTexture(const std::function<void(const Resource&)>& action) const;
     void ForEachShaderResource(const std::function<void(const Resource&)>& action) const;
 //Modify End
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
     const std::vector<ShaderResourceView>& GetTextureShaderResourceViews() const;
 //Modify End
 
@@ -82,7 +82,7 @@ private:
     BindlessDescriptorHeap m_BindlessDescriptorHeap;
     std::vector<RaytracingDemoMaterialData> m_Materials;
     std::vector<std::shared_ptr<Texture>> m_Textures;
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
     std::vector<ShaderResourceView> m_TextureShaderResourceViews;
 //Modify End
     std::unordered_map<std::wstring, uint32_t> m_TextureIndices;
@@ -128,7 +128,7 @@ private:
 class SceneRayTracingResources final
 {
 public:
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     explicit SceneRayTracingResources(std::shared_ptr<D3D12DeviceContext> deviceContext);
 //Modify End
 
@@ -147,7 +147,7 @@ public:
         std::span<const RaytracingDemoSceneObject> objects);
     void RemoveStressInstances();
     void Update(CommandList& commandList, BindlessDescriptorHeap& bindlessDescriptorHeap);
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
     void ForEachShaderResource(const std::function<void(const Resource&)>& action) const;
 //Modify End
 

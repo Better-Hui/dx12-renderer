@@ -1,6 +1,6 @@
 #include <Framework/Rendering/Lighting/ReSTIRDIPass.h>
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <DX12Library/CommandList.h>
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Texture.h>
@@ -8,7 +8,7 @@
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 #include <Framework/Rendering/Pipeline/ComputePipelineStateBuilder.h>
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <Framework/Rendering/Pipeline/ShaderTargetProfile.h>
 //Modify End
 #include <Framework/Rendering/Texture/RenderTexture.h>
@@ -152,7 +152,7 @@ void ReSTIRDIPass::EnsureResources(const uint32_t width, const uint32_t height)
     }
 
     m_Resources = std::make_unique<InternalResources>();
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     const auto createReservoir = [this, width, height](const wchar_t* name)
     {
         return RenderTexture::CreateUav2D(m_DeviceContext, RESERVOIR_FORMAT, width, height, name);
@@ -305,7 +305,7 @@ size_t ReSTIRDIPass::GetPipelineVariantIndex(
     const bool useSoftShadowVariant,
     const uint32_t environmentProjectionVariant)
 {
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
     Assert(
         environmentProjectionVariant < EnvironmentProjectionVariantCount,
         "Unsupported ReSTIR DI environment projection variant.");
@@ -502,7 +502,7 @@ std::unique_ptr<ComputeShader> ReSTIRDIPass::CreateComputeShader(
     {
         shaderDesc.Defines = m_ShaderSources.SoftShadowDefines;
     }
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
     if (environmentProjectionVariant != 0u)
     {
         Assert(
@@ -521,7 +521,7 @@ std::unique_ptr<ComputeShader> ReSTIRDIPass::CreateComputeShader(
         std::make_move_iterator(featureDefines.end()));
 
     const std::shared_ptr<ShaderBlob> shaderBlob = m_ShaderVariants.GetOrCompile(shaderDesc);
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     ComputePipelineDescBuilder pipelineDescBuilder =
         ComputePipelineDescBuilder::ReflectedDefault(*shaderBlob)
             .WithDirectlyIndexedResourceHeap();

@@ -1,10 +1,10 @@
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
 
 #include <Framework/Rendering/Pipeline/CommandContextDescriptorAllocator.h>
 
 #include <DX12Library/CommandList.h>
 #include <DX12Library/Helpers.h>
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <Framework/Rendering/Pipeline/BindlessDescriptorHeap.h>
 //Modify End
 #include <Framework/Rendering/Pipeline/CommandContext.h>
@@ -15,7 +15,7 @@ void CommandContextDescriptorAllocator::ResetTransientBindings()
     m_BoundTables = {};
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 void CommandContextDescriptorAllocator::SetBindlessDescriptorHeap(BindlessDescriptorHeap* bindlessDescriptorHeap)
 {
     m_BindlessDescriptorHeap = bindlessDescriptorHeap;
@@ -35,7 +35,7 @@ void CommandContextDescriptorAllocator::StageDescriptorTable(
         "Pipeline descriptor root parameter index exceeds command context cache capacity.");
 
     const D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle = allocation.GetDescriptorHandle();
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     if (m_BindlessDescriptorHeap != nullptr)
     {
         const D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle =

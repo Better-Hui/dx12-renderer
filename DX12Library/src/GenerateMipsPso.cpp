@@ -8,7 +8,7 @@
 #include "d3dx12.h"
 #include "ShaderUtils.h"
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 GenerateMipsPso::GenerateMipsPso(Microsoft::WRL::ComPtr<ID3D12Device2> device)
     : m_Device(std::move(device))
 {

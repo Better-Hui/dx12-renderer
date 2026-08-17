@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
 #include <RaytracingDemo.h>
 
 #include <DX12Library/CommandList.h>
@@ -7,7 +7,7 @@
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <Passes/RaytracingDemoPasses.h>
 #include <RenderGraph/RaytracingDemoGraphResources.h>
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 #include <RenderGraph/ExternalFrameProcessor.h>
 //Modify End
 #include <RenderGraph/RenderContext.h>
@@ -15,13 +15,13 @@
 #include <RenderGraph/RenderPass.h>
 
 #include <array>
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 #include <span>
 //Modify End
 
 namespace
 {
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     class DLSSFrameGenerationProcessor final : public RenderGraph::ExternalFrameProcessor
     {
     public:
@@ -90,7 +90,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateCu
         });
 }
 
-//Modify Begin:2026-08-16 by BestHui
+//Modify Begin:2026-08-16 by Hui
 std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateFrameworkBloomPass(
     const RaytracingDemoPassResources& resources,
     const RenderGraph::ResourceId sceneReadyToken)
@@ -121,7 +121,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateFr
 }
 //Modify End
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateFrameGenerationHudLessPass(
     const RaytracingDemoPassResources& resources,
     const RenderGraph::ResourceId sceneColor,
@@ -156,7 +156,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateFr
 void RaytracingDemo::PresentDisplayOutput()
 {
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     if (m_RenderGraphFrameState->FrameGenerationEnabled)
     {
         DLSSFrameGenerationProcessor frameProcessor(m_DLSS, m_FrameGenerationInputs);
@@ -174,13 +174,13 @@ void RaytracingDemo::PresentDisplayOutput()
     const RenderGraph::ResourceId displayColor = m_RenderGraph->GetPresentationResourceId();
 //Modify End
 
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     m_RenderGraph->PresentWithOverlayBlit(
         PWindow,
         displayColor,
         [this](CommandList& cmd, const std::shared_ptr<Texture>& sourceTexture)
         {
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
             CommandContext commandContext(cmd);
             commandContext.SetTexture(*m_DisplayCompositeShader, "SceneColor", ShaderResourceView(sourceTexture));
             commandContext.BindPipeline(*m_DisplayCompositeShader);

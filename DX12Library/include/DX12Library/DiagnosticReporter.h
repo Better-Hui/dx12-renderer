@@ -3,7 +3,7 @@
 #include <filesystem>
 #include <string_view>
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 class DiagnosticReporter
 {
 public:

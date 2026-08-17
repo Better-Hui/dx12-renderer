@@ -1,8 +1,8 @@
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #pragma once
 
 #include <DX12Library/DescriptorAllocation.h>
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 #include <DX12Library/D3D12DeviceContext.h>
 //Modify End
 
@@ -19,7 +19,7 @@ class FrameGenerationController;
 
 struct FrameworkDeviceContextDesc
 {
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     std::shared_ptr<D3D12DeviceContext> DeviceContext;
 //Modify End
     std::shared_ptr<CommandQueue> DirectQueue;
@@ -35,7 +35,7 @@ public:
     explicit FrameworkDeviceContext(FrameworkDeviceContextDesc desc);
 
     const Microsoft::WRL::ComPtr<ID3D12Device2>& GetDevice() const { return m_Desc.DeviceContext->GetDevice(); }
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     const std::shared_ptr<D3D12DeviceContext>& GetD3D12DeviceContext() const { return m_Desc.DeviceContext; }
 //Modify End
     std::shared_ptr<CommandQueue> GetCommandQueue(D3D12_COMMAND_LIST_TYPE type) const;

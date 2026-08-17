@@ -1,6 +1,6 @@
 #include <Framework/Interop/UnityD3D12Interop.h>
 
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
 bool UnityD3D12Interop::Initialize(IUnityInterfaces* unityInterfaces)
 {
     if (unityInterfaces == nullptr)

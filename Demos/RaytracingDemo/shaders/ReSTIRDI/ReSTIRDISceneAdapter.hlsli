@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
 #ifndef RAYTRACING_DEMO_RESTIR_DI_SCENE_ADAPTER_HLSLI
 #define RAYTRACING_DEMO_RESTIR_DI_SCENE_ADAPTER_HLSLI
 
@@ -11,7 +11,7 @@
 #define ReSTIRDI_LightSample PathTracingDirectLightSample
 #define ReSTIRDI_LoadSurface LoadGBufferSurface
 #define ReSTIRDI_GetLightCount GetReSTIRDILightCount
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
 #define ReSTIRDI_SampleLightIndex SamplePathTracingDirectLightIndex
 //Modify End
 #define ReSTIRDI_SampleLight SamplePathTracingDirectLight

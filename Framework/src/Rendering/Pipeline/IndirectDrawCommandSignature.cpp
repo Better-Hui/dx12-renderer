@@ -1,9 +1,9 @@
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <Framework/Rendering/Pipeline/IndirectDrawCommandSignature.h>
 
 #include <DX12Library/Helpers.h>
 #include <DX12Library/RootSignature.h>
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
 //Modify End
 
@@ -25,7 +25,7 @@ IndirectDrawCommandSignature::IndirectDrawCommandSignature(FrameworkDeviceContex
     ThrowIfFailed(m_CommandSignature->SetName(L"Indirect Draw Command Signature"));
 }
 
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
 IndirectDrawCommandSignature::IndirectDrawCommandSignature(
     FrameworkDeviceContext& deviceContext,
     const RootSignature& rootSignature,

@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
 #include <UI/DemoLightEditor.h>
 
 #include <Scene/SceneLightManager.h>

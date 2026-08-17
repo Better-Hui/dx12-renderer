@@ -1,8 +1,8 @@
 #pragma once
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
 
 #include <Framework/Rendering/RayTracing/RayTracingShader.h>
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 #include <Framework/Rendering/Pipeline/PipelineStateKey.h>
 //Modify End
 
@@ -15,7 +15,7 @@
 #include <string>
 
 class ShaderBlob;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 class FrameworkDeviceContext;
 //Modify End
 
@@ -23,7 +23,7 @@ class RayTracingPipelineState
 {
 public:
     RootSignature& GetGlobalRootSignature() const;
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     const std::shared_ptr<RootSignature>& GetGlobalRootSignaturePtr() const;
 //Modify End
     const Microsoft::WRL::ComPtr<ID3D12StateObject>& GetStateObject() const;
@@ -46,7 +46,7 @@ public:
         RayTracingPipelineDesc desc);
 
     std::shared_ptr<RayTracingPipelineState> Build() const;
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     RayTracingPipelineStateKey CreateKey() const;
 //Modify End
 
@@ -55,7 +55,7 @@ private:
     Microsoft::WRL::ComPtr<ID3D12StateObject> BuildStateObject(const std::shared_ptr<RootSignature>& globalRootSignature) const;
 
     const ShaderBlob& m_ShaderLibrary;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     FrameworkDeviceContext& m_DeviceContext;
 //Modify End
     RayTracingPipelineDesc m_Desc;

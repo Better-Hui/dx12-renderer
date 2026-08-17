@@ -1,10 +1,10 @@
 #include <Framework/Rendering/Pipeline/PipelineDescriptorSet.h>
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 
 #include <DX12Library/CommandList.h>
 #include <DX12Library/Helpers.h>
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
 //Modify End
 #include <DX12Library/StructuredBuffer.h>
@@ -14,10 +14,10 @@
 #include <algorithm>
 #include <cstring>
 
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
 namespace
 {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     ID3D12Resource* GetD3D12ResourcePtr(const Resource* resource)
     {
         return resource != nullptr ? resource->GetD3D12Resource().Get() : nullptr;
@@ -27,7 +27,7 @@ namespace
     bool IsSameShaderResourceBinding(const PipelineShaderResourceBinding& lhs, const PipelineShaderResourceBinding& rhs)
     {
         if (lhs.Resource != rhs.Resource ||
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
             lhs.ResourceIdentity != rhs.ResourceIdentity ||
 //Modify End
             lhs.StateAfter != rhs.StateAfter ||
@@ -45,7 +45,7 @@ namespace
     bool IsSameUnorderedAccessView(const UnorderedAccessView& lhs, const UnorderedAccessView& rhs)
     {
         if (lhs.m_Resource.get() != rhs.m_Resource.get() ||
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
             GetD3D12ResourcePtr(lhs.m_Resource.get()) != GetD3D12ResourcePtr(rhs.m_Resource.get()) ||
 //Modify End
             lhs.m_FirstSubresource != rhs.m_FirstSubresource ||
@@ -70,7 +70,7 @@ namespace
 }
 //Modify End
 
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
 D3D12_CPU_DESCRIPTOR_HANDLE PipelineDescriptorTableAllocation::GetDescriptorHandle(const uint32_t offset) const
 {
     Assert(IsValid() && offset < NumHandles, "Pipeline descriptor table CPU handle is invalid.");
@@ -89,10 +89,10 @@ void PipelineDescriptorSet::Reset(const PipelineLayout& layout)
     m_Bindings.Reset(layout);
     m_Layout = &layout;
     m_BoundResources.clear();
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     m_DescriptorTableAllocations.clear();
 //Modify End
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
     m_DescriptorPool = nullptr;
     m_SetIndex = 0;
     m_ResourceDescriptorOffset = 0;
@@ -158,10 +158,10 @@ UINT PipelineDescriptorSet::SetShaderResourceView(
     }
     PipelineShaderResourceBinding resourceBinding = {};
     resourceBinding.Resource = shaderResourceView.m_Resource.get();
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     resourceBinding.ResourceIdentity = GetD3D12ResourcePtr(resourceBinding.Resource);
 //Modify End
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
     resourceBinding.StateAfter = stateAfter;
 //Modify End
     resourceBinding.FirstSubresource = shaderResourceView.m_FirstSubresource;
@@ -171,14 +171,14 @@ UINT PipelineDescriptorSet::SetShaderResourceView(
     {
         resourceBinding.Desc = *shaderResourceView.GetDescOrNullptr();
     }
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const bool descriptorChanged =
         !shaderResources[arrayIndex].has_value() ||
         !IsSameShaderResourceBinding(*shaderResources[arrayIndex], resourceBinding);
 //Modify End
     shaderResources[arrayIndex] = resourceBinding;
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     if (descriptorChanged)
     {
         if (PipelineDescriptorTableAllocation* allocation = FindMutableDescriptorTableAllocation(binding.RootParameterIndex))
@@ -235,7 +235,7 @@ UINT PipelineDescriptorSet::SetShaderResourceViews(
         PipelineShaderResourceBinding resourceBinding = {};
         resourceBinding.Resource = shaderResourceView.m_Resource.get();
         resourceBinding.ResourceIdentity = GetD3D12ResourcePtr(resourceBinding.Resource);
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
         resourceBinding.StateAfter = stateAfter;
 //Modify End
         resourceBinding.FirstSubresource = shaderResourceView.m_FirstSubresource;
@@ -326,17 +326,17 @@ UINT PipelineDescriptorSet::SetShaderResource(
 
     PipelineShaderResourceBinding resourceBinding = {};
     resourceBinding.Resource = &resource;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     resourceBinding.ResourceIdentity = resource.GetD3D12Resource().Get();
 //Modify End
     resourceBinding.StateAfter = stateAfter;
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
     const bool descriptorChanged =
         !shaderResources[arrayIndex].has_value() ||
         !IsSameShaderResourceBinding(*shaderResources[arrayIndex], resourceBinding);
 //Modify End
     shaderResources[arrayIndex] = resourceBinding;
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     if (descriptorChanged)
     {
         if (PipelineDescriptorTableAllocation* allocation = FindMutableDescriptorTableAllocation(binding.RootParameterIndex))
@@ -371,20 +371,20 @@ UINT PipelineDescriptorSet::SetShaderResource(
 
     PipelineShaderResourceBinding resourceBinding = {};
     resourceBinding.Resource = &resource;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     resourceBinding.ResourceIdentity = resource.GetD3D12Resource().Get();
 //Modify End
     resourceBinding.StateAfter = stateAfter;
     resourceBinding.HasDesc = true;
     resourceBinding.Desc = srvDesc;
     resourceBinding.AutoTransition = false;
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
     const bool descriptorChanged =
         !shaderResources[arrayIndex].has_value() ||
         !IsSameShaderResourceBinding(*shaderResources[arrayIndex], resourceBinding);
 //Modify End
     shaderResources[arrayIndex] = resourceBinding;
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     if (descriptorChanged)
     {
         if (PipelineDescriptorTableAllocation* allocation = FindMutableDescriptorTableAllocation(binding.RootParameterIndex))
@@ -405,33 +405,33 @@ UINT PipelineDescriptorSet::SetUnorderedAccessView(
     const UnorderedAccessView& unorderedAccessView)
 {
     Assert(unorderedAccessView.m_Resource != nullptr, "Pipeline UAV resource must not be null.");
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     Assert(
         unorderedAccessView.m_Resource->SupportsUnorderedAccess(),
         "Pipeline UAV resource was not created with unordered-access usage.");
 //Modify End
 
     const DescriptorBindingInfo& binding = GetBinding(name, DescriptorBindingKind::UnorderedAccessView);
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
     const auto existingResource = m_BoundResources.find(binding.RootParameterIndex);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     ID3D12Resource* unorderedAccessViewResourceIdentity =
         unorderedAccessView.m_Resource != nullptr ? unorderedAccessView.m_Resource->GetD3D12Resource().Get() : nullptr;
 //Modify End
     const bool descriptorChanged =
         existingResource == m_BoundResources.end() ||
         !existingResource->second.UnorderedAccessView.has_value() ||
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         existingResource->second.UnorderedAccessViewResourceIdentity != unorderedAccessViewResourceIdentity ||
 //Modify End
         !IsSameUnorderedAccessView(*existingResource->second.UnorderedAccessView, unorderedAccessView);
 //Modify End
     m_BoundResources[binding.RootParameterIndex].UnorderedAccessView = unorderedAccessView;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     m_BoundResources[binding.RootParameterIndex].UnorderedAccessViewResourceIdentity =
         unorderedAccessViewResourceIdentity;
 //Modify End
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     if (descriptorChanged)
     {
         if (PipelineDescriptorTableAllocation* allocation = FindMutableDescriptorTableAllocation(binding.RootParameterIndex))
@@ -454,12 +454,12 @@ UINT PipelineDescriptorSet::SetStructuredBuffer(
     const D3D12_RESOURCE_STATES stateAfter)
 {
     const DescriptorBindingInfo& binding = GetBinding(name, DescriptorBindingKind::ShaderResourceView);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     auto& boundResource = m_BoundResources[binding.RootParameterIndex];
     PipelineShaderResourceBinding resourceBinding = {};
     resourceBinding.Resource = &buffer;
     resourceBinding.ResourceIdentity = buffer.GetD3D12Resource().Get();
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
     resourceBinding.StateAfter = stateAfter;
 //Modify End
     const bool descriptorChanged =
@@ -520,12 +520,12 @@ void PipelineDescriptorSet::ClearShaderResourceViews(std::string_view name)
     const DescriptorBindingInfo& binding = GetBinding(name, DescriptorBindingKind::ShaderResourceView);
     m_BoundResources[binding.RootParameterIndex].ShaderResourceViews.clear();
     m_BoundResources[binding.RootParameterIndex].ShaderResources.clear();
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     PipelineDescriptorTableAllocation* allocation = FindMutableDescriptorTableAllocation(binding.RootParameterIndex);
     const DescriptorAllocation* defaultDescriptors = GetLayout().FindDefaultDescriptorTable(binding.RootParameterIndex);
     if (allocation != nullptr && defaultDescriptors != nullptr)
     {
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
         const uint32_t descriptorCount = allocation->GetNumHandles();
         const uint32_t defaultDescriptorCount = defaultDescriptors->GetNumHandles();
         const uint32_t copiedDescriptorCount = (std::min)(descriptorCount, defaultDescriptorCount);
@@ -554,7 +554,7 @@ const PipelineLayout& PipelineDescriptorSet::GetLayout() const
     return *m_Layout;
 }
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 void PipelineDescriptorSet::SetDescriptorTableAllocation(
     const UINT rootParameterIndex,
     PipelineDescriptorTableAllocation allocation)
@@ -575,7 +575,7 @@ PipelineDescriptorTableAllocation* PipelineDescriptorSet::FindMutableDescriptorT
 }
 //Modify End
 
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
 void PipelineDescriptorSet::SetAllocationInfo(
     const PipelineDescriptorPool* descriptorPool,
     const uint32_t setIndex,

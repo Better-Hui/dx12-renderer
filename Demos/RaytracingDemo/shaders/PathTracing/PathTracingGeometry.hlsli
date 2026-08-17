@@ -7,7 +7,7 @@
 
 uint LoadIndex(uint indexBufferIndex, uint indexNumber)
 {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     return LoadBindlessIndex(indexBufferIndex, indexNumber);
 //Modify End
 }
@@ -17,7 +17,7 @@ RayPayload MakeMissPayload(float3 rayDirection)
     RayPayload payload;
     payload.Hit = 0u;
     payload.HitT = 0.0f;
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
     payload.BaseColor = SampleEnvironmentRadiance(rayDirection);
 //Modify End
     payload.Normal = 0.0f;
@@ -25,7 +25,7 @@ RayPayload MakeMissPayload(float3 rayDirection)
     payload.Metallic = 0.0f;
     payload.Roughness = 1.0f;
     payload.AmbientOcclusion = 1.0f;
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
     payload.Emission = 0.0f;
 //Modify End
     payload.Padding0 = 0u;
@@ -52,7 +52,7 @@ RayPayload MakeTrianglePayload(
     const uint i1 = LoadIndex(geometry.IndexBufferIndex, firstIndex + 1u);
     const uint i2 = LoadIndex(geometry.IndexBufferIndex, firstIndex + 2u);
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const VertexAttributes v0 = LoadBindlessVertex(geometry.VertexBufferIndex, i0);
     const VertexAttributes v1 = LoadBindlessVertex(geometry.VertexBufferIndex, i1);
     const VertexAttributes v2 = LoadBindlessVertex(geometry.VertexBufferIndex, i2);
@@ -70,7 +70,7 @@ RayPayload MakeTrianglePayload(
     const float3 p1Ws = mul(objectToWorld, float4(v1.Position.xyz, 1.0f));
     const float3 p2Ws = mul(objectToWorld, float4(v2.Position.xyz, 1.0f));
     const float3 positionError = ComputeTrianglePositionError(p0Ws, p1Ws, p2Ws, barycentrics);
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     float3 geometricNormalWs = normalize(cross(p1Ws - p0Ws, p2Ws - p0Ws));
     const bool isFrontFace = dot(geometricNormalWs, worldRayDirection) < 0.0f;
     if (!isFrontFace)
@@ -96,7 +96,7 @@ RayPayload MakeTrianglePayload(
         const float tangentHandedness = dot(cross(normalWs, tangent), bitangentWs) < 0.0f ? -1.0f : 1.0f;
         const float3 bitangent = cross(normalWs, tangent) * tangentHandedness;
         const float3x3 tbn = float3x3(tangent, bitangent, normalWs);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         const float3 normalTs = UnpackNormalMap(SampleBindlessTexture2DLevel(material.NormalTextureIndex, LinearWrapSampler, uv, 0.0f).xyz);
 //Modify End
         normalWs = normalize(mul(normalTs, tbn));
@@ -105,13 +105,13 @@ RayPayload MakeTrianglePayload(
     normalWs = dot(normalWs, geometricNormalWs) >= 0.0f ? normalWs : geometricNormalWs;
 //Modify End
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const float4 texel = material.HasDiffuseMap != 0u ? SampleBindlessTexture2DLevel(material.DiffuseTextureIndex, LinearWrapSampler, uv, 0.0f) : 1.0f;
 //Modify End
     float metallic = material.Metallic;
     if (material.HasMetallicMap != 0u)
     {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         metallic *= SampleBindlessTexture2DLevel(material.MetallicTextureIndex, LinearWrapSampler, uv, 0.0f).r;
 //Modify End
     }
@@ -119,7 +119,7 @@ RayPayload MakeTrianglePayload(
     float roughness = material.Roughness;
     if (material.HasRoughnessMap != 0u)
     {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         roughness *= SampleBindlessTexture2DLevel(material.RoughnessTextureIndex, LinearWrapSampler, uv, 0.0f).r;
 //Modify End
     }
@@ -127,12 +127,12 @@ RayPayload MakeTrianglePayload(
     float ambientOcclusion = 1.0f;
     if (material.HasAmbientOcclusionMap != 0u)
     {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         ambientOcclusion *= SampleBindlessTexture2DLevel(material.AmbientOcclusionTextureIndex, LinearWrapSampler, uv, 0.0f).r;
 //Modify End
     }
 
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
     const float3 emissionMap = material.HasEmissionMap != 0u
         ? SampleBindlessTexture2DLevel(material.EmissionTextureIndex, LinearWrapSampler, uv, 0.0f).rgb
         : 1.0f;
@@ -146,7 +146,7 @@ RayPayload MakeTrianglePayload(
     payload.Metallic = saturate(metallic);
     payload.Roughness = saturate(roughness);
     payload.AmbientOcclusion = saturate(ambientOcclusion);
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
     payload.Emission = material.Emission.rgb * emissionMap;
 //Modify End
     payload.Padding0 = 0u;

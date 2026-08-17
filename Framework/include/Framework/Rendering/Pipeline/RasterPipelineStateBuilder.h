@@ -18,7 +18,7 @@ public:
     explicit RasterPipelineStateBuilder(std::shared_ptr<RootSignature> rootSignature);
 
     Microsoft::WRL::ComPtr<ID3D12PipelineState> Build(Microsoft::WRL::ComPtr<ID3D12Device2> device) const;
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     RasterPipelineStateKey CreateKey(const RenderTargetState& renderTargetState) const;
 //Modify End
 
@@ -26,9 +26,9 @@ public:
     RasterPipelineStateBuilder& WithRootSignature(std::shared_ptr<RootSignature> rootSignature);
     RasterPipelineStateBuilder& WithSampleDesc(const DXGI_SAMPLE_DESC& sampleDesc);
     RasterPipelineStateBuilder& WithShaders(const Microsoft::WRL::ComPtr<ID3DBlob>& vertexShader, const Microsoft::WRL::ComPtr<ID3DBlob>& pixelShader);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     RasterPipelineStateBuilder& WithMeshShaders(const Microsoft::WRL::ComPtr<ID3DBlob>& meshShader, const Microsoft::WRL::ComPtr<ID3DBlob>& pixelShader);
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
     RasterPipelineStateBuilder& WithMeshShaders(
         const Microsoft::WRL::ComPtr<ID3DBlob>& amplificationShader,
         const Microsoft::WRL::ComPtr<ID3DBlob>& meshShader,
@@ -43,20 +43,20 @@ public:
     RasterPipelineStateBuilder& WithDepthStencil(const CD3DX12_DEPTH_STENCIL_DESC& depthStencil);
     RasterPipelineStateBuilder& WithDisabledDepthStencil();
     RasterPipelineStateBuilder& WithDisabledDepthWrite();
-    //Modify Begin:2026-07-23 by BestHui
+    //Modify Begin:2026-07-23 by Hui
     RasterPipelineStateBuilder& WithDepthTestNoWrite();
     //Modify End
 
     RasterPipelineStateBuilder& WithInputLayout(const std::vector<D3D12_INPUT_ELEMENT_DESC>& inputLayout);
     RasterPipelineStateBuilder& WithRasterizer(const CD3DX12_RASTERIZER_DESC& rasterizer);
-    //Modify Begin:2026-07-23 by BestHui
+    //Modify Begin:2026-07-23 by Hui
     RasterPipelineStateBuilder& WithFrontFaceCull();
     RasterPipelineStateBuilder& WithNoCull();
     RasterPipelineStateBuilder& WithWireframeNoCull();
     //Modify End
 
 private:
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     size_t BuildFixedFunctionStateHash() const;
 //Modify End
 
@@ -67,8 +67,8 @@ private:
     DXGI_FORMAT m_DepthStencilFormat;
 
     Microsoft::WRL::ComPtr<ID3DBlob> m_VertexShader;
-//Modify Begin:2026-07-30 by BestHui
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-07-31 by Hui
     Microsoft::WRL::ComPtr<ID3DBlob> m_AmplificationShader;
 //Modify End
     Microsoft::WRL::ComPtr<ID3DBlob> m_MeshShader;

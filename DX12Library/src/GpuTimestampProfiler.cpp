@@ -11,7 +11,7 @@
 #include <algorithm>
 #include <cstring>
 
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
 bool GpuTimestampProfiler::Initialize(
     Microsoft::WRL::ComPtr<ID3D12Device2> device,
     std::shared_ptr<CommandQueue> commandQueue,
@@ -25,7 +25,7 @@ bool GpuTimestampProfiler::Initialize(
         return false;
     }
 
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
     if (device == nullptr || commandQueue == nullptr ||
         FAILED(commandQueue->GetD3D12CommandQueue()->GetTimestampFrequency(&m_TimestampFrequency)) ||
         m_TimestampFrequency == 0)
@@ -68,11 +68,11 @@ void GpuTimestampProfiler::Shutdown()
     m_CurrentSlotIndex = 0;
     m_CurrentFrameNumber = 0;
     m_TimestampFrequency = 0;
-//Modify Begin:2026-08-02 by BestHui
+//Modify Begin:2026-08-02 by Hui
     m_CpuFrameStart = {};
 //Modify End
     m_Initialized = false;
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
     m_FrameActive = false;
 //Modify End
     m_LastFrameGpuMilliseconds = 0.0;
@@ -85,7 +85,7 @@ bool GpuTimestampProfiler::BeginFrame(const uint64_t frameNumber)
         return false;
     }
 
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
     for (uint32_t offset = 0; offset < FrameSlotCount; ++offset)
     {
         const uint32_t slotIndex = (m_CurrentSlotIndex + offset) % FrameSlotCount;
@@ -128,7 +128,7 @@ void GpuTimestampProfiler::WriteTimestamp(CommandList& commandList, const char* 
 
     const uint32_t queryIndex = slot.TimestampCount++;
     slot.Names.emplace_back(name != nullptr ? name : "");
-//Modify Begin:2026-08-02 by BestHui
+//Modify Begin:2026-08-02 by Hui
     slot.CpuMilliseconds.push_back(
         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - m_CpuFrameStart).count());
 //Modify End
@@ -202,7 +202,7 @@ bool GpuTimestampProfiler::CollectCompletedFrame(CommandQueue& commandQueue, std
                     static_cast<double>(timestamp - frameStart) * 1000.0 / static_cast<double>(m_TimestampFrequency);
                 sample.MillisecondsFromPrevious =
                     i == 0 ? 0.0 : static_cast<double>(timestamp - previous) * 1000.0 / static_cast<double>(m_TimestampFrequency);
-//Modify Begin:2026-08-02 by BestHui
+//Modify Begin:2026-08-02 by Hui
                 sample.CpuMillisecondsFromFrameStart =
                     i < slot.CpuMilliseconds.size() ? slot.CpuMilliseconds[i] : 0.0;
                 sample.CpuMillisecondsFromPrevious =
@@ -216,7 +216,7 @@ bool GpuTimestampProfiler::CollectCompletedFrame(CommandQueue& commandQueue, std
             m_LastFrameGpuMilliseconds = samples.back().MillisecondsFromFrameStart;
         }
 
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
         m_LastCollectedFrameNumber = slot.FrameNumber;
 //Modify End
         D3D12_RANGE writeRange = { 0, 0 };

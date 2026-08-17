@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
 #include <ShaderLibrary/Common/RootSignature.hlsli>
 #include <Common/EnvironmentTexture.hlsli>
 #include "../Scene/SceneCamera.hlsli"

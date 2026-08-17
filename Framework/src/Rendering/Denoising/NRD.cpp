@@ -1,15 +1,16 @@
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 #include <Framework/Rendering/Denoising/NRD.h>
 
 #include <DX12Library/CommandList.h>
+#include <DX12Library/CommandListInternalAccess.h>
 #include <DX12Library/CommandQueue.h>
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Texture.h>
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 //Modify End
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
 //Modify End
 #include <Framework/NRDInputAdapter_CS.h>
@@ -278,17 +279,17 @@ void NRD::PrepareInputs(
     constants.Width = width;
     constants.Height = height;
 
-    m_PrepareShader->SetConstantBuffer(commandList, "NRDInputAdapterConstants", constants);
-    commandList.SetTexture(*m_PrepareShader, "GBufferSpecularSmoothness", ShaderResourceView(gBufferSpecularSmoothness));
-    commandList.SetTexture(*m_PrepareShader, "GBufferNormal", ShaderResourceView(gBufferNormal));
-    commandList.SetTexture(*m_PrepareShader, "GBufferPosition", ShaderResourceView(gBufferPosition));
-    commandList.SetTexture(*m_PrepareShader, "DepthTexture", ShaderResourceView::DepthAsFloat(depthTexture));
-    commandList.SetTexture(*m_PrepareShader, "MotionVector", ShaderResourceView(motionVector));
-    m_PrepareShader->SetUnorderedAccessView(commandList, "NRDNormalRoughness", UnorderedAccessView(nrdNormalRoughness));
-    m_PrepareShader->SetUnorderedAccessView(commandList, "NRDViewZ", UnorderedAccessView(nrdViewZ));
-    m_PrepareShader->SetUnorderedAccessView(commandList, "NRDMotion", UnorderedAccessView(nrdMotion));
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
     const CommandContext commandContext(commandList);
+    commandContext.SetConstantBuffer(*m_PrepareShader, "NRDInputAdapterConstants", constants);
+    commandContext.SetTexture(*m_PrepareShader, "GBufferSpecularSmoothness", ShaderResourceView(gBufferSpecularSmoothness));
+    commandContext.SetTexture(*m_PrepareShader, "GBufferNormal", ShaderResourceView(gBufferNormal));
+    commandContext.SetTexture(*m_PrepareShader, "GBufferPosition", ShaderResourceView(gBufferPosition));
+    commandContext.SetTexture(*m_PrepareShader, "DepthTexture", ShaderResourceView::DepthAsFloat(depthTexture));
+    commandContext.SetTexture(*m_PrepareShader, "MotionVector", ShaderResourceView(motionVector));
+    commandContext.SetUnorderedAccessView(*m_PrepareShader, "NRDNormalRoughness", UnorderedAccessView(nrdNormalRoughness));
+    commandContext.SetUnorderedAccessView(*m_PrepareShader, "NRDViewZ", UnorderedAccessView(nrdViewZ));
+    commandContext.SetUnorderedAccessView(*m_PrepareShader, "NRDMotion", UnorderedAccessView(nrdMotion));
     commandContext.BindPipeline(*m_PrepareShader);
     commandContext.BindDescriptorSet(m_PrepareShader->GetDescriptorSet());
     commandContext.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
@@ -337,7 +338,7 @@ void NRD::Denoise(
     StoreNRDColumnMajorMatrix(commonSettings.viewToClipMatrixPrev, previousProjection);
     StoreNRDColumnMajorMatrix(commonSettings.worldToViewMatrix, currentView);
     StoreNRDColumnMajorMatrix(commonSettings.worldToViewMatrixPrev, previousView);
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     commonSettings.motionVectorScale[0] = 1.0f / static_cast<float>(width);
     commonSettings.motionVectorScale[1] = 1.0f / static_cast<float>(height);
 //Modify End
@@ -356,7 +357,7 @@ void NRD::Denoise(
     commonSettings.frameIndex = m_FrameIndex++;
     commonSettings.accumulationMode = resetHistory ? nrd::AccumulationMode::CLEAR_AND_RESTART : nrd::AccumulationMode::CONTINUE;
     commonSettings.isMotionVectorInWorldSpace = false;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     m_Impl->Integration.NewFrame();
 //Modify End
     m_Impl->Integration.SetCommonSettings(commonSettings);
@@ -415,14 +416,14 @@ void NRD::Denoise(
     }
 
     nrd::ResourceSnapshot snapshot = {};
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     snapshot.restoreInitialState = true;
     commandList.TransitionBarrier(*noisyRadiance, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     commandList.TransitionBarrier(*nrdNormalRoughness, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     commandList.TransitionBarrier(*nrdViewZ, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     commandList.TransitionBarrier(*nrdMotion, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     commandList.TransitionBarrier(*denoisedRadiance, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    commandList.FlushResourceBarriers();
+    CommandListInternalAccess::FlushResourceBarriers(commandList);
 //Modify End
 
     nri::Texture* noisyTexture = m_Impl->GetWrappedTexture(noisyRadiance, FrameworkNRD::RadianceFormat);
@@ -452,7 +453,7 @@ void NRD::Denoise(
     }
 
     const nrd::Identifier denoiser = DIFFUSE_DENOISER_ID;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     commandList.ExecuteExternalCommandRecording(
         [&](ID3D12GraphicsCommandList2&)
         {
@@ -477,14 +478,14 @@ void NRD::Composite(
     constants.Height = height;
     constants.DenoiserMode = static_cast<uint32_t>(m_Settings.Mode);
 
-    m_CompositeShader->SetConstantBuffer(commandList, "NRDOutputCompositeConstants", constants);
-    commandList.SetTexture(*m_CompositeShader, "DenoisedRadiance", ShaderResourceView(denoisedRadiance));
-    commandList.SetTexture(*m_CompositeShader, "DepthTexture", ShaderResourceView::DepthAsFloat(depthTexture));
-    commandList.SetTexture(*m_CompositeShader, "GBufferAlbedoOcclusion", ShaderResourceView(gBufferAlbedoOcclusion));
-    commandList.SetTexture(*m_CompositeShader, "GBufferEmissionMetallic", ShaderResourceView(gBufferEmissionMetallic));
-    m_CompositeShader->SetUnorderedAccessView(commandList, "Output", UnorderedAccessView(output));
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
     const CommandContext commandContext(commandList);
+    commandContext.SetConstantBuffer(*m_CompositeShader, "NRDOutputCompositeConstants", constants);
+    commandContext.SetTexture(*m_CompositeShader, "DenoisedRadiance", ShaderResourceView(denoisedRadiance));
+    commandContext.SetTexture(*m_CompositeShader, "DepthTexture", ShaderResourceView::DepthAsFloat(depthTexture));
+    commandContext.SetTexture(*m_CompositeShader, "GBufferAlbedoOcclusion", ShaderResourceView(gBufferAlbedoOcclusion));
+    commandContext.SetTexture(*m_CompositeShader, "GBufferEmissionMetallic", ShaderResourceView(gBufferEmissionMetallic));
+    commandContext.SetUnorderedAccessView(*m_CompositeShader, "Output", UnorderedAccessView(output));
     commandContext.BindPipeline(*m_CompositeShader);
     commandContext.BindDescriptorSet(m_CompositeShader->GetDescriptorSet());
     commandContext.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);

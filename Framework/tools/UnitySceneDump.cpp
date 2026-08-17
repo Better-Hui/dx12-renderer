@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
 #include <Framework/Scene/SceneImporter.h>
 #include <Framework/Geometry/Mesh.h>
 #include <Framework/Geometry/ModelLoader.h>
@@ -91,7 +91,7 @@ int main(int argc, char** argv)
                 << " baseMap=" << material.BaseMap.AssetPath.string() << "\n";
         }
 
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
         std::set<std::string> meshAssetPaths;
         for (const SceneObject& object : scene.GetObjects())
         {

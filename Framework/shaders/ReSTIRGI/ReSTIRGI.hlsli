@@ -1,9 +1,9 @@
 #ifndef FRAMEWORK_RESTIR_GI_HLSLI
 #define FRAMEWORK_RESTIR_GI_HLSLI
 
-//Modify Begin:2026-08-10 by BestHui
+//Modify Begin:2026-08-10 by Hui
 static const uint ReSTIRGIEnvironmentSampleBit = 0x80000000u;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 static const uint ReSTIRGICreationVisibilityKnownBit = 0x40000000u;
 static const uint ReSTIRGIAgeMask = 0x3fffffffu;
 //Modify End
@@ -83,7 +83,7 @@ bool ReSTIRGIIsEnvironmentSample(const ReSTIRGIReservoir reservoir)
     return (reservoir.AgeAndFlags & ReSTIRGIEnvironmentSampleBit) != 0u;
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 bool ReSTIRGIHasCreationVisibility(const ReSTIRGIReservoir reservoir)
 {
     return (reservoir.AgeAndFlags & ReSTIRGICreationVisibilityKnownBit) != 0u;
@@ -97,7 +97,7 @@ uint ReSTIRGIGetAge(const ReSTIRGIReservoir reservoir)
 
 void ReSTIRGISetAge(inout ReSTIRGIReservoir reservoir, const uint age)
 {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     reservoir.AgeAndFlags = (reservoir.AgeAndFlags &
         (ReSTIRGIEnvironmentSampleBit | ReSTIRGICreationVisibilityKnownBit)) |
         min(age, ReSTIRGIAgeMask);
@@ -106,14 +106,14 @@ void ReSTIRGISetAge(inout ReSTIRGIReservoir reservoir, const uint age)
 
 void ReSTIRGISetEnvironmentSample(inout ReSTIRGIReservoir reservoir, const bool isEnvironment)
 {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     reservoir.AgeAndFlags = (reservoir.AgeAndFlags &
         (ReSTIRGIAgeMask | ReSTIRGICreationVisibilityKnownBit)) |
         (isEnvironment ? ReSTIRGIEnvironmentSampleBit : 0u);
 //Modify End
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 void ReSTIRGISetCreationVisibility(inout ReSTIRGIReservoir reservoir, const bool isKnown)
 {
     reservoir.AgeAndFlags = (reservoir.AgeAndFlags &

@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 
 #include <Framework/Rendering/Pipeline/PipelineBindingSet.h>
 #include <Framework/Rendering/Pipeline/PipelineLayout.h>
@@ -23,7 +23,7 @@ class PipelineDescriptorPool;
 class Resource;
 class StructuredBuffer;
 
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
 enum class PipelineDescriptorHeapType : uint32_t
 {
     Resource = 0,
@@ -39,7 +39,7 @@ struct PipelineDescriptorSetAllocation
 };
 //Modify End
 
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
 struct PipelineDescriptorTableAllocation
 {
     PipelineDescriptorHeapType HeapType = PipelineDescriptorHeapType::Resource;
@@ -59,7 +59,7 @@ struct PipelineDescriptorTableAllocation
 struct PipelineShaderResourceBinding
 {
     const Resource* Resource = nullptr;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     ID3D12Resource* ResourceIdentity = nullptr;
 //Modify End
     D3D12_RESOURCE_STATES StateAfter = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
@@ -67,7 +67,7 @@ struct PipelineShaderResourceBinding
     UINT NumSubresources = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
     bool HasDesc = false;
     D3D12_SHADER_RESOURCE_VIEW_DESC Desc = {};
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     bool AutoTransition = true;
 //Modify End
 };
@@ -75,7 +75,7 @@ struct PipelineShaderResourceBinding
 struct PipelineBoundResource
 {
     std::optional<UnorderedAccessView> UnorderedAccessView;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     ID3D12Resource* UnorderedAccessViewResourceIdentity = nullptr;
 //Modify End
     std::vector<std::optional<ShaderResourceView>> ShaderResourceViews;
@@ -109,7 +109,7 @@ public:
         D3D12_RESOURCE_STATES stateAfter,
         const D3D12_SHADER_RESOURCE_VIEW_DESC& srvDesc);
     UINT SetUnorderedAccessView(std::string_view name, const UnorderedAccessView& unorderedAccessView);
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
     UINT SetStructuredBuffer(
         std::string_view name,
         const StructuredBuffer& buffer,
@@ -120,11 +120,11 @@ public:
     void ClearShaderResourceViews(std::string_view name);
 
     const PipelineLayout& GetLayout() const;
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     void SetDescriptorTableAllocation(UINT rootParameterIndex, PipelineDescriptorTableAllocation allocation);
     const PipelineDescriptorTableAllocation* FindDescriptorTableAllocation(UINT rootParameterIndex) const;
 //Modify End
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
     void SetAllocationInfo(
         const PipelineDescriptorPool* descriptorPool,
         uint32_t setIndex,
@@ -147,11 +147,11 @@ private:
     PipelineBindingSet m_Bindings;
     const PipelineLayout* m_Layout = nullptr;
     std::map<UINT, PipelineBoundResource> m_BoundResources;
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     std::map<UINT, PipelineDescriptorTableAllocation> m_DescriptorTableAllocations;
     PipelineDescriptorTableAllocation* FindMutableDescriptorTableAllocation(UINT rootParameterIndex);
 //Modify End
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
     const PipelineDescriptorPool* m_DescriptorPool = nullptr;
     uint32_t m_SetIndex = 0;
     uint32_t m_ResourceDescriptorOffset = 0;

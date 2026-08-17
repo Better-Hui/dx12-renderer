@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <Framework/Rendering/Lighting/ReSTIRDI.h>
 #include <Framework/Rendering/Lighting/MaterialShadingModel.h>
 #include <Framework/Rendering/Pipeline/PipelineLayout.h>
@@ -24,10 +24,10 @@ struct ReSTIRDIFrameState
 {
     bool Enabled = false;
     bool UseSoftShadowVariant = false;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     MaterialShadingModel ShadingModel = MaterialShadingModel::Pbr;
 //Modify End
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
     uint32_t EnvironmentProjectionVariant = 0u;
 //Modify End
     uint32_t Width = 1;
@@ -52,10 +52,10 @@ struct ReSTIRDIShaderSources
     std::wstring Spatial;
     std::wstring Shade;
     std::vector<ShaderVariantDefine> SoftShadowDefines;
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
     std::string EnvironmentProjectionDefineName;
 //Modify End
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     std::vector<PipelineStaticSamplerContract> StaticSamplerContracts;
 //Modify End
 };
@@ -69,7 +69,7 @@ public:
     ReSTIRDIPass(const ReSTIRDIPass&) = delete;
     ReSTIRDIPass& operator=(const ReSTIRDIPass&) = delete;
 
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
     void EnsurePipelines(
         bool useSoftShadowVariant,
         uint32_t environmentProjectionVariant,
@@ -92,7 +92,7 @@ private:
     struct PipelineSet;
     struct InternalResources;
 
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
     static constexpr uint32_t EnvironmentProjectionVariantCount = 3u;
     static constexpr uint32_t PipelineVariantCount = EnvironmentProjectionVariantCount * 2u;
 
@@ -137,7 +137,7 @@ private:
     FrameworkDeviceContext& m_DeviceContext;
     ReSTIRDIShaderSources m_ShaderSources;
     ShaderVariantManager m_ShaderVariants;
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
     std::array<std::unique_ptr<PipelineSet>, PipelineVariantCount> m_Pipelines;
 //Modify End
     std::unique_ptr<InternalResources> m_Resources;

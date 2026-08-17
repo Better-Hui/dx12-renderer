@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 
 #include <Framework/Rendering/RayTracing/RayTracingPipelineStateBuilder.h>
 #include <Framework/Rendering/RayTracing/RayTracingShader.h>
@@ -12,7 +12,7 @@
 #include <unordered_map>
 #include <vector>
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 class FrameworkDeviceContext;
 //Modify End
 
@@ -32,7 +32,7 @@ private:
         const RayTracingPipelineState& pipelineState,
         const std::vector<RayTracingShaderRecordDesc>& recordDescs) const;
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     struct BuiltPassTables
     {
         RayTracingShaderTable RayGenerationShaderTable;
@@ -44,7 +44,7 @@ private:
     const BuiltPassTables* m_CurrentPassTables = nullptr;
 //Modify End
     RayTracingShaderPassDesc m_DefaultPass;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     FrameworkDeviceContext& m_DeviceContext;
 //Modify End
 };

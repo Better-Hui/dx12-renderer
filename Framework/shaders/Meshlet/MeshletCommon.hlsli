@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
 #ifndef FRAMEWORK_MESHLET_COMMON_HLSLI
 #define FRAMEWORK_MESHLET_COMMON_HLSLI
 

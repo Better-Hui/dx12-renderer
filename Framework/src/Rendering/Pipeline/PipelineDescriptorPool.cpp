@@ -1,20 +1,20 @@
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 #include <Framework/Rendering/Pipeline/PipelineDescriptorPool.h>
 
 #include <DX12Library/Helpers.h>
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
 //Modify End
 #include <Framework/Rendering/Pipeline/PipelineLayout.h>
 
 #include <algorithm>
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
 #include <atomic>
 //Modify End
 
 namespace
 {
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
     std::atomic_uint64_t GNextDescriptorTableRevision = 1u;
 //Modify End
 }
@@ -32,7 +32,7 @@ void PipelineDescriptorPool::Reset()
     m_AllocatedDescriptorSetCount = 0;
     m_AllocatedResourceDescriptorCount = 0;
     m_AllocatedSamplerDescriptorCount = 0;
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
     m_AllocatedDescriptorCounts = {};
 //Modify End
 }
@@ -58,13 +58,13 @@ PipelineDescriptorSet PipelineDescriptorPool::AllocateDescriptorSetValue(
     ++m_AllocatedDescriptorSetCount;
     m_AllocatedResourceDescriptorCount += resourceDescriptorCount;
     m_AllocatedSamplerDescriptorCount += samplerDescriptorCount;
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
     m_AllocatedDescriptorCounts[static_cast<size_t>(PipelineDescriptorHeapType::Resource)] = m_AllocatedResourceDescriptorCount;
     m_AllocatedDescriptorCounts[static_cast<size_t>(PipelineDescriptorHeapType::Sampler)] = m_AllocatedSamplerDescriptorCount;
 //Modify End
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     PipelineDescriptorSet descriptorSet(layout);
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
     descriptorSet.SetAllocationInfo(
         this,
         setIndex,
@@ -73,10 +73,10 @@ PipelineDescriptorSet PipelineDescriptorPool::AllocateDescriptorSetValue(
         resourceDescriptorCount,
         samplerDescriptorCount);
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const auto& device = m_DeviceContext->GetDevice();
 //Modify End
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
     uint32_t nextResourceDescriptorOffset = resourceDescriptorOffset;
 //Modify End
     for (const PipelineDescriptorSetDesc& setDesc : layout.GetDescriptorSets())
@@ -88,7 +88,7 @@ PipelineDescriptorSet PipelineDescriptorPool::AllocateDescriptorSetValue(
                 continue;
             }
 
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
             const bool isVariableSizedRange =
                 (static_cast<uint32_t>(range.Flags) & static_cast<uint32_t>(PipelineDescriptorRangeFlags::VariableSizedArray)) != 0u;
             const uint32_t descriptorCount = isVariableSizedRange ? variableDescriptorNum : range.DescriptorCount;
@@ -98,7 +98,7 @@ PipelineDescriptorSet PipelineDescriptorPool::AllocateDescriptorSetValue(
 //Modify End
             if (const DescriptorAllocation* defaultDescriptors = layout.FindDefaultDescriptorTable(range.RootParameterIndex))
             {
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
                 const uint32_t defaultDescriptorCount = defaultDescriptors->GetNumHandles();
                 const uint32_t copiedDescriptorCount = (std::min)(descriptorCount, defaultDescriptorCount);
                 device->CopyDescriptorsSimple(
@@ -160,7 +160,7 @@ uint32_t PipelineDescriptorPool::CountSamplerDescriptors(const PipelineLayout& l
     return 0u;
 }
 
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
 PipelineDescriptorTableAllocation PipelineDescriptorPool::AllocateResourceDescriptorTable(const uint32_t descriptorCount)
 {
     Assert(descriptorCount > 0, "Pipeline descriptor table must contain at least one descriptor.");
@@ -169,10 +169,10 @@ PipelineDescriptorTableAllocation PipelineDescriptorPool::AllocateResourceDescri
     allocation.HeapType = PipelineDescriptorHeapType::Resource;
     allocation.HeapOffset = m_AllocatedResourceDescriptorCount;
     allocation.NumHandles = descriptorCount;
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
     allocation.Revision = GNextDescriptorTableRevision.fetch_add(1u);
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     allocation.CpuDescriptors = m_DeviceContext->AllocateDescriptors(
         D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
         descriptorCount);

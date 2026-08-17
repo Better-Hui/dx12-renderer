@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 #include "RenderGraphCompiler.h"
 
 #include "RenderMetadata.h"
@@ -225,7 +225,7 @@ namespace
             std::ranges::any_of(tokens, matches);
     }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     bool IsLiveGpuResource(
         const ResourceId resourceId,
         std::span<RenderPass* const> renderPasses,
@@ -315,7 +315,7 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
     m_ResourcePool->Clear(resourceRetirements);
     for (const TextureDescription& texture : textures)
     {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         if (IsLiveGpuResource(texture.m_Id, compiledGraph.m_RenderPasses, externalOutputIds))
         {
             m_ResourcePool->RegisterTexture(texture, compiledGraph.m_RenderPasses, renderMetadata, m_Device);
@@ -324,7 +324,7 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
     }
     for (const BufferDescription& buffer : buffers)
     {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         if (IsLiveGpuResource(buffer.m_Id, compiledGraph.m_RenderPasses, externalOutputIds))
         {
             m_ResourcePool->RegisterBuffer(buffer, compiledGraph.m_RenderPasses, renderMetadata, m_Device);
@@ -332,11 +332,11 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
 //Modify End
     }
     m_ResourcePool->InitHeaps(compiledGraph.m_RenderPasses, m_Device, std::vector<ResourceId>(externalOutputIds.begin(), externalOutputIds.end()));
-//Modify Begin:2026-08-10 by BestHui
+//Modify Begin:2026-08-10 by Hui
     m_ResourcePool->CreateResources();
 //Modify End
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     std::map<ResourceId, RenderPassQueue> lastWriterQueues;
     for (uint32_t passIndex = 0; passIndex < compiledGraph.m_RenderPasses.size(); ++passIndex)
     {
@@ -361,7 +361,7 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
                 resourceStatePlan.InputTransitions.push_back({ input.m_Id, stateAfter, insertUavBarrier });
             }
         }
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
         for (const ExternalResourceAccess& access : renderPass->GetExternalResourceAccesses())
         {
             Assert(access.Resource != nullptr && access.Resource->IsValid(),
@@ -398,7 +398,7 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
             }
         }
 
-        //Modify Begin:2026-08-07 by BestHui
+        //Modify Begin:2026-08-07 by Hui
         if (renderPass->GetQueue() == RenderPassQueue::AsyncCompute)
         {
             PassResourceStatePlan::AsyncComputeDirectPreamble directPreamble = {};
@@ -418,7 +418,7 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
                 }
             }
             resourceStatePlan.InputTransitions = std::move(computeInputTransitions);
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
             directPreamble.ExternalResourceTransitions = std::move(resourceStatePlan.ExternalResourceTransitions);
 //Modify End
             directPreamble.AliasingOutputs = std::move(resourceStatePlan.AliasingOutputs);

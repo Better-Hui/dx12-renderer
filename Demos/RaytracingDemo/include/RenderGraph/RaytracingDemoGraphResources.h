@@ -25,11 +25,11 @@ namespace RaytracingDemoRenderGraph
     constexpr DXGI_FORMAT NRD_VIEWZ_FORMAT = DXGI_FORMAT_R32_FLOAT;
     constexpr DXGI_FORMAT NRD_MOTION_FORMAT = DXGI_FORMAT_R16G16B16A16_FLOAT;
     constexpr DXGI_FORMAT DEPTH_FORMAT = DXGI_FORMAT_D32_FLOAT;
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     constexpr DXGI_FORMAT SCENE_COLOR_FORMAT = DXGI_FORMAT_R32G32B32A32_FLOAT;
 //Modify End
     constexpr DXGI_FORMAT OUTPUT_FORMAT = DXGI_FORMAT_R8G8B8A8_UNORM;
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     constexpr DXGI_FORMAT DLSS_NORMAL_ROUGHNESS_FORMAT = DXGI_FORMAT_R16G16B16A16_FLOAT;
 //Modify End
 
@@ -45,10 +45,10 @@ namespace RaytracingDemoRenderGraph
         static inline const RenderGraph::ResourceId DirectLighting = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DirectLighting");
         static inline const RenderGraph::ResourceId IndirectLighting = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.IndirectLighting");
         static inline const RenderGraph::ResourceId SceneColor = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.SceneColor");
-//Modify Begin:2026-08-17 by BestHui
+//Modify Begin:2026-08-17 by Hui
         static inline const RenderGraph::ResourceId BloomOutput = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.BloomOutput");
 //Modify End
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
         static inline const RenderGraph::ResourceId DLSSOutput = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DLSSOutput");
         static inline const RenderGraph::ResourceId DLSSNormalRoughness = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DLSSNormalRoughness");
         static inline const RenderGraph::ResourceId FrameGenerationHudLess = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.FrameGenerationHudLess");
@@ -69,11 +69,11 @@ namespace RaytracingDemoRenderGraph
         static inline const RenderGraph::ResourceId RayTracingFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.RayTracingFinished");
         static inline const RenderGraph::ResourceId DenoiseFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DenoiseFinished");
         static inline const RenderGraph::ResourceId CudaBloomFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.CudaBloomFinished");
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
         static inline const RenderGraph::ResourceId DLSSFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DLSSFinished");
         static inline const RenderGraph::ResourceId FrameGenerationHudLessFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.FrameGenerationHudLessFinished");
 //Modify End
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
         static inline const RenderGraph::ResourceId DebugOutputFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DebugOutputFinished");
 //Modify End
     };
@@ -108,7 +108,7 @@ namespace RaytracingDemoRenderGraph
     FrameGBufferResources GetFrameGBufferResources(const RenderGraph::RenderContext& context);
     NRDResources GetNRDResources(const RenderGraph::RenderContext& context);
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     std::vector<RenderGraph::TextureDescription> CreateTextureDescriptions(
         bool includeDLSS,
         bool includeFrameGeneration,
@@ -116,7 +116,7 @@ namespace RaytracingDemoRenderGraph
         bool includeFrameworkBloom);
 //Modify End
     std::vector<RenderGraph::BufferDescription> CreateBufferDescriptions();
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     std::vector<RenderGraph::TokenDescription> CreateTokenDescriptions(bool includeDLSS, bool includeFrameGeneration);
 //Modify End
 }

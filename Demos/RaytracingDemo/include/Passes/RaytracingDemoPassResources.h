@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #pragma once
 
 #include <Denoising/DenoiserController.h>
@@ -11,21 +11,21 @@
 #include <Framework/Rendering/Lighting/ReSTIRDI.h>
 #include <Framework/Rendering/Lighting/ReSTIRDIPass.h>
 #include <Framework/Rendering/Lighting/MaterialShadingModel.h>
-//Modify Begin:2026-08-10 by BestHui
+//Modify Begin:2026-08-10 by Hui
 #include <Framework/Rendering/Lighting/ReSTIRGI.h>
 #include <Framework/Rendering/Lighting/ReSTIRGIPass.h>
 //Modify End
 #include <Framework/Rendering/Pipeline/MeshShader.h>
 #include <Framework/Rendering/Pipeline/Shader.h>
 #include <Framework/Rendering/RayTracing/RayTracingShader.h>
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 #include <Framework/Rendering/Upscaling/DLSS.h>
 //Modify End
 
 #include <DX12Library/Camera.h>
 
 #include <DirectXMath.h>
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <wrl.h>
 //Modify End
 
@@ -34,7 +34,7 @@
 
 class CommandQueue;
 class CudaBloomPass;
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
 class GpuTimestampProfiler;
 //Modify End
 class IndirectDrawCommandSignature;
@@ -59,12 +59,12 @@ struct RaytracingDemoCameraConstants
     uint32_t AccumulationFrameIndex = 0;
     uint32_t AccumulationEnabled = 1;
     uint32_t NRDDenoiserMode = 0;
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
     uint32_t PaddingBeforeNrdParameters0 = 0;
     uint32_t PaddingBeforeNrdParameters1 = 0;
 //Modify End
     DirectX::XMFLOAT4 NRDReblurHitDistanceParameters = { 3.0f, 0.1f, 20.0f, 0.0f };
-//Modify Begin:2026-08-05 by BestHui
+//Modify Begin:2026-08-05 by Hui
     uint32_t ReSTIRDIHistoryValid = 0;
 //Modify End
     uint32_t Padding0 = 0;
@@ -135,17 +135,17 @@ struct RaytracingDemoPassResources
     RaytracingDemoSceneResources& Scene;
     SceneLightManager& Lights;
     PathTracingPipelineController& Pipelines;
-//Modify Begin:2026-08-05 by BestHui
+//Modify Begin:2026-08-05 by Hui
     ReSTIRDI& DirectLightingReSTIRDI;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     ReSTIRDIPass& DirectLightingReSTIRDIPass;
 //Modify End
-//Modify Begin:2026-08-10 by BestHui
+//Modify Begin:2026-08-10 by Hui
     ReSTIRGI& IndirectLightingReSTIRGI;
     ReSTIRGIPass& IndirectLightingReSTIRGIPass;
 //Modify End
 //Modify End
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     DLSS& Dlss;
     std::shared_ptr<ComputeShader> DLSSRayReconstructionPrepareShader;
 //Modify End
@@ -159,32 +159,32 @@ struct RaytracingDemoPassResources
     std::shared_ptr<Shader> DisplayCompositeShader;
     std::shared_ptr<ComputeShader> SkyboxComputeShader;
     std::shared_ptr<ComputeShader> SkyboxEquirectangularComputeShader;
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
     std::shared_ptr<ComputeShader> SkyboxCubemapStripComputeShader;
 //Modify End
     std::shared_ptr<Texture> SkyboxTexture;
     std::shared_ptr<Mesh> DisplayBlitMesh;
     Camera& SceneCamera;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     Microsoft::WRL::ComPtr<ID3D12Device2> Device;
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     std::shared_ptr<D3D12DeviceContext> DeviceContext;
 //Modify End
     std::shared_ptr<CommandQueue> DirectQueue;
     std::shared_ptr<CommandQueue> AsyncComputeQueue;
 //Modify End
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
     GpuTimestampProfiler* DirectGpuTimestampProfiler = nullptr;
 //Modify End
 };
 
-//Modify Begin:2026-08-05 by BestHui
+//Modify Begin:2026-08-05 by Hui
 enum class RaytracingDemoLightingTechnique : uint32_t
 {
     None = 0,
     PathTracing = 1,
     ReSTIRDI = 2,
-//Modify Begin:2026-08-10 by BestHui
+//Modify Begin:2026-08-10 by Hui
     ReSTIRGI = 3,
 //Modify End
 };
@@ -193,7 +193,7 @@ enum class RaytracingDemoLightingTechnique : uint32_t
 struct RaytracingDemoFrameState
 {
     PathTracingBackend Backend = PathTracingBackend::InlineRayQuery;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     MaterialShadingModel ShadingModel = MaterialShadingModel::Pbr;
 //Modify End
     RaytracingDemoLightingTechnique DirectLightingTechnique = RaytracingDemoLightingTechnique::None;
@@ -203,7 +203,7 @@ struct RaytracingDemoFrameState
     bool UseTaskShaderMeshlets = false;
     bool DebugMeshletClusters = false;
     bool SkyboxEnabled = false;
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     bool DLSSEnabled = false;
     bool RayReconstructionEnabled = false;
     bool FrameGenerationEnabled = false;
@@ -212,13 +212,13 @@ struct RaytracingDemoFrameState
     int DebugLightingTextureTarget = 0;
     int DebugTextureTarget = 0;
     int MaxBounces = 1;
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
     bool DenoiserEnabled = false;
     DenoiserController::Algorithm DenoiserAlgorithm = DenoiserController::Algorithm::Off;
 //Modify End
     uint32_t Width = 1;
     uint32_t Height = 1;
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     uint32_t DisplayWidth = 1;
     uint32_t DisplayHeight = 1;
     float DLSSSharpness = 0.0f;
@@ -231,16 +231,16 @@ struct RaytracingDemoFrameState
     uint32_t FrameIndex = 0;
     uint32_t AccumulationFrameIndex = 0;
     bool ReSTIRDIHistoryValid = false;
-//Modify Begin:2026-08-10 by BestHui
+//Modify Begin:2026-08-10 by Hui
     bool ReSTIRGIHistoryValid = false;
 //Modify End
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
     bool ReSTIRGIStageTimingEnabled = false;
 //Modify End
     bool HasPreviousViewProjection = false;
     DirectX::XMMATRIX PreviousViewProjection = DirectX::XMMatrixIdentity();
 
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
     bool UsesDirectLighting() const
     {
         return DirectLightingTechnique == RaytracingDemoLightingTechnique::PathTracing ||

@@ -23,7 +23,7 @@ void ConstantBuffer::CreateViews(const size_t numElements, const size_t elementS
 
 	const auto device = m_DeviceContext->GetDevice();
 
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
 	if (ConstantBufferView.IsNull())
 	{
 		ConstantBufferView = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);

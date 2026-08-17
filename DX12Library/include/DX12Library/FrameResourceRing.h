@@ -1,14 +1,14 @@
 #pragma once
 
 #include <cstdint>
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
 #include <functional>
 //Modify End
 #include <vector>
 
 class CommandQueue;
 
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
 class FrameResourceRing
 {
 public:
@@ -16,7 +16,7 @@ public:
     {
         uint64_t FenceValue = 0;
         uint64_t FrameNumber = 0;
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
         std::vector<std::function<void()>> RetireActions;
 //Modify End
     };
@@ -28,7 +28,7 @@ public:
     const Slot& GetSlot(uint32_t slotIndex) const;
 
     void MarkSubmitted(uint32_t slotIndex, uint64_t fenceValue, uint64_t frameNumber);
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
     void RetireCurrentFrameResource(std::function<void()>&& retireAction);
     uint64_t WaitForSlot(CommandQueue& commandQueue, uint32_t slotIndex);
 //Modify End

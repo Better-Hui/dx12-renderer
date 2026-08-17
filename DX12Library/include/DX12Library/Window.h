@@ -38,7 +38,7 @@
 #include <dxgi1_5.h>
 
 #include "Events.h"
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
 #include "FrameResourceRing.h"
 //Modify End
 #include "HighResolutionClock.h"
@@ -49,13 +49,13 @@
 
 class Game;
 class Texture;
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
 class CommandQueue;
 class D3D12DeviceContext;
 class StreamlineRuntime;
 //Modify End
 
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
 struct WindowD3D12Context
 {
     std::shared_ptr<D3D12DeviceContext> DeviceContext;
@@ -150,7 +150,7 @@ protected:
 	friend class Game;
 
 	Window() = delete;
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
 	Window(
 		HWND hWnd,
 		const std::wstring& windowName,
@@ -193,11 +193,11 @@ protected:
 
 	// Update the render target views for the swapchain back buffers.
 	void UpdateRenderTargetViews();
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
 	void UpdateFrameStatistics(double elapsedSeconds);
 //Modify End
 
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
 	void BeginFrame(uint64_t frameNumber);
 //Modify End
 
@@ -217,12 +217,12 @@ private:
 
 	HighResolutionClock UpdateClock;
 	HighResolutionClock RenderClock;
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
 	double FrameStatisticsElapsedSeconds = 0.0;
 	uint32_t FrameStatisticsCount = 0;
 //Modify End
 
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
 	FrameResourceRing FrameResources;
 //Modify End
 
@@ -238,7 +238,7 @@ private:
 	RECT WindowRect;
 	bool IsTearingSupported;
 
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
 	WindowD3D12Context m_D3d12Context;
 //Modify End
 

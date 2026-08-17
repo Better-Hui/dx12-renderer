@@ -8,7 +8,7 @@
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 #include <Framework/Rendering/Texture/UnorderedAccessView.h>
 #include <RenderGraph/RenderPass.h>
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <Scene/SceneLightManager.h>
 //Modify End
 
@@ -19,10 +19,10 @@ namespace
 {
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     void DispatchDxrLightingPass(
         CommandList& cmd,
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         BindlessDescriptorHeap& bindlessDescriptorHeap,
 //Modify End
         RayTracingShader& shader,
@@ -31,9 +31,9 @@ namespace
         const uint32_t width,
         const uint32_t height)
     {
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
         CommandContext commandContext(cmd);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         commandContext.BindBindlessDescriptorHeap(bindlessDescriptorHeap);
 //Modify End
         commandContext.BindPipeline(shader);
@@ -45,7 +45,7 @@ namespace
 //Modify End
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDirectLightingPass(
     const RaytracingDemoPassResources& resources,
     const RaytracingDemoPassConfig& config)
@@ -82,7 +82,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
                 CommandContext commandContext(cmd);
                 RaytracingDemoPassBindings::BindInlinePathTracingInputs(resources, commandContext, directLightingShader, gbuffer, camera);
                 commandContext.SetUnorderedAccessView(directLightingShader, "DirectLighting", UnorderedAccessView(context.GetTexture(DemoResourceIds::DirectLighting)));
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
                 commandContext.BindBindlessDescriptorHeap(resources.Scene.GetBindlessDescriptorHeap());
 //Modify End
                 commandContext.BindPipeline(directLightingShader);
@@ -95,10 +95,10 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
                 RayTracingBindingSet& directBindingSet = resources.Pipelines.GetDirectRayTracingBindingSet();
                 directBindingSet.SetUnorderedAccessView("DirectLighting", UnorderedAccessView(context.GetTexture(DemoResourceIds::DirectLighting)));
                 RaytracingDemoPassBindings::BindDxrPathTracingInputs(resources, directBindingSet, gbuffer, camera);
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
                 DispatchDxrLightingPass(
                     cmd,
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
                     resources.Scene.GetBindlessDescriptorHeap(),
 //Modify End
                     resources.Pipelines.GetRayTracingShader(),
@@ -109,13 +109,13 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
 //Modify End
             }
         });
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
     RaytracingDemoPassBindings::DeclareRayTracingExternalResourceAccesses(
         *pass,
         resources,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     if (backend == PathTracingBackend::InlineRayQuery)
     {
         pass->SetParallelRecordingEligible(true);
@@ -129,7 +129,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
     const RaytracingDemoPassConfig& config)
 {
     using namespace RenderGraph;
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
     const PathTracingBackend backend = config.FrameState->Backend;
     const RenderPassQueue queue =
         config.FrameState->AsyncComputeEnabled && backend == PathTracingBackend::InlineRayQuery
@@ -143,7 +143,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
     auto pass = RenderPass::Create(
         L"Indirect Lighting",
         {
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
             { DemoResourceIds::BaseResourcesFinishedToken, InputType::Token },
 //Modify End
             { DemoResourceIds::GBufferAlbedoOcclusion, gbufferInputType },
@@ -168,7 +168,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
                 CommandContext commandContext(cmd);
                 RaytracingDemoPassBindings::BindInlinePathTracingInputs(resources, commandContext, indirectLightingShader, gbuffer, camera);
                 commandContext.SetUnorderedAccessView(indirectLightingShader, "IndirectLighting", UnorderedAccessView(context.GetTexture(DemoResourceIds::IndirectLighting)));
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
                 commandContext.BindBindlessDescriptorHeap(resources.Scene.GetBindlessDescriptorHeap());
 //Modify End
                 commandContext.BindPipeline(indirectLightingShader);
@@ -181,10 +181,10 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
                 RayTracingBindingSet& indirectBindingSet = resources.Pipelines.GetIndirectRayTracingBindingSet();
                 indirectBindingSet.SetUnorderedAccessView("IndirectLighting", UnorderedAccessView(context.GetTexture(DemoResourceIds::IndirectLighting)));
                 RaytracingDemoPassBindings::BindDxrPathTracingInputs(resources, indirectBindingSet, gbuffer, camera);
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
                 DispatchDxrLightingPass(
                     cmd,
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
                     resources.Scene.GetBindlessDescriptorHeap(),
 //Modify End
                     resources.Pipelines.GetRayTracingShader(),
@@ -194,10 +194,10 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
                     camera.Height);
 //Modify End
             }
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
         },
         queue);
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
     RaytracingDemoPassBindings::DeclareRayTracingExternalResourceAccesses(
         *pass,
         resources,
@@ -268,7 +268,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateLi
                 gbuffer,
                 camera,
                 features);
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
             CommandContext commandContext(cmd);
             commandContext.BindPipeline(compositeShader);
             commandContext.BindDescriptorSet(compositeShader.GetDescriptorSet());

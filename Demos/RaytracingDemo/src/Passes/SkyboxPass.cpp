@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
 #include <Passes/RaytracingDemoPasses.h>
 
 #include <PathTracing/PathTracingSceneBindings.h>
@@ -23,12 +23,12 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateSk
         L"Skybox",
         {
             { sceneReadyToken, InputType::Token },
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
             { DemoResourceIds::DepthBuffer, InputType::ShaderResource },
 //Modify End
         },
         {
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
             { DemoResourceIds::SceneColor, OutputType::UnorderedAccess },
 //Modify End
             { DemoResourceIds::SkyboxFinishedToken, OutputType::Token },
@@ -39,7 +39,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateSk
             {
                 return;
             }
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
             const EnvironmentTextureProjection projection =
                 ShaderResourceView::GetEnvironmentTextureProjection(*resources.SkyboxTexture);
             ComputeShader& skyboxShader = projection == EnvironmentTextureProjection::Equirectangular
@@ -52,7 +52,7 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateSk
 
             commandContext.SetConstantBuffer(skyboxShader, "CameraConstants", sizeof(camera), &camera);
             commandContext.SetTexture(skyboxShader, "DepthTexture", ShaderResourceView::DepthAsFloat(context.GetTexture(DemoResourceIds::DepthBuffer)));
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
             if (skyboxShader.HasShaderResourceView("SkyboxTexture"))
             {
                 commandContext.SetTexture(

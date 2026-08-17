@@ -15,7 +15,7 @@ if ("${SOURCE_FILES}" STREQUAL "")
 endif ()
 
 # Shaders
-# Modify Begin:2026-07-30 by BestHui
+# Modify Begin:2026-07-30 by Hui
 if (NOT DEFINED DX12_RENDERER_SHADER_MODEL_VERSION)
     set(DX12_RENDERER_SHADER_MODEL_VERSION "6.8")
 endif ()
@@ -38,14 +38,14 @@ list(APPEND SHADER_FILES ${SHADER_FILES_VERTEX} ${SHADER_FILES_PIXEL} ${SHADER_F
 
 source_group("Resources\\Shaders" FILES ${SHADER_FILES})
 
-# Modify Begin:2026-07-30 by BestHui
+# Modify Begin:2026-07-30 by Hui
 set_source_files_properties(${SHADER_FILES} PROPERTIES HEADER_FILE_ONLY TRUE)
 set(DX12_RENDERER_SHADER_INCLUDE_ARGS
         -I "${CMAKE_SOURCE_DIR}/Shaders"
         -I "${CMAKE_SOURCE_DIR}/Framework/shaders"
         -I "${CMAKE_CURRENT_SOURCE_DIR}/shaders"
         )
-# Modify Begin:2026-08-16 by BestHui
+# Modify Begin:2026-08-16 by Hui
 # Keep shader compilation out of the Visual Studio file tree. CMake otherwise
 # materializes one hashed .rule file for every shader output under CMakeFiles.
 set(DX12_RENDERER_SHADER_PRE_BUILD_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${TARGET_NAME}_CompileShaders.cmake")

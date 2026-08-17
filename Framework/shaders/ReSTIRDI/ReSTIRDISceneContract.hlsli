@@ -1,8 +1,8 @@
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
 #ifndef FRAMEWORK_RESTIR_DI_SCENE_CONTRACT_HLSLI
 #define FRAMEWORK_RESTIR_DI_SCENE_CONTRACT_HLSLI
 
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
 #if !defined(FRAMEWORK_RESTIR_DI_SCENE_ADAPTER) || \
     !defined(ReSTIRDI_Surface) || \
     !defined(ReSTIRDI_LightSample) || \

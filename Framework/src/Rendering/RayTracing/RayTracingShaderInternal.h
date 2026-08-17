@@ -1,9 +1,9 @@
 #pragma once
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 
 #include <Framework/Rendering/Pipeline/DescriptorLayout.h>
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 #include <Framework/Rendering/Pipeline/PipelineDescriptorPool.h>
 //Modify End
 #include <Framework/Rendering/Pipeline/PipelineDescriptorSet.h>
@@ -82,7 +82,7 @@ struct RayTracingShader::Impl
     RayTracingPipelineDesc Desc;
     std::shared_ptr<RayTracingPipelineState> PipelineState;
     PipelineLayout Layout;
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     mutable RayTracingDispatchTables DispatchTables;
 //Modify End
     std::unordered_map<std::string, uint32_t> BindingIndicesByName;
@@ -99,7 +99,7 @@ struct RayTracingBindingSet::Impl
     void MarkDescriptorsDirty(const RayTracingShaderBindingDesc& binding);
 
     const RayTracingShader& Shader;
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     PipelineDescriptorPool DescriptorPool;
 //Modify End
     PipelineDescriptorSet DescriptorSet;

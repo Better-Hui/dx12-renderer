@@ -10,7 +10,7 @@
 class Texture;
 class FrameworkDeviceContext;
 
-//Modify Begin:2026-07-23 by BestHui
+//Modify Begin:2026-07-23 by Hui
 class RenderTexture final
 {
 public:

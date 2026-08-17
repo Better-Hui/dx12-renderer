@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #pragma once
 
 #include "RenderGraphExecutionPlan.h"
@@ -8,7 +8,7 @@
 
 #include <map>
 #include <memory>
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
 #include <span>
 //Modify End
 #include <vector>
@@ -47,7 +47,7 @@ namespace RenderGraph
             RenderContext& context,
             const std::map<const RenderPass*, RenderTargetInfo>& renderTargets,
             const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         void ExecuteParallelDirectBatch(
             const RenderGraphRecordingBatch& batch,
             const RenderMetadata& renderMetadata,
@@ -62,7 +62,7 @@ namespace RenderGraph
             const RenderPass& pass,
             std::shared_ptr<CommandList>& directCommandList,
             const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
         static void ApplyExternalResourceTransitions(
             CommandList& commandList,
             std::span<const PassExternalResourceTransition> transitions);
@@ -73,7 +73,7 @@ namespace RenderGraph
         std::shared_ptr<ResourcePool> m_ResourcePool;
         RenderGraphQueueScheduler& m_QueueScheduler;
         RenderGraphProfiler& m_Profiler;
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
         RenderGraphTaskScheduler m_ParallelRecordingTaskScheduler;
 //Modify End
     };

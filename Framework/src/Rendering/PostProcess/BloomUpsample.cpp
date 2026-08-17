@@ -28,7 +28,7 @@ namespace
 	}
 }
 
-//Modify Begin:2026-08-17 by BestHui
+//Modify Begin:2026-08-17 by Hui
 BloomUpsample::BloomUpsample(FrameworkDeviceContext& deviceContext, CommandList& commandList)
 	: m_BlitMesh(Mesh::CreateBlitTriangle(commandList))
 {
@@ -65,11 +65,7 @@ void BloomUpsample::Execute(CommandList& commandList, const BloomParameters& par
 {
 	PIXScope(commandList, "Bloom Upsample");
 
-	//Modify Begin:2026-08-17 by BestHui
-	commandList.TransitionBarrier(*source, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 	commandList.SetRenderTarget(destination);
-	commandList.FlushResourceBarriers();
-	//Modify End
 	commandList.SetAutomaticViewportAndScissorRect(destination);
 
 	m_UpsampleMaterial->SetShaderResourceView("sourceColorTexture", ShaderResourceView(source));
@@ -82,13 +78,13 @@ void BloomUpsample::Execute(CommandList& commandList, const BloomParameters& par
 	parametersCb.TexelSize = { 0.5f / fSourceWidth , 0.5f / fSourceHeight }; // 0.5 is for more focused blur
 	m_UpsampleMaterial->SetAllVariables(parametersCb);
 
-	//Modify Begin:2026-08-17 by BestHui
+	//Modify Begin:2026-08-17 by Hui
 	m_UpsampleMaterial->Bind(commandList);
 	//Modify End
 	m_BlitMesh->Draw(commandList);
 }
 
-//Modify Begin:2026-08-17 by BestHui
+//Modify Begin:2026-08-17 by Hui
 void BloomUpsample::ExecuteComposite(
 	CommandList& commandList,
 	const BloomParameters& parameters,
@@ -98,10 +94,7 @@ void BloomUpsample::ExecuteComposite(
 {
 	PIXScope(commandList, "Bloom Composite");
 
-	commandList.TransitionBarrier(*sourceColor, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-	commandList.TransitionBarrier(*bloom, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 	commandList.SetRenderTarget(destination);
-	commandList.FlushResourceBarriers();
 	commandList.SetAutomaticViewportAndScissorRect(destination);
 
 	m_CompositeMaterial->SetShaderResourceView("sourceColorTexture", ShaderResourceView(sourceColor));

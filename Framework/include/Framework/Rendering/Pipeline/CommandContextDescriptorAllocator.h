@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
 
 #include <array>
 #include <cstdint>
@@ -19,7 +19,7 @@ public:
     static constexpr uint32_t MaxRootDescriptorTables = 32;
 
     void ResetTransientBindings();
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     void SetBindlessDescriptorHeap(BindlessDescriptorHeap* bindlessDescriptorHeap);
     bool HasBindlessDescriptorHeap() const { return m_BindlessDescriptorHeap != nullptr; }
 //Modify End
@@ -39,7 +39,7 @@ private:
     };
 
     std::array<BoundTable, MaxRootDescriptorTables> m_BoundTables = {};
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     BindlessDescriptorHeap* m_BindlessDescriptorHeap = nullptr;
 //Modify End
 };

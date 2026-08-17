@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 Texture2D<float4> GBufferNormal : register(t0, space0);
 Texture2D<float4> GBufferSpecularSmoothness : register(t1, space0);
 Texture2D<float> DepthBuffer : register(t2, space0);

@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 #include <ShaderLibrary/Common/RootSignature.hlsli>
 #include "SVGFCommon.hlsli"
 
@@ -28,7 +28,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     const float3 color = max(FilteredColor.Load(int3(pixel, 0)).rgb, 0.0f);
     Output[pixel] = float4(color, 1.0f);
 //Modify End

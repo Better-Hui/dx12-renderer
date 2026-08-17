@@ -33,17 +33,17 @@ public:
     };
 
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     explicit CudaBloomPass(FrameworkDeviceContext& deviceContext);
 //Modify End
     ~CudaBloomPass();
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     bool DrawImGui(uint32_t width, uint32_t height);
 //Modify End
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     bool ExecuteInPlace(Texture& postProcessColor, uint32_t width, uint32_t height, ID3D12CommandQueue* d3d12CommandQueue);
-//Modify Begin:2026-08-16 by BestHui
+//Modify Begin:2026-08-16 by Hui
     bool ExecuteFrameworkBloom(
         const std::shared_ptr<Texture>& source,
         const std::shared_ptr<Texture>& destination,
@@ -55,7 +55,7 @@ public:
 //Modify End
     void Shutdown();
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     static uint32_t ComputeMaxPyramidLevels(uint32_t width, uint32_t height);
 //Modify End
 
@@ -64,7 +64,7 @@ public:
     Backend GetBackend() const { return m_Backend; }
     bool IsFrameworkRaster() const { return m_Backend == Backend::FrameworkRaster; }
     const std::string& GetStatus() const { return m_Status; }
-//Modify Begin:2026-08-17 by BestHui
+//Modify Begin:2026-08-17 by Hui
     void SetBackend(Backend backend) { m_Backend = backend; }
     void SetCudaMethod(CudaMethod method) { m_CudaMethod = method; }
     void SetThreshold(float threshold) { m_Threshold = threshold; }
@@ -76,10 +76,10 @@ public:
 //Modify End
 
 private:
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     FrameworkDeviceContext& m_DeviceContext;
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     static constexpr uint32_t CudaTimingFrameCount = 3;
 
     struct CudaTimingFrame
@@ -107,13 +107,13 @@ private:
 //Modify End
 
     bool InitializeCuda();
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     bool EnsureD3D12InteropResource(Texture& postProcessColor, uint32_t width, uint32_t height);
 //Modify End
     bool EnsureD3D12CudaSemaphore();
     bool SignalD3D12AndWaitInCuda(ID3D12CommandQueue* d3d12CommandQueue);
     bool SignalCudaAndWaitInD3D12(ID3D12CommandQueue* d3d12CommandQueue);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     bool EnsureCudaPyramidTextures(uint32_t width, uint32_t height, uint32_t levelCount);
     bool EnsureCudaTimingFrames();
     void BeginCudaTimingFrame();
@@ -147,7 +147,7 @@ private:
     CudaContext m_CudaContext;
     CudaDx12InteropTexture m_InputTexture;
     CudaDx12TimelineSemaphore m_TimelineSemaphore;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     CudaDeviceTexture2DPool m_PyramidTextures;
 //Modify End
     CUmodule m_Module = nullptr;
@@ -165,11 +165,11 @@ private:
     CUfunction m_BloomAdditiveUpsampleKernel = nullptr;
     CUfunction m_BloomCompositeKernel = nullptr;
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     std::vector<uint32_t> m_PyramidWidth;
     std::vector<uint32_t> m_PyramidHeight;
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     std::array<CudaTimingFrame, CudaTimingFrameCount> m_CudaTimingFrames = {};
     CudaTimingStats m_LastCudaTiming = {};
     uint32_t m_CudaTimingFrameCursor = 0;

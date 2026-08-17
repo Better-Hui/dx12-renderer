@@ -10,7 +10,7 @@ using namespace RenderGraph;
 
 namespace
 {
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
     struct ResourceIdRegistry
     {
         std::mutex Mutex;
@@ -30,7 +30,7 @@ const ResourceId ResourceIds::GRAPH_OUTPUT = GetResourceId(L"RenderGraph-BuiltIn
 
 ResourceId ResourceIds::GetResourceId(const wchar_t* name)
 {
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
     Assert(name != nullptr && name[0] != L'\0', "Render graph resource name must not be empty.");
     ResourceIdRegistry& registry = GetResourceIdRegistry();
     std::lock_guard lock(registry.Mutex);
@@ -49,7 +49,7 @@ ResourceId ResourceIds::GetResourceId(const wchar_t* name)
 
 std::wstring ResourceIds::GetResourceName(const ResourceId id)
 {
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
     ResourceIdRegistry& registry = GetResourceIdRegistry();
     std::lock_guard lock(registry.Mutex);
     Assert(id < registry.Names.size(), "ID is invalid.");

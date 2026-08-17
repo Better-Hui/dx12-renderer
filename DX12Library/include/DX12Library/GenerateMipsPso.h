@@ -3,7 +3,7 @@
 
 #include "RootSignature.h"
 #include "DescriptorAllocation.h"
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 #include "DescriptorAllocator.h"
 #include "DescriptorRetirementClock.h"
 //Modify End
@@ -12,7 +12,7 @@
 #include <DirectXMath.h>
 #include <wrl.h>
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 #include <memory>
 //Modify End
 
@@ -47,7 +47,7 @@ public:
 
 
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 	explicit GenerateMipsPso(Microsoft::WRL::ComPtr<ID3D12Device2> device);
 //Modify End
 
@@ -71,7 +71,7 @@ public:
 private:
 	RootSignature m_RootSignature;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> m_PipelineState;
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 	Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;
 	std::shared_ptr<DescriptorRetirementClock> m_DescriptorRetirementClock =
 		std::make_shared<DescriptorRetirementClock>();

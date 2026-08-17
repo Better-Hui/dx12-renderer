@@ -15,7 +15,7 @@
 #include <algorithm>
 #include <utility>
 
-//Modify Begin:2026-08-10 by BestHui
+//Modify Begin:2026-08-10 by Hui
 struct ReSTIRGIPass::PipelineSet
 {
     bool UseSoftShadowVariant = false;
@@ -35,7 +35,7 @@ struct ReSTIRGIPass::InternalResources
         std::shared_ptr<Texture> Light;
     };
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     struct HistorySet
     {
         ReservoirSet Temporal;
@@ -44,7 +44,7 @@ struct ReSTIRGIPass::InternalResources
 //Modify End
 
     ReservoirSet Initial;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     std::array<HistorySet, 2> History;
 //Modify End
 };
@@ -53,7 +53,7 @@ namespace
 {
     constexpr DXGI_FORMAT ReservoirFormat = DXGI_FORMAT_R32G32B32A32_UINT;
 
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
     void WriteStageTimestamp(
         CommandList& commandList,
         const ReSTIRGIExecutionInputs& inputs,
@@ -94,13 +94,13 @@ void ReSTIRGIPass::EnsurePipelines(
     const ReSTIRGIVariantConfig& variantConfig,
     const MaterialShadingModel shadingModel)
 {
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
     Assert(variantConfig.MaxPathBounces >= 1u && variantConfig.MaxPathBounces <= 5u,
         "ReSTIR GI path bounce variant is out of range.");
 //Modify End
     PipelineSet& pipelines = GetPipelines(useSoftShadowVariant, environmentProjectionVariant);
     static_cast<void>(GetStageShader(pipelines, ReSTIRGIStage::Initial, variantConfig, shadingModel));
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
     if (variantConfig.EnableTemporalResampling)
     {
         static_cast<void>(GetStageShader(pipelines, ReSTIRGIStage::Temporal, variantConfig, shadingModel));
@@ -129,7 +129,7 @@ void ReSTIRGIPass::Execute(
     PipelineSet& pipelines = GetPipelines(
         inputs.FrameState.UseSoftShadowVariant,
         inputs.FrameState.EnvironmentProjectionVariant);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const bool resourcesRecreated = EnsureResources(
         inputs.FrameState.Constants.Width,
         inputs.FrameState.Constants.Height);
@@ -138,14 +138,14 @@ void ReSTIRGIPass::Execute(
         inputs.FrameState.Constants.HistoryValid != 0u && m_HistoryValid && !resourcesRecreated ? 1u : 0u;
 //Modify End
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const uint32_t historyWriteIndex = 1u - m_HistoryReadIndex;
     const ReSTIRGIVariantConfig& variantConfig = executionInputs.FrameState.VariantConfig;
     const bool temporalResamplingEnabled = variantConfig.EnableTemporalResampling;
     const bool spatialResamplingEnabled = variantConfig.EnableSpatialResampling;
 //Modify End
 
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
     CommandContext commandContext(commandList);
     if (executionInputs.PrepareCommandContext)
     {
@@ -161,7 +161,7 @@ void ReSTIRGIPass::Execute(
         m_Resources->Initial.Light);
     WriteStageTimestamp(commandList, executionInputs, "ReSTIR GI.Initial");
 
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
     const InternalResources::ReservoirSet* finalReservoir = &m_Resources->Initial;
     if (temporalResamplingEnabled)
     {
@@ -203,7 +203,7 @@ void ReSTIRGIPass::Execute(
     WriteStageTimestamp(commandList, executionInputs, "ReSTIR GI.Shade");
 //Modify End
     commandList.UavBarrier(*executionInputs.IndirectLighting);
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
     if (temporalResamplingEnabled || spatialResamplingEnabled)
     {
         m_HistoryReadIndex = historyWriteIndex;
@@ -212,7 +212,7 @@ void ReSTIRGIPass::Execute(
 //Modify End
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 bool ReSTIRGIPass::EnsureResources(const uint32_t width, const uint32_t height)
 //Modify End
 {
@@ -221,7 +221,7 @@ bool ReSTIRGIPass::EnsureResources(const uint32_t width, const uint32_t height)
         return false;
     }
 
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     const auto createReservoirSet = [this, width, height](const wchar_t* prefix)
     {
         InternalResources::ReservoirSet reservoir;
@@ -250,7 +250,7 @@ bool ReSTIRGIPass::EnsureResources(const uint32_t width, const uint32_t height)
 
     m_Resources = std::make_unique<InternalResources>();
     m_Resources->Initial = createReservoirSet(L"ReSTIR GI Initial");
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     m_Resources->History[0].Temporal = createReservoirSet(L"ReSTIR GI History 0 Temporal");
     m_Resources->History[0].Spatial = createReservoirSet(L"ReSTIR GI History 0 Spatial");
     m_Resources->History[1].Temporal = createReservoirSet(L"ReSTIR GI History 1 Temporal");
@@ -259,14 +259,14 @@ bool ReSTIRGIPass::EnsureResources(const uint32_t width, const uint32_t height)
     m_ResourceWidth = width;
     m_ResourceHeight = height;
     m_HistoryReadIndex = 0;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     m_HistoryValid = false;
     return true;
 //Modify End
 }
 
 void ReSTIRGIPass::ExecuteInitialSampling(
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
     CommandContext& commandContext,
 //Modify End
     const ReSTIRGIExecutionInputs& inputs,
@@ -277,7 +277,7 @@ void ReSTIRGIPass::ExecuteInitialSampling(
         ReSTIRGIStage::Initial,
         inputs.FrameState.VariantConfig,
         inputs.FrameState.ShadingModel);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     inputs.BindSceneInputs(commandContext, shader);
 //Modify End
     commandContext.SetConstantBuffer(shader, "ReSTIRGIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
@@ -293,7 +293,7 @@ void ReSTIRGIPass::ExecuteInitialSampling(
 }
 
 void ReSTIRGIPass::ExecuteTemporalResampling(
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
     CommandContext& commandContext,
 //Modify End
     const ReSTIRGIExecutionInputs& inputs,
@@ -304,15 +304,15 @@ void ReSTIRGIPass::ExecuteTemporalResampling(
         ReSTIRGIStage::Temporal,
         inputs.FrameState.VariantConfig,
         inputs.FrameState.ShadingModel);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     inputs.BindSceneInputs(commandContext, shader);
 //Modify End
     commandContext.SetConstantBuffer(shader, "ReSTIRGIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
     commandContext.SetShaderResourceView(shader, "ReSTIRGIInitialCreation", ShaderResourceView(m_Resources->Initial.Creation));
     commandContext.SetShaderResourceView(shader, "ReSTIRGIInitialHit", ShaderResourceView(m_Resources->Initial.Hit));
     commandContext.SetShaderResourceView(shader, "ReSTIRGIInitialLight", ShaderResourceView(m_Resources->Initial.Light));
-//Modify Begin:2026-07-30 by BestHui
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-11 by Hui
     if (inputs.FrameState.VariantConfig.EnableTemporalResampling)
     {
         const InternalResources::ReservoirSet& historyRead =
@@ -338,11 +338,11 @@ void ReSTIRGIPass::ExecuteTemporalResampling(
 }
 
 void ReSTIRGIPass::ExecuteSpatialResampling(
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
     CommandContext& commandContext,
 //Modify End
     const ReSTIRGIExecutionInputs& inputs,
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
     PipelineSet& pipelines,
     const std::shared_ptr<Texture>& sourceCreation,
     const std::shared_ptr<Texture>& sourceHit,
@@ -354,11 +354,11 @@ void ReSTIRGIPass::ExecuteSpatialResampling(
         ReSTIRGIStage::Spatial,
         inputs.FrameState.VariantConfig,
         inputs.FrameState.ShadingModel);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     inputs.BindSceneInputs(commandContext, shader);
 //Modify End
     commandContext.SetConstantBuffer(shader, "ReSTIRGIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const InternalResources::ReservoirSet& spatialOutput = m_Resources->History[1u - m_HistoryReadIndex].Spatial;
     commandContext.SetShaderResourceView(shader, "ReSTIRGITemporalCreation", ShaderResourceView(sourceCreation));
     commandContext.SetShaderResourceView(shader, "ReSTIRGITemporalHit", ShaderResourceView(sourceHit));
@@ -376,7 +376,7 @@ void ReSTIRGIPass::ExecuteSpatialResampling(
 }
 
 void ReSTIRGIPass::ExecuteFinalShading(
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
     CommandContext& commandContext,
 //Modify End
     const ReSTIRGIExecutionInputs& inputs,
@@ -390,11 +390,11 @@ void ReSTIRGIPass::ExecuteFinalShading(
         ReSTIRGIStage::Shade,
         inputs.FrameState.VariantConfig,
         inputs.FrameState.ShadingModel);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     inputs.BindSceneInputs(commandContext, shader);
 //Modify End
     commandContext.SetConstantBuffer(shader, "ReSTIRGIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
     commandContext.SetShaderResourceView(shader, "ReSTIRGIHistoryCreation", ShaderResourceView(reservoirCreation));
     commandContext.SetShaderResourceView(shader, "ReSTIRGIHistoryHit", ShaderResourceView(reservoirHit));
     commandContext.SetShaderResourceView(shader, "ReSTIRGIHistoryLight", ShaderResourceView(reservoirLight));
@@ -451,7 +451,7 @@ uint32_t ReSTIRGIPass::GetStageVariantKey(
         break;
 
     case ReSTIRGIStage::Temporal:
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
         featureKey = variantConfig.EnableTemporalResampling
             ? 1u | ((variantConfig.EnableTemporalJacobian ? 1u : 0u) << 1u)
             : 0u;
@@ -598,7 +598,7 @@ std::unique_ptr<ComputeShader> ReSTIRGIPass::CreateComputeShader(
         std::make_move_iterator(featureDefines.end()));
 
     const std::shared_ptr<ShaderBlob> shaderBlob = m_ShaderVariants.GetOrCompile(shaderDesc);
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     ComputePipelineDescBuilder pipelineDescBuilder =
         ComputePipelineDescBuilder::ReflectedDefault(*shaderBlob)
             .WithDirectlyIndexedResourceHeap();

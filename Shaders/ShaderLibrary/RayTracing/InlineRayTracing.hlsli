@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
 #ifndef INLINE_RAYTRACING_HLSLI
 #define INLINE_RAYTRACING_HLSLI
 

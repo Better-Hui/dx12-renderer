@@ -1,18 +1,19 @@
 #include "RenderGraphRoot.h"
 
 #include <functional>
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <utility>
 //Modify End
 
 #include <d3d12.h>
 
 #include <DX12Library/Buffer.h>
+#include <DX12Library/CommandListInternalAccess.h>
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Texture.h>
 
 RenderGraph::RenderGraphRoot::RenderGraphRoot(
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     std::shared_ptr<D3D12DeviceContext> deviceContext,
     Microsoft::WRL::ComPtr<ID3D12Device2> device,
     std::shared_ptr<CommandQueue> directCommandQueue,
@@ -22,40 +23,40 @@ RenderGraph::RenderGraphRoot::RenderGraphRoot(
     std::vector<TextureDescription>&& textures,
     std::vector<BufferDescription>&& buffers,
     std::vector<TokenDescription>&& tokens
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     , RenderGraphOutputResources outputs
 //Modify End
 )
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     : m_DeviceContext(std::move(deviceContext))
     , m_Device(std::move(device))
     , m_DirectCommandQueue(std::move(directCommandQueue))
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
     , m_AsyncComputeCommandQueue(std::move(asyncComputeCommandQueue))
 //Modify End
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     , m_QueueScheduler(m_DirectCommandQueue, m_AsyncComputeCommandQueue)
 //Modify End
     , m_RenderPassesDescription(std::move(renderPasses))
     , m_TextureDescriptions(std::move(textures))
     , m_BufferDescriptions(std::move(buffers))
     , m_TokenDescriptions(std::move(tokens))
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     , m_ExternalOutputIds(std::move(outputs.External))
     , m_PresentationResourceId(outputs.Presentation)
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     , m_ResourcePool(std::make_shared<ResourcePool>(m_DeviceContext, m_DirectCommandQueue, m_AsyncComputeCommandQueue))
 //Modify End
 {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     Assert(m_Device != nullptr, "Render graph requires a D3D12 device.");
     Assert(m_DeviceContext != nullptr, "Render graph requires a D3D12 device context.");
     Assert(m_DirectCommandQueue != nullptr, "Render graph requires a direct command queue.");
     Assert(m_AsyncComputeCommandQueue != nullptr, "Render graph requires an async compute command queue.");
 //Modify End
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     if (std::ranges::find(m_ExternalOutputIds, m_PresentationResourceId) == m_ExternalOutputIds.end())
     {
         m_ExternalOutputIds.push_back(m_PresentationResourceId);
@@ -66,14 +67,14 @@ RenderGraph::RenderGraphRoot::RenderGraphRoot(
     }
 //Modify End
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     m_CommandExecutor = std::make_unique<RenderGraphCommandExecutor>(
         m_DirectCommandQueue,
         m_AsyncComputeCommandQueue,
         m_ResourcePool,
         m_QueueScheduler,
         m_Profiler);
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
         m_Compiler = std::make_unique<RenderGraphCompiler>(
             m_Device,
         m_ResourcePool);
@@ -116,7 +117,7 @@ void RenderGraph::RenderGraphRoot::Present(const std::shared_ptr<Window>& pWindo
 {
     const auto& pTexture = m_ResourcePool->GetTexture(resourceId);
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     auto pCommandList = m_DirectCommandQueue->GetCommandList();
 //Modify End
 
@@ -132,17 +133,17 @@ void RenderGraph::RenderGraphRoot::Present(const std::shared_ptr<Window>& pWindo
             pCommandList->TransitionBarrier(*pTexture, D3D12_RESOURCE_STATE_COPY_SOURCE);
         }
 
-        pCommandList->FlushResourceBarriers();
+        CommandListInternalAccess::FlushResourceBarriers(*pCommandList);
     }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     m_QueueScheduler.TrackExternalResource(resourceId, RenderPassQueue::Direct);
     m_QueueScheduler.SubmitDirect(pCommandList);
 //Modify End
     pWindow->Present(*pTexture);
 }
 
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
 void RenderGraph::RenderGraphRoot::PresentWithOverlay(
     const std::shared_ptr<Window>& pWindow,
     const ResourceId resourceId,
@@ -150,7 +151,7 @@ void RenderGraph::RenderGraphRoot::PresentWithOverlay(
 {
     const auto& pTexture = m_ResourcePool->GetTexture(resourceId);
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     auto pCommandList = m_DirectCommandQueue->GetCommandList();
 //Modify End
     auto& commandList = *pCommandList;
@@ -166,7 +167,7 @@ void RenderGraph::RenderGraphRoot::PresentWithOverlay(
         {
             commandList.TransitionBarrier(*pTexture, D3D12_RESOURCE_STATE_COPY_SOURCE);
         }
-        commandList.FlushResourceBarriers();
+        CommandListInternalAccess::FlushResourceBarriers(commandList);
 
         const RenderTarget& backBufferRenderTarget = pWindow->GetRenderTarget();
         const std::shared_ptr<Texture>& backBuffer = backBufferRenderTarget.GetTexture(Color0);
@@ -187,14 +188,14 @@ void RenderGraph::RenderGraphRoot::PresentWithOverlay(
         }
     }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     m_QueueScheduler.TrackExternalResource(resourceId, RenderPassQueue::Direct);
     m_QueueScheduler.SubmitDirect(pCommandList);
 //Modify End
     pWindow->Present();
 }
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 void RenderGraph::RenderGraphRoot::PresentWithExternalFrameProcessor(
     const std::shared_ptr<Window>& pWindow,
     const ResourceId displayResourceId,
@@ -214,14 +215,14 @@ void RenderGraph::RenderGraphRoot::PresentWithExternalFrameProcessor(
             Assert(resourceId != displayResourceId, "Display resource must not be duplicated in external processor resources.");
             commandList->TransitionBarrier(m_ResourcePool->GetResource(resourceId), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         }
-        commandList->FlushResourceBarriers();
+        CommandListInternalAccess::FlushResourceBarriers(*commandList);
 
         const RenderTarget& backBufferRenderTarget = pWindow->GetRenderTarget();
         const std::shared_ptr<Texture>& backBuffer = backBufferRenderTarget.GetTexture(Color0);
         commandList->CopyResource(*backBuffer, *displayTexture);
 
         commandList->TransitionBarrier(*displayTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-        commandList->FlushResourceBarriers();
+        CommandListInternalAccess::FlushResourceBarriers(*commandList);
 
         processor.Process(*commandList, displayTexture);
         if (overlayCallback)
@@ -253,7 +254,7 @@ void RenderGraph::RenderGraphRoot::PresentWithOverlayBlit(
 {
     const auto& pTexture = m_ResourcePool->GetTexture(resourceId);
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     auto pCommandList = m_DirectCommandQueue->GetCommandList();
 //Modify End
     auto& commandList = *pCommandList;
@@ -262,7 +263,7 @@ void RenderGraph::RenderGraphRoot::PresentWithOverlayBlit(
         PIXScope(commandList, L"Render Graph: Prepare Display Blit");
 
         commandList.TransitionBarrier(*pTexture, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-        commandList.FlushResourceBarriers();
+        CommandListInternalAccess::FlushResourceBarriers(commandList);
 
         const RenderTarget& backBufferRenderTarget = pWindow->GetRenderTarget();
         commandList.SetRenderTarget(backBufferRenderTarget);
@@ -278,7 +279,7 @@ void RenderGraph::RenderGraphRoot::PresentWithOverlayBlit(
         }
     }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     m_QueueScheduler.TrackExternalResource(resourceId, RenderPassQueue::Direct);
     m_QueueScheduler.SubmitDirect(pCommandList);
 //Modify End
@@ -293,15 +294,15 @@ void RenderGraph::RenderGraphRoot::TransitionTexture(
 {
     RebuildIfNecessary(renderMetadata);
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     auto pCommandList = m_DirectCommandQueue->GetCommandList();
 //Modify End
     const auto& pTexture = m_ResourcePool->GetTexture(resourceId);
 
     pCommandList->TransitionBarrier(*pTexture, stateAfter);
-    pCommandList->FlushResourceBarriers();
+    CommandListInternalAccess::FlushResourceBarriers(*pCommandList);
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     m_QueueScheduler.TrackExternalResource(resourceId, RenderPassQueue::Direct);
     const uint64_t fenceValue = m_QueueScheduler.SubmitDirect(pCommandList);
 //Modify End
@@ -319,7 +320,7 @@ void RenderGraph::RenderGraphRoot::CopyTexture(
 {
     RebuildIfNecessary(renderMetadata);
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     auto pCommandList = m_DirectCommandQueue->GetCommandList();
 //Modify End
     auto& commandList = *pCommandList;
@@ -328,11 +329,11 @@ void RenderGraph::RenderGraphRoot::CopyTexture(
 
     commandList.TransitionBarrier(*source, D3D12_RESOURCE_STATE_COPY_SOURCE);
     commandList.TransitionBarrier(*destination, D3D12_RESOURCE_STATE_COPY_DEST);
-    commandList.FlushResourceBarriers();
+    CommandListInternalAccess::FlushResourceBarriers(commandList);
 
     commandList.CopyResource(*destination, *source);
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     m_QueueScheduler.TrackExternalResource(sourceId, RenderPassQueue::Direct);
     m_QueueScheduler.TrackExternalResource(destinationId, RenderPassQueue::Direct);
     const uint64_t fenceValue = m_QueueScheduler.SubmitDirect(pCommandList);
@@ -350,14 +351,14 @@ void RenderGraph::RenderGraphRoot::DrawToTexture(
 {
     RebuildIfNecessary(renderMetadata);
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     auto pCommandList = m_DirectCommandQueue->GetCommandList();
 //Modify End
     auto& commandList = *pCommandList;
     const auto& pTexture = m_ResourcePool->GetTexture(resourceId);
 
     commandList.TransitionBarrier(*pTexture, D3D12_RESOURCE_STATE_RENDER_TARGET);
-    commandList.FlushResourceBarriers();
+    CommandListInternalAccess::FlushResourceBarriers(commandList);
 
     RenderTarget renderTarget;
     renderTarget.AttachTexture(Color0, pTexture);
@@ -366,7 +367,7 @@ void RenderGraph::RenderGraphRoot::DrawToTexture(
 
     drawCallback(commandList);
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     m_QueueScheduler.TrackExternalResource(resourceId, RenderPassQueue::Direct);
     m_QueueScheduler.SubmitDirect(pCommandList);
 //Modify End
@@ -375,19 +376,19 @@ void RenderGraph::RenderGraphRoot::DrawToTexture(
 
 void RenderGraph::RenderGraphRoot::DrawToGraphOutput(const RenderMetadata& renderMetadata, const std::function<void(CommandList&)>& drawCallback)
 {
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     DrawToTexture(renderMetadata, ResourceIds::GRAPH_OUTPUT, drawCallback);
 //Modify End
 }
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 const std::shared_ptr<Texture>& RenderGraph::RenderGraphRoot::GetTexture(const ResourceId resourceId) const
 {
     return m_ResourcePool->GetTexture(resourceId);
 }
 //Modify End
 
-//Modify Begin:2026-08-10 by BestHui
+//Modify Begin:2026-08-10 by Hui
 const RenderGraph::RenderGraphQueueFenceValues& RenderGraph::RenderGraphRoot::GetFrameSubmissionFences() const
 {
     return m_QueueScheduler.GetFrameSubmissionFences();

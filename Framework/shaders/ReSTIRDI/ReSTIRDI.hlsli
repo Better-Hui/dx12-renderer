@@ -1,7 +1,7 @@
 #ifndef FRAMEWORK_RESTIR_DI_HLSLI
 #define FRAMEWORK_RESTIR_DI_HLSLI
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 struct ReSTIRDIReservoir
 {
     uint LightData;

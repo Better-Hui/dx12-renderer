@@ -1,4 +1,4 @@
-# Modify Begin:2026-08-16 by BestHui
+# Modify Begin:2026-08-16 by Hui
 if (NOT DEFINED DX12_RENDERER_SOURCE_ROOT OR NOT DEFINED DX12_RENDERER_THIRD_PARTY_BUILD_DIRECTORY OR NOT DEFINED DX12_RENDERER_CONFIGURATION)
         message(FATAL_ERROR "The renderer third-party build script requires source, build, and configuration arguments.")
 endif()

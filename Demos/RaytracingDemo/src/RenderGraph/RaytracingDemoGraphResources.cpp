@@ -10,15 +10,15 @@ namespace RaytracingDemoRenderGraph
     {
         const RenderGraph::RenderMetadataExpression<uint32_t> renderWidthExpression = [](const RenderGraph::RenderMetadata& metadata) { return metadata.m_ScreenWidth; };
         const RenderGraph::RenderMetadataExpression<uint32_t> renderHeightExpression = [](const RenderGraph::RenderMetadata& metadata) { return metadata.m_ScreenHeight; };
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
         const RenderGraph::RenderMetadataExpression<uint32_t> displayWidthExpression = [](const RenderGraph::RenderMetadata& metadata) { return metadata.m_DisplayWidth; };
         const RenderGraph::RenderMetadataExpression<uint32_t> displayHeightExpression = [](const RenderGraph::RenderMetadata& metadata) { return metadata.m_DisplayHeight; };
 //Modify End
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
         std::vector<RenderGraph::TextureDescription> textureDescriptions = {
             { RenderGraph::ResourceIds::GRAPH_OUTPUT, renderWidthExpression, renderHeightExpression, OUTPUT_FORMAT, OUTPUT_CLEAR_COLOR, RenderGraph::ResourceInitAction::Clear },
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
             { ResourceIds::SceneColor, renderWidthExpression, renderHeightExpression, SCENE_COLOR_FORMAT, OUTPUT_CLEAR_COLOR, RenderGraph::ResourceInitAction::Clear, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS | D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS, D3D12_HEAP_FLAG_SHARED, true },
 //Modify End
             { ResourceIds::GBufferAlbedoOcclusion, renderWidthExpression, renderHeightExpression, GBUFFER_COLOR_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Clear },
@@ -27,15 +27,15 @@ namespace RaytracingDemoRenderGraph
             { ResourceIds::GBufferEmissionMetallic, renderWidthExpression, renderHeightExpression, GBUFFER_COLOR_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Clear },
             { ResourceIds::GBufferPosition, renderWidthExpression, renderHeightExpression, GBUFFER_POSITION_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Clear },
             { ResourceIds::MotionVector, renderWidthExpression, renderHeightExpression, MOTION_VECTOR_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Clear },
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
             { ResourceIds::DirectLighting, renderWidthExpression, renderHeightExpression, LIGHTING_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Clear },
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-11 by Hui
             { ResourceIds::IndirectLighting, renderWidthExpression, renderHeightExpression, LIGHTING_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Clear, D3D12_RESOURCE_FLAG_NONE, D3D12_HEAP_FLAG_NONE, true },
 //Modify End
 //Modify End
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
             { ResourceIds::HistoryColor, renderWidthExpression, renderHeightExpression, ACCUMULATION_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Preserve, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_HEAP_FLAG_NONE, true },
 //Modify End
             { ResourceIds::NoisyRadiance, renderWidthExpression, renderHeightExpression, LIGHTING_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Discard },
@@ -46,7 +46,7 @@ namespace RaytracingDemoRenderGraph
             { ResourceIds::NRDMotion, renderWidthExpression, renderHeightExpression, NRD_MOTION_FORMAT, GBUFFER_CLEAR_COLOR, RenderGraph::ResourceInitAction::Discard },
             { ResourceIds::DepthBuffer, renderWidthExpression, renderHeightExpression, DEPTH_FORMAT, { 1.0f, 0u }, RenderGraph::ResourceInitAction::Clear },
         };
-//Modify Begin:2026-08-17 by BestHui
+//Modify Begin:2026-08-17 by Hui
         if (includeFrameworkBloom)
         {
             textureDescriptions.emplace_back(
@@ -113,7 +113,7 @@ namespace RaytracingDemoRenderGraph
         const bool includeDLSS,
         const bool includeFrameGeneration)
     {
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
         std::vector<RenderGraph::TokenDescription> tokenDescriptions = {
             { ResourceIds::BaseResourcesFinishedToken },
             { ResourceIds::SkyboxFinishedToken },
@@ -122,7 +122,7 @@ namespace RaytracingDemoRenderGraph
             { ResourceIds::RayTracingFinishedToken },
             { ResourceIds::DenoiseFinishedToken },
             { ResourceIds::CudaBloomFinishedToken },
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
             { ResourceIds::DebugOutputFinishedToken },
 //Modify End
         };

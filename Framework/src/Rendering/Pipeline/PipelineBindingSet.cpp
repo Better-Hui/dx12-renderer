@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <exception>
 
-//Modify Begin:2026-07-24 by BestHui
+//Modify Begin:2026-07-24 by Hui
 
 PipelineBindingSet::PipelineBindingSet(const PipelineLayout& layout)
     : m_Layout(&layout)

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.8.0)
 
 project("Framework")
 
-# Modify Begin:2026-07-30 by BestHui
+# Modify Begin:2026-07-30 by Hui
 # Framework C++ files are collected recursively so the source tree can stay organized by module.
 # Modify End
 
@@ -14,7 +14,7 @@ set(SHADER_FILES_PIXEL
         "shaders/Blit_PS.hlsl"
         "shaders/Bloom_Prefilter_PS.hlsl"
         "shaders/Bloom_Downsample_PS.hlsl"
-# Modify Begin:2026-08-17 by BestHui
+# Modify Begin:2026-08-17 by Hui
         "shaders/Bloom_Composite_PS.hlsl"
 # Modify End
         "shaders/TAA_Resolve_PS.hlsl"
@@ -23,7 +23,7 @@ set(SHADER_FILES_PIXEL
 
 set(SHADER_FILES_COMPUTE
         "shaders/MSAADepthResolve_CS.hlsl"
-# Modify Begin:2026-07-27 by BestHui
+# Modify Begin:2026-07-27 by Hui
         "shaders/NRD/NRDInputAdapter_CS.hlsl"
         "shaders/NRD/NRDOutputComposite_CS.hlsl"
         "shaders/SVGF/SVGFAtrous_CS.hlsl"
@@ -32,7 +32,7 @@ set(SHADER_FILES_COMPUTE
 # Modify End
         )
 
-# Modify Begin:2026-08-16 by BestHui
+# Modify Begin:2026-08-16 by Hui
 # ReSTIR shader implementations belong to Framework. They are listed here for
 # IDE ownership; RaytracingDemo only compiles its scene-specific adapters.
 set(FRAMEWORK_RESTIR_DI_SHADER_FILES
@@ -61,19 +61,19 @@ set(FRAMEWORK_RESTIR_GI_ALL_SHADER_FILES
         )
 # Modify End
 
-# Modify Begin:2026-07-27 by BestHui
+# Modify Begin:2026-07-27 by Hui
 set(SHADERS_HEADER_FILES
-# Modify Begin:2026-08-06 by BestHui
+# Modify Begin:2026-08-06 by Hui
         "shaders/Common/Noise.hlsli"
         "shaders/Common/EnvironmentTexture.hlsli"
         "shaders/Bindless/BindlessResources.hlsli"
-        # Modify Begin:2026-07-30 by BestHui
+        # Modify Begin:2026-07-30 by Hui
         "shaders/Lighting/MaterialEvaluation.hlsli"
         # Modify End
         "shaders/Lighting/SurfaceEmitter.hlsli"
 # Modify End
         "shaders/SVGF/SVGFCommon.hlsli"
-# Modify Begin:2026-07-31 by BestHui
+# Modify Begin:2026-07-31 by Hui
         "shaders/Meshlet/MeshletCommon.hlsli"
 # Modify End
         ${FRAMEWORK_RESTIR_DI_ALL_SHADER_FILES}
@@ -85,7 +85,7 @@ set(TARGET_NAME Framework)
 set(SHADERS_OUTPUT_HEADERS TRUE)
 include(${CMAKE_SOURCE_DIR}/CMakeIncludes/ProjectBase.cmake)
 
-# Modify Begin:2026-08-16 by BestHui
+# Modify Begin:2026-08-16 by Hui
 set_source_files_properties(
         ${FRAMEWORK_RESTIR_DI_SHADER_FILES}
         ${FRAMEWORK_RESTIR_GI_SHADER_FILES}
@@ -103,7 +103,7 @@ source_group("Shaders\\ReSTIR GI" FILES ${FRAMEWORK_RESTIR_GI_ALL_SHADER_FILES})
 # Add source to this project's executable.
 add_library(${TARGET_NAME} STATIC ${HEADER_FILES} ${SOURCE_FILES} ${SHADER_FILES} ${SHADERS_HEADER_FILES})
 
-# Modify Begin:2026-08-16 by BestHui
+# Modify Begin:2026-08-16 by Hui
 # Dear ImGui is compiled into Framework so every ImGui::Slider* call shares the same double-click input behavior.
 set(DX12_RENDERER_IMGUI_SOURCES
         ${DX12_RENDERER_IMGUI_COMPILED_SOURCES}
@@ -112,7 +112,7 @@ target_sources(${TARGET_NAME} PRIVATE ${DX12_RENDERER_IMGUI_SOURCES})
 source_group("Third Party\\Dear ImGui" FILES ${DX12_RENDERER_IMGUI_SOURCES})
 # Modify End
 
-# Modify Begin:2026-07-28 by BestHui
+# Modify Begin:2026-07-28 by Hui
 target_compile_options(${TARGET_NAME} PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 # Modify End
 
@@ -120,18 +120,18 @@ include(${CMAKE_SOURCE_DIR}/CMakeIncludes/ProjectBasePost.cmake)
 
 target_include_directories(${TARGET_NAME}
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/Framework
-# Modify Begin:2026-08-07 by BestHui
+# Modify Begin:2026-08-07 by Hui
         PRIVATE "${DX12_RENDERER_DLSS_INCLUDE_DIRECTORY}"
         PRIVATE "${DX12_RENDERER_STREAMLINE_INCLUDE_DIRECTORY}"
 # Modify End
-# Modify Begin:2026-08-16 by BestHui
+# Modify Begin:2026-08-16 by Hui
         PUBLIC "${DX12_RENDERER_IMGUI_SOURCE_DIRECTORY}"
         PUBLIC "${DX12_RENDERER_IMGUI_SOURCE_DIRECTORY}/backends"
 # Modify End
         )
 
-# Modify Begin:2026-07-28 by BestHui
-# Modify Begin:2026-07-30 by BestHui
+# Modify Begin:2026-07-28 by Hui
+# Modify Begin:2026-07-30 by Hui
 set(DX12_RENDERER_CUDA_TOOLKIT_ROOT "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.8" CACHE PATH "CUDA Toolkit 12.8 root used by DX12 renderer CUDA interop.")
 
 find_path(DX12_RENDERER_CUDA_INCLUDE_DIR
@@ -159,30 +159,30 @@ target_include_directories(${TARGET_NAME}
 
 target_link_libraries(${TARGET_NAME}
         PUBLIC DX12Library
-# Modify Begin:2026-08-07 by BestHui
+# Modify Begin:2026-08-07 by Hui
         PUBLIC "${DX12_RENDERER_DLSS_LIBRARY}"
         PUBLIC "${DX12_RENDERER_STREAMLINE_LIBRARY}"
 # Modify End
-# Modify Begin:2026-07-28 by BestHui
+# Modify Begin:2026-07-28 by Hui
         PUBLIC "${DX12_RENDERER_CUDA_DRIVER_LIBRARY}"
 # Modify End
-# Modify Begin:2026-08-10 by BestHui
+# Modify Begin:2026-08-10 by Hui
         PUBLIC NRD
         PUBLIC NRDIntegration
         PUBLIC NRI
 # Modify End
         )
 
-# Modify Begin:2026-08-16 by BestHui
+# Modify Begin:2026-08-16 by Hui
 target_link_libraries(${TARGET_NAME} PRIVATE d3d12 dxgi dxguid imm32)
 # Modify End
 
-# Modify Begin:2026-07-30 by BestHui
+# Modify Begin:2026-07-30 by Hui
 find_package(meshoptimizer CONFIG REQUIRED)
 target_link_libraries(${TARGET_NAME} PUBLIC meshoptimizer::meshoptimizer)
 # Modify End
 
-# Modify Begin:2026-08-16 by BestHui
+# Modify Begin:2026-08-16 by Hui
 option(DX12_RENDERER_BUILD_DEVELOPER_TOOLS "Build developer-only command-line tools." OFF)
 if (DX12_RENDERER_BUILD_DEVELOPER_TOOLS)
         add_executable(UnitySceneDump "tools/UnitySceneDump.cpp")

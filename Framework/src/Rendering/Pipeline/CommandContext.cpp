@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 
@@ -6,14 +6,14 @@
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Resource.h>
 #include <DX12Library/StructuredBuffer.h>
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <Framework/Rendering/Pipeline/BindlessDescriptorHeap.h>
 //Modify End
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <Framework/Rendering/Pipeline/IndirectDrawCommandSignature.h>
 #include <Framework/Rendering/Pipeline/MeshShader.h>
 //Modify End
@@ -32,7 +32,7 @@
 #include <set>
 #include <unordered_set>
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 namespace
 {
     void LogMissingConstantBufferOnce(const std::string_view name)
@@ -50,7 +50,7 @@ namespace
 
     void TransitionShaderResourceBinding(CommandList& commandList, const PipelineShaderResourceBinding& shaderResource)
     {
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
         if (shaderResource.Resource == nullptr || !shaderResource.Resource->AreAutoBarriersEnabled())
         {
             return;
@@ -71,7 +71,7 @@ namespace
 
     void TransitionUnorderedAccessView(CommandList& commandList, const UnorderedAccessView& unorderedAccessView)
     {
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
         if (unorderedAccessView.m_Resource == nullptr || !unorderedAccessView.m_Resource->AreAutoBarriersEnabled())
         {
             return;
@@ -125,13 +125,13 @@ void CommandContext::SetPipelineLayout(const PipelineBindPoint bindPoint, const 
     {
         SetComputeRootSignature(*rootSignature);
     }
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
     m_DescriptorAllocator.ResetTransientBindings();
     (void)pipelineLayout;
 //Modify End
 }
 
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
 void CommandContext::SetDescriptorPool(const PipelineDescriptorPool& descriptorPool) const
 {
     m_DescriptorPool = &descriptorPool;
@@ -160,7 +160,7 @@ void CommandContext::SetDescriptorSet(
 
 void CommandContext::SetDescriptorSet(const PipelineBindPoint bindPoint, const PipelineDescriptorSet& descriptorSet) const
 {
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     std::set<UINT> appliedRootParameters;
     for (const auto& [rootParameterIndex, boundResource] : descriptorSet.GetBoundResources())
     {
@@ -212,7 +212,7 @@ void CommandContext::SetPipeline(Shader& shader) const
     m_HasBoundPipeline = true;
     m_BoundRayTracingShader = nullptr;
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const auto& device = shader.GetDeviceContext().GetDevice();
 //Modify End
     const auto& renderTargetState = m_CommandList.GetLastRenderTargetState();
@@ -231,14 +231,14 @@ void CommandContext::SetPipeline(Shader& shader) const
     SetGraphicsPipelineState(pipelineState);
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 void CommandContext::SetPipeline(MeshShader& shader) const
 {
     m_BoundPipelineBindPoint = PipelineBindPoint::Graphics;
     m_HasBoundPipeline = true;
     m_BoundRayTracingShader = nullptr;
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const auto& device = shader.GetDeviceContext().GetDevice();
 //Modify End
     const auto& renderTargetState = m_CommandList.GetLastRenderTargetState();
@@ -263,7 +263,7 @@ void CommandContext::SetPipeline(const ComputeShader& shader) const
     m_HasBoundPipeline = true;
     m_BoundRayTracingShader = nullptr;
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const auto& device = shader.GetDeviceContext().GetDevice();
 //Modify End
     const auto pipelineState = shader.GetPipelineState(device);
@@ -296,7 +296,7 @@ void CommandContext::BindPipeline(Shader& shader) const
     SetPipeline(shader);
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 void CommandContext::BindPipeline(MeshShader& shader) const
 {
     SetPipeline(shader);
@@ -313,7 +313,7 @@ void CommandContext::BindPipeline(const RayTracingShader& shader) const
     SetPipeline(shader);
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 void CommandContext::BindBindlessDescriptorHeap(
     BindlessDescriptorHeap& bindlessDescriptorHeap) const
 {
@@ -326,7 +326,7 @@ void CommandContext::BindBindlessDescriptorHeap(
 
 void CommandContext::BindDescriptorSet(const PipelineDescriptorSetBindDesc& descriptorSetDesc) const
 {
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
     Assert(m_HasBoundPipeline, "A pipeline must be bound before binding a descriptor set.");
     SetDescriptorSet(m_BoundPipelineBindPoint, descriptorSetDesc);
 //Modify End
@@ -337,7 +337,7 @@ void CommandContext::BindDescriptorSet(const PipelineDescriptorSet& descriptorSe
     BindDescriptorSet(PipelineDescriptorSetBindDesc{ descriptorSet.GetSetIndex(), &descriptorSet });
 }
 
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
 void CommandContext::SetConstantBuffer(Shader& shader, const std::string_view name, const size_t size, const void* data) const
 {
     if (!shader.HasConstantBuffer(std::string(name)))
@@ -425,7 +425,7 @@ void CommandContext::SetTexture(MeshShader& shader, const std::string_view name,
 
 void CommandContext::SetStructuredBuffer(const ComputeShader& shader, const std::string_view name, const StructuredBuffer& buffer) const
 {
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
     shader.m_DescriptorSet->SetStructuredBuffer(
         name,
         buffer,
@@ -445,7 +445,7 @@ void CommandContext::SetConstantBuffer(const ComputeShader& shader, const std::s
 
 void CommandContext::SetShaderResourceView(const ComputeShader& shader, const std::string_view name, const ShaderResourceView& shaderResourceView) const
 {
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
     shader.m_DescriptorSet->SetShaderResourceView(
         name,
         0u,
@@ -456,7 +456,7 @@ void CommandContext::SetShaderResourceView(const ComputeShader& shader, const st
 
 void CommandContext::SetShaderResourceView(const ComputeShader& shader, const std::string_view name, const uint32_t arrayIndex, const ShaderResourceView& shaderResourceView) const
 {
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
     shader.m_DescriptorSet->SetShaderResourceView(
         name,
         arrayIndex,
@@ -477,7 +477,7 @@ void CommandContext::SetShaderResource(
 
 void CommandContext::SetShaderResourceViews(const ComputeShader& shader, const std::string_view name, std::span<const ShaderResourceView> shaderResourceViews) const
 {
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
     shader.m_DescriptorSet->SetShaderResourceViews(
         name,
         shaderResourceViews,
@@ -534,7 +534,7 @@ void CommandContext::SetRayTracingPipelineState(
     m_CommandList.SetComputeRootSignature(globalRootSignature);
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 void CommandContext::StageDefaultDescriptorTable(
     const PipelineBindPoint bindPoint,
     const PipelineDescriptorSet& descriptorSet,
@@ -853,7 +853,7 @@ void CommandContext::StageDynamicDescriptors(
     m_CommandList.StageDynamicDescriptors(descriptorHeapType, rootParameterIndex, offset, numDescriptors, baseDescriptor);
 }
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 void CommandContext::InsertDescriptorSetOutputBarriers(const PipelineDescriptorSet& descriptorSet) const
 {
     InsertDescriptorSetOutputBarriersImpl(m_CommandList, descriptorSet);
@@ -890,7 +890,7 @@ void CommandContext::Draw(
     m_CommandList.Draw(vertexCount, instanceCount, startVertex, startInstance);
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 void CommandContext::DrawIndexed(
     const uint32_t indexCount,
     const uint32_t instanceCount,
@@ -902,7 +902,7 @@ void CommandContext::DrawIndexed(
 }
 //Modify End
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 void CommandContext::DrawIndirect(
     const IndirectDrawCommandSignature& commandSignature,
     const uint32_t maxCommandCount,
@@ -936,7 +936,7 @@ void CommandContext::Dispatch(const uint32_t numGroupsX, const uint32_t numGroup
 
 void CommandContext::BindDescriptorSet(const RayTracingBindingSet& bindingSet) const
 {
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     const RayTracingShader& shader = bindingSet.GetShader();
     const PipelineDescriptorSet& descriptorSet = bindingSet.GetDescriptorSet();
     Assert(descriptorSet.GetAccelerationStructure() != nullptr, "Ray tracing acceleration structure is not bound.");
@@ -945,7 +945,7 @@ void CommandContext::BindDescriptorSet(const RayTracingBindingSet& bindingSet) c
     {
         SetPipeline(shader);
     }
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
     SetDescriptorPool(bindingSet.GetDescriptorPool());
     SetDescriptorSet(PipelineBindPoint::RayTracing, PipelineDescriptorSetBindDesc{ descriptorSet.GetSetIndex(), &descriptorSet });
 //Modify End

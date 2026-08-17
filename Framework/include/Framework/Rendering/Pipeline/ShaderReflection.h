@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-07-24 by BestHui
+//Modify Begin:2026-07-24 by Hui
 
 #include <DX12Library/ShaderUtils.h>
 
@@ -24,7 +24,7 @@ struct ShaderReflectionMetadata
     std::vector<ShaderUtils::UnorderedAccessViewMetadata> m_UnorderedAccessViews{};
     NameCacheMap m_UnorderedAccessViewsNameCache{};
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     std::vector<ShaderUtils::SamplerMetadata> m_Samplers{};
     NameCacheMap m_SamplersNameCache{};
 //Modify End

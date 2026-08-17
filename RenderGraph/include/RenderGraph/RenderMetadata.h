@@ -8,7 +8,7 @@ namespace RenderGraph
     {
         uint32_t m_ScreenWidth = 1;
         uint32_t m_ScreenHeight = 1;
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
         uint32_t m_DisplayWidth = 1;
         uint32_t m_DisplayHeight = 1;
 //Modify End

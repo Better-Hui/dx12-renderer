@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include "RenderGraphCommandExecutor.h"
 
 #include "RenderGraphProfiler.h"
@@ -7,6 +7,7 @@
 #include "ResourcePool.h"
 
 #include <DX12Library/CommandList.h>
+#include <DX12Library/CommandListInternalAccess.h>
 #include <DX12Library/CommandQueue.h>
 #include <DX12Library/Helpers.h>
 #include <DX12Library/RenderTarget.h>
@@ -121,7 +122,7 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
                 Assert(IsAsyncComputeOutput(output.m_Type),
                     "Async compute render passes cannot write render targets or depth resources.");
             }
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
             for (const ExternalResourceAccess& access : renderPass->GetExternalResourceAccesses())
             {
                 Assert(access.Mode == ExternalResourceAccessMode::Read,
@@ -260,7 +261,7 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
     }
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 void RenderGraph::RenderGraphCommandExecutor::ExecuteParallelDirectBatch(
     const RenderGraphRecordingBatch& batch,
     const RenderMetadata& renderMetadata,
@@ -427,7 +428,7 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareAsyncComputeDependency(
         });
     }
 
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
     ApplyExternalResourceTransitions(commandList, directPreamble.ExternalResourceTransitions);
 //Modify End
 
@@ -464,7 +465,7 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareAsyncComputeDependency(
     m_QueueScheduler.WaitForDirectSubmissionOnAsyncCompute(producerFenceValue);
 }
 
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
 void RenderGraph::RenderGraphCommandExecutor::ApplyExternalResourceTransitions(
     CommandList& commandList,
     const std::span<const PassExternalResourceTransition> transitions)
@@ -508,7 +509,7 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareResourcesForRenderPass(
         });
     }
 
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
     ApplyExternalResourceTransitions(commandList, resourceStatePlan.ExternalResourceTransitions);
 //Modify End
 
@@ -560,7 +561,7 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareResourcesForRenderPass(
         }
     }
 
-    commandList.FlushResourceBarriers();
+    CommandListInternalAccess::FlushResourceBarriers(commandList);
 
     if (renderTargetIt != renderTargets.end())
     {
@@ -607,7 +608,7 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareResourcesForRenderPass(
         case Discard:
             commandList.DiscardResource(m_ResourcePool->GetResource(outputId));
             break;
-//Modify Begin:2026-08-05 by BestHui
+//Modify Begin:2026-08-05 by Hui
         case Preserve:
             break;
 //Modify End

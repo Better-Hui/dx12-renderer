@@ -22,7 +22,7 @@ struct [raypayload] RayPayload
     float Metallic : read(caller) : write(caller, closesthit, miss);
     float Roughness : read(caller) : write(caller, closesthit, miss);
     float AmbientOcclusion : read(caller) : write(caller, closesthit, miss);
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
     float3 Emission : read(caller) : write(caller, closesthit, miss);
     uint Padding0 : read(caller) : write(caller, closesthit, miss);
 //Modify End
@@ -38,7 +38,7 @@ struct RayPayload
     float Metallic;
     float Roughness;
     float AmbientOcclusion;
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
     float3 Emission;
 //Modify End
     uint Padding0;

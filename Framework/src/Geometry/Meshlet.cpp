@@ -12,7 +12,7 @@
 
 using namespace DirectX;
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 namespace
 {
     void CopyFloat3(XMFLOAT3& destination, const float source[3])
@@ -134,7 +134,7 @@ MeshletBuildResult MeshletBuilder::Build(const MeshPrototype& meshPrototype, con
 }
 //Modify End
 
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
 MeshletGeometrySet::MeshletGeometrySet()
     : m_VertexBuffer(L"MeshletGeometrySet Vertices")
     , m_IndexBuffer(L"MeshletGeometrySet Indices")
@@ -321,7 +321,7 @@ void MeshletGeometrySet::BuildInstances()
     }
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 void MeshletSceneResources::Clear()
 {
     m_GeometrySet.Clear();
@@ -395,7 +395,7 @@ bool MeshletSceneResources::RemoveInstance(const MeshletSceneInstanceHandle hand
     }
 
     m_Instances.pop_back();
-    // Modify Begin:2026-08-07 by BestHui
+    // Modify Begin:2026-08-07 by Hui
     // Updating the moved instance may rehash the unordered map and invalidate indexResult.
     m_InstanceIndices.erase(handle);
     // Modify End
@@ -403,7 +403,7 @@ bool MeshletSceneResources::RemoveInstance(const MeshletSceneInstanceHandle hand
     return true;
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 void MeshletSceneResources::RemoveInstances(const std::span<const MeshletSceneInstanceHandle> handles)
 {
     if (handles.empty())

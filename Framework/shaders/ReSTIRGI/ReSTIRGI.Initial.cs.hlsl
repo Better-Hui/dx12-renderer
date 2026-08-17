@@ -1,11 +1,11 @@
 #include "ReSTIRGI/ReSTIRGISceneContract.hlsli"
 #include "ReSTIRGI/ReSTIRGI.hlsli"
 #include "ReSTIRGI/ReSTIRGIConstants.hlsli"
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <Common/Noise.hlsli>
 //Modify End
 
-//Modify Begin:2026-08-10 by BestHui
+//Modify Begin:2026-08-10 by Hui
 RWTexture2D<uint4> ReSTIRGIInitialCreation : register(u2);
 RWTexture2D<uint4> ReSTIRGIInitialHit : register(u3);
 RWTexture2D<uint4> ReSTIRGIInitialLight : register(u4);
@@ -23,7 +23,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     const ReSTIRGI_Surface surface = ReSTIRGI_LoadSurface(pixel);
     if (surface.Valid)
     {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         float weightSum = 0.0f;
         const uint candidateCount = max(1u, ReSTIRGI_InitialCandidateCount);
         [loop]

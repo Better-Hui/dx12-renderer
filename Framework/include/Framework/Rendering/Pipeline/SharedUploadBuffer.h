@@ -9,14 +9,14 @@
 #include <DX12Library/CommandList.h>
 #include <DX12Library/Window.h>
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 class FrameworkDeviceContext;
 //Modify End
 
 class SharedUploadBuffer
 {
 public:
-    //Modify Begin:2026-07-30 by BestHui
+    //Modify Begin:2026-07-30 by Hui
     explicit SharedUploadBuffer(FrameworkDeviceContext& deviceContext)
         : m_DeviceContext(deviceContext)
     {
@@ -64,7 +64,7 @@ private:
 
     Microsoft::WRL::ComPtr<ID3D12Resource> CreateBuffer(uint64_t capacity) const;
 
-    //Modify Begin:2026-07-30 by BestHui
+    //Modify Begin:2026-07-30 by Hui
     FrameworkDeviceContext& m_DeviceContext;
     uint64_t m_FrameIndex = 0;
     //Modify End

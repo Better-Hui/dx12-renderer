@@ -14,7 +14,7 @@ This file is for AI agents working on `dx12-renderer-master`. Keep it concise, f
 All source changes in this repository must be wrapped with:
 
 ```cpp
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 // Modified code...
 //Modify End
 ```
@@ -22,7 +22,7 @@ All source changes in this repository must be wrapped with:
 For CMake:
 
 ```cmake
-# Modify Begin:2026-07-30 by BestHui
+# Modify Begin:2026-07-30 by Hui
 # Modified code...
 # Modify End
 ```
@@ -45,6 +45,12 @@ Comments inside code must be English. Conversation with the user stays Chinese.
 - First configure may download NRI/NRD build-only dependencies into the build tree through upstream CMake `FetchContent`. These generated dependencies and NRD shader blobs must not be copied into the parent repository.
 - `External/Streamline` remains a separately provisioned SDK package because its official source repository does not contain the runtime DLL set used by the current interposer integration.
 - After a fresh clone, run `git submodule update --init --recursive` before configuring. Verify the pinned commits with `git submodule status`.
+
+### CMake Solution Hygiene
+
+- Do not use `add_custom_target(...)` solely to model internal shader compilation, asset generation, or third-party prebuild work. Visual Studio generators emit every custom target as a visible solution project.
+- Attach that work to its consuming target with `add_custom_command(TARGET <consumer> PRE_BUILD ...)` instead. Keep the invoked script's stamp/byproduct checks so this does not force unnecessary rebuilds.
+- After changing solution-generation logic, regenerate and verify that `LearningDirectX12.sln` contains no internal helper-target identifiers. Do not delete stale generated `.vcxproj` files merely because they are no longer referenced by the solution.
 
 Current tracked focus is bottom/framework/render graph/external libs/docs and `Demos/RaytracingDemo`. Old demos may still exist locally and should stay build-visible when present, but they are not the current correctness target.
 

@@ -2,7 +2,7 @@
 #include "ReSTIRGI/ReSTIRGI.hlsli"
 #include "ReSTIRGI/ReSTIRGIConstants.hlsli"
 
-//Modify Begin:2026-08-10 by BestHui
+//Modify Begin:2026-08-10 by Hui
 Texture2D<uint4> ReSTIRGIHistoryCreation : register(t12, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
 Texture2D<uint4> ReSTIRGIHistoryHit : register(t13, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
 Texture2D<uint4> ReSTIRGIHistoryLight : register(t14, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
@@ -28,7 +28,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         ReSTIRGI_IndirectLighting[pixel] = 0.0f;
         return;
     }
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     ReSTIRGI_IndirectLighting[pixel] = float4(
         max(0.0f, ReSTIRGI_EvaluateContribution(surface, reservoir) * reservoir.AverageWeight),
         0.0f);

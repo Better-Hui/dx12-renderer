@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #pragma once
 
 #include <cstdint>
@@ -23,7 +23,7 @@ namespace RenderGraph
 
         void BeginFrame();
         uint64_t SubmitDirect(std::shared_ptr<CommandList>& commandList);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         uint64_t SubmitDirect(std::vector<std::shared_ptr<CommandList>>& commandLists);
 //Modify End
         uint64_t SubmitAsyncCompute(std::shared_ptr<CommandList>& commandList, bool waitForCompletion);
@@ -36,7 +36,7 @@ namespace RenderGraph
         const RenderGraphQueueFenceValues& GetFrameSubmissionFences() const;
 
     private:
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
         struct ExternalResourceUsage
         {
             RenderPassQueue LastWriterQueue = RenderPassQueue::Direct;
@@ -58,7 +58,7 @@ namespace RenderGraph
         std::shared_ptr<CommandQueue> m_AsyncComputeCommandQueue;
         std::map<ResourceId, RenderPassQueue> m_LastWriterQueues;
         std::map<ResourceId, uint64_t> m_LastWriterFenceValues;
-//Modify Begin:2026-08-13 by BestHui
+//Modify Begin:2026-08-13 by Hui
         std::map<const Resource*, ExternalResourceUsage> m_ExternalResourceUsages;
 //Modify End
         std::map<ResourceId, RenderGraphQueueFenceValues> m_ResourceRetirements;

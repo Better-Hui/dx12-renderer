@@ -1,8 +1,8 @@
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
 #include "RayTracingShaderInternal.h"
 
 #include <DX12Library/Helpers.h>
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
 //Modify End
 #include <Framework/Rendering/Pipeline/DescriptorLayout.h>
@@ -16,7 +16,7 @@
 #undef max
 #endif
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 using namespace RayTracingShaderInternal;
 
 namespace
@@ -56,7 +56,7 @@ RayTracingShader::Impl::Impl(
     Assert(!Desc.Bindings.empty(), "Ray tracing shader requires at least one binding.");
 
     PipelineLayoutDesc layoutDesc;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     layoutDesc.RootSamplers = Desc.RootSamplers;
 //Modify End
     layoutDesc.DescriptorRanges.reserve(Desc.Bindings.size());
@@ -82,7 +82,7 @@ RayTracingShader::Impl::Impl(
     }
 
     Layout.Reset(std::move(layoutDesc));
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     for (const RayTracingShaderBindingDesc& binding : Desc.Bindings)
     {
         if (!IsDescriptorTableBinding(binding.Type))
@@ -146,7 +146,7 @@ const RayTracingPipelineDesc& RayTracingShader::GetDesc() const
     return m_Impl->Desc;
 }
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 const RayTracingPipelineState& RayTracingShader::GetPipelineState() const
 {
     return *m_Impl->PipelineState;
@@ -183,7 +183,7 @@ D3D12_DISPATCH_RAYS_DESC RayTracingShader::BuildDispatchDesc(
 }
 //Modify End
 
-//Modify Begin:2026-07-24 by BestHui
+//Modify Begin:2026-07-24 by Hui
 RayTracingBindingSet RayTracingShader::CreateBindingSet() const
 {
     return RayTracingBindingSet(*this);

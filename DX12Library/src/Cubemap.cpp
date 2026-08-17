@@ -12,7 +12,7 @@ Cubemap::Cubemap(uint32_t size, DirectX::XMVECTOR position, CommandList& command
     , m_Viewport(CD3DX12_VIEWPORT(0.0f, 0.0f, static_cast<float>(size), static_cast<float>(size)))
     , m_ScissorRect(CD3DX12_RECT(0, 0, LONG_MAX, LONG_MAX))
 {
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     const std::shared_ptr<D3D12DeviceContext>& deviceContext = commandList.GetDeviceContext();
 //Modify End
     auto colorDesc = CD3DX12_RESOURCE_DESC::Tex2D(backBufferFormat,
@@ -63,7 +63,7 @@ Cubemap::Cubemap(uint32_t size, DirectX::XMVECTOR position, CommandList& command
         auto fallbackColorDesc = colorDesc;
         fallbackColorDesc.Width = 1;
         fallbackColorDesc.Height = 1;
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
         m_FallbackCubemap = std::make_shared<Texture>(
             fallbackColorDesc,
             &m_ClearColor,

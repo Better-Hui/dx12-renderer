@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
 #include <Passes/RaytracingDemoPasses.h>
 
 #include <RenderGraph/RaytracingDemoGraphResources.h>

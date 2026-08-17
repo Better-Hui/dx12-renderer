@@ -5,7 +5,7 @@
 
 #include <vector>
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDenoisePass(
     const RaytracingDemoPassResources& resources,
     const RaytracingDemoPassConfig& config)

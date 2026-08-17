@@ -17,7 +17,7 @@
 class Texture;
 class Buffer;
 class ByteAddressBuffer;
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
 class CommandQueue;
 //Modify End
 class StructuredBuffer;
@@ -35,7 +35,7 @@ namespace RenderGraph
     class ResourcePool
     {
     public:
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         ResourcePool(
             std::shared_ptr<D3D12DeviceContext> deviceContext,
             std::shared_ptr<CommandQueue> directCommandQueue,
@@ -52,7 +52,7 @@ namespace RenderGraph
         void ForEachResource(const std::function<bool(const ResourceDescription&)>& func);
 
         const TransientResourceAllocator::ResourceLifecycle& GetResourceLifecycle(ResourceId resourceId);
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
         bool HasResourceLifecycle(ResourceId resourceId) const;
 //Modify End
 
@@ -60,13 +60,13 @@ namespace RenderGraph
         const ResourceDescription& GetDescription(ResourceId resourceId) const;
 
         void Clear(const std::map<ResourceId, RenderGraphQueueFenceValues>& resourceRetirements = {});
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
         void InitHeaps(
             const std::vector<RenderPass*>& renderPasses,
             const Microsoft::WRL::ComPtr<ID3D12Device2>& pDevice,
             const std::vector<ResourceId>& externalOutputIds = { ResourceIds::GRAPH_OUTPUT });
 //Modify End
-//Modify Begin:2026-08-10 by BestHui
+//Modify Begin:2026-08-10 by Hui
         void CreateResources();
 //Modify End
 
@@ -102,16 +102,16 @@ namespace RenderGraph
 
         ResourceInstance& AppendResourceInstance(ResourceId resourceId, const ResourceInstance& resourceInstance);
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         std::map<ResourceId, ResourceInstance> m_ResourceInstances;
 //Modify End
         std::map<ResourceId, ResourceDescription> m_ResourceDescriptions;
         std::vector<TransientResourceAllocator::HeapInfo> m_HeapInfos;
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
         std::map<ResourceId, TransientResourceAllocator::ResourceLifecycle> m_ResourceLifecycles;
 //Modify End
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         struct DeferredDeletionBatch
         {
             RenderGraphQueueFenceValues FenceValues;

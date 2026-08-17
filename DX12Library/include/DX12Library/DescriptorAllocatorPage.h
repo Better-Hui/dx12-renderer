@@ -112,7 +112,7 @@ private:
 	StaleDescriptorQueueType StaleDescriptors;
 
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> DescriptorHeap;
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 	Microsoft::WRL::ComPtr<ID3D12Device2> Device;
 	std::shared_ptr<DescriptorRetirementClock> RetirementClock;
 //Modify End

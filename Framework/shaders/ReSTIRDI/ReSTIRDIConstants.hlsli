@@ -1,7 +1,7 @@
 #ifndef FRAMEWORK_RESTIR_DI_CONSTANTS_HLSLI
 #define FRAMEWORK_RESTIR_DI_CONSTANTS_HLSLI
 
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
 #ifndef RESTIR_DI_USE_INITIAL_VISIBILITY
 #define RESTIR_DI_USE_INITIAL_VISIBILITY 0
 #endif
@@ -51,7 +51,7 @@
 #endif
 //Modify End
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 cbuffer ReSTIRDIConstants : register(b1)
 {
     uint ReSTIRDI_CandidateCount;

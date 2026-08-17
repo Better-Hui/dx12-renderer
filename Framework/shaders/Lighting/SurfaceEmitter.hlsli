@@ -1,7 +1,7 @@
 #ifndef FRAMEWORK_SURFACE_EMITTER_HLSLI
 #define FRAMEWORK_SURFACE_EMITTER_HLSLI
 
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
 static const uint SurfaceEmitterInvalidMaterialIndex = 0xffffffffu;
 static const uint SurfaceEmitterInstanceFlagUseMaterialEmission = 1u << 0u;
 

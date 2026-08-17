@@ -70,7 +70,7 @@ namespace
         }
     }
 
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
     MeshPrototype FinalizePrototype(
         VertexCollectionType&& vertices,
         IndexCollectionType&& indices,
@@ -318,12 +318,12 @@ std::shared_ptr<Mesh> Mesh::CreateSphere(CommandList& commandList, float diamete
 
 std::shared_ptr<Mesh> Mesh::CreateCube(CommandList& commandList, float size, bool rhcoords)
 {
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
     return CreateMesh(commandList, CreateCubePrototype(size, rhcoords));
 //Modify End
 }
 
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
 MeshPrototype Mesh::CreateCubePrototype(float size, bool rhcoords)
 {
     // A cube has six faces, each one pointing in a different direction.
@@ -561,12 +561,12 @@ std::shared_ptr<Mesh> Mesh::CreateTorus(CommandList& commandList, float diameter
 
 std::shared_ptr<Mesh> Mesh::CreatePlane(CommandList& commandList, float width, float height, bool rhcoords)
 {
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
     return CreateMesh(commandList, CreatePlanePrototype(width, height, rhcoords));
 //Modify End
 }
 
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
 MeshPrototype Mesh::CreatePlanePrototype(float width, float height, bool rhcoords)
 {
     VertexCollectionType vertices =

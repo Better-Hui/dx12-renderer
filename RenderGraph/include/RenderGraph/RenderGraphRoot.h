@@ -9,18 +9,18 @@
 #include <DX12Library/Window.h>
 
 #include "RenderPass.h"
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 #include "ExternalFrameProcessor.h"
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include "RenderGraphCommandExecutor.h"
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 #include "RenderGraphCompiler.h"
 //Modify End
 #include "RenderGraphExecutionPlan.h"
 #include "RenderGraphProfiler.h"
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include "RenderGraphQueueScheduler.h"
 //Modify End
 #include "RenderMetadata.h"
@@ -29,12 +29,12 @@
 
 class Texture;
 class D3D12DeviceContext;
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
 //Modify End
 
 namespace RenderGraph
 {
-//Modify Begin:2026-08-17 by BestHui
+//Modify Begin:2026-08-17 by Hui
     struct RenderGraphOutputResources
     {
         ResourceId Presentation = ResourceIds::GRAPH_OUTPUT;
@@ -46,7 +46,7 @@ namespace RenderGraph
     {
     public:
         RenderGraphRoot(
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
             std::shared_ptr<D3D12DeviceContext> deviceContext,
             Microsoft::WRL::ComPtr<ID3D12Device2> device,
             std::shared_ptr<CommandQueue> directCommandQueue,
@@ -56,33 +56,33 @@ namespace RenderGraph
             std::vector<TextureDescription>&& textures,
             std::vector<BufferDescription>&& buffers,
             std::vector<TokenDescription>&& tokens
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
             , RenderGraphOutputResources outputs = {}
 //Modify End
         );
 
         void Execute(const RenderMetadata& renderMetadata);
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
         void SetGpuTimestampProfiler(GpuTimestampProfiler* profiler) { m_Profiler.SetQueueProfiler(RenderPassQueue::Direct, profiler); }
 //Modify End
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
         void SetAsyncComputeGpuTimestampProfiler(GpuTimestampProfiler* profiler) { m_Profiler.SetQueueProfiler(RenderPassQueue::AsyncCompute, profiler); }
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         void SetDebugSerializeAsyncCompute(bool enabled) { m_DebugSerializeAsyncCompute = enabled; }
 //Modify End
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
         void SetParallelDirectCommandRecording(bool enabled) { m_ParallelDirectCommandRecording = enabled; }
 //Modify End
         void Present(const std::shared_ptr<Window>& pWindow, ResourceId resourceId = ResourceIds::GRAPH_OUTPUT);
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
         void PresentWithOverlay(const std::shared_ptr<Window>& pWindow, ResourceId resourceId, const std::function<void(CommandList&)>& drawCallback);
         void PresentWithOverlayBlit(
             const std::shared_ptr<Window>& pWindow,
             ResourceId resourceId,
             const std::function<void(CommandList&, const std::shared_ptr<Texture>&)>& blitCallback,
             const std::function<void(CommandList&)>& overlayCallback);
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
         void PresentWithExternalFrameProcessor(
             const std::shared_ptr<Window>& pWindow,
             ResourceId displayResourceId,
@@ -94,13 +94,13 @@ namespace RenderGraph
         void TransitionTexture(const RenderMetadata& renderMetadata, ResourceId resourceId, D3D12_RESOURCE_STATES stateAfter, bool waitForCompletion = false);
 //Modify End
         void DrawToGraphOutput(const RenderMetadata& renderMetadata, const std::function<void(CommandList&)>& drawCallback);
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
         const std::shared_ptr<Texture>& GetTexture(ResourceId resourceId) const;
 //Modify End
-//Modify Begin:2026-08-17 by BestHui
+//Modify Begin:2026-08-17 by Hui
         [[nodiscard]] ResourceId GetPresentationResourceId() const { return m_PresentationResourceId; }
 //Modify End
-//Modify Begin:2026-08-10 by BestHui
+//Modify Begin:2026-08-10 by Hui
         const RenderGraphQueueFenceValues& GetFrameSubmissionFences() const;
 //Modify End
         void MarkDirty();
@@ -108,19 +108,19 @@ namespace RenderGraph
     private:
         void RebuildIfNecessary(const RenderMetadata& renderMetadata);
         void CheckPotentiallyDirtyResources(const RenderMetadata& renderMetadata);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;
         std::shared_ptr<D3D12DeviceContext> m_DeviceContext;
         std::shared_ptr<CommandQueue> m_DirectCommandQueue;
-//Modify Begin:2026-08-03 by BestHui
+//Modify Begin:2026-08-03 by Hui
         std::shared_ptr<CommandQueue> m_AsyncComputeCommandQueue;
 //Modify End
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         RenderGraphQueueScheduler m_QueueScheduler;
         bool m_DebugSerializeAsyncCompute = false;
 //Modify End
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
         bool m_ParallelDirectCommandRecording = true;
 //Modify End
 
@@ -129,16 +129,16 @@ namespace RenderGraph
         std::vector<TextureDescription> m_TextureDescriptions;
         std::vector<BufferDescription> m_BufferDescriptions;
         std::vector<TokenDescription> m_TokenDescriptions;
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
         std::vector<ResourceId> m_ExternalOutputIds;
 //Modify End
-//Modify Begin:2026-08-17 by BestHui
+//Modify Begin:2026-08-17 by Hui
         ResourceId m_PresentationResourceId = ResourceIds::GRAPH_OUTPUT;
 //Modify End
 
         std::shared_ptr<ResourcePool> m_ResourcePool;
-//Modify Begin:2026-07-30 by BestHui
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-07 by Hui
         std::unique_ptr<RenderGraphCompiler> m_Compiler;
         std::unique_ptr<CompiledRenderGraph> m_CompiledGraph;
 //Modify End

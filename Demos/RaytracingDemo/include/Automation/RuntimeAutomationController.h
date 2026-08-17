@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -22,10 +22,10 @@ namespace DemoAutomation
         std::vector<Step> Core;
         std::vector<Step> Stress;
         std::vector<Step> Matrix;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         std::vector<Step> ReSTIRGIProfile;
 //Modify End
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
         std::vector<Step> ReSTIRGIVariants;
         std::vector<Step> ReSTIRDIVariants;
 //Modify End

@@ -5,7 +5,7 @@
 #define RAYTRACING_DEMO_INLINE_BACKEND 0
 #endif
 
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
 #if !defined(RAYTRACING_DEMO_ENVIRONMENT_PROJECTION)
 #define RAYTRACING_DEMO_ENVIRONMENT_PROJECTION 0
 #endif
@@ -13,7 +13,7 @@
 
 #include "../GBuffer/GBufferLayout.hlsli"
 #include <Bindless/BindlessResources.hlsli>
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
 #include <Common/EnvironmentTexture.hlsli>
 //Modify End
 #include <Lighting/SurfaceEmitter.hlsli>
@@ -75,7 +75,7 @@ Texture2D<float4> GBufferTextures
     : RAYTRACING_DEMO_GBUFFER_REGISTER;
 
 Texture2D<float> DepthTexture : RAYTRACING_DEMO_DEPTH_REGISTER;
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
 #if RAYTRACING_DEMO_ENVIRONMENT_PROJECTION != 0
 Texture2D Skybox : RAYTRACING_DEMO_SKYBOX_REGISTER;
 #else
@@ -97,7 +97,7 @@ RWTexture2D<float4> DirectLighting : RAYTRACING_DEMO_DIRECT_LIGHTING_REGISTER;
 RWTexture2D<float4> IndirectLighting : RAYTRACING_DEMO_INDIRECT_LIGHTING_REGISTER;
 SamplerState LinearWrapSampler : RAYTRACING_DEMO_LINEAR_SAMPLER_REGISTER;
 
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
 float3 SampleEnvironmentRadiance(const float3 directionWs)
 {
 #if RAYTRACING_DEMO_ENVIRONMENT_PROJECTION == 1

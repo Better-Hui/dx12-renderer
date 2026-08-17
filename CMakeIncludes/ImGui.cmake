@@ -1,4 +1,4 @@
-# Modify Begin:2026-08-16 by BestHui
+# Modify Begin:2026-08-16 by Hui
 include(FetchContent)
 
 FetchContent_Declare(dx12_renderer_imgui
@@ -66,7 +66,7 @@ if (DX12_RENDERER_IMGUI_PATCH_OFFSET EQUAL -1)
         message(FATAL_ERROR "Dear ImGui ${IMGUI_VERSION} SliderScalar source no longer matches the required double-click input patch.")
 endif()
 string(REPLACE "${DX12_RENDERER_IMGUI_SLIDER_INPUT_SOURCE}" "${DX12_RENDERER_IMGUI_SLIDER_INPUT_REPLACEMENT}" DX12_RENDERER_IMGUI_PATCHED_WIDGETS_CONTENT "${DX12_RENDERER_IMGUI_WIDGETS_CONTENT}")
-# Modify Begin:2026-08-16 by BestHui
+# Modify Begin:2026-08-16 by Hui
 set(DX12_RENDERER_IMGUI_GRAB_OFFSET_SOURCE [=[                    g.SliderGrabClickOffset = (clicked_around_grab && is_floating_point) ? mouse_abs_pos - grab_pos : 0.0f;
 ]=])
 set(DX12_RENDERER_IMGUI_GRAB_OFFSET_REPLACEMENT [=[                    g.SliderGrabClickOffset = clicked_around_grab ? mouse_abs_pos - grab_pos : 0.0f;

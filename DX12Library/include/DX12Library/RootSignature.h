@@ -45,7 +45,7 @@ class RootSignature
 {
 public:
 	RootSignature();
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 	RootSignature(
 		const D3D12_ROOT_SIGNATURE_DESC1& rootSignatureDesc,
 		D3D_ROOT_SIGNATURE_VERSION rootSignatureVersion,
@@ -62,7 +62,7 @@ public:
 		return D3d12RootSignature;
 	}
 
-	//Modify Begin:2026-08-07 by BestHui
+	//Modify Begin:2026-08-07 by Hui
 	void SetRootSignatureDesc(
 		const D3D12_ROOT_SIGNATURE_DESC1& rootSignatureDesc,
 		D3D_ROOT_SIGNATURE_VERSION rootSignatureVersion,

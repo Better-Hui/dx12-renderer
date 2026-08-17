@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 
 #define FRAMEWORK_DEPRECATED(Message) [[deprecated(Message)]]
 

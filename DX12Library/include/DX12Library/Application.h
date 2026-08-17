@@ -32,10 +32,10 @@
   */
 
 #include "DescriptorAllocation.h"
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
 #include "D3D12RenderContext.h"
 //Modify End
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 #include "FrameFeaturesRuntime.h"
 //Modify End
 
@@ -58,7 +58,7 @@ class ResourceStateRegistry;
 class Window;
 class StreamlineRuntime;
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 struct ApplicationCreateDesc
 {
     bool EnableStreamlineInterposer = false;
@@ -73,13 +73,13 @@ public:
     * Create the application singleton with the application instance handle.
     */
     static void Create(HINSTANCE hInst);
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     static void Create(HINSTANCE hInst, const ApplicationCreateDesc& createDesc);
 //Modify End
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
     static void Create(HINSTANCE hInst, const ExternalD3D12Context& externalContext);
 //Modify End
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     static void Create(
         HINSTANCE hInst,
         const ExternalD3D12Context& externalContext,
@@ -151,10 +151,10 @@ public:
      * Get the Direct3D 12 device
      */
     Microsoft::WRL::ComPtr<ID3D12Device2> GetDevice() const;
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     std::shared_ptr<D3D12DeviceContext> GetD3D12DeviceContext() const;
 //Modify End
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
     bool UsesExternalDevice() const;
 //Modify End
     /**
@@ -165,10 +165,10 @@ public:
      */
     std::shared_ptr<CommandQueue> GetCommandQueue(D3D12_COMMAND_LIST_TYPE type = D3D12_COMMAND_LIST_TYPE_DIRECT) const;
     std::shared_ptr<StreamlineRuntime> GetStreamlineRuntime() const;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     std::shared_ptr<ResourceStateRegistry> GetResourceStateRegistry() const;
 //Modify End
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     std::shared_ptr<FrameFeaturesRuntime> GetFrameFeaturesRuntime() const;
 //Modify End
     bool SetFrameGenerationEnabled(bool enabled) override;
@@ -207,14 +207,14 @@ public:
 protected:
     // Create an application instance.
     Application(HINSTANCE hInst);
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
     Application(HINSTANCE hInst, const ExternalD3D12Context* externalContext);
 //Modify End
     // Destroy the application instance and all windows associated with this application.
     virtual ~Application();
 
     // Initialize the application instance.
-//Modify Begin:2026-07-21 by BestHui
+//Modify Begin:2026-07-21 by Hui
     void Initialize(const ExternalD3D12Context* externalContext, const ApplicationCreateDesc& createDesc);
 //Modify End
 
@@ -230,7 +230,7 @@ private:
 
     HINSTANCE m_hInstance;
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     std::unique_ptr<DiagnosticReporter> m_DiagnosticReporter;
     D3D12RenderContext m_RenderContext;
     std::atomic<DWORD> m_MessageThreadId = 0;

@@ -21,17 +21,17 @@ namespace
 	}
 }
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 BloomPrefilter::BloomPrefilter(FrameworkDeviceContext& deviceContext, CommandList& commandList)
 //Modify End
 	: m_BlitMesh(Mesh::CreateBlitTriangle(commandList))
 {
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 	auto shader = std::make_shared<Shader>(
 		deviceContext,
 		ShaderBlob(ShaderBytecode_Blit_VS, sizeof ShaderBytecode_Blit_VS),
 		ShaderBlob(ShaderBytecode_Bloom_Prefilter_PS, sizeof ShaderBytecode_Bloom_Prefilter_PS),
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         PipelineLayoutReflectionOptions{
             .StaticSamplerContracts = { PipelineStaticSamplers::LinearClamp(3u) },
             .MaxDescriptorCount = 4096u,
@@ -47,11 +47,7 @@ void BloomPrefilter::Execute(CommandList& commandList, const BloomParameters& pa
 {
 	PIXScope(commandList, "Bloom Prefilter");
 
-	//Modify Begin:2026-08-17 by BestHui
-	commandList.TransitionBarrier(*source, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 	commandList.SetRenderTarget(destination);
-	commandList.FlushResourceBarriers();
-	//Modify End
 	commandList.SetAutomaticViewportAndScissorRect(destination);
 
 	m_Material->SetShaderResourceView("sourceColorTexture", ShaderResourceView(source));
@@ -68,5 +64,4 @@ void BloomPrefilter::Execute(CommandList& commandList, const BloomParameters& pa
 
 	m_Material->Bind(commandList);
 	m_BlitMesh->Draw(commandList);
-	m_Material->Unbind(commandList);
 }

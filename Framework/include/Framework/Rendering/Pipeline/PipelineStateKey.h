@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 #pragma once
 
 #include <DX12Library/RenderTargetState.h>
@@ -29,8 +29,8 @@ struct PipelineShaderBytecodeKey
 struct RasterPipelineStateKey
 {
     PipelineShaderBytecodeKey VertexShader;
-//Modify Begin:2026-07-30 by BestHui
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-07-31 by Hui
     PipelineShaderBytecodeKey AmplificationShader;
 //Modify End
     PipelineShaderBytecodeKey MeshShader;
@@ -43,8 +43,8 @@ struct RasterPipelineStateKey
     bool operator==(const RasterPipelineStateKey& other) const
     {
         return VertexShader == other.VertexShader &&
-//Modify Begin:2026-07-30 by BestHui
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-07-31 by Hui
             AmplificationShader == other.AmplificationShader &&
 //Modify End
             MeshShader == other.MeshShader &&

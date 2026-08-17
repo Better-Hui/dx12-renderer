@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
 #include <ShaderLibrary/Common/RootSignature.hlsli>
 #include "../Scene/SceneCamera.hlsli"
 
@@ -32,7 +32,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     }
 
     const float3 directionWs = BuildSkyboxDirection(pixel);
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const float3 skyColor = SkyboxTexture.SampleLevel(g_Common_LinearClampSampler, directionWs, 0.0f).rgb *
         Camera_SkyLight.ColorAndIntensity.rgb *
         Camera_SkyLight.ColorAndIntensity.w;

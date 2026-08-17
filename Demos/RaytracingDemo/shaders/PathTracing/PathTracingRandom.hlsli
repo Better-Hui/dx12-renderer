@@ -2,7 +2,7 @@
 #define RAYTRACING_DEMO_PATH_TRACING_RANDOM_HLSLI
 
 #include "../Common/PathTracingConstants.hlsli"
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
 #include <Common/Noise.hlsli>
 //Modify End
 
@@ -20,7 +20,7 @@ uint Hash(uint value)
 
 float Random01(inout uint state)
 {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     state = state * 747796405u + 2891336453u;
     uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
     word = (word >> 22u) ^ word;
@@ -35,26 +35,26 @@ float HashToFloat(uint value)
 
 float InterleavedGradientNoise(float2 pixel)
 {
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
     return FrameworkInterleavedGradientNoise(pixel);
 //Modify End
 }
 
 float AnimatedInterleavedGradientNoise(uint2 pixel, uint frameIndex)
 {
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
     return FrameworkAnimatedInterleavedGradientNoise(pixel, frameIndex);
 //Modify End
 }
 
 uint InitializeRandomState(uint2 pixel, uint width, uint frameIndex, uint salt)
 {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const uint pixelIndex = pixel.x + pixel.y * width;
     const uint xHash = Hash(pixel.x * 0x8da6b343u);
     const uint yHash = Hash(pixel.y * 0xd8163841u);
     const uint frameHash = Hash(frameIndex * 0xcb1ab31fu);
-//Modify Begin:2026-08-06 by BestHui
+//Modify Begin:2026-08-06 by Hui
     const float2 noise = FrameworkInterleavedGradientNoise2D(pixel, frameIndex, salt);
     return Hash(xHash ^ yHash ^ Hash(pixelIndex) ^ frameHash ^ salt ^ asuint(noise.x) ^ asuint(noise.y));
 //Modify End
@@ -76,7 +76,7 @@ float3 ToWorldHemisphere(float3 normal, float x, float y, float z)
     return normalize(tangent * x + bitangent * y + normal * z);
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 float3 SampleCosineHemisphere(float3 normal, const float2 sample)
 {
     float r = sqrt(sample.x);

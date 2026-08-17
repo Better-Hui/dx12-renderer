@@ -14,12 +14,12 @@ namespace
 	}
 }
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 Bloom::Bloom(FrameworkDeviceContext& deviceContext, CommandList& commandList, uint32_t width, uint32_t height, DXGI_FORMAT backBufferFormat, size_t pyramidSize)
 //Modify End
 	: m_Width(width)
 	, m_Height(height)
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 	, m_Prefilter(deviceContext, commandList)
 	, m_Downsample(deviceContext, commandList)
 	, m_Upsample(deviceContext, commandList)
@@ -62,7 +62,7 @@ void Bloom::Draw(CommandList& commandList,
 
 	m_Prefilter.Execute(commandList, parameters, source, m_IntermediateTextures[0]);
 
-//Modify Begin:2026-08-17 by BestHui
+//Modify Begin:2026-08-17 by Hui
     for (size_t i = 1; i < m_IntermediateTextures.size(); ++i)
     {
         const auto& previousTexture = m_IntermediateTextures[i - 1].GetTexture(Color0);
@@ -115,7 +115,7 @@ void Bloom::CreateIntermediateTexture(
 	GetIntermediateTextureSize(width, height, index, textureWidth, textureHeight);
 
 	auto desc = CreateRenderTargetDesc(format, textureWidth, textureHeight);
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
 	auto intermediateTexture = std::make_shared<Texture>(
 		desc,
 		nullptr,

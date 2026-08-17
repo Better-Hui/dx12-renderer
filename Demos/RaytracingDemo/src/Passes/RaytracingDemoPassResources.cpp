@@ -1,9 +1,9 @@
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <Passes/RaytracingDemoPassResources.h>
 
 #include <RenderGraph/RenderContext.h>
 #include <RenderGraph/RenderMetadata.h>
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include <Scene/SceneLightManager.h>
 //Modify End
 
@@ -18,11 +18,11 @@ RaytracingDemoCameraConstants BuildPassCameraConstants(
     const RaytracingDemoPassConfig& config,
     const RenderGraph::RenderContext& context)
 {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const RaytracingDemoFrameState& frameState = *config.FrameState;
 //Modify End
     RaytracingDemoCameraConstants camera{};
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     camera.InverseView = XMMatrixInverse(nullptr, frameState.View);
     camera.InverseProjection = XMMatrixInverse(nullptr, frameState.Projection);
 //Modify End
@@ -39,7 +39,7 @@ RaytracingDemoCameraConstants BuildPassCameraConstants(
     camera.AccumulationFrameIndex = accumulationEnabled ? frameState.AccumulationFrameIndex : 0u;
     camera.AccumulationEnabled = accumulationEnabled ? 1u : 0u;
     resources.Denoisers.FillCameraConstants(camera.NRDDenoiserMode, camera.NRDReblurHitDistanceParameters);
-//Modify Begin:2026-08-05 by BestHui
+//Modify Begin:2026-08-05 by Hui
     camera.ReSTIRDIHistoryValid = frameState.ReSTIRDIHistoryValid ? 1u : 0u;
 //Modify End
     return camera;
@@ -49,11 +49,11 @@ RaytracingDemoPipelineConstants BuildPassPipelineConstants(
     const RaytracingDemoPassResources& resources,
     const RaytracingDemoPassConfig& config)
 {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const RaytracingDemoFrameState& frameState = *config.FrameState;
 //Modify End
     RaytracingDemoPipelineConstants pipeline{};
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     pipeline.View = frameState.View;
     pipeline.Projection = frameState.Projection;
     pipeline.ViewProjection = frameState.ViewProjection;

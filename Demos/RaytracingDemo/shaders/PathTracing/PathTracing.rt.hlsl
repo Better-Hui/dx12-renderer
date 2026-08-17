@@ -35,7 +35,7 @@ void IndirectLightingRayGen()
 [shader("miss")]
 void Miss(inout RayPayload payload)
 {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const RayPayload missPayload = MakeMissPayload(WorldRayDirection());
     payload.BaseColor = missPayload.BaseColor;
     payload.HitT = missPayload.HitT;
@@ -55,7 +55,7 @@ void ClosestHit(inout RayPayload payload, BuiltInTriangleIntersectionAttributes 
 {
     GeometryData geometry = Geometries[InstanceID()];
     MaterialData material = Materials[geometry.MaterialIndex];
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const RayPayload trianglePayload = MakeTrianglePayload(
         geometry,
         material,
@@ -78,12 +78,12 @@ void ClosestHit(inout RayPayload payload, BuiltInTriangleIntersectionAttributes 
 //Modify End
 }
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 [shader("closesthit")]
 void VisibilityClosestHit(inout RayPayload payload, BuiltInTriangleIntersectionAttributes attributes)
 {
     (void)attributes;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     payload.BaseColor = 0.0f;
     payload.Hit = 1u;
     payload.HitT = RayTCurrent();

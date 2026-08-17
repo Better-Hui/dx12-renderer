@@ -1,10 +1,10 @@
 #ifndef RAYTRACING_DEMO_RESTIR_GI_SCENE_ADAPTER_HLSLI
 #define RAYTRACING_DEMO_RESTIR_GI_SCENE_ADAPTER_HLSLI
 
-//Modify Begin:2026-08-10 by BestHui
+//Modify Begin:2026-08-10 by Hui
 #define FRAMEWORK_RESTIR_GI_SCENE_ADAPTER 1
 
-//Modify Begin:2026-08-11 by BestHui
+//Modify Begin:2026-08-11 by Hui
 #include <ReSTIRGI/ReSTIRGIConstants.hlsli>
 #define RAYTRACING_DEMO_MAX_BOUNCES RESTIR_GI_MAX_PATH_BOUNCES
 //Modify End
@@ -16,7 +16,7 @@ float3 RaytracingDemoReSTIRGIEvaluateContribution(
     const SurfaceData surface,
     const ReSTIRGIReservoir reservoir)
 {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     if (!surface.Valid || !ReSTIRGIIsValid(reservoir))
     {
         return 0.0f;
@@ -41,7 +41,7 @@ bool RaytracingDemoReSTIRGIGenerateInitialSample(
     const float2 directionalSample,
     out ReSTIRGIReservoir reservoir)
 {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     reservoir = ReSTIRGIEmptyReservoir();
     float3 directionWs = 0.0f;
     float sourcePdf = 0.0f;
@@ -116,7 +116,7 @@ bool RaytracingDemoReSTIRGITestVisibility(
     return IsVisibleAlongRay(rayOrigin, directionWs, tMax);
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 bool RaytracingDemoReSTIRGITestVisibilityAt(
     const float3 originPositionWs,
     const float3 originNormalWs,
@@ -158,7 +158,7 @@ bool RaytracingDemoReSTIRGITestVisibilityAt(
 #define ReSTIRGI_GenerateInitialSample RaytracingDemoReSTIRGIGenerateInitialSample
 #define ReSTIRGI_EvaluateContribution RaytracingDemoReSTIRGIEvaluateContribution
 #define ReSTIRGI_TestVisibility RaytracingDemoReSTIRGITestVisibility
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #define ReSTIRGI_TestVisibilityAt RaytracingDemoReSTIRGITestVisibilityAt
 //Modify End
 #define ReSTIRGI_IndirectLighting IndirectLighting

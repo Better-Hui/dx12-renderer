@@ -2,7 +2,7 @@ target_include_directories(${TARGET_NAME}
         PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
         )
 
-# Modify Begin:2026-08-17 by BestHui
+# Modify Begin:2026-08-17 by Hui
 if (DX12_RENDERER_HAS_SHADER_ASSETS)
     # Keep shader compilation coupled to its owning target. A separate custom
     # target becomes a visible Visual Studio project even though it is not a
@@ -14,7 +14,7 @@ if (DX12_RENDERER_HAS_SHADER_ASSETS)
 endif()
 # Modify End
 
-# Modify Begin:2026-07-21 by BestHui
+# Modify Begin:2026-07-21 by Hui
 target_include_directories(${TARGET_NAME}
         PUBLIC "${CMAKE_SOURCE_DIR}/Shaders"
         )

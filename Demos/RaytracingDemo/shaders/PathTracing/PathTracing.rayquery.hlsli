@@ -10,7 +10,7 @@ RayPayload TraceScene(float3 origin, float3 direction, float tMax, uint flags)
     RayDesc ray;
     ray.Origin = origin;
     ray.Direction = direction;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     ray.TMin = 0.0001f;
 //Modify End
     ray.TMax = tMax;
@@ -26,7 +26,7 @@ RayPayload TraceScene(float3 origin, float3 direction, float tMax, uint flags)
         return MakeMissPayload(direction);
     }
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     if ((flags & RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH) != 0u)
     {
         RayPayload payload;

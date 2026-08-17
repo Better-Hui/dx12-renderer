@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 #include <RenderGraph/RaytracingDemoRenderGraphBuilder.h>
 
 #include <RenderGraph/RaytracingDemoGraphResources.h>
@@ -11,11 +11,11 @@
 
 std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::Create(RaytracingDemo& demo)
 {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const RaytracingDemoPassResources resources = demo.CreatePassResources();
     const RaytracingDemoPassConfig config = demo.CreatePassConfig();
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     const RaytracingDemoFrameState& frameState = *config.FrameState;
 //Modify End
     std::vector<std::unique_ptr<RenderGraph::RenderPass>> renderPasses;
@@ -52,9 +52,9 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
         }
     }
     renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateLightingCompositePass(resources, config));
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
     RenderGraph::ResourceId sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::RayTracingFinishedToken;
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
     if (frameState.UseMeshletGBuffer && frameState.DebugMeshletClusters)
     {
         RenderGraph::ResourceId debugTarget = RaytracingDemoRenderGraph::ResourceIds::GBufferAlbedoOcclusion;
@@ -83,7 +83,7 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
     else
 //Modify End
     {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         if (frameState.DenoiserEnabled)
         {
             renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDenoisePass(resources, config));
@@ -131,7 +131,7 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
         renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateSkyboxPass(resources, config, sceneReadyToken));
         sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::SkyboxFinishedToken;
     }
-//Modify Begin:2026-08-17 by BestHui
+//Modify Begin:2026-08-17 by Hui
     const bool useFrameworkRasterBloom = resources.CudaBloom.IsEnabled() && resources.CudaBloom.IsFrameworkRaster();
     if (resources.CudaBloom.IsEnabled())
     {
@@ -147,7 +147,7 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
     }
 //Modify End
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     RenderGraph::ResourceId displayColor = useFrameworkRasterBloom
         ? RaytracingDemoRenderGraph::ResourceIds::BloomOutput
         : RaytracingDemoRenderGraph::ResourceIds::SceneColor;
@@ -192,7 +192,7 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
         resources.DirectQueue,
         resources.AsyncComputeQueue,
         std::move(renderPasses),
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
         RaytracingDemoRenderGraph::CreateTextureDescriptions(
             frameState.DLSSEnabled,
             frameState.FrameGenerationEnabled,
@@ -200,7 +200,7 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
             useFrameworkRasterBloom),
 //Modify End
         RaytracingDemoRenderGraph::CreateBufferDescriptions(),
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
         RaytracingDemoRenderGraph::CreateTokenDescriptions(
             frameState.DLSSEnabled,
             frameState.FrameGenerationEnabled),

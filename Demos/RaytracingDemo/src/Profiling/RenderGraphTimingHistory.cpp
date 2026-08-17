@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 #include <Profiling/RenderGraphTimingHistory.h>
 
 #include <algorithm>

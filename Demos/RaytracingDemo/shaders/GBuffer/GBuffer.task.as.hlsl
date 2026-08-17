@@ -1,8 +1,8 @@
-//Modify Begin:2026-07-31 by BestHui
+//Modify Begin:2026-07-31 by Hui
 #include <ShaderLibrary/Common/RootSignature.hlsli>
 #include <Meshlet/MeshletCommon.hlsli>
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 cbuffer MeshletCullCBuffer : register(b1, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE)
 //Modify End
 {

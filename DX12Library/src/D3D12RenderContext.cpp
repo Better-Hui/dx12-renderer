@@ -3,34 +3,34 @@
 #include "D3D12RenderContext.h"
 
 #include "CommandQueue.h"
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 #include "D3D12DeviceContext.h"
 #include "ResourceStateRegistry.h"
 //Modify End
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 #include "StreamlineRuntime.h"
 
 #include <filesystem>
 #include <stdexcept>
 //Modify End
 
-//Modify Begin:2026-07-28 by BestHui
+//Modify Begin:2026-07-28 by Hui
 void D3D12RenderContext::InitializeOwned(
     Microsoft::WRL::ComPtr<ID3D12Device2> device,
     const D3D12RenderContextInitializationDesc& initializationDesc)
 {
     Assert(device != nullptr, "D3D12 device is null.");
     m_Device = device;
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     m_ResourceStateRegistry = std::make_shared<ResourceStateRegistry>();
 //Modify End
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     CreateDeviceContext();
 //Modify End
     m_UsesExternalDevice = false;
     InitializeStreamlineIfRequested(initializationDesc);
     CreateOwnedQueues();
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     ConfigureCommandListDependencies();
 //Modify End
 }
@@ -41,16 +41,16 @@ void D3D12RenderContext::InitializeExternal(
 {
     Assert(externalContext.Device != nullptr, "External D3D12 device is required.");
     ThrowIfFailed(externalContext.Device->QueryInterface(IID_PPV_ARGS(&m_Device)));
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     m_ResourceStateRegistry = std::make_shared<ResourceStateRegistry>();
 //Modify End
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     CreateDeviceContext();
 //Modify End
     m_UsesExternalDevice = true;
     InitializeStreamlineIfRequested(initializationDesc);
     WrapExternalQueues(externalContext);
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     ConfigureCommandListDependencies();
 //Modify End
 }
@@ -71,7 +71,7 @@ Microsoft::WRL::ComPtr<ID3D12Device2> D3D12RenderContext::GetDevice() const
     return m_Device;
 }
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 std::shared_ptr<D3D12DeviceContext> D3D12RenderContext::GetD3D12DeviceContext() const
 {
     return m_DeviceContext;
@@ -89,7 +89,7 @@ std::shared_ptr<CommandQueue> D3D12RenderContext::GetCommandQueue(const D3D12_CO
     case D3D12_COMMAND_LIST_TYPE_COPY:
         return m_CopyCommandQueue;
     default:
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
         throw std::invalid_argument("Invalid D3D12 command queue type.");
 //Modify End
     }
@@ -100,7 +100,7 @@ std::shared_ptr<StreamlineRuntime> D3D12RenderContext::GetStreamlineRuntime() co
     return m_StreamlineRuntime;
 }
 
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
 std::shared_ptr<ResourceStateRegistry> D3D12RenderContext::GetResourceStateRegistry() const
 {
     return m_ResourceStateRegistry;
@@ -112,7 +112,7 @@ D3D12RenderContext::~D3D12RenderContext()
     m_DirectCommandQueue.reset();
     m_ComputeCommandQueue.reset();
     m_CopyCommandQueue.reset();
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     m_DeviceContext.reset();
     m_ResourceStateRegistry.reset();
 //Modify End
@@ -122,7 +122,7 @@ D3D12RenderContext::~D3D12RenderContext()
     }
 }
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 void D3D12RenderContext::CreateDeviceContext()
 {
     D3D12DeviceContextDesc deviceContextDesc;
@@ -132,7 +132,7 @@ void D3D12RenderContext::CreateDeviceContext()
 }
 //Modify End
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 void D3D12RenderContext::SetFatalErrorHandler(CommandQueueFailureHandler handler)
 {
     m_DirectCommandQueue->SetFatalErrorHandler(handler);
@@ -143,7 +143,7 @@ void D3D12RenderContext::SetFatalErrorHandler(CommandQueueFailureHandler handler
 
 void D3D12RenderContext::CreateOwnedQueues()
 {
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
     m_DirectCommandQueue = std::make_shared<CommandQueue>(
         D3D12_COMMAND_LIST_TYPE_DIRECT, m_DeviceContext, m_StreamlineRuntime);
     m_ComputeCommandQueue = std::make_shared<CommandQueue>(
@@ -156,7 +156,7 @@ void D3D12RenderContext::CreateOwnedQueues()
 void D3D12RenderContext::WrapExternalQueues(const ExternalD3D12Context& externalContext)
 {
     m_DirectCommandQueue = externalContext.DirectCommandQueue != nullptr
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
         ? std::make_shared<CommandQueue>(
             D3D12_COMMAND_LIST_TYPE_DIRECT,
             m_DeviceContext,
@@ -183,7 +183,7 @@ void D3D12RenderContext::WrapExternalQueues(const ExternalD3D12Context& external
 //Modify End
 }
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 void D3D12RenderContext::InitializeStreamlineIfRequested(
     const D3D12RenderContextInitializationDesc& initializationDesc)
 {
@@ -204,7 +204,7 @@ void D3D12RenderContext::InitializeStreamlineIfRequested(
 }
 //Modify End
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 void D3D12RenderContext::ConfigureCommandListDependencies()
 {
     const std::weak_ptr<CommandQueue> computeQueue = m_ComputeCommandQueue;

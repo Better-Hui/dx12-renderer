@@ -7,7 +7,7 @@
 
 struct UnorderedAccessView
 {
-//Modify Begin:2026-07-30 by BestHui
+//Modify Begin:2026-07-30 by Hui
     explicit UnorderedAccessView(Resource& resource,
         UINT firstSubresource = 0, UINT numSubresources = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES
     )

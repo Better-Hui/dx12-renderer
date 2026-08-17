@@ -38,7 +38,7 @@ ByteAddressBuffer::ByteAddressBuffer(
 void ByteAddressBuffer::CreateViews(size_t numElements, size_t elementSize)
 {
     const auto device = m_DeviceContext->GetDevice();
-//Modify Begin:2026-08-12 by BestHui
+//Modify Begin:2026-08-12 by Hui
     if (m_Srv.IsNull())
     {
         m_Srv = m_DeviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
@@ -73,7 +73,7 @@ void ByteAddressBuffer::CreateViews(size_t numElements, size_t elementSize)
     }
 }
 
-//Modify Begin:2026-08-07 by BestHui
+//Modify Begin:2026-08-07 by Hui
 D3D12_CPU_DESCRIPTOR_HANDLE ByteAddressBuffer::GetUnorderedAccessView(
     const D3D12_UNORDERED_ACCESS_VIEW_DESC* uavDesc) const
 {

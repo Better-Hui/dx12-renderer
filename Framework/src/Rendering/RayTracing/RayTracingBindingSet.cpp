@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 
 #include "RayTracingShaderInternal.h"
 #include "RayTracingDispatchTables.h"
@@ -18,7 +18,7 @@ namespace
 {
     using namespace RayTracingShaderInternal;
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
     const RayTracingShaderBindingDesc* FindBinding(
         const RayTracingPipelineDesc& desc,
         const std::string_view name)
@@ -224,7 +224,7 @@ void RayTracingBindingSet::SetTextureArray(std::string_view name, const std::vec
     m_Impl->MarkDescriptorsDirty(binding);
 }
 
-//Modify Begin:2026-07-27 by BestHui
+//Modify Begin:2026-07-27 by Hui
 const RayTracingShader& RayTracingBindingSet::GetShader() const
 {
     return m_Impl->Shader;
@@ -235,7 +235,7 @@ const PipelineDescriptorSet& RayTracingBindingSet::GetDescriptorSet() const
     return m_Impl->DescriptorSet;
 }
 
-//Modify Begin:2026-07-29 by BestHui
+//Modify Begin:2026-07-29 by Hui
 const PipelineDescriptorPool& RayTracingBindingSet::GetDescriptorPool() const
 {
     return m_Impl->DescriptorPool;
