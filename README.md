@@ -14,9 +14,10 @@ The upstream renderer remains the foundation. This fork adds framework and sampl
 
 | Area | Added or extended here |
 | --- | --- |
-| Framework API | `CommandContext`, reflection-driven pipeline layouts, named descriptor-set bindings, bindless descriptor submission, DXR helpers, and mesh-shader pipeline support. |
-| RenderGraph | Logical resources, compiled resource-state plans, centralized resource-state tracking, native/external state handoff, per-queue GPU timestamps/CSV export, and explicit Direct/Async Compute queue synchronization. |
-| RaytracingDemo | The maintained integration sample. It demonstrates this repository's framework APIs rather than treating raw D3D12 calls as normal sample-facing code. |
+| D3D12 foundation | `DX12Library` extends the upstream wrappers around device contexts, queues, command lists, resource states, fences, descriptor allocation, swap chains, and application lifetime. Raw D3D12 ownership and synchronization live here rather than in feature code. |
+| Framework API | `CommandContext`, reflection-driven pipeline layouts, named descriptor-set bindings, bindless descriptor submission, DXR helpers, mesh-shader pipeline support, and reusable rendering features provide the normal path for demo-facing code. |
+| RenderGraph | Logical pass/resource declarations are compiled into immutable ordering, resource-state, aliasing, queue-dependency, and execution plans. The executor owns barriers, queue waits, submission, and optional per-queue timing instead of asking each demo pass to implement raw DX12 synchronization. |
+| RaytracingDemo | The maintained integration sample. It demonstrates this repository's layered APIs: feature authors declare graph inputs/outputs and record through Framework, while raw `ID3D12Device`, command-list, root-signature, descriptor-heap, barrier, and fence work stays below the demo boundary unless an abstraction is genuinely missing. |
 | Ray tracing | Runtime-selectable inline ray-query and shader-table DXR paths sharing the same scene/resource model. |
 | Material shading | Framework-owned metallic/roughness GGX PBR evaluation, with an experimental `Stylized Comic` PBR-NPR variant selected by the sample UI. |
 | ReSTIR DI | Inline ray-query direct-lighting sample with RIS, temporal/boiling/spatial resampling, stage-specific visibility and bias-correction settings, and final shading. |

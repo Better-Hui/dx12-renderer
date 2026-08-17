@@ -14,8 +14,9 @@
 
 ## 本 fork 在上游基础上增加了什么
 
-- **Framework 层接口**：围绕 `CommandContext` 提供 pipeline、descriptor set、bindless descriptor、DXR 和 mesh shader 等常用封装，sample 不需要把 raw D3D12 调用铺满业务代码。
-- **RenderGraph**：提供资源读写声明、依赖排序、编译后的状态计划、统一资源状态追踪、native/external 状态交接、GPU timing 记录和 CSV 导出。
+- **底层 D3D12 封装**：`DX12Library` 在上游基础上扩展了 device context、queue、command list、resource state、fence、descriptor allocation、swap chain 和 application 生命周期封装。raw D3D12 对象所有权与同步逻辑应留在这一层，而不是散落到功能代码中。
+- **Framework 层接口**：围绕 `CommandContext` 提供 pipeline、descriptor set、bindless descriptor、DXR、mesh shader 和通用 rendering feature 等封装，demo 作者通常通过这些接口完成资源绑定和命令录制。
+- **RenderGraph**：pass 只需声明逻辑资源读写；Compiler 将其编译为不可变的排序、resource state、aliasing、queue dependency 与 execution plan，Executor 统一处理 barrier、queue wait、提交和可选的分 queue GPU timing。demo pass 不需要自行处理 raw DX12 同步。
 - **显式异步计算**：pass 可以指定使用 `Direct` 或 `AsyncCompute` queue；RenderGraph 负责跨 queue 的 GPU fence 等待与资源交接。
 - **光线追踪与降噪**：同一场景可在 inline ray query 和 shader-table DXR 之间切换，并可使用 NRD 或 SVGF。
 - **材质着色模型**：默认 GGX 金属度/粗糙度 PBR 评估已归入 Framework；sample UI 可选择实验性的 `Stylized Comic` 风格化 PBR-NPR 变体。
@@ -30,7 +31,7 @@
 
 ## `RaytracingDemo`：本项目 API 的使用示例
 
-`RaytracingDemo` 的目的不是展示一堆零散的 D3D12 调用，而是演示本项目 Framework 和 RenderGraph 的使用方式。通常，一个 pass 应通过 Framework 提交命令，并通过 RenderGraph 声明自己读取和写入的资源。
+`RaytracingDemo` 的目的不是展示一堆零散的 D3D12 调用，而是演示本项目 Framework 和 RenderGraph 的使用方式。通常，一个 pass 应通过 Framework 提交命令，并通过 RenderGraph 声明自己读取和写入的资源；`ID3D12Device`、command list、root signature、descriptor heap、barrier 和 fence 等底层细节应留在 demo 边界之下，只有现有抽象确实无法覆盖需求时才向下扩展。
 
 例如，compute pass 的命令录制使用 `CommandContext`：
 
