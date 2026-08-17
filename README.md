@@ -74,8 +74,6 @@ Queue submission and last-writer fence tracking live in `RenderGraphQueueSchedul
 
 ### Rendering features
 
-The stress-sphere UI toggle exercises incremental scene mutation: meshlet geometry and existing BLAS data are reused while instance data and the TLAS are updated.
-
 | Feature | Demonstrated usage |
 | --- | --- |
 | Base resources | GBuffer-style normal/depth/material data, motion/world-position data, history/display resources, and raster or meshlet GBuffer generation. |
@@ -88,7 +86,6 @@ The stress-sphere UI toggle exercises incremental scene mutation: meshlet geomet
 | Meshlets | Task-shader and compute-indirect GBuffer backends with cluster debugging. |
 | CUDA Bloom | External D3D12/CUDA post process with shared-resource and shared-fence synchronization. |
 | Profiling | PIX scopes and RenderGraph GPU timestamp history exported as CSV. |
-| Runtime scene changes | Incremental stress-instance add/remove without rebuilding all meshlet geometry or every BLAS. |
 
 ## Requirements
 
@@ -177,7 +174,7 @@ The startup compiler currently covers the shaders directly owned by `RaytracingD
 - `RenderGraphRoot::Execute` is now a thin graph entry point; `RenderGraphCommandExecutor` owns pass recording/submission and `RenderGraphProfiler` owns optional direct/async timestamp lifetimes. Graph build/topology orchestration remains in `RenderGraphRoot`.
 - Transient resources are retired using the actual Direct/Async Compute fence values recorded for the frame. Aliasing is deliberately conservative: resources used by different queues are not aliased until a more general multi-queue allocator is designed.
 - Device and queue state is injected through the application composition root for the current Framework and RenderGraph execution paths. Standalone application/window lifecycle code and a small set of legacy resource-wrapper compatibility paths still retain `Application` dependencies.
-- `RaytracingDemoSceneResources` exposes four internal builders for texture/material, geometry, meshlet, and RTAS resources. The facade remains sample-facing while scene mutation updates meshlet/TLAS instances incrementally.
+- `RaytracingDemoSceneResources` exposes four internal builders for texture/material, geometry, meshlet, and RTAS resources. The facade remains sample-facing.
 - Per-queue RenderGraph timestamps are useful for pass duration; PIX Timing Capture is required to inspect cross-queue wall-clock overlap, waits, and GPU bubbles.
 - Meshlet rendering is an experimental GBuffer backend, not a complete visibility/streaming system or a claim of optimal meshlet performance.
 - `Stylized Comic` is an experimental stylized-PBR/PBR-NPR material evaluation. It retains metallic, roughness, and GGX material inputs while applying banded diffuse response, cool shadow tint, and graphic highlights. It is not a complete Spider-Verse reproduction: outlines, halftones, print misregistration, hatching, and temporal stylization are outside this material model.

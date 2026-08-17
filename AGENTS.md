@@ -148,7 +148,6 @@ Device/queue work in demo feature code must use the injected `FrameworkDeviceCon
 Current major pieces:
 
 - `Scene` from Framework stores camera, objects, materials, lights, skybox.
-- `UnitySceneImporter` parses Unity `.unity` scene into Framework `Scene`.
 - `RaytracingDemoSceneResources` converts `Scene` to GPU-side textures/material buffers/geometry buffers/RTAS/meshlet buffers.
 - `SceneLightManager` owns editable lights and GPU light buffers.
 - `PathTracingPipelineController` owns inline ray query and DXR pipeline setup.
@@ -238,7 +237,7 @@ uses `IUnityGraphicsD3D12v7::GetDevice()` / `GetCommandQueue()`, Unity render ev
 
 Recommended next steps:
 
-- After the SM6.9/SER phase, keep C++20 as the project baseline and actively modernize suitable legacy C++11-style code with C++20 facilities. Keep modern HLSL features capability-gated by shader model and hardware support.
+- Keep C++20 as the project baseline and actively modernize suitable legacy C++11-style code with C++20 facilities. Keep modern HLSL features capability-gated by the Shader Model 6.8 baseline and hardware support.
 - Split `RaytracingDemoSceneResources` into clearer scene-to-GPU resource builders.
 - Add task/amplification shader and GPU culling to the meshlet path.
 - Add sample-grade object picking and transform gizmo only after selection/render ID infrastructure is in place.

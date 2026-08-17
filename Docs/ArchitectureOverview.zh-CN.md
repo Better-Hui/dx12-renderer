@@ -106,7 +106,7 @@ Scene
     -> GPU scene buffer 与 bindless texture
 ```
 
-`RaytracingDemoSceneResources` 是四个 builder 的 sample-facing facade。压力球的增删会复用共享 geometry 和已有 BLAS，只更新 meshlet instance 数据与 TLAS。
+`RaytracingDemoSceneResources` 是四个 builder 的 sample-facing facade。
 
 ### 已演示的渲染路径
 

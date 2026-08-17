@@ -72,10 +72,9 @@ auto pass = RenderGraph::RenderPass::Create(
 | 软阴影 | 平行光和点光源使用预编译 Hard/Soft Shader 变体；面积光继续采样真实发光面。 |
 | 降噪 | NRD 与 SVGF 两条可选路径；NRD 的 native 状态变化会回写 RenderGraph。 |
 | DLSS 与 Streamline | 实验性的 NGX DLSS SR/DLAA 与 Streamline RR/FG 资源准备路径；是否可用由启动配置和运行时 capability query 决定。 |
-| Meshlet | task shader 和 compute-indirect 后端、cluster 调试显示，以及实例数据增量更新。 |
+| Meshlet | task shader 和 compute-indirect 后端，以及 cluster 调试显示。 |
 | CUDA 互操作 | 基于 shared resource / shared fence 的 Bloom 后处理。 |
 | 性能分析 | PIX scope，以及 Direct、Compute queue 分别记录的 RenderGraph GPU timing / CSV。 |
-| 动态场景测试 | 压力球可以在运行时增删；复用静态 Meshlet geometry 和已有 BLAS，只更新实例数据与 TLAS。 |
 
 ## 环境与依赖
 
@@ -182,7 +181,7 @@ cmake --build ..\build --config Release --target RaytracingDemo
 - `RenderGraphRoot::Execute()` 现在只是图执行入口；pass 录制/提交由 `RenderGraphCommandExecutor` 负责，Direct/Async Compute 的可选 timestamp 生命周期由 `RenderGraphProfiler` 负责。Root 仍负责图构建和拓扑编排。
 - transient resource 会按本帧实际记录的 Direct/Async Compute fence 做延迟退休。aliasing 仍采取保守策略：不同 queue 使用的资源不会互相 alias，后续再设计更一般的多 queue allocator。
 - 当前 Framework 和 RenderGraph 的执行路径由应用组合根显式注入 device、queue 和 descriptor 分配器。独立运行时的 application/window 生命周期，以及少量 legacy resource-wrapper 兼容路径，仍保留 `Application` 依赖。
-- `RaytracingDemoSceneResources` 内部已拆成 texture/material、geometry、meshlet、RTAS 四个 builder。facade 仍是 sample 层入口，但压力球等场景修改只增量更新 Meshlet/TLAS instance 数据。
+- `RaytracingDemoSceneResources` 内部已拆成 texture/material、geometry、meshlet、RTAS 四个 builder；facade 仍是 sample 层入口。
 - RenderGraph timing 分别记录每条 queue 上的 pass 时长；判断跨 queue overlap、wait 和 GPU bubble 时，请使用 PIX Timing Capture。
 - Meshlet 路径是实验性 GBuffer 后端，不是完整的 visibility / streaming 系统，也不代表已达到最优 Meshlet 性能。
 - `Stylized Comic` 是实验性的风格化 PBR/PBR-NPR 材质评估：它保留金属度、粗糙度和 GGX 材质输入，同时加入分段漫反射、冷色阴影和图形化高光；这不是完整的 Spider-Verse 复刻，线稿、网点、套印、hatching 与时间风格化仍不属于该材质模型。
