@@ -1,20 +1,18 @@
 #include <cuda_runtime.h>
 
+//Modify Begin:2026-08-17 by Hui
 __device__ float3 LoadRgb(cudaTextureObject_t texture, unsigned int x, unsigned int y)
 {
     const float4 value = tex2D<float4>(texture, static_cast<float>(x) + 0.5f, static_cast<float>(y) + 0.5f);
     return make_float3(value.x, value.y, value.z);
 }
 
-//Modify Begin:2026-07-30 by BestHui
 __device__ float3 SampleLinear(cudaTextureObject_t texture, float u, float v)
 {
     const float4 value = tex2D<float4>(texture, u, v);
     return make_float3(value.x, value.y, value.z);
 }
-//Modify End
 
-//Modify Begin:2026-08-16 by BestHui
 __device__ float MipGaussianBlendWeight(float sigma, unsigned int level)
 {
     constexpr float pi = 3.14159265358979323846f;
@@ -24,24 +22,11 @@ __device__ float MipGaussianBlendWeight(float sigma, unsigned int level)
     const float sixteenToLevel = fourToLevel * fourToLevel;
     return fminf(fmaxf((sixteenToLevel * logf(4.0f)) / (c * (fourToLevel + c)), 0.0f), 1.0f);
 }
-//Modify End
 
-__device__ void StoreRgb(cudaSurfaceObject_t surface, unsigned int x, unsigned int y, float3 color)
-{
-//Modify Begin:2026-07-28 by BestHui
-    color.x = fminf(fmaxf(color.x, 0.0f), 250.0f);
-    color.y = fminf(fmaxf(color.y, 0.0f), 250.0f);
-    color.z = fminf(fmaxf(color.z, 0.0f), 250.0f);
-    surf2Dwrite(make_float4(color.x, color.y, color.z, 1.0f), surface, x * sizeof(float4), y);
-//Modify End
-}
-
-//Modify Begin:2026-08-17 by BestHui
-__device__ void StoreRasterMatchedRgb(cudaSurfaceObject_t surface, unsigned int x, unsigned int y, float3 color)
+__device__ void StoreRasterBloomRgb(cudaSurfaceObject_t surface, unsigned int x, unsigned int y, float3 color)
 {
     surf2Dwrite(make_float4(color.x, color.y, color.z, 1.0f), surface, x * sizeof(float4), y);
 }
-//Modify End
 
 __device__ float Luminance(float3 color)
 {
@@ -59,8 +44,7 @@ __device__ float3 PrefilterColor(float3 color, float threshold, float softThresh
     return make_float3(color.x * contribution, color.y * contribution, color.z * contribution);
 }
 
-//Modify Begin:2026-08-17 by BestHui
-__device__ float3 SampleRasterBoxBlur(
+__device__ float3 SampleRasterBloomBoxBlur(
     cudaTextureObject_t source,
     float u,
     float v,
@@ -77,7 +61,7 @@ __device__ float3 SampleRasterBoxBlur(
         (topLeft.z + topRight.z + bottomLeft.z + bottomRight.z) * 0.25f);
 }
 
-__device__ float3 SampleRasterCrossPrefilter(
+__device__ float3 SampleRasterBloomQuincunxPrefilter(
     cudaTextureObject_t source,
     unsigned int sourceWidth,
     unsigned int sourceHeight,
@@ -120,7 +104,7 @@ __device__ float3 SampleRasterCrossPrefilter(
 }
 
 extern "C" __global__
-void PrefilterDownsampleRasterMatchedKernel(
+void PrefilterDownsampleRasterBloomKernel(
     cudaTextureObject_t source,
     cudaSurfaceObject_t output,
     unsigned int sourceWidth,
@@ -138,11 +122,11 @@ void PrefilterDownsampleRasterMatchedKernel(
         return;
     }
 
-    StoreRasterMatchedRgb(
+    StoreRasterBloomRgb(
         output,
         x,
         y,
-        SampleRasterCrossPrefilter(
+        SampleRasterBloomQuincunxPrefilter(
             source,
             sourceWidth,
             sourceHeight,
@@ -156,7 +140,7 @@ void PrefilterDownsampleRasterMatchedKernel(
 }
 
 extern "C" __global__
-void DownsampleRasterMatchedKernel(
+void DownsampleRasterBloomKernel(
     cudaTextureObject_t source,
     cudaSurfaceObject_t output,
     unsigned int sourceWidth,
@@ -173,11 +157,11 @@ void DownsampleRasterMatchedKernel(
 
     const float u = (static_cast<float>(x) + 0.5f) / static_cast<float>(outputWidth);
     const float v = (static_cast<float>(y) + 0.5f) / static_cast<float>(outputHeight);
-    StoreRasterMatchedRgb(
+    StoreRasterBloomRgb(
         output,
         x,
         y,
-        SampleRasterBoxBlur(
+        SampleRasterBloomBoxBlur(
             source,
             u,
             v,
@@ -186,7 +170,7 @@ void DownsampleRasterMatchedKernel(
 }
 
 extern "C" __global__
-void UpsampleRasterMatchedKernel(
+void UpsampleRasterBloomKernel(
     cudaTextureObject_t low,
     cudaTextureObject_t high,
     cudaSurfaceObject_t highOutput,
@@ -205,20 +189,20 @@ void UpsampleRasterMatchedKernel(
     const float u = (static_cast<float>(x) + 0.5f) / static_cast<float>(highWidth);
     const float v = (static_cast<float>(y) + 0.5f) / static_cast<float>(highHeight);
     const float3 base = LoadRgb(high, x, y);
-    const float3 bloom = SampleRasterBoxBlur(
+    const float3 bloom = SampleRasterBloomBoxBlur(
         low,
         u,
         v,
         0.5f / static_cast<float>(lowWidth),
         0.5f / static_cast<float>(lowHeight));
-    StoreRasterMatchedRgb(highOutput, x, y, make_float3(
+    StoreRasterBloomRgb(highOutput, x, y, make_float3(
         base.x + bloom.x,
         base.y + bloom.y,
         base.z + bloom.z));
 }
 
 extern "C" __global__
-void CompositeRasterMatchedBloomKernel(
+void CompositeRasterBloomKernel(
     cudaTextureObject_t input,
     cudaTextureObject_t bloom,
     cudaSurfaceObject_t output,
@@ -237,308 +221,27 @@ void CompositeRasterMatchedBloomKernel(
     const float u = (static_cast<float>(x) + 0.5f) / static_cast<float>(width);
     const float v = (static_cast<float>(y) + 0.5f) / static_cast<float>(height);
     const float3 base = LoadRgb(input, x, y);
-    const float3 glow = SampleRasterBoxBlur(
+    const float3 glow = SampleRasterBloomBoxBlur(
         bloom,
         u,
         v,
         0.5f / static_cast<float>(bloomWidth),
         0.5f / static_cast<float>(bloomHeight));
-    StoreRasterMatchedRgb(output, x, y, make_float3(
+    StoreRasterBloomRgb(output, x, y, make_float3(
         base.x + glow.x,
         base.y + glow.y,
         base.z + glow.z));
 }
-//Modify End
 
-//Modify Begin:2026-08-17 by BestHui
-__device__ void StoreOptional(cudaSurfaceObject_t output, unsigned int width, unsigned int height, unsigned int x, unsigned int y, float3 color)
-{
-    if (output != 0 && x < width && y < height)
-    {
-        surf2Dwrite(make_float4(color.x, color.y, color.z, 1.0f), output, x * sizeof(float4), y);
-    }
-}
-//Modify End
-
-//Modify Begin:2026-08-16 by BestHui
-template <int TapCount, bool ApplyPrefilter>
-__device__ float3 SampleBloomRingDownsample(
-    cudaTextureObject_t source,
-    unsigned int sourceWidth,
-    unsigned int sourceHeight,
-    unsigned int outputWidth,
-    unsigned int outputHeight,
-    unsigned int x,
-    unsigned int y,
-    float threshold,
-    float softThreshold,
-    float intensity)
-{
-    constexpr float pi = 3.14159265358979323846f;
-    constexpr int ringPointCount = TapCount - 1;
-    const float u = (static_cast<float>(x) + 0.5f) / static_cast<float>(outputWidth);
-    const float v = (static_cast<float>(y) + 0.5f) / static_cast<float>(outputHeight);
-    const float2 texelSize = make_float2(
-        1.0f / static_cast<float>(sourceWidth),
-        1.0f / static_cast<float>(sourceHeight));
-    const float ringStart = 2.0f / static_cast<float>(ringPointCount);
-    constexpr float sampleScale = 1.41421356237f;
-
-    if constexpr (ApplyPrefilter)
-    {
-        float3 total = make_float3(0.0f, 0.0f, 0.0f);
-        float weightSum = 0.0f;
-        for (int i = 0; i < ringPointCount; ++i)
-        {
-            const float angle = (2.0f * pi / static_cast<float>(ringPointCount)) *
-                (static_cast<float>(i) + ringStart);
-            const float2 offset = make_float2(sinf(angle), cosf(angle));
-            float3 sample = PrefilterColor(
-                SampleLinear(
-                    source,
-                    u + sampleScale * texelSize.x * offset.x,
-                    v + sampleScale * texelSize.y * offset.y),
-                threshold,
-                softThreshold);
-            const float weight = 1.0f / (Luminance(sample) + 1.0f);
-            total.x += sample.x * weight;
-            total.y += sample.y * weight;
-            total.z += sample.z * weight;
-            weightSum += weight;
-        }
-
-        float3 center = PrefilterColor(SampleLinear(source, u, v), threshold, softThreshold);
-        const float weight = 1.0f / (Luminance(center) + 1.0f);
-        total.x += center.x * weight;
-        total.y += center.y * weight;
-        total.z += center.z * weight;
-        weightSum += weight;
-        return make_float3(
-            total.x / weightSum * intensity,
-            total.y / weightSum * intensity,
-            total.z / weightSum * intensity);
-    }
-
-    float3 total = make_float3(0.0f, 0.0f, 0.0f);
-    for (int i = 0; i < ringPointCount; ++i)
-    {
-        const float angle = (2.0f * pi / static_cast<float>(ringPointCount)) *
-            (static_cast<float>(i) + ringStart);
-        const float2 offset = make_float2(sinf(angle), cosf(angle));
-        const float3 sample = SampleLinear(
-            source,
-            u + sampleScale * texelSize.x * offset.x,
-            v + sampleScale * texelSize.y * offset.y);
-        total.x += sample.x;
-        total.y += sample.y;
-        total.z += sample.z;
-    }
-
-    const float3 center = SampleLinear(source, u, v);
-    total.x += center.x;
-    total.y += center.y;
-    total.z += center.z;
-    return make_float3(
-        total.x / static_cast<float>(TapCount),
-        total.y / static_cast<float>(TapCount),
-        total.z / static_cast<float>(TapCount));
-}
-
-template <bool ApplyPrefilter>
-__device__ float3 SampleBloomDiagonal5Downsample(
-    cudaTextureObject_t source,
-    unsigned int sourceWidth,
-    unsigned int sourceHeight,
-    unsigned int outputWidth,
-    unsigned int outputHeight,
-    unsigned int x,
-    unsigned int y,
-    float threshold,
-    float softThreshold,
-    float intensity)
-{
-    const float u = (static_cast<float>(x) + 0.5f) / static_cast<float>(outputWidth);
-    const float v = (static_cast<float>(y) + 0.5f) / static_cast<float>(outputHeight);
-    const float2 texelSize = make_float2(
-        1.0f / static_cast<float>(sourceWidth),
-        1.0f / static_cast<float>(sourceHeight));
-    const float offsets[10] = { 0.0f, 0.0f, -1.0f, -1.0f, -1.0f, 1.0f, 1.0f, -1.0f, 1.0f, 1.0f };
-
-    if constexpr (ApplyPrefilter)
-    {
-        float3 total = make_float3(0.0f, 0.0f, 0.0f);
-        float weightSum = 0.0f;
-        for (int i = 0; i < 5; ++i)
-        {
-            const float3 sample = PrefilterColor(
-                SampleLinear(
-                    source,
-                    u + offsets[i * 2 + 0] * texelSize.x,
-                    v + offsets[i * 2 + 1] * texelSize.y),
-                threshold,
-                softThreshold);
-            const float weight = 1.0f / (Luminance(sample) + 1.0f);
-            total.x += sample.x * weight;
-            total.y += sample.y * weight;
-            total.z += sample.z * weight;
-            weightSum += weight;
-        }
-
-        return make_float3(
-            total.x / weightSum * intensity,
-            total.y / weightSum * intensity,
-            total.z / weightSum * intensity);
-    }
-
-    float3 total = make_float3(0.0f, 0.0f, 0.0f);
-    for (int i = 0; i < 5; ++i)
-    {
-        const float3 sample = SampleLinear(
-            source,
-            u + offsets[i * 2 + 0] * texelSize.x,
-            v + offsets[i * 2 + 1] * texelSize.y);
-        total.x += sample.x;
-        total.y += sample.y;
-        total.z += sample.z;
-    }
-
-    return make_float3(total.x * 0.2f, total.y * 0.2f, total.z * 0.2f);
-}
-
-template <int TapCount, bool ApplyPrefilter>
-__device__ float3 SampleBloomDownsample(
-    cudaTextureObject_t source,
-    unsigned int sourceWidth,
-    unsigned int sourceHeight,
-    unsigned int outputWidth,
-    unsigned int outputHeight,
-    unsigned int x,
-    unsigned int y,
-    float threshold,
-    float softThreshold,
-    float intensity)
-{
-    if constexpr (TapCount == 5)
-    {
-        return SampleBloomDiagonal5Downsample<ApplyPrefilter>(
-            source,
-            sourceWidth,
-            sourceHeight,
-            outputWidth,
-            outputHeight,
-            x,
-            y,
-            threshold,
-            softThreshold,
-            intensity);
-    }
-
-    return SampleBloomRingDownsample<TapCount, ApplyPrefilter>(
-        source,
-        sourceWidth,
-        sourceHeight,
-        outputWidth,
-        outputHeight,
-        x,
-        y,
-        threshold,
-        softThreshold,
-        intensity);
-}
-
-template <int TapCount>
-__device__ void DownsampleBloomKernelBody(
-    cudaTextureObject_t source,
-    cudaSurfaceObject_t output,
-    unsigned int sourceWidth,
-    unsigned int sourceHeight,
-    unsigned int outputWidth,
-    unsigned int outputHeight,
-    float threshold,
-    float softThreshold,
-    float intensity)
-{
-    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
-    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
-    if (x >= outputWidth || y >= outputHeight)
-    {
-        return;
-    }
-
-    const float3 color = SampleBloomDownsample<TapCount, false>(
-        source,
-        sourceWidth,
-        sourceHeight,
-        outputWidth,
-        outputHeight,
-        x,
-        y,
-        threshold,
-        softThreshold,
-        intensity);
-    StoreOptional(output, outputWidth, outputHeight, x, y, color);
-}
-
-template <int TapCount>
-__device__ void PrefilterBloomKernelBody(
-    cudaTextureObject_t source,
-    cudaSurfaceObject_t output,
-    unsigned int sourceWidth,
-    unsigned int sourceHeight,
-    unsigned int outputWidth,
-    unsigned int outputHeight,
-    float threshold,
-    float softThreshold,
-    float intensity)
-{
-    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
-    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
-    if (x >= outputWidth || y >= outputHeight)
-    {
-        return;
-    }
-
-    const float3 color = SampleBloomDownsample<TapCount, true>(
-        source,
-        sourceWidth,
-        sourceHeight,
-        outputWidth,
-        outputHeight,
-        x,
-        y,
-        threshold,
-        softThreshold,
-        intensity);
-    StoreOptional(output, outputWidth, outputHeight, x, y, color);
-}
-
-#define DECLARE_BLOOM_DOWNSAMPLE_VARIANT(TapCount) \
-extern "C" __global__ void PrefilterDownsample##TapCount##TapKernel( \
-    cudaTextureObject_t source, cudaSurfaceObject_t output, unsigned int sourceWidth, unsigned int sourceHeight, \
-    unsigned int outputWidth, unsigned int outputHeight, float threshold, float softThreshold, float intensity) \
-{ PrefilterBloomKernelBody<TapCount>(source, output, sourceWidth, sourceHeight, outputWidth, outputHeight, threshold, softThreshold, intensity); } \
-extern "C" __global__ void Downsample##TapCount##TapKernel( \
-    cudaTextureObject_t source, cudaSurfaceObject_t output, unsigned int sourceWidth, unsigned int sourceHeight, \
-    unsigned int outputWidth, unsigned int outputHeight) \
-{ DownsampleBloomKernelBody<TapCount>(source, output, sourceWidth, sourceHeight, outputWidth, outputHeight, 0.0f, 0.0f, 1.0f); }
-
-DECLARE_BLOOM_DOWNSAMPLE_VARIANT(5)
-DECLARE_BLOOM_DOWNSAMPLE_VARIANT(10)
-DECLARE_BLOOM_DOWNSAMPLE_VARIANT(15)
-
-#undef DECLARE_BLOOM_DOWNSAMPLE_VARIANT
-//Modify End
-
-//Modify Begin:2026-07-30 by BestHui
-template <bool BoxFilterApproximation, bool AddBaseMip>
-__device__ void UpsampleKernelBody(
-//Modify Begin:2026-07-30 by BestHui
+template <bool AddBaseMip>
+__device__ void UpsampleBoxFilterKernelBody(
     cudaTextureObject_t low,
     cudaTextureObject_t high,
     cudaSurfaceObject_t highOutput,
-//Modify End
     unsigned int highWidth,
     unsigned int highHeight,
+    unsigned int lowWidth,
+    unsigned int lowHeight,
     unsigned int level,
     float sigma)
 {
@@ -551,16 +254,13 @@ __device__ void UpsampleKernelBody(
 
     const float u = (static_cast<float>(x) + 0.5f) / static_cast<float>(highWidth);
     const float v = (static_cast<float>(y) + 0.5f) / static_cast<float>(highHeight);
-//Modify Begin:2026-07-30 by BestHui
     const float3 base = LoadRgb(high, x, y);
-    const float3 bloom = SampleLinear(low, u, v);
-//Modify End
-    if constexpr (!BoxFilterApproximation)
-    {
-        StoreOptional(highOutput, highWidth, highHeight, x, y, make_float3(base.x + bloom.x, base.y + bloom.y, base.z + bloom.z));
-        return;
-    }
-
+    const float3 bloom = SampleRasterBloomBoxBlur(
+        low,
+        u,
+        v,
+        0.5f / static_cast<float>(lowWidth),
+        0.5f / static_cast<float>(lowHeight));
     const float weight = MipGaussianBlendWeight(sigma, level);
     float3 fitted = make_float3(
         bloom.x + (base.x - bloom.x) * weight,
@@ -570,20 +270,7 @@ __device__ void UpsampleKernelBody(
     {
         fitted = make_float3(fitted.x + base.x, fitted.y + base.y, fitted.z + base.z);
     }
-    StoreOptional(highOutput, highWidth, highHeight, x, y, fitted);
-}
-//Modify End
-
-//Modify Begin:2026-07-30 by BestHui
-extern "C" __global__
-void UpsampleClassicKernel(
-    cudaTextureObject_t low,
-    cudaTextureObject_t high,
-    cudaSurfaceObject_t highOutput,
-    unsigned int highWidth,
-    unsigned int highHeight)
-{
-    UpsampleKernelBody<false, false>(low, high, highOutput, highWidth, highHeight, 0u, 0.0f);
+    StoreRasterBloomRgb(highOutput, x, y, fitted);
 }
 
 extern "C" __global__
@@ -593,10 +280,21 @@ void UpsampleBoxFilterKernel(
     cudaSurfaceObject_t highOutput,
     unsigned int highWidth,
     unsigned int highHeight,
+    unsigned int lowWidth,
+    unsigned int lowHeight,
     unsigned int level,
     float sigma)
 {
-    UpsampleKernelBody<true, true>(low, high, highOutput, highWidth, highHeight, level, sigma);
+    UpsampleBoxFilterKernelBody<true>(
+        low,
+        high,
+        highOutput,
+        highWidth,
+        highHeight,
+        lowWidth,
+        lowHeight,
+        level,
+        sigma);
 }
 
 extern "C" __global__
@@ -606,35 +304,20 @@ void UpsampleBoxFilterOriginalKernel(
     cudaSurfaceObject_t highOutput,
     unsigned int highWidth,
     unsigned int highHeight,
+    unsigned int lowWidth,
+    unsigned int lowHeight,
     unsigned int level,
     float sigma)
 {
-    UpsampleKernelBody<true, false>(low, high, highOutput, highWidth, highHeight, level, sigma);
+    UpsampleBoxFilterKernelBody<false>(
+        low,
+        high,
+        highOutput,
+        highWidth,
+        highHeight,
+        lowWidth,
+        lowHeight,
+        level,
+        sigma);
 }
 //Modify End
-
-extern "C" __global__
-void CompositeBloomKernel(
-    cudaTextureObject_t input,
-//Modify Begin:2026-07-30 by BestHui
-    cudaTextureObject_t bloom,
-//Modify End
-    cudaSurfaceObject_t output,
-    unsigned int width,
-    unsigned int height)
-{
-    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
-    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
-    if (x >= width || y >= height)
-    {
-        return;
-    }
-
-    const float u = (static_cast<float>(x) + 0.5f) / static_cast<float>(width);
-    const float v = (static_cast<float>(y) + 0.5f) / static_cast<float>(height);
-    const float3 base = LoadRgb(input, x, y);
-//Modify Begin:2026-07-30 by BestHui
-    const float3 glow = SampleLinear(bloom, u, v);
-//Modify End
-    StoreRgb(output, x, y, make_float3(base.x + glow.x, base.y + glow.y, base.z + glow.z));
-}

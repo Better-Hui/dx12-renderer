@@ -18,7 +18,7 @@ class Bloom;
 class CudaBloomPass final
 {
 public:
-//Modify Begin:2026-08-17 by BestHui
+//Modify Begin:2026-08-17 by Hui
     enum class Backend : uint32_t
     {
         Cuda = 0,
@@ -27,18 +27,11 @@ public:
 
     enum class CudaMethod : uint32_t
     {
-        Classic = 0,
+        ClassicPyramid = 0,
         BoxFilterApproximation = 1,
         BoxFilterOriginalPaper = 2,
-        RasterMatched = 3,
     };
 
-    enum class DownsampleTapCount : uint32_t
-    {
-        Five = 5,
-        Ten = 10,
-        Fifteen = 15,
-    };
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
     explicit CudaBloomPass(FrameworkDeviceContext& deviceContext);
@@ -70,12 +63,6 @@ public:
     void SetEnabled(bool enabled) { m_Enabled = enabled; }
     Backend GetBackend() const { return m_Backend; }
     bool IsFrameworkRaster() const { return m_Backend == Backend::FrameworkRaster; }
-//Modify Begin:2026-08-17 by BestHui
-    bool IsCudaRasterMatched() const
-    {
-        return m_Backend == Backend::Cuda && m_CudaMethod == CudaMethod::RasterMatched;
-    }
-//Modify End
     const std::string& GetStatus() const { return m_Status; }
 //Modify Begin:2026-08-17 by BestHui
     void SetBackend(Backend backend) { m_Backend = backend; }
@@ -85,7 +72,6 @@ public:
     void SetIntensity(float intensity) { m_Intensity = intensity; }
     void SetPyramidLevels(int pyramidLevels) { m_PyramidLevels = pyramidLevels; }
     void SetBoxFilterSigma(float sigma) { m_BoxFilterSigma = sigma; }
-    void SetDownsampleTapCount(DownsampleTapCount tapCount) { m_DownsampleTapCount = tapCount; }
 //Modify End
 
 private:
@@ -143,11 +129,10 @@ private:
     float m_SoftThreshold = 0.30f;
     float m_Intensity = 0.75f;
     int m_PyramidLevels = 5;
-//Modify Begin:2026-08-17 by BestHui
+//Modify Begin:2026-08-17 by Hui
     Backend m_Backend = Backend::Cuda;
-    CudaMethod m_CudaMethod = CudaMethod::Classic;
+    CudaMethod m_CudaMethod = CudaMethod::ClassicPyramid;
     float m_BoxFilterSigma = 1.0f;
-    DownsampleTapCount m_DownsampleTapCount = DownsampleTapCount::Five;
     std::unique_ptr<Bloom> m_FrameworkBloom;
     uint32_t m_FrameworkBloomWidth = 0;
     uint32_t m_FrameworkBloomHeight = 0;
@@ -162,25 +147,15 @@ private:
     CudaDeviceTexture2DPool m_PyramidTextures;
 //Modify End
     CUmodule m_Module = nullptr;
-    CUfunction m_PrefilterDownsample5TapKernel = nullptr;
-    CUfunction m_PrefilterDownsample10TapKernel = nullptr;
-    CUfunction m_PrefilterDownsample15TapKernel = nullptr;
-    CUfunction m_Downsample5TapKernel = nullptr;
-    CUfunction m_Downsample10TapKernel = nullptr;
-    CUfunction m_Downsample15TapKernel = nullptr;
-//Modify Begin:2026-08-17 by BestHui
-    CUfunction m_PrefilterDownsampleRasterMatchedKernel = nullptr;
-    CUfunction m_DownsampleRasterMatchedKernel = nullptr;
+//Modify Begin:2026-08-17 by Hui
+    CUfunction m_PrefilterDownsampleRasterBloomKernel = nullptr;
+    CUfunction m_DownsampleRasterBloomKernel = nullptr;
 //Modify End
-//Modify Begin:2026-07-30 by BestHui
-    CUfunction m_UpsampleClassicKernel = nullptr;
+//Modify Begin:2026-08-17 by Hui
     CUfunction m_UpsampleBoxFilterKernel = nullptr;
     CUfunction m_UpsampleBoxFilterOriginalKernel = nullptr;
-//Modify End
-    CUfunction m_CompositeBloomKernel = nullptr;
-//Modify Begin:2026-08-17 by BestHui
-    CUfunction m_UpsampleRasterMatchedKernel = nullptr;
-    CUfunction m_CompositeRasterMatchedBloomKernel = nullptr;
+    CUfunction m_UpsampleRasterBloomKernel = nullptr;
+    CUfunction m_CompositeRasterBloomKernel = nullptr;
 //Modify End
 //Modify Begin:2026-07-30 by BestHui
     std::vector<uint32_t> m_PyramidWidth;

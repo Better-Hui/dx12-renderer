@@ -1510,13 +1510,9 @@ void RaytracingDemo::LoadStartupConfiguration()
         {
             m_CudaBloom.SetCudaMethod(CudaBloomPass::CudaMethod::BoxFilterOriginalPaper);
         }
-        else if (stringValue == "raster-matched" || stringValue == "rastermatched")
+        else if (stringValue == "classic" || stringValue == "classic-pyramid")
         {
-            m_CudaBloom.SetCudaMethod(CudaBloomPass::CudaMethod::RasterMatched);
-        }
-        else if (stringValue == "classic")
-        {
-            m_CudaBloom.SetCudaMethod(CudaBloomPass::CudaMethod::Classic);
+            m_CudaBloom.SetCudaMethod(CudaBloomPass::CudaMethod::ClassicPyramid);
         }
     }
     if (configuration.TryGetFloat("CudaBloom", "Threshold", floatValue))
@@ -1543,22 +1539,6 @@ void RaytracingDemo::LoadStartupConfiguration()
     if (configuration.TryGetFloat("CudaBloom", "BoxFilterSigma", floatValue))
     {
         m_CudaBloom.SetBoxFilterSigma(std::max(0.001f, floatValue));
-    }
-    if (configuration.TryGetString("CudaBloom", "DownsampleTapCount", stringValue))
-    {
-        stringValue = ToLower(stringValue);
-        if (stringValue == "5" || stringValue == "5tap" || stringValue == "5-tap")
-        {
-            m_CudaBloom.SetDownsampleTapCount(CudaBloomPass::DownsampleTapCount::Five);
-        }
-        else if (stringValue == "10" || stringValue == "10tap" || stringValue == "10-tap")
-        {
-            m_CudaBloom.SetDownsampleTapCount(CudaBloomPass::DownsampleTapCount::Ten);
-        }
-        else if (stringValue == "15" || stringValue == "15tap" || stringValue == "15-tap")
-        {
-            m_CudaBloom.SetDownsampleTapCount(CudaBloomPass::DownsampleTapCount::Fifteen);
-        }
     }
 //Modify End
 
