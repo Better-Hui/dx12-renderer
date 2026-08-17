@@ -1,6 +1,6 @@
 # DX12 Renderer
 
-> 一个基于 DirectX 12 的实验性渲染器仓库。它用于验证和学习渲染器架构、RenderGraph、光线追踪、Meshlet、场景导入，以及 CUDA/D3D12 互操作。
+> 一个基于 DirectX 12 的实验性渲染器仓库。它用于验证和学习渲染器架构、RenderGraph、光线追踪、Meshlet，以及 CUDA/D3D12 互操作。
 
 [English README](README.md) · [架构总览](Docs/ArchitectureOverview.zh-CN.md) · [RaytracingDemo API 说明（英文）](Docs/RaytracingSampleApi.md)
 
@@ -19,15 +19,14 @@
 - **显式异步计算**：pass 可以指定使用 `Direct` 或 `AsyncCompute` queue；RenderGraph 负责跨 queue 的 GPU fence 等待与资源交接。
 - **光线追踪与降噪**：同一场景可在 inline ray query 和 shader-table DXR 之间切换，并可使用 NRD 或 SVGF。
 - **材质着色模型**：默认 GGX 金属度/粗糙度 PBR 评估已归入 Framework；sample UI 可选择实验性的 `Stylized Comic` 风格化 PBR-NPR 变体。
-- **场景工作流**：新增公共 `Scene` 和 `SceneImporter`，可以读取 Unity 文本序列化场景和 JSON 场景，适配 PBR 材质和自发光 surface emitter，并通过压力球开关验证增量增删实例。
 - **Meshlet 实验路径**：包含 Meshlet 构建、GPU 资源、task shader / compute-indirect 两种 GBuffer 后端，以及只更新实例数据的增量路径。
 - **ReSTIR DI 直接光**：提供 RIS、时域/Boiling/空域复用、各阶段的可见性与 bias correction 配置，以及最终着色。
 - **ReSTIR GI 间接光**：基于 Inline Ray Query，提供初始 BSDF 采样、时域复用、空域复用、Jacobian correction 和最终可见性/着色。
 - **CUDA Bloom**：演示 D3D12 shared resource、shared fence 与 CUDA external semaphore 的互操作流程。
 - **实验性帧特性**：接入 Native NGX DLSS SR/DLAA，以及 Streamline Ray Reconstruction 和 Frame Generation；这些路径尚未完成可交付验证。
-- **调试与分析工具**：集成 PIX event、RenderGraph timing history/CSV、运行时调试 UI 和 `UnitySceneDump`。
+- **调试与分析工具**：集成 PIX event、RenderGraph timing history/CSV 和运行时调试 UI。
 
-这些内容的定位是“可运行的工程实验和 API 示例”。其中不少封装仍在演进，尤其是异步计算、Meshlet 和场景导入；请把它们视为当前仓库的实现方式，而不是通用最佳实践。
+这些内容的定位是“可运行的工程实验和 API 示例”。其中不少封装仍在演进，尤其是异步计算和 Meshlet；请把它们视为当前仓库的实现方式，而不是通用最佳实践。
 
 ## `RaytracingDemo`：本项目 API 的使用示例
 
@@ -75,12 +74,7 @@ auto pass = RenderGraph::RenderPass::Create(
 | Meshlet | task shader 和 compute-indirect 后端、cluster 调试显示，以及实例数据增量更新。 |
 | CUDA 互操作 | 基于 shared resource / shared fence 的 Bloom 后处理。 |
 | 性能分析 | PIX scope，以及 Direct、Compute queue 分别记录的 RenderGraph GPU timing / CSV。 |
-| 场景导入 | `.unity` 文本场景和 JSON 场景导入，最终转换为材质、几何、Meshlet buffer 和 acceleration structure。 |
 | 动态场景测试 | 压力球可以在运行时增删；复用静态 Meshlet geometry 和已有 BLAS，只更新实例数据与 TLAS。 |
-
-默认场景是仓库内的 Unity YAML 文件 `Assets/Scenes/Sponza.unity`。Sponza 使用的模型、纹理及 Unity `.meta` 文件已随仓库放在 `Assets/Models/Sponza`。JSON 场景继续保留兼容；新增内容优先使用 Unity 文本序列化的 `.unity` 场景。如需查看 Unity 场景转换后的信息，可以使用 `UnitySceneDump`。
-
-`Save Scene` 会把相机、天空盒和光源修改写入同目录的 `.runtime.json` 状态文件。JSON 与 Unity YAML 场景都会在下次启动时重新应用该状态，不会修改原始场景文件。
 
 ## 环境与依赖
 
@@ -89,12 +83,12 @@ auto pass = RenderGraph::RenderPass::Create(
 - Windows 10/11，x64。
 - Visual Studio 2022，以及 MSVC C++ desktop toolchain 和 Windows SDK。
 - CMake 3.22 或更新版本；当前 NRI/NRD 源码构建以此为最低版本。
-- 支持 **Shader Model 6.9** 的 D3D12 GPU 与驱动。DXR、mesh shader 和 CUDA 路径还取决于各自的硬件和驱动能力。
+- 支持 **Shader Model 6.8** 的 D3D12 GPU 与驱动。DXR、mesh shader 和 CUDA 路径还取决于各自的硬件和驱动能力。
 - **CUDA Toolkit 12.8**。当前 CMake 配置阶段会构建 CUDA interop/Bloom，因此即使运行时关闭 Bloom，配置时仍需要 CUDA。
 
-### Shader Model 6.9 基线
+### Shader Model 6.8 基线
 
-项目中的 raster、compute、task/mesh 和 DXR library shader 均由 DXC 按 Shader Model 6.9 编译，即 `vs/ps/cs/as/ms/lib_6_9`。仓库在 `D3D12/` 随附 DirectX Agility SDK **1.619.5** 运行时，在 `External/AgilitySDK/include/` 随附匹配的 C++ 头文件；CMake 会检查这套 redist，启动时还会拒绝不支持 Shader Model 6.9 的驱动。
+项目中的 raster、compute、task/mesh 和 DXR library shader 均由 DXC 按 Shader Model 6.8 编译，即 `vs/ps/cs/as/ms/lib_6_8`。仓库在 `D3D12/` 随附 DirectX Agility SDK **1.619.5** 运行时，在 `External/AgilitySDK/include/` 随附匹配的 C++ 头文件；CMake 会检查这套 redist，启动时还会拒绝不支持 Shader Model 6.8 的驱动。
 
 ### vcpkg 包
 
@@ -110,7 +104,7 @@ vcpkg install --triplet x64-windows assimp directxtex directxmesh imgui meshopti
 
 | 组件 | 位置 / 获取方式 | 用途 |
 | --- | --- | --- |
-| DirectX Agility SDK 1.619.5 | `D3D12/`、`External/AgilitySDK/include/` | SM6.9 基线所需的运行时 redist 和匹配的 C++ 头文件。 |
+| DirectX Agility SDK 1.619.5 | `D3D12/`、`External/AgilitySDK/include/` | SM6.8 基线所需的运行时 redist 和匹配的 C++ 头文件。 |
 | DirectX Shader Compiler | 优先 `DXC/dxc.exe`，否则使用 Windows SDK 的 `dxc.exe` | 编译 ray tracing、task、mesh、compute 等 shader。 |
 | WinPixEventRuntime | `WinPixEventRuntime/` | 向 PIX 写入 CPU/GPU event marker。 |
 | NVIDIA NRD / NRI | `External/NRD/`、`External/NRI/` Git submodule | 降噪路径及其 API 层；CMake 会从固定的上游提交构建 D3D12 库。 |
@@ -143,19 +137,13 @@ cmake -S . -B ..\build -G "Visual Studio 17 2022" -A x64 `
     -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
     -DDX12_RENDERER_CUDA_TOOLKIT_ROOT="$cudaRoot"
 
-cmake --build ..\build --config Release --target RaytracingDemo UnitySceneDump
+cmake --build ..\build --config Release --target RaytracingDemo
 ```
 
 运行：
 
 ```powershell
 & ..\build\bin\Release\RaytracingDemo.exe
-```
-
-查看 Unity 场景的转换结果：
-
-```powershell
-& ..\build\bin\Release\UnitySceneDump.exe 'C:\Scenes\Example.unity'
 ```
 
 ## 启动期 Shader 编译与变体
@@ -195,8 +183,6 @@ cmake --build ..\build --config Release --target RaytracingDemo UnitySceneDump
 - 当前 Framework 和 RenderGraph 的执行路径由应用组合根显式注入 device、queue 和 descriptor 分配器。独立运行时的 application/window 生命周期，以及少量 legacy resource-wrapper 兼容路径，仍保留 `Application` 依赖。
 - `RaytracingDemoSceneResources` 内部已拆成 texture/material、geometry、meshlet、RTAS 四个 builder。facade 仍是 sample 层入口，但压力球等场景修改只增量更新 Meshlet/TLAS instance 数据。
 - RenderGraph timing 分别记录每条 queue 上的 pass 时长；判断跨 queue overlap、wait 和 GPU bubble 时，请使用 PIX Timing Capture。
-- Unity importer 是静态、有限的导入器；prefab / nested prefab、skinned mesh、`LODGroup` 与 asset-database cache 尚未覆盖。
-- JSON 场景已经可用，但压力球仍由 sample C++ 定义，不属于场景数据。它们默认开启，可以通过运行时 UI 走增量 Add/Remove 路径切换。
 - Meshlet 路径是实验性 GBuffer 后端，不是完整的 visibility / streaming 系统，也不代表已达到最优 Meshlet 性能。
 - `Stylized Comic` 是实验性的风格化 PBR/PBR-NPR 材质评估：它保留金属度、粗糙度和 GGX 材质输入，同时加入分段漫反射、冷色阴影和图形化高光；这不是完整的 Spider-Verse 复刻，线稿、网点、套印、hatching 与时间风格化仍不属于该材质模型。
 - ReSTIR DI 是实验性的 inline ray-query 直接光 sample。它的光源采样、自发光表面发射体、时空复用和可见性测试选项仍在演进；图像质量、稳定性和性能均未作为等价 RTXDI 的实现完成验收。
@@ -208,7 +194,7 @@ cmake --build ..\build --config Release --target RaytracingDemo UnitySceneDump
 ## 进一步阅读与许可证
 
 - [架构总览](Docs/ArchitectureOverview.zh-CN.md)：按 DX12Library、Framework、RenderGraph、RaytracingDemo 分层说明职责、数据流和当前技术边界。
-- [RaytracingDemo API 说明（英文）](Docs/RaytracingSampleApi.md)：介绍 Framework 用法、RenderGraph、场景导入、profiling 和功能边界。
+- [RaytracingDemo API 说明（英文）](Docs/RaytracingSampleApi.md)：介绍 Framework 用法、RenderGraph、profiling 和功能边界。
 - 使用或再分发本仓库前，请保留上游与第三方组件的声明，并审阅对应的许可证文件。
 - 本 README 不引入替代性的仓库级许可证。
 - `External/DLSS/`、`External/NRI/`、`External/NRD/` 以及 `External/Streamline/` 中的 NVIDIA 组件均保留上游条款；Git submodule 链接不会转移或替换这些条款。SDK 放在 `External/` 不代表它变成开源，也不代表本仓库向任何人授予 NVIDIA SDK 的再许可；请保留全部 notice 与 license，不要把本仓库当作可独立分发的 SDK 镜像。在公开源码、再分发二进制或包含这些组件的商业发布前，应单独完成法务/许可证审查。

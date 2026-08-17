@@ -146,21 +146,11 @@ Do not infer global overlap from separate queue timestamp origins. Use PIX Timin
 
 PIX is the authority for cross-queue wall-clock overlap; CSV is the lightweight repeatable companion measurement.
 
-## Scene workflow
-
-`SceneImporter::ImportFromFile` selects the parser from extension: `.unity` for Unity text scenes and `.json` for JSON scenes. The default demo scene is `Assets/Scenes/Sponza.unity`; its model, textures, and Unity `.meta` files are repository-local under `Assets/Models/Sponza`.
-
-`RaytracingDemoSceneResources::LoadScene` adapts a `Scene` into textures, materials, geometry, meshlet buffers, acceleration structures, and emissive surface-emitter sampling data. The current renderer only has a PBR material path; an imported non-PBR material receives the fallback PBR-like material rather than a water, particle, or custom Unity shader implementation.
-
-The default sample still appends C++ stress-test spheres for renderer load testing; the runtime scene is therefore not yet fully data-authored. The UI toggle uses incremental add/remove handles: static meshlet geometry and existing BLAS data are reused, while meshlet instance buffers and the TLAS are updated.
-
-Current importer limits: no full prefab/nested-prefab support, no complete `SkinnedMeshRenderer` or `LODGroup`, no Unity asset-database cache/live sync, and no automatic coordinate-system conversion. `UnitySceneDump` inspects supported scenes without launching the renderer.
-
 ## Soft-shadow variants
 
 `PathTracingPipelineController` selects either hard-shadow or soft-shadow precompiled shader artifacts for both inline ray-query compute and shader-table DXR. The runtime toggle changes pipeline variants; the shader does not branch on a soft-shadow boolean.
 
-Directional lights use `DirectionalLightData::DirectionAndAngularRadius.w`. Point lights expose `PointLight::SourceRadius`, uploaded through `PointLightData::Attenuation.w`. Unity scenes can provide `m_ShadowAngle` / `m_ShadowRadius`, and JSON lights can provide `angularRadius` / `sourceRadius`. Area lights already sample their rectangular emitter surface and do not need a separate hard/soft branch.
+Directional lights use `DirectionalLightData::DirectionAndAngularRadius.w`. Point lights expose `PointLight::SourceRadius`, uploaded through `PointLightData::Attenuation.w`. Area lights already sample their rectangular emitter surface and do not need a separate hard/soft branch.
 
 The current soft variant uses four shadow samples. This is a sample-quality fixed preset rather than an adaptive production solution.
 

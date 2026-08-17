@@ -1,0 +1,10 @@
+# 后续功能候选清单
+
+> 本文记录可能推进的技术方向，不代表功能承诺或固定排期。实现前仍需先完成架构、画质和性能评估。
+
+- [ ] **间接光追**：在 `Framework` 中形成独立的间接光照模块，明确输入 `GBuffer`、RTAS、材质、光源与环境数据，输出 `IndirectLighting`。目标是支持可配置的 bounce、漫反射与镜面传输、环境与自发光贡献，以及可独立接入的降噪契约；`RaytracingDemo` 仅负责选择技术并连接 `RenderGraph` 资源。
+- [ ] **自发光 Mesh 光源**：完善 `SurfaceEmitter` 的网格发光体采样、动态更新和 Direct/Indirect Lighting 共享 light-domain 路径。
+- [ ] **动态 RTAS 更新**：补充动态顶点几何的 BLAS refit 与资源退休策略，并用自动化场景验证变换和几何更新。
+- [ ] **多 queue 资源调度**：将连续 Async Compute pass 合并为 compute segment，并设计可验证的跨 queue transient aliasing 与 Copy queue 调度。
+- [ ] **Shader 变体工作流**：继续完善 Framework shader 的依赖追踪、变体声明和构建缓存，避免不受控的排列组合膨胀。
+- [ ] **实验性 DLSS 路径验证**：在支持硬件上分别完成 DLSS SR/DLAA、Ray Reconstruction 与 Frame Generation 的画质、稳定性和性能验证。

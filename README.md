@@ -1,6 +1,6 @@
 # DX12 Renderer
 
-> An experimental DirectX 12 renderer and Windows sample collection for exploring renderer architecture, RenderGraph execution, ray tracing, meshlets, scene import, and CUDA/D3D12 interop.
+> An experimental DirectX 12 renderer and Windows sample collection for exploring renderer architecture, RenderGraph execution, ray tracing, meshlets, and CUDA/D3D12 interop.
 
 [中文文档](README.zh-CN.md) · [Architecture Overview](Docs/ArchitectureOverview.md) · [RaytracingDemo API Guide](Docs/RaytracingSampleApi.md)
 
@@ -21,11 +21,10 @@ The upstream renderer remains the foundation. This fork adds framework and sampl
 | Material shading | Framework-owned metallic/roughness GGX PBR evaluation, with an experimental `Stylized Comic` PBR-NPR variant selected by the sample UI. |
 | ReSTIR DI | Inline ray-query direct-lighting sample with RIS, temporal/boiling/spatial resampling, stage-specific visibility and bias-correction settings, and final shading. |
 | ReSTIR GI | Inline ray-query one-bounce indirect-lighting sample with initial BSDF sampling, temporal reuse, spatial reuse, Jacobian correction, and final visibility/shading. |
-| Scene workflow | Shared `Scene` data, Unity/JSON import, PBR material adaptation, emissive surface emitters, and incremental runtime instance add/remove used by the stress-scene controls. |
 | Meshlets | Meshlet generation/GPU resources, task-shader and compute-indirect GBuffer backends, and incremental instance-buffer updates. |
 | Denoising and interop | NRD/SVGF sample paths, RenderGraph-aware NRD resource-state handoff, and CUDA Bloom using D3D12 shared resources with external fence/semaphore synchronization. |
 | Experimental frame features | Native NGX DLSS SR/DLAA plus Streamline Ray Reconstruction and Frame Generation integration. These paths are experimental and not validated for delivery. |
-| Investigation | PIX scopes, RenderGraph timing history/CSV export, `UnitySceneDump`, and runtime UI controls. |
+| Investigation | PIX scopes, RenderGraph timing history/CSV export, and runtime UI controls. |
 
 ## Repository layout
 
@@ -72,14 +71,9 @@ Queue submission and last-writer fence tracking live in `RenderGraphQueueSchedul
 
 `RenderGraphRoot` receives its device and queues from the application composition root. Its execution path is split into `RenderGraphCommandExecutor` for pass recording/submission and `RenderGraphProfiler` for optional per-queue GPU timestamps. `RaytracingDemo` follows the same boundary: `RaytracingDemoPassResources` supplies object references and `RaytracingDemoPassConfig` supplies explicit runtime configuration, so pass lambdas do not capture the whole demo or use friend access.
 
-### Scene import and rendering features
+### Rendering features
 
-```cpp
-const SceneImportResult result = SceneImporter::ImportFromFile(scenePath);
-const Scene& scene = result.SceneData;
-```
-
-`SceneImporter` accepts Unity text-serialized `.unity` files and JSON scene files. `RaytracingDemoSceneResources` adapts the imported scene into textures, materials, geometry, meshlet buffers, and acceleration structures. The stress-sphere UI toggle exercises incremental scene mutation: meshlet geometry and existing BLAS data are reused while instance data and the TLAS are updated.
+The stress-sphere UI toggle exercises incremental scene mutation: meshlet geometry and existing BLAS data are reused while instance data and the TLAS are updated.
 
 | Feature | Demonstrated usage |
 | --- | --- |
@@ -102,12 +96,12 @@ const Scene& scene = result.SceneData;
 | Platform | Windows 10/11, x64. This is a Windows/D3D12 project. |
 | Toolchain | Visual Studio 2022 with the MSVC C++ desktop toolchain and a Windows SDK. |
 | CMake | CMake 3.22 or newer; the current NRI/NRD source builds require this baseline. |
-| GPU/driver | A D3D12 GPU/driver that reports **Shader Model 6.9**. DXR, mesh shaders, and CUDA paths need the relevant hardware/driver support. |
+| GPU/driver | A D3D12 GPU/driver that reports **Shader Model 6.8**. DXR, mesh shaders, and CUDA paths need the relevant hardware/driver support. |
 | CUDA | CUDA Toolkit **12.8** is currently required because `Framework` and `RaytracingDemo` build CUDA interop/Bloom. |
 
-### Shader Model 6.9 baseline
+### Shader Model 6.8 baseline
 
-The project compiles raster, compute, task/mesh, and DXR libraries with DXC at Shader Model 6.9 (`vs/ps/cs/as/ms/lib_6_9`). It ships the DirectX Agility SDK **1.619.5** runtime in `D3D12/` and its C++ headers in `External/AgilitySDK/include/`; CMake verifies the redistributable, and startup rejects drivers that do not report Shader Model 6.9.
+The project compiles raster, compute, task/mesh, and DXR libraries with DXC at Shader Model 6.8 (`vs/ps/cs/as/ms/lib_6_8`). It ships the DirectX Agility SDK **1.619.5** runtime in `D3D12/` and its C++ headers in `External/AgilitySDK/include/`; CMake verifies the redistributable, and startup rejects drivers that do not report Shader Model 6.8.
 
 ### vcpkg packages
 
@@ -121,7 +115,7 @@ Set `VCPKG_ROOT` before configuring, or pass `CMAKE_TOOLCHAIN_FILE` explicitly.
 
 | Component | Location / provisioning | Role |
 | --- | --- | --- |
-| DirectX Agility SDK 1.619.5 | `D3D12/`, `External/AgilitySDK/include/` | Runtime redistributable and matching C++ headers for the SM6.9 baseline. |
+| DirectX Agility SDK 1.619.5 | `D3D12/`, `External/AgilitySDK/include/` | Runtime redistributable and matching C++ headers for the SM6.8 baseline. |
 | DirectX Shader Compiler | `DXC/dxc.exe` when present; otherwise a Windows SDK `dxc.exe` | Compiles ray-tracing, task, mesh, compute, and other sample shaders. |
 | WinPixEventRuntime | `WinPixEventRuntime/` | PIX CPU/GPU event markers. |
 | NVIDIA NRD / NRI | Git submodules at `External/NRD/` and `External/NRI/` | Denoising integration and its API layer. CMake builds the D3D12 libraries from the pinned upstream commits. |
@@ -153,14 +147,10 @@ $cudaRoot = 'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8'
 cmake -S . -B ..\build -G "Visual Studio 17 2022" -A x64 `
     -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
     -DDX12_RENDERER_CUDA_TOOLKIT_ROOT="$cudaRoot"
-cmake --build ..\build --config Release --target RaytracingDemo UnitySceneDump
+cmake --build ..\build --config Release --target RaytracingDemo
 
 & ..\build\bin\Release\RaytracingDemo.exe
 ```
-
-The demo loads the repository-local Unity YAML scene `Assets/Scenes/Sponza.unity` by default. The required Sponza model, textures, and Unity `.meta` files are included under `Assets/Models/Sponza`. JSON scenes remain supported for compatibility; use Unity text-serialized `.unity` scenes for new scene content when possible.
-
-`Save Scene` writes camera, skybox, and light edits into a sibling `.runtime.json` state file. That state is reapplied for either JSON or Unity YAML scenes at the next launch, without mutating the source scene.
 
 ## Startup shader compilation and variants
 
@@ -176,12 +166,6 @@ Variants are **explicitly declared, automatically compiled, and automatically ca
 
 The startup compiler currently covers the shaders directly owned by `RaytracingDemo`. Framework shaders embedded as generated headers and legacy demos still use their existing build-time compilation paths.
 
-`UnitySceneDump` inspects a supported scene without launching the renderer:
-
-```powershell
-& ..\build\bin\Release\UnitySceneDump.exe 'C:\Scenes\Example.unity'
-```
-
 ## Current limitations
 
 - Only Windows/x64/D3D12 is supported.
@@ -194,8 +178,6 @@ The startup compiler currently covers the shaders directly owned by `RaytracingD
 - Device and queue state is injected through the application composition root for the current Framework and RenderGraph execution paths. Standalone application/window lifecycle code and a small set of legacy resource-wrapper compatibility paths still retain `Application` dependencies.
 - `RaytracingDemoSceneResources` exposes four internal builders for texture/material, geometry, meshlet, and RTAS resources. The facade remains sample-facing while scene mutation updates meshlet/TLAS instances incrementally.
 - Per-queue RenderGraph timestamps are useful for pass duration; PIX Timing Capture is required to inspect cross-queue wall-clock overlap, waits, and GPU bubbles.
-- The Unity importer is static and limited: prefab resolution, nested prefabs, skinned meshes, `LODGroup`, and an asset-database cache are not complete.
-- JSON scene import exists, but the stress-test spheres are still defined by sample C++ rather than scene data. They are enabled by default and can be added or removed incrementally from the runtime UI.
 - Meshlet rendering is an experimental GBuffer backend, not a complete visibility/streaming system or a claim of optimal meshlet performance.
 - `Stylized Comic` is an experimental stylized-PBR/PBR-NPR material evaluation. It retains metallic, roughness, and GGX material inputs while applying banded diffuse response, cool shadow tint, and graphic highlights. It is not a complete Spider-Verse reproduction: outlines, halftones, print misregistration, hatching, and temporal stylization are outside this material model.
 - ReSTIR DI is an experimental inline-ray-query direct-lighting sample. Its light sampling, emissive surface emitters, temporal/spatial reuse, and visibility-test options continue to evolve; image quality, stability, and performance have not been accepted as an RTXDI-equivalent implementation.
@@ -207,7 +189,7 @@ The startup compiler currently covers the shaders directly owned by `RaytracingD
 ## Documentation and notices
 
 - [Architecture Overview](Docs/ArchitectureOverview.md) maps the DX12Library, Framework, RenderGraph, and RaytracingDemo responsibilities and data flow.
-- [RaytracingDemo API Guide](Docs/RaytracingSampleApi.md) explains sample APIs, RenderGraph behavior, scene import, profiling, and boundaries.
+- [RaytracingDemo API Guide](Docs/RaytracingSampleApi.md) explains sample APIs, RenderGraph behavior, profiling, and boundaries.
 - Keep maintained sample passes framework-facing; avoid raw D3D12 calls where an existing API covers the operation.
 - This fork preserves upstream and third-party notices. Review the upstream project and vendored license files before use or redistribution; this README introduces no replacement repository-wide license.
 - `External/DLSS/`, `External/NRI/`, `External/NRD/`, and the NVIDIA components used by `External/Streamline/` retain their upstream terms. A Git submodule link does not transfer or replace those terms. Keeping an SDK under `External/` does not make it open source and does not grant a sublicense. Preserve all notices and licenses, do not treat this repository as a standalone SDK mirror, and obtain a legal/license review before publishing source, redistributing binaries, or making a commercial release that includes these components.

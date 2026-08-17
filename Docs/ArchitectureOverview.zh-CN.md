@@ -49,7 +49,7 @@ DX12Library
 
 - Meshlet 构建与 mesh shader 公共数据位于 `Framework/Geometry` 和 `Framework/shaders/Meshlet`。
 - `RayTracingAccelerationStructure`、`RayTracingShader`、`RayTracingShaderTable` 封装 BLAS/TLAS、ray tracing pipeline 和 shader-table dispatch。场景变化可增删、更新 instance，不必重建无关几何。
-- 公共 `Scene` 和 `SceneImporter` 同时读取 Unity 文本序列化的 `.unity` YAML 与 JSON，统一得到 camera、light、transform、PBR material 与 mesh 数据。
+- 公共 `Scene` 保存 sample 资源路径需要的 camera、light、transform、PBR material 与 mesh 数据。
 - `SurfaceEmitter` 定义矩形面积光和自发光 mesh 的 GPU 表示与采样数据。场景适配器构建共享 geometry 的 triangle CDF 与每实例数据，避免为每个重复实例的每个三角形存储完整灯光记录。
 
 ### 通用渲染模块
@@ -94,12 +94,10 @@ Compiler 会把连续、显式声明为 parallel-safe 的 Direct pass 组成 rec
 
 `Demos/RaytracingDemo/` 是当前维护的主 sample。它承载功能选择、UI、场景选择和图拓扑；可复用的 GPU 机制应继续下沉到 Framework。
 
-### 场景与资源数据流
+### 场景资源数据流
 
 ```text
-Unity YAML 或 JSON
-    -> SceneImporter
-    -> Scene
+Scene
     -> RaytracingDemoSceneResources
        -> texture/material builder
        -> geometry builder
@@ -125,16 +123,14 @@ ReSTIR GI 同样只作为一个 `ReSTIR GI` 间接光 producer 进入图。它�
 ### 调试和自动化
 
 - 运行时 UI 按技术选择、场景/光源、降噪、upscaling、压力内容与调试控制分类。
-- `Save Scene` 会将 camera、skybox、light-group 开关和 directional/point/area light 状态写到 `<source scene>.runtime.json`；原始 Unity/JSON 场景不变。`Save Camera` 是单独的 Unity 场景 camera 写回路径。
 - `RAYTRACING_DEMO_AUTOTEST=core`、`stress`、`matrix` 可以进行非交互启动与功能组合 smoke test。它用于发现崩溃/回归，不能替代画面验收。
 - RenderGraph timestamp CSV 用于可重复的 pass timing；完整 queue 时间线应看 PIX。
 
 ## 当前边界
 
-- 平台是 Windows/x64/D3D12，Shader Model 6.9 为基线。
+- 平台是 Windows/x64/D3D12，Shader Model 6.8 为基线。
 - Async Compute 只有依赖和硬件允许 overlap 时才可能降低 GPU wall time；额外 fence、cache 与带宽竞争也可能令它变慢。
 - Meshlet 是实验性的 GBuffer backend，不是完整的 visibility、streaming、residency 或 LOD 系统。
-- 场景导入有意保持有限：完整 prefab/nested prefab、skinned mesh、`LODGroup`、asset database live sync 与完整非 PBR material 都不在当前范围内。
 - ReSTIR DI/GI、CUDA Bloom、DLSS SR/DLAA、Streamline RR/FG、Unity interop 都是工程实验；用于交付前必须逐硬件完成正确性、画质、稳定性、显存和性能验证。
 
 使用示例和更细的功能边界见 [RaytracingDemo API Guide](RaytracingSampleApi.md)。

@@ -49,7 +49,7 @@ This layer deliberately exposes D3D12 concepts. `Framework` is responsible for p
 
 - Meshlet construction and common mesh-shader data are under `Framework/Geometry` and `Framework/shaders/Meshlet`.
 - `RayTracingAccelerationStructure`, `RayTracingShader`, and `RayTracingShaderTable` wrap BLAS/TLAS construction, ray-tracing pipelines, and shader-table dispatch. Scene mutation can add, remove, and update instances without rebuilding unrelated geometry.
-- The shared `Scene` model and `SceneImporter` read Unity text-serialized `.unity` YAML and JSON scene files. The importer resolves supported camera, light, transform, PBR-material, and mesh data into one representation.
+- The shared `Scene` model carries camera, light, transform, PBR-material, and mesh data for the sample resource path.
 - `SurfaceEmitter` defines the GPU representation and sampling data for rectangular area lights and emissive mesh surfaces. The scene adapter builds shared-geometry triangle CDF data plus per-instance data, avoiding one full light record per repeated triangle instance.
 
 ### Reusable rendering features
@@ -94,12 +94,10 @@ Use PIX Timing Capture to evaluate queue overlap, GPU waits, and CPU/GPU bubbles
 
 `Demos/RaytracingDemo/` is the maintained integration sample. It is intentionally where feature selection, UI, scene choice, and graph topology live; reusable GPU mechanisms should stay below it.
 
-### Scene and resource path
+### Scene resource path
 
 ```text
-Unity YAML or JSON
-    -> SceneImporter
-    -> Scene
+Scene
     -> RaytracingDemoSceneResources
        -> texture/material builder
        -> geometry builder
@@ -125,16 +123,14 @@ For ReSTIR GI, the graph instead selects one `ReSTIR GI` indirect-lighting produ
 ### Diagnostics and automation
 
 - Runtime UI groups technique selection, scene/light controls, denoising, upscaling, stress content, and debugging controls.
-- `Save Scene` writes camera, skybox, light-group flags, and directional/point/area light state to `<source scene>.runtime.json`; the source Unity or JSON scene remains unchanged. `Save Camera` is a separate Unity-scene camera edit path.
 - `RAYTRACING_DEMO_AUTOTEST=core`, `stress`, or `matrix` runs non-interactive startup/feature-toggle coverage. It is a crash/regression smoke test, not a substitute for visual validation.
 - RenderGraph timestamp CSV is useful for repeatable pass timing; PIX is required for full queue timelines.
 
 ## Current boundaries
 
-- The repository targets Windows/x64/D3D12 with Shader Model 6.9.
+- The repository targets Windows/x64/D3D12 with Shader Model 6.8.
 - Explicit async compute can reduce GPU wall time only when dependencies and hardware allow overlap; fence waits, cache pressure, and bandwidth contention can make it slower.
 - Meshlets are an experimental GBuffer backend, not a complete visibility, streaming, residency, or LOD system.
-- Scene import is intentionally limited: full prefabs, nested prefabs, skinned meshes, `LODGroup`, live asset-database synchronization, and complete non-PBR material support are outside the current importer scope.
 - ReSTIR DI/GI, CUDA Bloom, DLSS SR/DLAA, Streamline RR/FG, and Unity interop are engineering experiments. They require per-hardware functional, image-quality, stability, memory, and performance validation before any delivery use.
 
 For sample-facing API examples and detailed feature limitations, see [RaytracingDemo API Guide](RaytracingSampleApi.md).
