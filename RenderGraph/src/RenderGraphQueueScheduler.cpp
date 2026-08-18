@@ -1,316 +1,415 @@
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-18 by Hui
 #include "RenderGraphQueueScheduler.h"
 
 #include <algorithm>
+#include <stdexcept>
 #include <utility>
 
 #include <DX12Library/CommandList.h>
 #include <DX12Library/CommandQueue.h>
 #include <DX12Library/Helpers.h>
 
-RenderGraph::RenderGraphQueueScheduler::RenderGraphQueueScheduler(
-    std::shared_ptr<CommandQueue> directCommandQueue,
-    std::shared_ptr<CommandQueue> asyncComputeCommandQueue)
-    : m_DirectCommandQueue(std::move(directCommandQueue))
-    , m_AsyncComputeCommandQueue(std::move(asyncComputeCommandQueue))
+namespace RenderGraph
 {
-    Assert(m_DirectCommandQueue != nullptr, "Render graph requires a direct command queue.");
-    Assert(m_AsyncComputeCommandQueue != nullptr, "Render graph requires an async compute command queue.");
-}
-
-void RenderGraph::RenderGraphQueueScheduler::BeginFrame()
-{
-    if (m_AsyncComputeSubmitted)
+    RenderGraphQueueScheduler::RenderGraphQueueScheduler(
+        std::shared_ptr<CommandQueue> directCommandQueue,
+        std::shared_ptr<CommandQueue> asyncComputeCommandQueue,
+        std::shared_ptr<CommandQueue> copyCommandQueue)
+        : m_DirectCommandQueue(std::move(directCommandQueue))
+        , m_AsyncComputeCommandQueue(std::move(asyncComputeCommandQueue))
+        , m_CopyCommandQueue(std::move(copyCommandQueue))
     {
-        m_DirectCommandQueue->Wait(*m_AsyncComputeCommandQueue, m_LastAsyncComputeFenceValue);
+        Assert(m_DirectCommandQueue != nullptr, "Render graph requires a direct command queue.");
+        Assert(m_AsyncComputeCommandQueue != nullptr, "Render graph requires an async compute command queue.");
+        Assert(m_CopyCommandQueue != nullptr, "Render graph requires a copy command queue.");
     }
 
-    m_LastWriterQueues.clear();
-    m_LastWriterFenceValues.clear();
-//Modify Begin:2026-08-13 by Hui
-    m_ExternalResourceUsages.clear();
-//Modify End
-    m_ResourceRetirements.clear();
-    m_FrameSubmissionFences = {};
-    m_PendingDirectResources.clear();
-    m_AsyncComputeSubmitted = false;
-    m_LastAsyncComputeFenceValue = 0;
-}
-
-uint64_t RenderGraph::RenderGraphQueueScheduler::SubmitDirect(std::shared_ptr<CommandList>& commandList)
-{
-    if (commandList == nullptr)
+    void RenderGraphQueueScheduler::BeginFrame()
     {
-        return 0;
-    }
-
-    const uint64_t fenceValue = m_DirectCommandQueue->ExecuteCommandList(commandList);
-//Modify Begin:2026-08-13 by Hui
-    FinalizeDirectSubmission(fenceValue);
-//Modify End
-    commandList.reset();
-    return fenceValue;
-}
-
-//Modify Begin:2026-07-30 by Hui
-uint64_t RenderGraph::RenderGraphQueueScheduler::SubmitDirect(
-    std::vector<std::shared_ptr<CommandList>>& commandLists)
-{
-    if (commandLists.empty())
-    {
-        return 0;
-    }
-
-    const uint64_t fenceValue = m_DirectCommandQueue->ExecuteCommandLists(commandLists);
-//Modify Begin:2026-08-13 by Hui
-    FinalizeDirectSubmission(fenceValue);
-//Modify End
-    commandLists.clear();
-    return fenceValue;
-}
-//Modify End
-
-uint64_t RenderGraph::RenderGraphQueueScheduler::SubmitAsyncCompute(
-    std::shared_ptr<CommandList>& commandList,
-    const bool waitForCompletion)
-{
-    Assert(commandList != nullptr, "Cannot submit a null async compute command list.");
-    const uint64_t fenceValue = m_AsyncComputeCommandQueue->ExecuteCommandList(commandList);
-    m_FrameSubmissionFences.AsyncCompute = (std::max)(m_FrameSubmissionFences.AsyncCompute, fenceValue);
-    commandList.reset();
-
-    if (waitForCompletion)
-    {
-        m_AsyncComputeCommandQueue->WaitForFenceValue(fenceValue);
-    }
-
-    m_AsyncComputeSubmitted = true;
-    m_LastAsyncComputeFenceValue = fenceValue;
-    return fenceValue;
-}
-
-uint64_t RenderGraph::RenderGraphQueueScheduler::GetCrossQueueProducerFence(const RenderPass& pass) const
-{
-    uint64_t producerFenceValue = 0;
-    const auto inspectResource = [&](const ResourceId resourceId)
-    {
-        const auto writer = m_LastWriterQueues.find(resourceId);
-        if (writer == m_LastWriterQueues.end() || writer->second == pass.GetQueue())
+        if (m_LastAsyncComputeFenceValue != 0)
         {
-            return;
+            m_DirectCommandQueue->Wait(*m_AsyncComputeCommandQueue, m_LastAsyncComputeFenceValue);
+        }
+        if (m_LastCopyFenceValue != 0)
+        {
+            m_DirectCommandQueue->Wait(*m_CopyCommandQueue, m_LastCopyFenceValue);
         }
 
-        const auto fence = m_LastWriterFenceValues.find(resourceId);
-        Assert(fence != m_LastWriterFenceValues.end(), "Render pass writer fence was not recorded.");
-        Assert(fence->second != 0, "Cross-queue producer has not been submitted.");
-        producerFenceValue = (std::max)(producerFenceValue, fence->second);
-    };
-
-    for (const Input& input : pass.GetInputs())
-    {
-        inspectResource(input.m_Id);
-    }
-    for (const Output& output : pass.GetOutputs())
-    {
-        inspectResource(output.m_Id);
-    }
-//Modify Begin:2026-08-13 by Hui
-    const auto inspectFence = [&pass, &producerFenceValue](
-        const RenderPassQueue queue,
-        const uint64_t fenceValue)
-    {
-        if (queue == pass.GetQueue())
-        {
-            return;
-        }
-        Assert(fenceValue != 0, "Cross-queue external resource usage has not been submitted.");
-        producerFenceValue = (std::max)(producerFenceValue, fenceValue);
-    };
-
-    for (const ExternalResourceAccess& access : pass.GetExternalResourceAccesses())
-    {
-        Assert(access.Resource != nullptr, "External resource access must reference a resource.");
-        const auto usageIt = m_ExternalResourceUsages.find(access.Resource);
-        if (usageIt == m_ExternalResourceUsages.end())
-        {
-            continue;
-        }
-
-        const ExternalResourceUsage& usage = usageIt->second;
-        if (usage.HasWriter)
-        {
-            inspectFence(usage.LastWriterQueue, usage.LastWriterFenceValue);
-        }
-        if (access.Mode == ExternalResourceAccessMode::Write)
-        {
-            if (usage.HasDirectReader)
-            {
-                inspectFence(RenderPassQueue::Direct, usage.LastDirectReaderFenceValue);
-            }
-            if (usage.HasAsyncComputeReader)
-            {
-                inspectFence(RenderPassQueue::AsyncCompute, usage.LastAsyncComputeReaderFenceValue);
-            }
-        }
-    }
-//Modify End
-    return producerFenceValue;
-}
-
-void RenderGraph::RenderGraphQueueScheduler::WaitForDirectSubmissionOnAsyncCompute(const uint64_t fenceValue) const
-{
-    if (fenceValue != 0)
-    {
-        m_AsyncComputeCommandQueue->Wait(*m_DirectCommandQueue, fenceValue);
-    }
-}
-
-void RenderGraph::RenderGraphQueueScheduler::WaitForAsyncComputeSubmissionOnDirect(const uint64_t fenceValue)
-{
-    if (fenceValue == 0)
-    {
-        return;
-    }
-
-    m_DirectCommandQueue->Wait(*m_AsyncComputeCommandQueue, fenceValue);
-    if (m_AsyncComputeSubmitted && fenceValue >= m_LastAsyncComputeFenceValue)
-    {
-        m_AsyncComputeSubmitted = false;
+        m_LastWriterQueues.clear();
+        m_LastWriterFenceValues.clear();
+        m_ExternalResourceUsages.clear();
+        m_ResourceRetirements.clear();
+        m_FrameSubmissionFences = {};
+        m_PendingDirectResources.clear();
         m_LastAsyncComputeFenceValue = 0;
+        m_LastCopyFenceValue = 0;
     }
-}
 
-void RenderGraph::RenderGraphQueueScheduler::TrackPassResources(
-    const RenderPass& pass,
-    const uint64_t fenceValue)
-{
-    const auto trackResource = [this, &pass, fenceValue](const ResourceId resourceId)
+    uint64_t RenderGraphQueueScheduler::SubmitDirect(std::shared_ptr<CommandList>& commandList)
     {
-        if (pass.GetQueue() == RenderPassQueue::AsyncCompute)
+        if (commandList == nullptr)
         {
-            Assert(fenceValue != 0, "Async compute resource usage requires a submitted fence value.");
-            m_ResourceRetirements[resourceId].AsyncCompute = (std::max)(
-                m_ResourceRetirements[resourceId].AsyncCompute,
-                fenceValue);
+            return 0;
+        }
+
+        const uint64_t fenceValue = m_DirectCommandQueue->ExecuteCommandList(commandList);
+        FinalizeDirectSubmission(fenceValue);
+        commandList.reset();
+        return fenceValue;
+    }
+
+    uint64_t RenderGraphQueueScheduler::SubmitDirect(
+        std::vector<std::shared_ptr<CommandList>>& commandLists)
+    {
+        if (commandLists.empty())
+        {
+            return 0;
+        }
+
+        const uint64_t fenceValue = m_DirectCommandQueue->ExecuteCommandLists(commandLists);
+        FinalizeDirectSubmission(fenceValue);
+        commandLists.clear();
+        return fenceValue;
+    }
+
+    uint64_t RenderGraphQueueScheduler::SubmitAsyncCompute(
+        std::shared_ptr<CommandList>& commandList,
+        const bool waitForCompletion)
+    {
+        return SubmitNonDirect(RenderPassQueue::AsyncCompute, commandList, waitForCompletion);
+    }
+
+    uint64_t RenderGraphQueueScheduler::SubmitCopy(
+        std::shared_ptr<CommandList>& commandList,
+        const bool waitForCompletion)
+    {
+        return SubmitNonDirect(RenderPassQueue::Copy, commandList, waitForCompletion);
+    }
+
+    uint64_t RenderGraphQueueScheduler::SubmitNonDirect(
+        const RenderPassQueue queue,
+        std::shared_ptr<CommandList>& commandList,
+        const bool waitForCompletion)
+    {
+        Assert(queue != RenderPassQueue::Direct, "SubmitNonDirect cannot submit a direct command list.");
+        Assert(commandList != nullptr, "Cannot submit a null non-direct command list.");
+        CommandQueue& commandQueue = GetCommandQueue(queue);
+        const uint64_t fenceValue = commandQueue.ExecuteCommandList(commandList);
+        QueueFence(m_FrameSubmissionFences, queue) = (std::max)(
+            QueueFence(m_FrameSubmissionFences, queue),
+            fenceValue);
+        commandList.reset();
+
+        if (waitForCompletion)
+        {
+            commandQueue.WaitForFenceValue(fenceValue);
+        }
+
+        if (queue == RenderPassQueue::AsyncCompute)
+        {
+            m_LastAsyncComputeFenceValue = fenceValue;
         }
         else
         {
-            m_PendingDirectResources.insert(resourceId);
+            m_LastCopyFenceValue = fenceValue;
         }
-    };
-
-    for (const Input& input : pass.GetInputs())
-    {
-        trackResource(input.m_Id);
+        return fenceValue;
     }
 
-    for (const Output& output : pass.GetOutputs())
+    RenderGraphQueueFenceValues RenderGraphQueueScheduler::GetCrossQueueProducerFences(
+        const RenderPass& pass,
+        const RenderPassQueue waitingQueue) const
     {
-        trackResource(output.m_Id);
-        m_LastWriterQueues[output.m_Id] = pass.GetQueue();
-        m_LastWriterFenceValues[output.m_Id] = fenceValue;
-    }
-
-//Modify Begin:2026-08-13 by Hui
-    for (const ExternalResourceAccess& access : pass.GetExternalResourceAccesses())
-    {
-        TrackExternalResourceAccess(access, pass.GetQueue(), fenceValue);
-    }
-//Modify End
-}
-
-//Modify Begin:2026-08-13 by Hui
-void RenderGraph::RenderGraphQueueScheduler::FinalizeDirectSubmission(const uint64_t fenceValue)
-{
-    m_FrameSubmissionFences.Direct = (std::max)(m_FrameSubmissionFences.Direct, fenceValue);
-    for (const ResourceId resourceId : m_PendingDirectResources)
-    {
-        m_ResourceRetirements[resourceId].Direct = (std::max)(
-            m_ResourceRetirements[resourceId].Direct,
-            fenceValue);
-    }
-    m_PendingDirectResources.clear();
-
-    for (const auto& [resourceId, queue] : m_LastWriterQueues)
-    {
-        if (queue == RenderPassQueue::Direct && m_LastWriterFenceValues[resourceId] == 0)
+        RenderGraphQueueFenceValues dependencies = {};
+        const auto inspectFence = [waitingQueue, &dependencies](
+            const RenderPassQueue producerQueue,
+            const uint64_t fenceValue)
         {
-            m_LastWriterFenceValues[resourceId] = fenceValue;
+            if (producerQueue == waitingQueue || fenceValue == 0)
+            {
+                return;
+            }
+            QueueFence(dependencies, producerQueue) = (std::max)(
+                QueueFence(dependencies, producerQueue),
+                fenceValue);
+        };
+        const auto inspectResource = [this, &inspectFence](const ResourceId resourceId)
+        {
+            const auto writer = m_LastWriterQueues.find(resourceId);
+            if (writer == m_LastWriterQueues.end())
+            {
+                return;
+            }
+            const auto fence = m_LastWriterFenceValues.find(resourceId);
+            Assert(fence != m_LastWriterFenceValues.end(), "Render pass writer fence was not recorded.");
+            inspectFence(writer->second, fence->second);
+        };
+
+        for (const Input& input : pass.GetInputs())
+        {
+            inspectResource(input.m_Id);
+        }
+        for (const Output& output : pass.GetOutputs())
+        {
+            inspectResource(output.m_Id);
+        }
+
+        for (const ExternalResourceAccess& access : pass.GetExternalResourceAccesses())
+        {
+            Assert(access.Resource != nullptr, "External resource access must reference a resource.");
+            const auto usageIt = m_ExternalResourceUsages.find(access.Resource);
+            if (usageIt == m_ExternalResourceUsages.end())
+            {
+                continue;
+            }
+
+            const ExternalResourceUsage& usage = usageIt->second;
+            if (usage.HasWriter)
+            {
+                inspectFence(usage.LastWriterQueue, usage.LastWriterFenceValue);
+            }
+            if (access.Mode == ExternalResourceAccessMode::Write)
+            {
+                for (const RenderPassQueue readerQueue : {
+                    RenderPassQueue::Direct,
+                    RenderPassQueue::AsyncCompute,
+                    RenderPassQueue::Copy })
+                {
+                    const size_t readerIndex = QueueIndex(readerQueue);
+                    if (usage.HasReader[readerIndex])
+                    {
+                        inspectFence(readerQueue, usage.ReaderFenceValues[readerIndex]);
+                    }
+                }
+            }
+        }
+        return dependencies;
+    }
+
+    void RenderGraphQueueScheduler::WaitForDependencies(
+        const RenderPassQueue waitingQueue,
+        const RenderGraphQueueFenceValues& dependencies)
+    {
+        CommandQueue& consumer = GetCommandQueue(waitingQueue);
+        for (const RenderPassQueue producerQueue : {
+            RenderPassQueue::Direct,
+            RenderPassQueue::AsyncCompute,
+            RenderPassQueue::Copy })
+        {
+            if (producerQueue == waitingQueue)
+            {
+                continue;
+            }
+            const uint64_t fenceValue = QueueFence(dependencies, producerQueue);
+            if (fenceValue != 0)
+            {
+                consumer.Wait(GetCommandQueue(producerQueue), fenceValue);
+            }
+        }
+
+        if (waitingQueue == RenderPassQueue::Direct)
+        {
+            if (dependencies.AsyncCompute >= m_LastAsyncComputeFenceValue)
+            {
+                m_LastAsyncComputeFenceValue = 0;
+            }
+            if (dependencies.Copy >= m_LastCopyFenceValue)
+            {
+                m_LastCopyFenceValue = 0;
+            }
         }
     }
 
-    for (auto& [resource, usage] : m_ExternalResourceUsages)
+    void RenderGraphQueueScheduler::WaitForDirectSubmission(
+        const RenderPassQueue waitingQueue,
+        const uint64_t fenceValue)
     {
-        (void)resource;
-        if (usage.HasWriter &&
-            usage.LastWriterQueue == RenderPassQueue::Direct &&
-            usage.LastWriterFenceValue == 0)
+        Assert(waitingQueue != RenderPassQueue::Direct, "Direct queue cannot wait for itself.");
+        if (fenceValue != 0)
         {
+            GetCommandQueue(waitingQueue).Wait(*m_DirectCommandQueue, fenceValue);
+        }
+    }
+
+    void RenderGraphQueueScheduler::TrackPassResources(
+        const RenderPass& pass,
+        const uint64_t fenceValue)
+    {
+        const auto trackResource = [this, &pass, fenceValue](const ResourceId resourceId)
+        {
+            if (pass.GetQueue() == RenderPassQueue::Direct)
+            {
+                m_PendingDirectResources.insert(resourceId);
+                return;
+            }
+
+            Assert(fenceValue != 0, "Non-direct resource usage requires a submitted fence value.");
+            uint64_t& retirementFence = QueueFence(m_ResourceRetirements[resourceId], pass.GetQueue());
+            retirementFence = (std::max)(retirementFence, fenceValue);
+        };
+
+        for (const Input& input : pass.GetInputs())
+        {
+            trackResource(input.m_Id);
+        }
+        for (const Output& output : pass.GetOutputs())
+        {
+            trackResource(output.m_Id);
+            m_LastWriterQueues[output.m_Id] = pass.GetQueue();
+            m_LastWriterFenceValues[output.m_Id] = fenceValue;
+        }
+        for (const ExternalResourceAccess& access : pass.GetExternalResourceAccesses())
+        {
+            TrackExternalResourceAccess(access, pass.GetQueue(), fenceValue);
+        }
+    }
+
+    void RenderGraphQueueScheduler::FinalizeDirectSubmission(const uint64_t fenceValue)
+    {
+        m_FrameSubmissionFences.Direct = (std::max)(m_FrameSubmissionFences.Direct, fenceValue);
+        for (const ResourceId resourceId : m_PendingDirectResources)
+        {
+            m_ResourceRetirements[resourceId].Direct = (std::max)(
+                m_ResourceRetirements[resourceId].Direct,
+                fenceValue);
+        }
+        m_PendingDirectResources.clear();
+
+        for (const auto& [resourceId, queue] : m_LastWriterQueues)
+        {
+            if (queue == RenderPassQueue::Direct && m_LastWriterFenceValues[resourceId] == 0)
+            {
+                m_LastWriterFenceValues[resourceId] = fenceValue;
+            }
+        }
+
+        const size_t directIndex = QueueIndex(RenderPassQueue::Direct);
+        for (auto& [resource, usage] : m_ExternalResourceUsages)
+        {
+            (void)resource;
+            if (usage.HasWriter &&
+                usage.LastWriterQueue == RenderPassQueue::Direct &&
+                usage.LastWriterFenceValue == 0)
+            {
+                usage.LastWriterFenceValue = fenceValue;
+            }
+            if (usage.HasReader[directIndex] && usage.ReaderFenceValues[directIndex] == 0)
+            {
+                usage.ReaderFenceValues[directIndex] = fenceValue;
+            }
+        }
+    }
+
+    void RenderGraphQueueScheduler::TrackExternalResourceAccess(
+        const ExternalResourceAccess& access,
+        const RenderPassQueue queue,
+        const uint64_t fenceValue)
+    {
+        Assert(access.Resource != nullptr, "External resource access must reference a resource.");
+        ExternalResourceUsage& usage = m_ExternalResourceUsages[access.Resource];
+        if (access.Mode == ExternalResourceAccessMode::Write)
+        {
+            usage.LastWriterQueue = queue;
             usage.LastWriterFenceValue = fenceValue;
+            usage.HasWriter = true;
+            usage.ReaderFenceValues = {};
+            usage.HasReader = {};
+            return;
         }
-        if (usage.HasDirectReader && usage.LastDirectReaderFenceValue == 0)
+
+        const size_t queueIndex = QueueIndex(queue);
+        usage.ReaderFenceValues[queueIndex] = fenceValue;
+        usage.HasReader[queueIndex] = true;
+    }
+
+    void RenderGraphQueueScheduler::TrackExternalResource(
+        const ResourceId resourceId,
+        const RenderPassQueue queue)
+    {
+        if (queue != RenderPassQueue::Direct)
         {
-            usage.LastDirectReaderFenceValue = fenceValue;
+            throw std::invalid_argument("External graph outputs must be tracked on the direct queue.");
+        }
+        m_PendingDirectResources.insert(resourceId);
+    }
+
+    const std::map<ResourceId, RenderGraphQueueFenceValues>&
+    RenderGraphQueueScheduler::GetResourceRetirements() const
+    {
+        return m_ResourceRetirements;
+    }
+
+    const RenderGraphQueueFenceValues& RenderGraphQueueScheduler::GetFrameSubmissionFences() const
+    {
+        return m_FrameSubmissionFences;
+    }
+
+    size_t RenderGraphQueueScheduler::QueueIndex(const RenderPassQueue queue)
+    {
+        switch (queue)
+        {
+        case RenderPassQueue::Direct:
+            return 0u;
+        case RenderPassQueue::AsyncCompute:
+            return 1u;
+        case RenderPassQueue::Copy:
+            return 2u;
+        default:
+            Assert(false, "Unknown render-pass queue.");
+            return 0u;
         }
     }
-}
 
-void RenderGraph::RenderGraphQueueScheduler::TrackExternalResourceAccess(
-    const ExternalResourceAccess& access,
-    const RenderPassQueue queue,
-    const uint64_t fenceValue)
-{
-    Assert(access.Resource != nullptr, "External resource access must reference a resource.");
-    ExternalResourceUsage& usage = m_ExternalResourceUsages[access.Resource];
-    if (access.Mode == ExternalResourceAccessMode::Write)
+    uint64_t& RenderGraphQueueScheduler::QueueFence(
+        RenderGraphQueueFenceValues& fences,
+        const RenderPassQueue queue)
     {
-        usage.LastWriterQueue = queue;
-        usage.LastWriterFenceValue = fenceValue;
-        usage.HasWriter = true;
-        usage.LastDirectReaderFenceValue = 0;
-        usage.LastAsyncComputeReaderFenceValue = 0;
-        usage.HasDirectReader = false;
-        usage.HasAsyncComputeReader = false;
-        return;
+        switch (queue)
+        {
+        case RenderPassQueue::Direct:
+            return fences.Direct;
+        case RenderPassQueue::AsyncCompute:
+            return fences.AsyncCompute;
+        case RenderPassQueue::Copy:
+            return fences.Copy;
+        default:
+            Assert(false, "Unknown render-pass queue.");
+            return fences.Direct;
+        }
     }
 
-    if (queue == RenderPassQueue::Direct)
+    uint64_t RenderGraphQueueScheduler::QueueFence(
+        const RenderGraphQueueFenceValues& fences,
+        const RenderPassQueue queue)
     {
-        usage.LastDirectReaderFenceValue = fenceValue;
-        usage.HasDirectReader = true;
-    }
-    else
-    {
-        usage.LastAsyncComputeReaderFenceValue = fenceValue;
-        usage.HasAsyncComputeReader = true;
-    }
-}
-//Modify End
-
-void RenderGraph::RenderGraphQueueScheduler::TrackExternalResource(
-    const ResourceId resourceId,
-    const RenderPassQueue queue)
-{
-    if (queue == RenderPassQueue::Direct)
-    {
-        m_PendingDirectResources.insert(resourceId);
-        return;
+        switch (queue)
+        {
+        case RenderPassQueue::Direct:
+            return fences.Direct;
+        case RenderPassQueue::AsyncCompute:
+            return fences.AsyncCompute;
+        case RenderPassQueue::Copy:
+            return fences.Copy;
+        default:
+            Assert(false, "Unknown render-pass queue.");
+            return 0;
+        }
     }
 
-//Modify Begin:2026-07-30 by Hui
-    throw std::invalid_argument("External async compute resource tracking requires an explicit fence value.");
-//Modify End
-}
-
-const std::map<RenderGraph::ResourceId, RenderGraph::RenderGraphQueueFenceValues>&
-RenderGraph::RenderGraphQueueScheduler::GetResourceRetirements() const
-{
-    return m_ResourceRetirements;
-}
-
-const RenderGraph::RenderGraphQueueFenceValues&
-RenderGraph::RenderGraphQueueScheduler::GetFrameSubmissionFences() const
-{
-    return m_FrameSubmissionFences;
+    CommandQueue& RenderGraphQueueScheduler::GetCommandQueue(const RenderPassQueue queue) const
+    {
+        switch (queue)
+        {
+        case RenderPassQueue::Direct:
+            return *m_DirectCommandQueue;
+        case RenderPassQueue::AsyncCompute:
+            return *m_AsyncComputeCommandQueue;
+        case RenderPassQueue::Copy:
+            return *m_CopyCommandQueue;
+        default:
+            Assert(false, "Unknown render-pass queue.");
+            return *m_DirectCommandQueue;
+        }
+    }
 }
 //Modify End

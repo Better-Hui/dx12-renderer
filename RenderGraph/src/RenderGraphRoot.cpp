@@ -18,6 +18,7 @@ RenderGraph::RenderGraphRoot::RenderGraphRoot(
     Microsoft::WRL::ComPtr<ID3D12Device2> device,
     std::shared_ptr<CommandQueue> directCommandQueue,
     std::shared_ptr<CommandQueue> asyncComputeCommandQueue,
+    std::shared_ptr<CommandQueue> copyCommandQueue,
 //Modify End
     std::vector<std::unique_ptr<RenderPass>>&& renderPasses,
     std::vector<TextureDescription>&& textures,
@@ -33,10 +34,11 @@ RenderGraph::RenderGraphRoot::RenderGraphRoot(
     , m_DirectCommandQueue(std::move(directCommandQueue))
 //Modify Begin:2026-08-03 by Hui
     , m_AsyncComputeCommandQueue(std::move(asyncComputeCommandQueue))
+    , m_CopyCommandQueue(std::move(copyCommandQueue))
 //Modify End
 //Modify End
 //Modify Begin:2026-07-30 by Hui
-    , m_QueueScheduler(m_DirectCommandQueue, m_AsyncComputeCommandQueue)
+    , m_QueueScheduler(m_DirectCommandQueue, m_AsyncComputeCommandQueue, m_CopyCommandQueue)
 //Modify End
     , m_RenderPassesDescription(std::move(renderPasses))
     , m_TextureDescriptions(std::move(textures))
@@ -47,7 +49,11 @@ RenderGraph::RenderGraphRoot::RenderGraphRoot(
     , m_PresentationResourceId(outputs.Presentation)
 //Modify End
 //Modify Begin:2026-07-30 by Hui
-    , m_ResourcePool(std::make_shared<ResourcePool>(m_DeviceContext, m_DirectCommandQueue, m_AsyncComputeCommandQueue))
+    , m_ResourcePool(std::make_shared<ResourcePool>(
+        m_DeviceContext,
+        m_DirectCommandQueue,
+        m_AsyncComputeCommandQueue,
+        m_CopyCommandQueue))
 //Modify End
 {
 //Modify Begin:2026-07-30 by Hui
@@ -55,6 +61,7 @@ RenderGraph::RenderGraphRoot::RenderGraphRoot(
     Assert(m_DeviceContext != nullptr, "Render graph requires a D3D12 device context.");
     Assert(m_DirectCommandQueue != nullptr, "Render graph requires a direct command queue.");
     Assert(m_AsyncComputeCommandQueue != nullptr, "Render graph requires an async compute command queue.");
+    Assert(m_CopyCommandQueue != nullptr, "Render graph requires a copy command queue.");
 //Modify End
 //Modify Begin:2026-07-28 by Hui
     if (std::ranges::find(m_ExternalOutputIds, m_PresentationResourceId) == m_ExternalOutputIds.end())
@@ -71,6 +78,7 @@ RenderGraph::RenderGraphRoot::RenderGraphRoot(
     m_CommandExecutor = std::make_unique<RenderGraphCommandExecutor>(
         m_DirectCommandQueue,
         m_AsyncComputeCommandQueue,
+        m_CopyCommandQueue,
         m_ResourcePool,
         m_QueueScheduler,
         m_Profiler);

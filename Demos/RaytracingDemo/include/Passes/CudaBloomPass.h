@@ -32,15 +32,35 @@ public:
         BoxFilterOriginalPaper = 2,
     };
 
+    struct Settings
+    {
+        bool Enabled = false;
+        Backend SelectedBackend = Backend::Cuda;
+        CudaMethod Method = CudaMethod::ClassicPyramid;
+        float Threshold = 0.55f;
+        float SoftThreshold = 0.30f;
+        float Intensity = 0.75f;
+        int PyramidLevels = 16;
+        float BoxFilterSigma = 1.0f;
+        bool UseSharedMemoryDownsampling = false;
+    };
+
+    struct TimingStats
+    {
+        float D3DToCudaWaitMs = 0.0f;
+        float KernelsMs = 0.0f;
+        float CudaSignalMs = 0.0f;
+        float TotalCudaStreamMs = 0.0f;
+        uint64_t FrameIndex = 0;
+        bool Valid = false;
+    };
+
 //Modify End
 //Modify Begin:2026-07-30 by Hui
     explicit CudaBloomPass(FrameworkDeviceContext& deviceContext);
 //Modify End
     ~CudaBloomPass();
 
-//Modify Begin:2026-07-30 by Hui
-    bool DrawImGui(uint32_t width, uint32_t height);
-//Modify End
 //Modify Begin:2026-07-28 by Hui
     bool ExecuteInPlace(Texture& postProcessColor, uint32_t width, uint32_t height, ID3D12CommandQueue* d3d12CommandQueue);
 //Modify Begin:2026-08-16 by Hui
@@ -64,6 +84,9 @@ public:
     Backend GetBackend() const { return m_Backend; }
     bool IsFrameworkRaster() const { return m_Backend == Backend::FrameworkRaster; }
     const std::string& GetStatus() const { return m_Status; }
+    Settings GetSettings() const;
+    void SetSettings(const Settings& settings);
+    const TimingStats& GetTimingStats() const { return m_LastCudaTiming; }
 //Modify Begin:2026-08-17 by Hui
     void SetBackend(Backend backend) { m_Backend = backend; }
     void SetCudaMethod(CudaMethod method) { m_CudaMethod = method; }
@@ -95,15 +118,6 @@ private:
         bool Pending = false;
     };
 
-    struct CudaTimingStats
-    {
-        float D3DToCudaWaitMs = 0.0f;
-        float KernelsMs = 0.0f;
-        float CudaSignalMs = 0.0f;
-        float TotalCudaStreamMs = 0.0f;
-        uint64_t FrameIndex = 0;
-        bool Valid = false;
-    };
 //Modify End
 
     bool InitializeCuda();
@@ -171,7 +185,7 @@ private:
 //Modify End
 //Modify Begin:2026-07-30 by Hui
     std::array<CudaTimingFrame, CudaTimingFrameCount> m_CudaTimingFrames = {};
-    CudaTimingStats m_LastCudaTiming = {};
+    TimingStats m_LastCudaTiming = {};
     uint32_t m_CudaTimingFrameCursor = 0;
     uint64_t m_CudaTimingFrameCounter = 0;
     int32_t m_ActiveCudaTimingFrameIndex = -1;

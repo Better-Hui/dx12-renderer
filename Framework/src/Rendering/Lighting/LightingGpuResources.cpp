@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #if defined(min)
 #undef min
@@ -34,6 +35,10 @@ namespace
         size_t newCapacity = std::max<size_t>(InitialLightBufferCapacity, currentCapacity);
         while (newCapacity < requiredCapacity)
         {
+            if (newCapacity > std::numeric_limits<size_t>::max() / 2)
+            {
+                return requiredCapacity;
+            }
             newCapacity *= 2;
         }
         return newCapacity;

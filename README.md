@@ -34,10 +34,10 @@ The upstream renderer remains the foundation. This fork adds framework and sampl
 | `DX12Library/` | Low-level D3D12 wrappers: command queues/lists, resources, synchronization, descriptor heaps, application, and swap chain. |
 | `Framework/` | Scene, geometry, materials, pipeline/binding abstractions, ray tracing, denoising, meshlets, and CUDA interop. |
 | `RenderGraph/` | Pass/resource declarations, dependency ordering, resource-state planning, queue synchronization, and timing integration. |
+| `Demos/Common/` | Shared standalone-demo entry-point support used by `RaytracingDemo`. |
 | `Demos/RaytracingDemo/` | Primary maintained sample and the best entry point for current API usage. |
-| `Demos/*` | Additional historical or focused samples. Useful references, but not the main integration target. |
 | `Assets/` | Demo scenes, textures, and runtime sample assets. |
-| `External/` | Third-party integrations. DLSS, NRI, and NRD are pinned Git submodules; each component retains its own license and redistribution terms. |
+| `External/` | Third-party integrations. Dear ImGui, DLSS, NRI, and NRD are pinned Git submodules; each component retains its own license and redistribution terms. |
 | `Docs/` | Architecture and sample API notes. |
 
 ## What `RaytracingDemo` demonstrates
@@ -104,7 +104,7 @@ The project compiles raster, compute, task/mesh, and DXR libraries with DXC at S
 ### vcpkg packages
 
 ```powershell
-vcpkg install --triplet x64-windows assimp directxtex directxmesh imgui meshoptimizer
+vcpkg install --triplet x64-windows assimp directxtex directxmesh meshoptimizer
 ```
 
 Set `VCPKG_ROOT` before configuring, or pass `CMAKE_TOOLCHAIN_FILE` explicitly.
@@ -116,6 +116,7 @@ Set `VCPKG_ROOT` before configuring, or pass `CMAKE_TOOLCHAIN_FILE` explicitly.
 | DirectX Agility SDK 1.619.5 | `D3D12/`, `External/AgilitySDK/include/` | Runtime redistributable and matching C++ headers for the SM6.8 baseline. |
 | DirectX Shader Compiler | `DXC/dxc.exe` when present; otherwise a Windows SDK `dxc.exe` | Compiles ray-tracing, task, mesh, compute, and other sample shaders. |
 | WinPixEventRuntime | `WinPixEventRuntime/` | PIX CPU/GPU event markers. |
+| Dear ImGui | Git submodule at `External/ImGui/`, pinned to `v1.91.9` | Runtime debug UI. Framework compiles the official sources directly and keeps repository-specific numeric widget behavior in `Framework/UI/NumericWidgets`. |
 | NVIDIA NRD / NRI | Git submodules at `External/NRD/` and `External/NRI/` | Denoising integration and its API layer. CMake builds the D3D12 libraries from the pinned upstream commits. |
 | NVIDIA DLSS SDK | Git submodule at `External/DLSS/` | Experimental native NGX SR/DLAA integration. The SDK's own license and notices are provided by the submodule. |
 | NVIDIA Streamline | `External/Streamline/` | Experimental RR/FG integration and runtime interposer. Preserve `license.txt`, `nvngx_dlss.license.txt`, and `3rd-party-licenses.md`. |
@@ -134,7 +135,7 @@ cd dx12-renderer
 git submodule update --init --recursive
 ```
 
-The current pinned revisions are DLSS `v310.7.0`, NRI `v180`, and NRD `4.17.4`. NRI and NRD are built from source by CMake. Their upstream CMake files may download build-only dependencies such as D3D12 Memory Allocator, MathLib, and ShaderMake into the build directory; those files are not committed to this repository. Streamline remains a separately provisioned SDK package because its official source repository does not contain the runtime DLL set required by this sample.
+The current pinned revisions are Dear ImGui `v1.91.9`, DLSS `v310.7.0`, NRI `v180`, and NRD `4.17.4`. Dear ImGui, NRI, and NRD are built from source by CMake. NRI and NRD's upstream CMake files may download build-only dependencies such as D3D12 Memory Allocator, MathLib, and ShaderMake into the build directory; those files are not committed to this repository. Streamline remains a separately provisioned SDK package because its official source repository does not contain the runtime DLL set required by this sample.
 
 Run from the repository root. The example uses a sibling build directory.
 

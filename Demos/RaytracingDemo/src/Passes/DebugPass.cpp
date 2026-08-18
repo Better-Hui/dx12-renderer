@@ -7,9 +7,21 @@
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <RenderGraph/RenderContext.h>
-#include <RenderGraph/RenderPass.h>
+#include <RenderGraph/RenderGraphBuilder.h>
 
-std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDebugTexturePass(
+//Modify Begin:2026-08-18 by Hui
+namespace
+{
+    struct DebugTexturePassData
+    {
+        RaytracingDemoPassResourcesSnapshot Resources;
+        RenderGraph::ResourceId DebugTarget = 0;
+    };
+}
+//Modify End
+
+void RaytracingDemoPasses::Builder::AddDebugTexturePass(
+    RenderGraph::RenderGraphBuilder& renderGraphBuilder,
     const RaytracingDemoPassResources& resources,
     const RenderGraph::ResourceId debugTarget,
     const RenderGraph::ResourceId debugTargetReadyToken)
@@ -17,23 +29,25 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDe
     using namespace RenderGraph;
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
 
-    return RenderPass::Create(
+    renderGraphBuilder.AddPass<DebugTexturePassData>(
         L"Debug Texture",
+        [&resources, debugTarget, debugTargetReadyToken](RenderGraphPassBuilder& passBuilder, DebugTexturePassData& passData)
         {
-            { debugTargetReadyToken, InputType::Token },
-            { debugTarget, InputType::ShaderResource },
+            passData.Resources.emplace(resources);
+            passData.DebugTarget = debugTarget;
+            passBuilder.ReadToken(debugTargetReadyToken);
+            passBuilder.ReadTexture(debugTarget);
+            passBuilder.WriteTexture(DemoResourceIds::SceneColor);
+            passBuilder.WriteToken(DemoResourceIds::DebugOutputFinishedToken);
         },
+        [](const DebugTexturePassData& passData, const RenderContext& context, CommandList& cmd)
         {
-            { DemoResourceIds::SceneColor, OutputType::RenderTarget },
-            { DemoResourceIds::DebugOutputFinishedToken, OutputType::Token },
-        },
-        [resources, debugTarget](const RenderContext& context, CommandList& cmd)
-        {
+            const RaytracingDemoPassResources& resources = passData.Resources.value();
             CommandContext commandContext(cmd);
             commandContext.SetTexture(
                 *resources.DisplayCompositeShader,
                 "SceneColor",
-                ShaderResourceView(context.GetTexture(debugTarget)));
+                ShaderResourceView(context.GetTexture(passData.DebugTarget)));
             commandContext.BindPipeline(*resources.DisplayCompositeShader);
             commandContext.BindDescriptorSet(resources.DisplayCompositeShader->GetDescriptorSet());
             resources.DisplayBlitMesh->Draw(cmd);

@@ -12,36 +12,57 @@
 //Modify Begin:2026-07-30 by Hui
 #include <Framework/Rendering/Texture/UnorderedAccessView.h>
 //Modify End
-#include <RenderGraph/RenderPass.h>
+#include <RenderGraph/RenderGraphBuilder.h>
 //Modify Begin:2026-07-30 by Hui
 #include <Scene/SceneLightManager.h>
 //Modify End
 
 using namespace DirectX;
 
+//Modify Begin:2026-08-18 by Hui
+namespace
+{
+    struct BaseResourcesPassData
+    {
+        RaytracingDemoPassResourcesSnapshot Resources;
+        RaytracingDemoPassConfig Config = {};
+    };
+}
+//Modify End
+
 //Modify Begin:2026-07-30 by Hui
-std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBaseResourcesPass(
+void RaytracingDemoPasses::Builder::AddBaseResourcesPass(
+    RenderGraph::RenderGraphBuilder& renderGraphBuilder,
     const RaytracingDemoPassResources& resources,
     const RaytracingDemoPassConfig& config)
 {
     using namespace RenderGraph;
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
 
-    auto pass = RenderPass::Create(
+    renderGraphBuilder.AddPass<BaseResourcesPassData>(
         L"Base Resources",
-        {},
+        [&resources, config](RenderGraphPassBuilder& passBuilder, BaseResourcesPassData& passData)
         {
-            { DemoResourceIds::GBufferAlbedoOcclusion, OutputType::RenderTarget },
-            { DemoResourceIds::GBufferSpecularSmoothness, OutputType::RenderTarget },
-            { DemoResourceIds::GBufferNormal, OutputType::RenderTarget },
-            { DemoResourceIds::GBufferEmissionMetallic, OutputType::RenderTarget },
-            { DemoResourceIds::GBufferPosition, OutputType::RenderTarget },
-            { DemoResourceIds::MotionVector, OutputType::RenderTarget },
-            { DemoResourceIds::DepthBuffer, OutputType::DepthWrite },
-            { DemoResourceIds::BaseResourcesFinishedToken, OutputType::Token },
+            passData.Resources.emplace(resources);
+            passData.Config = config;
+            passBuilder.WriteTexture(DemoResourceIds::GBufferAlbedoOcclusion);
+            passBuilder.WriteTexture(DemoResourceIds::GBufferSpecularSmoothness);
+            passBuilder.WriteTexture(DemoResourceIds::GBufferNormal);
+            passBuilder.WriteTexture(DemoResourceIds::GBufferEmissionMetallic);
+            passBuilder.WriteTexture(DemoResourceIds::GBufferPosition);
+            passBuilder.WriteTexture(DemoResourceIds::MotionVector);
+            passBuilder.WriteDepth(DemoResourceIds::DepthBuffer);
+            passBuilder.WriteToken(DemoResourceIds::BaseResourcesFinishedToken);
+            resources.Scene.ForEachGBufferShaderResource(
+                [&passBuilder](const Resource& resource)
+                {
+                    passBuilder.ReadExternal(resource, D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
+                });
         },
-        [resources, config](const RenderContext& context, CommandList& cmd)
+        [](const BaseResourcesPassData& passData, const RenderContext& context, CommandList& cmd)
         {
+            const RaytracingDemoPassResources& resources = passData.Resources.value();
+            const RaytracingDemoPassConfig& config = passData.Config;
 //Modify Begin:2026-07-30 by Hui
             const RaytracingDemoFrameState& frameState = *config.FrameState;
 //Modify End
@@ -239,13 +260,5 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateBa
 //Modify End
             }
         });
-//Modify Begin:2026-08-13 by Hui
-    resources.Scene.ForEachGBufferShaderResource(
-        [&pass](const Resource& resource)
-        {
-            pass->AddExternalResourceAccess(resource, D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
-        });
-    return pass;
-//Modify End
 }
 //Modify End

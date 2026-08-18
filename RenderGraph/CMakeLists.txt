@@ -4,19 +4,14 @@ project("RenderGraph")
 
 set(HEADER_FILES
         include/RenderGraph/RenderContext.h
-        # Modify Begin:2026-07-30 by Hui
+        include/RenderGraph/RenderGraphBuilder.h
         include/RenderGraph/RenderGraphCommandExecutor.h
-        # Modify Begin:2026-08-07 by Hui
         include/RenderGraph/RenderGraphCompiler.h
-        # Modify End
         include/RenderGraph/RenderGraphExecutionPlan.h
-        # Modify Begin:2026-08-07 by Hui
         include/RenderGraph/RenderGraphTaskScheduler.h
-        # Modify End
         include/RenderGraph/RenderGraphProfiler.h
         include/RenderGraph/RenderGraphQueueFence.h
         include/RenderGraph/RenderGraphQueueScheduler.h
-        # Modify End
         include/RenderGraph/RenderGraphRoot.h
         include/RenderGraph/RenderMetadata.h
         include/RenderGraph/RenderPass.h
@@ -28,21 +23,14 @@ set(HEADER_FILES
         )
 
 set(SOURCE_FILES
-        # Modify Begin:2026-07-30 by Hui
         src/RenderContext.cpp
+        src/RenderGraphBuilder.cpp
         src/RenderGraphCommandExecutor.cpp
-        # Modify Begin:2026-08-07 by Hui
         src/RenderGraphTaskScheduler.cpp
-        # Modify End
-        # Modify Begin:2026-08-07 by Hui
         src/RenderGraphCompiler.cpp
-        # Modify End
         src/RenderGraphProfiler.cpp
-        # Modify End
         src/RenderGraphRoot.cpp
-        # Modify Begin:2026-07-30 by Hui
         src/RenderGraphQueueScheduler.cpp
-        # Modify End
         src/RenderPass.cpp
         src/ResourceId.cpp
         src/ResourcePool.cpp
@@ -73,5 +61,4 @@ target_include_directories(${TARGET_NAME}
 
 target_link_libraries(${TARGET_NAME}
         PUBLIC DX12Library
-        PUBLIC Framework
         )

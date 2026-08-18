@@ -20,6 +20,9 @@ namespace RenderGraph
     {
         Direct,
         AsyncCompute,
+        //Modify Begin:2026-08-18 by Hui
+        Copy,
+        //Modify End
     };
 //Modify End
 

@@ -24,6 +24,8 @@
 
 #include <DX12Library/Camera.h>
 
+#include <Passes/CudaBloomPass.h>
+
 #include <DirectXMath.h>
 //Modify Begin:2026-07-30 by Hui
 #include <wrl.h>
@@ -31,9 +33,9 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 
 class CommandQueue;
-class CudaBloomPass;
 //Modify Begin:2026-08-11 by Hui
 class GpuTimestampProfiler;
 //Modify End
@@ -172,11 +174,14 @@ struct RaytracingDemoPassResources
 //Modify End
     std::shared_ptr<CommandQueue> DirectQueue;
     std::shared_ptr<CommandQueue> AsyncComputeQueue;
+    std::shared_ptr<CommandQueue> CopyQueue;
 //Modify End
 //Modify Begin:2026-08-11 by Hui
     GpuTimestampProfiler* DirectGpuTimestampProfiler = nullptr;
 //Modify End
 };
+
+using RaytracingDemoPassResourcesSnapshot = std::optional<RaytracingDemoPassResources>;
 
 //Modify Begin:2026-08-05 by Hui
 enum class RaytracingDemoLightingTechnique : uint32_t
@@ -215,6 +220,10 @@ struct RaytracingDemoFrameState
 //Modify Begin:2026-08-13 by Hui
     bool DenoiserEnabled = false;
     DenoiserController::Algorithm DenoiserAlgorithm = DenoiserController::Algorithm::Off;
+//Modify Begin:2026-08-18 by Hui
+    bool BloomEnabled = false;
+    CudaBloomPass::Backend BloomBackend = CudaBloomPass::Backend::Cuda;
+//Modify End
 //Modify End
     uint32_t Width = 1;
     uint32_t Height = 1;

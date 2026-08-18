@@ -533,11 +533,9 @@ ShaderVariantManagerConfig ShaderVariantManager::CreateDefaultConfig()
         AddUniquePath(config.IncludeDirectories, config.SourceRoot / "External" / "NRD" / "Shaders");
     }
 
-    std::wstring compilationMode = GetEnvironmentValue(L"DX12_RENDERER_SHADER_COMPILE");
-    if (compilationMode.empty())
-    {
-        compilationMode = GetEnvironmentValue(L"RAYTRACING_DEMO_SHADER_COMPILE");
-    }
+//Modify Begin:2026-08-18 by Hui
+    const std::wstring compilationMode = GetEnvironmentValue(L"DX12_RENDERER_SHADER_COMPILE");
+//Modify End
     config.CompilationMode = ParseCompilationMode(compilationMode);
     return config;
 }

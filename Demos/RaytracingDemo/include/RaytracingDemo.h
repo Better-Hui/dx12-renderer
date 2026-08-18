@@ -34,14 +34,15 @@
 #include <Framework/Rendering/Pipeline/ShaderVariant.h>
 //Modify End
 
-#include <RenderGraph/RenderGraphRoot.h>
+#include <RenderGraph/RaytracingDemoRenderPipelineController.h>
 #include <Scene/SceneLightManager.h>
+#include <Scene/RaytracingDemoSceneRuntimeController.h>
 #include <Scene/SceneLighting.h>
 #include <Scene/SceneResources.h>
 #include <UI/DemoLightEditor.h>
 #include <PathTracing/PathTracingPipelineController.h>
-#include <Passes/CudaBloomPass.h>
 //Modify Begin:2026-07-30 by Hui
+#include <Passes/CudaBloomPass.h>
 #include <Passes/RaytracingDemoPassResources.h>
 //Modify End
 
@@ -161,9 +162,6 @@ private:
     void LoadSceneContent(CommandList& commandList, const std::filesystem::path& scenePath);
 //Modify End
 //Modify Begin:2026-07-30 by Hui
-    void ApplyStressTestSpheresState();
-//Modify End
-//Modify Begin:2026-07-30 by Hui
     void ResetCameraToInitialSceneState();
 //Modify Begin:2026-08-16 by Hui
     void LoadStartupConfiguration();
@@ -178,48 +176,13 @@ private:
 //Modify End
     void OnImGui();
 
-    std::unique_ptr<RenderGraph::RenderGraphRoot> m_RenderGraph;
+    //Modify Begin:2026-08-18 by Hui
+    RaytracingDemoRenderPipelineController m_RenderPipeline;
+    //Modify End
 //Modify Begin:2026-07-30 by Hui
     std::shared_ptr<RaytracingDemoFrameState> m_RenderGraphFrameState = std::make_shared<RaytracingDemoFrameState>();
 //Modify End
-//Modify Begin:2026-07-28 by Hui
-    bool m_RenderGraphDenoiserEnabled = false;
-    DenoiserController::Algorithm m_RenderGraphDenoiserAlgorithm = DenoiserController::Algorithm::Off;
-    bool m_RenderGraphCudaBloomEnabled = false;
-//Modify Begin:2026-08-16 by Hui
-//Modify Begin:2026-08-17 by Hui
-    CudaBloomPass::Backend m_RenderGraphCudaBloomBackend = CudaBloomPass::Backend::Cuda;
-//Modify End
-//Modify End
-//Modify Begin:2026-08-07 by Hui
-    bool m_RenderGraphDLSSEnabled = false;
-    bool m_RenderGraphRayReconstructionEnabled = false;
-    bool m_RenderGraphFrameGenerationEnabled = false;
-//Modify End
-//Modify Begin:2026-08-03 by Hui
-    bool m_RenderGraphAsyncComputeEnabled = false;
-    PathTracingBackend m_RenderGraphPathTracingBackend = PathTracingBackend::InlineRayQuery;
-//Modify Begin:2026-08-06 by Hui
-    RaytracingDemoLightingTechnique m_RenderGraphDirectLightingTechnique = RaytracingDemoLightingTechnique::None;
-//Modify End
-//Modify Begin:2026-08-10 by Hui
-//Modify Begin:2026-08-11 by Hui
-    RaytracingDemoLightingTechnique m_RenderGraphIndirectLightingTechnique = RaytracingDemoLightingTechnique::ReSTIRGI;
-    bool m_RenderGraphIndirectLightingEnabled = true;
-//Modify End
-//Modify End
-//Modify Begin:2026-07-30 by Hui
-    int m_RenderGraphLightingDebugTextureTarget = 0;
-//Modify End
-//Modify End
-//Modify End
-//Modify Begin:2026-07-31 by Hui
-    bool m_RenderGraphMeshletGBufferEnabled = false;
-    bool m_RenderGraphTaskMeshletEnabled = true;
-    bool m_RenderGraphMeshletDebugEnabled = false;
     int m_DebugTextureTarget = 0;
-    int m_RenderGraphDebugTextureTarget = 0;
-//Modify End
 //Modify Begin:2026-07-27 by Hui
     FrameworkDeviceContext m_FrameworkDeviceContext;
 //Modify Begin:2026-08-07 by Hui
@@ -250,6 +213,11 @@ private:
     GpuTimestampProfiler m_AsyncComputeGpuTimestampProfiler;
     std::vector<GpuTimestampSample> m_AsyncComputeGpuTimestampSamples;
     std::vector<GpuTimestampSample> m_AsyncComputeGpuTimestampDisplaySamples;
+//Modify Begin:2026-08-18 by Hui
+    GpuTimestampProfiler m_CopyGpuTimestampProfiler;
+    std::vector<GpuTimestampSample> m_CopyGpuTimestampSamples;
+    std::vector<GpuTimestampSample> m_CopyGpuTimestampDisplaySamples;
+//Modify End
 //Modify End
 //Modify Begin:2026-08-07 by Hui
     DemoProfiling::RenderGraphTimingHistory m_RenderGraphTimingHistory;
@@ -267,6 +235,9 @@ private:
 //Modify End
 //Modify End
     RaytracingDemoSceneResources m_SceneResources;
+//Modify Begin:2026-08-18 by Hui
+    RaytracingDemoSceneRuntimeController m_SceneRuntime;
+//Modify End
     SceneLightManager m_Lights;
     DemoLightEditor m_LightEditor;
     std::unique_ptr<ImGuiImpl> m_ImGui;
@@ -330,10 +301,6 @@ private:
 //Modify End
 //Modify Begin:2026-07-30 by Hui
     bool m_SoftShadowsEnabled = false;
-//Modify End
-//Modify Begin:2026-07-30 by Hui
-    bool m_StressTestSpheresEnabled = false;
-    bool m_StressTestSpheresStateDirty = false;
 //Modify End
 //Modify Begin:2026-07-30 by Hui
     DirectX::XMFLOAT3 m_InitialSceneCameraTranslation = { 0.0f, 0.0f, 0.0f };

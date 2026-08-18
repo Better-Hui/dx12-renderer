@@ -127,13 +127,16 @@ namespace
 RenderGraph::ResourcePool::ResourcePool(
     std::shared_ptr<D3D12DeviceContext> deviceContext,
     std::shared_ptr<CommandQueue> directCommandQueue,
-    std::shared_ptr<CommandQueue> asyncComputeCommandQueue)
+    std::shared_ptr<CommandQueue> asyncComputeCommandQueue,
+    std::shared_ptr<CommandQueue> copyCommandQueue)
     : m_DirectCommandQueue(std::move(directCommandQueue))
     , m_AsyncComputeCommandQueue(std::move(asyncComputeCommandQueue))
+    , m_CopyCommandQueue(std::move(copyCommandQueue))
     , m_DeviceContext(std::move(deviceContext))
 {
     Assert(m_DirectCommandQueue != nullptr, "Resource pool requires a direct command queue.");
     Assert(m_AsyncComputeCommandQueue != nullptr, "Resource pool requires an async compute command queue.");
+    Assert(m_CopyCommandQueue != nullptr, "Resource pool requires a copy command queue.");
     Assert(m_DeviceContext != nullptr, "Resource pool requires a D3D12 device context.");
     m_ResourceStateRegistry = m_DirectCommandQueue->GetResourceStateRegistry();
     Assert(m_ResourceStateRegistry != nullptr, "Resource pool requires a resource state registry.");
@@ -170,7 +173,8 @@ void RenderGraph::ResourcePool::BeginFrame(CommandList& commandList)
 bool RenderGraph::ResourcePool::IsRetirementComplete(const RenderGraphQueueFenceValues& fenceValues) const
 {
     return (fenceValues.Direct == 0 || m_DirectCommandQueue->IsFenceComplete(fenceValues.Direct)) &&
-        (fenceValues.AsyncCompute == 0 || m_AsyncComputeCommandQueue->IsFenceComplete(fenceValues.AsyncCompute));
+        (fenceValues.AsyncCompute == 0 || m_AsyncComputeCommandQueue->IsFenceComplete(fenceValues.AsyncCompute)) &&
+        (fenceValues.Copy == 0 || m_CopyCommandQueue->IsFenceComplete(fenceValues.Copy));
 }
 //Modify End
 const Resource& RenderGraph::ResourcePool::GetResource(const ResourceId resourceId) const

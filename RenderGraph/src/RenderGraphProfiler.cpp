@@ -80,13 +80,31 @@ void RenderGraph::RenderGraphProfiler::EndQueueFrame(
 RenderGraph::RenderGraphProfiler::QueueProfilerState&
 RenderGraph::RenderGraphProfiler::GetQueueState(const RenderPassQueue queue)
 {
-    return queue == RenderPassQueue::AsyncCompute ? m_AsyncCompute : m_Direct;
+    switch (queue)
+    {
+    case RenderPassQueue::AsyncCompute:
+        return m_AsyncCompute;
+    case RenderPassQueue::Copy:
+        return m_Copy;
+    case RenderPassQueue::Direct:
+    default:
+        return m_Direct;
+    }
 }
 
 const RenderGraph::RenderGraphProfiler::QueueProfilerState&
 RenderGraph::RenderGraphProfiler::GetQueueState(const RenderPassQueue queue) const
 {
-    return queue == RenderPassQueue::AsyncCompute ? m_AsyncCompute : m_Direct;
+    switch (queue)
+    {
+    case RenderPassQueue::AsyncCompute:
+        return m_AsyncCompute;
+    case RenderPassQueue::Copy:
+        return m_Copy;
+    case RenderPassQueue::Direct:
+    default:
+        return m_Direct;
+    }
 }
 
 std::string RenderGraph::RenderGraphProfiler::NarrowPassName(const std::wstring& passName)

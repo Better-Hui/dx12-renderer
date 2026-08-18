@@ -6,12 +6,9 @@
 #include <Passes/RaytracingDemoPassResources.h>
 //Modify End
 
-#include <memory>
-#include <vector>
-
 namespace RenderGraph
 {
-    class RenderPass;
+    class RenderGraphBuilder;
 }
 
 namespace RaytracingDemoPasses
@@ -20,60 +17,76 @@ namespace RaytracingDemoPasses
     {
     public:
 //Modify Begin:2026-07-30 by Hui
-        static std::unique_ptr<RenderGraph::RenderPass> CreateBaseResourcesPass(
+        //Modify Begin:2026-08-18 by Hui
+        static void AddBaseResourcesPass(
+            RenderGraph::RenderGraphBuilder& renderGraphBuilder,
             const RaytracingDemoPassResources& resources,
             const RaytracingDemoPassConfig& config);
 //Modify Begin:2026-07-28 by Hui
-        static std::unique_ptr<RenderGraph::RenderPass> CreateSkyboxPass(
+        static void AddSkyboxPass(
+            RenderGraph::RenderGraphBuilder& renderGraphBuilder,
             const RaytracingDemoPassResources& resources,
             const RaytracingDemoPassConfig& config,
             RenderGraph::ResourceId sceneReadyToken);
 //Modify End
-        static std::unique_ptr<RenderGraph::RenderPass> CreateDirectLightingPass(
+        static void AddDirectLightingPass(
+            RenderGraph::RenderGraphBuilder& renderGraphBuilder,
             const RaytracingDemoPassResources& resources,
             const RaytracingDemoPassConfig& config);
-        static std::unique_ptr<RenderGraph::RenderPass> CreateIndirectLightingPass(
+        static void AddIndirectLightingPass(
+            RenderGraph::RenderGraphBuilder& renderGraphBuilder,
             const RaytracingDemoPassResources& resources,
             const RaytracingDemoPassConfig& config);
-        static std::unique_ptr<RenderGraph::RenderPass> CreateReSTIRGIPass(
+        static void AddReSTIRGIPass(
+            RenderGraph::RenderGraphBuilder& renderGraphBuilder,
             const RaytracingDemoPassResources& resources,
             const RaytracingDemoPassConfig& config);
-        static std::unique_ptr<RenderGraph::RenderPass> CreateReSTIRDIPass(
+        static void AddReSTIRDIPass(
+            RenderGraph::RenderGraphBuilder& renderGraphBuilder,
             const RaytracingDemoPassResources& resources,
             const RaytracingDemoPassConfig& config);
-        static std::unique_ptr<RenderGraph::RenderPass> CreateLightingCompositePass(
+        static void AddLightingCompositePass(
+            RenderGraph::RenderGraphBuilder& renderGraphBuilder,
             const RaytracingDemoPassResources& resources,
             const RaytracingDemoPassConfig& config);
 //Modify Begin:2026-07-31 by Hui
-        static std::unique_ptr<RenderGraph::RenderPass> CreateDebugTexturePass(
+        static void AddDebugTexturePass(
+            RenderGraph::RenderGraphBuilder& renderGraphBuilder,
             const RaytracingDemoPassResources& resources,
             RenderGraph::ResourceId debugTarget,
             RenderGraph::ResourceId debugTargetReadyToken);
 //Modify End
-        static std::unique_ptr<RenderGraph::RenderPass> CreateDenoisePass(
+        static void AddDenoisePass(
+            RenderGraph::RenderGraphBuilder& renderGraphBuilder,
             const RaytracingDemoPassResources& resources,
             const RaytracingDemoPassConfig& config);
-        static std::unique_ptr<RenderGraph::RenderPass> CreateCudaBloomPass(
+        static void AddCudaBloomPass(
+            RenderGraph::RenderGraphBuilder& renderGraphBuilder,
             const RaytracingDemoPassResources& resources,
             RenderGraph::ResourceId sceneReadyToken);
 //Modify Begin:2026-08-16 by Hui
-        static std::unique_ptr<RenderGraph::RenderPass> CreateFrameworkBloomPass(
+        static void AddFrameworkBloomPass(
+            RenderGraph::RenderGraphBuilder& renderGraphBuilder,
             const RaytracingDemoPassResources& resources,
             RenderGraph::ResourceId sceneReadyToken);
 //Modify End
 //Modify Begin:2026-08-07 by Hui
-        static std::unique_ptr<RenderGraph::RenderPass> CreateDLSSPass(
+        static void AddDLSSPass(
+            RenderGraph::RenderGraphBuilder& renderGraphBuilder,
             const RaytracingDemoPassResources& resources,
             const RaytracingDemoPassConfig& config,
             RenderGraph::ResourceId inputColor,
             RenderGraph::ResourceId sceneReadyToken);
-        static std::unique_ptr<RenderGraph::RenderPass> CreateDLSSRayReconstructionPreparationPass(
+        static void AddDLSSRayReconstructionPreparationPass(
+            RenderGraph::RenderGraphBuilder& renderGraphBuilder,
             const RaytracingDemoPassResources& resources);
-        static std::unique_ptr<RenderGraph::RenderPass> CreateFrameGenerationHudLessPass(
+        static void AddFrameGenerationHudLessPass(
+            RenderGraph::RenderGraphBuilder& renderGraphBuilder,
             const RaytracingDemoPassResources& resources,
             RenderGraph::ResourceId sceneColor,
             RenderGraph::ResourceId sceneReadyToken);
 //Modify End
+        //Modify End
 //Modify End
     };
 }

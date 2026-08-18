@@ -11,8 +11,8 @@
 #include <RenderGraph/ExternalFrameProcessor.h>
 //Modify End
 #include <RenderGraph/RenderContext.h>
+#include <RenderGraph/RenderGraphBuilder.h>
 #include <RenderGraph/RenderMetadata.h>
-#include <RenderGraph/RenderPass.h>
 
 #include <array>
 //Modify Begin:2026-08-07 by Hui
@@ -21,6 +21,24 @@
 
 namespace
 {
+//Modify Begin:2026-08-18 by Hui
+    struct CudaBloomPassData
+    {
+        RaytracingDemoPassResourcesSnapshot Resources;
+    };
+
+    struct FrameworkBloomPassData
+    {
+        RaytracingDemoPassResourcesSnapshot Resources;
+    };
+
+    struct FrameGenerationHudLessPassData
+    {
+        RaytracingDemoPassResourcesSnapshot Resources;
+        RenderGraph::ResourceId SceneColor = 0;
+    };
+//Modify End
+
 //Modify Begin:2026-08-07 by Hui
     class DLSSFrameGenerationProcessor final : public RenderGraph::ExternalFrameProcessor
     {
@@ -64,23 +82,25 @@ namespace
 //Modify End
 }
 
-std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateCudaBloomPass(
+void RaytracingDemoPasses::Builder::AddCudaBloomPass(
+    RenderGraph::RenderGraphBuilder& renderGraphBuilder,
     const RaytracingDemoPassResources& resources,
     const RenderGraph::ResourceId sceneReadyToken)
 {
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
 
-    return RenderGraph::RenderPass::CreateExternal(
+    renderGraphBuilder.AddExternalPass<CudaBloomPassData>(
         L"CUDA Bloom",
+        [&resources, sceneReadyToken](RenderGraph::RenderGraphPassBuilder& passBuilder, CudaBloomPassData& passData)
         {
-            { sceneReadyToken, RenderGraph::InputType::Token },
+            passData.Resources.emplace(resources);
+            passBuilder.ReadToken(sceneReadyToken);
+            passBuilder.WriteExternal(DemoResourceIds::SceneColor);
+            passBuilder.WriteToken(DemoResourceIds::CudaBloomFinishedToken);
         },
+        [](const CudaBloomPassData& passData, const RenderGraph::RenderContext& context)
         {
-            { DemoResourceIds::SceneColor, RenderGraph::OutputType::ExternalAccess },
-            { DemoResourceIds::CudaBloomFinishedToken, RenderGraph::OutputType::Token },
-        },
-        [resources](const RenderGraph::RenderContext& context)
-        {
+            const RaytracingDemoPassResources& resources = passData.Resources.value();
             const auto& sceneColor = context.GetTexture(DemoResourceIds::SceneColor);
             resources.CudaBloom.ExecuteInPlace(
                 *sceneColor,
@@ -91,24 +111,26 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateCu
 }
 
 //Modify Begin:2026-08-16 by Hui
-std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateFrameworkBloomPass(
+void RaytracingDemoPasses::Builder::AddFrameworkBloomPass(
+    RenderGraph::RenderGraphBuilder& renderGraphBuilder,
     const RaytracingDemoPassResources& resources,
     const RenderGraph::ResourceId sceneReadyToken)
 {
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
 
-    return RenderGraph::RenderPass::Create(
+    renderGraphBuilder.AddPass<FrameworkBloomPassData>(
         L"Built-in Raster Bloom",
+        [&resources, sceneReadyToken](RenderGraph::RenderGraphPassBuilder& passBuilder, FrameworkBloomPassData& passData)
         {
-            { sceneReadyToken, RenderGraph::InputType::Token },
-            { DemoResourceIds::SceneColor, RenderGraph::InputType::ShaderResource },
+            passData.Resources.emplace(resources);
+            passBuilder.ReadToken(sceneReadyToken);
+            passBuilder.ReadTexture(DemoResourceIds::SceneColor);
+            passBuilder.WriteTexture(DemoResourceIds::BloomOutput);
+            passBuilder.WriteToken(DemoResourceIds::CudaBloomFinishedToken);
         },
+        [](const FrameworkBloomPassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
         {
-            { DemoResourceIds::BloomOutput, RenderGraph::OutputType::RenderTarget },
-            { DemoResourceIds::CudaBloomFinishedToken, RenderGraph::OutputType::Token },
-        },
-        [resources](const RenderGraph::RenderContext& context, CommandList& commandList)
-        {
+            const RaytracingDemoPassResources& resources = passData.Resources.value();
             const auto& sceneColor = context.GetTexture(DemoResourceIds::SceneColor);
             const auto& bloomOutput = context.GetTexture(DemoResourceIds::BloomOutput);
             resources.CudaBloom.ExecuteFrameworkBloom(
@@ -122,30 +144,33 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateFr
 //Modify End
 
 //Modify Begin:2026-08-07 by Hui
-std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateFrameGenerationHudLessPass(
+void RaytracingDemoPasses::Builder::AddFrameGenerationHudLessPass(
+    RenderGraph::RenderGraphBuilder& renderGraphBuilder,
     const RaytracingDemoPassResources& resources,
     const RenderGraph::ResourceId sceneColor,
     const RenderGraph::ResourceId sceneReadyToken)
 {
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
 
-    return RenderGraph::RenderPass::Create(
+    renderGraphBuilder.AddPass<FrameGenerationHudLessPassData>(
         L"Frame Generation HUD-less Color",
+        [&resources, sceneColor, sceneReadyToken](RenderGraph::RenderGraphPassBuilder& passBuilder, FrameGenerationHudLessPassData& passData)
         {
-            { sceneReadyToken, RenderGraph::InputType::Token },
-            { sceneColor, RenderGraph::InputType::ShaderResource },
+            passData.Resources.emplace(resources);
+            passData.SceneColor = sceneColor;
+            passBuilder.ReadToken(sceneReadyToken);
+            passBuilder.ReadTexture(sceneColor);
+            passBuilder.WriteTexture(DemoResourceIds::FrameGenerationHudLess);
+            passBuilder.WriteToken(DemoResourceIds::FrameGenerationHudLessFinishedToken);
         },
+        [](const FrameGenerationHudLessPassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
         {
-            { DemoResourceIds::FrameGenerationHudLess, RenderGraph::OutputType::RenderTarget },
-            { DemoResourceIds::FrameGenerationHudLessFinishedToken, RenderGraph::OutputType::Token },
-        },
-        [resources, sceneColor](const RenderGraph::RenderContext& context, CommandList& commandList)
-        {
+            const RaytracingDemoPassResources& resources = passData.Resources.value();
             CommandContext commandContext(commandList);
             commandContext.SetTexture(
                 *resources.DisplayCompositeShader,
                 "SceneColor",
-                ShaderResourceView(context.GetTexture(sceneColor)));
+                ShaderResourceView(context.GetTexture(passData.SceneColor)));
             commandContext.BindPipeline(*resources.DisplayCompositeShader);
             commandContext.BindDescriptorSet(resources.DisplayCompositeShader->GetDescriptorSet());
             resources.DisplayBlitMesh->Draw(commandList);
@@ -156,13 +181,14 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateFr
 void RaytracingDemo::PresentDisplayOutput()
 {
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
+    RenderGraph::RenderGraphRoot& renderGraph = m_RenderPipeline.GetRenderGraph();
 //Modify Begin:2026-08-07 by Hui
     if (m_RenderGraphFrameState->FrameGenerationEnabled)
     {
         DLSSFrameGenerationProcessor frameProcessor(m_DLSS, m_FrameGenerationInputs);
-        m_RenderGraph->PresentWithExternalFrameProcessor(
+        renderGraph.PresentWithExternalFrameProcessor(
             PWindow,
-            m_RenderGraph->GetPresentationResourceId(),
+            renderGraph.GetPresentationResourceId(),
             frameProcessor,
             [this](CommandList& commandList)
             {
@@ -171,11 +197,11 @@ void RaytracingDemo::PresentDisplayOutput()
         return;
     }
 
-    const RenderGraph::ResourceId displayColor = m_RenderGraph->GetPresentationResourceId();
+    const RenderGraph::ResourceId displayColor = renderGraph.GetPresentationResourceId();
 //Modify End
 
 //Modify Begin:2026-07-28 by Hui
-    m_RenderGraph->PresentWithOverlayBlit(
+    renderGraph.PresentWithOverlayBlit(
         PWindow,
         displayColor,
         [this](CommandList& cmd, const std::shared_ptr<Texture>& sourceTexture)

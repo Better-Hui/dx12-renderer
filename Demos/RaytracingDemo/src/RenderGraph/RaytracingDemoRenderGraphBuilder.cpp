@@ -4,7 +4,7 @@
 #include <RenderGraph/RaytracingDemoGraphResources.h>
 #include <Passes/RaytracingDemoPasses.h>
 #include <RaytracingDemo.h>
-#include <RenderGraph/RenderPass.h>
+#include <RenderGraph/RenderGraphBuilder.h>
 
 #include <utility>
 #include <vector>
@@ -18,19 +18,24 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
 //Modify Begin:2026-07-30 by Hui
     const RaytracingDemoFrameState& frameState = *config.FrameState;
 //Modify End
-    std::vector<std::unique_ptr<RenderGraph::RenderPass>> renderPasses;
-    renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateBaseResourcesPass(resources, config));
+//Modify Begin:2026-08-18 by Hui
+    RenderGraph::RenderGraphBuilder renderGraphBuilder({
+        .AsyncComputeSupported = resources.AsyncComputeQueue != nullptr,
+        .CopyQueueSupported = resources.CopyQueue != nullptr,
+    });
+    RaytracingDemoPasses::Builder::AddBaseResourcesPass(renderGraphBuilder, resources, config);
+//Modify End
     if (frameState.UsesIndirectLighting())
     {
         switch (frameState.IndirectLightingTechnique)
         {
         case RaytracingDemoLightingTechnique::PathTracing:
-            renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateIndirectLightingPass(resources, config));
+            RaytracingDemoPasses::Builder::AddIndirectLightingPass(renderGraphBuilder, resources, config);
             break;
         case RaytracingDemoLightingTechnique::ReSTIRGI:
             if (frameState.Backend == PathTracingBackend::InlineRayQuery)
             {
-                renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateReSTIRGIPass(resources, config));
+                RaytracingDemoPasses::Builder::AddReSTIRGIPass(renderGraphBuilder, resources, config);
                 break;
             }
         default:
@@ -42,16 +47,16 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
         switch (frameState.DirectLightingTechnique)
         {
         case RaytracingDemoLightingTechnique::PathTracing:
-            renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDirectLightingPass(resources, config));
+            RaytracingDemoPasses::Builder::AddDirectLightingPass(renderGraphBuilder, resources, config);
             break;
         case RaytracingDemoLightingTechnique::ReSTIRDI:
-            renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateReSTIRDIPass(resources, config));
+            RaytracingDemoPasses::Builder::AddReSTIRDIPass(renderGraphBuilder, resources, config);
             break;
         default:
             break;
         }
     }
-    renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateLightingCompositePass(resources, config));
+    RaytracingDemoPasses::Builder::AddLightingCompositePass(renderGraphBuilder, resources, config);
 //Modify Begin:2026-07-28 by Hui
     RenderGraph::ResourceId sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::RayTracingFinishedToken;
 //Modify Begin:2026-07-31 by Hui
@@ -74,10 +79,11 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
             debugTarget = RaytracingDemoRenderGraph::ResourceIds::GBufferAlbedoOcclusion;
             break;
         }
-        renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDebugTexturePass(
+        RaytracingDemoPasses::Builder::AddDebugTexturePass(
+            renderGraphBuilder,
             resources,
             debugTarget,
-            sceneReadyToken));
+            sceneReadyToken);
         sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::DebugOutputFinishedToken;
     }
     else
@@ -86,7 +92,7 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
 //Modify Begin:2026-07-30 by Hui
         if (frameState.DenoiserEnabled)
         {
-            renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDenoisePass(resources, config));
+            RaytracingDemoPasses::Builder::AddDenoisePass(renderGraphBuilder, resources, config);
             sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::DenoiseFinishedToken;
         }
 
@@ -118,17 +124,18 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
 
         if (debugTarget != 0)
         {
-            renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDebugTexturePass(
+            RaytracingDemoPasses::Builder::AddDebugTexturePass(
+                renderGraphBuilder,
                 resources,
                 debugTarget,
-                sceneReadyToken));
+                sceneReadyToken);
             sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::DebugOutputFinishedToken;
         }
 //Modify End
     }
     if (frameState.SkyboxEnabled)
     {
-        renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateSkyboxPass(resources, config, sceneReadyToken));
+        RaytracingDemoPasses::Builder::AddSkyboxPass(renderGraphBuilder, resources, config, sceneReadyToken);
         sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::SkyboxFinishedToken;
     }
 //Modify Begin:2026-08-17 by Hui
@@ -137,11 +144,11 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
     {
         if (useFrameworkRasterBloom)
         {
-            renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateFrameworkBloomPass(resources, sceneReadyToken));
+            RaytracingDemoPasses::Builder::AddFrameworkBloomPass(renderGraphBuilder, resources, sceneReadyToken);
         }
         else
         {
-            renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateCudaBloomPass(resources, sceneReadyToken));
+            RaytracingDemoPasses::Builder::AddCudaBloomPass(renderGraphBuilder, resources, sceneReadyToken);
         }
         sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::CudaBloomFinishedToken;
     }
@@ -155,22 +162,24 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
     {
         if (frameState.RayReconstructionEnabled)
         {
-            renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDLSSRayReconstructionPreparationPass(resources));
+            RaytracingDemoPasses::Builder::AddDLSSRayReconstructionPreparationPass(renderGraphBuilder, resources);
         }
-        renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateDLSSPass(
+        RaytracingDemoPasses::Builder::AddDLSSPass(
+            renderGraphBuilder,
             resources,
             config,
             displayColor,
-            sceneReadyToken));
+            sceneReadyToken);
         sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::DLSSFinishedToken;
         displayColor = RaytracingDemoRenderGraph::ResourceIds::DLSSOutput;
     }
     if (frameState.FrameGenerationEnabled)
     {
-        renderPasses.emplace_back(RaytracingDemoPasses::Builder::CreateFrameGenerationHudLessPass(
+        RaytracingDemoPasses::Builder::AddFrameGenerationHudLessPass(
+            renderGraphBuilder,
             resources,
             displayColor,
-            sceneReadyToken));
+            sceneReadyToken);
         sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::FrameGenerationHudLessFinishedToken;
         displayColor = RaytracingDemoRenderGraph::ResourceIds::FrameGenerationHudLess;
     }
@@ -191,7 +200,8 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
         resources.Device,
         resources.DirectQueue,
         resources.AsyncComputeQueue,
-        std::move(renderPasses),
+        resources.CopyQueue,
+        renderGraphBuilder.ReleasePasses(),
 //Modify Begin:2026-08-07 by Hui
         RaytracingDemoRenderGraph::CreateTextureDescriptions(
             frameState.DLSSEnabled,

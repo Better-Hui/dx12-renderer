@@ -21,40 +21,23 @@
 #include <string>
 #include <utility>
 
-namespace
-{
-    bool IsAsyncComputeInput(const RenderGraph::InputType inputType)
-    {
-        return inputType == RenderGraph::InputType::Token ||
-            inputType == RenderGraph::InputType::ShaderResource ||
-            inputType == RenderGraph::InputType::NonPixelShaderResource ||
-            inputType == RenderGraph::InputType::CopySource ||
-            inputType == RenderGraph::InputType::IndirectArgument;
-    }
-
-    bool IsAsyncComputeOutput(const RenderGraph::OutputType outputType)
-    {
-        return outputType == RenderGraph::OutputType::Token ||
-            outputType == RenderGraph::OutputType::UnorderedAccess ||
-            outputType == RenderGraph::OutputType::CopyDestination;
-    }
-
-}
-
 RenderGraph::RenderGraphCommandExecutor::RenderGraphCommandExecutor(
     std::shared_ptr<CommandQueue> directCommandQueue,
     std::shared_ptr<CommandQueue> asyncComputeCommandQueue,
+    std::shared_ptr<CommandQueue> copyCommandQueue,
     std::shared_ptr<ResourcePool> resourcePool,
     RenderGraphQueueScheduler& queueScheduler,
     RenderGraphProfiler& profiler)
     : m_DirectCommandQueue(std::move(directCommandQueue))
     , m_AsyncComputeCommandQueue(std::move(asyncComputeCommandQueue))
+    , m_CopyCommandQueue(std::move(copyCommandQueue))
     , m_ResourcePool(std::move(resourcePool))
     , m_QueueScheduler(queueScheduler)
     , m_Profiler(profiler)
 {
     Assert(m_DirectCommandQueue != nullptr, "Render graph executor requires a direct command queue.");
     Assert(m_AsyncComputeCommandQueue != nullptr, "Render graph executor requires an async compute command queue.");
+    Assert(m_CopyCommandQueue != nullptr, "Render graph executor requires a copy command queue.");
     Assert(m_ResourcePool != nullptr, "Render graph executor requires a resource pool.");
 }
 
@@ -73,11 +56,16 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
     auto directCommandList = m_DirectCommandQueue->GetCommandList();
 
     const RenderPass* lastAsyncComputePass = nullptr;
+    const RenderPass* lastCopyPass = nullptr;
     for (const RenderPass* renderPass : renderPasses)
     {
         if (renderPass->GetQueue() == RenderPassQueue::AsyncCompute)
         {
             lastAsyncComputePass = renderPass;
+        }
+        else if (renderPass->GetQueue() == RenderPassQueue::Copy)
+        {
+            lastCopyPass = renderPass;
         }
     }
 
@@ -90,9 +78,27 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
 
     for (const RenderGraphRecordingBatch& recordingBatch : recordingBatches)
     {
+        Assert(!recordingBatch.Passes.empty(), "Render-graph recording batch cannot be empty.");
+        Assert(recordingBatch.Passes.front()->GetQueue() == recordingBatch.Queue,
+            "Render-graph recording batch queue does not match its passes.");
+
+        if (recordingBatch.Queue != RenderPassQueue::Direct)
+        {
+            ExecuteNonDirectBatch(
+                recordingBatch,
+                renderMetadata,
+                recordingBatch.Queue == RenderPassQueue::AsyncCompute
+                    ? lastAsyncComputePass
+                    : lastCopyPass,
+                debugSerializeAsyncCompute,
+                directCommandList,
+                renderTargets,
+                resourceStatePlans);
+            continue;
+        }
+
         if (enableParallelDirectRecording && recordingBatch.RecordInParallel)
         {
-            Assert(!recordingBatch.Passes.empty(), "Parallel recording batch cannot be empty.");
             PrepareDirectQueueDependencies(
                 recordingBatch.Passes,
                 directCommandList);
@@ -107,141 +113,72 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
 
         for (RenderPass* renderPass : recordingBatch.Passes)
         {
-        Assert(!renderPass->IsExternal() || renderPass->GetQueue() == RenderPassQueue::Direct,
-            "External render passes must use the direct queue.");
-
-        if (renderPass->GetQueue() == RenderPassQueue::AsyncCompute)
-        {
-            for (const Input& input : renderPass->GetInputs())
-            {
-                Assert(IsAsyncComputeInput(input.m_Type),
-                    "Async compute render passes only support read-only resource inputs.");
-            }
-            for (const Output& output : renderPass->GetOutputs())
-            {
-                Assert(IsAsyncComputeOutput(output.m_Type),
-                    "Async compute render passes cannot write render targets or depth resources.");
-            }
-//Modify Begin:2026-08-13 by Hui
-            for (const ExternalResourceAccess& access : renderPass->GetExternalResourceAccesses())
-            {
-                Assert(access.Mode == ExternalResourceAccessMode::Read,
-                    "Async compute external resources are read-only; write outputs must be RenderGraph resources.");
-            }
-//Modify End
-
-            PrepareAsyncComputeDependency(*renderPass, directCommandList, resourceStatePlans);
-
-            auto computeCommandList = m_AsyncComputeCommandQueue->GetCommandList();
-            if (!m_Profiler.IsQueueFrameActive(RenderPassQueue::AsyncCompute))
-            {
-                m_Profiler.BeginQueueFrame(
-                    RenderPassQueue::AsyncCompute,
-                    renderMetadata.m_FrameIndex,
-                    *computeCommandList);
-            }
-
-            context.SetRenderTargetInfo({});
-            try
-            {
-                PrepareResourcesForRenderPass(
-                    *computeCommandList,
-                    *renderPass,
-                    context,
-                    renderTargets,
-                    resourceStatePlans);
-                renderPass->Execute(context, *computeCommandList);
-            }
-            catch (const std::exception& exception)
-            {
-                throw std::runtime_error(
-                    "RenderGraph async compute pass '" +
-                    RenderGraphProfiler::NarrowPassName(renderPass->GetPassName()) +
-                    "' execution failed: " + exception.what());
-            }
-            m_Profiler.WritePassTimestamp(RenderPassQueue::AsyncCompute, *computeCommandList, renderPass->GetPassName());
-
-            const bool isLastAsyncComputePass = renderPass == lastAsyncComputePass;
-            if (isLastAsyncComputePass)
-            {
-                m_Profiler.ResolveQueueFrame(RenderPassQueue::AsyncCompute, *computeCommandList);
-            }
-
-            const uint64_t computeFenceValue = m_QueueScheduler.SubmitAsyncCompute(
-                computeCommandList,
-                debugSerializeAsyncCompute);
-            if (isLastAsyncComputePass)
-            {
-                m_Profiler.EndQueueFrame(RenderPassQueue::AsyncCompute, computeFenceValue);
-            }
-            m_QueueScheduler.TrackPassResources(*renderPass, computeFenceValue);
-            continue;
-        }
-
-        PrepareDirectQueueDependencies(
-            std::span<RenderPass* const>(&renderPass, 1u),
-            directCommandList);
-        if (directCommandList == nullptr)
-        {
-            directCommandList = m_DirectCommandQueue->GetCommandList();
-        }
-
-        CommandList& commandList = *directCommandList;
-        context.SetRenderTargetInfo({});
-        if (renderPass->IsExternal())
-        {
-            {
-                PIXScope(commandList, renderPass->GetPassName().c_str());
-                PrepareResourcesForRenderPass(
-                    commandList,
-                    *renderPass,
-                    context,
-                    renderTargets,
-                    resourceStatePlans);
-                m_Profiler.WriteMarker(
-                    RenderPassQueue::Direct,
-                    commandList,
-                    "BeforeExternal." + RenderGraphProfiler::NarrowPassName(renderPass->GetPassName()));
-            }
-
-            m_QueueScheduler.TrackPassResources(*renderPass, 0u);
-            m_QueueScheduler.SubmitDirect(directCommandList);
-            renderPass->ExecuteExternal(context);
-
-            if (m_Profiler.IsQueueFrameActive(RenderPassQueue::Direct))
+            Assert(renderPass != nullptr, "Direct recording batch contains a null pass.");
+            Assert(renderPass->GetQueue() == RenderPassQueue::Direct,
+                "Direct recording batch contains a non-direct pass.");
+            PrepareDirectQueueDependencies(
+                std::span<RenderPass* const>(&renderPass, 1u),
+                directCommandList);
+            if (directCommandList == nullptr)
             {
                 directCommandList = m_DirectCommandQueue->GetCommandList();
-                m_Profiler.WriteMarker(
-                    RenderPassQueue::Direct,
-                    *directCommandList,
-                    "AfterExternal." + RenderGraphProfiler::NarrowPassName(renderPass->GetPassName()));
-                m_QueueScheduler.SubmitDirect(directCommandList);
             }
-        }
-        else
-        {
-            PIXScope(commandList, renderPass->GetPassName().c_str());
-            try
-            {
-                PrepareResourcesForRenderPass(
-                    commandList,
-                    *renderPass,
-                    context,
-                    renderTargets,
-                    resourceStatePlans);
-                renderPass->Execute(context, commandList);
-            }
-            catch (const std::exception& exception)
-            {
-                throw std::runtime_error(
-                    "RenderGraph direct pass '" +
-                    RenderGraphProfiler::NarrowPassName(renderPass->GetPassName()) +
-                    "' execution failed: " + exception.what());
-            }
-            m_Profiler.WritePassTimestamp(RenderPassQueue::Direct, commandList, renderPass->GetPassName());
-            m_QueueScheduler.TrackPassResources(*renderPass, 0u);
-        }
 
+            CommandList& commandList = *directCommandList;
+            context.SetRenderTargetInfo({});
+            if (renderPass->IsExternal())
+            {
+                {
+                    PIXScope(commandList, renderPass->GetPassName().c_str());
+                    PrepareResourcesForRenderPass(
+                        commandList,
+                        *renderPass,
+                        context,
+                        renderTargets,
+                        resourceStatePlans);
+                    m_Profiler.WriteMarker(
+                        RenderPassQueue::Direct,
+                        commandList,
+                        "BeforeExternal." + RenderGraphProfiler::NarrowPassName(renderPass->GetPassName()));
+                }
+
+                m_QueueScheduler.TrackPassResources(*renderPass, 0u);
+                m_QueueScheduler.SubmitDirect(directCommandList);
+                renderPass->ExecuteExternal(context);
+
+                if (m_Profiler.IsQueueFrameActive(RenderPassQueue::Direct))
+                {
+                    directCommandList = m_DirectCommandQueue->GetCommandList();
+                    m_Profiler.WriteMarker(
+                        RenderPassQueue::Direct,
+                        *directCommandList,
+                        "AfterExternal." + RenderGraphProfiler::NarrowPassName(renderPass->GetPassName()));
+                    m_QueueScheduler.SubmitDirect(directCommandList);
+                }
+            }
+            else
+            {
+                PIXScope(commandList, renderPass->GetPassName().c_str());
+                try
+                {
+                    PrepareResourcesForRenderPass(
+                        commandList,
+                        *renderPass,
+                        context,
+                        renderTargets,
+                        resourceStatePlans);
+                    renderPass->Execute(context, commandList);
+                }
+                catch (const std::exception& exception)
+                {
+                    throw std::runtime_error(
+                        "RenderGraph direct pass '" +
+                        RenderGraphProfiler::NarrowPassName(renderPass->GetPassName()) +
+                        "' execution failed: " + exception.what());
+                }
+                m_Profiler.WritePassTimestamp(RenderPassQueue::Direct, commandList, renderPass->GetPassName());
+                m_QueueScheduler.TrackPassResources(*renderPass, 0u);
+            }
         }
     }
 
@@ -363,16 +300,16 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareDirectQueueDependencies(
 {
     Assert(!passes.empty(), "Direct queue dependency preparation requires at least one pass.");
 
-    uint64_t producerFenceValue = 0u;
+    RenderGraphQueueFenceValues producerFences;
     for (const RenderPass* pass : passes)
     {
         Assert(pass != nullptr, "Direct queue dependency preparation received a null pass.");
         Assert(pass->GetQueue() == RenderPassQueue::Direct, "Only direct passes can enter a parallel recording batch.");
-        producerFenceValue = (std::max)(
-            producerFenceValue,
-            m_QueueScheduler.GetCrossQueueProducerFence(*pass));
+        producerFences.Merge(m_QueueScheduler.GetCrossQueueProducerFences(
+            *pass,
+            RenderPassQueue::Direct));
     }
-    if (producerFenceValue == 0)
+    if (producerFences.IsEmpty())
     {
         return;
     }
@@ -383,29 +320,131 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareDirectQueueDependencies(
         {
             directCommandList = m_DirectCommandQueue->GetCommandList();
         }
-        m_Profiler.WriteMarker(RenderPassQueue::Direct, *directCommandList, "Async Wait.Begin");
+        m_Profiler.WriteMarker(RenderPassQueue::Direct, *directCommandList, "Queue Wait.Begin");
     }
 
     m_QueueScheduler.SubmitDirect(directCommandList);
-    m_QueueScheduler.WaitForAsyncComputeSubmissionOnDirect(producerFenceValue);
+    m_QueueScheduler.WaitForDependencies(RenderPassQueue::Direct, producerFences);
 
     if (m_Profiler.IsQueueFrameActive(RenderPassQueue::Direct))
     {
         directCommandList = m_DirectCommandQueue->GetCommandList();
-        m_Profiler.WriteMarker(RenderPassQueue::Direct, *directCommandList, "Async Wait.End");
+        m_Profiler.WriteMarker(RenderPassQueue::Direct, *directCommandList, "Queue Wait.End");
     }
 }
 
-void RenderGraph::RenderGraphCommandExecutor::PrepareAsyncComputeDependency(
-    const RenderPass& pass,
+//Modify Begin:2026-08-18 by Hui
+void RenderGraph::RenderGraphCommandExecutor::ExecuteNonDirectBatch(
+    const RenderGraphRecordingBatch& batch,
+    const RenderMetadata& renderMetadata,
+    const RenderPass* lastQueuePass,
+    const bool debugSerializeAsyncCompute,
+    std::shared_ptr<CommandList>& directCommandList,
+    const std::map<const RenderPass*, RenderTargetInfo>& renderTargets,
+    const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans)
+{
+    Assert(!batch.Passes.empty(), "Non-direct recording batch cannot be empty.");
+    Assert(batch.Queue != RenderPassQueue::Direct, "Non-direct batch cannot use the direct queue.");
+    for (const RenderPass* pass : batch.Passes)
+    {
+        Assert(pass != nullptr, "Non-direct recording batch contains a null pass.");
+        Assert(pass->GetQueue() == batch.Queue, "Non-direct recording batch mixes queue types.");
+        Assert(!pass->IsExternal(), "External render passes must use the direct queue.");
+    }
+
+    PrepareNonDirectBatchDependencies(batch, directCommandList, resourceStatePlans);
+
+    CommandQueue& commandQueue = GetCommandQueue(batch.Queue);
+    auto commandList = commandQueue.GetCommandList();
+    if (!m_Profiler.IsQueueFrameActive(batch.Queue))
+    {
+        m_Profiler.BeginQueueFrame(batch.Queue, renderMetadata.m_FrameIndex, *commandList);
+    }
+
+    FrameContext context(m_ResourcePool, renderMetadata);
+    for (RenderPass* pass : batch.Passes)
+    {
+        context.SetRenderTargetInfo({});
+        try
+        {
+            PrepareResourcesForRenderPass(
+                *commandList,
+                *pass,
+                context,
+                renderTargets,
+                resourceStatePlans);
+            PIXScope(*commandList, pass->GetPassName().c_str());
+            pass->Execute(context, *commandList);
+        }
+        catch (const std::exception& exception)
+        {
+            const char* queueName = batch.Queue == RenderPassQueue::AsyncCompute
+                ? "async compute"
+                : "copy";
+            throw std::runtime_error(
+                "RenderGraph " + std::string(queueName) + " pass '" +
+                RenderGraphProfiler::NarrowPassName(pass->GetPassName()) +
+                "' execution failed: " + exception.what());
+        }
+        m_Profiler.WritePassTimestamp(batch.Queue, *commandList, pass->GetPassName());
+    }
+
+    const bool containsLastQueuePass = lastQueuePass != nullptr &&
+        std::ranges::find(batch.Passes, lastQueuePass) != batch.Passes.end();
+    if (containsLastQueuePass)
+    {
+        m_Profiler.ResolveQueueFrame(batch.Queue, *commandList);
+    }
+
+    const uint64_t fenceValue = batch.Queue == RenderPassQueue::AsyncCompute
+        ? m_QueueScheduler.SubmitAsyncCompute(commandList, debugSerializeAsyncCompute)
+        : m_QueueScheduler.SubmitCopy(commandList, false);
+    for (const RenderPass* pass : batch.Passes)
+    {
+        m_QueueScheduler.TrackPassResources(*pass, fenceValue);
+    }
+    if (containsLastQueuePass)
+    {
+        m_Profiler.EndQueueFrame(batch.Queue, fenceValue);
+    }
+}
+
+void RenderGraph::RenderGraphCommandExecutor::PrepareNonDirectBatchDependencies(
+    const RenderGraphRecordingBatch& batch,
     std::shared_ptr<CommandList>& directCommandList,
     const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans)
 {
-    Assert(pass.GetQueue() == RenderPassQueue::AsyncCompute, "Async compute dependency preparation requires an async compute pass.");
-    const auto planIt = resourceStatePlans.find(&pass);
-    Assert(planIt != resourceStatePlans.end(), "Render pass resource state plan was not built.");
-    Assert(planIt->second.DirectPreamble.has_value(), "Async compute render pass has no direct queue preamble plan.");
-    const PassResourceStatePlan::AsyncComputeDirectPreamble& directPreamble = *planIt->second.DirectPreamble;
+    Assert(!batch.Passes.empty(), "Non-direct dependency preparation requires at least one pass.");
+    Assert(batch.Queue != RenderPassQueue::Direct, "Non-direct dependency preparation cannot target the direct queue.");
+
+    RenderGraphQueueFenceValues producerFences;
+    for (const RenderPass* pass : batch.Passes)
+    {
+        Assert(pass != nullptr && pass->GetQueue() == batch.Queue,
+            "Non-direct dependency preparation received an invalid pass.");
+        producerFences.Merge(m_QueueScheduler.GetCrossQueueProducerFences(
+            *pass,
+            RenderPassQueue::Direct));
+    }
+
+    if (!producerFences.IsEmpty())
+    {
+        if (m_Profiler.IsQueueFrameActive(RenderPassQueue::Direct))
+        {
+            if (directCommandList == nullptr)
+            {
+                directCommandList = m_DirectCommandQueue->GetCommandList();
+            }
+            m_Profiler.WriteMarker(RenderPassQueue::Direct, *directCommandList, "Preamble Wait.Begin");
+        }
+        m_QueueScheduler.SubmitDirect(directCommandList);
+        m_QueueScheduler.WaitForDependencies(RenderPassQueue::Direct, producerFences);
+        if (m_Profiler.IsQueueFrameActive(RenderPassQueue::Direct))
+        {
+            directCommandList = m_DirectCommandQueue->GetCommandList();
+            m_Profiler.WriteMarker(RenderPassQueue::Direct, *directCommandList, "Preamble Wait.End");
+        }
+    }
 
     if (directCommandList == nullptr)
     {
@@ -413,7 +452,28 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareAsyncComputeDependency(
     }
 
     CommandList& commandList = *directCommandList;
-    for (const PassResourceTransition& transition : directPreamble.DirectProducerInputTransitions)
+    for (const RenderPass* pass : batch.Passes)
+    {
+        ApplyDirectQueuePreamble(*pass, commandList, resourceStatePlans);
+    }
+
+    const uint64_t preambleFenceValue = m_QueueScheduler.SubmitDirect(directCommandList);
+    m_QueueScheduler.WaitForDirectSubmission(batch.Queue, preambleFenceValue);
+}
+
+void RenderGraph::RenderGraphCommandExecutor::ApplyDirectQueuePreamble(
+    const RenderPass& pass,
+    CommandList& commandList,
+    const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans)
+{
+    Assert(pass.GetQueue() != RenderPassQueue::Direct,
+        "Direct-queue preambles are only generated for non-direct passes.");
+    const auto planIt = resourceStatePlans.find(&pass);
+    Assert(planIt != resourceStatePlans.end(), "Render pass resource state plan was not built.");
+    Assert(planIt->second.DirectPreamble.has_value(), "Non-direct render pass has no direct-queue preamble plan.");
+    const PassResourceStatePlan::NonDirectQueuePreamble& directPreamble = *planIt->second.DirectPreamble;
+
+    for (const PassResourceTransition& transition : directPreamble.CrossQueueInputTransitions)
     {
         const auto& resource = m_ResourcePool->GetResource(transition.Id);
         resource.ForEachResourceRecursive([&commandList, &transition](const Resource& nestedResource)
@@ -459,11 +519,24 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareAsyncComputeDependency(
     m_Profiler.WriteMarker(
         RenderPassQueue::Direct,
         commandList,
-        "Async Prepare." + RenderGraphProfiler::NarrowPassName(pass.GetPassName()));
-
-    const uint64_t producerFenceValue = m_QueueScheduler.SubmitDirect(directCommandList);
-    m_QueueScheduler.WaitForDirectSubmissionOnAsyncCompute(producerFenceValue);
+        "Queue Prepare." + RenderGraphProfiler::NarrowPassName(pass.GetPassName()));
 }
+
+CommandQueue& RenderGraph::RenderGraphCommandExecutor::GetCommandQueue(const RenderPassQueue queue) const
+{
+    switch (queue)
+    {
+    case RenderPassQueue::AsyncCompute:
+        return *m_AsyncComputeCommandQueue;
+    case RenderPassQueue::Copy:
+        return *m_CopyCommandQueue;
+    case RenderPassQueue::Direct:
+    default:
+        Assert(false, "Non-direct executor requested the direct command queue.");
+        return *m_DirectCommandQueue;
+    }
+}
+//Modify End
 
 //Modify Begin:2026-08-13 by Hui
 void RenderGraph::RenderGraphCommandExecutor::ApplyExternalResourceTransitions(

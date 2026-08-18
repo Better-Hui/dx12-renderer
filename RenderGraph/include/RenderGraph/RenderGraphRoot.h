@@ -51,6 +51,7 @@ namespace RenderGraph
             Microsoft::WRL::ComPtr<ID3D12Device2> device,
             std::shared_ptr<CommandQueue> directCommandQueue,
             std::shared_ptr<CommandQueue> asyncComputeCommandQueue,
+            std::shared_ptr<CommandQueue> copyCommandQueue,
 //Modify End
             std::vector<std::unique_ptr<RenderPass>>&& renderPasses,
             std::vector<TextureDescription>&& textures,
@@ -67,6 +68,7 @@ namespace RenderGraph
 //Modify End
 //Modify Begin:2026-08-03 by Hui
         void SetAsyncComputeGpuTimestampProfiler(GpuTimestampProfiler* profiler) { m_Profiler.SetQueueProfiler(RenderPassQueue::AsyncCompute, profiler); }
+        void SetCopyGpuTimestampProfiler(GpuTimestampProfiler* profiler) { m_Profiler.SetQueueProfiler(RenderPassQueue::Copy, profiler); }
 //Modify End
 //Modify Begin:2026-07-30 by Hui
         void SetDebugSerializeAsyncCompute(bool enabled) { m_DebugSerializeAsyncCompute = enabled; }
@@ -114,6 +116,7 @@ namespace RenderGraph
         std::shared_ptr<CommandQueue> m_DirectCommandQueue;
 //Modify Begin:2026-08-03 by Hui
         std::shared_ptr<CommandQueue> m_AsyncComputeCommandQueue;
+        std::shared_ptr<CommandQueue> m_CopyCommandQueue;
 //Modify End
 //Modify End
 //Modify Begin:2026-07-30 by Hui

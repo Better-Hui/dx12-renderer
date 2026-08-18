@@ -35,6 +35,7 @@ namespace RenderGraph
         const QueueProfilerState& GetQueueState(RenderPassQueue queue) const;
         QueueProfilerState m_Direct;
         QueueProfilerState m_AsyncCompute;
+        QueueProfilerState m_Copy;
     };
 }
 //Modify End

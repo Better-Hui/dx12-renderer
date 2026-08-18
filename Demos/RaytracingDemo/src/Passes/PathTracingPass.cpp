@@ -7,7 +7,7 @@
 #include <DX12Library/Helpers.h>
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 #include <Framework/Rendering/Texture/UnorderedAccessView.h>
-#include <RenderGraph/RenderPass.h>
+#include <RenderGraph/RenderGraphBuilder.h>
 //Modify Begin:2026-07-30 by Hui
 #include <Scene/SceneLightManager.h>
 //Modify End
@@ -18,6 +18,22 @@
 namespace
 {
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
+
+//Modify Begin:2026-08-18 by Hui
+    struct PathTracingLightingPassData
+    {
+        RaytracingDemoPassResourcesSnapshot Resources;
+        RaytracingDemoPassConfig Config = {};
+        PathTracingBackend Backend = PathTracingBackend::InlineRayQuery;
+    };
+
+    struct LightingCompositePassData
+    {
+        RaytracingDemoPassResourcesSnapshot Resources;
+        RaytracingDemoPassConfig Config = {};
+        PathTracingCompositeFeatures Features = {};
+    };
+//Modify End
 
 //Modify Begin:2026-07-27 by Hui
     void DispatchDxrLightingPass(
@@ -46,33 +62,51 @@ namespace
 }
 
 //Modify Begin:2026-07-30 by Hui
-std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDirectLightingPass(
+void RaytracingDemoPasses::Builder::AddDirectLightingPass(
+    RenderGraph::RenderGraphBuilder& renderGraphBuilder,
     const RaytracingDemoPassResources& resources,
     const RaytracingDemoPassConfig& config)
 {
     using namespace RenderGraph;
     const PathTracingBackend backend = config.FrameState->Backend;
-    const InputType gbufferInputType = backend == PathTracingBackend::InlineRayQuery
-        ? InputType::NonPixelShaderResource
-        : InputType::ShaderResource;
-
-    auto pass = RenderPass::Create(
+    renderGraphBuilder.AddPass<PathTracingLightingPassData>(
         L"Direct Lighting",
+        [&resources, config, backend](RenderGraphPassBuilder& passBuilder, PathTracingLightingPassData& passData)
         {
-            { DemoResourceIds::BaseResourcesFinishedToken, InputType::Token },
-            { DemoResourceIds::GBufferAlbedoOcclusion, gbufferInputType },
-            { DemoResourceIds::GBufferSpecularSmoothness, gbufferInputType },
-            { DemoResourceIds::GBufferNormal, gbufferInputType },
-            { DemoResourceIds::GBufferEmissionMetallic, gbufferInputType },
-            { DemoResourceIds::GBufferPosition, gbufferInputType },
-            { DemoResourceIds::DepthBuffer, gbufferInputType },
+            passData.Resources.emplace(resources);
+            passData.Config = config;
+            passData.Backend = backend;
+            passBuilder.ReadToken(DemoResourceIds::BaseResourcesFinishedToken);
+            const auto readGBuffer = [&passBuilder, backend](const ResourceId resourceId)
+            {
+                if (backend == PathTracingBackend::InlineRayQuery)
+                {
+                    passBuilder.ReadBuffer(resourceId);
+                }
+                else
+                {
+                    passBuilder.ReadTexture(resourceId);
+                }
+            };
+            readGBuffer(DemoResourceIds::GBufferAlbedoOcclusion);
+            readGBuffer(DemoResourceIds::GBufferSpecularSmoothness);
+            readGBuffer(DemoResourceIds::GBufferNormal);
+            readGBuffer(DemoResourceIds::GBufferEmissionMetallic);
+            readGBuffer(DemoResourceIds::GBufferPosition);
+            readGBuffer(DemoResourceIds::DepthBuffer);
+            passBuilder.WriteUav(DemoResourceIds::DirectLighting);
+            passBuilder.WriteToken(DemoResourceIds::DirectLightingFinishedToken);
+            RaytracingDemoPassBindings::DeclareRayTracingExternalResourceAccesses(
+                passBuilder,
+                resources,
+                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            passBuilder.SetParallelRecordingEligible(backend == PathTracingBackend::InlineRayQuery);
         },
+        [](const PathTracingLightingPassData& passData, const RenderContext& context, CommandList& cmd)
         {
-            { DemoResourceIds::DirectLighting, OutputType::UnorderedAccess },
-            { DemoResourceIds::DirectLightingFinishedToken, OutputType::Token },
-        },
-        [resources, config, backend](const RenderContext& context, CommandList& cmd)
-        {
+            const RaytracingDemoPassResources& resources = passData.Resources.value();
+            const RaytracingDemoPassConfig& config = passData.Config;
+            const PathTracingBackend backend = passData.Backend;
             const RaytracingDemoRenderGraph::FrameGBufferResources gbuffer = RaytracingDemoRenderGraph::GetFrameGBufferResources(context);
             const RaytracingDemoCameraConstants camera = RaytracingDemoPassBindings::BuildPassCameraConstants(resources, config, context);
 
@@ -109,56 +143,63 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDi
 //Modify End
             }
         });
-//Modify Begin:2026-08-13 by Hui
-    RaytracingDemoPassBindings::DeclareRayTracingExternalResourceAccesses(
-        *pass,
-        resources,
-        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-//Modify End
-//Modify Begin:2026-07-30 by Hui
-    if (backend == PathTracingBackend::InlineRayQuery)
-    {
-        pass->SetParallelRecordingEligible(true);
-    }
-    return pass;
-//Modify End
 }
 
-std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIndirectLightingPass(
+void RaytracingDemoPasses::Builder::AddIndirectLightingPass(
+    RenderGraph::RenderGraphBuilder& renderGraphBuilder,
     const RaytracingDemoPassResources& resources,
     const RaytracingDemoPassConfig& config)
 {
     using namespace RenderGraph;
 //Modify Begin:2026-08-03 by Hui
     const PathTracingBackend backend = config.FrameState->Backend;
-    const RenderPassQueue queue =
-        config.FrameState->AsyncComputeEnabled && backend == PathTracingBackend::InlineRayQuery
-            ? RenderPassQueue::AsyncCompute
-            : RenderPassQueue::Direct;
-    const InputType gbufferInputType = backend == PathTracingBackend::InlineRayQuery
-        ? InputType::NonPixelShaderResource
-        : InputType::ShaderResource;
+    const bool useAsyncCompute =
+        config.FrameState->AsyncComputeEnabled && backend == PathTracingBackend::InlineRayQuery;
 //Modify End
 
-    auto pass = RenderPass::Create(
+    renderGraphBuilder.AddPass<PathTracingLightingPassData>(
         L"Indirect Lighting",
+        [&resources, config, backend, useAsyncCompute](RenderGraphPassBuilder& passBuilder, PathTracingLightingPassData& passData)
         {
-//Modify Begin:2026-08-03 by Hui
-            { DemoResourceIds::BaseResourcesFinishedToken, InputType::Token },
-//Modify End
-            { DemoResourceIds::GBufferAlbedoOcclusion, gbufferInputType },
-            { DemoResourceIds::GBufferSpecularSmoothness, gbufferInputType },
-            { DemoResourceIds::GBufferNormal, gbufferInputType },
-            { DemoResourceIds::GBufferEmissionMetallic, gbufferInputType },
-            { DemoResourceIds::GBufferPosition, gbufferInputType },
-            { DemoResourceIds::DepthBuffer, gbufferInputType },
+            passData.Resources.emplace(resources);
+            passData.Config = config;
+            passData.Backend = backend;
+            passBuilder.ReadToken(DemoResourceIds::BaseResourcesFinishedToken);
+            const auto readGBuffer = [&passBuilder, backend](const ResourceId resourceId)
+            {
+                if (backend == PathTracingBackend::InlineRayQuery)
+                {
+                    passBuilder.ReadBuffer(resourceId);
+                }
+                else
+                {
+                    passBuilder.ReadTexture(resourceId);
+                }
+            };
+            readGBuffer(DemoResourceIds::GBufferAlbedoOcclusion);
+            readGBuffer(DemoResourceIds::GBufferSpecularSmoothness);
+            readGBuffer(DemoResourceIds::GBufferNormal);
+            readGBuffer(DemoResourceIds::GBufferEmissionMetallic);
+            readGBuffer(DemoResourceIds::GBufferPosition);
+            readGBuffer(DemoResourceIds::DepthBuffer);
+            passBuilder.WriteUav(DemoResourceIds::IndirectLighting);
+            passBuilder.WriteToken(DemoResourceIds::IndirectLightingFinishedToken);
+            if (useAsyncCompute)
+            {
+                passBuilder.UseAsyncComputeWhenSupported();
+            }
+            passBuilder.SetParallelRecordingEligible(
+                !useAsyncCompute && backend == PathTracingBackend::InlineRayQuery);
+            RaytracingDemoPassBindings::DeclareRayTracingExternalResourceAccesses(
+                passBuilder,
+                resources,
+                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         },
+        [](const PathTracingLightingPassData& passData, const RenderContext& context, CommandList& cmd)
         {
-            { DemoResourceIds::IndirectLighting, OutputType::UnorderedAccess },
-            { DemoResourceIds::IndirectLightingFinishedToken, OutputType::Token },
-        },
-        [resources, config, backend, queue](const RenderContext& context, CommandList& cmd)
-        {
+            const RaytracingDemoPassResources& resources = passData.Resources.value();
+            const RaytracingDemoPassConfig& config = passData.Config;
+            const PathTracingBackend backend = passData.Backend;
             const RaytracingDemoRenderGraph::FrameGBufferResources gbuffer = RaytracingDemoRenderGraph::GetFrameGBufferResources(context);
             const RaytracingDemoCameraConstants camera = RaytracingDemoPassBindings::BuildPassCameraConstants(resources, config, context);
 
@@ -194,71 +235,61 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateIn
                     camera.Height);
 //Modify End
             }
-//Modify Begin:2026-08-03 by Hui
-        },
-        queue);
-//Modify Begin:2026-08-13 by Hui
-    RaytracingDemoPassBindings::DeclareRayTracingExternalResourceAccesses(
-        *pass,
-        resources,
-        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-//Modify End
-    if (queue != RenderPassQueue::AsyncCompute && backend == PathTracingBackend::InlineRayQuery)
-    {
-        pass->SetParallelRecordingEligible(true);
-    }
-    return pass;
-//Modify End
+        });
 }
 
-std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateLightingCompositePass(
+void RaytracingDemoPasses::Builder::AddLightingCompositePass(
+    RenderGraph::RenderGraphBuilder& renderGraphBuilder,
     const RaytracingDemoPassResources& resources,
     const RaytracingDemoPassConfig& config)
 {
     using namespace RenderGraph;
     const PathTracingCompositeFeatures features = config.FrameState->GetCompositeFeatures();
-    std::vector<Input> inputs = {
-        { DemoResourceIds::GBufferAlbedoOcclusion, InputType::ShaderResource },
-        { DemoResourceIds::GBufferSpecularSmoothness, InputType::ShaderResource },
-        { DemoResourceIds::GBufferNormal, InputType::ShaderResource },
-        { DemoResourceIds::GBufferEmissionMetallic, InputType::ShaderResource },
-        { DemoResourceIds::GBufferPosition, InputType::ShaderResource },
-        { DemoResourceIds::DepthBuffer, InputType::ShaderResource },
-    };
-    if (features.DirectLightingEnabled)
-    {
-        inputs.emplace_back(DemoResourceIds::DirectLightingFinishedToken, InputType::Token);
-        inputs.emplace_back(DemoResourceIds::DirectLighting, InputType::ShaderResource);
-    }
-    if (features.IndirectLightingEnabled)
-    {
-        inputs.emplace_back(DemoResourceIds::IndirectLightingFinishedToken, InputType::Token);
-        inputs.emplace_back(DemoResourceIds::IndirectLighting, InputType::ShaderResource);
-    }
-
-    std::vector<Output> outputs = {
-        { DemoResourceIds::SceneColor, OutputType::UnorderedAccess },
-        { DemoResourceIds::RayTracingFinishedToken, OutputType::Token },
-    };
-    if (features.AccumulationEnabled)
-    {
-        outputs.emplace_back(DemoResourceIds::HistoryColor, OutputType::UnorderedAccess);
-    }
-    if (features.DenoiserMode == static_cast<uint32_t>(DenoiserController::Algorithm::SVGF))
-    {
-        outputs.emplace_back(DemoResourceIds::NoisyRadiance, OutputType::UnorderedAccess);
-    }
-    if (features.DenoiserMode == static_cast<uint32_t>(DenoiserController::Algorithm::NRD))
-    {
-        outputs.emplace_back(DemoResourceIds::NRDNoisyRadiance, OutputType::UnorderedAccess);
-    }
-
-    auto pass = RenderPass::Create(
+    renderGraphBuilder.AddPass<LightingCompositePassData>(
         L"Lighting Composite",
-        inputs,
-        outputs,
-        [resources, config, features](const RenderContext& context, CommandList& cmd)
+        [&resources, config, features](RenderGraphPassBuilder& passBuilder, LightingCompositePassData& passData)
         {
+            passData.Resources.emplace(resources);
+            passData.Config = config;
+            passData.Features = features;
+            passBuilder.ReadTexture(DemoResourceIds::GBufferAlbedoOcclusion);
+            passBuilder.ReadTexture(DemoResourceIds::GBufferSpecularSmoothness);
+            passBuilder.ReadTexture(DemoResourceIds::GBufferNormal);
+            passBuilder.ReadTexture(DemoResourceIds::GBufferEmissionMetallic);
+            passBuilder.ReadTexture(DemoResourceIds::GBufferPosition);
+            passBuilder.ReadTexture(DemoResourceIds::DepthBuffer);
+            if (features.DirectLightingEnabled)
+            {
+                passBuilder.ReadToken(DemoResourceIds::DirectLightingFinishedToken);
+                passBuilder.ReadTexture(DemoResourceIds::DirectLighting);
+            }
+            if (features.IndirectLightingEnabled)
+            {
+                passBuilder.ReadToken(DemoResourceIds::IndirectLightingFinishedToken);
+                passBuilder.ReadTexture(DemoResourceIds::IndirectLighting);
+            }
+            passBuilder.WriteUav(DemoResourceIds::SceneColor);
+            passBuilder.WriteToken(DemoResourceIds::RayTracingFinishedToken);
+            if (features.AccumulationEnabled)
+            {
+                passBuilder.WriteUav(DemoResourceIds::HistoryColor);
+            }
+            if (features.DenoiserMode == static_cast<uint32_t>(DenoiserController::Algorithm::SVGF))
+            {
+                passBuilder.WriteUav(DemoResourceIds::NoisyRadiance);
+            }
+            if (features.DenoiserMode == static_cast<uint32_t>(DenoiserController::Algorithm::NRD))
+            {
+                passBuilder.WriteUav(DemoResourceIds::NRDNoisyRadiance);
+            }
+            passBuilder.SetParallelRecordingEligible(
+                config.FrameState->Backend == PathTracingBackend::InlineRayQuery);
+        },
+        [](const LightingCompositePassData& passData, const RenderContext& context, CommandList& cmd)
+        {
+            const RaytracingDemoPassResources& resources = passData.Resources.value();
+            const RaytracingDemoPassConfig& config = passData.Config;
+            const PathTracingCompositeFeatures& features = passData.Features;
             const RaytracingDemoRenderGraph::FrameGBufferResources gbuffer = RaytracingDemoRenderGraph::GetFrameGBufferResources(context);
             const RaytracingDemoCameraConstants camera = RaytracingDemoPassBindings::BuildPassCameraConstants(resources, config, context);
             ComputeShader& compositeShader = RaytracingDemoPassBindings::BindCompositeInputs(
@@ -275,10 +306,5 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateLi
             commandContext.Dispatch(Math::DivideByMultiple(camera.Width, 8u), Math::DivideByMultiple(camera.Height, 8u), 1u);
 //Modify End
         });
-    if (config.FrameState->Backend == PathTracingBackend::InlineRayQuery)
-    {
-        pass->SetParallelRecordingEligible(true);
-    }
-    return pass;
 }
 //Modify End

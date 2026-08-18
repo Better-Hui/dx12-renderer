@@ -8,27 +8,39 @@
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <Framework/Rendering/Texture/UnorderedAccessView.h>
 #include <RenderGraph/RenderContext.h>
-#include <RenderGraph/RenderPass.h>
+#include <RenderGraph/RenderGraphBuilder.h>
 
-std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDLSSRayReconstructionPreparationPass(
+//Modify Begin:2026-08-18 by Hui
+namespace
+{
+    struct DLSSRayReconstructionPreparationPassData
+    {
+        RaytracingDemoPassResourcesSnapshot Resources;
+    };
+}
+//Modify End
+
+void RaytracingDemoPasses::Builder::AddDLSSRayReconstructionPreparationPass(
+    RenderGraph::RenderGraphBuilder& renderGraphBuilder,
     const RaytracingDemoPassResources& resources)
 {
     using namespace RenderGraph;
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
 
-    return RenderPass::Create(
+    renderGraphBuilder.AddPass<DLSSRayReconstructionPreparationPassData>(
         L"DLSS Ray Reconstruction Inputs",
+        [&resources](RenderGraphPassBuilder& passBuilder, DLSSRayReconstructionPreparationPassData& passData)
         {
-            { DemoResourceIds::BaseResourcesFinishedToken, InputType::Token },
-            { DemoResourceIds::GBufferNormal, InputType::NonPixelShaderResource },
-            { DemoResourceIds::GBufferSpecularSmoothness, InputType::NonPixelShaderResource },
-            { DemoResourceIds::DepthBuffer, InputType::NonPixelShaderResource },
+            passData.Resources.emplace(resources);
+            passBuilder.ReadToken(DemoResourceIds::BaseResourcesFinishedToken);
+            passBuilder.ReadBuffer(DemoResourceIds::GBufferNormal);
+            passBuilder.ReadBuffer(DemoResourceIds::GBufferSpecularSmoothness);
+            passBuilder.ReadBuffer(DemoResourceIds::DepthBuffer);
+            passBuilder.WriteUav(DemoResourceIds::DLSSNormalRoughness);
         },
+        [](const DLSSRayReconstructionPreparationPassData& passData, const RenderContext& context, CommandList& commandList)
         {
-            { DemoResourceIds::DLSSNormalRoughness, OutputType::UnorderedAccess },
-        },
-        [resources](const RenderContext& context, CommandList& commandList)
-        {
+            const RaytracingDemoPassResources& resources = passData.Resources.value();
             ComputeShader& shader = *resources.DLSSRayReconstructionPrepareShader;
             CommandContext commandContext(commandList);
             commandContext.SetTexture(

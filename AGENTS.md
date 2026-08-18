@@ -19,13 +19,7 @@ All source changes in this repository must be wrapped with:
 //Modify End
 ```
 
-For CMake:
-
-```cmake
-# Modify Begin:2026-07-30 by Hui
-# Modified code...
-# Modify End
-```
+CMake files must not contain author signatures, `# Modify` markers, or similar handoff annotations. Keep CMake changes readable through target names, standard commands, and short English comments only where the intent is not obvious.
 
 Comments inside code must be English. Conversation with the user stays Chinese.
 
@@ -40,6 +34,7 @@ Comments inside code must be English. Conversation with the user stays Chinese.
 ### External dependency provisioning
 
 - `External/DLSS` is the pinned `NVIDIA/DLSS` submodule at `v310.7.0`; use the official `include/` and `lib/Windows_x86_64/` layout from that checkout.
+- `External/ImGui` is the pinned `ocornut/imgui` submodule at `v1.91.9`. Compile its official sources directly; do not copy or patch ImGui implementation files under the build directory. Repository-specific numeric input behavior belongs in `Framework/UI/NumericWidgets`.
 - `External/NRI` is the pinned `NVIDIA-RTX/NRI` submodule at `v180`, and `External/NRD` is the pinned upstream commit that reports NRD `4.17.4`.
 - The root CMake config builds NRI and NRD source targets with only the D3D12 backend enabled. Framework links the `NRI`, `NRD`, and `NRDIntegration` targets; do not reintroduce direct `_Bin/*.lib` or `_Bin/*.dll` paths in Demo CMake.
 - First configure may download NRI/NRD build-only dependencies into the build tree through upstream CMake `FetchContent`. These generated dependencies and NRD shader blobs must not be copied into the parent repository.
@@ -48,11 +43,18 @@ Comments inside code must be English. Conversation with the user stays Chinese.
 
 ### CMake Solution Hygiene
 
+- Project-owned files must use the common `ProjectBase.cmake` physical-tree mapping so Visual Studio filters and MSBuild `Link` metadata mirror paths relative to each target directory, such as `include/Framework/...`, `src/...`, `shaders/...`, and `tools/...`. Do not add manual groups that flatten or rename those directories. External implementation files compiled into a target may be hidden with standard MSBuild `Visible=false` metadata so they do not pollute the target's physical tree.
+- The mapping has two required halves: `source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" ...)` generates Visual Studio `.vcxproj.filters`, while per-source `VS_SETTINGS "Link=<target-relative-path>"` preserves the same physical hierarchy in Rider/MSBuild project views. Do not remove either half because one IDE happens to look correct locally.
+- Set `HEADER_FILES`, `SOURCE_FILES`, shader lists, and `DX12_RENDERER_IDE_ONLY_FILES` before including `ProjectBase.cmake`. Only files physically below the current target directory belong in its tree mapping; do not give an external source a fake `include`, `src`, or `shaders` path.
+- Framework's expected top-level project tree is exactly `include`, `shaders`, `src`, and `tools`. RaytracingDemo's is `include`, `shaders`, and `src`. Paths below those roots must mirror the repository directories rather than synthetic groups such as `Header Files`, `Source Files`, or duplicated target-name folders.
+- Dear ImGui source remains under `External/ImGui`. Framework compiles those official files with `target_sources`, but marks them `Visible=false`; never copy, generate, or patch ImGui source under `build/Generated`, `_deps`, Framework, or the Demo merely to affect IDE grouping.
+- `build` is disposable generated state, not a source location. It may contain CMake/MSBuild projects, compiled shader headers, isolated NRI/NRD build trees, libraries, binaries, and Rider's `.idea`; it must not become the canonical home of editable C++/CUDA/HLSL sources. After diagnosing stale output, preserve `.idea` only when the user wants Rider settings retained, remove the other generated entries, then configure from source again.
+- The root project explicitly adds `Demos/RaytracingDemo`; do not glob or auto-discover every directory under `Demos`. `Demos/Common` is shared support code consumed by the maintained demo and is not a standalone solution target.
 - Do not use `add_custom_target(...)` solely to model internal shader compilation, asset generation, or third-party prebuild work. Visual Studio generators emit every custom target as a visible solution project.
 - Attach that work to its consuming target with `add_custom_command(TARGET <consumer> PRE_BUILD ...)` instead. Keep the invoked script's stamp/byproduct checks so this does not force unnecessary rebuilds.
-- After changing solution-generation logic, regenerate and verify that `LearningDirectX12.sln` contains no internal helper-target identifiers. Do not delete stale generated `.vcxproj` files merely because they are no longer referenced by the solution.
+- After changing solution-generation logic, regenerate and verify that `LearningDirectX12.sln` contains only `RaytracingDemo`, `DX12Library`, `Framework`, `RenderGraph`, and CMake's predefined targets. Confirm `build/Demos` contains only `RaytracingDemo`, old demo names are absent, and `build/Generated/ImGui` plus `_deps/dx12_renderer_imgui-*` do not exist. Do not delete stale generated `.vcxproj` files merely because they are no longer referenced by the solution; clean the build tree and regenerate instead.
 
-Current tracked focus is bottom/framework/render graph/external libs/docs and `Demos/RaytracingDemo`. Old demos may still exist locally and should stay build-visible when present, but they are not the current correctness target.
+`Demos` contains only the maintained `RaytracingDemo` and its shared `Common` support. Do not auto-discover or restore deleted historical demos in the root CMake configuration.
 
 ## Build And Run
 
@@ -123,7 +125,10 @@ Avoid adding new sample code that directly touches root signatures, raw descript
 
 ## Render Graph Recording
 
+- Demo authors declare passes through `RenderGraphBuilder::AddPass<PassData>()` and `RenderGraphPassBuilder`: use `ReadTexture`, `ReadBuffer`, `WriteTexture`, `WriteUav`, `ReadWriteUav`, `ReadExternal`, `WriteExternal`, and `UseAsyncComputeWhenSupported` instead of manually constructing naked input/output vectors. `PassData` is the immutable recording contract.
+- Typed `PassData` must own its construction-time data or retain an explicitly shared immutable object. Never store a pointer/reference to a graph-builder local adapter such as `RaytracingDemoPassResources`; the graph outlives that stack frame. `RaytracingDemoPassResourcesSnapshot` intentionally stores a value snapshot for this reason.
 - `RenderGraphCompiler` produces the immutable `CompiledRenderGraph`: culled topological order, per-pass resource-state plan, render-target info, and execution batches. `RenderGraphRoot` only owns definitions/rebuilds; `RenderGraphCommandExecutor` records and submits.
+- The compiled queue schedule covers Direct, Async Compute, and Copy queues. Copy destinations must use `ResourceInitAction::CopyDestination` or `Preserve`; a Copy command list cannot record render-target clear/discard initialization.
 - Async-compute ownership transfer is explicit in `PassResourceStatePlan::DirectPreamble`: the Compiler assigns alias barriers and async-output transitions to a direct-queue preamble, then the compute command list records only the remaining per-pass plan. Do not add execution-time `skip...` booleans to suppress duplicated barriers.
 - Resources outside `ResourcePool` must be declared through `RenderPass::AddExternalResourceAccess()`. The Compiler places async-pass external transitions in `DirectPreamble`; pass lambdas may bind those resources but must not hand-write queue-state preparation callbacks or barriers.
 - Current async external accesses are deliberately read-only. Declare async outputs as RenderGraph resources; do not claim or add async writes to externally owned resources until queue-aware external ownership transfer is designed and tested.
@@ -158,7 +163,7 @@ Current major pieces:
 - `SceneLightManager` owns editable lights and GPU light buffers.
 - `PathTracingPipelineController` owns inline ray query and DXR pipeline setup.
 - RenderGraph schedules base resources, lighting, denoise, skybox, postprocess, overlays.
-- CUDA bloom is an external pass/tool path and must not corrupt history resources.
+- CUDA Bloom is a RaytracingDemo-specific external pass/tool path under `Demos/RaytracingDemo`; it must not be moved into Framework or corrupt history resources.
 
 ## DLSS / Streamline
 
@@ -169,6 +174,7 @@ Current major pieces:
 - `DLSSOutput`, `DLSSFinishedToken`, `DLSSNormalRoughness`, and `FrameGenerationHudLess` must be registered only for the graph topology that produces and consumes them. Registering unused transient resources corrupts RenderGraph lifetimes during graph destruction.
 - The experimental FG path prepares Streamline constants/options before RenderGraph execution, produces tone-mapped HUD-less color, tags depth/motion/HUD-less resources before present, emits PCL submit/present markers, then lets the Streamline-proxied swapchain present inject generated frames. It requires a supported adapter/driver/OS configuration; do not force-enable it on unsupported hardware or infer that it works from a successful build.
 - Recreate the native NGX feature only when mode or render/display resolution changes. Before releasing an already evaluated feature, flush the injected `FrameworkDeviceContext`; do not release an in-flight handle. Only commit a newly created handle after NGX creation succeeds.
+- `RaytracingDemoRenderPipelineConfiguration` owns both graph topology and resource-affecting DLSS state (`DLSSMode`, render size, and display size). Any configuration change flushes outstanding GPU work, releases CUDA interop and the old NGX feature, then rebuilds the graph. Do not let dynamic RenderGraph texture recreation occur independently of NGX resource retirement.
 - RR/FG require process startup with `--streamline-interposer`; the default path intentionally leaves device, queues, and swapchain unproxied. Runtime values: `RAYTRACING_DEMO_DLSS=off|dlaa|quality|balanced|performance|ultra-performance`, `RAYTRACING_DEMO_DLSS_RR=0|1`, and `RAYTRACING_DEMO_DLSS_FRAME_GENERATION=0|1`. The SDK runtime files live in `External/Streamline`; preserve its notices and deployed runtime files when distributing builds.
 
 ## External Present Processing
@@ -208,8 +214,6 @@ Important meshlet bug found on 2026-07-30: do not use a UV sphere with a full du
 
 Important meshlet bug found on 2026-07-31: normal draw and meshlet must be built from the same `MeshPrototype`. Splitting built-in plane/cube/sphere creation between draw and meshlet paths can produce UV/winding differences. Also bind the same bindless descriptor heap for draw, task meshlet, and compute-indirect meshlet GBuffer paths.
 
-`Demos/MeshletsDemo` is not a real mesh shader demo. It builds meshlets with `meshoptimizer`, runs compute culling, writes indirect draw commands, and draws through traditional VS/PS with `ExecuteIndirect`.
-
 ## Unity Plugin Direction
 
 Long-term target: this renderer can run standalone or as a Unity native plugin.
@@ -233,7 +237,6 @@ uses `IUnityGraphicsD3D12v7::GetDevice()` / `GetCommandQueue()`, Unity render ev
 
 ## Current Known Risks
 
-- Some old demos still use `CommonRootSignature`. Do not migrate them unless explicitly requested.
 - `RaytracingDemoSceneResources` is still broad: textures, model loading, material buffer, geometry buffer, RTAS, meshlet buffers, and stress objects all live there.
 - Meshlet path has both a task-shader backend and a compute-cull/`ExecuteIndirect` backend. It can still be slower than raster for a scene whose meshlet culling does not recover its dispatch and descriptor costs; measure before treating this as a regression.
 - Descriptor binding must compare underlying `ID3D12Resource*`, not only wrapper object pointers, because buffers can be recreated inside stable wrapper objects.
@@ -256,8 +259,14 @@ This machine does not put `cmake.exe` on `PATH`. Resolve it before building; the
 
 ```powershell
 $cmake = 'C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe'
-& $cmake --build C:\Program Files\Unity\dx12-renderer-master\build --config Release --target RaytracingDemo
+$source = 'C:\Program Files\Unity\dx12-renderer-master\dx12-renderer-master'
+$build = 'C:\Program Files\Unity\dx12-renderer-master\build'
+$env:TrackFileAccess = 'false'
+& $cmake -S $source -B $build -G 'Visual Studio 17 2022' -A x64
+& $cmake --build $build --config Release --target RaytracingDemo --parallel
 ```
+
+On this machine, MSBuild file tracking can leave `cl.exe` at zero CPU during compiler probes or compilation. Set `TrackFileAccess=false` in the environment before both configure and build so nested CMake/MSBuild work, including NRD's ShaderMake external project, inherits it. Passing only `-- /p:TrackFileAccess=false` fixes the outer MSBuild but does not propagate to nested builds. Do not create a `CodexMSVCProbeOverride.cmake`, force compiler identity variables, switch to Ninja, or patch generated `.vcxproj` files to hide this machine-specific issue.
 
 For source edits, use `C:\Users\minghuidai\.codex\tools\Invoke-CodexApplyPatch.ps1` with a single-quoted PowerShell here-string. Do not pass a multiline patch through the `apply_patch.bat` wrapper, `cmd`, a pipeline, `Set-Content`, or a string replacement script. Always run `git diff --check` after editing and inspect focused diffs if the worktree already has pending changes.
 
@@ -273,7 +282,9 @@ if (-not $process.WaitForExit(45000)) { throw 'RaytracingDemo automation did not
 if ($process.ExitCode -ne 0) { throw "RaytracingDemo failed with exit code $($process.ExitCode)." }
 ```
 
-After every automated run, inspect `build\bin\Release\Saved\RuntimeAutomation.log`. A valid run must contain `Runtime automation completed.` and no newly written `build\bin\Release\DemoException.log`. `core` toggles RG timing/capture/export, soft shadows, stress spheres four times, meshlet enable/backend, the PBR/Stylized Comic material model, Inline/DXR backend, direct/indirect lighting including ReSTIR GI, parallel direct recording, async compute, skybox, and accumulation. It emits an immediate timing CSV after the ReSTIR GI state, then a final CSV. `stress` only performs the four stress-sphere transitions and is the fastest regression test for RTAS/meshlet resource updates.
+Do not launch this automation with `Start-Process -WindowStyle Hidden`: a hidden D3D12 window may not enter the normal render/update loop, leaving `RuntimeAutomation.log` at only `Runtime automation started.`. Command-line automation may open the normal application window, but it must not inject mouse or keyboard input. Use a bounded wait and terminate a timed-out process instead of waiting indefinitely.
+
+After every automated run, inspect `build\bin\Release\Saved\RuntimeAutomation.log`. A valid run must contain `Runtime automation completed.` and no newly written `build\bin\Release\DemoException.log` or `Saved\Diagnostics\WindowCallbackException.log`; stale diagnostic files may remain, so compare timestamps. `core` toggles RG timing/capture/export, soft shadows, stress spheres four times, meshlet enable/backend, every native DLSS SR/DLAA mode, the PBR/Stylized Comic material model, Inline/DXR backend, direct/indirect lighting including ReSTIR GI, parallel direct recording, async compute, skybox, and accumulation. It emits an immediate timing CSV after the ReSTIR GI state, then a final CSV. `stress` only performs the four stress-sphere transitions and is the fastest regression test for RTAS/meshlet resource updates.
 
 `RAYTRACING_DEMO_AUTOTEST=matrix` is the crash-regression matrix for discrete production rendering switches. It applies a complete legal state snapshot, waits for the next stable interval, then records `Begin matrix#...` and `Applied matrix#...` in the log. It covers raster/task-mesh/compute-indirect GBuffer, PBR/Stylized Comic material shading, Inline Ray Query/DXR, valid Direct and Indirect lighting techniques, async compute only on Inline, parallel direct recording, hard/soft shadows, stress-sphere add/remove, skybox, and accumulation. Inline cases additionally cover ReSTIR GI indirect lighting, while invalid `DXR + ReSTIR DI/GI` and `DXR + async compute` cases are deliberately excluded. The full matrix currently has 3840 cases; it defaults to a 250 ms stable interval. Use `RAYTRACING_DEMO_AUTOTEST_START_CASE=<one-based>` and `RAYTRACING_DEMO_AUTOTEST_MAX_CASES=<count>` to reproduce or smoke-test a bounded range, and set `RAYTRACING_DEMO_AUTOTEST_QUIT=1` to exit after completion. Numeric ImGui parameters and diagnostic texture views are intentionally outside this matrix because they require a separate parameter-quality test rather than a compatibility test.
 

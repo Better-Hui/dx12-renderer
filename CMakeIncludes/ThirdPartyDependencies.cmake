@@ -1,4 +1,3 @@
-# Modify Begin:2026-08-17 by Hui
 set(DX12_RENDERER_THIRD_PARTY_BUILD_DIRECTORY "${CMAKE_BINARY_DIR}/ThirdParty")
 set(DX12_RENDERER_NRD_SHADER_INCLUDE_DIRECTORY "${DX12_RENDERER_THIRD_PARTY_BUILD_DIRECTORY}/NRD/Shaders")
 
@@ -32,4 +31,3 @@ function(dx12_renderer_add_third_party_prebuild target_name)
                 COMMENT "Updating isolated NRI and NRD dependencies"
                 VERBATIM)
 endfunction()
-# Modify End

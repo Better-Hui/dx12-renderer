@@ -11,52 +11,36 @@ set(HEADER_FILES
         include/DX12Library/Camera.h
         include/DX12Library/CommandList.h
         include/DX12Library/CommandQueue.h
-        # Modify Begin:2026-07-30 by Hui
         include/DX12Library/CommandQueueFailure.h
-        # Modify End
         include/DX12Library/ConstantBuffer.h
         include/DX12Library/Cubemap.h
-        # Modify Begin:2026-07-28 by Hui
         include/DX12Library/D3D12DeviceContext.h
         include/DX12Library/D3D12RenderContext.h
-        # Modify End
         include/DX12Library/Defines.h
-        # Modify Begin:2026-07-30 by Hui
         include/DX12Library/DiagnosticReporter.h
-        # Modify End
         include/DX12Library/DescriptorAllocation.h
         include/DX12Library/DescriptorAllocator.h
         include/DX12Library/DescriptorAllocatorPage.h
         include/DX12Library/DX12LibPCH.h
         include/DX12Library/DynamicDescriptorHeap.h
         include/DX12Library/Events.h
-        # Modify Begin:2026-07-28 by Hui
         include/DX12Library/FrameResourceRing.h
-        # Modify End
         include/DX12Library/Game.h
         include/DX12Library/GenerateMipsPso.h
-        # Modify Begin:2026-07-29 by Hui
         include/DX12Library/GpuTimestampProfiler.h
-        # Modify End
         include/DX12Library/Helpers.h
         include/DX12Library/HighResolutionClock.h
         include/DX12Library/IndexBuffer.h
         include/DX12Library/KeyCodes.h
         include/DX12Library/RenderTarget.h
         include/DX12Library/Resource.h
-        # Modify Begin:2026-07-30 by Hui
         include/DX12Library/ResourceStateTransition.h
-        # Modify End
-        # Modify Begin:2026-07-30 by Hui
         include/DX12Library/ResourceStateRegistry.h
-        # Modify End
         include/DX12Library/ResourceStateTracker.h
         include/DX12Library/RootSignature.h
         include/DX12Library/ShaderUtils.h
         include/DX12Library/StructuredBuffer.h
-        # Modify Begin:2026-08-07 by Hui
         include/DX12Library/StreamlineRuntime.h
-        # Modify End
         include/DX12Library/Texture.h
         include/DX12Library/TextureUsageType.h
         include/DX12Library/ThreadSafeQueue.h
@@ -79,25 +63,17 @@ set(SOURCE_FILES
         src/CommandQueue.cpp
         src/ConstantBuffer.cpp
         src/Cubemap.cpp
-        # Modify Begin:2026-07-28 by Hui
         src/D3D12RenderContext.cpp
-        # Modify End
-        # Modify Begin:2026-07-30 by Hui
         src/DiagnosticReporter.cpp
-        # Modify End
         src/DescriptorAllocation.cpp
         src/DescriptorAllocator.cpp
         src/DescriptorAllocatorPage.cpp
         src/DX12LibPCH.cpp
         src/DynamicDescriptorHeap.cpp
         src/Game.cpp
-        # Modify Begin:2026-07-28 by Hui
         src/FrameResourceRing.cpp
-        # Modify End
         src/GenerateMipsPso.cpp
-        # Modify Begin:2026-07-29 by Hui
         src/GpuTimestampProfiler.cpp
-        # Modify End
         src/HighResolutionClock.cpp
         src/IndexBuffer.cpp
         src/RenderTarget.cpp
@@ -106,9 +82,7 @@ set(SOURCE_FILES
         src/RootSignature.cpp
         src/ShaderUtils.cpp
         src/StructuredBuffer.cpp
-        # Modify Begin:2026-08-07 by Hui
         src/StreamlineRuntime.cpp
-        # Modify End
         src/Texture.cpp
         src/UploadBuffer.cpp
         src/VertexBuffer.cpp
@@ -150,7 +124,6 @@ set(EXT_LIBRARIES
 # Add source to this project's executable.
 add_library(${TARGET_NAME} STATIC ${HEADER_FILES} ${SOURCE_FILES} ${SHADER_FILES} ${SHADERS_HEADER_FILES})
 
-# Modify Begin:2026-07-30 by Hui
 target_include_directories(${TARGET_NAME} BEFORE PUBLIC "${DX12_RENDERER_AGILITY_INCLUDE_DIRECTORY}")
 
 if (DX12_RENDERER_ENABLE_D3D12_AGILITY)
@@ -158,15 +131,12 @@ if (DX12_RENDERER_ENABLE_D3D12_AGILITY)
                 DX12_RENDERER_ENABLE_D3D12_AGILITY=1
                 DX12_RENDERER_AGILITY_SDK_VERSION=${DX12_RENDERER_AGILITY_SDK_VERSION})
 endif()
-# Modify End
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/../CMakeIncludes/ProjectBasePost.cmake)
 
 target_include_directories(${TARGET_NAME}
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/DX12Library
-        # Modify Begin:2026-08-07 by Hui
         PRIVATE "${DX12_RENDERER_STREAMLINE_INCLUDE_DIRECTORY}"
-        # Modify End
         )
 
 # Includes and libraries
@@ -176,9 +146,7 @@ target_include_directories(${TARGET_NAME}
         )
 target_link_libraries(${TARGET_NAME}
         PUBLIC ${EXT_LIBRARIES}
-        # Modify Begin:2026-08-07 by Hui
         PUBLIC "${DX12_RENDERER_STREAMLINE_LIBRARY}"
-        # Modify End
         )
 
 

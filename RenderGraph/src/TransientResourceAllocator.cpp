@@ -10,15 +10,27 @@ namespace
 //Modify Begin:2026-07-30 by Hui
     constexpr uint8_t DirectQueueMask = 1u << 0u;
     constexpr uint8_t AsyncComputeQueueMask = 1u << 1u;
+    constexpr uint8_t CopyQueueMask = 1u << 2u;
 
     uint8_t GetQueueMask(const RenderPassQueue queue)
     {
-        return queue == RenderPassQueue::AsyncCompute ? AsyncComputeQueueMask : DirectQueueMask;
+        switch (queue)
+        {
+        case RenderPassQueue::AsyncCompute:
+            return AsyncComputeQueueMask;
+        case RenderPassQueue::Copy:
+            return CopyQueueMask;
+        case RenderPassQueue::Direct:
+        default:
+            return DirectQueueMask;
+        }
     }
 
     bool HasSingleQueue(const uint8_t queueMask)
     {
-        return queueMask == DirectQueueMask || queueMask == AsyncComputeQueueMask;
+        return queueMask == DirectQueueMask ||
+            queueMask == AsyncComputeQueueMask ||
+            queueMask == CopyQueueMask;
     }
 
     TransientResourceAllocator::ResourceLifecycle& GetOrAdd(

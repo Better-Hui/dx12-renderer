@@ -2,8 +2,82 @@
 #include <RaytracingDemo.h>
 
 #include <imgui.h>
+#include <Framework/UI/NumericWidgets.h>
 
 #include <algorithm>
+
+//Modify Begin:2026-08-18 by Hui
+namespace
+{
+    bool DrawCudaBloomControls(CudaBloomPass& cudaBloom, const uint32_t width, const uint32_t height)
+    {
+        if (!ImGui::CollapsingHeader("CUDA Bloom"))
+        {
+            return false;
+        }
+
+        CudaBloomPass::Settings settings = cudaBloom.GetSettings();
+        bool changed = ImGui::Checkbox("Enable CUDA Bloom", &settings.Enabled);
+        const char* backendNames[] = { "CUDA", "Built-in Raster" };
+        int backend = static_cast<int>(settings.SelectedBackend);
+        if (ImGui::Combo("Bloom Backend", &backend, backendNames, IM_ARRAYSIZE(backendNames)))
+        {
+            settings.SelectedBackend = static_cast<CudaBloomPass::Backend>(backend);
+            changed = true;
+        }
+
+        if (settings.SelectedBackend == CudaBloomPass::Backend::Cuda)
+        {
+            const char* methodNames[] = {
+                "Classic Pyramid",
+                "Box Filter Approximation (add + lerp)",
+                "Box Filter Original Paper (lerp)",
+            };
+            int method = static_cast<int>(settings.Method);
+            if (ImGui::Combo("CUDA Method", &method, methodNames, IM_ARRAYSIZE(methodNames)))
+            {
+                settings.Method = static_cast<CudaBloomPass::CudaMethod>(method);
+                changed = true;
+            }
+            ImGui::TextDisabled("Fixed pyramid: 5-tap prefilter, 4-tap downsample, 4-tap upsample and composite.");
+            changed |= ImGui::Checkbox("Shared-Memory Downsampling", &settings.UseSharedMemoryDownsampling);
+            ImGui::TextDisabled("Experimental: cascades four downsample levels per dispatch.");
+        }
+
+        changed |= ImGui::DragFloat("Bloom Threshold", &settings.Threshold, 0.01f, 0.0f, 5.0f, "%.2f");
+        changed |= ImGui::DragFloat("Bloom Soft Knee", &settings.SoftThreshold, 0.01f, 0.0f, 2.0f, "%.2f");
+        changed |= ImGui::DragFloat("Bloom Intensity", &settings.Intensity, 0.01f, 0.0f, 5.0f, "%.2f");
+        const int maxPyramidLevels = static_cast<int>(CudaBloomPass::ComputeMaxPyramidLevels(width, height));
+        settings.PyramidLevels = std::clamp(settings.PyramidLevels, 1, maxPyramidLevels);
+        changed |= ImGui::DragInt("Bloom Pyramid Levels", &settings.PyramidLevels, 0.1f, 1, maxPyramidLevels);
+
+        if (settings.SelectedBackend == CudaBloomPass::Backend::Cuda &&
+            (settings.Method == CudaBloomPass::CudaMethod::BoxFilterApproximation ||
+                settings.Method == CudaBloomPass::CudaMethod::BoxFilterOriginalPaper))
+        {
+            changed |= ImGui::DragFloat("Box Filter Sigma", &settings.BoxFilterSigma, 0.01f, 0.1f, 16.0f, "%.2f");
+        }
+
+        const CudaBloomPass::TimingStats& timingStats = cudaBloom.GetTimingStats();
+        if (timingStats.Valid)
+        {
+            ImGui::Text(
+                "CUDA timing: wait %.3f ms, kernels %.3f ms, signal %.3f ms, stream %.3f ms",
+                timingStats.D3DToCudaWaitMs,
+                timingStats.KernelsMs,
+                timingStats.CudaSignalMs,
+                timingStats.TotalCudaStreamMs);
+        }
+        ImGui::TextWrapped("%s", cudaBloom.GetStatus().c_str());
+
+        if (changed)
+        {
+            cudaBloom.SetSettings(settings);
+        }
+        return changed;
+    }
+}
+//Modify End
 
 void RaytracingDemo::OnImGui()
 {
@@ -47,6 +121,10 @@ void RaytracingDemo::OnImGui()
 //Modify Begin:2026-08-03 by Hui
             m_AsyncComputeGpuTimestampSamples.clear();
             m_AsyncComputeGpuTimestampDisplaySamples.clear();
+//Modify Begin:2026-08-18 by Hui
+            m_CopyGpuTimestampSamples.clear();
+            m_CopyGpuTimestampDisplaySamples.clear();
+//Modify End
 //Modify End
 //Modify Begin:2026-08-03 by Hui
             if (!m_GpuTimingEnabled)
@@ -66,7 +144,7 @@ void RaytracingDemo::OnImGui()
             ImGui::SameLine();
             ImGui::SetNextItemWidth(140.0f);
             int timingHistoryCapacity = static_cast<int>(m_RenderGraphTimingHistory.GetCapacity());
-            if (ImGui::SliderInt("History Frames", &timingHistoryCapacity, 30, 3600))
+            if (FrameworkImGui::SliderInt("History Frames", &timingHistoryCapacity, 30, 3600))
             {
                 m_RenderGraphTimingHistory.SetCapacity(static_cast<size_t>(timingHistoryCapacity));
             }
@@ -97,6 +175,11 @@ void RaytracingDemo::OnImGui()
             ImGui::Text(
                 "RG Async Compute Queue: gpu %.3f ms",
                 m_AsyncComputeGpuTimestampProfiler.GetLastFrameGpuMilliseconds());
+//Modify Begin:2026-08-18 by Hui
+            ImGui::Text(
+                "RG Copy Queue: gpu %.3f ms",
+                m_CopyGpuTimestampProfiler.GetLastFrameGpuMilliseconds());
+//Modify End
             if (!m_GpuTimestampDisplaySamples.empty() && ImGui::CollapsingHeader("GPU RG Timing: Direct"))
             {
 //Modify Begin:2026-08-02 by Hui
@@ -127,6 +210,22 @@ void RaytracingDemo::OnImGui()
                         sample.CpuMillisecondsFromFrameStart);
                 }
             }
+//Modify Begin:2026-08-18 by Hui
+            if (!m_CopyGpuTimestampDisplaySamples.empty() && ImGui::CollapsingHeader("GPU RG Timing: Copy"))
+            {
+                ImGui::Text("gpu/cpu delta: since previous marker, gpu/cpu total: since copy queue begin");
+                for (const GpuTimestampSample& sample : m_CopyGpuTimestampDisplaySamples)
+                {
+                    ImGui::Text(
+                        "%s: gpu %.3f/%.3f ms, cpu %.3f/%.3f ms",
+                        sample.Name.c_str(),
+                        sample.MillisecondsFromPrevious,
+                        sample.MillisecondsFromFrameStart,
+                        sample.CpuMillisecondsFromPrevious,
+                        sample.CpuMillisecondsFromFrameStart);
+                }
+            }
+//Modify End
         }
     }
 //Modify End
@@ -166,7 +265,7 @@ void RaytracingDemo::OnImGui()
 //Modify Begin:2026-08-06 by Hui
                 settingsChanged |= ImGui::Checkbox("RIS Initial Visibility", &restirSettings.EnableInitialVisibility);
 //Modify End
-                settingsChanged |= ImGui::SliderInt("Local Light Samples", &candidateCount, 1, 32);
+                settingsChanged |= FrameworkImGui::SliderInt("Local Light Samples", &candidateCount, 1, 32);
             }
 
             if (ImGui::CollapsingHeader("Temporal Resampling"))
@@ -188,14 +287,14 @@ void RaytracingDemo::OnImGui()
                         &temporalBiasCorrection,
                         "Off\0Basic\0Ray Traced\0");
 //Modify End
-                    settingsChanged |= ImGui::SliderInt("Temporal Max History Length", &temporalMaxHistoryLength, 1, 64);
+                    settingsChanged |= FrameworkImGui::SliderInt("Temporal Max History Length", &temporalMaxHistoryLength, 1, 64);
                     settingsChanged |= ImGui::Checkbox("Enable Permutation Sampling", &restirSettings.EnableTemporalPermutationSampling);
-                    settingsChanged |= ImGui::SliderFloat(
+                    settingsChanged |= FrameworkImGui::SliderFloat(
                         "Temporal Normal Threshold",
                         &restirSettings.TemporalNormalSimilarityThreshold,
                         -1.0f,
                         1.0f);
-                    settingsChanged |= ImGui::SliderFloat(
+                    settingsChanged |= FrameworkImGui::SliderFloat(
                         "Temporal Depth Threshold",
                         &restirSettings.TemporalDepthSimilarityThreshold,
                         0.0f,
@@ -204,7 +303,7 @@ void RaytracingDemo::OnImGui()
                 settingsChanged |= ImGui::Checkbox("Enable Boiling Filter", &restirSettings.EnableBoilingFilter);
                 if (restirSettings.EnableBoilingFilter)
                 {
-                    settingsChanged |= ImGui::SliderFloat(
+                    settingsChanged |= FrameworkImGui::SliderFloat(
                         "Boiling Filter Strength",
                         &restirSettings.BoilingFilterStrength,
                         0.01f,
@@ -231,28 +330,28 @@ void RaytracingDemo::OnImGui()
                         &spatialBiasCorrection,
                         "Off\0Basic\0Pairwise\0Ray Traced\0");
 //Modify End
-                    settingsChanged |= ImGui::SliderInt("Spatial Samples", &spatialNeighborCount, 1, 32);
-                    settingsChanged |= ImGui::SliderInt(
+                    settingsChanged |= FrameworkImGui::SliderInt("Spatial Samples", &spatialNeighborCount, 1, 32);
+                    settingsChanged |= FrameworkImGui::SliderInt(
                         "Spatial Disocclusion Boost Samples",
                         &spatialDisocclusionBoostSampleCount,
                         1,
                         32);
-                    settingsChanged |= ImGui::SliderInt(
+                    settingsChanged |= FrameworkImGui::SliderInt(
                         "Spatial Target History Length",
                         &spatialTargetHistoryLength,
                         0,
                         64);
-                    settingsChanged |= ImGui::SliderFloat(
+                    settingsChanged |= FrameworkImGui::SliderFloat(
                         "Spatial Sampling Radius",
                         &restirSettings.SpatialSamplingRadius,
                         1.0f,
                         64.0f);
-                    settingsChanged |= ImGui::SliderFloat(
+                    settingsChanged |= FrameworkImGui::SliderFloat(
                         "Spatial Normal Threshold",
                         &restirSettings.SpatialNormalSimilarityThreshold,
                         -1.0f,
                         1.0f);
-                    settingsChanged |= ImGui::SliderFloat(
+                    settingsChanged |= FrameworkImGui::SliderFloat(
                         "Spatial Depth Threshold",
                         &restirSettings.SpatialDepthSimilarityThreshold,
                         0.0f,
@@ -262,7 +361,7 @@ void RaytracingDemo::OnImGui()
                         &restirSettings.EnableSpatialMaterialSimilarityTest);
                     if (restirSettings.EnableSpatialMaterialSimilarityTest)
                     {
-                        settingsChanged |= ImGui::SliderFloat(
+                        settingsChanged |= FrameworkImGui::SliderFloat(
                             "Spatial Material Threshold",
                             &restirSettings.SpatialMaterialSimilarityThreshold,
                             0.0f,
@@ -284,8 +383,8 @@ void RaytracingDemo::OnImGui()
                     &restirSettings.ReuseFinalVisibility);
                 if (restirSettings.ReuseFinalVisibility)
                 {
-                    settingsChanged |= ImGui::SliderInt("Final Visibility Max Age", &finalVisibilityMaxAge, 0, 16);
-                    settingsChanged |= ImGui::SliderFloat(
+                    settingsChanged |= FrameworkImGui::SliderInt("Final Visibility Max Age", &finalVisibilityMaxAge, 0, 16);
+                    settingsChanged |= FrameworkImGui::SliderFloat(
                         "Final Visibility Max Distance",
                         &restirSettings.FinalVisibilityMaxDistance,
                         0.0f,
@@ -365,7 +464,7 @@ void RaytracingDemo::OnImGui()
 
 //Modify Begin:2026-07-30 by Hui
 //Modify Begin:2026-08-11 by Hui
-        settingsChanged |= ImGui::SliderInt("GI Initial Candidates", &initialCandidateCount, 1, 32);
+        settingsChanged |= FrameworkImGui::SliderInt("GI Initial Candidates", &initialCandidateCount, 1, 32);
 //Modify End
 //Modify End
 //Modify Begin:2026-08-11 by Hui
@@ -387,19 +486,19 @@ void RaytracingDemo::OnImGui()
                 "Enable GI Temporal Jacobian",
                 &restirSettings.EnableTemporalJacobian);
 //Modify Begin:2026-08-11 by Hui
-            settingsChanged |= ImGui::SliderInt(
+            settingsChanged |= FrameworkImGui::SliderInt(
                 "GI Temporal Max History",
                 &temporalMaxHistoryLength,
                 1,
                 256);
-            settingsChanged |= ImGui::SliderInt("GI Max Sample Age", &maxSampleAge, 1, 256);
+            settingsChanged |= FrameworkImGui::SliderInt("GI Max Sample Age", &maxSampleAge, 1, 256);
 //Modify End
-            settingsChanged |= ImGui::SliderFloat(
+            settingsChanged |= FrameworkImGui::SliderFloat(
                 "GI Temporal Normal Threshold",
                 &restirSettings.TemporalNormalSimilarityThreshold,
                 -1.0f,
                 1.0f);
-            settingsChanged |= ImGui::SliderFloat(
+            settingsChanged |= FrameworkImGui::SliderFloat(
                 "GI Temporal Position Threshold",
                 &restirSettings.TemporalPositionSimilarityThreshold,
                 0.001f,
@@ -417,34 +516,34 @@ void RaytracingDemo::OnImGui()
                 &restirSettings.EnableRayTracedSpatialBiasCorrection);
 //Modify End
 //Modify Begin:2026-08-11 by Hui
-            settingsChanged |= ImGui::SliderInt("GI Spatial Neighbors", &spatialNeighborCount, 1, 16);
-            settingsChanged |= ImGui::SliderInt(
+            settingsChanged |= FrameworkImGui::SliderInt("GI Spatial Neighbors", &spatialNeighborCount, 1, 16);
+            settingsChanged |= FrameworkImGui::SliderInt(
                 "GI Spatial Max History",
                 &spatialMaxHistoryLength,
                 1,
                 256);
 //Modify End
-            settingsChanged |= ImGui::SliderFloat(
+            settingsChanged |= FrameworkImGui::SliderFloat(
                 "GI Spatial Radius",
                 &restirSettings.SpatialSamplingRadius,
                 1.0f,
                 256.0f);
-            settingsChanged |= ImGui::SliderFloat(
+            settingsChanged |= FrameworkImGui::SliderFloat(
                 "GI Spatial Normal Threshold",
                 &restirSettings.SpatialNormalSimilarityThreshold,
                 -1.0f,
                 1.0f);
-            settingsChanged |= ImGui::SliderFloat(
+            settingsChanged |= FrameworkImGui::SliderFloat(
                 "GI Spatial Position Threshold",
                 &restirSettings.SpatialPositionSimilarityThreshold,
                 0.001f,
                 2.0f);
-            settingsChanged |= ImGui::SliderFloat(
+            settingsChanged |= FrameworkImGui::SliderFloat(
                 "GI Max Jacobian",
                 &restirSettings.MaxJacobian,
                 1.0f,
                 100.0f);
-            settingsChanged |= ImGui::SliderFloat(
+            settingsChanged |= FrameworkImGui::SliderFloat(
                 "GI Max Spatial Weight",
                 &restirSettings.MaxSpatialWeight,
                 0.001f,
@@ -489,9 +588,10 @@ void RaytracingDemo::OnImGui()
     ImGui::TextDisabled("Directional and point lights use soft-shadow variants; area lights already sample their surface.");
 //Modify End
 //Modify Begin:2026-07-30 by Hui
-    if (ImGui::Checkbox("Enable Stress Test Spheres (12,288)", &m_StressTestSpheresEnabled))
+    bool stressTestSpheresEnabled = m_SceneRuntime.AreStressTestSpheresEnabled();
+    if (ImGui::Checkbox("Enable Stress Test Spheres (12,288)", &stressTestSpheresEnabled))
     {
-        m_StressTestSpheresStateDirty = true;
+        m_SceneRuntime.SetStressTestSpheresEnabled(stressTestSpheresEnabled);
     }
     ImGui::TextDisabled("Adds or removes instances; BLAS and static meshlet geometry stay resident.");
 //Modify End
@@ -658,7 +758,8 @@ void RaytracingDemo::OnImGui()
         ResetAccumulation();
     }
 //Modify Begin:2026-07-27 by Hui
-    if (m_CudaBloom.DrawImGui(
+    if (DrawCudaBloomControls(
+        m_CudaBloom,
         static_cast<uint32_t>((std::max)(m_Width, 1)),
         static_cast<uint32_t>((std::max)(m_Height, 1))))
     {
@@ -690,7 +791,7 @@ void RaytracingDemo::OnImGui()
 //Modify End
 //Modify Begin:2026-08-11 by Hui
     int requestedMaxBounces = m_MaxBounces;
-    const bool bouncesChanged = ImGui::SliderInt(
+    const bool bouncesChanged = FrameworkImGui::SliderInt(
         "Bounces",
         &requestedMaxBounces,
         1,
@@ -708,16 +809,16 @@ void RaytracingDemo::OnImGui()
     bool wheelSpeedChanged = false;
     if (ImGui::CollapsingHeader("Camera"))
     {
-        fovChanged = ImGui::SliderFloat("FOV", &m_CameraFov, 12.0f, 90.0f, "%.1f");
+        fovChanged = FrameworkImGui::SliderFloat("FOV", &m_CameraFov, 12.0f, 90.0f, "%.1f");
 //Modify Begin:2026-08-11 by Hui
-        nearClipChanged = ImGui::SliderFloat("Near Clip", &m_CameraNearClipPlane, 0.001f, 100.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        nearClipChanged = FrameworkImGui::SliderFloat("Near Clip", &m_CameraNearClipPlane, 0.001f, 100.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
 //Modify End
         if (m_CameraFarClipPlane <= m_CameraNearClipPlane)
         {
             m_CameraFarClipPlane = m_CameraNearClipPlane + 0.001f;
         }
 //Modify Begin:2026-08-11 by Hui
-        farClipChanged = ImGui::SliderFloat(
+        farClipChanged = FrameworkImGui::SliderFloat(
             "Far Clip",
             &m_CameraFarClipPlane,
             m_CameraNearClipPlane + 0.001f,
@@ -725,10 +826,10 @@ void RaytracingDemo::OnImGui()
             "%.1f",
             ImGuiSliderFlags_AlwaysClamp);
 //Modify End
-        rotateSpeedChanged = ImGui::SliderFloat("Mouse Rotate", &m_MouseRotateSpeed, 0.01f, 0.5f, "%.3f");
-        panSpeedChanged = ImGui::SliderFloat("Mouse Pan", &m_MousePanSpeed, 0.005f, 0.25f, "%.3f");
-        dollySpeedChanged = ImGui::SliderFloat("Mouse Dolly", &m_MouseDollySpeed, 0.005f, 0.25f, "%.3f");
-        wheelSpeedChanged = ImGui::SliderFloat("Wheel Dolly", &m_MouseWheelDollySpeed, 0.05f, 5.0f, "%.2f");
+        rotateSpeedChanged = FrameworkImGui::SliderFloat("Mouse Rotate", &m_MouseRotateSpeed, 0.01f, 0.5f, "%.3f");
+        panSpeedChanged = FrameworkImGui::SliderFloat("Mouse Pan", &m_MousePanSpeed, 0.005f, 0.25f, "%.3f");
+        dollySpeedChanged = FrameworkImGui::SliderFloat("Mouse Dolly", &m_MouseDollySpeed, 0.005f, 0.25f, "%.3f");
+        wheelSpeedChanged = FrameworkImGui::SliderFloat("Wheel Dolly", &m_MouseWheelDollySpeed, 0.05f, 5.0f, "%.2f");
     }
 //Modify End
 

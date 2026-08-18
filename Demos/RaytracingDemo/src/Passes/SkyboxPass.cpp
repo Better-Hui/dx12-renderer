@@ -7,11 +7,23 @@
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <Framework/Rendering/Texture/UnorderedAccessView.h>
-#include <RenderGraph/RenderPass.h>
+#include <RenderGraph/RenderGraphBuilder.h>
 
 using namespace DirectX;
 
-std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateSkyboxPass(
+//Modify Begin:2026-08-18 by Hui
+namespace
+{
+    struct SkyboxPassData
+    {
+        RaytracingDemoPassResourcesSnapshot Resources;
+        RaytracingDemoPassConfig Config = {};
+    };
+}
+//Modify End
+
+void RaytracingDemoPasses::Builder::AddSkyboxPass(
+    RenderGraph::RenderGraphBuilder& renderGraphBuilder,
     const RaytracingDemoPassResources& resources,
     const RaytracingDemoPassConfig& config,
     const RenderGraph::ResourceId sceneReadyToken)
@@ -19,22 +31,21 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateSk
     using namespace RenderGraph;
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
 
-    return RenderPass::Create(
+    renderGraphBuilder.AddPass<SkyboxPassData>(
         L"Skybox",
+        [&resources, config, sceneReadyToken](RenderGraphPassBuilder& passBuilder, SkyboxPassData& passData)
         {
-            { sceneReadyToken, InputType::Token },
-//Modify Begin:2026-07-28 by Hui
-            { DemoResourceIds::DepthBuffer, InputType::ShaderResource },
-//Modify End
+            passData.Resources.emplace(resources);
+            passData.Config = config;
+            passBuilder.ReadToken(sceneReadyToken);
+            passBuilder.ReadTexture(DemoResourceIds::DepthBuffer);
+            passBuilder.WriteUav(DemoResourceIds::SceneColor);
+            passBuilder.WriteToken(DemoResourceIds::SkyboxFinishedToken);
         },
+        [](const SkyboxPassData& passData, const RenderContext& context, CommandList& cmd)
         {
-//Modify Begin:2026-07-28 by Hui
-            { DemoResourceIds::SceneColor, OutputType::UnorderedAccess },
-//Modify End
-            { DemoResourceIds::SkyboxFinishedToken, OutputType::Token },
-        },
-        [resources, config](const RenderContext& context, CommandList& cmd)
-        {
+            const RaytracingDemoPassResources& resources = passData.Resources.value();
+            const RaytracingDemoPassConfig& config = passData.Config;
             if (!config.FrameState->SkyboxEnabled)
             {
                 return;

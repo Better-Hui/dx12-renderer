@@ -26,9 +26,8 @@ void RaytracingDemo::OnUpdate(UpdateEventArgs& e)
     UpdateRuntimeAutomation(e.TotalTime);
 //Modify End
     m_DeltaTime = static_cast<float>(e.ElapsedTime);
-    if (m_Lights.IsPointLightAnimationEnabled())
+    if (m_SceneRuntime.UpdateAnimatedLights(m_Lights, static_cast<float>(e.TotalTime)))
     {
-        m_Lights.UpdateDynamicLights(static_cast<float>(e.TotalTime));
         ResetAccumulation(false);
     }
 
@@ -293,13 +292,7 @@ void RaytracingDemo::OnResize(ResizeEventArgs& e)
     const float aspectRatio = static_cast<float>(m_Width) / static_cast<float>(m_Height);
     GetSceneCamera().SetProjection(m_CameraFov, aspectRatio, m_CameraNearClipPlane, m_CameraFarClipPlane);
 
-    if (m_RenderGraph != nullptr)
-    {
-//Modify Begin:2026-07-28 by Hui
-        m_FrameworkDeviceContext.Flush();
-        m_CudaBloom.ReleaseInteropResource();
-//Modify End
-        m_RenderGraph->MarkDirty();
-    }
+    // Render and display dimensions are part of the pipeline configuration.
+    // The next frame retires the old graph, DLSS feature, and CUDA interop resource together.
 }
 //Modify End

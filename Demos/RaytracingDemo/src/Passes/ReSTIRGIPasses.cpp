@@ -9,37 +9,53 @@
 //Modify End
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 #include <RenderGraph/RenderContext.h>
-#include <RenderGraph/RenderPass.h>
+#include <RenderGraph/RenderGraphBuilder.h>
 
 //Modify Begin:2026-08-10 by Hui
 namespace
 {
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
+
+//Modify Begin:2026-08-18 by Hui
+    struct ReSTIRGIPassData
+    {
+        RaytracingDemoPassResourcesSnapshot Resources;
+        RaytracingDemoPassConfig Config = {};
+    };
+//Modify End
 }
 
-std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateReSTIRGIPass(
+void RaytracingDemoPasses::Builder::AddReSTIRGIPass(
+    RenderGraph::RenderGraphBuilder& renderGraphBuilder,
     const RaytracingDemoPassResources& resources,
     const RaytracingDemoPassConfig& config)
 {
     using namespace RenderGraph;
-    auto pass = RenderPass::Create(
+    renderGraphBuilder.AddPass<ReSTIRGIPassData>(
         L"ReSTIR GI",
+        [&resources, config](RenderGraphPassBuilder& passBuilder, ReSTIRGIPassData& passData)
         {
-            { DemoResourceIds::BaseResourcesFinishedToken, InputType::Token },
-            { DemoResourceIds::GBufferAlbedoOcclusion, InputType::NonPixelShaderResource },
-            { DemoResourceIds::GBufferSpecularSmoothness, InputType::NonPixelShaderResource },
-            { DemoResourceIds::GBufferNormal, InputType::NonPixelShaderResource },
-            { DemoResourceIds::GBufferEmissionMetallic, InputType::NonPixelShaderResource },
-            { DemoResourceIds::GBufferPosition, InputType::NonPixelShaderResource },
-            { DemoResourceIds::MotionVector, InputType::NonPixelShaderResource },
-            { DemoResourceIds::DepthBuffer, InputType::NonPixelShaderResource },
+            passData.Resources.emplace(resources);
+            passData.Config = config;
+            passBuilder.ReadToken(DemoResourceIds::BaseResourcesFinishedToken);
+            passBuilder.ReadBuffer(DemoResourceIds::GBufferAlbedoOcclusion);
+            passBuilder.ReadBuffer(DemoResourceIds::GBufferSpecularSmoothness);
+            passBuilder.ReadBuffer(DemoResourceIds::GBufferNormal);
+            passBuilder.ReadBuffer(DemoResourceIds::GBufferEmissionMetallic);
+            passBuilder.ReadBuffer(DemoResourceIds::GBufferPosition);
+            passBuilder.ReadBuffer(DemoResourceIds::MotionVector);
+            passBuilder.ReadBuffer(DemoResourceIds::DepthBuffer);
+            passBuilder.WriteUav(DemoResourceIds::IndirectLighting);
+            passBuilder.WriteToken(DemoResourceIds::IndirectLightingFinishedToken);
+            RaytracingDemoPassBindings::DeclareRayTracingExternalResourceAccesses(
+                passBuilder,
+                resources,
+                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         },
+        [](const ReSTIRGIPassData& passData, const RenderContext& context, CommandList& commandList)
         {
-            { DemoResourceIds::IndirectLighting, OutputType::UnorderedAccess },
-            { DemoResourceIds::IndirectLightingFinishedToken, OutputType::Token },
-        },
-        [resources, config](const RenderContext& context, CommandList& commandList)
-        {
+            const RaytracingDemoPassResources& resources = passData.Resources.value();
+            const RaytracingDemoPassConfig& config = passData.Config;
             const RaytracingDemoRenderGraph::FrameGBufferResources gbuffer =
                 RaytracingDemoRenderGraph::GetFrameGBufferResources(context);
             const RaytracingDemoCameraConstants camera =
@@ -92,12 +108,5 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
             };
             resources.IndirectLightingReSTIRGIPass.Execute(commandList, inputs);
         });
-//Modify Begin:2026-08-13 by Hui
-    RaytracingDemoPassBindings::DeclareRayTracingExternalResourceAccesses(
-        *pass,
-        resources,
-        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-//Modify End
-    return pass;
 }
 //Modify End

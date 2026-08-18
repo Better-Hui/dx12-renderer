@@ -1,10 +1,13 @@
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-18 by Hui
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <memory>
 #include <set>
+#include <vector>
 
 #include "RenderGraphQueueFence.h"
 #include "RenderPass.h"
@@ -19,53 +22,62 @@ namespace RenderGraph
     public:
         RenderGraphQueueScheduler(
             std::shared_ptr<CommandQueue> directCommandQueue,
-            std::shared_ptr<CommandQueue> asyncComputeCommandQueue);
+            std::shared_ptr<CommandQueue> asyncComputeCommandQueue,
+            std::shared_ptr<CommandQueue> copyCommandQueue);
 
         void BeginFrame();
         uint64_t SubmitDirect(std::shared_ptr<CommandList>& commandList);
-//Modify Begin:2026-07-30 by Hui
         uint64_t SubmitDirect(std::vector<std::shared_ptr<CommandList>>& commandLists);
-//Modify End
         uint64_t SubmitAsyncCompute(std::shared_ptr<CommandList>& commandList, bool waitForCompletion);
-        uint64_t GetCrossQueueProducerFence(const RenderPass& pass) const;
-        void WaitForDirectSubmissionOnAsyncCompute(uint64_t fenceValue) const;
-        void WaitForAsyncComputeSubmissionOnDirect(uint64_t fenceValue);
+        uint64_t SubmitCopy(std::shared_ptr<CommandList>& commandList, bool waitForCompletion);
+
+        RenderGraphQueueFenceValues GetCrossQueueProducerFences(
+            const RenderPass& pass,
+            RenderPassQueue waitingQueue) const;
+        void WaitForDependencies(RenderPassQueue waitingQueue, const RenderGraphQueueFenceValues& dependencies);
+        void WaitForDirectSubmission(RenderPassQueue waitingQueue, uint64_t fenceValue);
+
         void TrackPassResources(const RenderPass& pass, uint64_t fenceValue);
         void TrackExternalResource(ResourceId resourceId, RenderPassQueue queue);
         const std::map<ResourceId, RenderGraphQueueFenceValues>& GetResourceRetirements() const;
         const RenderGraphQueueFenceValues& GetFrameSubmissionFences() const;
 
     private:
-//Modify Begin:2026-08-13 by Hui
+        static size_t QueueIndex(RenderPassQueue queue);
+        static uint64_t& QueueFence(RenderGraphQueueFenceValues& fences, RenderPassQueue queue);
+        static uint64_t QueueFence(const RenderGraphQueueFenceValues& fences, RenderPassQueue queue);
+
         struct ExternalResourceUsage
         {
             RenderPassQueue LastWriterQueue = RenderPassQueue::Direct;
             uint64_t LastWriterFenceValue = 0;
             bool HasWriter = false;
-            uint64_t LastDirectReaderFenceValue = 0;
-            uint64_t LastAsyncComputeReaderFenceValue = 0;
-            bool HasDirectReader = false;
-            bool HasAsyncComputeReader = false;
+            std::array<uint64_t, 3> ReaderFenceValues = {};
+            std::array<bool, 3> HasReader = {};
         };
 
+        CommandQueue& GetCommandQueue(RenderPassQueue queue) const;
+        uint64_t SubmitNonDirect(
+            RenderPassQueue queue,
+            std::shared_ptr<CommandList>& commandList,
+            bool waitForCompletion);
         void FinalizeDirectSubmission(uint64_t fenceValue);
         void TrackExternalResourceAccess(
             const ExternalResourceAccess& access,
             RenderPassQueue queue,
             uint64_t fenceValue);
-//Modify End
+
         std::shared_ptr<CommandQueue> m_DirectCommandQueue;
         std::shared_ptr<CommandQueue> m_AsyncComputeCommandQueue;
+        std::shared_ptr<CommandQueue> m_CopyCommandQueue;
         std::map<ResourceId, RenderPassQueue> m_LastWriterQueues;
         std::map<ResourceId, uint64_t> m_LastWriterFenceValues;
-//Modify Begin:2026-08-13 by Hui
         std::map<const Resource*, ExternalResourceUsage> m_ExternalResourceUsages;
-//Modify End
         std::map<ResourceId, RenderGraphQueueFenceValues> m_ResourceRetirements;
         RenderGraphQueueFenceValues m_FrameSubmissionFences;
         std::set<ResourceId> m_PendingDirectResources;
-        bool m_AsyncComputeSubmitted = false;
         uint64_t m_LastAsyncComputeFenceValue = 0;
+        uint64_t m_LastCopyFenceValue = 0;
     };
 }
 //Modify End

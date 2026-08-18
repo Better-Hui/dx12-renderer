@@ -379,6 +379,7 @@ void DLSS::InvalidateHistory()
 
 void DLSS::OnResourcesRecreated()
 {
+    ReleaseFeature();
     if (m_InternalState->EvaluationParameters != nullptr)
     {
         NVSDK_NGX_Parameter_SetD3d12Resource(m_InternalState->EvaluationParameters, NVSDK_NGX_Parameter_Color, nullptr);

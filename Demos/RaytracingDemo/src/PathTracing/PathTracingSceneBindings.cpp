@@ -8,7 +8,7 @@
 #include <Framework/Rendering/RayTracing/RayTracingShader.h>
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <Framework/Rendering/Texture/UnorderedAccessView.h>
-#include <RenderGraph/RenderPass.h>
+#include <RenderGraph/RenderGraphBuilder.h>
 //Modify Begin:2026-07-30 by Hui
 #include <Scene/SceneLightManager.h>
 //Modify End
@@ -26,19 +26,19 @@ RaytracingDemoCameraConstants RaytracingDemoPassBindings::BuildPassCameraConstan
 
 //Modify Begin:2026-08-13 by Hui
 void RaytracingDemoPassBindings::DeclareRayTracingExternalResourceAccesses(
-    RenderGraph::RenderPass& renderPass,
+    RenderGraph::RenderGraphPassBuilder& passBuilder,
     const RaytracingDemoPassResources& resources,
     const D3D12_RESOURCE_STATES stateAfter)
 {
-    const auto declareAccess = [&renderPass, stateAfter](const Resource& resource)
+    const auto declareAccess = [&passBuilder, stateAfter](const Resource& resource)
     {
-        renderPass.AddExternalResourceAccess(resource, stateAfter);
+        passBuilder.ReadExternal(resource, stateAfter);
     };
     resources.Scene.ForEachRayTracingShaderResource(declareAccess);
     resources.Lights.ForEachShaderResource(declareAccess);
     if (resources.SkyboxTexture != nullptr)
     {
-        renderPass.AddExternalResourceAccess(*resources.SkyboxTexture, stateAfter);
+        passBuilder.ReadExternal(*resources.SkyboxTexture, stateAfter);
     }
 }
 //Modify End

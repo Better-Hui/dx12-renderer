@@ -7,38 +7,52 @@
 #include <DX12Library/CommandList.h>
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 #include <RenderGraph/RenderContext.h>
-#include <RenderGraph/RenderPass.h>
+#include <RenderGraph/RenderGraphBuilder.h>
 
 namespace
 {
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
+
+//Modify Begin:2026-08-18 by Hui
+    struct ReSTIRDIPassData
+    {
+        RaytracingDemoPassResourcesSnapshot Resources;
+        RaytracingDemoPassConfig Config = {};
+    };
+//Modify End
 }
 
-std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateReSTIRDIPass(
+void RaytracingDemoPasses::Builder::AddReSTIRDIPass(
+    RenderGraph::RenderGraphBuilder& renderGraphBuilder,
     const RaytracingDemoPassResources& resources,
     const RaytracingDemoPassConfig& config)
 {
     using namespace RenderGraph;
-    auto pass = RenderPass::Create(
+    renderGraphBuilder.AddPass<ReSTIRDIPassData>(
         L"ReSTIR DI",
+        [&resources, config](RenderGraphPassBuilder& passBuilder, ReSTIRDIPassData& passData)
         {
-            { DemoResourceIds::BaseResourcesFinishedToken, InputType::Token },
-            { DemoResourceIds::GBufferAlbedoOcclusion, InputType::NonPixelShaderResource },
-            { DemoResourceIds::GBufferSpecularSmoothness, InputType::NonPixelShaderResource },
-            { DemoResourceIds::GBufferNormal, InputType::NonPixelShaderResource },
-            { DemoResourceIds::GBufferEmissionMetallic, InputType::NonPixelShaderResource },
-            { DemoResourceIds::GBufferPosition, InputType::NonPixelShaderResource },
-            { DemoResourceIds::MotionVector, InputType::NonPixelShaderResource },
-            { DemoResourceIds::DepthBuffer, InputType::NonPixelShaderResource },
+            passData.Resources.emplace(resources);
+            passData.Config = config;
+            passBuilder.ReadToken(DemoResourceIds::BaseResourcesFinishedToken);
+            passBuilder.ReadBuffer(DemoResourceIds::GBufferAlbedoOcclusion);
+            passBuilder.ReadBuffer(DemoResourceIds::GBufferSpecularSmoothness);
+            passBuilder.ReadBuffer(DemoResourceIds::GBufferNormal);
+            passBuilder.ReadBuffer(DemoResourceIds::GBufferEmissionMetallic);
+            passBuilder.ReadBuffer(DemoResourceIds::GBufferPosition);
+            passBuilder.ReadBuffer(DemoResourceIds::MotionVector);
+            passBuilder.ReadBuffer(DemoResourceIds::DepthBuffer);
+            passBuilder.WriteUav(DemoResourceIds::DirectLighting);
+            passBuilder.WriteToken(DemoResourceIds::DirectLightingFinishedToken);
+            RaytracingDemoPassBindings::DeclareRayTracingExternalResourceAccesses(
+                passBuilder,
+                resources,
+                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         },
+        [](const ReSTIRDIPassData& passData, const RenderContext& context, CommandList& commandList)
         {
-            { DemoResourceIds::DirectLighting, OutputType::UnorderedAccess },
-//Modify Begin:2026-08-06 by Hui
-            { DemoResourceIds::DirectLightingFinishedToken, OutputType::Token },
-//Modify End
-        },
-        [resources, config](const RenderContext& context, CommandList& commandList)
-        {
+            const RaytracingDemoPassResources& resources = passData.Resources.value();
+            const RaytracingDemoPassConfig& config = passData.Config;
             const RaytracingDemoRenderGraph::FrameGBufferResources gbuffer =
                 RaytracingDemoRenderGraph::GetFrameGBufferResources(context);
             const RaytracingDemoCameraConstants camera =
@@ -77,12 +91,5 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateRe
             };
             resources.DirectLightingReSTIRDIPass.Execute(commandList, inputs);
         });
-//Modify Begin:2026-08-13 by Hui
-    RaytracingDemoPassBindings::DeclareRayTracingExternalResourceAccesses(
-        *pass,
-        resources,
-        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-//Modify End
-    return pass;
 }
 //Modify End

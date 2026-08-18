@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "RenderTargetInfo.h"
+#include "RenderPass.h"
 #include "ResourceId.h"
 
 class Resource;
@@ -45,9 +46,10 @@ namespace RenderGraph
         std::vector<ResourceId> InitOutputs;
 
         //Modify Begin:2026-08-07 by Hui
-        struct AsyncComputeDirectPreamble
+        //Modify Begin:2026-08-18 by Hui
+        struct NonDirectQueuePreamble
         {
-            std::vector<PassResourceTransition> DirectProducerInputTransitions;
+            std::vector<PassResourceTransition> CrossQueueInputTransitions;
 //Modify Begin:2026-08-13 by Hui
             std::vector<PassExternalResourceTransition> ExternalResourceTransitions;
 //Modify End
@@ -55,13 +57,17 @@ namespace RenderGraph
             std::vector<PassResourceTransition> OutputTransitions;
         };
 
-        std::optional<AsyncComputeDirectPreamble> DirectPreamble;
+        std::optional<NonDirectQueuePreamble> DirectPreamble;
+        //Modify End
         //Modify End
     };
 
     struct RenderGraphRecordingBatch
     {
         std::vector<RenderPass*> Passes;
+        //Modify Begin:2026-08-18 by Hui
+        RenderPassQueue Queue = RenderPassQueue::Direct;
+        //Modify End
         bool RecordInParallel = false;
     };
 

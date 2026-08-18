@@ -1,12 +1,12 @@
+//Modify Begin:2026-07-30 by Hui
 #include <Passes/CudaBloomPass.h>
+//Modify End
 
 #include <DX12Library/Helpers.h>
 #include <DX12Library/RenderTarget.h>
 #include <DX12Library/Texture.h>
 #include <Framework/Core/FrameworkDeviceContext.h>
 #include <Framework/Rendering/PostProcess/Bloom.h>
-
-#include <imgui.h>
 
 #include <algorithm>
 
@@ -89,73 +89,33 @@ void CudaBloomPass::ReleaseInteropResource()
     m_Height = 0;
 }
 
-//Modify Begin:2026-08-16 by Hui
-bool CudaBloomPass::DrawImGui(const uint32_t width, const uint32_t height)
+//Modify Begin:2026-08-18 by Hui
+CudaBloomPass::Settings CudaBloomPass::GetSettings() const
 {
-    bool changed = false;
-    if (ImGui::CollapsingHeader("CUDA Bloom"))
-    {
-        changed |= ImGui::Checkbox("Enable CUDA Bloom", &m_Enabled);
-//Modify Begin:2026-08-17 by Hui
-        const char* backendNames[] = { "CUDA", "Built-in Raster" };
-        int backend = static_cast<int>(m_Backend);
-        if (ImGui::Combo("Bloom Backend", &backend, backendNames, IM_ARRAYSIZE(backendNames)))
-        {
-            m_Backend = static_cast<Backend>(backend);
-            changed = true;
-        }
+    return {
+        .Enabled = m_Enabled,
+        .SelectedBackend = m_Backend,
+        .Method = m_CudaMethod,
+        .Threshold = m_Threshold,
+        .SoftThreshold = m_SoftThreshold,
+        .Intensity = m_Intensity,
+        .PyramidLevels = m_PyramidLevels,
+        .BoxFilterSigma = m_BoxFilterSigma,
+        .UseSharedMemoryDownsampling = m_UseSharedMemoryDownsampling,
+    };
+}
 
-        if (!IsFrameworkRaster())
-        {
-            const char* methodNames[] = {
-                "Classic Pyramid",
-                "Box Filter Approximation (add + lerp)",
-                "Box Filter Original Paper (lerp)",
-            };
-            int method = static_cast<int>(m_CudaMethod);
-            if (ImGui::Combo("CUDA Method", &method, methodNames, IM_ARRAYSIZE(methodNames)))
-            {
-                m_CudaMethod = static_cast<CudaMethod>(method);
-                changed = true;
-            }
-
-            ImGui::TextDisabled("Fixed pyramid: 5-tap prefilter, 4-tap downsample, 4-tap upsample and composite.");
-            changed |= ImGui::Checkbox("Shared-Memory Downsampling", &m_UseSharedMemoryDownsampling);
-            ImGui::TextDisabled("Experimental: cascades four downsample levels per dispatch.");
-        }
-//Modify End
-        changed |= ImGui::SliderFloat("Bloom Threshold", &m_Threshold, 0.0f, 5.0f, "%.2f");
-        changed |= ImGui::SliderFloat("Bloom Soft Knee", &m_SoftThreshold, 0.0f, 2.0f, "%.2f");
-        changed |= ImGui::SliderFloat("Bloom Intensity", &m_Intensity, 0.0f, 5.0f, "%.2f");
-//Modify Begin:2026-07-30 by Hui
-        const uint32_t pyramidWidth = m_Width > 0u ? m_Width : width;
-        const uint32_t pyramidHeight = m_Height > 0u ? m_Height : height;
-        const int maxPyramidLevels = static_cast<int>(ComputeMaxPyramidLevels(pyramidWidth, pyramidHeight));
-        m_PyramidLevels = std::clamp(m_PyramidLevels, 1, maxPyramidLevels);
-        changed |= ImGui::SliderInt("Bloom Pyramid Levels", &m_PyramidLevels, 1, maxPyramidLevels);
-//Modify End
-//Modify Begin:2026-08-17 by Hui
-        if (!IsFrameworkRaster() &&
-            (m_CudaMethod == CudaMethod::BoxFilterApproximation ||
-                m_CudaMethod == CudaMethod::BoxFilterOriginalPaper))
-        {
-            changed |= ImGui::SliderFloat("Box Filter Sigma", &m_BoxFilterSigma, 0.1f, 16.0f, "%.2f");
-        }
-//Modify End
-//Modify Begin:2026-07-30 by Hui
-        if (m_LastCudaTiming.Valid)
-        {
-            ImGui::Text(
-                "CUDA timing: wait %.3f ms, kernels %.3f ms, signal %.3f ms, stream %.3f ms",
-                m_LastCudaTiming.D3DToCudaWaitMs,
-                m_LastCudaTiming.KernelsMs,
-                m_LastCudaTiming.CudaSignalMs,
-                m_LastCudaTiming.TotalCudaStreamMs);
-        }
-//Modify End
-        ImGui::TextWrapped("%s", m_Status.c_str());
-    }
-    return changed;
+void CudaBloomPass::SetSettings(const Settings& settings)
+{
+    m_Enabled = settings.Enabled;
+    m_Backend = settings.SelectedBackend;
+    m_CudaMethod = settings.Method;
+    m_Threshold = settings.Threshold;
+    m_SoftThreshold = settings.SoftThreshold;
+    m_Intensity = settings.Intensity;
+    m_PyramidLevels = settings.PyramidLevels;
+    m_BoxFilterSigma = settings.BoxFilterSigma;
+    m_UseSharedMemoryDownsampling = settings.UseSharedMemoryDownsampling;
 }
 //Modify End
 
@@ -480,7 +440,7 @@ void CudaBloomPass::CollectCompletedCudaTimingFrames()
             continue;
         }
 
-        CudaTimingStats timingStats = {};
+        TimingStats timingStats = {};
         timingStats.FrameIndex = timingFrame.FrameIndex;
         timingStats.Valid = true;
         cuEventElapsedTime(&timingStats.D3DToCudaWaitMs, timingFrame.D3DWaitBegin, timingFrame.D3DWaitEnd);

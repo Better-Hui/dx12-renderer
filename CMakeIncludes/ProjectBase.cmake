@@ -15,12 +15,10 @@ if ("${SOURCE_FILES}" STREQUAL "")
 endif ()
 
 # Shaders
-# Modify Begin:2026-07-30 by Hui
 if (NOT DEFINED DX12_RENDERER_SHADER_MODEL_VERSION)
     set(DX12_RENDERER_SHADER_MODEL_VERSION "6.8")
 endif ()
 string(REPLACE "." "_" DX12_RENDERER_SHADER_MODEL_SUFFIX "${DX12_RENDERER_SHADER_MODEL_VERSION}")
-# Modify End
 
 if ("${SHADER_FILES_VERTEX}" STREQUAL "")
     FILE(GLOB_RECURSE SHADER_FILES_VERTEX ${CMAKE_CURRENT_SOURCE_DIR}/shaders/*_VS.hlsl)
@@ -36,16 +34,47 @@ endif ()
 
 list(APPEND SHADER_FILES ${SHADER_FILES_VERTEX} ${SHADER_FILES_PIXEL} ${SHADER_FILES_COMPUTE})
 
-source_group("Resources\\Shaders" FILES ${SHADER_FILES})
+# Generate standard Visual Studio filters and MSBuild logical paths from the
+# physical target tree. Rider may ignore .vcxproj.filters depending on its
+# application-wide setting, while Link metadata remains part of the project.
+set(DX12_RENDERER_PROJECT_LOCAL_FILES
+        ${HEADER_FILES}
+        ${SOURCE_FILES}
+        ${SHADER_FILES}
+        ${SHADERS_HEADER_FILES}
+        ${DX12_RENDERER_IDE_ONLY_FILES}
+        )
+list(REMOVE_DUPLICATES DX12_RENDERER_PROJECT_LOCAL_FILES)
 
-# Modify Begin:2026-07-30 by Hui
+set(DX12_RENDERER_PROJECT_TREE_FILES)
+foreach(project_file IN LISTS DX12_RENDERER_PROJECT_LOCAL_FILES)
+    get_filename_component(project_file_absolute
+            "${project_file}"
+            ABSOLUTE
+            BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+    file(RELATIVE_PATH project_file_relative
+            "${CMAKE_CURRENT_SOURCE_DIR}"
+            "${project_file_absolute}")
+    if (NOT project_file_relative MATCHES "^\\.\\./")
+        list(APPEND DX12_RENDERER_PROJECT_TREE_FILES "${project_file_absolute}")
+        if (CMAKE_GENERATOR MATCHES "^Visual Studio")
+            file(TO_NATIVE_PATH "${project_file_relative}" project_file_link)
+            set_property(SOURCE "${project_file_absolute}" APPEND PROPERTY
+                    VS_SETTINGS "Link=${project_file_link}")
+        endif ()
+    endif ()
+endforeach()
+
+if (DX12_RENDERER_PROJECT_TREE_FILES)
+    source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${DX12_RENDERER_PROJECT_TREE_FILES})
+endif ()
+
 set_source_files_properties(${SHADER_FILES} PROPERTIES HEADER_FILE_ONLY TRUE)
 set(DX12_RENDERER_SHADER_INCLUDE_ARGS
         -I "${CMAKE_SOURCE_DIR}/Shaders"
         -I "${CMAKE_SOURCE_DIR}/Framework/shaders"
         -I "${CMAKE_CURRENT_SOURCE_DIR}/shaders"
         )
-# Modify Begin:2026-08-16 by Hui
 # Keep shader compilation out of the Visual Studio file tree. CMake otherwise
 # materializes one hashed .rule file for every shader output under CMakeFiles.
 set(DX12_RENDERER_SHADER_PRE_BUILD_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${TARGET_NAME}_CompileShaders.cmake")
@@ -102,6 +131,3 @@ endforeach()
 if (DX12_RENDERER_HAS_SHADER_ASSETS)
     file(WRITE "${DX12_RENDERER_SHADER_PRE_BUILD_SCRIPT}" "${DX12_RENDERER_SHADER_PRE_BUILD_SCRIPT_CONTENT}")
 endif()
-
-# Modify End
-# Modify End

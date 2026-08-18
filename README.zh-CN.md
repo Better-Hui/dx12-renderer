@@ -95,7 +95,7 @@ auto pass = RenderGraph::RenderPass::Create(
 先安装以下依赖：
 
 ```powershell
-vcpkg install --triplet x64-windows assimp directxtex directxmesh imgui meshoptimizer
+vcpkg install --triplet x64-windows assimp directxtex directxmesh meshoptimizer
 ```
 
 配置时设置 `VCPKG_ROOT`，或手动指定 `CMAKE_TOOLCHAIN_FILE`。
@@ -107,6 +107,7 @@ vcpkg install --triplet x64-windows assimp directxtex directxmesh imgui meshopti
 | DirectX Agility SDK 1.619.5 | `D3D12/`、`External/AgilitySDK/include/` | SM6.8 基线所需的运行时 redist 和匹配的 C++ 头文件。 |
 | DirectX Shader Compiler | 优先 `DXC/dxc.exe`，否则使用 Windows SDK 的 `dxc.exe` | 编译 ray tracing、task、mesh、compute 等 shader。 |
 | WinPixEventRuntime | `WinPixEventRuntime/` | 向 PIX 写入 CPU/GPU event marker。 |
+| Dear ImGui | `External/ImGui/` Git submodule，固定为 `v1.91.9` | 运行时调试 UI；Framework 直接编译官方源码，项目特有的数值控件行为位于 `Framework/UI/NumericWidgets`。 |
 | NVIDIA NRD / NRI | `External/NRD/`、`External/NRI/` Git submodule | 降噪路径及其 API 层；CMake 会从固定的上游提交构建 D3D12 库。 |
 | NVIDIA DLSS SDK | `External/DLSS/` Git submodule | 实验性的 Native NGX SR/DLAA 集成；许可证和 notice 由该 submodule 自身提供。 |
 | NVIDIA Streamline | `External/Streamline/` | 实验性的 RR/FG 集成与 runtime interposer；需保留 `license.txt`、`nvngx_dlss.license.txt` 和 `3rd-party-licenses.md`。 |
@@ -117,7 +118,7 @@ vcpkg install --triplet x64-windows assimp directxtex directxmesh imgui meshopti
 
 ### 获取 Git submodule
 
-父仓库只保存第三方仓库的固定提交，不再把 DLSS、NRI、NRD 的源码或 SDK 文件复制进父仓库：
+父仓库只保存第三方仓库的固定提交，不再把 Dear ImGui、DLSS、NRI、NRD 的源码或 SDK 文件复制进父仓库：
 
 ```powershell
 git clone --recurse-submodules https://github.com/best-Hui/dx12-renderer.git
@@ -125,7 +126,7 @@ cd dx12-renderer
 git submodule update --init --recursive
 ```
 
-当前固定版本为：DLSS `v310.7.0`、NRI `v180`、NRD `4.17.4`。NRI 和 NRD 会由 CMake 从源码构建。它们的官方 CMake 在首次配置时可能把 D3D12 Memory Allocator、MathLib、ShaderMake 等仅用于构建的依赖下载到 build 目录；这些文件不会提交到本仓库。Streamline 暂时仍使用单独提供的 SDK 包，因为它的官方源码仓库不包含本 sample 所需的完整 runtime DLL 集合。
+当前固定版本为：Dear ImGui `v1.91.9`、DLSS `v310.7.0`、NRI `v180`、NRD `4.17.4`。Dear ImGui、NRI 和 NRD 会由 CMake 从源码构建；Dear ImGui 直接使用 `External/ImGui` 中的官方源码，不会复制或改写到 build 目录。NRI 和 NRD 的官方 CMake 在首次配置时可能把 D3D12 Memory Allocator、MathLib、ShaderMake 等仅用于构建的依赖下载到 build 目录；这些文件不会提交到本仓库。Streamline 暂时仍使用单独提供的 SDK 包，因为它的官方源码仓库不包含本 sample 所需的完整 runtime DLL 集合。
 
 以下命令在仓库根目录执行，并将构建产物放到同级 `build` 目录：
 

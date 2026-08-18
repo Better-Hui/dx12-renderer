@@ -39,7 +39,8 @@ namespace RenderGraph
         ResourcePool(
             std::shared_ptr<D3D12DeviceContext> deviceContext,
             std::shared_ptr<CommandQueue> directCommandQueue,
-            std::shared_ptr<CommandQueue> asyncComputeCommandQueue);
+            std::shared_ptr<CommandQueue> asyncComputeCommandQueue,
+            std::shared_ptr<CommandQueue> copyCommandQueue);
 //Modify End
         void BeginFrame(CommandList& commandList);
 
@@ -124,6 +125,7 @@ namespace RenderGraph
 
         std::shared_ptr<CommandQueue> m_DirectCommandQueue;
         std::shared_ptr<CommandQueue> m_AsyncComputeCommandQueue;
+        std::shared_ptr<CommandQueue> m_CopyCommandQueue;
         std::shared_ptr<D3D12DeviceContext> m_DeviceContext;
         std::shared_ptr<ResourceStateRegistry> m_ResourceStateRegistry;
         std::queue<DeferredDeletionBatch> m_DeferredDeletionQueue;

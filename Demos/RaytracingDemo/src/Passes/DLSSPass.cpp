@@ -6,13 +6,22 @@
 #include <DX12Library/CommandList.h>
 #include <Framework/Rendering/Upscaling/DLSS.h>
 #include <RenderGraph/RenderContext.h>
-#include <RenderGraph/RenderPass.h>
+#include <RenderGraph/RenderGraphBuilder.h>
 
-//Modify Begin:2026-08-07 by Hui
-#include <vector>
+//Modify Begin:2026-08-18 by Hui
+namespace
+{
+    struct DLSSPassData
+    {
+        RaytracingDemoPassResourcesSnapshot Resources;
+        RaytracingDemoPassConfig Config = {};
+        RenderGraph::ResourceId InputColor = 0;
+    };
+}
 //Modify End
 
-std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDLSSPass(
+void RaytracingDemoPasses::Builder::AddDLSSPass(
+    RenderGraph::RenderGraphBuilder& renderGraphBuilder,
     const RaytracingDemoPassResources& resources,
     const RaytracingDemoPassConfig& config,
     const RenderGraph::ResourceId inputColor,
@@ -21,31 +30,33 @@ std::unique_ptr<RenderGraph::RenderPass> RaytracingDemoPasses::Builder::CreateDL
     using namespace RenderGraph;
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
 
-    std::vector<Input> inputs = {
-        { sceneReadyToken, InputType::Token },
-        { inputColor, InputType::NonPixelShaderResource },
-        { DemoResourceIds::DepthBuffer, InputType::NonPixelShaderResource },
-        { DemoResourceIds::MotionVector, InputType::NonPixelShaderResource },
-    };
-    if (config.FrameState->RayReconstructionEnabled)
-    {
-        inputs.emplace_back(DemoResourceIds::GBufferAlbedoOcclusion, InputType::NonPixelShaderResource);
-        inputs.emplace_back(DemoResourceIds::GBufferSpecularSmoothness, InputType::NonPixelShaderResource);
-        inputs.emplace_back(DemoResourceIds::DLSSNormalRoughness, InputType::NonPixelShaderResource);
-    }
-
-    return RenderPass::Create(
+    renderGraphBuilder.AddPass<DLSSPassData>(
         L"DLSS Super Resolution",
-        inputs,
+        [&resources, config, inputColor, sceneReadyToken](RenderGraphPassBuilder& passBuilder, DLSSPassData& passData)
         {
-            { DemoResourceIds::DLSSOutput, OutputType::UnorderedAccess },
-            { DemoResourceIds::DLSSFinishedToken, OutputType::Token },
+            passData.Resources.emplace(resources);
+            passData.Config = config;
+            passData.InputColor = inputColor;
+            passBuilder.ReadToken(sceneReadyToken);
+            passBuilder.ReadBuffer(inputColor);
+            passBuilder.ReadBuffer(DemoResourceIds::DepthBuffer);
+            passBuilder.ReadBuffer(DemoResourceIds::MotionVector);
+            if (config.FrameState->RayReconstructionEnabled)
+            {
+                passBuilder.ReadBuffer(DemoResourceIds::GBufferAlbedoOcclusion);
+                passBuilder.ReadBuffer(DemoResourceIds::GBufferSpecularSmoothness);
+                passBuilder.ReadBuffer(DemoResourceIds::DLSSNormalRoughness);
+            }
+            passBuilder.WriteUav(DemoResourceIds::DLSSOutput);
+            passBuilder.WriteToken(DemoResourceIds::DLSSFinishedToken);
         },
-        [resources, config, inputColor](const RenderContext& context, CommandList& commandList)
+        [](const DLSSPassData& passData, const RenderContext& context, CommandList& commandList)
         {
+            const RaytracingDemoPassResources& resources = passData.Resources.value();
+            const RaytracingDemoPassConfig& config = passData.Config;
             const RaytracingDemoFrameState& frameState = *config.FrameState;
             DLSSExecutionInputs inputs{};
-            inputs.Color = context.GetTexture(inputColor);
+            inputs.Color = context.GetTexture(passData.InputColor);
             inputs.Depth = context.GetTexture(DemoResourceIds::DepthBuffer);
             inputs.MotionVectors = context.GetTexture(DemoResourceIds::MotionVector);
             inputs.Output = context.GetTexture(DemoResourceIds::DLSSOutput);
