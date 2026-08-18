@@ -2,6 +2,7 @@
 
 #include <DX12Library/Buffer.h>
 #include <DX12Library/ByteAddressBuffer.h>
+#include <DX12Library/CommandListInternalAccess.h>
 #include <DX12Library/CommandQueue.h>
 #include <DX12Library/D3D12DeviceContext.h>
 #include <DX12Library/Helpers.h>
@@ -149,7 +150,7 @@ void RenderGraph::ResourcePool::BeginFrame(CommandList& commandList)
     {
         GetResource(desc.m_Id).ForEachResourceRecursive([&commandList](const Resource& resource)
         {
-            commandList.TrackResource(resource);
+            CommandListInternalAccess::TrackResourceLifetime(commandList, resource);
         });
         return true;
     });

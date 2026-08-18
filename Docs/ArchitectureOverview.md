@@ -31,11 +31,12 @@ The maintained first-party CMake targets are `DX12Library`, `Framework`, `Render
 `DX12Library/` is the native D3D12 boundary. Its important responsibilities are:
 
 - `D3D12DeviceContext`, `CommandQueue`, and `CommandList` wrap the D3D12 device and Direct, Compute, and Copy command queues.
+- `CommandList` is restricted to command recording, barriers, descriptor staging, and command-list lifetime tracking. `ResourceUploader` owns staging uploads and resource replacement, while `MipGenerator` owns the reusable mip-generation pipeline.
 - `Resource`, `Texture`, `Buffer`, structured/raw buffers, upload buffers, RTAS backing resources, and resource views own native D3D12 allocations.
 - `DescriptorAllocator`, `DynamicDescriptorHeap`, and `FrameResourceRing` manage descriptor and per-frame lifetime. GPU-visible descriptor tables are built here rather than by demo code.
 - `ResourceStateRegistry` and `ResourceStateTracker` provide native transition, UAV, and aliasing-barrier tracking.
 - `GpuTimestampProfiler` supplies queue-local GPU timestamp queries.
-- Window, swap-chain, PIX markers, Streamline runtime startup, and the Unity D3D12 interop boundary also live at this layer.
+- Window, swap-chain, PIX markers, and the Unity D3D12 interop boundary also live at this layer. Optional integrations can supply the generic `D3D12RuntimeLifecycle` contract for initialization before the first D3D12/DXGI call, device attachment immediately after creation, and shutdown. `CommandQueue` and `Window` always use the normal D3D12/DXGI creation APIs and never know about a concrete feature SDK.
 
 This layer deliberately exposes D3D12 concepts. `Framework` is responsible for presenting a narrower renderer-facing API above it.
 
@@ -50,6 +51,7 @@ This layer deliberately exposes D3D12 concepts. `Framework` is responsible for p
 - `BindlessDescriptorHeap` keeps canonical descriptors in a CPU-only heap and mirrors them into fence-retired shader-visible frame pages. Materials keep stable descriptor indices; `CommandContext` stages the corresponding table in the selected page for direct heap indexing. This prevents CPU descriptor updates from overwriting descriptors still consumed by Direct or Async Compute GPU work.
 - `ShaderVariantManager` compiles explicitly requested variants at startup, fingerprints sources/includes/defines, and caches bytecode. It is not runtime shader hot reload or exhaustive permutation generation.
 - `SharedUploadBuffer`, transient descriptor allocation, `StructuredBuffer`, raw buffers, and `RWStructuredBuffer`-style UAV binding support common data-upload and compute workloads.
+- `TextureLoader` owns DirectXTex/OpenEXR decoding and texture-cache lookup, then delegates GPU staging and optional mip generation to the focused low-level services.
 
 ### Geometry, ray tracing, and scenes
 
@@ -63,7 +65,7 @@ This layer deliberately exposes D3D12 concepts. `Framework` is responsible for p
 - `ReSTIRDIPass` owns the ReSTIR DI resource history, pipeline variants, and RIS, temporal, spatial, and final-shading dispatch sequence. A caller supplies the output, motion vectors, frame constants, and a scene-binding callback.
 - `ReSTIRGIPass` owns packed GI reservoirs, pipeline variants, and initial-sampling, temporal, spatial, and final-shading dispatches. A caller supplies an indirect-lighting output, motion vectors, frame constants, and an inline-ray-query scene-binding callback.
 - `Taa`, `NRD`, and `SVGF` provide temporal anti-aliasing and denoising integration. NRD reports its native state transitions back to RenderGraph through `RenderContext`.
-- `DLSS` owns native NGX DLSS SR/DLAA setup and the experimental Streamline RR/FG integration boundary. RR/FG require startup interposition and have not completed supported-hardware validation.
+- `DLSS` owns native NGX DLSS SR/DLAA evaluation and the experimental Streamline RR/FG frame-feature path. `DLSS.cpp` and `StreamlineRuntime.cpp` are built by the dedicated `FrameworkNvidiaFeatures` adapter target, so ordinary `Framework` consumers neither inherit the vendor SDK include paths nor link `sl.interposer.lib`. Framework's `StreamlineRuntime` performs `slInit` before D3D12 creation, calls `slSetD3DDevice` after device creation, owns capability queries, and requests generic presentation reconfiguration for Frame Generation. Automatic interposition owns queue/swap-chain interception; DX12Library never references Streamline or Frame Generation/Ray Reconstruction capability types. RR/FG have not completed supported-hardware validation.
 - CUDA interop wraps shared D3D12 resources and external fence/semaphore synchronization. CUDA Bloom is the current consumer.
 
 Framework modules are reusable building blocks, but their interfaces are still evolving. They should not be interpreted as a compatibility layer comparable to a mature public rendering SDK.
@@ -84,11 +86,11 @@ The compiler performs pass culling, dependency ordering, resource-state planning
 
 ### Queues and synchronization
 
-- A pass explicitly chooses `Direct` or `AsyncCompute` with `RenderPassQueue`; queue placement is not inferred automatically.
+- A pass explicitly chooses `Direct`, `AsyncCompute`, or `Copy` with `RenderPassQueue`; queue placement is not inferred automatically.
 - `RenderGraphQueueScheduler` tracks a logical resource's last producer queue and submitted fence value. A dependent consumer receives a GPU-side wait before its work is submitted.
 - `PassResourceStatePlan` stores immutable per-pass transition, UAV, aliasing, initialization, and async-handoff work. The executor records that plan in the command list that owns the pass; `CommandList` resolves initial transition states through the shared `ResourceStateRegistry` when lists are closed in final submission order.
-- The low-level Copy queue exists, but RenderGraph does not yet schedule Copy-queue passes.
-- Transient resources retire against the actual Direct/Compute fence values of the frame. Aliasing is intentionally conservative: only same-queue lifetimes are reused; cross-queue aliasing remains disabled.
+- `RenderGraphPassBuilder::UseCopyQueue()` routes copy-compatible passes through the compiled plan, executor, queue scheduler, profiler, and transient retirement path. The maintained sample does not currently declare a Copy-queue pass.
+- Transient resources retire against the actual Direct/Compute/Copy fence values of the frame. Aliasing is intentionally conservative: only same-queue lifetimes are reused; cross-queue aliasing remains disabled.
 
 ### Recording model
 

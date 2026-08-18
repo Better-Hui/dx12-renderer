@@ -9,12 +9,15 @@
 #include <dxgidebug.h>
 
 #include <Framework/Core/GraphicsSettings.h>
+#include <Framework/Rendering/Upscaling/StreamlineRuntime.h>
 
 //Modify Begin:2026-07-21 by Hui
 #include <fstream>
 //Modify End
 //Modify Begin:2026-07-28 by Hui
 #include <sstream>
+#include <memory>
+#include <utility>
 #include <vector>
 #include <wrl.h>
 //Modify End
@@ -91,11 +94,14 @@ void ParseCommandLineArguments(Parameters& parameters)
 }
 
 //Modify Begin:2026-07-30 by Hui
-std::shared_ptr<Game> CreateGame(Application& application, const Parameters& parameters)
+std::shared_ptr<Game> CreateGame(
+	Application& application,
+	const Parameters& parameters,
+	FrameFeatureServices frameFeatureServices)
 {
 #ifdef DEMO_TYPE
 	return std::make_shared<DEMO_TYPE>(application, DEMO_NAME, parameters.m_ClientWidth, parameters.m_ClientHeight,
-		parameters.m_GraphicsSettings);
+		parameters.m_GraphicsSettings, std::move(frameFeatureServices));
 #else
 	throw std::exception("DEMO_TYPE was not defined.");
 #endif
@@ -231,17 +237,33 @@ int CALLBACK wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR lpCmdL
 	Application* application = nullptr;
 	try
 	{
+		std::shared_ptr<StreamlineRuntime> streamlineRuntime;
+		FrameFeatureServices frameFeatureServices;
 		ApplicationCreateDesc applicationCreateDesc;
-		applicationCreateDesc.EnableStreamlineInterposer = parameters.m_EnableStreamlineInterposer;
+		if (parameters.m_EnableStreamlineInterposer)
+		{
+			streamlineRuntime = std::make_shared<StreamlineRuntime>();
+			applicationCreateDesc.RuntimeLifecycle = streamlineRuntime;
+			frameFeatureServices.Runtime = streamlineRuntime;
+			frameFeatureServices.FrameGeneration = streamlineRuntime;
+		}
 		Application::Create(hInstance, applicationCreateDesc);
 		application = &Application::Get();
+		if (streamlineRuntime != nullptr)
+		{
+			streamlineRuntime->SetPresentationController(application);
+		}
 		{
 			applicationStage = "CreateGame";
-			const auto demo = CreateGame(*application, parameters);
+			const auto demo = CreateGame(*application, parameters, std::move(frameFeatureServices));
 			applicationStage = "Run";
 			retCode = application->Run(demo);
 		}
 		applicationStage = "Destroy";
+		if (streamlineRuntime != nullptr)
+		{
+			streamlineRuntime->SetPresentationController(nullptr);
+		}
 		Application::Destroy();
 		application = nullptr;
 	}

@@ -35,8 +35,6 @@
 
 #include <cassert>
 
-#include "TextureUsageType.h"
-
 #include <d3d12.h>
 #include <wrl.h>
 
@@ -45,14 +43,11 @@
 #include <string>
 #include <vector> // for std::vector
 
-#include "GenerateMipsPso.h"
 #include "ClearValue.h"
 #include "RenderTargetState.h"
 #include "ResourceStateRegistry.h"
 #include "UploadBuffer.h"
 
-class Buffer;
-class ByteAddressBuffer;
 class CommandListInternalAccess;
 class ConstantBuffer;
 //Modify Begin:2026-08-12 by Hui
@@ -63,7 +58,6 @@ class IndexBuffer;
 class RenderTarget;
 class Resource;
 class ResourceStateTracker;
-class StructuredBuffer;
 class RootSignature;
 class Texture;
 class UploadBuffer;
@@ -75,8 +69,7 @@ public:
 //Modify Begin:2026-08-07 by Hui
     CommandList(
         D3D12_COMMAND_LIST_TYPE type,
-        std::shared_ptr<D3D12DeviceContext> deviceContext,
-        std::function<std::shared_ptr<CommandList>()> computeCommandListFactory = {});
+        std::shared_ptr<D3D12DeviceContext> deviceContext);
 //Modify End
     virtual ~CommandList();
 
@@ -186,65 +179,9 @@ public:
         uint32_t srcSubresource = 0);
 
     /**
-     * Copy the contents to a vertex buffer in GPU memory.
-     */
-    void CopyVertexBuffer(VertexBuffer& vertexBuffer, size_t numVertices, size_t vertexStride,
-        const void* vertexBufferData);
-
-    template <typename T>
-    void CopyVertexBuffer(VertexBuffer& vertexBuffer, const std::vector<T>& vertexBufferData)
-    {
-        CopyVertexBuffer(vertexBuffer, vertexBufferData.size(), sizeof(T), vertexBufferData.data());
-    }
-
-    /**
-     * Copy the contents to a index buffer in GPU memory.
-     */
-    void CopyIndexBuffer(IndexBuffer& indexBuffer, size_t numIndices, DXGI_FORMAT indexFormat,
-        const void* indexBufferData);
-
-    template <typename T>
-    void CopyIndexBuffer(IndexBuffer& indexBuffer, const std::vector<T>& indexBufferData)
-    {
-        assert(sizeof(T) == 2 || sizeof(T) == 4);
-
-        DXGI_FORMAT indexFormat = (sizeof(T) == 2) ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_R32_UINT;
-        CopyIndexBuffer(indexBuffer, indexBufferData.size(), indexFormat, indexBufferData.data());
-    }
-
-    /**
-     * Copy the contents to a byte address buffer in GPU memory.
-     */
-    void CopyByteAddressBuffer(ByteAddressBuffer& byteAddressBuffer, size_t bufferSize, const void* bufferData);
-
-    template <typename T>
-    void CopyByteAddressBuffer(ByteAddressBuffer& byteAddressBuffer, const T& data)
-    {
-        CopyByteAddressBuffer(byteAddressBuffer, sizeof(T), &data);
-    }
-
-    /**
-     * Copy the contents to a structured buffer in GPU memory.
-     */
-    void CopyStructuredBuffer(StructuredBuffer& structuredBuffer, size_t numElements, size_t elementSize,
-        const void* bufferData);
-
-    template <typename T>
-    void CopyStructuredBuffer(StructuredBuffer& structuredBuffer, const std::vector<T>& bufferData)
-    {
-        CopyStructuredBuffer(structuredBuffer, bufferData.size(), sizeof(T), bufferData.data());
-    }
-
-    /**
      * Set the current primitive topology for the rendering pipeline.
      */
     void SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY primitiveTopology) const;
-
-    /**
-     * Load a texture by a filename.
-     */
-    bool LoadTextureFromFile(Texture& texture, const std::wstring& fileName,
-        TextureUsageType textureUsage = TextureUsageType::Albedo, bool throwOnNotFound = true);
 
     /**
      * Clear a texture.
@@ -257,24 +194,6 @@ public:
      */
     void ClearDepthStencilTexture(const Texture& texture, D3D12_CLEAR_FLAGS clearFlags, float depth = 1.0f,
         uint8_t stencil = 0);
-
-    /**
-     * Generate mips for the texture.
-     * The first subresource is used to generate the mip chain.
-     * Mips are automatically generated for textures loaded from files.
-     */
-    void GenerateMips(Texture& texture);
-
-    /**
-     * Generate a cubemap texture from a panoramic (equirectangular) texture.
-     */
-    //void PanoToCubemap(Texture& cubemap, const Texture& pano);
-
-    /**
-     * Copy subresource data to a texture.
-     */
-    void CopyTextureSubresource(Texture& texture, uint32_t firstSubresource, uint32_t numSubresources,
-        D3D12_SUBRESOURCE_DATA* subresourceData);
 
     /**
      * Set a dynamic constant buffer data to an inline descriptor in the root
@@ -662,11 +581,6 @@ public:
      * Should only be called by the DynamicDescriptorHeap class.
      */
     void SetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE heapType, ID3D12DescriptorHeap* heap);
-    std::shared_ptr<CommandList> GetGenerateMipsCommandList() const
-    {
-        return m_ComputeCommandList;
-    }
-
     void SetComputeRootUnorderedAccessView(UINT rootParameterIndex, const Resource& resource);
     void SetComputeRootShaderResourceView(UINT rootParameterIndex, D3D12_GPU_VIRTUAL_ADDRESS gpuAddress);
     void SetComputeRootConstantBufferView(UINT rootParameterIndex, D3D12_GPU_VIRTUAL_ADDRESS gpuAddress);
@@ -681,23 +595,17 @@ public:
     const RenderTargetFormats& GetLastRenderTargetFormats() const { return m_LastRenderTargetState.GetFormats(); }
     const RenderTargetState& GetLastRenderTargetState() const { return m_LastRenderTargetState; }
 
-    // Copy the contents of a CPU buffer to a GPU buffer (possibly replacing the previous buffer contents).
-    void CopyBuffer(Buffer& buffer, size_t numElements, size_t elementSize, const void* bufferData,
-        D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE);
-
     void SetShadingRateImage(const Resource& resource);
     void ResetShadingRateImage();
     void SetShadingRate(const D3D12_SHADING_RATE& shadingRate, const D3D12_SHADING_RATE_COMBINER* combiners);
-
-    UploadBuffer::Allocation AllocateInUploadBuffer(size_t bufferSize, size_t alignment);
-
-    void TrackObject(const Microsoft::WRL::ComPtr<ID3D12Object>& object);
-    void TrackResource(const Resource& res);
 
 private:
 //Modify Begin:2026-08-17 by Hui
     friend class CommandListInternalAccess;
 
+    UploadBuffer::Allocation AllocateInUploadBuffer(size_t bufferSize, size_t alignment);
+    void TrackObject(const Microsoft::WRL::ComPtr<ID3D12Object>& object);
+    void TrackResource(const Resource& res);
     void FlushResourceBarriers();
     void NotifyResourceState(
         const Resource& resource,
@@ -718,13 +626,6 @@ private:
     void CommitStagedDescriptorsForDispatch();
 //Modify End
 
-    // Generate mips for UAV compatible textures.
-    void GenerateMipsUav(Texture& texture, DXGI_FORMAT format);
-    //// Generate mips for BGR textures.
-    //void GenerateMips_BGR(Texture& texture);
-    //// Generate mips for sRGB textures.
-    //void GenerateMips_sRGB(Texture& texture);
-
     // Binds the current descriptor heaps to the command list.
     void BindDescriptorHeaps();
 
@@ -739,7 +640,6 @@ private:
 //Modify Begin:2026-07-30 by Hui
     std::shared_ptr<ResourceStateRegistry> m_ResourceStateRegistry;
 //Modify End
-    std::function<std::shared_ptr<CommandList>()> m_ComputeCommandListFactory;
 //Modify End
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList2> m_D3d12CommandList;
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList5> m_D3d12CommandList5;
@@ -747,12 +647,6 @@ private:
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList6> m_D3d12CommandList6;
 //Modify End
     Microsoft::WRL::ComPtr<ID3D12CommandAllocator> m_D3d12CommandAllocator;
-
-    // For copy queues, it may be necessary to generate mips while loading textures.
-    // Mips can't be generated on copy queues but must be generated on compute or
-    // direct queues. In this case, a Compute command list is generated and executed
-    // after the copy queue is finished uploading the first sub resource.
-    std::shared_ptr<CommandList> m_ComputeCommandList;
 
     // Keep track of the currently bound root signatures to minimize root
     // signature changes.
@@ -775,11 +669,6 @@ private:
     // Keep track of the currently bound descriptor heaps. Only change descriptor
     // heaps if they are different than the currently bound descriptor heaps.
     ID3D12DescriptorHeap* m_DescriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES];
-    // Pipeline state object for Mip map generation.
-    std::unique_ptr<GenerateMipsPso> m_GenerateMipsPso;
-    //// Pipeline state object for converting panorama (equirectangular) to cubemaps
-    //std::unique_ptr<PanoToCubemapPSO> PanoToCubemapPso;
-
     // Objects that are being tracked by a command list that is "in-flight" on
     // the command-queue and cannot be deleted. To ensure objects are not deleted
     // until the command list is finished executing, a reference to the object

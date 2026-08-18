@@ -11,9 +11,6 @@
 #include "RenderTarget.h"
 #include "ResourceStateTracker.h"
 #include "Texture.h"
-//Modify Begin:2026-08-07 by Hui
-#include "StreamlineRuntime.h"
-//Modify End
 #include "Helpers.h"
 
 //Modify Begin:2026-07-21 by Hui
@@ -441,28 +438,13 @@ ComPtr<IDXGISwapChain4> Window::CreateSwapChain()
 	ID3D12CommandQueue* pCommandQueue = m_D3d12Context.DirectCommandQueue->GetD3D12CommandQueue().Get();
 
 	ComPtr<IDXGISwapChain1> swapChain1;
-	const std::shared_ptr<StreamlineRuntime> streamlineRuntime = m_D3d12Context.StreamlineRuntime;
-	if (streamlineRuntime != nullptr)
-	{
-		ThrowIfFailed(streamlineRuntime->CreateSwapChainForHwnd(
-			dxgiFactory4.Get(),
-			pCommandQueue,
-			HWnd,
-			&swapChainDesc,
-			nullptr,
-			nullptr,
-			&swapChain1));
-	}
-	else
-	{
-		ThrowIfFailed(dxgiFactory4->CreateSwapChainForHwnd(
-			pCommandQueue,
-			HWnd,
-			&swapChainDesc,
-			nullptr,
-			nullptr,
-			&swapChain1));
-	}
+	ThrowIfFailed(dxgiFactory4->CreateSwapChainForHwnd(
+		pCommandQueue,
+		HWnd,
+		&swapChainDesc,
+		nullptr,
+		nullptr,
+		&swapChain1));
 
 	// Disable the Alt+Enter fullscreen toggle feature. Switching to fullscreen
 	// will be handled manually.

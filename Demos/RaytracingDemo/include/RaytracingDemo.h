@@ -28,6 +28,7 @@
 #include <Framework/Rendering/Lighting/ReSTIRGIPass.h>
 //Modify End
 #include <Framework/Rendering/Upscaling/DLSS.h>
+#include <Framework/Rendering/Upscaling/FrameFeaturesRuntime.h>
 #include <Framework/Scene/Scene.h>
 #include <Framework/Rendering/Pipeline/Shader.h>
 //Modify Begin:2026-07-30 by Hui
@@ -70,7 +71,13 @@ public:
     using Base = Game;
 
 //Modify Begin:2026-07-30 by Hui
-    RaytracingDemo(Application& application, const std::wstring& name, int width, int height, GraphicsSettings graphicsSettings);
+    RaytracingDemo(
+        Application& application,
+        const std::wstring& name,
+        int width,
+        int height,
+        GraphicsSettings graphicsSettings,
+        FrameFeatureServices frameFeatureServices);
 //Modify End
 
     bool LoadContent() override;
@@ -138,6 +145,7 @@ private:
 //Modify Begin:2026-07-28 by Hui
     void RebuildRenderGraph();
     void EnsureRenderGraphTopology();
+    void ResetRenderGraphTimingDisplay();
 //Modify Begin:2026-07-30 by Hui
     void UpdateRenderGraphFrameState();
 //Modify End
@@ -207,22 +215,22 @@ private:
 //Modify End
 //Modify Begin:2026-07-29 by Hui
     GpuTimestampProfiler m_GpuTimestampProfiler;
-    std::vector<GpuTimestampSample> m_GpuTimestampSamples;
+    DemoProfiling::GpuTimestampSampleAverager m_GpuTimestampAverager;
     std::vector<GpuTimestampSample> m_GpuTimestampDisplaySamples;
 //Modify Begin:2026-08-03 by Hui
     GpuTimestampProfiler m_AsyncComputeGpuTimestampProfiler;
-    std::vector<GpuTimestampSample> m_AsyncComputeGpuTimestampSamples;
+    DemoProfiling::GpuTimestampSampleAverager m_AsyncComputeGpuTimestampAverager;
     std::vector<GpuTimestampSample> m_AsyncComputeGpuTimestampDisplaySamples;
 //Modify Begin:2026-08-18 by Hui
     GpuTimestampProfiler m_CopyGpuTimestampProfiler;
-    std::vector<GpuTimestampSample> m_CopyGpuTimestampSamples;
+    DemoProfiling::GpuTimestampSampleAverager m_CopyGpuTimestampAverager;
     std::vector<GpuTimestampSample> m_CopyGpuTimestampDisplaySamples;
 //Modify End
 //Modify End
 //Modify Begin:2026-08-07 by Hui
     DemoProfiling::RenderGraphTimingHistory m_RenderGraphTimingHistory;
 //Modify End
-    double m_LastGpuTimingUiUpdateTime = 0.0;
+    double m_LastGpuTimingUiUpdateTime = -1.0;
 //Modify Begin:2026-08-03 by Hui
     bool m_GpuTimingEnabled = false;
     bool m_RenderGraphTimingCaptureEnabled = false;
@@ -231,7 +239,9 @@ private:
     bool m_ReSTIRGIStageTimingEnabled = false;
 //Modify End
 //Modify Begin:2026-08-02 by Hui
-    double m_LastRenderGraphCpuMilliseconds = 0.0;
+    double m_RenderGraphCpuDisplayMilliseconds = 0.0;
+    double m_RenderGraphCpuAccumulatedMilliseconds = 0.0;
+    uint64_t m_RenderGraphCpuTimingFrameCount = 0;
 //Modify End
 //Modify End
     RaytracingDemoSceneResources m_SceneResources;

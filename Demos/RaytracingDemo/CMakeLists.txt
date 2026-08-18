@@ -158,6 +158,7 @@ set_source_files_properties(shaders/CUDA/CudaBloom.cu PROPERTIES HEADER_FILE_ONL
 
 target_link_libraries(${TARGET_NAME}
         PUBLIC Framework
+        PRIVATE FrameworkNvidiaFeatures
         PUBLIC RenderGraph
         )
 

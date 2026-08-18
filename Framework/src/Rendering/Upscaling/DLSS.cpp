@@ -2,7 +2,7 @@
 #include <Framework/Rendering/Upscaling/DLSS.h>
 
 #include <DX12Library/CommandList.h>
-#include <DX12Library/FrameFeaturesRuntime.h>
+#include <Framework/Rendering/Upscaling/FrameFeaturesRuntime.h>
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Texture.h>
 #include <Framework/Core/FrameworkDeviceContext.h>

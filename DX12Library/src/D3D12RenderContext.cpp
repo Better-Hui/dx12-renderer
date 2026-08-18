@@ -7,17 +7,10 @@
 #include "D3D12DeviceContext.h"
 #include "ResourceStateRegistry.h"
 //Modify End
-//Modify Begin:2026-08-07 by Hui
-#include "StreamlineRuntime.h"
-
-#include <filesystem>
 #include <stdexcept>
-//Modify End
 
 //Modify Begin:2026-07-28 by Hui
-void D3D12RenderContext::InitializeOwned(
-    Microsoft::WRL::ComPtr<ID3D12Device2> device,
-    const D3D12RenderContextInitializationDesc& initializationDesc)
+void D3D12RenderContext::InitializeOwned(Microsoft::WRL::ComPtr<ID3D12Device2> device)
 {
     Assert(device != nullptr, "D3D12 device is null.");
     m_Device = device;
@@ -28,16 +21,10 @@ void D3D12RenderContext::InitializeOwned(
     CreateDeviceContext();
 //Modify End
     m_UsesExternalDevice = false;
-    InitializeStreamlineIfRequested(initializationDesc);
     CreateOwnedQueues();
-//Modify Begin:2026-08-07 by Hui
-    ConfigureCommandListDependencies();
-//Modify End
 }
 
-void D3D12RenderContext::InitializeExternal(
-    const ExternalD3D12Context& externalContext,
-    const D3D12RenderContextInitializationDesc& initializationDesc)
+void D3D12RenderContext::InitializeExternal(const ExternalD3D12Context& externalContext)
 {
     Assert(externalContext.Device != nullptr, "External D3D12 device is required.");
     ThrowIfFailed(externalContext.Device->QueryInterface(IID_PPV_ARGS(&m_Device)));
@@ -48,11 +35,7 @@ void D3D12RenderContext::InitializeExternal(
     CreateDeviceContext();
 //Modify End
     m_UsesExternalDevice = true;
-    InitializeStreamlineIfRequested(initializationDesc);
     WrapExternalQueues(externalContext);
-//Modify Begin:2026-08-07 by Hui
-    ConfigureCommandListDependencies();
-//Modify End
 }
 
 bool D3D12RenderContext::IsValid() const
@@ -95,11 +78,6 @@ std::shared_ptr<CommandQueue> D3D12RenderContext::GetCommandQueue(const D3D12_CO
     }
 }
 
-std::shared_ptr<StreamlineRuntime> D3D12RenderContext::GetStreamlineRuntime() const
-{
-    return m_StreamlineRuntime;
-}
-
 //Modify Begin:2026-07-30 by Hui
 std::shared_ptr<ResourceStateRegistry> D3D12RenderContext::GetResourceStateRegistry() const
 {
@@ -109,18 +87,21 @@ std::shared_ptr<ResourceStateRegistry> D3D12RenderContext::GetResourceStateRegis
 
 D3D12RenderContext::~D3D12RenderContext()
 {
+    Reset();
+}
+
+//Modify Begin:2026-08-18 by Hui
+void D3D12RenderContext::Reset()
+{
     m_DirectCommandQueue.reset();
     m_ComputeCommandQueue.reset();
     m_CopyCommandQueue.reset();
-//Modify Begin:2026-07-30 by Hui
     m_DeviceContext.reset();
     m_ResourceStateRegistry.reset();
-//Modify End
-    if (m_StreamlineRuntime != nullptr)
-    {
-        m_StreamlineRuntime->Shutdown();
-    }
+    m_Device.Reset();
+    m_UsesExternalDevice = false;
 }
+//Modify End
 
 //Modify Begin:2026-08-07 by Hui
 void D3D12RenderContext::CreateDeviceContext()
@@ -145,11 +126,11 @@ void D3D12RenderContext::CreateOwnedQueues()
 {
 //Modify Begin:2026-08-07 by Hui
     m_DirectCommandQueue = std::make_shared<CommandQueue>(
-        D3D12_COMMAND_LIST_TYPE_DIRECT, m_DeviceContext, m_StreamlineRuntime);
+        D3D12_COMMAND_LIST_TYPE_DIRECT, m_DeviceContext);
     m_ComputeCommandQueue = std::make_shared<CommandQueue>(
-        D3D12_COMMAND_LIST_TYPE_COMPUTE, m_DeviceContext, m_StreamlineRuntime);
+        D3D12_COMMAND_LIST_TYPE_COMPUTE, m_DeviceContext);
     m_CopyCommandQueue = std::make_shared<CommandQueue>(
-        D3D12_COMMAND_LIST_TYPE_COPY, m_DeviceContext, m_StreamlineRuntime);
+        D3D12_COMMAND_LIST_TYPE_COPY, m_DeviceContext);
 //Modify End
 }
 
@@ -160,65 +141,24 @@ void D3D12RenderContext::WrapExternalQueues(const ExternalD3D12Context& external
         ? std::make_shared<CommandQueue>(
             D3D12_COMMAND_LIST_TYPE_DIRECT,
             m_DeviceContext,
-            externalContext.DirectCommandQueue,
-            m_StreamlineRuntime)
+            externalContext.DirectCommandQueue)
         : std::make_shared<CommandQueue>(
-            D3D12_COMMAND_LIST_TYPE_DIRECT, m_DeviceContext, m_StreamlineRuntime);
+            D3D12_COMMAND_LIST_TYPE_DIRECT, m_DeviceContext);
     m_ComputeCommandQueue = externalContext.ComputeCommandQueue != nullptr
         ? std::make_shared<CommandQueue>(
             D3D12_COMMAND_LIST_TYPE_COMPUTE,
             m_DeviceContext,
-            externalContext.ComputeCommandQueue,
-            m_StreamlineRuntime)
+            externalContext.ComputeCommandQueue)
         : std::make_shared<CommandQueue>(
-            D3D12_COMMAND_LIST_TYPE_COMPUTE, m_DeviceContext, m_StreamlineRuntime);
+            D3D12_COMMAND_LIST_TYPE_COMPUTE, m_DeviceContext);
     m_CopyCommandQueue = externalContext.CopyCommandQueue != nullptr
         ? std::make_shared<CommandQueue>(
             D3D12_COMMAND_LIST_TYPE_COPY,
             m_DeviceContext,
-            externalContext.CopyCommandQueue,
-            m_StreamlineRuntime)
+            externalContext.CopyCommandQueue)
         : std::make_shared<CommandQueue>(
-            D3D12_COMMAND_LIST_TYPE_COPY, m_DeviceContext, m_StreamlineRuntime);
+            D3D12_COMMAND_LIST_TYPE_COPY, m_DeviceContext);
 //Modify End
 }
 
-//Modify Begin:2026-08-07 by Hui
-void D3D12RenderContext::InitializeStreamlineIfRequested(
-    const D3D12RenderContextInitializationDesc& initializationDesc)
-{
-    if (!initializationDesc.EnableStreamlineInterposer)
-    {
-        return;
-    }
-
-    m_StreamlineRuntime = std::make_shared<StreamlineRuntime>();
-    if (m_StreamlineRuntime->Initialize(m_Device.Get(), std::filesystem::current_path().wstring()))
-    {
-        return;
-    }
-
-    const std::string statusMessage = m_StreamlineRuntime->GetStatusMessage();
-    m_StreamlineRuntime.reset();
-    throw std::runtime_error("Streamline interposer initialization failed: " + statusMessage);
-}
-//Modify End
-
-//Modify Begin:2026-08-07 by Hui
-void D3D12RenderContext::ConfigureCommandListDependencies()
-{
-    const std::weak_ptr<CommandQueue> computeQueue = m_ComputeCommandQueue;
-    const auto requestComputeCommandList = [computeQueue]()
-    {
-        const std::shared_ptr<CommandQueue> resolvedComputeQueue = computeQueue.lock();
-        Assert(resolvedComputeQueue != nullptr, "Compute command queue is unavailable.");
-        return resolvedComputeQueue->GetCommandList();
-    };
-
-    m_DirectCommandQueue->SetComputeCommandListFactory(requestComputeCommandList);
-    m_CopyCommandQueue->SetComputeCommandListFactory(requestComputeCommandList);
-    m_DirectCommandQueue->SetComputeCommandQueue(m_ComputeCommandQueue);
-    m_CopyCommandQueue->SetComputeCommandQueue(m_ComputeCommandQueue);
-}
-//Modify End
 //Modify End

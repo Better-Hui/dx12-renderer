@@ -77,6 +77,17 @@ set(TARGET_NAME Framework)
 set(SHADERS_OUTPUT_HEADERS TRUE)
 include(${CMAKE_SOURCE_DIR}/CMakeIncludes/ProjectBase.cmake)
 
+set(FRAMEWORK_NVIDIA_FEATURE_SOURCE_FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/Rendering/Upscaling/DLSS.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/Rendering/Upscaling/StreamlineRuntime.cpp"
+        )
+set(FRAMEWORK_NVIDIA_FEATURE_HEADER_FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/Framework/Rendering/Upscaling/DLSS.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/Framework/Rendering/Upscaling/StreamlineRuntime.h"
+        )
+list(REMOVE_ITEM SOURCE_FILES ${FRAMEWORK_NVIDIA_FEATURE_SOURCE_FILES})
+list(REMOVE_ITEM HEADER_FILES ${FRAMEWORK_NVIDIA_FEATURE_HEADER_FILES})
+
 set_source_files_properties(
         ${FRAMEWORK_RESTIR_DI_SHADER_FILES}
         ${FRAMEWORK_RESTIR_GI_SHADER_FILES}
@@ -106,8 +117,6 @@ include(${CMAKE_SOURCE_DIR}/CMakeIncludes/ProjectBasePost.cmake)
 
 target_include_directories(${TARGET_NAME}
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/Framework
-        PRIVATE "${DX12_RENDERER_DLSS_INCLUDE_DIRECTORY}"
-        PRIVATE "${DX12_RENDERER_STREAMLINE_INCLUDE_DIRECTORY}"
         PUBLIC "${DX12_RENDERER_IMGUI_SOURCE_DIRECTORY}"
         PUBLIC "${DX12_RENDERER_IMGUI_SOURCE_DIRECTORY}/backends"
         )
@@ -137,8 +146,6 @@ target_include_directories(${TARGET_NAME}
 
 target_link_libraries(${TARGET_NAME}
         PUBLIC DX12Library
-        PUBLIC "${DX12_RENDERER_DLSS_LIBRARY}"
-        PUBLIC "${DX12_RENDERER_STREAMLINE_LIBRARY}"
         PUBLIC "${DX12_RENDERER_CUDA_DRIVER_LIBRARY}"
         PUBLIC NRD
         PUBLIC NRDIntegration
@@ -149,6 +156,35 @@ target_link_libraries(${TARGET_NAME} PRIVATE d3d12 dxgi dxguid imm32)
 
 find_package(meshoptimizer CONFIG REQUIRED)
 target_link_libraries(${TARGET_NAME} PUBLIC meshoptimizer::meshoptimizer)
+
+find_package(assimp CONFIG REQUIRED)
+find_package(directxtex CONFIG REQUIRED)
+find_package(OpenEXR CONFIG REQUIRED)
+find_package(directxmesh CONFIG REQUIRED)
+target_link_libraries(${TARGET_NAME}
+        PRIVATE assimp::assimp
+        PRIVATE Microsoft::DirectXTex
+        PRIVATE OpenEXR::OpenEXR
+        PRIVATE Microsoft::DirectXMesh
+        )
+
+add_library(FrameworkNvidiaFeatures STATIC
+        ${FRAMEWORK_NVIDIA_FEATURE_HEADER_FILES}
+        ${FRAMEWORK_NVIDIA_FEATURE_SOURCE_FILES})
+set_target_properties(FrameworkNvidiaFeatures PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED TRUE)
+target_compile_options(FrameworkNvidiaFeatures PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+target_include_directories(FrameworkNvidiaFeatures
+        PRIVATE "${DX12_RENDERER_DLSS_INCLUDE_DIRECTORY}"
+        PRIVATE "${DX12_RENDERER_STREAMLINE_INCLUDE_DIRECTORY}")
+target_link_libraries(FrameworkNvidiaFeatures
+        PUBLIC Framework
+        PRIVATE "${DX12_RENDERER_DLSS_LIBRARY}"
+        PRIVATE "${DX12_RENDERER_STREAMLINE_LIBRARY}")
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES
+        ${FRAMEWORK_NVIDIA_FEATURE_HEADER_FILES}
+        ${FRAMEWORK_NVIDIA_FEATURE_SOURCE_FILES})
 
 if (DX12_RENDERER_BUILD_DEVELOPER_TOOLS)
         add_executable(UnitySceneDump "tools/UnitySceneDump.cpp")

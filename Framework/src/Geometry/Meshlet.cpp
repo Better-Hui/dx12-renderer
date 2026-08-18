@@ -2,6 +2,10 @@
 
 #include <DX12Library/CommandList.h>
 #include <DX12Library/Helpers.h>
+//Modify Begin:2026-08-18 by Hui
+#include <DX12Library/CommandListInternalAccess.h>
+#include <DX12Library/ResourceUploader.h>
+//Modify End
 
 #include <meshoptimizer.h>
 
@@ -233,11 +237,17 @@ void MeshletGeometrySet::Upload(CommandList& commandList)
         return;
     }
 
+//Modify Begin:2026-08-18 by Hui
+    ResourceUploader uploader(commandList.GetDeviceContext());
+//Modify End
     if (m_GeometryDataDirty)
     {
-        commandList.CopyStructuredBuffer(m_VertexBuffer, m_Vertices);
-        commandList.CopyByteAddressBuffer(m_IndexBuffer, m_Indices.size() * sizeof(uint16_t), m_Indices.data());
-        commandList.CopyStructuredBuffer(m_MeshletBuffer, m_Meshlets);
+//Modify Begin:2026-08-18 by Hui
+        uploader.UploadStructuredBuffer(commandList, m_VertexBuffer, m_Vertices);
+        uploader.UploadByteAddressBuffer(
+            commandList, m_IndexBuffer, m_Indices.size() * sizeof(uint16_t), m_Indices.data());
+        uploader.UploadStructuredBuffer(commandList, m_MeshletBuffer, m_Meshlets);
+//Modify End
         m_GeometryDataDirty = false;
     }
 
@@ -253,8 +263,10 @@ void MeshletGeometrySet::Upload(CommandList& commandList)
         return;
     }
 
-    commandList.CopyStructuredBuffer(m_TransformBuffer, m_Transforms);
-    commandList.CopyStructuredBuffer(m_InstanceBuffer, m_Instances);
+//Modify Begin:2026-08-18 by Hui
+    uploader.UploadStructuredBuffer(commandList, m_TransformBuffer, m_Transforms);
+    uploader.UploadStructuredBuffer(commandList, m_InstanceBuffer, m_Instances);
+//Modify End
 
     const uint64_t requiredCommandBufferSize = sizeof(MeshletIndirectCommand) * m_Instances.size();
     const D3D12_RESOURCE_DESC currentCommandBufferDesc = m_IndirectCommandBuffer.GetD3D12ResourceDesc();
@@ -263,7 +275,7 @@ void MeshletGeometrySet::Upload(CommandList& commandList)
     {
         if (m_IndirectCommandBuffer.GetD3D12Resource() != nullptr)
         {
-            commandList.TrackResource(m_IndirectCommandBuffer);
+            CommandListInternalAccess::TrackResourceLifetime(commandList, m_IndirectCommandBuffer);
         }
 
         const D3D12_RESOURCE_DESC commandBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(

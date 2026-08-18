@@ -3,9 +3,11 @@
 
 #include <DX12Library/CommandList.h>
 #include <DX12Library/Helpers.h>
+#include <DX12Library/ResourceUploader.h>
 
 #include <Framework/Geometry/Mesh.h>
 #include <Framework/Geometry/Model.h>
+#include <Framework/Rendering/Texture/TextureLoader.h>
 
 #include <algorithm>
 #include <cwctype>
@@ -48,7 +50,7 @@ uint32_t SceneTextureMaterialResources::AddTexture(
         L"",
         commandList.GetDeviceContext());
 //Modify End
-    commandList.LoadTextureFromFile(*texture, path, usage);
+    TextureLoader(commandList.GetDeviceContext()).Load(commandList, *texture, path, usage);
     const uint32_t textureIndex = m_BindlessDescriptorHeap.AddShaderResourceView(*texture);
     m_Textures.push_back(texture);
 //Modify Begin:2026-08-11 by Hui
@@ -146,7 +148,8 @@ uint32_t SceneTextureMaterialResources::AddDiffuseMaterial(
 
 void SceneTextureMaterialResources::UploadMaterialBuffer(CommandList& commandList)
 {
-    commandList.CopyStructuredBuffer(m_MaterialBuffer, m_Materials);
+    ResourceUploader(commandList.GetDeviceContext()).UploadStructuredBuffer(
+        commandList, m_MaterialBuffer, m_Materials);
 }
 
 //Modify Begin:2026-08-13 by Hui
@@ -387,6 +390,7 @@ void SceneRayTracingResources::UploadGeometryBuffer(
         geometry.IndexBufferIndex = indexBufferDescriptorIndices[geometry.IndexBufferIndex];
     }
 
-    commandList.CopyStructuredBuffer(m_GeometryBuffer, geometryData);
+    ResourceUploader(commandList.GetDeviceContext()).UploadStructuredBuffer(
+        commandList, m_GeometryBuffer, geometryData);
 }
 //Modify End

@@ -14,7 +14,7 @@ The upstream renderer remains the foundation. This fork adds framework and sampl
 
 | Area | Added or extended here |
 | --- | --- |
-| D3D12 foundation | `DX12Library` extends the upstream wrappers around device contexts, queues, command lists, resource states, fences, descriptor allocation, swap chains, and application lifetime. Raw D3D12 ownership and synchronization live here rather than in feature code. |
+| D3D12 foundation | `DX12Library` extends the upstream wrappers around device contexts, queues, command lists, resource states, fences, descriptor allocation, swap chains, and application lifetime. `CommandList` records commands; focused uploader and mip-generator services own data preparation. Raw D3D12 ownership and synchronization live here rather than in feature code. |
 | Framework API | `CommandContext`, reflection-driven pipeline layouts, named descriptor-set bindings, bindless descriptor submission, DXR helpers, mesh-shader pipeline support, and reusable rendering features provide the normal path for demo-facing code. |
 | RenderGraph | Logical pass/resource declarations are compiled into immutable ordering, resource-state, aliasing, queue-dependency, and execution plans. The executor owns barriers, queue waits, submission, and optional per-queue timing instead of asking each demo pass to implement raw DX12 synchronization. |
 | RaytracingDemo | The maintained integration sample. It demonstrates this repository's layered APIs: feature authors declare graph inputs/outputs and record through Framework, while raw `ID3D12Device`, command-list, root-signature, descriptor-heap, barrier, and fence work stays below the demo boundary unless an abstraction is genuinely missing. |
@@ -24,7 +24,7 @@ The upstream renderer remains the foundation. This fork adds framework and sampl
 | ReSTIR GI | Inline ray-query one-bounce indirect-lighting sample with initial BSDF sampling, temporal reuse, spatial reuse, Jacobian correction, and final visibility/shading. |
 | Meshlets | Meshlet generation/GPU resources, task-shader and compute-indirect GBuffer backends, and incremental instance-buffer updates. |
 | Denoising and interop | NRD/SVGF sample paths, RenderGraph-aware NRD resource-state handoff, and CUDA Bloom using D3D12 shared resources with external fence/semaphore synchronization. |
-| Experimental frame features | Native NGX DLSS SR/DLAA plus Streamline Ray Reconstruction and Frame Generation integration. These paths are experimental and not validated for delivery. |
+| Experimental frame features | Native NGX DLSS SR/DLAA plus Framework-owned Streamline Ray Reconstruction and Frame Generation integration. DX12Library exposes only a generic pre-device/post-device runtime lifecycle; queue and swap-chain creation remain ordinary D3D12/DXGI code while the linked Streamline interposer performs interception. These paths are experimental and not validated for delivery. |
 | Investigation | PIX scopes, RenderGraph timing history/CSV export, and runtime UI controls. |
 
 ## Repository layout
@@ -177,10 +177,10 @@ The startup compiler currently covers the shaders directly owned by `RaytracingD
 - Only Windows/x64/D3D12 is supported.
 - `RaytracingDemo` is a maintained integration sample, not a production renderer or public API compatibility promise.
 - CUDA 12.8 is required at configure time even when CUDA Bloom is disabled at runtime; fully optional CUDA remains build-system work.
-- Async compute is **explicitly assigned per pass**. The graph does not automatically choose queues, split passes, optimize overlap, or schedule a Copy queue.
+- Direct, Async Compute, and Copy queue placement is **explicitly assigned per pass**. The graph does not automatically choose queues, split passes, or optimize overlap; Copy queue support currently has infrastructure coverage but no maintained sample pass.
 - Consecutive async passes are currently submitted per pass rather than batch-scheduled as a larger compute segment.
-- `RenderGraphRoot::Execute` is now a thin graph entry point; `RenderGraphCommandExecutor` owns pass recording/submission and `RenderGraphProfiler` owns optional direct/async timestamp lifetimes. Graph build/topology orchestration remains in `RenderGraphRoot`.
-- Transient resources are retired using the actual Direct/Async Compute fence values recorded for the frame. Aliasing is deliberately conservative: resources used by different queues are not aliased until a more general multi-queue allocator is designed.
+- `RenderGraphRoot::Execute` is now a thin graph entry point; `RenderGraphCommandExecutor` owns pass recording/submission and `RenderGraphProfiler` owns optional Direct/Async Compute/Copy timestamp lifetimes. Graph build/topology orchestration remains in `RenderGraphRoot`.
+- Transient resources are retired using the actual Direct/Async Compute/Copy fence values recorded for the frame. Aliasing is deliberately conservative: resources used by different queues are not aliased until a more general multi-queue allocator is designed.
 - Device and queue state is injected through the application composition root for the current Framework and RenderGraph execution paths. Standalone application/window lifecycle code and a small set of legacy resource-wrapper compatibility paths still retain `Application` dependencies.
 - `RaytracingDemoSceneResources` exposes four internal builders for texture/material, geometry, meshlet, and RTAS resources. The facade remains sample-facing.
 - Per-queue RenderGraph timestamps are useful for pass duration; PIX Timing Capture is required to inspect cross-queue wall-clock overlap, waits, and GPU bubbles.

@@ -45,6 +45,7 @@ class ResourceStateRegistration;
 //Modify End
 //Modify Begin:2026-08-12 by Hui
 class CommandList;
+class ResourceUploader;
 class Window;
 //Modify End
 
@@ -189,6 +190,7 @@ protected:
 protected:
 //Modify Begin:2026-08-12 by Hui
     friend class CommandList;
+    friend class ResourceUploader;
     friend class Window;
 
     void AttachDeviceContext(std::shared_ptr<D3D12DeviceContext> deviceContext);

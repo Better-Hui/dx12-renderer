@@ -1,6 +1,9 @@
 #include <Framework/Rendering/PostProcess/SSAOUtils.h>
 
 #include <DX12Library/D3D12DeviceContext.h>
+//Modify Begin:2026-08-18 by Hui
+#include <DX12Library/ResourceUploader.h>
+//Modify End
 
 using namespace DirectX;
 
@@ -67,7 +70,10 @@ std::shared_ptr<Texture> SSAOUtils::GenerateNoiseTexture(CommandList& commandLis
     D3D12_SUBRESOURCE_DATA subresourceData{};
     subresourceData.pData = noiseSamples.data();
     subresourceData.RowPitch = sizeof(XMFLOAT2) * noiseTextureWidth;
-    commandList.CopyTextureSubresource(*noiseTexture, 0, 1, &subresourceData);
+//Modify Begin:2026-08-18 by Hui
+    ResourceUploader(commandList.GetDeviceContext()).UploadTextureSubresources(
+        commandList, *noiseTexture, 0u, 1u, &subresourceData);
+//Modify End
 
     return noiseTexture;
 }

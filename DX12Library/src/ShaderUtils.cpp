@@ -235,7 +235,11 @@ std::vector<ShaderUtils::ConstantBufferMetadata> ShaderUtils::GetConstantBuffers
             }
 
 
-            constantBufferMetadata.Size = max(constantBufferMetadata.Size, variableMetadata.Offset + variableMetadata.Size);
+//Modify Begin:2026-08-18 by Hui
+            constantBufferMetadata.Size = std::max(
+                constantBufferMetadata.Size,
+                variableMetadata.Offset + variableMetadata.Size);
+//Modify End
             constantBufferMetadata.Variables.push_back(variableMetadata);
         }
 
@@ -305,7 +309,11 @@ std::vector<ShaderUtils::ConstantBufferMetadata> ShaderUtils::GetConstantBuffers
                 variableMetadata.Name = variableDesc.Name;
                 variableMetadata.Offset = variableDesc.StartOffset;
                 variableMetadata.Size = variableDesc.Size;
-                constantBufferMetadata.Size = max(constantBufferMetadata.Size, variableMetadata.Offset + variableMetadata.Size);
+//Modify Begin:2026-08-18 by Hui
+                constantBufferMetadata.Size = std::max(
+                    constantBufferMetadata.Size,
+                    variableMetadata.Offset + variableMetadata.Size);
+//Modify End
                 constantBufferMetadata.Variables.push_back(variableMetadata);
             }
 

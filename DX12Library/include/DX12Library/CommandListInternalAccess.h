@@ -9,6 +9,26 @@
 class CommandListInternalAccess
 {
 public:
+    static UploadBuffer::Allocation AllocateTransientUpload(
+        CommandList& commandList,
+        const size_t sizeInBytes,
+        const size_t alignment)
+    {
+        return commandList.AllocateInUploadBuffer(sizeInBytes, alignment);
+    }
+
+    static void TrackObjectLifetime(
+        CommandList& commandList,
+        const Microsoft::WRL::ComPtr<ID3D12Object>& object)
+    {
+        commandList.TrackObject(object);
+    }
+
+    static void TrackResourceLifetime(CommandList& commandList, const Resource& resource)
+    {
+        commandList.TrackResource(resource);
+    }
+
     static void FlushResourceBarriers(CommandList& commandList)
     {
         commandList.FlushResourceBarriers();

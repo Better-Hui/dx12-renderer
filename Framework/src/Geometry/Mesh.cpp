@@ -1,6 +1,9 @@
 #include <DX12Library/DX12LibPCH.h>
 #include <Framework/Geometry/Mesh.h>
 #include <Framework/Geometry/Bone.h>
+//Modify Begin:2026-08-18 by Hui
+#include <DX12Library/ResourceUploader.h>
+//Modify End
 
 #include <DirectXMesh.h>
 
@@ -153,7 +156,10 @@ void Mesh::SetSkinningVertexAttributes(CommandList& commandList, const SkinningV
     if (vertexAttributes.size() != m_VertexBuffer.GetNumVertices())
         throw std::exception("Sizes of vertex buffers should be equal.");
 
-    commandList.CopyVertexBuffer(m_SkinningVertexBuffer, vertexAttributes);
+//Modify Begin:2026-08-18 by Hui
+    ResourceUploader(commandList.GetDeviceContext()).UploadVertexBuffer(
+        commandList, m_SkinningVertexBuffer, vertexAttributes);
+//Modify End
 }
 
 const Armature& Mesh::GetArmature() const
@@ -684,8 +690,11 @@ void Mesh::Initialize(CommandList& commandList, VertexCollectionType& vertices, 
         ReverseWinding(indices, vertices);
 
     CalculateAabb(vertices);
-    commandList.CopyVertexBuffer(m_VertexBuffer, vertices);
-    commandList.CopyIndexBuffer(m_IndexBuffer, indices);
+//Modify Begin:2026-08-18 by Hui
+    ResourceUploader uploader(commandList.GetDeviceContext());
+    uploader.UploadVertexBuffer(commandList, m_VertexBuffer, vertices);
+    uploader.UploadIndexBuffer(commandList, m_IndexBuffer, indices);
+//Modify End
 
     m_IndexCount = static_cast<UINT>(indices.size());
 }
@@ -693,8 +702,11 @@ void Mesh::Initialize(CommandList& commandList, VertexCollectionType& vertices, 
 void Mesh::Initialize(CommandList& commandList, const MeshPrototype& prototype)
 {
     CalculateAabb(prototype.m_Vertices);
-    commandList.CopyVertexBuffer(m_VertexBuffer, prototype.m_Vertices);
-    commandList.CopyIndexBuffer(m_IndexBuffer, prototype.m_Indices);
+//Modify Begin:2026-08-18 by Hui
+    ResourceUploader uploader(commandList.GetDeviceContext());
+    uploader.UploadVertexBuffer(commandList, m_VertexBuffer, prototype.m_Vertices);
+    uploader.UploadIndexBuffer(commandList, m_IndexBuffer, prototype.m_Indices);
+//Modify End
 
     m_Armature = prototype.m_Armature;
 

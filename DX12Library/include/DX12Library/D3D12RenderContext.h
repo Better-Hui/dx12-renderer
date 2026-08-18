@@ -11,7 +11,6 @@
 class CommandQueue;
 class D3D12DeviceContext;
 class ResourceStateRegistry;
-class StreamlineRuntime;
 
 //Modify Begin:2026-07-28 by Hui
 struct ExternalD3D12Context
@@ -22,25 +21,15 @@ struct ExternalD3D12Context
     ID3D12CommandQueue* CopyCommandQueue = nullptr;
 };
 
-//Modify Begin:2026-08-07 by Hui
-struct D3D12RenderContextInitializationDesc
-{
-    bool EnableStreamlineInterposer = false;
-};
-//Modify End
-
 class D3D12RenderContext
 {
 public:
     D3D12RenderContext() = default;
     ~D3D12RenderContext();
 
-    void InitializeOwned(
-        Microsoft::WRL::ComPtr<ID3D12Device2> device,
-        const D3D12RenderContextInitializationDesc& initializationDesc);
-    void InitializeExternal(
-        const ExternalD3D12Context& externalContext,
-        const D3D12RenderContextInitializationDesc& initializationDesc);
+    void InitializeOwned(Microsoft::WRL::ComPtr<ID3D12Device2> device);
+    void InitializeExternal(const ExternalD3D12Context& externalContext);
+    void Reset();
 
     bool IsValid() const;
     bool UsesExternalDevice() const;
@@ -50,7 +39,6 @@ public:
     std::shared_ptr<D3D12DeviceContext> GetD3D12DeviceContext() const;
 //Modify End
     std::shared_ptr<CommandQueue> GetCommandQueue(D3D12_COMMAND_LIST_TYPE type) const;
-    std::shared_ptr<StreamlineRuntime> GetStreamlineRuntime() const;
 //Modify Begin:2026-07-30 by Hui
     std::shared_ptr<ResourceStateRegistry> GetResourceStateRegistry() const;
 //Modify End
@@ -64,13 +52,6 @@ private:
 //Modify Begin:2026-08-07 by Hui
     void CreateDeviceContext();
 //Modify End
-//Modify Begin:2026-08-07 by Hui
-    void InitializeStreamlineIfRequested(const D3D12RenderContextInitializationDesc& initializationDesc);
-//Modify End
-//Modify Begin:2026-08-07 by Hui
-    void ConfigureCommandListDependencies();
-//Modify End
-
     Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;
 //Modify Begin:2026-07-30 by Hui
     std::shared_ptr<ResourceStateRegistry> m_ResourceStateRegistry;
@@ -78,7 +59,6 @@ private:
 //Modify Begin:2026-08-07 by Hui
     std::shared_ptr<D3D12DeviceContext> m_DeviceContext;
 //Modify End
-    std::shared_ptr<StreamlineRuntime> m_StreamlineRuntime;
     std::shared_ptr<CommandQueue> m_DirectCommandQueue;
     std::shared_ptr<CommandQueue> m_ComputeCommandQueue;
     std::shared_ptr<CommandQueue> m_CopyCommandQueue;

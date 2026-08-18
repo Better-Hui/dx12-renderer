@@ -32,6 +32,12 @@ public:
         BoxFilterOriginalPaper = 2,
     };
 
+    enum class ThreadBlockSize : uint32_t
+    {
+        Size8x8 = 8,
+        Size16x16 = 16,
+    };
+
     struct Settings
     {
         bool Enabled = false;
@@ -43,6 +49,7 @@ public:
         int PyramidLevels = 16;
         float BoxFilterSigma = 1.0f;
         bool UseSharedMemoryDownsampling = false;
+        ThreadBlockSize BlockSize = ThreadBlockSize::Size16x16;
     };
 
     struct TimingStats
@@ -96,6 +103,7 @@ public:
     void SetPyramidLevels(int pyramidLevels) { m_PyramidLevels = pyramidLevels; }
     void SetBoxFilterSigma(float sigma) { m_BoxFilterSigma = sigma; }
     void SetUseSharedMemoryDownsampling(bool enabled) { m_UseSharedMemoryDownsampling = enabled; }
+    void SetThreadBlockSize(ThreadBlockSize blockSize) { m_ThreadBlockSize = blockSize; }
 //Modify End
 
 private:
@@ -151,6 +159,7 @@ private:
     CudaMethod m_CudaMethod = CudaMethod::ClassicPyramid;
     float m_BoxFilterSigma = 1.0f;
     bool m_UseSharedMemoryDownsampling = false;
+    ThreadBlockSize m_ThreadBlockSize = ThreadBlockSize::Size16x16;
     std::unique_ptr<Bloom> m_FrameworkBloom;
     uint32_t m_FrameworkBloomWidth = 0;
     uint32_t m_FrameworkBloomHeight = 0;

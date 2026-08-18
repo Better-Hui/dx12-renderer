@@ -57,9 +57,4 @@ public:
      */
     virtual void CreateViews(size_t numElements, size_t elementSize) = 0;
 
-    const Microsoft::WRL::ComPtr<ID3D12Resource>& GetUploadResource(size_t size) const;
-
-private:
-    mutable Microsoft::WRL::ComPtr<ID3D12Resource> m_UploadResource;
-    mutable CD3DX12_RESOURCE_DESC m_UploadResourceDesc;
 };

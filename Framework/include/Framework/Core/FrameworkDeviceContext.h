@@ -5,6 +5,7 @@
 //Modify Begin:2026-08-07 by Hui
 #include <DX12Library/D3D12DeviceContext.h>
 //Modify End
+#include <Framework/Rendering/Upscaling/FrameFeaturesRuntime.h>
 
 #include <d3d12.h>
 #include <wrl.h>
@@ -14,9 +15,6 @@
 
 class CommandQueue;
 class D3D12DeviceContext;
-class FrameFeaturesRuntime;
-class FrameGenerationController;
-
 struct FrameworkDeviceContextDesc
 {
 //Modify Begin:2026-08-07 by Hui
@@ -26,7 +24,7 @@ struct FrameworkDeviceContextDesc
     std::shared_ptr<CommandQueue> ComputeQueue;
     std::shared_ptr<CommandQueue> CopyQueue;
     std::shared_ptr<FrameFeaturesRuntime> FrameFeatures;
-    FrameGenerationController* FrameGeneration = nullptr;
+    std::shared_ptr<FrameGenerationController> FrameGeneration;
 };
 
 class FrameworkDeviceContext final
@@ -40,7 +38,7 @@ public:
 //Modify End
     std::shared_ptr<CommandQueue> GetCommandQueue(D3D12_COMMAND_LIST_TYPE type) const;
     std::shared_ptr<FrameFeaturesRuntime> GetFrameFeaturesRuntime() const { return m_Desc.FrameFeatures; }
-    FrameGenerationController* GetFrameGenerationController() const { return m_Desc.FrameGeneration; }
+    FrameGenerationController* GetFrameGenerationController() const { return m_Desc.FrameGeneration.get(); }
     DescriptorAllocation AllocateDescriptors(
         D3D12_DESCRIPTOR_HEAP_TYPE type,
         uint32_t descriptorCount = 1) const

@@ -5,9 +5,9 @@
 
 #include "CommandQueue.h"
 #include "DiagnosticReporter.h"
+#include "D3D12RuntimeLifecycle.h"
 #include "Game.h"
 //Modify Begin:2026-08-07 by Hui
-#include "StreamlineRuntime.h"
 #include "D3D12DeviceContext.h"
 //Modify End
 #include "Window.h"
@@ -113,6 +113,16 @@ void Application::Initialize(
 //Modify Begin:2026-07-30 by Hui
     m_DiagnosticReporter = std::make_unique<DiagnosticReporter>(createDesc.DiagnosticsDirectory);
 //Modify End
+//Modify Begin:2026-08-18 by Hui
+    m_RuntimeLifecycle = createDesc.RuntimeLifecycle;
+    if (m_RuntimeLifecycle != nullptr &&
+        !m_RuntimeLifecycle->InitializeBeforeD3D12(std::filesystem::current_path().wstring()))
+    {
+        throw std::runtime_error(
+            std::string(m_RuntimeLifecycle->GetName()) + " initialization failed: " +
+            std::string(m_RuntimeLifecycle->GetInitializationStatus()));
+    }
+//Modify End
 //Modify Begin:2026-07-21 by Hui
     const bool useExternalDevice = externalContext != nullptr && externalContext->Device != nullptr;
 //Modify End
@@ -159,11 +169,19 @@ void Application::Initialize(
 #endif
 
 //Modify Begin:2026-07-21 by Hui
-    D3D12RenderContextInitializationDesc renderContextDesc;
-    renderContextDesc.EnableStreamlineInterposer = createDesc.EnableStreamlineInterposer;
     if (useExternalDevice)
     {
-        m_RenderContext.InitializeExternal(*externalContext, renderContextDesc);
+//Modify Begin:2026-08-18 by Hui
+        ComPtr<ID3D12Device2> device;
+        ThrowIfFailed(externalContext->Device->QueryInterface(IID_PPV_ARGS(&device)));
+        if (m_RuntimeLifecycle != nullptr && !m_RuntimeLifecycle->AttachDevice(device.Get()))
+        {
+            throw std::runtime_error(
+                std::string(m_RuntimeLifecycle->GetName()) + " device attachment failed: " +
+                std::string(m_RuntimeLifecycle->GetInitializationStatus()));
+        }
+        m_RenderContext.InitializeExternal(*externalContext);
+//Modify End
     }
     else
     {
@@ -176,7 +194,16 @@ void Application::Initialize(
 
         if (dxgiAdapter)
         {
-            m_RenderContext.InitializeOwned(CreateDevice(dxgiAdapter), renderContextDesc);
+//Modify Begin:2026-08-18 by Hui
+            Microsoft::WRL::ComPtr<ID3D12Device2> device = CreateDevice(dxgiAdapter);
+            if (m_RuntimeLifecycle != nullptr && !m_RuntimeLifecycle->AttachDevice(device.Get()))
+            {
+                throw std::runtime_error(
+                    std::string(m_RuntimeLifecycle->GetName()) + " device attachment failed: " +
+                    std::string(m_RuntimeLifecycle->GetInitializationStatus()));
+            }
+            m_RenderContext.InitializeOwned(std::move(device));
+//Modify End
         }
         else
         {
@@ -226,8 +253,13 @@ void Application::Create(HINSTANCE hInst, const ApplicationCreateDesc& createDes
 {
     if (!gs_pSingelton)
     {
-        gs_pSingelton = new Application(hInst);
-        gs_pSingelton->Initialize(nullptr, createDesc);
+//Modify Begin:2026-08-18 by Hui
+        auto destroyApplication = [](Application* application) { delete application; };
+        std::unique_ptr<Application, decltype(destroyApplication)> application(
+            new Application(hInst), destroyApplication);
+        application->Initialize(nullptr, createDesc);
+        gs_pSingelton = application.release();
+//Modify End
     }
 }
 //Modify End
@@ -249,8 +281,13 @@ void Application::Create(
     Assert(externalContext.Device != nullptr, "External D3D12 device is required.");
     if (!gs_pSingelton)
     {
-        gs_pSingelton = new Application(hInst, &externalContext);
-        gs_pSingelton->Initialize(&externalContext, createDesc);
+//Modify Begin:2026-08-18 by Hui
+        auto destroyApplication = [](Application* application) { delete application; };
+        std::unique_ptr<Application, decltype(destroyApplication)> application(
+            new Application(hInst, &externalContext), destroyApplication);
+        application->Initialize(&externalContext, createDesc);
+        gs_pSingelton = application.release();
+//Modify End
     }
 }
 //Modify End
@@ -275,7 +312,17 @@ void Application::Destroy()
 
 Application::~Application()
 {
-    Flush();
+//Modify Begin:2026-08-18 by Hui
+    if (m_RenderContext.IsValid())
+    {
+        Flush();
+    }
+    m_RenderContext.Reset();
+    if (m_RuntimeLifecycle != nullptr)
+    {
+        m_RuntimeLifecycle->Shutdown();
+    }
+//Modify End
 }
 
 Microsoft::WRL::ComPtr<IDXGIAdapter4> Application::GetAdapter(bool bUseWarp)
@@ -461,7 +508,6 @@ std::shared_ptr<Window> Application::CreateRenderWindow(const std::wstring& wind
     windowD3D12Context.DirectCommandQueue = m_RenderContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
     windowD3D12Context.ComputeCommandQueue = m_RenderContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE);
     windowD3D12Context.CopyCommandQueue = m_RenderContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COPY);
-    windowD3D12Context.StreamlineRuntime = m_RenderContext.GetStreamlineRuntime();
     windowD3D12Context.IsTearingSupported = m_TearingSupported;
     WindowPtr pWindow = std::make_shared<MakeWindow>(
         hWnd,
@@ -544,8 +590,25 @@ int Application::Run(std::shared_ptr<Game> pGame)
     // Flush any commands in the commands queues before quiting.
     Flush();
 
-    pGame->UnloadContent();
-    pGame->Destroy();
+//Modify Begin:2026-08-18 by Hui
+    try
+    {
+        pGame->UnloadContent();
+    }
+    catch (const std::exception& exception)
+    {
+        throw std::runtime_error(std::string("Game::UnloadContent failed: ") + exception.what());
+    }
+
+    try
+    {
+        pGame->Destroy();
+    }
+    catch (const std::exception& exception)
+    {
+        throw std::runtime_error(std::string("Game::Destroy failed: ") + exception.what());
+    }
+//Modify End
 
     m_MessageThreadId.store(0, std::memory_order_release);
     m_QuitRequested.store(false, std::memory_order_release);
@@ -589,11 +652,6 @@ std::shared_ptr<D3D12DeviceContext> Application::GetD3D12DeviceContext() const
 }
 //Modify End
 
-std::shared_ptr<StreamlineRuntime> Application::GetStreamlineRuntime() const
-{
-    return m_RenderContext.GetStreamlineRuntime();
-}
-
 //Modify Begin:2026-07-30 by Hui
 std::shared_ptr<ResourceStateRegistry> Application::GetResourceStateRegistry() const
 {
@@ -601,46 +659,35 @@ std::shared_ptr<ResourceStateRegistry> Application::GetResourceStateRegistry() c
 }
 //Modify End
 
-//Modify Begin:2026-08-07 by Hui
-std::shared_ptr<FrameFeaturesRuntime> Application::GetFrameFeaturesRuntime() const
+bool Application::ReconfigurePresentation(const std::function<bool()>& configureRuntime)
 {
-    return m_RenderContext.GetStreamlineRuntime();
-}
-//Modify End
-
-bool Application::SetFrameGenerationEnabled(const bool enabled)
-{
-    const std::shared_ptr<StreamlineRuntime> streamlineRuntime = GetStreamlineRuntime();
-    if (streamlineRuntime == nullptr)
-    {
-        return false;
-    }
-    if (streamlineRuntime->IsFrameGenerationEnabled() == enabled)
-    {
-        return true;
-    }
-
+    Assert(static_cast<bool>(configureRuntime), "Presentation reconfiguration callback is empty.");
     Flush();
-    for (const auto& [windowHandle, window] : gs_Windows)
-    {
-        (void)windowHandle;
-        window->ReleaseSwapChainResources();
-    }
-    if (!streamlineRuntime->SetFrameGenerationEnabled(enabled))
+    const auto recreateSwapChains = []
     {
         for (const auto& [windowHandle, window] : gs_Windows)
         {
             (void)windowHandle;
             window->RecreateSwapChain();
         }
-        return false;
-    }
+    };
     for (const auto& [windowHandle, window] : gs_Windows)
     {
         (void)windowHandle;
-        window->RecreateSwapChain();
+        window->ReleaseSwapChainResources();
     }
-    return true;
+
+    try
+    {
+        const bool configured = configureRuntime();
+        recreateSwapChains();
+        return configured;
+    }
+    catch (...)
+    {
+        recreateSwapChains();
+        throw;
+    }
 }
 
 //Modify Begin:2026-07-21 by Hui

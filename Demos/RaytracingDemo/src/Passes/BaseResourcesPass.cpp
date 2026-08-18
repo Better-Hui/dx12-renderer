@@ -3,6 +3,9 @@
 #include <RenderGraph/RaytracingDemoGraphResources.h>
 
 #include <DX12Library/CommandList.h>
+//Modify Begin:2026-08-18 by Hui
+#include <DX12Library/ResourceUploader.h>
+//Modify End
 #include <Framework/Geometry/Mesh.h>
 //Modify Begin:2026-07-30 by Hui
 #include <Framework/Geometry/Model.h>
@@ -152,7 +155,10 @@ void RaytracingDemoPasses::Builder::AddBaseResourcesPass(
                 }
 //Modify End
 
-                cmd.CopyByteAddressBuffer(meshletIndirectCommands.GetCounterBuffer(), clearCounter);
+//Modify Begin:2026-08-18 by Hui
+                ResourceUploader(cmd.GetDeviceContext()).UploadByteAddressBuffer(
+                    cmd, meshletIndirectCommands.GetCounterBuffer(), clearCounter);
+//Modify End
                 commandContext.TransitionUnorderedAccess(meshletIndirectCommands.GetCounterBuffer());
 
                 ComputeShader& cullShader = *resources.MeshletCullShader;

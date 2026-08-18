@@ -40,6 +40,15 @@ namespace
                 changed = true;
             }
             ImGui::TextDisabled("Fixed pyramid: 5-tap prefilter, 4-tap downsample, 4-tap upsample and composite.");
+            const char* threadBlockNames[] = { "8 x 8", "16 x 16" };
+            int threadBlockIndex = settings.BlockSize == CudaBloomPass::ThreadBlockSize::Size8x8 ? 0 : 1;
+            if (ImGui::Combo("CUDA Thread Block", &threadBlockIndex, threadBlockNames, IM_ARRAYSIZE(threadBlockNames)))
+            {
+                settings.BlockSize = threadBlockIndex == 0
+                    ? CudaBloomPass::ThreadBlockSize::Size8x8
+                    : CudaBloomPass::ThreadBlockSize::Size16x16;
+                changed = true;
+            }
             changed |= ImGui::Checkbox("Shared-Memory Downsampling", &settings.UseSharedMemoryDownsampling);
             ImGui::TextDisabled("Experimental: cascades four downsample levels per dispatch.");
         }
@@ -116,16 +125,7 @@ void RaytracingDemo::OnImGui()
     {
         if (ImGui::Checkbox("Enable RG Timing", &m_GpuTimingEnabled))
         {
-            m_GpuTimestampSamples.clear();
-            m_GpuTimestampDisplaySamples.clear();
-//Modify Begin:2026-08-03 by Hui
-            m_AsyncComputeGpuTimestampSamples.clear();
-            m_AsyncComputeGpuTimestampDisplaySamples.clear();
-//Modify Begin:2026-08-18 by Hui
-            m_CopyGpuTimestampSamples.clear();
-            m_CopyGpuTimestampDisplaySamples.clear();
-//Modify End
-//Modify End
+            ResetRenderGraphTimingDisplay();
 //Modify Begin:2026-08-03 by Hui
             if (!m_GpuTimingEnabled)
             {
@@ -168,17 +168,23 @@ void RaytracingDemo::OnImGui()
 //Modify End
 //Modify Begin:2026-08-02 by Hui
             ImGui::Text(
-                "RG Direct Queue: gpu %.3f ms, cpu %.3f ms",
-                m_GpuTimestampProfiler.GetLastFrameGpuMilliseconds(),
-                m_LastRenderGraphCpuMilliseconds);
+                "RG Direct Queue (1 s avg): gpu %.3f ms, cpu %.3f ms",
+                m_GpuTimestampDisplaySamples.empty()
+                    ? 0.0
+                    : m_GpuTimestampDisplaySamples.back().MillisecondsFromFrameStart,
+                m_RenderGraphCpuDisplayMilliseconds);
 //Modify End
             ImGui::Text(
-                "RG Async Compute Queue: gpu %.3f ms",
-                m_AsyncComputeGpuTimestampProfiler.GetLastFrameGpuMilliseconds());
+                "RG Async Compute Queue (1 s avg): gpu %.3f ms",
+                m_AsyncComputeGpuTimestampDisplaySamples.empty()
+                    ? 0.0
+                    : m_AsyncComputeGpuTimestampDisplaySamples.back().MillisecondsFromFrameStart);
 //Modify Begin:2026-08-18 by Hui
             ImGui::Text(
-                "RG Copy Queue: gpu %.3f ms",
-                m_CopyGpuTimestampProfiler.GetLastFrameGpuMilliseconds());
+                "RG Copy Queue (1 s avg): gpu %.3f ms",
+                m_CopyGpuTimestampDisplaySamples.empty()
+                    ? 0.0
+                    : m_CopyGpuTimestampDisplaySamples.back().MillisecondsFromFrameStart);
 //Modify End
             if (!m_GpuTimestampDisplaySamples.empty() && ImGui::CollapsingHeader("GPU RG Timing: Direct"))
             {

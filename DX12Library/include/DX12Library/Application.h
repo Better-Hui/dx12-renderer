@@ -36,7 +36,7 @@
 #include "D3D12RenderContext.h"
 //Modify End
 //Modify Begin:2026-08-07 by Hui
-#include "FrameFeaturesRuntime.h"
+#include "PresentationController.h"
 //Modify End
 
 #include <d3d12.h>
@@ -51,22 +51,22 @@
 
 class CommandQueue;
 class D3D12DeviceContext;
+class D3D12RuntimeLifecycle;
 class DiagnosticReporter;
 class DescriptorAllocator;
 class Game;
 class ResourceStateRegistry;
 class Window;
-class StreamlineRuntime;
 
 //Modify Begin:2026-08-07 by Hui
 struct ApplicationCreateDesc
 {
-    bool EnableStreamlineInterposer = false;
+    std::shared_ptr<D3D12RuntimeLifecycle> RuntimeLifecycle;
     std::filesystem::path DiagnosticsDirectory;
 };
 //Modify End
 
-class Application : public FrameGenerationController
+class Application : public PresentationController
 {
 public:
     /**
@@ -164,14 +164,10 @@ public:
      * - D3D12_COMMAND_LIST_TYPE_COPY   : Can be used for copy commands.
      */
     std::shared_ptr<CommandQueue> GetCommandQueue(D3D12_COMMAND_LIST_TYPE type = D3D12_COMMAND_LIST_TYPE_DIRECT) const;
-    std::shared_ptr<StreamlineRuntime> GetStreamlineRuntime() const;
 //Modify Begin:2026-07-30 by Hui
     std::shared_ptr<ResourceStateRegistry> GetResourceStateRegistry() const;
 //Modify End
-//Modify Begin:2026-08-07 by Hui
-    std::shared_ptr<FrameFeaturesRuntime> GetFrameFeaturesRuntime() const;
-//Modify End
-    bool SetFrameGenerationEnabled(bool enabled) override;
+    bool ReconfigurePresentation(const std::function<bool()>& configureRuntime) override;
 
     /**
      * Flush all command queues.
@@ -232,6 +228,9 @@ private:
 
 //Modify Begin:2026-07-30 by Hui
     std::unique_ptr<DiagnosticReporter> m_DiagnosticReporter;
+//Modify Begin:2026-08-18 by Hui
+    std::shared_ptr<D3D12RuntimeLifecycle> m_RuntimeLifecycle;
+//Modify End
     D3D12RenderContext m_RenderContext;
     std::atomic<DWORD> m_MessageThreadId = 0;
     std::atomic_bool m_QuitRequested = false;

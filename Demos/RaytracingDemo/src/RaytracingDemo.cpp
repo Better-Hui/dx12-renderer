@@ -12,6 +12,9 @@
 #include <Framework/Geometry/ModelLoader.h>
 #include <Framework/Rendering/Pipeline/RasterPipelineStateBuilder.h>
 #include <Framework/Rendering/Pipeline/ShaderBlob.h>
+//Modify Begin:2026-08-18 by Hui
+#include <Framework/Rendering/Texture/TextureLoader.h>
+//Modify End
 //Modify Begin:2026-07-30 by Hui
 #include <Framework/Rendering/Pipeline/ShaderTargetProfile.h>
 //Modify End
@@ -65,7 +68,9 @@ using RuntimeAutomationMatrixCase = RaytracingDemoAutomation::MatrixCase;
 namespace
 {
     //Modify Begin:2026-07-30 by Hui
-    FrameworkDeviceContext CreateFrameworkDeviceContext(Application& application)
+    FrameworkDeviceContext CreateFrameworkDeviceContext(
+        Application& application,
+        FrameFeatureServices frameFeatureServices)
     {
         FrameworkDeviceContextDesc desc;
 //Modify Begin:2026-08-07 by Hui
@@ -74,8 +79,8 @@ namespace
         desc.DirectQueue = application.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
         desc.ComputeQueue = application.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE);
         desc.CopyQueue = application.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COPY);
-        desc.FrameFeatures = application.GetFrameFeaturesRuntime();
-        desc.FrameGeneration = &application;
+        desc.FrameFeatures = std::move(frameFeatureServices.Runtime);
+        desc.FrameGeneration = std::move(frameFeatureServices.FrameGeneration);
         return FrameworkDeviceContext(std::move(desc));
     }
     //Modify End
@@ -440,11 +445,12 @@ RaytracingDemo::RaytracingDemo(
     const std::wstring& name,
     const int width,
     const int height,
-    GraphicsSettings graphicsSettings)
+    GraphicsSettings graphicsSettings,
+    FrameFeatureServices frameFeatureServices)
     : Base(application, name, width, height, false)
     , m_Width(width)
     , m_Height(height)
-    , m_FrameworkDeviceContext(CreateFrameworkDeviceContext(application))
+    , m_FrameworkDeviceContext(CreateFrameworkDeviceContext(application, std::move(frameFeatureServices)))
 //Modify Begin:2026-08-07 by Hui
     , m_DLSS(m_FrameworkDeviceContext)
 //Modify End
@@ -789,7 +795,10 @@ void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::files
             L"",
             commandList.GetDeviceContext());
 //Modify End
-        commandList.LoadTextureFromFile(*m_SkyboxTexture, skyboxTexturePath.wstring(), TextureUsageType::Albedo);
+//Modify Begin:2026-08-18 by Hui
+        TextureLoader(commandList.GetDeviceContext()).Load(
+            commandList, *m_SkyboxTexture, skyboxTexturePath, TextureUsageType::Albedo);
+//Modify End
     }
 }
 //Modify End
@@ -1120,6 +1129,12 @@ void RaytracingDemo::LoadStartupConfiguration()
     {
         m_CudaBloom.SetUseSharedMemoryDownsampling(boolValue);
     }
+    if (configuration.TryGetInt("CudaBloom", "ThreadBlockSize", intValue) && (intValue == 8 || intValue == 16))
+    {
+        m_CudaBloom.SetThreadBlockSize(intValue == 8
+            ? CudaBloomPass::ThreadBlockSize::Size8x8
+            : CudaBloomPass::ThreadBlockSize::Size16x16);
+    }
 //Modify End
 
     if (configuration.TryGetBoolean("Debug", "GpuTiming", boolValue))
@@ -1253,14 +1268,7 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         break;
     case RuntimeAutomationAction::GpuTiming:
         m_GpuTimingEnabled = enabled;
-        m_GpuTimestampSamples.clear();
-        m_GpuTimestampDisplaySamples.clear();
-        m_AsyncComputeGpuTimestampSamples.clear();
-        m_AsyncComputeGpuTimestampDisplaySamples.clear();
-//Modify Begin:2026-08-18 by Hui
-        m_CopyGpuTimestampSamples.clear();
-        m_CopyGpuTimestampDisplaySamples.clear();
-//Modify End
+        ResetRenderGraphTimingDisplay();
         if (!enabled)
         {
             m_RenderGraphTimingCaptureEnabled = false;
@@ -1909,6 +1917,7 @@ RaytracingDemo::PipelineConstants RaytracingDemo::BuildPipelineConstants() const
 //Modify Begin:2026-07-28 by Hui
 void RaytracingDemo::RebuildRenderGraph()
 {
+    ResetRenderGraphTimingDisplay();
 //Modify Begin:2026-07-30 by Hui
     UpdateRenderGraphFrameState();
 //Modify End
@@ -1942,6 +1951,20 @@ void RaytracingDemo::RebuildRenderGraph()
             renderGraph.SetParallelDirectCommandRecording(m_ParallelDirectCommandRecordingEnabled);
         });
 //Modify End
+}
+
+void RaytracingDemo::ResetRenderGraphTimingDisplay()
+{
+    m_GpuTimestampAverager.Clear();
+    m_GpuTimestampDisplaySamples.clear();
+    m_AsyncComputeGpuTimestampAverager.Clear();
+    m_AsyncComputeGpuTimestampDisplaySamples.clear();
+    m_CopyGpuTimestampAverager.Clear();
+    m_CopyGpuTimestampDisplaySamples.clear();
+    m_RenderGraphCpuDisplayMilliseconds = 0.0;
+    m_RenderGraphCpuAccumulatedMilliseconds = 0.0;
+    m_RenderGraphCpuTimingFrameCount = 0;
+    m_LastGpuTimingUiUpdateTime = -1.0;
 }
 
 void RaytracingDemo::EnsureRenderGraphTopology()
@@ -2158,14 +2181,13 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     const auto collectGpuTimingFrames = [this](
         GpuTimestampProfiler& profiler,
         CommandQueue& commandQueue,
-        std::vector<GpuTimestampSample>& latestSamples,
+        DemoProfiling::GpuTimestampSampleAverager& averager,
         const char* queueName)
     {
-        bool collectedAnyFrame = false;
         std::vector<GpuTimestampSample> completedSamples;
         while (profiler.CollectCompletedFrame(commandQueue, completedSamples))
         {
-            latestSamples = completedSamples;
+            averager.Accumulate(completedSamples);
             if (m_RenderGraphTimingCaptureEnabled)
             {
                 m_RenderGraphTimingHistory.Record(
@@ -2173,46 +2195,53 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
                     queueName,
                     completedSamples);
             }
-            collectedAnyFrame = true;
         }
-        return collectedAnyFrame;
     };
-    const bool collectedDirectGpuTimingFrame = m_GpuTimingEnabled && collectGpuTimingFrames(
-        m_GpuTimestampProfiler,
-        *directCommandQueue,
-        m_GpuTimestampSamples,
-        "Direct");
-    const bool collectedAsyncComputeGpuTimingFrame = m_GpuTimingEnabled && collectGpuTimingFrames(
-        m_AsyncComputeGpuTimestampProfiler,
-        *asyncComputeCommandQueue,
-        m_AsyncComputeGpuTimestampSamples,
-        "AsyncCompute");
-//Modify Begin:2026-08-18 by Hui
-    const bool collectedCopyGpuTimingFrame = m_GpuTimingEnabled && collectGpuTimingFrames(
-        m_CopyGpuTimestampProfiler,
-        *copyCommandQueue,
-        m_CopyGpuTimestampSamples,
-        "Copy");
-//Modify End
-//Modify End
-    if ((collectedDirectGpuTimingFrame || collectedAsyncComputeGpuTimingFrame || collectedCopyGpuTimingFrame) &&
-        e.TotalTime - m_LastGpuTimingUiUpdateTime >= 0.25)
+    if (m_GpuTimingEnabled)
     {
-        if (collectedDirectGpuTimingFrame)
+        collectGpuTimingFrames(
+            m_GpuTimestampProfiler,
+            *directCommandQueue,
+            m_GpuTimestampAverager,
+            "Direct");
+        collectGpuTimingFrames(
+            m_AsyncComputeGpuTimestampProfiler,
+            *asyncComputeCommandQueue,
+            m_AsyncComputeGpuTimestampAverager,
+            "AsyncCompute");
+        collectGpuTimingFrames(
+            m_CopyGpuTimestampProfiler,
+            *copyCommandQueue,
+            m_CopyGpuTimestampAverager,
+            "Copy");
+
+        if (m_LastGpuTimingUiUpdateTime < 0.0)
         {
-            m_GpuTimestampDisplaySamples = m_GpuTimestampSamples;
+            m_LastGpuTimingUiUpdateTime = e.TotalTime;
         }
-        if (collectedAsyncComputeGpuTimingFrame)
+        else if (e.TotalTime - m_LastGpuTimingUiUpdateTime >= 1.0)
         {
-            m_AsyncComputeGpuTimestampDisplaySamples = m_AsyncComputeGpuTimestampSamples;
+            if (m_GpuTimestampAverager.HasSamples())
+            {
+                m_GpuTimestampDisplaySamples = m_GpuTimestampAverager.ConsumeAverage();
+            }
+            if (m_AsyncComputeGpuTimestampAverager.HasSamples())
+            {
+                m_AsyncComputeGpuTimestampDisplaySamples = m_AsyncComputeGpuTimestampAverager.ConsumeAverage();
+            }
+            if (m_CopyGpuTimestampAverager.HasSamples())
+            {
+                m_CopyGpuTimestampDisplaySamples = m_CopyGpuTimestampAverager.ConsumeAverage();
+            }
+            if (m_RenderGraphCpuTimingFrameCount > 0)
+            {
+                m_RenderGraphCpuDisplayMilliseconds = m_RenderGraphCpuAccumulatedMilliseconds /
+                    static_cast<double>(m_RenderGraphCpuTimingFrameCount);
+                m_RenderGraphCpuAccumulatedMilliseconds = 0.0;
+                m_RenderGraphCpuTimingFrameCount = 0;
+            }
+            m_LastGpuTimingUiUpdateTime = e.TotalTime;
         }
-//Modify Begin:2026-08-18 by Hui
-        if (collectedCopyGpuTimingFrame)
-        {
-            m_CopyGpuTimestampDisplaySamples = m_CopyGpuTimestampSamples;
-        }
-//Modify End
-        m_LastGpuTimingUiUpdateTime = e.TotalTime;
     }
 //Modify End
 
@@ -2332,8 +2361,13 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
         throw std::runtime_error(std::string("RaytracingDemo::OnRender RenderGraph.Execute failed: ") + exception.what());
     }
 //Modify Begin:2026-08-02 by Hui
-    m_LastRenderGraphCpuMilliseconds = std::chrono::duration<double, std::milli>(
+    const double renderGraphCpuMilliseconds = std::chrono::duration<double, std::milli>(
         std::chrono::steady_clock::now() - renderGraphCpuStart).count();
+    if (m_GpuTimingEnabled)
+    {
+        m_RenderGraphCpuAccumulatedMilliseconds += renderGraphCpuMilliseconds;
+        ++m_RenderGraphCpuTimingFrameCount;
+    }
 //Modify End
 
     try

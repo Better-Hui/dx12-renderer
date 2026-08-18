@@ -11,6 +11,23 @@
 
 namespace DemoProfiling
 {
+    class GpuTimestampSampleAverager final
+    {
+    public:
+        void Clear();
+        void Accumulate(const std::vector<GpuTimestampSample>& samples);
+        std::vector<GpuTimestampSample> ConsumeAverage();
+
+        bool HasSamples() const { return m_FrameCount > 0; }
+        uint64_t GetFrameCount() const { return m_FrameCount; }
+
+    private:
+        bool IsCompatible(const std::vector<GpuTimestampSample>& samples) const;
+
+        std::vector<GpuTimestampSample> m_AccumulatedSamples;
+        uint64_t m_FrameCount = 0;
+    };
+
     class RenderGraphTimingHistory final
     {
     public:

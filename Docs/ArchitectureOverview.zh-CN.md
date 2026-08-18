@@ -31,11 +31,12 @@ DX12Library
 `DX12Library/` 保留 D3D12 的原生概念，主要包含：
 
 - `D3D12DeviceContext`、`CommandQueue`、`CommandList`：封装 device，以及 Direct、Compute、Copy 三类 command queue。
+- `CommandList` 只保留命令录制、barrier、descriptor staging 与 command-list 生命周期跟踪；`ResourceUploader` 负责 staging upload 和资源替换，`MipGenerator` 负责可复用的 mip 生成 pipeline。
 - `Resource`、`Texture`、`Buffer`、structured/raw buffer、upload buffer 与 RTAS backing resource：管理原生 D3D12 allocation 和 resource view。
 - `DescriptorAllocator`、`DynamicDescriptorHeap`、`FrameResourceRing`：管理 descriptor 以及逐帧资源寿命。GPU 可见 descriptor table 在此层完成，而不是由 demo 手写。
 - `ResourceStateRegistry`、`ResourceStateTracker`：记录 transition、UAV 与 aliasing barrier。
 - `GpuTimestampProfiler`：提供单条 queue 内的 GPU timestamp。
-- window、swap chain、PIX marker、Streamline runtime 启动和 Unity D3D12 interop 边界同样位于这一层。
+- window、swap chain、PIX marker 和 Unity D3D12 interop 边界同样位于这一层。可选集成只能通过通用 `D3D12RuntimeLifecycle` 契约完成首次 D3D12/DXGI 调用前初始化、设备创建后附着与关闭；`CommandQueue` 和 `Window` 始终调用普通 D3D12/DXGI 创建 API，不感知具体功能 SDK。
 
 这层可以直接暴露 D3D12；`Framework` 的职责是向上提供更收敛的渲染器接口。
 
@@ -50,6 +51,7 @@ DX12Library
 - `BindlessDescriptorHeap` 将 canonical descriptor 保存在 CPU-only heap，再镜像到按 fence 退休的 shader-visible frame page。材质保存稳定的 descriptor index；`CommandContext` 在当前 page 中准备使用 direct heap indexing 的 descriptor table。这样 CPU 更新 descriptor 时不会覆盖仍被 Direct 或 Async Compute GPU 工作读取的页。
 - `ShaderVariantManager` 在启动期编译代码显式请求的变体，指纹覆盖源码、include、宏和编译参数并缓存字节码。它不是运行时热更，也不会枚举所有理论宏组合。
 - `SharedUploadBuffer`、临时 descriptor 分配、`StructuredBuffer`、raw buffer 与 `RWStructuredBuffer` 风格 UAV 绑定覆盖常用数据上传和 compute 场景。
+- `TextureLoader` 负责 DirectXTex/OpenEXR 解码和 texture cache 查询，再把 GPU staging 与可选 mip 生成委托给职责单一的底层服务。
 
 ### 几何、光追与场景
 
@@ -63,7 +65,7 @@ DX12Library
 - `ReSTIRDIPass` 拥有 ReSTIR DI 的 history、pipeline variant，以及 RIS、temporal、spatial、final shading 的 dispatch 序列。调用方提供输出、motion vector、frame constant 和场景绑定回调。
 - `ReSTIRGIPass` 拥有 packed GI reservoir、pipeline variant，以及 initial sampling、temporal、spatial、final shading 的 dispatch 序列。调用方提供间接光输出、motion vector、frame constant 和 Inline Ray Query 场景绑定回调。
 - `Taa`、`NRD`、`SVGF` 是抗锯齿和降噪模块；NRD 会通过 `RenderContext` 把 native 状态变化回报给 RenderGraph。
-- `DLSS` 管理 Native NGX DLSS SR/DLAA 与实验性 Streamline RR/FG 的边界。RR/FG 需要启动期 interposer，尚未完成支持硬件上的完整验证。
+- `DLSS` 管理 Native NGX DLSS SR/DLAA 评估与实验性 Streamline RR/FG frame-feature 路径。`DLSS.cpp` 与 `StreamlineRuntime.cpp` 由独立的 `FrameworkNvidiaFeatures` 适配目标编译，普通 `Framework` 使用者不会继承厂商 SDK include 路径，也不会链接 `sl.interposer.lib`。Framework 的 `StreamlineRuntime` 在创建 D3D12 设备前执行 `slInit`，设备创建后执行 `slSetD3DDevice`，并负责 capability query 与 Frame Generation 所需的通用 presentation 重建请求；queue/swap-chain 拦截完全交给自动 interposer。DX12Library 不再引用 Streamline，也不再定义 Frame Generation/Ray Reconstruction 能力接口。RR/FG 尚未完成支持硬件上的完整验证。
 - CUDA interop 封装 shared D3D12 resource 与 external fence/semaphore 同步；当前 CUDA Bloom 使用此路径。
 
 Framework 模块以复用为目标，但接口仍在演进，不能把它们理解为成熟公共渲染 SDK 的兼容层。
@@ -84,11 +86,11 @@ RenderPass 声明
 
 ### Queue 与同步
 
-- pass 通过 `RenderPassQueue` 显式指定 `Direct` 或 `AsyncCompute`；系统不会自动推断 placement。
+- pass 通过 `RenderPassQueue` 显式指定 `Direct`、`AsyncCompute` 或 `Copy`；系统不会自动推断 placement。
 - `RenderGraphQueueScheduler` 保存每个逻辑 resource 的 last producer queue 与 submitted fence value；有依赖的 consumer 提交前会收到 GPU-side wait。
 - `PassResourceStatePlan` 保存不可变的 per-pass transition、UAV、aliasing、初始化和 async handoff 工作。Executor 将该计划录入拥有该 pass 的 command list；各 list 在最终提交顺序中关闭时，`CommandList` 通过共享 `ResourceStateRegistry` 解析 transition 的初始状态。
-- 底层具备 Copy queue，但 RenderGraph 尚未调度 Copy-queue pass。
-- transient resource 按本帧实际的 Direct/Compute fence 延迟退休。aliasing 目前是保守的：仅复用可证明在同一 queue 上的 lifetime，跨 queue aliasing 仍禁用。
+- copy-compatible pass 可通过 `RenderGraphPassBuilder::UseCopyQueue()` 进入编译计划、Executor、QueueScheduler、Profiler 和 transient retirement 路径；当前主 sample 尚未声明 Copy-queue pass。
+- transient resource 按本帧实际的 Direct/Compute/Copy fence 延迟退休。aliasing 目前是保守的：仅复用可证明在同一 queue 上的 lifetime，跨 queue aliasing 仍禁用。
 
 ### 多线程命令录制
 

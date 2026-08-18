@@ -31,6 +31,84 @@ namespace
     }
 }
 
+void DemoProfiling::GpuTimestampSampleAverager::Clear()
+{
+    m_AccumulatedSamples.clear();
+    m_FrameCount = 0;
+}
+
+void DemoProfiling::GpuTimestampSampleAverager::Accumulate(const std::vector<GpuTimestampSample>& samples)
+{
+    if (samples.empty())
+    {
+        return;
+    }
+
+    if (!IsCompatible(samples))
+    {
+        Clear();
+    }
+
+    if (m_AccumulatedSamples.empty())
+    {
+        m_AccumulatedSamples = samples;
+        m_FrameCount = 1;
+        return;
+    }
+
+    for (size_t sampleIndex = 0; sampleIndex < samples.size(); ++sampleIndex)
+    {
+        GpuTimestampSample& accumulated = m_AccumulatedSamples[sampleIndex];
+        const GpuTimestampSample& sample = samples[sampleIndex];
+        accumulated.MillisecondsFromFrameStart += sample.MillisecondsFromFrameStart;
+        accumulated.MillisecondsFromPrevious += sample.MillisecondsFromPrevious;
+        accumulated.CpuMillisecondsFromFrameStart += sample.CpuMillisecondsFromFrameStart;
+        accumulated.CpuMillisecondsFromPrevious += sample.CpuMillisecondsFromPrevious;
+    }
+    ++m_FrameCount;
+}
+
+std::vector<GpuTimestampSample> DemoProfiling::GpuTimestampSampleAverager::ConsumeAverage()
+{
+    if (m_FrameCount == 0)
+    {
+        return {};
+    }
+
+    std::vector<GpuTimestampSample> average = m_AccumulatedSamples;
+    const double reciprocalFrameCount = 1.0 / static_cast<double>(m_FrameCount);
+    for (GpuTimestampSample& sample : average)
+    {
+        sample.MillisecondsFromFrameStart *= reciprocalFrameCount;
+        sample.MillisecondsFromPrevious *= reciprocalFrameCount;
+        sample.CpuMillisecondsFromFrameStart *= reciprocalFrameCount;
+        sample.CpuMillisecondsFromPrevious *= reciprocalFrameCount;
+    }
+    Clear();
+    return average;
+}
+
+bool DemoProfiling::GpuTimestampSampleAverager::IsCompatible(
+    const std::vector<GpuTimestampSample>& samples) const
+{
+    if (m_AccumulatedSamples.empty())
+    {
+        return true;
+    }
+    if (m_AccumulatedSamples.size() != samples.size())
+    {
+        return false;
+    }
+    for (size_t sampleIndex = 0; sampleIndex < samples.size(); ++sampleIndex)
+    {
+        if (m_AccumulatedSamples[sampleIndex].Name != samples[sampleIndex].Name)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 void DemoProfiling::RenderGraphTimingHistory::Clear()
 {
     m_Frames.clear();

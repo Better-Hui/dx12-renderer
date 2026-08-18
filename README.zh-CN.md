@@ -14,7 +14,7 @@
 
 ## 本 fork 在上游基础上增加了什么
 
-- **底层 D3D12 封装**：`DX12Library` 在上游基础上扩展了 device context、queue、command list、resource state、fence、descriptor allocation、swap chain 和 application 生命周期封装。raw D3D12 对象所有权与同步逻辑应留在这一层，而不是散落到功能代码中。
+- **底层 D3D12 封装**：`DX12Library` 在上游基础上扩展了 device context、queue、command list、resource state、fence、descriptor allocation、swap chain 和 application 生命周期封装。`CommandList` 只负责命令录制，数据上传与 mip 生成由独立服务承担；raw D3D12 对象所有权与同步逻辑应留在这一层，而不是散落到功能代码中。
 - **Framework 层接口**：围绕 `CommandContext` 提供 pipeline、descriptor set、bindless descriptor、DXR、mesh shader 和通用 rendering feature 等封装，demo 作者通常通过这些接口完成资源绑定和命令录制。
 - **RenderGraph**：pass 只需声明逻辑资源读写；Compiler 将其编译为不可变的排序、resource state、aliasing、queue dependency 与 execution plan，Executor 统一处理 barrier、queue wait、提交和可选的分 queue GPU timing。demo pass 不需要自行处理 raw DX12 同步。
 - **显式异步计算**：pass 可以指定使用 `Direct` 或 `AsyncCompute` queue；RenderGraph 负责跨 queue 的 GPU fence 等待与资源交接。
@@ -24,7 +24,7 @@
 - **ReSTIR DI 直接光**：提供 RIS、时域/Boiling/空域复用、各阶段的可见性与 bias correction 配置，以及最终着色。
 - **ReSTIR GI 间接光**：基于 Inline Ray Query，提供初始 BSDF 采样、时域复用、空域复用、Jacobian correction 和最终可见性/着色。
 - **CUDA Bloom**：演示 D3D12 shared resource、shared fence 与 CUDA external semaphore 的互操作流程。
-- **实验性帧特性**：接入 Native NGX DLSS SR/DLAA，以及 Streamline Ray Reconstruction 和 Frame Generation；这些路径尚未完成可交付验证。
+- **实验性帧特性**：接入 Native NGX DLSS SR/DLAA，以及 Framework 管理的 Streamline Ray Reconstruction 和 Frame Generation。DX12Library 只暴露通用的设备创建前/后 runtime 生命周期；queue 与 swap chain 仍走普通 D3D12/DXGI 创建路径，由链接的 Streamline interposer 完成拦截。这些路径尚未完成可交付验证。
 - **调试与分析工具**：集成 PIX event、RenderGraph timing history/CSV 和运行时调试 UI。
 
 这些内容的定位是“可运行的工程实验和 API 示例”。其中不少封装仍在演进，尤其是异步计算和 Meshlet；请把它们视为当前仓库的实现方式，而不是通用最佳实践。
@@ -186,10 +186,10 @@ CMake 生成的工程会保持各 target 的真实源码目录。`DX12Library`�
 - 仅支持 Windows / x64 / D3D12。
 - `RaytracingDemo` 是集成 sample，不是 production renderer，也不承诺稳定的公开 API 兼容性。
 - CUDA 在运行时可以关闭，但仍是当前构建流程的硬依赖；将它做成真正可选的模块仍需调整 build system。
-- Async Compute 目前采用**显式指定**方式。RenderGraph 不会自动选择 queue、拆分 pass、优化 overlap，也还没有 Copy queue 调度器。
+- Direct、Async Compute 和 Copy queue 都由 pass **显式指定**。RenderGraph 不会自动选择 queue、拆分 pass 或优化 overlap；Copy queue 已具备底层调度能力，但当前主 sample 还没有对应 pass。
 - 连续的 async pass 目前逐 pass 提交，尚未合并成更大的 compute segment。
-- `RenderGraphRoot::Execute()` 现在只是图执行入口；pass 录制/提交由 `RenderGraphCommandExecutor` 负责，Direct/Async Compute 的可选 timestamp 生命周期由 `RenderGraphProfiler` 负责。Root 仍负责图构建和拓扑编排。
-- transient resource 会按本帧实际记录的 Direct/Async Compute fence 做延迟退休。aliasing 仍采取保守策略：不同 queue 使用的资源不会互相 alias，后续再设计更一般的多 queue allocator。
+- `RenderGraphRoot::Execute()` 现在只是图执行入口；pass 录制/提交由 `RenderGraphCommandExecutor` 负责，Direct/Async Compute/Copy 的可选 timestamp 生命周期由 `RenderGraphProfiler` 负责。Root 仍负责图构建和拓扑编排。
+- transient resource 会按本帧实际记录的 Direct/Async Compute/Copy fence 做延迟退休。aliasing 仍采取保守策略：不同 queue 使用的资源不会互相 alias，后续再设计更一般的多 queue allocator。
 - 当前 Framework 和 RenderGraph 的执行路径由应用组合根显式注入 device、queue 和 descriptor 分配器。独立运行时的 application/window 生命周期，以及少量 legacy resource-wrapper 兼容路径，仍保留 `Application` 依赖。
 - `RaytracingDemoSceneResources` 内部已拆成 texture/material、geometry、meshlet、RTAS 四个 builder；facade 仍是 sample 层入口。
 - RenderGraph timing 分别记录每条 queue 上的 pass 时长；判断跨 queue overlap、wait 和 GPU bubble 时，请使用 PIX Timing Capture。

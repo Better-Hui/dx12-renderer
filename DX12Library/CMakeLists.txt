@@ -16,6 +16,7 @@ set(HEADER_FILES
         include/DX12Library/Cubemap.h
         include/DX12Library/D3D12DeviceContext.h
         include/DX12Library/D3D12RenderContext.h
+        include/DX12Library/D3D12RuntimeLifecycle.h
         include/DX12Library/Defines.h
         include/DX12Library/DiagnosticReporter.h
         include/DX12Library/DescriptorAllocation.h
@@ -31,16 +32,18 @@ set(HEADER_FILES
         include/DX12Library/Helpers.h
         include/DX12Library/HighResolutionClock.h
         include/DX12Library/IndexBuffer.h
+        include/DX12Library/MipGenerator.h
+        include/DX12Library/PresentationController.h
         include/DX12Library/KeyCodes.h
         include/DX12Library/RenderTarget.h
         include/DX12Library/Resource.h
+        include/DX12Library/ResourceUploader.h
         include/DX12Library/ResourceStateTransition.h
         include/DX12Library/ResourceStateRegistry.h
         include/DX12Library/ResourceStateTracker.h
         include/DX12Library/RootSignature.h
         include/DX12Library/ShaderUtils.h
         include/DX12Library/StructuredBuffer.h
-        include/DX12Library/StreamlineRuntime.h
         include/DX12Library/Texture.h
         include/DX12Library/TextureUsageType.h
         include/DX12Library/ThreadSafeQueue.h
@@ -76,13 +79,14 @@ set(SOURCE_FILES
         src/GpuTimestampProfiler.cpp
         src/HighResolutionClock.cpp
         src/IndexBuffer.cpp
+        src/MipGenerator.cpp
         src/RenderTarget.cpp
         src/Resource.cpp
+        src/ResourceUploader.cpp
         src/ResourceStateTracker.cpp
         src/RootSignature.cpp
         src/ShaderUtils.cpp
         src/StructuredBuffer.cpp
-        src/StreamlineRuntime.cpp
         src/Texture.cpp
         src/UploadBuffer.cpp
         src/VertexBuffer.cpp
@@ -125,6 +129,7 @@ set(EXT_LIBRARIES
 add_library(${TARGET_NAME} STATIC ${HEADER_FILES} ${SOURCE_FILES} ${SHADER_FILES} ${SHADERS_HEADER_FILES})
 
 target_include_directories(${TARGET_NAME} BEFORE PUBLIC "${DX12_RENDERER_AGILITY_INCLUDE_DIRECTORY}")
+target_compile_definitions(${TARGET_NAME} PUBLIC NOMINMAX)
 
 if (DX12_RENDERER_ENABLE_D3D12_AGILITY)
         target_compile_definitions(${TARGET_NAME} PUBLIC
@@ -136,7 +141,6 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/../CMakeIncludes/ProjectBasePost.cmake)
 
 target_include_directories(${TARGET_NAME}
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/DX12Library
-        PRIVATE "${DX12_RENDERER_STREAMLINE_INCLUDE_DIRECTORY}"
         )
 
 # Includes and libraries
@@ -146,24 +150,4 @@ target_include_directories(${TARGET_NAME}
         )
 target_link_libraries(${TARGET_NAME}
         PUBLIC ${EXT_LIBRARIES}
-        PUBLIC "${DX12_RENDERER_STREAMLINE_LIBRARY}"
         )
-
-
-# Packages
-
-# assimp
-find_package(assimp CONFIG REQUIRED)
-target_link_libraries(${TARGET_NAME} PUBLIC assimp::assimp)
-
-# DirectXTex
-find_package(directxtex CONFIG REQUIRED)
-target_link_libraries(${TARGET_NAME} PUBLIC Microsoft::DirectXTex)
-
-# OpenEXR
-find_package(OpenEXR CONFIG REQUIRED)
-target_link_libraries(${TARGET_NAME} PUBLIC OpenEXR::OpenEXR)
-
-# DirectXMesh
-find_package(directxmesh CONFIG REQUIRED)
-target_link_libraries(${TARGET_NAME} PUBLIC Microsoft::DirectXMesh)

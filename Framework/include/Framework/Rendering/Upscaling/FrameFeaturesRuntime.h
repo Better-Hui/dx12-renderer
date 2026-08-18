@@ -1,8 +1,9 @@
 #pragma once
 
-//Modify Begin:2026-08-07 by Hui
+#include <memory>
 #include <string>
 
+//Modify Begin:2026-08-18 by Hui
 class FrameFeaturesRuntime
 {
 public:
@@ -20,5 +21,11 @@ public:
     virtual ~FrameGenerationController() = default;
 
     virtual bool SetFrameGenerationEnabled(bool enabled) = 0;
+};
+
+struct FrameFeatureServices
+{
+    std::shared_ptr<FrameFeaturesRuntime> Runtime;
+    std::shared_ptr<FrameGenerationController> FrameGeneration;
 };
 //Modify End

@@ -8,6 +8,9 @@
 #include <Framework/Geometry/Model.h>
 #include <Framework/Geometry/Bone.h>
 #include <Framework/Geometry/Animation.h>
+//Modify Begin:2026-08-18 by Hui
+#include <Framework/Rendering/Texture/TextureLoader.h>
+//Modify End
 
 #include <assimp/Importer.hpp>      // C++ importer interface
 #include <assimp/scene.h>           // Output data structure
@@ -318,6 +321,8 @@ std::shared_ptr<Texture> ModelLoader::LoadTexture(CommandList& commandList, cons
         L"",
         commandList.GetDeviceContext());
 //Modify End
-    commandList.LoadTextureFromFile(*texture, path, usage);
+//Modify Begin:2026-08-18 by Hui
+    TextureLoader(commandList.GetDeviceContext()).Load(commandList, *texture, path, usage);
+//Modify End
     return texture;
 }

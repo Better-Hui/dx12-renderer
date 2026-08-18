@@ -5,7 +5,6 @@
 #include "CommandList.h"
 //Modify Begin:2026-08-07 by Hui
 #include "D3D12DeviceContext.h"
-#include "StreamlineRuntime.h"
 //Modify End
 
 //Modify Begin:2026-07-28 by Hui
@@ -18,11 +17,9 @@
 //Modify Begin:2026-08-07 by Hui
 CommandQueue::CommandQueue(
 	const D3D12_COMMAND_LIST_TYPE type,
-	std::shared_ptr<D3D12DeviceContext> deviceContext,
-	std::shared_ptr<StreamlineRuntime> streamlineRuntime)
+	std::shared_ptr<D3D12DeviceContext> deviceContext)
 	: m_CommandListType(type)
 	, m_DeviceContext(std::move(deviceContext))
-	, m_StreamlineRuntime(std::move(streamlineRuntime))
 	, m_FenceValue(0)
 	, m_IsProcessingInFlightCommandLists(true)
 {
@@ -35,17 +32,7 @@ CommandQueue::CommandQueue(
 	desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
 	desc.NodeMask = 0;
 
-	if (m_StreamlineRuntime != nullptr)
-	{
-		ThrowIfFailed(m_StreamlineRuntime->CreateCommandQueue(
-			device.Get(),
-			&desc,
-			IID_PPV_ARGS(&m_D3d12CommandQueue)));
-	}
-	else
-	{
-		ThrowIfFailed(device->CreateCommandQueue(&desc, IID_PPV_ARGS(&m_D3d12CommandQueue)));
-	}
+	ThrowIfFailed(device->CreateCommandQueue(&desc, IID_PPV_ARGS(&m_D3d12CommandQueue)));
 //Modify Begin:2026-07-21 by Hui
 	InitializeFenceAndWorker();
 //Modify End
@@ -55,11 +42,9 @@ CommandQueue::CommandQueue(
 CommandQueue::CommandQueue(
 	const D3D12_COMMAND_LIST_TYPE type,
 	std::shared_ptr<D3D12DeviceContext> deviceContext,
-	ID3D12CommandQueue* externalCommandQueue,
-	std::shared_ptr<StreamlineRuntime> streamlineRuntime)
+	ID3D12CommandQueue* externalCommandQueue)
 	: m_CommandListType(type)
 	, m_DeviceContext(std::move(deviceContext))
-	, m_StreamlineRuntime(std::move(streamlineRuntime))
 	, m_D3d12CommandQueue(externalCommandQueue)
 	, m_FenceValue(0)
 	, m_IsProcessingInFlightCommandLists(true)
@@ -91,22 +76,10 @@ void CommandQueue::InitializeFenceAndWorker()
 }
 //Modify End
 
-//Modify Begin:2026-08-07 by Hui
-void CommandQueue::SetComputeCommandListFactory(std::function<std::shared_ptr<CommandList>()> factory)
-{
-	m_ComputeCommandListFactory = std::move(factory);
-}
-
-void CommandQueue::SetComputeCommandQueue(std::shared_ptr<CommandQueue> queue)
-{
-	m_ComputeCommandQueue = std::move(queue);
-}
-
 void CommandQueue::SetFatalErrorHandler(CommandQueueFailureHandler handler)
 {
 	m_FatalErrorHandler = std::move(handler);
 }
-//Modify End
 
 CommandQueue::~CommandQueue()
 {
@@ -169,10 +142,7 @@ std::shared_ptr<CommandList> CommandQueue::GetCommandList()
 	{
 		// Otherwise create a new command list.
 		//Modify Begin:2026-08-07 by Hui
-		commandList = std::make_shared<CommandList>(
-			m_CommandListType,
-			m_DeviceContext,
-			m_ComputeCommandListFactory);
+		commandList = std::make_shared<CommandList>(m_CommandListType, m_DeviceContext);
 		//Modify End
 	}
 
@@ -196,10 +166,6 @@ uint64_t CommandQueue::ExecuteCommandLists(const std::vector<std::shared_ptr<Com
 	std::vector<std::shared_ptr<CommandList>> toBeQueued;
 	toBeQueued.reserve(commandLists.size() * 2); // 2x since each command list will have a pending command list.
 
-	// Generate mips command lists.
-	std::vector<std::shared_ptr<CommandList>> generateMipsCommandLists;
-	generateMipsCommandLists.reserve(commandLists.size());
-
 	// Command lists that need to be executed.
 	std::vector<ID3D12CommandList*> d3d12CommandLists;
 	d3d12CommandLists.reserve(commandLists.size() * 2); // 2x since each command list will have a pending command list.
@@ -219,12 +185,6 @@ uint64_t CommandQueue::ExecuteCommandLists(const std::vector<std::shared_ptr<Com
 
 		toBeQueued.push_back(pendingCommandList);
 		toBeQueued.push_back(commandList);
-
-		auto generateMipsCommandList = commandList->GetGenerateMipsCommandList();
-		if (generateMipsCommandList)
-		{
-			generateMipsCommandLists.push_back(generateMipsCommandList);
-		}
 	}
 
 	UINT numCommandLists = static_cast<UINT>(d3d12CommandLists.size());
@@ -239,18 +199,6 @@ uint64_t CommandQueue::ExecuteCommandLists(const std::vector<std::shared_ptr<Com
 //Modify Begin:2026-07-29 by Hui
 	m_ProcessInFlightCommandListsThreadCv.notify_one();
 //Modify End
-
-	// If there are any command lists that generate mips then execute those
-	// after the initial resource command lists have finished.
-	if (generateMipsCommandLists.size() > 0)
-	{
-		//Modify Begin:2026-08-07 by Hui
-		Assert(m_ComputeCommandQueue != nullptr, "Compute command queue is unavailable.");
-		m_ComputeCommandQueue->Wait(*this);
-		m_ComputeCommandQueue->ExecuteCommandLists(generateMipsCommandLists);
-		//Modify End
-	}
-
 	return fenceValue;
 }
 

@@ -48,7 +48,6 @@
 
 class CommandList;
 class D3D12DeviceContext;
-class StreamlineRuntime;
 
 class CommandQueue
 {
@@ -56,17 +55,13 @@ public:
 	//Modify Begin:2026-08-07 by Hui
 	CommandQueue(
 		D3D12_COMMAND_LIST_TYPE type,
-		std::shared_ptr<D3D12DeviceContext> deviceContext,
-		std::shared_ptr<StreamlineRuntime> streamlineRuntime = nullptr);
+		std::shared_ptr<D3D12DeviceContext> deviceContext);
 //Modify Begin:2026-07-21 by Hui
 	CommandQueue(
 		D3D12_COMMAND_LIST_TYPE type,
 		std::shared_ptr<D3D12DeviceContext> deviceContext,
-		ID3D12CommandQueue* externalCommandQueue,
-		std::shared_ptr<StreamlineRuntime> streamlineRuntime = nullptr);
+		ID3D12CommandQueue* externalCommandQueue);
 //Modify End
-	void SetComputeCommandListFactory(std::function<std::shared_ptr<CommandList>()> factory);
-	void SetComputeCommandQueue(std::shared_ptr<CommandQueue> queue);
 	void SetFatalErrorHandler(CommandQueueFailureHandler handler);
 	//Modify End
 	virtual ~CommandQueue();
@@ -110,9 +105,6 @@ private:
 	D3D12_COMMAND_LIST_TYPE m_CommandListType;
 	//Modify Begin:2026-08-07 by Hui
 	std::shared_ptr<D3D12DeviceContext> m_DeviceContext;
-	std::shared_ptr<StreamlineRuntime> m_StreamlineRuntime;
-	std::function<std::shared_ptr<CommandList>()> m_ComputeCommandListFactory;
-	std::shared_ptr<CommandQueue> m_ComputeCommandQueue;
 	CommandQueueFailureHandler m_FatalErrorHandler;
 	//Modify End
 	Microsoft::WRL::ComPtr<ID3D12CommandQueue> m_D3d12CommandQueue;

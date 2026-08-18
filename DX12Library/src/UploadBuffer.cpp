@@ -20,10 +20,15 @@ UploadBuffer::UploadBuffer(Microsoft::WRL::ComPtr<ID3D12Device2> device, const s
 
 UploadBuffer::Allocation UploadBuffer::Allocate(const size_t sizeInBytes, const size_t alignment)
 {
-	if (sizeInBytes > m_PageSize)
+//Modify Begin:2026-08-18 by Hui
+	const size_t alignedSize = Math::AlignUp(sizeInBytes, alignment);
+	if (alignedSize > m_PageSize)
 	{
-		throw std::bad_alloc();
+		auto largePage = std::make_shared<Page>(m_Device, alignedSize);
+		m_LargePages.push_back(largePage);
+		return largePage->Allocate(sizeInBytes, alignment);
 	}
+//Modify End
 
 	if (!m_CurrentPage || !m_CurrentPage->HasSpace(sizeInBytes, alignment))
 	{
@@ -55,6 +60,9 @@ std::shared_ptr<UploadBuffer::Page> UploadBuffer::RequestPage()
 void UploadBuffer::Reset()
 {
 	m_CurrentPage = nullptr;
+//Modify Begin:2026-08-18 by Hui
+	m_LargePages.clear();
+//Modify End
 	// Reset all available pages
 	m_AvailablePages = m_PagePool;
 
@@ -122,6 +130,10 @@ UploadBuffer::Allocation UploadBuffer::Page::Allocate(const size_t sizeInBytes, 
 	Allocation allocation;
 	allocation.Cpu = static_cast<uint8_t*>(m_CpuPtr) + m_OffsetInBytes;
 	allocation.Gpu = m_GpuPtr + m_OffsetInBytes;
+//Modify Begin:2026-08-18 by Hui
+	allocation.Resource = m_Resource;
+	allocation.Offset = m_OffsetInBytes;
+//Modify End
 
 	m_OffsetInBytes += alignedSize;
 

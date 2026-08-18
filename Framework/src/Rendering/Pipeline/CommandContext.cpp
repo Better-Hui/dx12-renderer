@@ -3,6 +3,9 @@
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 
 #include <DX12Library/CommandList.h>
+//Modify Begin:2026-08-18 by Hui
+#include <DX12Library/CommandListInternalAccess.h>
+//Modify End
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Resource.h>
 #include <DX12Library/StructuredBuffer.h>
@@ -727,7 +730,8 @@ void CommandContext::ApplyComputeBinding(const PipelineDescriptorSet& descriptor
     if (range->Kind == DescriptorBindingKind::ConstantBuffer)
     {
         Assert(!boundResource->ConstantBufferData.empty(), "Pipeline constant buffer is not bound.");
-        auto allocation = m_CommandList.AllocateInUploadBuffer(
+        auto allocation = CommandListInternalAccess::AllocateTransientUpload(
+            m_CommandList,
             boundResource->ConstantBufferData.size(),
             D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
         std::memcpy(allocation.Cpu, boundResource->ConstantBufferData.data(), boundResource->ConstantBufferData.size());

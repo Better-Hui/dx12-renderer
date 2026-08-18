@@ -3,6 +3,7 @@
 
 #include <DX12Library/CommandList.h>
 #include <DX12Library/Helpers.h>
+#include <DX12Library/ResourceUploader.h>
 
 #include <Framework/Core/FrameworkDeviceContext.h>
 #include <Framework/Rendering/Pipeline/CommandContext.h>
@@ -79,7 +80,8 @@ namespace
         currentCapacity = GrowLightBufferCapacity(currentCapacity, values.size());
         std::vector<T> capacityData(currentCapacity);
         std::copy(values.begin(), values.end(), capacityData.begin());
-        commandList.CopyStructuredBuffer(buffer, capacityData);
+        ResourceUploader(commandList.GetDeviceContext()).UploadStructuredBuffer(
+            commandList, buffer, capacityData);
         return true;
     }
 
@@ -276,6 +278,7 @@ void LightingGpuResources::UpdateAreaLight(const AreaLightData& light, const siz
 
 void LightingGpuResources::Initialize(CommandList& commandList)
 {
+    ResourceUploader uploader(commandList.GetDeviceContext());
     m_UploadBuffer = std::make_unique<SharedUploadBuffer>(m_DeviceContext);
     m_DirectionalLightBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_DirectionalLightGpuData.size());
     m_PointLightBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_PointLightGpuData.size());
@@ -284,13 +287,13 @@ void LightingGpuResources::Initialize(CommandList& commandList)
     m_SurfaceEmitterTriangleCdfBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_SurfaceEmitterTriangleCdfGpuData.size());
     m_SurfaceEmitterInstanceBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_SurfaceEmitterInstanceGpuData.size());
     m_DirectLightCdfBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_DirectLightCdfGpuData.size());
-    commandList.CopyStructuredBuffer(m_DirectionalLightBuffer, CreateBufferCapacityData<DirectionalLightData>(m_DirectionalLightBufferCapacity));
-    commandList.CopyStructuredBuffer(m_PointLightBuffer, CreateBufferCapacityData<PointLightData>(m_PointLightBufferCapacity));
-    commandList.CopyStructuredBuffer(m_SurfaceEmitterGeometryBuffer, CreateBufferCapacityData<SurfaceEmitterGeometryData>(m_SurfaceEmitterGeometryBufferCapacity));
-    commandList.CopyStructuredBuffer(m_SurfaceEmitterTriangleBuffer, CreateBufferCapacityData<SurfaceEmitterTriangleData>(m_SurfaceEmitterTriangleBufferCapacity));
-    commandList.CopyStructuredBuffer(m_SurfaceEmitterTriangleCdfBuffer, CreateBufferCapacityData<float>(m_SurfaceEmitterTriangleCdfBufferCapacity));
-    commandList.CopyStructuredBuffer(m_SurfaceEmitterInstanceBuffer, CreateBufferCapacityData<SurfaceEmitterInstanceData>(m_SurfaceEmitterInstanceBufferCapacity));
-    commandList.CopyStructuredBuffer(m_DirectLightCdfBuffer, CreateBufferCapacityData<float>(m_DirectLightCdfBufferCapacity));
+    uploader.UploadStructuredBuffer(commandList, m_DirectionalLightBuffer, CreateBufferCapacityData<DirectionalLightData>(m_DirectionalLightBufferCapacity));
+    uploader.UploadStructuredBuffer(commandList, m_PointLightBuffer, CreateBufferCapacityData<PointLightData>(m_PointLightBufferCapacity));
+    uploader.UploadStructuredBuffer(commandList, m_SurfaceEmitterGeometryBuffer, CreateBufferCapacityData<SurfaceEmitterGeometryData>(m_SurfaceEmitterGeometryBufferCapacity));
+    uploader.UploadStructuredBuffer(commandList, m_SurfaceEmitterTriangleBuffer, CreateBufferCapacityData<SurfaceEmitterTriangleData>(m_SurfaceEmitterTriangleBufferCapacity));
+    uploader.UploadStructuredBuffer(commandList, m_SurfaceEmitterTriangleCdfBuffer, CreateBufferCapacityData<float>(m_SurfaceEmitterTriangleCdfBufferCapacity));
+    uploader.UploadStructuredBuffer(commandList, m_SurfaceEmitterInstanceBuffer, CreateBufferCapacityData<SurfaceEmitterInstanceData>(m_SurfaceEmitterInstanceBufferCapacity));
+    uploader.UploadStructuredBuffer(commandList, m_DirectLightCdfBuffer, CreateBufferCapacityData<float>(m_DirectLightCdfBufferCapacity));
 }
 
 bool LightingGpuResources::Upload(CommandList& commandList, const uint64_t frameIndex)

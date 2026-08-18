@@ -102,6 +102,7 @@ CudaBloomPass::Settings CudaBloomPass::GetSettings() const
         .PyramidLevels = m_PyramidLevels,
         .BoxFilterSigma = m_BoxFilterSigma,
         .UseSharedMemoryDownsampling = m_UseSharedMemoryDownsampling,
+        .BlockSize = m_ThreadBlockSize,
     };
 }
 
@@ -116,6 +117,7 @@ void CudaBloomPass::SetSettings(const Settings& settings)
     m_PyramidLevels = settings.PyramidLevels;
     m_BoxFilterSigma = settings.BoxFilterSigma;
     m_UseSharedMemoryDownsampling = settings.UseSharedMemoryDownsampling;
+    m_ThreadBlockSize = settings.BlockSize;
 }
 //Modify End
 
@@ -530,8 +532,11 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
         return false;
     }
 
-    constexpr uint32_t blockX = 16;
-    constexpr uint32_t blockY = 16;
+//Modify Begin:2026-08-18 by Hui
+    const uint32_t blockDimension = static_cast<uint32_t>(m_ThreadBlockSize);
+    const uint32_t blockX = blockDimension;
+    const uint32_t blockY = blockDimension;
+//Modify End
 
 //Modify Begin:2026-07-30 by Hui
     auto getPyramidSurface = [this, levelCount](const uint32_t level) -> CUsurfObject

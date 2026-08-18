@@ -2,6 +2,8 @@
 #include <Framework/Core/FrameworkDeviceContext.h>
 #include "DX12Library/Helpers.h"
 
+#include <algorithm>
+
 namespace
 {
 	CD3DX12_RESOURCE_DESC CreateRenderTargetDesc(DXGI_FORMAT backBufferFormat, uint32_t width, uint32_t height)
@@ -97,8 +99,10 @@ void Bloom::GetIntermediateTextureSize(uint32_t width,
 
 	for (size_t i = 0; i <= index; i++)
 	{
-		outWidth = max(1, outWidth >> 1);
-		outHeight = max(1, outHeight >> 1);
+//Modify Begin:2026-08-18 by Hui
+		outWidth = std::max(1u, outWidth >> 1u);
+		outHeight = std::max(1u, outHeight >> 1u);
+//Modify End
 	}
 }
 

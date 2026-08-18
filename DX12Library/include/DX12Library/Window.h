@@ -52,7 +52,6 @@ class Texture;
 //Modify Begin:2026-08-12 by Hui
 class CommandQueue;
 class D3D12DeviceContext;
-class StreamlineRuntime;
 //Modify End
 
 //Modify Begin:2026-08-12 by Hui
@@ -62,7 +61,6 @@ struct WindowD3D12Context
     std::shared_ptr<CommandQueue> DirectCommandQueue;
     std::shared_ptr<CommandQueue> ComputeCommandQueue;
     std::shared_ptr<CommandQueue> CopyCommandQueue;
-    std::shared_ptr<StreamlineRuntime> StreamlineRuntime;
     bool IsTearingSupported = false;
 };
 //Modify End

@@ -16,6 +16,10 @@ public:
 	{
 		void* Cpu;
 		D3D12_GPU_VIRTUAL_ADDRESS Gpu;
+//Modify Begin:2026-08-18 by Hui
+		Microsoft::WRL::ComPtr<ID3D12Resource> Resource;
+		size_t Offset;
+//Modify End
 	};
 
 	/**
@@ -80,6 +84,9 @@ private:
 
 	PagePoolType m_PagePool;
 	PagePoolType m_AvailablePages;
+//Modify Begin:2026-08-18 by Hui
+	PagePoolType m_LargePages;
+//Modify End
 
 	std::shared_ptr<Page> m_CurrentPage;
 	//Modify Begin:2026-08-07 by Hui
