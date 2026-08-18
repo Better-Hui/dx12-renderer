@@ -34,9 +34,9 @@ endif ()
 
 list(APPEND SHADER_FILES ${SHADER_FILES_VERTEX} ${SHADER_FILES_PIXEL} ${SHADER_FILES_COMPUTE})
 
-# Generate standard Visual Studio filters and MSBuild logical paths from the
-# physical target tree. Rider may ignore .vcxproj.filters depending on its
-# application-wide setting, while Link metadata remains part of the project.
+# Generate standard Visual Studio filters from the physical target tree.
+# Rider reads the physical paths directly, so keep every project-owned file on
+# the same path model instead of mixing them with MSBuild Link metadata.
 set(DX12_RENDERER_PROJECT_LOCAL_FILES
         ${HEADER_FILES}
         ${SOURCE_FILES}
@@ -57,11 +57,6 @@ foreach(project_file IN LISTS DX12_RENDERER_PROJECT_LOCAL_FILES)
             "${project_file_absolute}")
     if (NOT project_file_relative MATCHES "^\\.\\./")
         list(APPEND DX12_RENDERER_PROJECT_TREE_FILES "${project_file_absolute}")
-        if (CMAKE_GENERATOR MATCHES "^Visual Studio")
-            file(TO_NATIVE_PATH "${project_file_relative}" project_file_link)
-            set_property(SOURCE "${project_file_absolute}" APPEND PROPERTY
-                    VS_SETTINGS "Link=${project_file_link}")
-        endif ()
     endif ()
 endforeach()
 

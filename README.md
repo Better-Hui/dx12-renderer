@@ -34,6 +34,7 @@ The upstream renderer remains the foundation. This fork adds framework and sampl
 | `DX12Library/` | Low-level D3D12 wrappers: command queues/lists, resources, synchronization, descriptor heaps, application, and swap chain. |
 | `Framework/` | Scene, geometry, materials, pipeline/binding abstractions, ray tracing, denoising, meshlets, and CUDA interop. |
 | `RenderGraph/` | Pass/resource declarations, dependency ordering, resource-state planning, queue synchronization, and timing integration. |
+| `CMakeIncludes/` | Shared target setup, third-party provisioning, shader build rules, and generated-project organization. |
 | `Demos/Common/` | Shared standalone-demo entry-point support used by `RaytracingDemo`. |
 | `Demos/RaytracingDemo/` | Primary maintained sample and the best entry point for current API usage. |
 | `Assets/` | Demo scenes, textures, and runtime sample assets. |
@@ -151,6 +152,12 @@ cmake --build ..\build --config Release --target RaytracingDemo
 & ..\build\bin\Release\RaytracingDemo.exe
 ```
 
+### Generated Visual Studio and Rider layout
+
+The generated projects intentionally mirror each target's physical source tree. `DX12Library`, `Framework`, `RenderGraph`, and `RaytracingDemo` show their target-local `CMakeLists.txt` at the project root, followed by the real `include/`, `shaders/`, `src/`, and optional `tools/` directories. CMake's `source_group(TREE ...)` supplies Visual Studio filters, while Rider reads the same unmodified physical source paths.
+
+The build system deliberately does not assign MSBuild `Link` metadata to project-owned files. Mixing virtual linked paths with CMake's physical `CMakeLists.txt` regeneration item makes Rider create a duplicate target-named folder. Generated `.vcxproj`, `.filters`, shader outputs, dependency build trees, libraries, and executables belong under `build/`; editable C++, HLSL, and CUDA source must remain in the repository source tree. The build directory is disposable and should be regenerated from CMake rather than edited by hand.
+
 ## Startup shader compilation and variants
 
 `RaytracingDemo` now requests its graphics, compute, mesh/task, and DXR shaders through the Framework `ShaderVariantManager`. This is a **startup-time** workflow, not runtime hot reload: edit an `.hlsl` or referenced `.hlsli`, launch the demo again, and the affected requested variants compile before their pipelines are created.
@@ -163,7 +170,7 @@ cmake --build ..\build --config Release --target RaytracingDemo
 
 Variants are **explicitly declared, automatically compiled, and automatically cached**. The system intentionally does not enumerate every theoretical `#define` combination: that would produce an unbounded permutation explosion. For example, `PathTracingPipelineController` declares Hard and `RAYTRACING_DEMO_SOFT_SHADOWS=1` variants from the same source file; no soft-shadow wrapper source is needed by the runtime path.
 
-The startup compiler currently covers the shaders directly owned by `RaytracingDemo`. Framework shaders embedded as generated headers and legacy demos still use their existing build-time compilation paths.
+The startup compiler currently covers the shaders directly owned by `RaytracingDemo`. Framework shaders embedded as generated headers continue to use their build-time compilation path.
 
 ## Current limitations
 

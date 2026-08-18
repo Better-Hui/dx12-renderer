@@ -147,6 +147,12 @@ cmake --build ..\build --config Release --target RaytracingDemo
 & ..\build\bin\Release\RaytracingDemo.exe
 ```
 
+### Visual Studio 与 Rider 工程层级
+
+CMake 生成的工程会保持各 target 的真实源码目录。`DX12Library`、`Framework`、`RenderGraph` 和 `RaytracingDemo` 的项目根节点下，先显示该 target 自己的 `CMakeLists.txt`，其余内容继续按照磁盘上的 `include/`、`shaders/`、`src/`、`tools/` 层级展开。Visual Studio 使用 `source_group(TREE ...)` 生成的 filter；Rider 则直接读取同一组未经虚拟重映射的物理路径。
+
+本项目不会给自身源码添加 MSBuild `Link` 元数据。若普通源码使用虚拟 `Link`，而 CMake 自动注入的 regeneration `CMakeLists.txt` 仍使用物理路径，Rider 就会额外生成一个与 target 同名的目录。`build/` 只保存 `.sln`、`.vcxproj`、shader 产物、第三方构建树、库和可执行文件，不是源码目录；其中内容出现陈旧或混乱时，应清理后重新运行 CMake，不能直接修改生成工程来掩盖问题。
+
 ## 启动期 Shader 编译与变体
 
 `RaytracingDemo` 现在通过 Framework 的 `ShaderVariantManager` 请求自身的 Raster、Compute、Task/Mesh 和 DXR Shader。这是**启动期编译**，不是运行中的 Shader 热更新：修改某个 `.hlsl`，或它引用的 `.hlsli`，重新启动 demo 后，相关变体会在创建 pipeline 前自动编译。
@@ -159,7 +165,7 @@ cmake --build ..\build --config Release --target RaytracingDemo
 
 这里的“自动管理变体”是：**变体由代码显式声明，系统自动编译和缓存**；不是枚举所有理论上的 `#define` 组合。后者会带来不可控的排列组合爆炸。当前 `PathTracingPipelineController` 就从同一份 Shader 源码声明 Hard 与 `RAYTRACING_DEMO_SOFT_SHADOWS=1` 两个变体，运行时不再依赖软阴影 wrapper 文件。
 
-目前启动期编译已经覆盖 `RaytracingDemo` 直接拥有的 Shader。Framework 中生成到 C++ header 的 Shader，以及旧 demo，仍维持原有的构建期编译方式。
+目前启动期编译已经覆盖 `RaytracingDemo` 直接拥有的 Shader。Framework 中需要生成 C++ header 的 Shader 仍维持构建期编译。
 
 ## 目录导航
 
@@ -168,8 +174,11 @@ cmake --build ..\build --config Release --target RaytracingDemo
 | `DX12Library/` | command queue/list、资源、同步、descriptor heap、application 和 swap chain 等底层 D3D12 封装。 |
 | `Framework/` | 场景、几何、材质、pipeline/binding、光线追踪、降噪、Meshlet 和 CUDA 互操作。 |
 | `RenderGraph/` | pass/resource 描述、依赖、状态切换、queue 同步与 timing。 |
+| `CMakeIncludes/` | 公共 target 配置、第三方依赖、Shader 构建规则和 IDE 工程组织。 |
+| `Demos/Common/` | `RaytracingDemo` 使用的独立程序公共入口支持，不单独生成 target。 |
 | `Demos/RaytracingDemo/` | 当前维护的主 sample；优先从这里理解本项目 API。 |
 | `Assets/` | 场景、纹理和运行时资源。 |
+| `External/` | 第三方源码与 SDK；其中部分目录是固定提交的 Git submodule。 |
 | `Docs/` | 更详细的架构与 API 说明。 |
 
 ## 当前边界与已知限制

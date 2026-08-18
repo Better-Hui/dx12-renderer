@@ -20,6 +20,12 @@ DX12Library
 
 Each layer may depend on the layer below it. New sample features should normally be expressed through `Framework` and `RenderGraph`, rather than adding raw D3D12 descriptor, root-signature, or fence code to a demo pass.
 
+## Build targets and source ownership
+
+The maintained first-party CMake targets are `DX12Library`, `Framework`, `RenderGraph`, and `RaytracingDemo`. `Demos/Common` supplies shared entry-point support but is not a standalone target. Target-local source ownership follows the repository directories: Framework owns `Framework/include`, `Framework/shaders`, `Framework/src`, and `Framework/tools`; the other targets follow the same physical-tree rule for the directories they contain.
+
+`CMakeIncludes/ProjectBase.cmake` applies `source_group(TREE ...)` for Visual Studio without assigning virtual MSBuild `Link` paths to project-owned files. This keeps Visual Studio filters and Rider's physical project view consistent, including CMake's automatically generated regeneration item for each target-local `CMakeLists.txt`. External implementation files may be hidden from a target view, but they must not be copied into `build/` or presented as if they were owned by that target. The generated build tree is disposable and never owns editable source.
+
 ## DX12Library
 
 `DX12Library/` is the native D3D12 boundary. Its important responsibilities are:

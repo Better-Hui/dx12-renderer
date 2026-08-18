@@ -20,6 +20,12 @@ DX12Library
 
 上层只依赖下层。新增 sample 功能时，应优先通过 `Framework` 和 `RenderGraph` 表达，不应在 demo pass 中直接铺开 D3D12 descriptor、root signature 或 CPU fence 逻辑。
 
+## 构建 target 与源码归属
+
+当前维护的第一方 CMake target 只有 `DX12Library`、`Framework`、`RenderGraph` 和 `RaytracingDemo`。`Demos/Common` 只提供公共程序入口，不会单独生成 target。每个 target 的源码归属严格对应仓库目录：例如 Framework 只拥有 `Framework/include`、`Framework/shaders`、`Framework/src` 和 `Framework/tools`，其他 target 也按自身磁盘目录组织。
+
+`CMakeIncludes/ProjectBase.cmake` 使用 `source_group(TREE ...)` 为 Visual Studio 生成 filter，但不会给项目自身源码添加虚拟 MSBuild `Link` 路径。这样 Visual Studio 与 Rider 都以同一份真实目录为准，CMake 自动加入的 target-local `CMakeLists.txt` regeneration 条目也能停留在项目根节点。外部实现文件可以从 target 视图隐藏，但不能复制到 `build/`，也不能伪装成该 target 自己的 `include`、`src` 或 `shaders`。构建目录随时可以重新生成，不拥有任何需要编辑的源码。
+
 ## DX12Library：D3D12 边界
 
 `DX12Library/` 保留 D3D12 的原生概念，主要包含：
