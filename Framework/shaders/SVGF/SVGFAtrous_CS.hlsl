@@ -7,9 +7,7 @@ cbuffer SVGFAtrousConstants : register(b0)
     uint Width;
     uint Height;
     uint StepSize;
-//Modify Begin:2026-07-27 by Hui
     uint Direction;
-//Modify End
     float PhiColor;
     float PhiNormal;
     float PhiDepth;
@@ -56,7 +54,6 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     float3 colorSum = 0.0f;
     float weightSum = 0.0f;
 
-//Modify Begin:2026-07-27 by Hui
     [unroll]
     for (int tap = -2; tap <= 2; ++tap)
     {
@@ -86,7 +83,6 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         colorSum += sampleColor.rgb * weight;
         weightSum += weight;
     }
-//Modify End
 
     const float3 filteredColor = weightSum > 0.0f ? colorSum / weightSum : centerColor.rgb;
     OutputColor[pixel] = float4(filteredColor, centerColor.a);

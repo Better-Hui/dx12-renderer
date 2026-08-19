@@ -3,10 +3,8 @@
 
 //Modify Begin:2026-08-10 by Hui
 static const uint ReSTIRGIEnvironmentSampleBit = 0x80000000u;
-//Modify Begin:2026-07-30 by Hui
 static const uint ReSTIRGICreationVisibilityKnownBit = 0x40000000u;
 static const uint ReSTIRGIAgeMask = 0x3fffffffu;
-//Modify End
 
 struct ReSTIRGIReservoir
 {
@@ -83,12 +81,10 @@ bool ReSTIRGIIsEnvironmentSample(const ReSTIRGIReservoir reservoir)
     return (reservoir.AgeAndFlags & ReSTIRGIEnvironmentSampleBit) != 0u;
 }
 
-//Modify Begin:2026-07-30 by Hui
 bool ReSTIRGIHasCreationVisibility(const ReSTIRGIReservoir reservoir)
 {
     return (reservoir.AgeAndFlags & ReSTIRGICreationVisibilityKnownBit) != 0u;
 }
-//Modify End
 
 uint ReSTIRGIGetAge(const ReSTIRGIReservoir reservoir)
 {
@@ -97,30 +93,24 @@ uint ReSTIRGIGetAge(const ReSTIRGIReservoir reservoir)
 
 void ReSTIRGISetAge(inout ReSTIRGIReservoir reservoir, const uint age)
 {
-//Modify Begin:2026-07-30 by Hui
     reservoir.AgeAndFlags = (reservoir.AgeAndFlags &
         (ReSTIRGIEnvironmentSampleBit | ReSTIRGICreationVisibilityKnownBit)) |
         min(age, ReSTIRGIAgeMask);
-//Modify End
 }
 
 void ReSTIRGISetEnvironmentSample(inout ReSTIRGIReservoir reservoir, const bool isEnvironment)
 {
-//Modify Begin:2026-07-30 by Hui
     reservoir.AgeAndFlags = (reservoir.AgeAndFlags &
         (ReSTIRGIAgeMask | ReSTIRGICreationVisibilityKnownBit)) |
         (isEnvironment ? ReSTIRGIEnvironmentSampleBit : 0u);
-//Modify End
 }
 
-//Modify Begin:2026-07-30 by Hui
 void ReSTIRGISetCreationVisibility(inout ReSTIRGIReservoir reservoir, const bool isKnown)
 {
     reservoir.AgeAndFlags = (reservoir.AgeAndFlags &
         (ReSTIRGIEnvironmentSampleBit | ReSTIRGIAgeMask)) |
         (isKnown ? ReSTIRGICreationVisibilityKnownBit : 0u);
 }
-//Modify End
 
 ReSTIRGIReservoir ReSTIRGIReadReservoir(
     Texture2D<uint4> creationTexture,

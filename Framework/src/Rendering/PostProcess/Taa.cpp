@@ -27,12 +27,11 @@ TAA::TAA(FrameworkDeviceContext& deviceContext, CommandList& commandList, DXGI_F
     , m_Width(width)
     , m_Height(height)
 {
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-07-30 by Hui
     auto shader = std::make_shared<Shader>(
         deviceContext,
         ShaderBlob(ShaderBytecode_Blit_VS, sizeof ShaderBytecode_Blit_VS),
         ShaderBlob(ShaderBytecode_TAA_Resolve_PS, sizeof ShaderBytecode_TAA_Resolve_PS),
-//Modify Begin:2026-07-30 by Hui
         PipelineLayoutReflectionOptions{
             .StaticSamplerContracts = {
                 PipelineStaticSamplers::PointClamp(2u),
@@ -41,7 +40,6 @@ TAA::TAA(FrameworkDeviceContext& deviceContext, CommandList& commandList, DXGI_F
             .MaxDescriptorCount = 4096u,
             .ShaderStages = PipelineShaderStageFlags::AllGraphics
         }
-//Modify End
         );
 //Modify End
     m_Material = Material::Create(shader);

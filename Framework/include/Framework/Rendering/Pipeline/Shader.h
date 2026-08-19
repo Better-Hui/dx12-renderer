@@ -1,7 +1,7 @@
 #pragma once
 
 #include <d3d12.h>
-#include <d3dx12.h>
+#include <d3dx12/d3dx12.h>
 
 #include <wrl.h>
 #include <DX12Library/CommandList.h>
@@ -36,7 +36,7 @@ class CommandContext;
 class FrameworkDeviceContext;
 //Modify End
 //Modify Begin:2026-07-31 by Hui
-class IndirectDrawCommandSignature;
+class IndirectCommandSignature;
 //Modify End
 
 class Shader
@@ -72,7 +72,7 @@ public:
 	const PipelineDescriptorSet& GetDescriptorSet() const { return *m_DescriptorSet; }
 //Modify End
 //Modify Begin:2026-07-31 by Hui
-	std::unique_ptr<IndirectDrawCommandSignature> CreateIndirectDrawCommandSignature(
+	std::unique_ptr<IndirectCommandSignature> CreateIndirectDrawCommandSignature(
 		const std::string& rootConstantBufferName,
 		UINT byteStride) const;
 //Modify End
@@ -117,13 +117,11 @@ private:
 
 	ShaderMetadata m_VertexShaderMetadata;
 	ShaderMetadata m_PixelShaderMetadata;
-//Modify Begin:2026-07-24 by Hui
+//Modify Begin:2026-07-27 by Hui
 	std::unique_ptr<PipelineLayout> m_PipelineLayout;
 	std::unique_ptr<PipelineBindingSet> m_BindingSet;
 	std::unique_ptr<PipelineDescriptorSet> m_DescriptorSet;
-//Modify Begin:2026-07-27 by Hui
 	PipelineDescriptorPool m_DescriptorPool;
-//Modify End
 //Modify End
 //Modify Begin:2026-07-31 by Hui
 	PipelineLayoutReflectionOptions m_PipelineLayoutOptions;

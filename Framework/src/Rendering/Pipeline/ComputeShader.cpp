@@ -3,13 +3,13 @@
 #include <DX12Library/ShaderUtils.h>
 #include <DX12Library/StructuredBuffer.h>
 #include <Framework/Rendering/RayTracing/RayTracingAccelerationStructure.h>
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
 //Modify End
 
 #include <algorithm>
 
-//Modify Begin:2026-07-23 by Hui
+//Modify Begin:2026-08-19 by Hui
 ComputePipelineDescBuilder::ComputePipelineDescBuilder(ComputePipelineDesc desc)
     : m_Desc(std::move(desc))
 {
@@ -40,7 +40,6 @@ ComputePipelineDescBuilder& ComputePipelineDescBuilder::WithDescriptorArrayCount
     return *this;
 }
 
-//Modify Begin:2026-08-12 by Hui
 ComputePipelineDescBuilder& ComputePipelineDescBuilder::WithStaticSamplerContract(
     PipelineStaticSamplerContract contract)
 {
@@ -68,7 +67,6 @@ ComputePipelineDescBuilder& ComputePipelineDescBuilder::WithCommonRootSignatureS
     PipelineStaticSamplers::AddCommonRootSignatureContracts(m_Desc.StaticSamplerContracts);
     return *this;
 }
-//Modify End
 
 ComputePipelineDescBuilder& ComputePipelineDescBuilder::WithMaxDescriptorCount(UINT maxDescriptorCount)
 {
@@ -76,7 +74,6 @@ ComputePipelineDescBuilder& ComputePipelineDescBuilder::WithMaxDescriptorCount(U
     return *this;
 }
 
-//Modify Begin:2026-07-30 by Hui
 ComputePipelineDescBuilder& ComputePipelineDescBuilder::WithRootSignatureFlags(D3D12_ROOT_SIGNATURE_FLAGS flags)
 {
     m_Desc.RootSignatureFlags = flags;
@@ -89,7 +86,6 @@ ComputePipelineDescBuilder& ComputePipelineDescBuilder::WithDirectlyIndexedResou
         m_Desc.RootSignatureFlags | D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED);
     return *this;
 }
-//Modify End
 
 ComputePipelineDesc ComputePipelineDescBuilder::Build() const
 {
@@ -124,7 +120,7 @@ bool ComputeShader::HasConstantBuffer(const std::string& variableName) const
     return m_BindingSet->HasBinding(variableName, DescriptorBindingKind::ConstantBuffer);
 }
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
 bool ComputeShader::HasShaderResourceView(const std::string& variableName) const
 {
     return m_BindingSet->HasBinding(variableName, DescriptorBindingKind::ShaderResourceView);
@@ -165,7 +161,7 @@ void ComputeShader::SetTexture(CommandList& commandList, const std::string& vari
 void ComputeShader::SetShaderResourceView(CommandList& commandList, const std::string& variableName, UINT arrayIndex, const ShaderResourceView& shaderResourceView) const
 {
     (void)commandList;
-//Modify Begin:2026-08-03 by Hui
+//Modify Begin:2026-08-19 by Hui
     m_DescriptorSet->SetShaderResourceView(
         variableName,
         arrayIndex,
@@ -180,27 +176,23 @@ void ComputeShader::SetShaderResourceView(CommandList& commandList, const std::s
     m_DescriptorSet->SetShaderResource(variableName, arrayIndex, resource, stateAfter);
 }
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
 void ComputeShader::SetShaderResourceViews(CommandList& commandList, const std::string& variableName, std::span<const ShaderResourceView> shaderResourceViews) const
 {
     (void)commandList;
-//Modify Begin:2026-08-03 by Hui
     m_DescriptorSet->SetShaderResourceViews(
         variableName,
         shaderResourceViews,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-//Modify End
 }
 
 void ComputeShader::SetStructuredBuffer(CommandList& commandList, const std::string& variableName, const StructuredBuffer& buffer) const
 {
     (void)commandList;
-//Modify Begin:2026-08-03 by Hui
     m_DescriptorSet->SetStructuredBuffer(
         variableName,
         buffer,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-//Modify End
 }
 //Modify End
 
@@ -221,7 +213,7 @@ void ComputeShader::SetAccelerationStructure(
 
 Microsoft::WRL::ComPtr<ID3D12PipelineState> ComputeShader::GetPipelineState(const Microsoft::WRL::ComPtr<ID3D12Device2>& device) const
 {
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-08-19 by Hui
     const ComputePipelineStateKey pipelineStateKey = m_PipelineStateBuilder.CreateKey();
     return m_PipelineStateCache.GetOrCreate(
         pipelineStateKey,
@@ -239,7 +231,7 @@ void ComputeShader::CollectShaderMetadata(const Microsoft::WRL::ComPtr<ID3DBlob>
 
 void ComputeShader::BuildReflectedRootSignature(const ComputePipelineDesc& desc)
 {
-    //Modify Begin:2026-07-24 by Hui
+//Modify Begin:2026-08-19 by Hui
     PipelineLayoutReflectionOptions layoutOptions;
     layoutOptions.MaxDescriptorCount = desc.MaxDescriptorCount;
     layoutOptions.ShaderStages = PipelineShaderStageFlags::Compute;
@@ -248,9 +240,7 @@ void ComputeShader::BuildReflectedRootSignature(const ComputePipelineDesc& desc)
     {
         layoutOptions.BindingOverrides.push_back({ bindingOverride.Name, bindingOverride.DescriptorCount });
     }
-//Modify Begin:2026-08-12 by Hui
     layoutOptions.StaticSamplerContracts = desc.StaticSamplerContracts;
-//Modify End
 
     m_PipelineLayout->Reset(PipelineLayout::CreateDescFromReflection(m_ShaderMetadata, layoutOptions));
     m_BindingSet = std::make_unique<PipelineBindingSet>(*m_PipelineLayout);
@@ -279,12 +269,11 @@ void ComputeShader::BuildReflectedRootSignature(const ComputePipelineDesc& desc)
     //Modify End
 
     PipelineRootSignatureBuildDesc rootSignatureBuildDesc;
-//Modify Begin:2026-07-30 by Hui
     rootSignatureBuildDesc.Flags = desc.RootSignatureFlags;
 //Modify End
     m_RootSignature = m_PipelineLayout->CreateRootSignature(rootSignatureBuildDesc);
     m_PipelineLayout->SetRootSignature(m_RootSignature);
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-08-19 by Hui
     m_DescriptorSet = m_DescriptorPool.AllocateDescriptorSet(*m_PipelineLayout);
 //Modify End
 }
@@ -293,4 +282,3 @@ const DescriptorBindingInfo& ComputeShader::GetReflectedBinding(const std::strin
 {
     return m_BindingSet->GetBinding(variableName, expectedKind);
 }
-//Modify End

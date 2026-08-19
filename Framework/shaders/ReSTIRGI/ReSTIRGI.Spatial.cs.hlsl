@@ -1,11 +1,9 @@
 #include "ReSTIRGI/ReSTIRGISceneContract.hlsli"
 #include "ReSTIRGI/ReSTIRGI.hlsli"
 #include "ReSTIRGI/ReSTIRGIConstants.hlsli"
-//Modify Begin:2026-07-30 by Hui
-#include <Common/Noise.hlsli>
-//Modify End
-
 //Modify Begin:2026-08-10 by Hui
+#include <Common/Noise.hlsli>
+
 Texture2D<uint4> ReSTIRGITemporalCreation : register(t12, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
 Texture2D<uint4> ReSTIRGITemporalHit : register(t13, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
 Texture2D<uint4> ReSTIRGITemporalLight : register(t14, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
@@ -34,7 +32,6 @@ bool ReSTIRGIIsSpatiallyCompatible(
         length(receiver.PositionWs - neighbor.PositionWs) <= ReSTIRGI_SpatialPositionSimilarityThreshold;
 }
 
-//Modify Begin:2026-07-30 by Hui
 [numthreads(8, 8, 1)]
 void main(uint3 dispatchThreadId : SV_DispatchThreadID)
 {

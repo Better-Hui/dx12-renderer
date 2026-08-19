@@ -141,12 +141,10 @@ void RootSignature::SetRootSignatureDesc(
 		rootSignatureVersion, &rootSignatureBlob, &errorBlob);
 	if (FAILED(hResult))
 	{
-//Modify Begin:2026-07-21 by Hui
 		if (errorBlob)
 		{
 			throw std::exception(static_cast<const char*>(errorBlob->GetBufferPointer()));
 		}
-//Modify End
 		ThrowIfFailed(hResult);
 	}
 

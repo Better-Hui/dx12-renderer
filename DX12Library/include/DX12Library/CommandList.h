@@ -163,12 +163,18 @@ public:
      */
     void CopyResource(const Resource& dstRes, const Resource& srcRes);
     void CopyResource(Microsoft::WRL::ComPtr<ID3D12Resource> dstRes, Microsoft::WRL::ComPtr<ID3D12Resource> srcRes, bool dstAutoBarriers = true, bool srcAutoBarriers = true);
-//Modify Begin:2026-08-12 by Hui
+//Modify Begin:2026-08-19 by Hui
     void CopyBufferRegion(
         const Resource& destination,
         uint64_t destinationOffset,
         Microsoft::WRL::ComPtr<ID3D12Resource> source,
         uint64_t sourceOffset,
+        uint64_t sizeInBytes);
+    void CopyBufferToReadback(
+        const Resource& source,
+        uint64_t sourceOffset,
+        Microsoft::WRL::ComPtr<ID3D12Resource> destination,
+        uint64_t destinationOffset,
         uint64_t sizeInBytes);
 //Modify End
 
@@ -351,7 +357,7 @@ public:
         const D3D12_SHADER_RESOURCE_VIEW_DESC* srv = nullptr
     );
 
-//Modify Begin:2026-07-21 by Hui
+//Modify Begin:2026-07-28 by Hui
     void SetGlobalTexture(
         uint32_t rootParameterIndex,
         uint32_t descriptorOffset,
@@ -416,7 +422,6 @@ public:
         shader->SetTexture(*this, variableName, texture);
     }
 
-//Modify Begin:2026-07-28 by Hui
     template <typename ShaderLike, typename BufferLike>
     void SetConstantBuffer(ShaderLike& shader, const std::string& variableName, const BufferLike& data)
     {
@@ -477,7 +482,6 @@ public:
         shader->SetUnorderedAccessView(*this, variableName, unorderedAccessView);
     }
 //Modify End
-//Modify End
 
     /**
      * Set the UAV on the graphics pipeline.
@@ -510,14 +514,18 @@ public:
     void DrawIndexed(uint32_t indexCount, uint32_t instanceCount = 1, uint32_t startIndex = 0, int32_t baseVertex = 0,
         uint32_t startInstance = 0);
 
-    void DrawIndirect(
+//Modify Begin:2026-08-19 by Hui
+    void ExecuteIndirect(
         const Microsoft::WRL::ComPtr<ID3D12CommandSignature>& pCommandSignature,
+        D3D12_INDIRECT_ARGUMENT_TYPE executionArgumentType,
         uint32_t maxCommandCount,
-        const Microsoft::WRL::ComPtr<ID3D12Resource>& pArgumentBuffer,
-        uint64_t argumentBufferOffset,
-        const Microsoft::WRL::ComPtr<ID3D12Resource>& pCountBuffer,
+        const Resource& argumentBuffer,
+        uint64_t argumentBufferOffset = 0,
+        const Resource* countBuffer = nullptr,
         uint64_t countBufferOffset = 0
     );
+    void ClearUnorderedAccessUint(const Resource& resource, const UINT values[4]);
+//Modify End
 
     /**
      * Dispatch a compute shader.
@@ -632,14 +640,10 @@ private:
     using TrackedObjectsType = std::vector<Microsoft::WRL::ComPtr<ID3D12Object>>;
 
     D3D12_COMMAND_LIST_TYPE m_D3d12CommandListType;
-//Modify Begin:2026-08-07 by Hui
 //Modify Begin:2026-08-12 by Hui
     std::shared_ptr<D3D12DeviceContext> m_DeviceContext;
-//Modify End
     Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;
-//Modify Begin:2026-07-30 by Hui
     std::shared_ptr<ResourceStateRegistry> m_ResourceStateRegistry;
-//Modify End
 //Modify End
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList2> m_D3d12CommandList;
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList5> m_D3d12CommandList5;

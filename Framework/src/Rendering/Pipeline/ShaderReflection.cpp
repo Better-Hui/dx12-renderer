@@ -1,6 +1,6 @@
 #include <Framework/Rendering/Pipeline/ShaderReflection.h>
 
-//Modify Begin:2026-07-24 by Hui
+//Modify Begin:2026-07-27 by Hui
 
 std::string ShaderReflection::GetBaseResourceName(const std::string& name)
 {
@@ -37,13 +37,11 @@ ShaderReflectionMetadata ShaderReflection::CollectShader(const Microsoft::WRL::C
         CacheResourceName(metadata.m_UnorderedAccessViews[i], i, metadata.m_UnorderedAccessViewsNameCache);
     }
 
-//Modify Begin:2026-07-27 by Hui
     metadata.m_Samplers = ShaderUtils::GetSamplers(reflection);
     for (size_t i = 0; i < metadata.m_Samplers.size(); ++i)
     {
         CacheResourceName(metadata.m_Samplers[i], i, metadata.m_SamplersNameCache);
     }
-//Modify End
 
     return metadata;
 }
@@ -72,13 +70,11 @@ ShaderReflectionMetadata ShaderReflection::CollectLibrary(const Microsoft::WRL::
         CacheResourceName(metadata.m_UnorderedAccessViews[i], i, metadata.m_UnorderedAccessViewsNameCache);
     }
 
-//Modify Begin:2026-07-27 by Hui
     metadata.m_Samplers = ShaderUtils::GetSamplers(reflection);
     for (size_t i = 0; i < metadata.m_Samplers.size(); ++i)
     {
         CacheResourceName(metadata.m_Samplers[i], i, metadata.m_SamplersNameCache);
     }
-//Modify End
 
     return metadata;
 }

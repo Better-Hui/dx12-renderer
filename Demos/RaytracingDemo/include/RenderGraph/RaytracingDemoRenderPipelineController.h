@@ -20,6 +20,7 @@ struct RaytracingDemoRenderGraphTopology
     bool FrameGenerationEnabled = false;
     bool AsyncComputeEnabled = false;
     PathTracingBackend PathTracingBackendType = PathTracingBackend::InlineRayQuery;
+    PathTracingDispatchMode PathTracingDispatchModeType = PathTracingDispatchMode::FullResolution;
     RaytracingDemoLightingTechnique DirectLightingTechnique = RaytracingDemoLightingTechnique::None;
     RaytracingDemoLightingTechnique IndirectLightingTechnique = RaytracingDemoLightingTechnique::None;
     bool IndirectLightingEnabled = false;

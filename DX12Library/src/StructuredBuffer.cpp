@@ -1,6 +1,6 @@
 #include "StructuredBuffer.h"
 
-#include <d3dx12.h>
+#include <d3dx12/d3dx12.h>
 
 #include "Buffer.h"
 #include "D3D12DeviceContext.h"
@@ -61,6 +61,7 @@ StructuredBuffer::StructuredBuffer(
     size_t elementSize,
     const std::wstring& name,
     std::shared_ptr<D3D12DeviceContext> deviceContext)
+//Modify Begin:2026-08-19 by Hui
     : Buffer(
         resourceDesc,
         pHeap,
@@ -68,7 +69,8 @@ StructuredBuffer::StructuredBuffer(
         numElements,
         elementSize,
         name,
-        std::move(deviceContext))
+        deviceContext)
+//Modify End
     , m_NumElements(numElements)
     , m_ElementSize(elementSize)
     , m_CounterBuffer(std::make_shared<ByteAddressBuffer>(

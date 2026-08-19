@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-08-12 by Hui
 #include <Framework/Rendering/Denoising/NRD.h>
 
 #include <DX12Library/CommandList.h>
@@ -6,13 +6,9 @@
 #include <DX12Library/CommandQueue.h>
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Texture.h>
-//Modify Begin:2026-07-29 by Hui
 #include <Framework/Rendering/Pipeline/CommandContext.h>
-//Modify End
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
-//Modify Begin:2026-07-30 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
-//Modify End
 #include <Framework/NRDInputAdapter_CS.h>
 #include <Framework/NRDOutputComposite_CS.h>
 #include <Framework/Rendering/Pipeline/ShaderBlob.h>
@@ -279,7 +275,6 @@ void NRD::PrepareInputs(
     constants.Width = width;
     constants.Height = height;
 
-//Modify Begin:2026-07-29 by Hui
     const CommandContext commandContext(commandList);
     commandContext.SetConstantBuffer(*m_PrepareShader, "NRDInputAdapterConstants", constants);
     commandContext.SetTexture(*m_PrepareShader, "GBufferSpecularSmoothness", ShaderResourceView(gBufferSpecularSmoothness));
@@ -293,7 +288,6 @@ void NRD::PrepareInputs(
     commandContext.BindPipeline(*m_PrepareShader);
     commandContext.BindDescriptorSet(m_PrepareShader->GetDescriptorSet());
     commandContext.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
-//Modify End
 }
 
 void NRD::PrepareDenoiserInputs(
@@ -338,10 +332,8 @@ void NRD::Denoise(
     StoreNRDColumnMajorMatrix(commonSettings.viewToClipMatrixPrev, previousProjection);
     StoreNRDColumnMajorMatrix(commonSettings.worldToViewMatrix, currentView);
     StoreNRDColumnMajorMatrix(commonSettings.worldToViewMatrixPrev, previousView);
-//Modify Begin:2026-07-27 by Hui
     commonSettings.motionVectorScale[0] = 1.0f / static_cast<float>(width);
     commonSettings.motionVectorScale[1] = 1.0f / static_cast<float>(height);
-//Modify End
     commonSettings.motionVectorScale[2] = 1.0f;
     commonSettings.resourceSize[0] = static_cast<uint16_t>(width);
     commonSettings.resourceSize[1] = static_cast<uint16_t>(height);
@@ -357,9 +349,7 @@ void NRD::Denoise(
     commonSettings.frameIndex = m_FrameIndex++;
     commonSettings.accumulationMode = resetHistory ? nrd::AccumulationMode::CLEAR_AND_RESTART : nrd::AccumulationMode::CONTINUE;
     commonSettings.isMotionVectorInWorldSpace = false;
-//Modify Begin:2026-07-30 by Hui
     m_Impl->Integration.NewFrame();
-//Modify End
     m_Impl->Integration.SetCommonSettings(commonSettings);
     m_PreviousView = currentView;
     m_PreviousProjection = currentProjection;
@@ -416,7 +406,6 @@ void NRD::Denoise(
     }
 
     nrd::ResourceSnapshot snapshot = {};
-//Modify Begin:2026-08-12 by Hui
     snapshot.restoreInitialState = true;
     commandList.TransitionBarrier(*noisyRadiance, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     commandList.TransitionBarrier(*nrdNormalRoughness, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -424,7 +413,6 @@ void NRD::Denoise(
     commandList.TransitionBarrier(*nrdMotion, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     commandList.TransitionBarrier(*denoisedRadiance, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     CommandListInternalAccess::FlushResourceBarriers(commandList);
-//Modify End
 
     nri::Texture* noisyTexture = m_Impl->GetWrappedTexture(noisyRadiance, FrameworkNRD::RadianceFormat);
     nri::Texture* normalRoughnessTexture = m_Impl->GetWrappedTexture(nrdNormalRoughness, FrameworkNRD::NormalRoughnessFormat);
@@ -453,13 +441,11 @@ void NRD::Denoise(
     }
 
     const nrd::Identifier denoiser = DIFFUSE_DENOISER_ID;
-//Modify Begin:2026-07-30 by Hui
     commandList.ExecuteExternalCommandRecording(
         [&](ID3D12GraphicsCommandList2&)
         {
             m_Impl->Integration.Denoise(&denoiser, 1, *nriCommandBuffer, snapshot);
         });
-//Modify End
     m_Impl->Core.DestroyCommandBuffer(nriCommandBuffer);
 }
 
@@ -478,7 +464,6 @@ void NRD::Composite(
     constants.Height = height;
     constants.DenoiserMode = static_cast<uint32_t>(m_Settings.Mode);
 
-//Modify Begin:2026-07-29 by Hui
     const CommandContext commandContext(commandList);
     commandContext.SetConstantBuffer(*m_CompositeShader, "NRDOutputCompositeConstants", constants);
     commandContext.SetTexture(*m_CompositeShader, "DenoisedRadiance", ShaderResourceView(denoisedRadiance));
@@ -489,7 +474,6 @@ void NRD::Composite(
     commandContext.BindPipeline(*m_CompositeShader);
     commandContext.BindDescriptorSet(m_CompositeShader->GetDescriptorSet());
     commandContext.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
-//Modify End
 }
 
 void NRD::Execute(

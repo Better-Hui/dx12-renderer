@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-07-28 by Hui
 #include <ShaderLibrary/Common/RootSignature.hlsli>
 #include "../../../External/NRD/Shaders/NRD.hlsli"
 
@@ -24,7 +24,6 @@ float3 GetNRDDiffuseDemodulation(uint2 pixel)
     return lerp(diffuseFactor, float3(1.0f, 1.0f, 1.0f), metallic);
 }
 
-//Modify Begin:2026-07-28 by Hui
 float3 SanitizeNRDCompositeColor(float3 color)
 {
     if (!all(isfinite(color)))
@@ -34,7 +33,6 @@ float3 SanitizeNRDCompositeColor(float3 color)
 
     return min(max(color, 0.0f), 250.0f);
 }
-//Modify End
 
 [numthreads(8, 8, 1)]
 void main(uint3 dispatchThreadId : SV_DispatchThreadID)
@@ -56,9 +54,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         denoised = REBLUR_BackEnd_UnpackRadianceAndNormHitDist(denoised);
     }
 
-//Modify Begin:2026-07-28 by Hui
     float3 color = SanitizeNRDCompositeColor(denoised.rgb * GetNRDDiffuseDemodulation(pixel));
     Output[pixel] = float4(color, 1.0f);
-//Modify End
 }
 //Modify End

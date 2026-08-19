@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-08-12 by Hui
 #pragma once
 
 #include <cstdint>
@@ -9,9 +9,7 @@
 
 class CommandList;
 class ComputeShader;
-//Modify Begin:2026-07-30 by Hui
 class FrameworkDeviceContext;
-//Modify End
 class Texture;
 
 class SVGF
@@ -65,9 +63,7 @@ private:
         uint32_t Width = 1;
         uint32_t Height = 1;
         uint32_t StepSize = 1;
-//Modify Begin:2026-07-27 by Hui
         uint32_t Direction = 0;
-//Modify End
         float PhiColor = 4.0f;
         float PhiNormal = 64.0f;
         float PhiDepth = 1.0f;
@@ -99,7 +95,6 @@ private:
         const std::shared_ptr<Texture>& depthTexture,
         uint32_t width,
         uint32_t height);
-//Modify Begin:2026-07-27 by Hui
     void AtrousPass(
         CommandList& commandList,
         const std::shared_ptr<Texture>& input,
@@ -111,7 +106,6 @@ private:
         uint32_t height,
         uint32_t stepSize,
         uint32_t direction);
-//Modify End
     void Composite(
         CommandList& commandList,
         const std::shared_ptr<Texture>& input,
@@ -123,9 +117,7 @@ private:
     std::unique_ptr<ComputeShader> m_TemporalShader;
     std::unique_ptr<ComputeShader> m_AtrousShader;
     std::unique_ptr<ComputeShader> m_CompositeShader;
-//Modify Begin:2026-08-12 by Hui
     FrameworkDeviceContext& m_DeviceContext;
-//Modify End
 
     Settings m_Settings = {};
     bool m_Enabled = false;

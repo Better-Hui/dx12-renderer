@@ -1,6 +1,6 @@
 #include <Passes/RaytracingDemoPasses.h>
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-18 by Hui
 #include <PathTracing/PathTracingSceneBindings.h>
 #include <RenderGraph/RaytracingDemoGraphResources.h>
 
@@ -13,13 +13,11 @@ namespace
 {
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
 
-//Modify Begin:2026-08-18 by Hui
     struct ReSTIRDIPassData
     {
         RaytracingDemoPassResourcesSnapshot Resources;
         RaytracingDemoPassConfig Config = {};
     };
-//Modify End
 }
 
 void RaytracingDemoPasses::Builder::AddReSTIRDIPass(
@@ -62,13 +60,9 @@ void RaytracingDemoPasses::Builder::AddReSTIRDIPass(
             inputs.FrameState.Enabled = true;
             inputs.FrameState.UseSoftShadowVariant =
                 resources.Pipelines.GetShadowMode() == PathTracingShadowMode::SoftShadows;
-//Modify Begin:2026-07-30 by Hui
             inputs.FrameState.ShadingModel = config.FrameState->ShadingModel;
-//Modify End
-//Modify Begin:2026-08-06 by Hui
             inputs.FrameState.EnvironmentProjectionVariant =
                 static_cast<uint32_t>(resources.Pipelines.GetLayout().EnvironmentProjection);
-//Modify End
             inputs.FrameState.Width = config.FrameState->Width;
             inputs.FrameState.Height = config.FrameState->Height;
             inputs.FrameState.FrameIndex = config.FrameState->FrameIndex;

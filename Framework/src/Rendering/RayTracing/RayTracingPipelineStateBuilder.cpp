@@ -1,17 +1,13 @@
-//Modify Begin:2026-07-21 by Hui
+//Modify Begin:2026-07-30 by Hui
 #include <Framework/Rendering/RayTracing/RayTracingPipelineStateBuilder.h>
 
 #include <DX12Library/Helpers.h>
-//Modify Begin:2026-07-30 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
-//Modify End
-//Modify Begin:2026-07-27 by Hui
 #include <Framework/Rendering/Pipeline/PipelineLayout.h>
 #include <Framework/Rendering/Pipeline/PipelineStateCache.h>
-//Modify End
 #include <Framework/Rendering/Pipeline/ShaderBlob.h>
 
-#include <d3dx12.h>
+#include <d3dx12/d3dx12.h>
 
 using Microsoft::WRL::ComPtr;
 
@@ -59,9 +55,7 @@ namespace
         return device5;
     }
 
-    //Modify Begin:2026-07-27 by Hui
     PipelineStateCache<RayTracingPipelineStateKey, std::shared_ptr<RayTracingPipelineState>> GPipelineStateCache;
-    //Modify End
 }
 
 RootSignature& RayTracingPipelineState::GetGlobalRootSignature() const
@@ -69,12 +63,10 @@ RootSignature& RayTracingPipelineState::GetGlobalRootSignature() const
     return *m_GlobalRootSignature;
 }
 
-//Modify Begin:2026-07-27 by Hui
 const std::shared_ptr<RootSignature>& RayTracingPipelineState::GetGlobalRootSignaturePtr() const
 {
     return m_GlobalRootSignature;
 }
-//Modify End
 
 const ComPtr<ID3D12StateObject>& RayTracingPipelineState::GetStateObject() const
 {
@@ -110,7 +102,6 @@ std::shared_ptr<RayTracingPipelineState> RayTracingPipelineStateBuilder::Build()
         });
 }
 
-//Modify Begin:2026-07-27 by Hui
 RayTracingPipelineStateKey RayTracingPipelineStateBuilder::CreateKey() const
 {
     RayTracingPipelineStateKey key;
@@ -146,7 +137,6 @@ RayTracingPipelineStateKey RayTracingPipelineStateBuilder::CreateKey() const
                 sizeof(binding.NullUnorderedAccessViewDesc));
         }
     }
-//Modify Begin:2026-07-30 by Hui
     for (const PipelineRootSamplerDesc& sampler : m_Desc.RootSamplers)
     {
         PipelineHashString(key.LayoutHash, sampler.Name);
@@ -155,7 +145,6 @@ RayTracingPipelineStateKey RayTracingPipelineStateBuilder::CreateKey() const
         PipelineHashValue(key.LayoutHash, sampler.ShaderStages);
         PipelineHashBytes(key.LayoutHash, &sampler.Desc, sizeof(sampler.Desc));
     }
-//Modify End
 
     key.PayloadSizeInBytes = m_Desc.PayloadSizeInBytes;
     key.AttributeSizeInBytes = m_Desc.AttributeSizeInBytes;
@@ -163,15 +152,12 @@ RayTracingPipelineStateKey RayTracingPipelineStateBuilder::CreateKey() const
     key.DescriptorCapacity = m_Desc.MaxDescriptorCount;
     return key;
 }
-//Modify End
 
 std::shared_ptr<RootSignature> RayTracingPipelineStateBuilder::BuildGlobalRootSignature() const
 {
     PipelineLayoutDesc layoutDesc;
     layoutDesc.ShaderStages = PipelineShaderStageFlags::RayTracing;
-//Modify Begin:2026-07-30 by Hui
     layoutDesc.RootSamplers = m_Desc.RootSamplers;
-//Modify End
     layoutDesc.DescriptorRanges.reserve(m_Desc.Bindings.size());
     for (uint32_t bindingIndex = 0; bindingIndex < m_Desc.Bindings.size(); ++bindingIndex)
     {
@@ -193,9 +179,7 @@ std::shared_ptr<RootSignature> RayTracingPipelineStateBuilder::BuildGlobalRootSi
     PipelineLayout layout(m_DeviceContext, std::move(layoutDesc));
 
     PipelineRootSignatureBuildDesc rootSignatureBuildDesc;
-//Modify Begin:2026-07-30 by Hui
     rootSignatureBuildDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED;
-//Modify End
     return layout.CreateRootSignature(rootSignatureBuildDesc);
 }
 

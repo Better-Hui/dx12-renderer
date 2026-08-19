@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-31 by Hui
+//Modify Begin:2026-08-18 by Hui
 #include <Passes/RaytracingDemoPasses.h>
 
 #include <RenderGraph/RaytracingDemoGraphResources.h>
@@ -9,7 +9,6 @@
 #include <RenderGraph/RenderContext.h>
 #include <RenderGraph/RenderGraphBuilder.h>
 
-//Modify Begin:2026-08-18 by Hui
 namespace
 {
     struct DebugTexturePassData
@@ -18,7 +17,6 @@ namespace
         RenderGraph::ResourceId DebugTarget = 0;
     };
 }
-//Modify End
 
 void RaytracingDemoPasses::Builder::AddDebugTexturePass(
     RenderGraph::RenderGraphBuilder& renderGraphBuilder,

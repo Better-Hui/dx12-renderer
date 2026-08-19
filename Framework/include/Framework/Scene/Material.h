@@ -50,7 +50,7 @@ public:
 
 private:
 
-	//Modify Begin:2026-08-17 by Hui
+//Modify Begin:2026-08-19 by Hui
 	void UploadUniforms(CommandList& commandList);
 	//Modify End
     void SetVariable(const std::string& name, size_t size, const void* data, bool array = false, bool throwOnNotFound = true);
@@ -60,7 +60,6 @@ private:
 
 	std::shared_ptr<Shader> m_Shader;
 	const ShaderUtils::ConstantBufferMetadata* m_Metadata;
-//Modify Begin:2026-07-27 by Hui
 	std::string m_ConstantBufferName;
 //Modify End
 	std::unique_ptr<uint8_t[]> m_ConstantBuffer = nullptr;

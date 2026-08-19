@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-08-13 by Hui
 #include <Scene/SceneLightManager.h>
 
 #include <DX12Library/CommandList.h>
@@ -6,9 +6,7 @@
 
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
-//Modify Begin:2026-07-30 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
-//Modify End
 #include <Framework/Rendering/RayTracing/RayTracingShader.h>
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
 
@@ -155,14 +153,11 @@ void SceneLightManager::CreateFromScene(const Scene& scene)
     m_PointLightOrbitCenter.clear();
     m_PointLightAnimated.clear();
 
-//Modify Begin:2026-08-06 by Hui
     const SceneLightGroupSettings& lightGroups = scene.GetLightGroupSettings();
     m_DirectionalLightsEnabled = lightGroups.DirectionalLightsEnabled;
     m_PointLightsEnabled = lightGroups.PointLightsEnabled;
     m_AreaLightsEnabled = lightGroups.AreaLightsEnabled;
-//Modify End
 
-//Modify Begin:2026-07-30 by Hui
     m_SkyLight.ColorAndIntensity = scene.GetSkybox().AmbientColorAndIntensity;
     if (scene.GetSkybox().Texture.IsValid() &&
         m_SkyLight.ColorAndIntensity.x <= 0.0f &&
@@ -171,7 +166,6 @@ void SceneLightManager::CreateFromScene(const Scene& scene)
     {
         m_SkyLight.ColorAndIntensity = { 1.0f, 1.0f, 1.0f, std::max(0.001f, m_SkyLight.ColorAndIntensity.w) };
     }
-//Modify End
 
     for (const DirectionalLight& light : scene.GetDirectionalLights())
     {
@@ -203,13 +197,11 @@ void SceneLightManager::CreateFromScene(const Scene& scene)
     RebuildGpuResources();
 }
 
-//Modify Begin:2026-08-06 by Hui
 void SceneLightManager::SetEmissiveMeshSurfaceEmitters(SurfaceEmitterSceneData emitterData)
 {
     m_MeshSurfaceEmitterData = std::move(emitterData);
     m_GpuResources.SetMeshSurfaceEmitters(m_MeshSurfaceEmitterData);
 }
-//Modify End
 
 void SceneLightManager::InitializeGpuBuffers(CommandList& commandList)
 {
@@ -285,13 +277,11 @@ void SceneLightManager::ApplyToScene(Scene& scene) const
     SceneSkybox skybox = scene.GetSkybox();
     skybox.AmbientColorAndIntensity = m_SkyLight.ColorAndIntensity;
     scene.SetSkybox(skybox);
-//Modify Begin:2026-08-06 by Hui
     scene.SetLightGroupSettings({
         m_DirectionalLightsEnabled,
         m_PointLightsEnabled,
         m_AreaLightsEnabled
     });
-//Modify End
     scene.SetDirectionalLights(m_DirectionalLights);
     scene.SetPointLights(m_PointLights);
     scene.SetAreaLights(std::move(areaLights));
@@ -302,13 +292,11 @@ void SceneLightManager::BindComputeResources(CommandContext& commandContext, Com
     m_GpuResources.BindComputeResources(commandContext, shader);
 }
 
-//Modify Begin:2026-08-13 by Hui
 void SceneLightManager::ForEachShaderResource(
     const std::function<void(const Resource&)>& action) const
 {
     m_GpuResources.ForEachShaderResource(action);
 }
-//Modify End
 
 void SceneLightManager::BindRayTracingResources(RayTracingBindingSet& bindingSet)
 {

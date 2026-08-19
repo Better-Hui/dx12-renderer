@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-03 by Hui
 #pragma once
 
 #include <Framework/Scene/Scene.h>
@@ -27,14 +27,11 @@ struct SceneImportResult
 class SceneImporter final
 {
 public:
-//Modify Begin:2026-08-03 by Hui
     // Imports Unity YAML scenes and Unity-style JSON scenes into the shared Scene representation.
-//Modify End
     static SceneImportResult ImportFromFile(
         const std::filesystem::path& scenePath,
         const SceneImportOptions& options = {});
 
-//Modify Begin:2026-08-03 by Hui
     static SceneImportResult ImportJsonFromFile(
         const std::filesystem::path& scenePath,
         const SceneImportOptions& options = {});
@@ -44,7 +41,6 @@ public:
     static void WriteJsonRuntimeState(
         const std::filesystem::path& statePath,
         const Scene& scene);
-//Modify End
 
     static void WriteCameraToSourceFile(
         const std::filesystem::path& scenePath,

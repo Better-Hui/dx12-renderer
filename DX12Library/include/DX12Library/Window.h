@@ -221,14 +221,12 @@ private:
 
 	HighResolutionClock UpdateClock;
 	HighResolutionClock RenderClock;
-//Modify Begin:2026-07-21 by Hui
+//Modify Begin:2026-08-18 by Hui
 	double FrameStatisticsElapsedSeconds = 0.0;
 	uint32_t FrameStatisticsCount = 0;
-//Modify Begin:2026-08-18 by Hui
 	double ProfilerDisplayRefreshIntervalSeconds = 1.0;
 	double FramesPerSecond = 0.0;
 	double FrameMilliseconds = 0.0;
-//Modify End
 //Modify End
 
 //Modify Begin:2026-07-28 by Hui

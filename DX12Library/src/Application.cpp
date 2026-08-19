@@ -168,10 +168,9 @@ void Application::Initialize(
 //Modify End
 #endif
 
-//Modify Begin:2026-07-21 by Hui
+//Modify Begin:2026-08-18 by Hui
     if (useExternalDevice)
     {
-//Modify Begin:2026-08-18 by Hui
         ComPtr<ID3D12Device2> device;
         ThrowIfFailed(externalContext->Device->QueryInterface(IID_PPV_ARGS(&device)));
         if (m_RuntimeLifecycle != nullptr && !m_RuntimeLifecycle->AttachDevice(device.Get()))
@@ -181,7 +180,6 @@ void Application::Initialize(
                 std::string(m_RuntimeLifecycle->GetInitializationStatus()));
         }
         m_RenderContext.InitializeExternal(*externalContext);
-//Modify End
     }
     else
     {
@@ -194,7 +192,6 @@ void Application::Initialize(
 
         if (dxgiAdapter)
         {
-//Modify Begin:2026-08-18 by Hui
             Microsoft::WRL::ComPtr<ID3D12Device2> device = CreateDevice(dxgiAdapter);
             if (m_RuntimeLifecycle != nullptr && !m_RuntimeLifecycle->AttachDevice(device.Get()))
             {
@@ -203,14 +200,12 @@ void Application::Initialize(
                     std::string(m_RuntimeLifecycle->GetInitializationStatus()));
             }
             m_RenderContext.InitializeOwned(std::move(device));
-//Modify End
         }
         else
         {
             throw std::exception("DXGI adapter enumeration failed.");
         }
     }
-//Modify Begin:2026-08-07 by Hui
     m_RenderContext.SetFatalErrorHandler(
         [this](const CommandQueueFailure& failure)
         {
@@ -221,7 +216,6 @@ void Application::Initialize(
             WriteDiagnostic("CommandQueueException", report.str());
             Quit(failure.ExitCode);
         });
-//Modify End
     const auto device = m_RenderContext.GetDevice();
     D3D12_FEATURE_DATA_SHADER_MODEL shaderModel = { D3D_SHADER_MODEL_6_8 };
     ThrowIfFailed(device->CheckFeatureSupport(
@@ -248,18 +242,16 @@ void Application::Create(HINSTANCE hInst)
     Create(hInst, createDesc);
 }
 
-//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-08-18 by Hui
 void Application::Create(HINSTANCE hInst, const ApplicationCreateDesc& createDesc)
 {
     if (!gs_pSingelton)
     {
-//Modify Begin:2026-08-18 by Hui
         auto destroyApplication = [](Application* application) { delete application; };
         std::unique_ptr<Application, decltype(destroyApplication)> application(
             new Application(hInst), destroyApplication);
         application->Initialize(nullptr, createDesc);
         gs_pSingelton = application.release();
-//Modify End
     }
 }
 //Modify End
@@ -272,7 +264,7 @@ void Application::Create(HINSTANCE hInst, const ExternalD3D12Context& externalCo
 }
 //Modify End
 
-//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-08-18 by Hui
 void Application::Create(
     HINSTANCE hInst,
     const ExternalD3D12Context& externalContext,
@@ -281,13 +273,11 @@ void Application::Create(
     Assert(externalContext.Device != nullptr, "External D3D12 device is required.");
     if (!gs_pSingelton)
     {
-//Modify Begin:2026-08-18 by Hui
         auto destroyApplication = [](Application* application) { delete application; };
         std::unique_ptr<Application, decltype(destroyApplication)> application(
             new Application(hInst, &externalContext), destroyApplication);
         application->Initialize(&externalContext, createDesc);
         gs_pSingelton = application.release();
-//Modify End
     }
 }
 //Modify End
@@ -646,9 +636,7 @@ Microsoft::WRL::ComPtr<ID3D12Device2> Application::GetDevice() const
 //Modify Begin:2026-08-07 by Hui
 std::shared_ptr<D3D12DeviceContext> Application::GetD3D12DeviceContext() const
 {
-//Modify Begin:2026-08-07 by Hui
     return m_RenderContext.GetD3D12DeviceContext();
-//Modify End
 }
 //Modify End
 
@@ -690,12 +678,10 @@ bool Application::ReconfigurePresentation(const std::function<bool()>& configure
     }
 }
 
-//Modify Begin:2026-07-21 by Hui
+//Modify Begin:2026-07-28 by Hui
 bool Application::UsesExternalDevice() const
 {
-//Modify Begin:2026-07-28 by Hui
     return m_RenderContext.UsesExternalDevice();
-//Modify End
 }
 //Modify End
 
@@ -1023,14 +1009,13 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
     }
 
     return 0;
-//Modify Begin:2026-07-28 by Hui
+//Modify Begin:2026-08-07 by Hui
     }
     catch (const std::exception& exception)
     {
         std::ostringstream report;
         report << "Message=" << message << std::endl;
         report << exception.what() << std::endl;
-//Modify Begin:2026-08-03 by Hui
         const auto device = gs_pSingelton != nullptr ? gs_pSingelton->GetDevice() : nullptr;
         if (device != nullptr)
         {
@@ -1060,7 +1045,6 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
                 }
             }
         }
-//Modify End
         if (gs_pSingelton != nullptr)
         {
             gs_pSingelton->WriteDiagnostic("WindowCallbackException", report.str());
@@ -1068,7 +1052,6 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
         PostQuitMessage(4);
         return 0;
     }
-//Modify Begin:2026-08-07 by Hui
     catch (...)
     {
         std::ostringstream report;
@@ -1081,6 +1064,5 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
         PostQuitMessage(4);
         return 0;
     }
-//Modify End
 //Modify End
 }

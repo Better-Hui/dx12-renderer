@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-08-12 by Hui
 #include "DescriptorAllocator.h"
 #include "DescriptorRetirementClock.h"
 #include "ResourceStateRegistry.h"
@@ -17,7 +17,6 @@
 #include <string>
 #include <utility>
 
-//Modify Begin:2026-08-12 by Hui
 struct D3D12TextureCacheKey
 {
     std::wstring Path;
@@ -28,7 +27,6 @@ struct D3D12TextureCacheKey
         return Path < other.Path || (Path == other.Path && Usage < other.Usage);
     }
 };
-//Modify End
 
 struct D3D12DeviceContextDesc
 {
@@ -36,13 +34,11 @@ struct D3D12DeviceContextDesc
     std::shared_ptr<ResourceStateRegistry> ResourceStateRegistry;
 };
 
-//Modify Begin:2026-08-12 by Hui
 struct D3D12TextureCacheEntry
 {
     Microsoft::WRL::ComPtr<ID3D12Resource> Resource;
     std::shared_ptr<ResourceStateRegistration> StateRegistration;
 };
-//Modify End
 
 class D3D12DeviceContext final
 {
@@ -87,7 +83,6 @@ public:
         m_DescriptorRetirementClock->SetCurrentFrame(frameNumber);
     }
 
-//Modify Begin:2026-08-12 by Hui
     uint64_t GetDescriptorRetirementFrame() const
     {
         return m_DescriptorRetirementClock->GetCurrentFrame();
@@ -119,7 +114,6 @@ public:
                     D3D12_RESOURCE_STATE_COMMON)
             });
     }
-//Modify End
 
 private:
     D3D12DeviceContextDesc m_Desc;

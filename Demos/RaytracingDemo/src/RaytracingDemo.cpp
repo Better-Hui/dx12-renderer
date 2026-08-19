@@ -12,17 +12,17 @@
 #include <Framework/Geometry/ModelLoader.h>
 #include <Framework/Rendering/Pipeline/RasterPipelineStateBuilder.h>
 #include <Framework/Rendering/Pipeline/ShaderBlob.h>
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-08-19 by Hui
 #include <Framework/Rendering/Texture/TextureLoader.h>
 //Modify End
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
 #include <Framework/Rendering/Pipeline/ShaderTargetProfile.h>
 //Modify End
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
 #include <Framework/Scene/SceneImporter.h>
 //Modify End
 
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-08-19 by Hui
 #include <Automation/RaytracingDemoAutomation.h>
 //Modify End
 
@@ -30,7 +30,7 @@
 #include <RenderGraph/RenderMetadata.h>
 
 #include <DirectXMath.h>
-#include <d3dx12.h>
+#include <d3dx12/d3dx12.h>
 #include <imgui.h>
 
 #include <algorithm>
@@ -60,22 +60,20 @@
 
 using namespace DirectX;
 
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-08-19 by Hui
 using RuntimeAutomationAction = RaytracingDemoAutomation::Action;
 using RuntimeAutomationMatrixCase = RaytracingDemoAutomation::MatrixCase;
 //Modify End
 
 namespace
 {
-    //Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
     FrameworkDeviceContext CreateFrameworkDeviceContext(
         Application& application,
         FrameFeatureServices frameFeatureServices)
     {
         FrameworkDeviceContextDesc desc;
-//Modify Begin:2026-08-07 by Hui
         desc.DeviceContext = application.GetD3D12DeviceContext();
-//Modify End
         desc.DirectQueue = application.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
         desc.ComputeQueue = application.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE);
         desc.CopyQueue = application.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COPY);
@@ -92,7 +90,6 @@ namespace
             std::max(resourceCount, resourceCapacity)));
     }
 
-//Modify Begin:2026-08-07 by Hui
     DLSSMode ParseDLSSMode(const char* value)
     {
         if (value == nullptr || std::strcmp(value, "0") == 0 || std::strcmp(value, "off") == 0)
@@ -119,7 +116,7 @@ namespace
     }
 //Modify End
 
-//Modify Begin:2026-08-12 by Hui
+//Modify Begin:2026-08-19 by Hui
     MaterialShadingModel ParseMaterialShadingModel(const char* value)
     {
         if (value != nullptr &&
@@ -133,7 +130,7 @@ namespace
     }
 //Modify End
 
-//Modify Begin:2026-08-10 by Hui
+//Modify Begin:2026-08-19 by Hui
     bool TryGetEnvironmentBoolean(const char* variableName, bool& value)
     {
         char* environmentValue = nullptr;
@@ -149,7 +146,6 @@ namespace
         return true;
     }
 
-//Modify Begin:2026-08-16 by Hui
     std::string Trim(std::string value)
     {
         const auto first = std::find_if_not(value.begin(), value.end(), [](unsigned char character)
@@ -350,9 +346,8 @@ namespace
         std::string m_Status;
     };
 //Modify End
-//Modify End
 
-//Modify Begin:2026-08-03 by Hui
+//Modify Begin:2026-08-19 by Hui
     std::filesystem::path GetScenePath()
     {
         char* scenePath = nullptr;
@@ -425,7 +420,7 @@ namespace
         camera.SetProjection(sceneCamera.FieldOfView, static_cast<float>(width) / static_cast<float>(height), sceneCamera.NearClipPlane, sceneCamera.FarClipPlane);
     }
 
-//Modify Begin:2026-07-29 by Hui
+//Modify Begin:2026-08-19 by Hui
     void CalculateCameraControllerFromLookDirection(
         const XMVECTOR lookDirection,
         float& yaw,
@@ -439,7 +434,7 @@ namespace
 
 }
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
 RaytracingDemo::RaytracingDemo(
     Application& application,
     const std::wstring& name,
@@ -451,11 +446,8 @@ RaytracingDemo::RaytracingDemo(
     , m_Width(width)
     , m_Height(height)
     , m_FrameworkDeviceContext(CreateFrameworkDeviceContext(application, std::move(frameFeatureServices)))
-//Modify Begin:2026-08-07 by Hui
     , m_DLSS(m_FrameworkDeviceContext)
-//Modify End
     , m_PathTracingPipelines(m_FrameworkDeviceContext)
-//Modify Begin:2026-07-30 by Hui
     , m_DirectLightingReSTIRDIPass(
         m_FrameworkDeviceContext,
         {
@@ -464,15 +456,9 @@ RaytracingDemo::RaytracingDemo(
             L"Demos/RaytracingDemo/shaders/ReSTIRDI/ReSTIRDI.Spatial.cs.hlsl",
             L"Demos/RaytracingDemo/shaders/ReSTIRDI/ReSTIRDI.Shade.cs.hlsl",
             { { "RAYTRACING_DEMO_SOFT_SHADOWS", "1" } },
-//Modify Begin:2026-08-06 by Hui
             "RAYTRACING_DEMO_ENVIRONMENT_PROJECTION",
-//Modify End
-//Modify Begin:2026-08-12 by Hui
             { PipelineStaticSamplers::LinearWrap(1u) },
-//Modify End
         })
-//Modify End
-//Modify Begin:2026-08-10 by Hui
     , m_IndirectLightingReSTIRGIPass(
         m_FrameworkDeviceContext,
         {
@@ -482,35 +468,24 @@ RaytracingDemo::RaytracingDemo(
             L"Demos/RaytracingDemo/shaders/ReSTIRGI/ReSTIRGI.Shade.cs.hlsl",
             { { "RAYTRACING_DEMO_SOFT_SHADOWS", "1" } },
             "RAYTRACING_DEMO_ENVIRONMENT_PROJECTION",
-//Modify Begin:2026-08-12 by Hui
             { PipelineStaticSamplers::LinearWrap(1u) },
-//Modify End
         })
-//Modify End
-//Modify Begin:2026-07-30 by Hui
     , m_CudaBloom(m_FrameworkDeviceContext)
     , m_ProfilerDisplay(graphicsSettings.ProfilerDisplayRefreshIntervalSeconds)
-//Modify Begin:2026-07-30 by Hui
     , m_SceneResources(m_FrameworkDeviceContext.GetD3D12DeviceContext())
-//Modify End
-//Modify End
     , m_Lights(m_FrameworkDeviceContext)
 {
     const XMVECTOR cameraPos = XMVectorSet(0, 8, -35, 1);
     const XMVECTOR cameraTarget = XMVectorSet(0, 5, 18, 1);
     const XMVECTOR cameraUp = XMVectorSet(0, 1, 0, 0);
     GetSceneCamera().SetLookAt(cameraPos, cameraTarget, cameraUp);
-//Modify Begin:2026-07-28 by Hui
     const XMVECTOR initialForward = XMVector3Normalize(cameraTarget - cameraPos);
     m_CameraController.Yaw = XMConvertToDegrees(std::atan2(XMVectorGetX(initialForward), XMVectorGetZ(initialForward)));
     m_CameraController.Pitch = XMConvertToDegrees(std::asin(std::clamp(XMVectorGetY(initialForward), -1.0f, 1.0f)));
-//Modify End
     GetSceneCamera().SetProjection(m_CameraFov, static_cast<float>(m_Width) / static_cast<float>(m_Height), 0.1f, 1000.0f);
 
-//Modify Begin:2026-07-30 by Hui
     m_DLSS.SetMode(DLSSMode::Quality);
     LoadStartupConfiguration();
-//Modify End
 
     char* mode = nullptr;
     size_t modeLength = 0;
@@ -529,7 +504,22 @@ RaytracingDemo::RaytracingDemo(
     }
     std::free(mode);
 
-//Modify Begin:2026-08-10 by Hui
+    char* dispatchMode = nullptr;
+    size_t dispatchModeLength = 0;
+    _dupenv_s(&dispatchMode, &dispatchModeLength, "RAYTRACING_DEMO_RAY_TRACING_DISPATCH");
+    if (dispatchMode != nullptr)
+    {
+        const std::string environmentDispatchMode = ToLower(dispatchMode);
+        if (environmentDispatchMode == "compacted" || environmentDispatchMode == "compacted-indirect" || environmentDispatchMode == "indirect")
+        {
+            m_PathTracingDispatchMode = PathTracingDispatchMode::CompactedIndirect;
+        }
+        else if (environmentDispatchMode == "full" || environmentDispatchMode == "full-resolution")
+        {
+            m_PathTracingDispatchMode = PathTracingDispatchMode::FullResolution;
+        }
+    }
+    std::free(dispatchMode);
     char* bounceCount = nullptr;
     size_t bounceCountLength = 0;
     _dupenv_s(&bounceCount, &bounceCountLength, "RAYTRACING_DEMO_BOUNCES");
@@ -543,9 +533,7 @@ RaytracingDemo::RaytracingDemo(
         }
     }
     std::free(bounceCount);
-//Modify End
 
-//Modify Begin:2026-08-12 by Hui
     char* materialShadingModel = nullptr;
     size_t materialShadingModelLength = 0;
     _dupenv_s(&materialShadingModel, &materialShadingModelLength, "RAYTRACING_DEMO_MATERIAL_SHADING");
@@ -554,9 +542,7 @@ RaytracingDemo::RaytracingDemo(
         m_MaterialShadingModel = ParseMaterialShadingModel(materialShadingModel);
     }
     std::free(materialShadingModel);
-//Modify End
 
-//Modify Begin:2026-08-10 by Hui
     // Environment variables override startup configuration values.
     TryGetEnvironmentLightingTechnique("RAYTRACING_DEMO_DIRECT_LIGHTING", m_DirectLightingTechnique);
     TryGetEnvironmentLightingTechnique("RAYTRACING_DEMO_INDIRECT_LIGHTING", m_IndirectLightingTechnique);
@@ -574,9 +560,7 @@ RaytracingDemo::RaytracingDemo(
     {
         m_IndirectLightingReSTIRGI.SetSettings(restirGISettings);
     }
-//Modify End
 
-//Modify Begin:2026-07-30 by Hui
     char* softShadows = nullptr;
     size_t softShadowsLength = 0;
     _dupenv_s(&softShadows, &softShadowsLength, "RAYTRACING_DEMO_SOFT_SHADOWS");
@@ -585,7 +569,6 @@ RaytracingDemo::RaytracingDemo(
         m_SoftShadowsEnabled = std::strcmp(softShadows, "0") != 0;
     }
     std::free(softShadows);
-//Modify End
 
     char* nrdMode = nullptr;
     size_t nrdModeLength = 0;
@@ -605,7 +588,6 @@ RaytracingDemo::RaytracingDemo(
     }
     std::free(denoiserMode);
 
-//Modify Begin:2026-08-07 by Hui
     char* dlssMode = nullptr;
     size_t dlssModeLength = 0;
     _dupenv_s(&dlssMode, &dlssModeLength, "RAYTRACING_DEMO_DLSS");
@@ -632,9 +614,7 @@ RaytracingDemo::RaytracingDemo(
         m_DLSS.SetFrameGenerationEnabled(std::strcmp(frameGeneration, "0") != 0);
     }
     std::free(frameGeneration);
-//Modify End
 
-//Modify Begin:2026-07-30 by Hui
     char* asyncCompute = nullptr;
     size_t asyncComputeLength = 0;
     _dupenv_s(&asyncCompute, &asyncComputeLength, "RAYTRACING_DEMO_ASYNC_COMPUTE");
@@ -655,7 +635,6 @@ RaytracingDemo::RaytracingDemo(
         m_DebugSerializeAsyncCompute = std::strcmp(debugSerializeAsyncCompute, "0") != 0;
     }
     std::free(debugSerializeAsyncCompute);
-//Modify End
 
     char* cudaBloom = nullptr;
     size_t cudaBloomLength = 0;
@@ -668,7 +647,7 @@ RaytracingDemo::RaytracingDemo(
 
 //Modify End
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
     char* meshletGBuffer = nullptr;
     size_t meshletGBufferLength = 0;
     _dupenv_s(&meshletGBuffer, &meshletGBufferLength, "RAYTRACING_DEMO_MESHLET_GBUFFER");
@@ -691,7 +670,6 @@ RaytracingDemo::RaytracingDemo(
     }
     std::free(meshletDebug);
 
-//Modify Begin:2026-07-31 by Hui
     char* meshletBackend = nullptr;
     size_t meshletBackendLength = 0;
     _dupenv_s(&meshletBackend, &meshletBackendLength, "RAYTRACING_DEMO_MESHLET_BACKEND");
@@ -701,13 +679,10 @@ RaytracingDemo::RaytracingDemo(
     }
     std::free(meshletBackend);
 //Modify End
-//Modify End
 
 }
-//Modify End
 
-//Modify Begin:2026-07-30 by Hui
-//Modify Begin:2026-08-03 by Hui
+//Modify Begin:2026-08-19 by Hui
 void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::filesystem::path& scenePath)
 {
     const SceneImportResult sceneImport = SceneImporter::ImportFromFile(scenePath);
@@ -741,18 +716,13 @@ void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::files
     m_Scene.SetSkybox(sceneSkybox);
 
     m_Lights.CreateFromScene(m_Scene);
-//Modify Begin:2026-08-10 by Hui
     bool directionalLightsEnabled = m_Lights.AreDirectionalLightsEnabled();
-//Modify Begin:2026-08-11 by Hui
     bool pointLightsEnabled = false;
-//Modify End
     bool areaLightsEnabled = m_Lights.AreAreaLightsEnabled();
-//Modify Begin:2026-08-11 by Hui
     TryGetEnvironmentBoolean("RAYTRACING_DEMO_DIRECTIONAL_LIGHTS", directionalLightsEnabled);
     TryGetEnvironmentBoolean("RAYTRACING_DEMO_POINT_LIGHTS", pointLightsEnabled);
     TryGetEnvironmentBoolean("RAYTRACING_DEMO_AREA_LIGHTS", areaLightsEnabled);
     m_Lights.SetLightGroupSettings(directionalLightsEnabled, pointLightsEnabled, areaLightsEnabled);
-//Modify End
 
     bool skyLightEnabled = true;
     if (TryGetEnvironmentBoolean("RAYTRACING_DEMO_SKY_LIGHT", skyLightEnabled) && !skyLightEnabled)
@@ -761,10 +731,7 @@ void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::files
         skyLight.ColorAndIntensity.w = 0.0f;
         m_Lights.SetSkyLight(skyLight);
     }
-//Modify End
-//Modify Begin:2026-08-06 by Hui
     m_Lights.SetEmissiveMeshSurfaceEmitters(m_SceneResources.CollectEmissiveMeshSurfaceEmitters());
-//Modify End
     m_SkyboxEnabled = !skyboxTexturePath.empty() && std::filesystem::exists(skyboxTexturePath);
     m_HasSceneCamera = sceneCamera.RuntimeCamera != nullptr;
 
@@ -777,32 +744,24 @@ void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::files
     m_CameraFov = sceneCamera.FieldOfView;
     m_CameraNearClipPlane = sceneCamera.NearClipPlane;
     m_CameraFarClipPlane = sceneCamera.FarClipPlane;
-//Modify Begin:2026-07-30 by Hui
     XMStoreFloat3(&m_InitialSceneCameraTranslation, GetSceneCamera().GetTranslation());
     XMStoreFloat4(&m_InitialSceneCameraRotation, GetSceneCamera().GetRotation());
     m_InitialSceneCameraYaw = m_CameraController.Yaw;
     m_InitialSceneCameraPitch = m_CameraController.Pitch;
     m_HasInitialSceneCameraState = true;
-//Modify End
 
     m_SkyboxTexture.reset();
     if (m_SkyboxEnabled)
     {
-//Modify Begin:2026-08-12 by Hui
         m_SkyboxTexture = std::make_shared<Texture>(
             TextureUsageType::Other,
             L"",
             commandList.GetDeviceContext());
-//Modify End
-//Modify Begin:2026-08-18 by Hui
         TextureLoader(commandList.GetDeviceContext()).Load(
             commandList, *m_SkyboxTexture, skyboxTexturePath, TextureUsageType::Albedo);
-//Modify End
     }
 }
-//Modify End
 
-//Modify Begin:2026-07-30 by Hui
 void RaytracingDemo::ResetCameraToInitialSceneState()
 {
     if (!m_HasInitialSceneCameraState)
@@ -818,7 +777,6 @@ void RaytracingDemo::ResetCameraToInitialSceneState()
     ResetAccumulation();
 }
 
-//Modify Begin:2026-07-30 by Hui
 void RaytracingDemo::LoadStartupConfiguration()
 {
     const std::filesystem::path configurationPath = std::filesystem::current_path() / "Config" / "RaytracingDemo.ini";
@@ -854,7 +812,26 @@ void RaytracingDemo::LoadStartupConfiguration()
         }
     };
 
+    auto applyDispatchMode = [&](const char* section, const char* key)
+    {
+        std::string value;
+        if (!configuration.TryGetString(section, key, value))
+        {
+            return;
+        }
+
+        value = ToLower(value);
+        if (value == "compacted" || value == "compacted-indirect" || value == "indirect")
+        {
+            m_PathTracingDispatchMode = PathTracingDispatchMode::CompactedIndirect;
+        }
+        else if (value == "full" || value == "full-resolution")
+        {
+            m_PathTracingDispatchMode = PathTracingDispatchMode::FullResolution;
+        }
+    };
     applyBackend("Renderer", "PathTracingBackend");
+    applyDispatchMode("Renderer", "PathTracingDispatch");
     applyLightingTechnique("Renderer", "DirectLighting", m_DirectLightingTechnique);
     applyLightingTechnique("Renderer", "IndirectLighting", m_IndirectLightingTechnique);
 
@@ -1070,7 +1047,6 @@ void RaytracingDemo::LoadStartupConfiguration()
     {
         m_CudaBloom.SetEnabled(boolValue);
     }
-//Modify Begin:2026-08-17 by Hui
     if (configuration.TryGetString("CudaBloom", "Backend", stringValue))
     {
         stringValue = ToLower(stringValue);
@@ -1134,7 +1110,6 @@ void RaytracingDemo::LoadStartupConfiguration()
             ? CudaBloomPass::ThreadBlockSize::Size8x8
             : CudaBloomPass::ThreadBlockSize::Size16x16);
     }
-//Modify End
 
     if (configuration.TryGetBoolean("Debug", "GpuTiming", boolValue))
     {
@@ -1145,9 +1120,7 @@ void RaytracingDemo::LoadStartupConfiguration()
         SetProfilerDisplayRefreshIntervalSeconds(floatValue);
     }
 }
-//Modify End
 
-//Modify Begin:2026-08-07 by Hui
 void RaytracingDemo::InitializeRuntimeAutomation()
 {
     m_RuntimeAutomation.Initialize(RaytracingDemoAutomation::CreateTestSuites());
@@ -1188,12 +1161,8 @@ void RaytracingDemo::ApplyRuntimeAutomationMatrixCase(const uint32_t caseIndex)
     m_SkyboxEnabled = testCase.Skybox;
     m_AccumulationEnabled = testCase.Accumulation;
     m_DLSS.SetMode(testCase.DlssMode);
-//Modify Begin:2026-08-12 by Hui
     m_MaterialShadingModel = testCase.ShadingModel;
-//Modify End
-//Modify Begin:2026-07-30 by Hui
     SetMaxBounces(testCase.MaxBounces);
-//Modify End
     m_DebugMeshletClusters = false;
     m_DebugLightingTextureTarget = 0;
     m_DebugTextureTarget = 0;
@@ -1242,15 +1211,11 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         m_IndirectLightingTechnique = static_cast<RaytracingDemoLightingTechnique>(value);
         ResetAccumulation();
         break;
-//Modify Begin:2026-07-30 by Hui
     case RuntimeAutomationAction::MaxBounces:
         SetMaxBounces(static_cast<int>(value));
         break;
-//Modify End
-//Modify Begin:2026-07-30 by Hui
     case RuntimeAutomationAction::Wait:
         break;
-//Modify End
     case RuntimeAutomationAction::AsyncCompute:
         if (m_PathTracingBackend == PathTracingBackend::InlineRayQuery)
         {
@@ -1282,12 +1247,9 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         m_RenderGraphTimingCaptureEnabled = enabled;
         m_RenderGraphTimingHistory.Clear();
         break;
-//Modify Begin:2026-08-11 by Hui
     case RuntimeAutomationAction::ReSTIRGIStageTiming:
         m_ReSTIRGIStageTimingEnabled = enabled && m_GpuTimingEnabled;
         break;
-//Modify End
-//Modify Begin:2026-08-11 by Hui
     case RuntimeAutomationAction::ReSTIRGITemporalResampling:
     case RuntimeAutomationAction::ReSTIRGISpatialResampling:
     case RuntimeAutomationAction::ReSTIRGITemporalJacobian:
@@ -1316,21 +1278,16 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         ResetAccumulation();
         break;
     }
-//Modify End
     case RuntimeAutomationAction::DumpTiming:
         m_RenderGraphTimingHistory.DumpCsv();
         break;
-//Modify Begin:2026-08-07 by Hui
     case RuntimeAutomationAction::DLSS:
         m_DLSS.SetMode(static_cast<DLSSMode>(value));
         ResetAccumulation();
         break;
-//Modify End
-//Modify Begin:2026-08-12 by Hui
     case RuntimeAutomationAction::MaterialShading:
         SetMaterialShadingModel(static_cast<MaterialShadingModel>(value));
         break;
-//Modify End
     case RuntimeAutomationAction::ReSTIRDIConfig:
     {
         m_PathTracingBackend = PathTracingBackend::InlineRayQuery;
@@ -1361,8 +1318,6 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         break;
     }
 }
-//Modify End
-//Modify End
 
 std::shared_ptr<ShaderBlob> RaytracingDemo::LoadShaderVariant(
     std::wstring compiledFileName,
@@ -1388,18 +1343,18 @@ bool RaytracingDemo::LoadContent()
     const auto commandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
     const auto commandList = commandQueue->GetCommandList();
 
-//Modify Begin:2026-08-03 by Hui
+//Modify Begin:2026-08-19 by Hui
     LoadSceneContent(*commandList, GetScenePath());
 //Modify End
 
     m_ImGui = std::make_unique<ImGuiImpl>(m_FrameworkDeviceContext, *commandList, *PWindow);
 
     m_LightBillboardMesh = Mesh::CreateVerticalQuad(*commandList);
-//Modify Begin:2026-07-28 by Hui
+//Modify Begin:2026-08-19 by Hui
     m_DisplayBlitMesh = Mesh::CreateBlitTriangle(*commandList);
 //Modify End
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
     const auto withShaderCreateContext = [](const char* name, const auto& createShader)
     {
         try
@@ -1442,11 +1397,11 @@ bool RaytracingDemo::LoadContent()
         {
             builder.WithNoCull();
         });
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
     });
 //Modify End
 
-//Modify Begin:2026-07-31 by Hui
+//Modify Begin:2026-08-19 by Hui
     withShaderCreateContext("GBufferTaskMeshShader", [&]()
     {
     const auto amplificationShader = LoadShaderVariant(
@@ -1530,9 +1485,8 @@ bool RaytracingDemo::LoadContent()
         "MeshletDrawCBuffer",
         sizeof(MeshletIndirectCommand));
     });
-//Modify End
 
-//Modify Begin:2026-07-28 by Hui
+//Modify Begin:2026-08-19 by Hui
     withShaderCreateContext("DisplayComposite", [&]()
     {
     const auto vertexShader = LoadShaderVariant(
@@ -1556,7 +1510,7 @@ bool RaytracingDemo::LoadContent()
     });
 //Modify End
 
-//Modify Begin:2026-07-28 by Hui
+//Modify Begin:2026-08-19 by Hui
     withShaderCreateContext("SkyboxCompute", [&]()
     {
     const auto skyboxComputeShader = LoadShaderVariant(
@@ -1581,7 +1535,6 @@ bool RaytracingDemo::LoadContent()
             .WithCommonRootSignatureStaticSamplers()
             .Build());
 
-//Modify Begin:2026-08-06 by Hui
     const auto cubemapStripSkyboxComputeShader = LoadShaderVariant(
         L"SkyboxCubemapStrip.cs.cso",
         L"Demos/RaytracingDemo/shaders/Skybox/SkyboxCubemapStrip.cs.hlsl",
@@ -1592,11 +1545,10 @@ bool RaytracingDemo::LoadContent()
         ComputePipelineDescBuilder::ReflectedDefault(*cubemapStripSkyboxComputeShader)
             .WithCommonRootSignatureStaticSamplers()
             .Build());
-//Modify End
     });
 //Modify End
 
-//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-08-19 by Hui
     withShaderCreateContext("DLSSRayReconstructionPrepare", [&]()
     {
         const auto rayReconstructionPrepareShader = LoadShaderVariant(
@@ -1635,41 +1587,35 @@ bool RaytracingDemo::LoadContent()
     accelerationStructureSettings.AllowUpdate = true;
     m_SceneResources.BuildRayTracingAccelerationStructure(*commandList, accelerationStructureSettings);
     m_Lights.InitializeGpuBuffers(*commandList);
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-08-19 by Hui
     EnsureRayTracingPipelines();
 //Modify End
-//Modify Begin:2026-08-06 by Hui
+//Modify Begin:2026-08-19 by Hui
     PrewarmRuntimeShadowVariants();
 //Modify End
     BindRayTracingShaderResources();
 
-//Modify Begin:2026-07-28 by Hui
-//Modify Begin:2026-07-29 by Hui
+//Modify Begin:2026-08-19 by Hui
     m_GpuTimestampProfiler.Initialize(
         m_FrameworkDeviceContext.GetDevice(),
         m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT),
         128);
-//Modify Begin:2026-08-03 by Hui
     m_AsyncComputeGpuTimestampProfiler.Initialize(
         m_FrameworkDeviceContext.GetDevice(),
         m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE),
         128,
         D3D12_COMMAND_LIST_TYPE_COMPUTE);
-//Modify Begin:2026-08-18 by Hui
     m_CopyGpuTimestampProfiler.Initialize(
         m_FrameworkDeviceContext.GetDevice(),
         m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COPY),
         128,
         D3D12_COMMAND_LIST_TYPE_COPY);
-//Modify End
-//Modify End
-//Modify End
     RebuildRenderGraph();
 //Modify End
 
     const uint64_t fenceValue = commandQueue->ExecuteCommandList(commandList);
     commandQueue->WaitForFenceValue(fenceValue);
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
     InitializeRuntimeAutomation();
 //Modify End
     return true;
@@ -1677,52 +1623,42 @@ bool RaytracingDemo::LoadContent()
 
 void RaytracingDemo::UnloadContent()
 {
-//Modify Begin:2026-07-28 by Hui
+//Modify Begin:2026-08-19 by Hui
     m_CudaBloom.ReleaseInteropResource();
 //Modify End
     m_RenderPipeline.Reset();
     m_LightBillboardShader.reset();
-//Modify Begin:2026-07-28 by Hui
+//Modify Begin:2026-08-19 by Hui
     m_SkyboxComputeShader.reset();
     m_SkyboxEquirectangularComputeShader.reset();
-//Modify Begin:2026-08-06 by Hui
     m_SkyboxCubemapStripComputeShader.reset();
-//Modify End
-//Modify Begin:2026-08-07 by Hui
     m_DLSSRayReconstructionPrepareShader.reset();
-//Modify End
     m_DisplayCompositeShader.reset();
 //Modify End
-//Modify Begin:2026-07-30 by Hui
-//Modify Begin:2026-07-31 by Hui
+//Modify Begin:2026-08-19 by Hui
     m_GBufferTaskMeshShader.reset();
-//Modify End
     m_GBufferMeshletIndirectShader.reset();
     m_MeshletCullShader.reset();
     m_MeshletDrawCommandSignature.reset();
 //Modify End
     m_GBufferShader.reset();
     m_LightBillboardMesh.reset();
-//Modify Begin:2026-07-28 by Hui
+//Modify Begin:2026-08-19 by Hui
     m_DisplayBlitMesh.reset();
 //Modify End
     m_ImGui.reset();
     m_Denoisers.Shutdown();
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-08-19 by Hui
     m_CudaBloom.Shutdown();
 //Modify End
     m_SkyboxTexture.reset();
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-08-19 by Hui
     m_PathTracingPipelines.Reset();
 //Modify End
-//Modify Begin:2026-07-29 by Hui
+//Modify Begin:2026-08-19 by Hui
     m_GpuTimestampProfiler.Shutdown();
-//Modify Begin:2026-08-03 by Hui
     m_AsyncComputeGpuTimestampProfiler.Shutdown();
-//Modify Begin:2026-08-18 by Hui
     m_CopyGpuTimestampProfiler.Shutdown();
-//Modify End
-//Modify End
 //Modify End
     m_SceneResources.Clear();
 }
@@ -1735,7 +1671,7 @@ RayTracingSceneResourceLayout RaytracingDemo::BuildRayTracingSceneResourceLayout
     RayTracingSceneResourceLayout layout;
     layout.TextureDescriptorCapacity = ComputeDescriptorArrayCapacity(m_SceneResources.GetTextureCount(), m_SceneResources.GetTextureCapacity());
     layout.GeometryDescriptorCapacity = ComputeDescriptorArrayCapacity(rayTracingMeshes.size(), rayTracingMeshes.capacity());
-//Modify Begin:2026-08-06 by Hui
+//Modify Begin:2026-08-19 by Hui
     layout.EnvironmentProjection = m_SkyboxTexture != nullptr
         ? ShaderResourceView::GetEnvironmentTextureProjection(*m_SkyboxTexture)
         : EnvironmentTextureProjection::Cubemap;
@@ -1747,29 +1683,25 @@ void RaytracingDemo::EnsureRayTracingPipelines()
 {
     const RayTracingSceneResourceLayout layout = BuildRayTracingSceneResourceLayout();
     const ReSTIRDIFrameConstants restirDIConstants = m_DirectLightingReSTIRDI.GetFrameConstants(false);
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-08-19 by Hui
     m_PathTracingPipelines.EnsurePipelines(
         m_PathTracingBackend,
         m_SoftShadowsEnabled ? PathTracingShadowMode::SoftShadows : PathTracingShadowMode::HardShadows,
         m_MaterialShadingModel,
         layout,
-        static_cast<uint32_t>(m_MaxBounces));
-//Modify Begin:2026-07-30 by Hui
+        static_cast<uint32_t>(m_MaxBounces),
+        m_PathTracingDispatchMode);
     m_DirectLightingReSTIRDIPass.EnsurePipelines(
         m_SoftShadowsEnabled,
         static_cast<uint32_t>(layout.EnvironmentProjection),
         restirDIConstants,
         m_MaterialShadingModel);
-//Modify End
-//Modify Begin:2026-08-10 by Hui
     const bool restirGIActive =
         m_PathTracingBackend == PathTracingBackend::InlineRayQuery &&
         m_IndirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRGI &&
         m_MaxBounces > 1;
-//Modify Begin:2026-08-11 by Hui
     const ReSTIRGIVariantConfig restirGIVariantConfig = m_IndirectLightingReSTIRGI.GetVariantConfig(
         static_cast<uint32_t>(m_MaxBounces));
-//Modify End
     if (restirGIActive)
     {
         m_IndirectLightingReSTIRGIPass.EnsurePipelines(
@@ -1778,7 +1710,6 @@ void RaytracingDemo::EnsureRayTracingPipelines()
             restirGIVariantConfig,
             m_MaterialShadingModel);
     }
-//Modify End
     if (m_SceneResources.GetRayTracingAccelerationStructure().GetInstanceCount() > 0)
     {
         BindRayTracingShaderResources();
@@ -1786,7 +1717,7 @@ void RaytracingDemo::EnsureRayTracingPipelines()
 //Modify End
 }
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
 void RaytracingDemo::SetMaterialShadingModel(const MaterialShadingModel shadingModel)
 {
     if (m_MaterialShadingModel == shadingModel)
@@ -1803,7 +1734,7 @@ void RaytracingDemo::SetMaterialShadingModel(const MaterialShadingModel shadingM
 }
 //Modify End
 
-//Modify Begin:2026-08-11 by Hui
+//Modify Begin:2026-08-19 by Hui
 void RaytracingDemo::SetMaxBounces(const int maxBounces)
 {
     const int clampedMaxBounces = std::clamp(maxBounces, 1, 5);
@@ -1823,7 +1754,7 @@ void RaytracingDemo::SetMaxBounces(const int maxBounces)
 }
 //Modify End
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
 void RaytracingDemo::PrewarmRuntimeShadowVariants()
 {
     const RayTracingSceneResourceLayout layout = BuildRayTracingSceneResourceLayout();
@@ -1840,21 +1771,19 @@ void RaytracingDemo::PrewarmRuntimeShadowVariants()
         alternateShadowMode,
         m_MaterialShadingModel,
         layout,
-        static_cast<uint32_t>(m_MaxBounces));
+        static_cast<uint32_t>(m_MaxBounces),
+        m_PathTracingDispatchMode);
     m_DirectLightingReSTIRDIPass.EnsurePipelines(
         alternateShadowMode == PathTracingShadowMode::SoftShadows,
         static_cast<uint32_t>(layout.EnvironmentProjection),
         restirDIConstants,
         m_MaterialShadingModel);
-//Modify Begin:2026-08-10 by Hui
     const bool restirGIActive =
         m_PathTracingBackend == PathTracingBackend::InlineRayQuery &&
         m_IndirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRGI &&
         m_MaxBounces > 1;
-//Modify Begin:2026-08-11 by Hui
     const ReSTIRGIVariantConfig restirGIVariantConfig = m_IndirectLightingReSTIRGI.GetVariantConfig(
         static_cast<uint32_t>(m_MaxBounces));
-//Modify End
     if (restirGIActive)
     {
         m_IndirectLightingReSTIRGIPass.EnsurePipelines(
@@ -1863,19 +1792,18 @@ void RaytracingDemo::PrewarmRuntimeShadowVariants()
             restirGIVariantConfig,
             m_MaterialShadingModel);
     }
-//Modify End
     m_PathTracingPipelines.EnsurePipelines(
         m_PathTracingBackend,
         currentShadowMode,
         m_MaterialShadingModel,
         layout,
-        static_cast<uint32_t>(m_MaxBounces));
+        static_cast<uint32_t>(m_MaxBounces),
+        m_PathTracingDispatchMode);
     m_DirectLightingReSTIRDIPass.EnsurePipelines(
         currentShadowMode == PathTracingShadowMode::SoftShadows,
         static_cast<uint32_t>(layout.EnvironmentProjection),
         restirDIConstants,
         m_MaterialShadingModel);
-//Modify Begin:2026-08-10 by Hui
     if (restirGIActive)
     {
         m_IndirectLightingReSTIRGIPass.EnsurePipelines(
@@ -1884,14 +1812,13 @@ void RaytracingDemo::PrewarmRuntimeShadowVariants()
             restirGIVariantConfig,
             m_MaterialShadingModel);
     }
-//Modify End
     BindRayTracingShaderResources();
 }
 //Modify End
 
 void RaytracingDemo::BindRayTracingShaderResources()
 {
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-08-19 by Hui
     m_PathTracingPipelines.BindRayTracingResources(
         m_SceneResources.GetRayTracingAccelerationStructure(),
         m_SceneResources,
@@ -1911,25 +1838,20 @@ RaytracingDemo::PipelineConstants RaytracingDemo::BuildPipelineConstants() const
     pipeline.InverseProjection = XMMatrixInverse(nullptr, pipeline.Projection);
     pipeline.ScreenResolution = { static_cast<float>(m_Width), static_cast<float>(m_Height) };
     pipeline.ScreenTexelSize = { 1.0f / pipeline.ScreenResolution.x, 1.0f / pipeline.ScreenResolution.y };
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
     pipeline.PreviousViewProjection = m_HasPreviousViewProjection ? m_PreviousViewProjection : pipeline.ViewProjection;
     pipeline.DebugMeshletClusters = m_DebugMeshletClusters ? 1u : 0u;
 //Modify End
     return pipeline;
 }
 
-//Modify Begin:2026-07-28 by Hui
+//Modify Begin:2026-08-19 by Hui
 void RaytracingDemo::RebuildRenderGraph()
 {
     ResetProfilerDisplay();
-//Modify Begin:2026-07-30 by Hui
     UpdateRenderGraphFrameState();
-//Modify End
-//Modify Begin:2026-07-30 by Hui
     EnsureRayTracingPipelines();
-//Modify End
 
-//Modify Begin:2026-08-18 by Hui
     const RaytracingDemoRenderPipelineConfiguration configuration =
         RaytracingDemoRenderPipelineController::BuildConfiguration(*m_RenderGraphFrameState);
     m_RenderPipeline.Rebuild(
@@ -1954,7 +1876,6 @@ void RaytracingDemo::RebuildRenderGraph()
             renderGraph.SetDebugSerializeAsyncCompute(m_DebugSerializeAsyncCompute);
             renderGraph.SetParallelDirectCommandRecording(m_ParallelDirectCommandRecordingEnabled);
         });
-//Modify End
 }
 
 void RaytracingDemo::ResetProfilerDisplay()
@@ -1973,14 +1894,12 @@ void RaytracingDemo::SetProfilerDisplayRefreshIntervalSeconds(const double refre
 
 void RaytracingDemo::EnsureRenderGraphTopology()
 {
-//Modify Begin:2026-08-18 by Hui
     if (m_RenderPipeline.NeedsRebuild(
         RaytracingDemoRenderPipelineController::BuildConfiguration(*m_RenderGraphFrameState)))
     {
         RebuildRenderGraph();
         ResetAccumulation();
     }
-//Modify End
 }
 
 //Modify End
@@ -1988,34 +1907,30 @@ void RaytracingDemo::EnsureRenderGraphTopology()
 void RaytracingDemo::ResetAccumulation(bool resetDenoiserHistory, bool resetReSTIRHistory)
 {
     m_AccumulationFrameIndex = 0;
-//Modify Begin:2026-08-05 by Hui
+//Modify Begin:2026-08-19 by Hui
     if (resetReSTIRHistory)
     {
         m_ReSTIRDIHistoryValid = false;
-//Modify Begin:2026-08-10 by Hui
         m_ReSTIRGIHistoryValid = false;
-//Modify End
     }
 //Modify End
     if (resetDenoiserHistory)
     {
         m_Denoisers.ResetHistory();
-//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-08-19 by Hui
         m_DLSS.InvalidateHistory();
         m_HasPreviousViewProjection = false;
 //Modify End
     }
 }
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
 void RaytracingDemo::SaveCurrentCameraToUnityScene()
 {
-//Modify Begin:2026-08-03 by Hui
     if (m_Scene.GetSourcePath().extension() != ".unity")
     {
         throw std::runtime_error("Saving a JSON scene camera is not implemented yet.");
     }
-//Modify End
     if (!m_HasSceneCamera || m_Scene.GetSourcePath().empty())
     {
         throw std::runtime_error("No source scene camera is loaded.");
@@ -2045,29 +1960,20 @@ void RaytracingDemo::SaveCurrentScene()
     m_CameraSaveStatus = "Runtime scene state saved to " + runtimeStatePath.filename().string() + ".";
 }
 //Modify End
-//Modify End
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
 RaytracingDemoPassResources RaytracingDemo::CreatePassResources()
 {
     return {
         m_SceneResources,
         m_Lights,
         m_PathTracingPipelines,
-//Modify Begin:2026-08-05 by Hui
         m_DirectLightingReSTIRDI,
-//Modify Begin:2026-07-30 by Hui
         m_DirectLightingReSTIRDIPass,
-//Modify End
-//Modify End
-//Modify Begin:2026-08-10 by Hui
         m_IndirectLightingReSTIRGI,
         m_IndirectLightingReSTIRGIPass,
-//Modify End
-//Modify Begin:2026-08-07 by Hui
         m_DLSS,
         m_DLSSRayReconstructionPrepareShader,
-//Modify End
         m_Denoisers,
         m_CudaBloom,
         m_GBufferShader,
@@ -2078,22 +1984,16 @@ RaytracingDemoPassResources RaytracingDemo::CreatePassResources()
         m_DisplayCompositeShader,
         m_SkyboxComputeShader,
         m_SkyboxEquirectangularComputeShader,
-//Modify Begin:2026-08-06 by Hui
         m_SkyboxCubemapStripComputeShader,
-//Modify End
         m_SkyboxTexture,
         m_DisplayBlitMesh,
         GetSceneCamera(),
         m_FrameworkDeviceContext.GetDevice(),
-//Modify Begin:2026-08-07 by Hui
         m_FrameworkDeviceContext.GetD3D12DeviceContext(),
-//Modify End
         m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT),
         m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE),
         m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COPY),
-//Modify Begin:2026-08-11 by Hui
         &m_GpuTimestampProfiler
-//Modify End
     };
 }
 
@@ -2105,14 +2005,13 @@ RaytracingDemoPassConfig RaytracingDemo::CreatePassConfig() const
 }
 //Modify End
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
 void RaytracingDemo::UpdateRenderGraphFrameState()
 {
     RaytracingDemoFrameState& state = *m_RenderGraphFrameState;
     state.Backend = m_PathTracingBackend;
-//Modify Begin:2026-07-30 by Hui
+    state.DispatchMode = m_PathTracingDispatchMode;
     state.ShadingModel = m_MaterialShadingModel;
-//Modify End
     state.DirectLightingTechnique = m_DirectLightingTechnique;
     state.IndirectLightingTechnique = m_IndirectLightingTechnique;
     state.AsyncComputeEnabled = m_AsyncComputeEnabled;
@@ -2127,11 +2026,8 @@ void RaytracingDemo::UpdateRenderGraphFrameState()
     state.DenoiserAlgorithm = state.DenoiserEnabled
         ? m_Denoisers.GetAlgorithm()
         : DenoiserController::Algorithm::Off;
-//Modify Begin:2026-08-18 by Hui
     state.BloomEnabled = m_CudaBloom.IsEnabled();
     state.BloomBackend = m_CudaBloom.GetBackend();
-//Modify End
-//Modify Begin:2026-08-07 by Hui
     const uint32_t displayWidth = static_cast<uint32_t>((std::max)(m_Width, 1));
     const uint32_t displayHeight = static_cast<uint32_t>((std::max)(m_Height, 1));
     const DLSSOptimalSettings dlssSettings = m_DLSS.GetOptimalSettings(displayWidth, displayHeight);
@@ -2153,17 +2049,12 @@ void RaytracingDemo::UpdateRenderGraphFrameState()
         state.Projection.r[2].m128_f32[1] -= 2.0f * state.DLSSJitterOffset.y / static_cast<float>(state.Height);
     }
     state.ViewProjection = state.View * state.Projection;
-//Modify End
     state.AccumulationEnabled = m_AccumulationEnabled;
     state.FrameIndex = m_FrameIndex;
     state.AccumulationFrameIndex = m_AccumulationFrameIndex;
     state.ReSTIRDIHistoryValid = m_ReSTIRDIHistoryValid;
-//Modify Begin:2026-08-10 by Hui
     state.ReSTIRGIHistoryValid = m_ReSTIRGIHistoryValid;
-//Modify End
-//Modify Begin:2026-08-11 by Hui
     state.ReSTIRGIStageTimingEnabled = m_GpuTimingEnabled && m_ReSTIRGIStageTimingEnabled;
-//Modify End
     state.HasPreviousViewProjection = m_HasPreviousViewProjection;
     state.PreviousViewProjection = m_PreviousViewProjection;
 }
@@ -2173,15 +2064,11 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
 {
     Base::OnRender(e);
 
-//Modify Begin:2026-07-29 by Hui
+//Modify Begin:2026-08-19 by Hui
     const auto directCommandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
-//Modify Begin:2026-08-03 by Hui
     const auto asyncComputeCommandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE);
-//Modify Begin:2026-08-18 by Hui
     const auto copyCommandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COPY);
-//Modify End
-//Modify End
-//Modify Begin:2026-08-03 by Hui
+    m_PathTracingPipelines.CollectActiveRayCountReadback(*directCommandQueue);
     const auto collectGpuTimingFrames = [this](
         GpuTimestampProfiler& profiler,
         CommandQueue& commandQueue,
@@ -2241,7 +2128,6 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
         });
     }
     m_ProfilerDisplay.Update(e.TotalTime);
-//Modify End
 
     if (m_ImGui != nullptr)
     {
@@ -2250,7 +2136,6 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
         m_ImGui->Render();
     }
 
-//Modify Begin:2026-07-30 by Hui
     if (m_SceneRuntime.ApplyPendingChanges(
         m_FrameworkDeviceContext,
         m_SceneResources,
@@ -2263,33 +2148,23 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
         ResetAccumulation();
         m_RuntimeAutomation.AppendDiagnosticLog("Stress transition: complete.");
     }
-//Modify End
 
-//Modify Begin:2026-08-07 by Hui
     if (m_DLSS.IsFrameGenerationEnabled())
     {
         m_DLSS.BeginFrameGeneration(m_FrameIndex);
     }
-//Modify End
 
-//Modify Begin:2026-08-07 by Hui
     UpdateRenderGraphFrameState();
     RenderGraph::RenderMetadata metadata;
     metadata.m_ScreenWidth = m_RenderGraphFrameState->Width;
     metadata.m_ScreenHeight = m_RenderGraphFrameState->Height;
     metadata.m_DisplayWidth = m_RenderGraphFrameState->DisplayWidth;
     metadata.m_DisplayHeight = m_RenderGraphFrameState->DisplayHeight;
-//Modify End
     metadata.m_FrameIndex = m_FrameIndex;
     metadata.m_Time = e.TotalTime;
 
-//Modify Begin:2026-07-28 by Hui
     EnsureRenderGraphTopology();
-//Modify End
-//Modify Begin:2026-08-18 by Hui
     RenderGraph::RenderGraphRoot& renderGraph = m_RenderPipeline.GetRenderGraph();
-//Modify End
-//Modify Begin:2026-08-07 by Hui
     if (m_RenderGraphFrameState->FrameGenerationEnabled)
     {
         m_FrameGenerationInputs = {};
@@ -2309,26 +2184,23 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
         m_FrameGenerationInputs.PreviousViewProjection = m_RenderGraphFrameState->PreviousViewProjection;
         m_DLSS.PrepareFrameGeneration(m_FrameGenerationInputs);
     }
-//Modify End
-//Modify Begin:2026-07-29 by Hui
     renderGraph.SetGpuTimestampProfiler(m_GpuTimingEnabled ? &m_GpuTimestampProfiler : nullptr);
-//Modify Begin:2026-08-03 by Hui
     renderGraph.SetAsyncComputeGpuTimestampProfiler(
         m_GpuTimingEnabled ? &m_AsyncComputeGpuTimestampProfiler : nullptr);
-//Modify Begin:2026-08-18 by Hui
     renderGraph.SetCopyGpuTimestampProfiler(
         m_GpuTimingEnabled ? &m_CopyGpuTimestampProfiler : nullptr);
-//Modify End
-//Modify Begin:2026-07-30 by Hui
     renderGraph.SetDebugSerializeAsyncCompute(m_DebugSerializeAsyncCompute);
-//Modify End
-//Modify End
-//Modify End
-//Modify Begin:2026-08-02 by Hui
     const auto renderGraphCpuStart = std::chrono::steady_clock::now();
-//Modify End
-//Modify Begin:2026-07-28 by Hui
-//Modify Begin:2026-08-10 by Hui
+    const bool readsCompactedPathTracingRayCount =
+        m_RenderGraphFrameState->DispatchMode == PathTracingDispatchMode::CompactedIndirect &&
+        ((m_RenderGraphFrameState->UsesDirectLighting() &&
+                m_RenderGraphFrameState->DirectLightingTechnique == RaytracingDemoLightingTechnique::PathTracing) ||
+            (m_RenderGraphFrameState->UsesIndirectLighting() &&
+                m_RenderGraphFrameState->IndirectLightingTechnique == RaytracingDemoLightingTechnique::PathTracing));
+    if (readsCompactedPathTracingRayCount)
+    {
+        m_PathTracingPipelines.BeginActiveRayCountReadback();
+    }
     BindlessDescriptorHeap& bindlessDescriptorHeap = m_SceneResources.GetBindlessDescriptorHeap();
     bindlessDescriptorHeap.BeginFrame(*directCommandQueue, *asyncComputeCommandQueue);
     bool bindlessFrameEnded = false;
@@ -2343,29 +2215,42 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
         bindlessDescriptorHeap.EndFrame(frameFences.Direct, frameFences.AsyncCompute);
         bindlessFrameEnded = true;
     };
-//Modify End
+    bool activeRayCountReadbackEnded = false;
+    const auto endActiveRayCountReadback = [&renderGraph, &activeRayCountReadbackEnded, this]()
+    {
+        if (activeRayCountReadbackEnded)
+        {
+            return;
+        }
+
+        m_PathTracingPipelines.EndActiveRayCountReadback(renderGraph.GetFrameSubmissionFences().Direct);
+        activeRayCountReadbackEnded = true;
+    };
     try
     {
         renderGraph.Execute(metadata);
-//Modify Begin:2026-08-10 by Hui
         endBindlessFrame();
-//Modify End
+        endActiveRayCountReadback();
     }
     catch (const std::exception& exception)
     {
-//Modify Begin:2026-08-10 by Hui
         endBindlessFrame();
-//Modify End
+        if (renderGraph.GetFrameSubmissionFences().Direct != 0u)
+        {
+            endActiveRayCountReadback();
+        }
+        else
+        {
+            m_PathTracingPipelines.CancelActiveRayCountReadback();
+        }
         throw std::runtime_error(std::string("RaytracingDemo::OnRender RenderGraph.Execute failed: ") + exception.what());
     }
-//Modify Begin:2026-08-02 by Hui
     const double renderGraphCpuMilliseconds = std::chrono::duration<double, std::milli>(
         std::chrono::steady_clock::now() - renderGraphCpuStart).count();
     if (m_GpuTimingEnabled)
     {
         m_ProfilerDisplay.AccumulateRenderGraphCpuMilliseconds(renderGraphCpuMilliseconds);
     }
-//Modify End
 
     try
     {
@@ -2373,7 +2258,6 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     }
     catch (const std::exception& exception)
     {
-//Modify Begin:2026-08-03 by Hui
         const char* backendName = m_PathTracingBackend == PathTracingBackend::InlineRayQuery
             ? "InlineRayQuery"
             : "ShaderTableDxr";
@@ -2381,12 +2265,9 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
             std::string("RaytracingDemo::OnRender PresentDisplayOutput failed: ") + exception.what() +
             " [Backend=" + backendName +
             ", AsyncCompute=" + (m_AsyncComputeEnabled ? "true" : "false") + "]");
-//Modify End
     }
-//Modify End
 
     ++m_FrameIndex;
-//Modify Begin:2026-08-06 by Hui
     if (m_AccumulationEnabled)
     {
         ++m_AccumulationFrameIndex;
@@ -2395,20 +2276,15 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     {
         m_AccumulationFrameIndex = 0;
     }
-//Modify Begin:2026-08-05 by Hui
     m_ReSTIRDIHistoryValid =
         m_PathTracingBackend == PathTracingBackend::InlineRayQuery &&
         m_DirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRDI;
-//Modify End
-//Modify Begin:2026-08-10 by Hui
     m_ReSTIRGIHistoryValid =
         m_PathTracingBackend == PathTracingBackend::InlineRayQuery &&
         m_IndirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRGI &&
         m_MaxBounces > 1;
-//Modify End
 
-//Modify Begin:2026-08-07 by Hui
     m_PreviousViewProjection = m_RenderGraphFrameState->ViewProjection;
-//Modify End
     m_HasPreviousViewProjection = true;
 }
+//Modify End

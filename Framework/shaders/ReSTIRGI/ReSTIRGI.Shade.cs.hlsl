@@ -28,10 +28,8 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         ReSTIRGI_IndirectLighting[pixel] = 0.0f;
         return;
     }
-//Modify Begin:2026-07-30 by Hui
     ReSTIRGI_IndirectLighting[pixel] = float4(
         max(0.0f, ReSTIRGI_EvaluateContribution(surface, reservoir) * reservoir.AverageWeight),
         0.0f);
-//Modify End
 }
 //Modify End

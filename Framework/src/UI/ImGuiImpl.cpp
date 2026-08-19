@@ -3,17 +3,17 @@
 #include <imgui_impl_dx12.h>
 #include <imgui_impl_win32.h>
 
-//Modify Begin:2026-08-12 by Hui
+//Modify Begin:2026-08-19 by Hui
 #include <DX12Library/Application.h>
 //Modify End
 #include <DX12Library/CommandQueue.h>
 #include <DX12Library/Helpers.h>
 
 #include <Framework/Blit_VS.h>
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
 //Modify End
-//Modify Begin:2026-07-29 by Hui
+//Modify Begin:2026-08-19 by Hui
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 //Modify End
 #include <Framework/ImGuiCombine_PS.h>
@@ -28,7 +28,7 @@ namespace
     }
 }
 
-//Modify Begin:2026-07-21 by Hui
+//Modify Begin:2026-08-19 by Hui
 void ImGuiImpl::AllocateSrvDescriptor(
     ImGui_ImplDX12_InitInfo* info,
     D3D12_CPU_DESCRIPTOR_HANDLE* outCpuDescriptor,
@@ -75,30 +75,25 @@ void ImGuiImpl::FreeSrvDescriptor(
 //Modify End
 
 ImGuiImpl::ImGuiImpl(FrameworkDeviceContext& deviceContext, CommandList& commandList, const Window& window)
-    //Modify Begin:2026-07-21 by Hui
+//Modify Begin:2026-08-19 by Hui
     : m_DeviceContext(deviceContext)
     , m_FreeSrvDescriptors(ImGuiSrvDescriptorCount, true)
     //Modify End
 {
-//Modify Begin:2026-07-21 by Hui
-//Modify Begin:2026-07-27 by Hui
     m_CombineShader = std::make_shared<Shader>(
         m_DeviceContext,
         ShaderBlob(ShaderBytecode_Blit_VS, sizeof ShaderBytecode_Blit_VS),
         ShaderBlob(ShaderBytecode_ImGuiCombine_PS, sizeof ShaderBytecode_ImGuiCombine_PS),
-//Modify Begin:2026-07-30 by Hui
         PipelineLayoutReflectionOptions{
             .StaticSamplerContracts = { PipelineStaticSamplers::LinearClamp(3u) },
             .MaxDescriptorCount = 4096u,
             .ShaderStages = PipelineShaderStageFlags::AllGraphics
         },
-//Modify End
         [](RasterPipelineStateBuilder& psb)
         {
             psb.WithAlphaBlend();
         }
     );
-//Modify End
 
     m_BlitMesh = Mesh::CreateBlitTriangle(commandList);
 //Modify End
@@ -108,13 +103,12 @@ ImGuiImpl::ImGuiImpl(FrameworkDeviceContext& deviceContext, CommandList& command
     {
         D3D12_DESCRIPTOR_HEAP_DESC desc = {};
         desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-        //Modify Begin:2026-07-21 by Hui
+//Modify Begin:2026-08-19 by Hui
         desc.NumDescriptors = ImGuiSrvDescriptorCount;
         //Modify End
         desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
         ThrowIfFailed(pDevice->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&m_SrvDescHeap)));
     }
-    //Modify Begin:2026-07-21 by Hui
     m_SrvDescriptorSize = pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
     //Modify End
 
@@ -124,13 +118,12 @@ ImGuiImpl::ImGuiImpl(FrameworkDeviceContext& deviceContext, CommandList& command
     ImGuiIO& io = ImGui::GetIO();
     (void) io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-//Modify Begin:2026-07-30 by Hui
     io.ConfigDragClickToInputText = true;
 //Modify End
     //io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
 
     ImGui::StyleColorsDark();
-    //Modify Begin:2026-07-21 by Hui
+//Modify Begin:2026-08-19 by Hui
     ImGuiStyle& style = ImGui::GetStyle();
     io.FontGlobalScale = 1.25f;
     style.ScaleAllSizes(1.12f);
@@ -145,7 +138,6 @@ ImGuiImpl::ImGuiImpl(FrameworkDeviceContext& deviceContext, CommandList& command
     //Modify End
 
     ImGui_ImplWin32_Init(window.GetWindowHandle());
-    //Modify Begin:2026-07-21 by Hui
     const auto commandQueue = m_DeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT)->GetD3D12CommandQueue();
     ImGui_ImplDX12_InitInfo initInfo = {};
     initInfo.Device = pDevice.Get();
@@ -197,7 +189,6 @@ void ImGuiImpl::Render() const
 
 void ImGuiImpl::DrawToRenderTarget(CommandList& commandList)
 {
-//Modify Begin:2026-07-30 by Hui
     commandList.ExecuteExternalCommandRecording(
         [this](ID3D12GraphicsCommandList2& nativeCommandList)
         {
@@ -210,7 +201,7 @@ void ImGuiImpl::DrawToRenderTarget(CommandList& commandList)
 
 void ImGuiImpl::BlitCombine(CommandList& commandList, const std::shared_ptr<Texture>& pSourceTexture) const
 {
-//Modify Begin:2026-07-29 by Hui
+//Modify Begin:2026-08-19 by Hui
     const CommandContext commandContext(commandList);
     commandContext.SetTexture(*m_CombineShader, "source", ShaderResourceView(pSourceTexture));
     commandContext.BindPipeline(*m_CombineShader);

@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-07-24 by Hui
+//Modify Begin:2026-07-30 by Hui
 
 #include <DX12Library/DescriptorAllocation.h>
 #include <DX12Library/ShaderUtils.h>
@@ -12,9 +12,7 @@
 #include <vector>
 
 class CommandList;
-//Modify Begin:2026-07-30 by Hui
 class FrameworkDeviceContext;
-//Modify End
 
 enum class DescriptorBindingKind
 {
@@ -34,13 +32,11 @@ struct DescriptorBindingInfo
 class DescriptorLayout
 {
 public:
-//Modify Begin:2026-07-30 by Hui
     DescriptorLayout() = default;
     explicit DescriptorLayout(FrameworkDeviceContext& deviceContext)
         : m_DeviceContext(&deviceContext)
     {
     }
-//Modify End
     using BindingMap = std::map<std::string, DescriptorBindingInfo>;
 
     static constexpr UINT UnboundedBindCount = 0xffffffffu;
@@ -60,9 +56,7 @@ public:
     void AddDefaultUnorderedAccessViewTable(UINT rootParameterIndex, UINT descriptorCount, const ShaderUtils::UnorderedAccessViewMetadata& uav);
     void AddDefaultUnorderedAccessViewTable(UINT rootParameterIndex, UINT descriptorCount, const D3D12_UNORDERED_ACCESS_VIEW_DESC& uavDesc);
     void StageDefaultDescriptorTables(CommandList& commandList) const;
-//Modify Begin:2026-07-27 by Hui
     const DescriptorAllocation* FindDefaultDescriptorTable(UINT rootParameterIndex) const;
-//Modify End
 
 private:
     struct DefaultDescriptorTable
@@ -74,9 +68,7 @@ private:
 
     BindingMap m_Bindings;
     std::vector<DefaultDescriptorTable> m_DefaultDescriptorTables;
-//Modify Begin:2026-07-30 by Hui
     FrameworkDeviceContext* m_DeviceContext = nullptr;
-//Modify End
 };
 
 //Modify End

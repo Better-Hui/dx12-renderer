@@ -17,6 +17,7 @@ RaytracingDemoRenderPipelineConfiguration RaytracingDemoRenderPipelineController
             .FrameGenerationEnabled = frameState.FrameGenerationEnabled,
             .AsyncComputeEnabled = frameState.AsyncComputeEnabled,
             .PathTracingBackendType = frameState.Backend,
+            .PathTracingDispatchModeType = frameState.DispatchMode,
             .DirectLightingTechnique = frameState.DirectLightingTechnique,
             .IndirectLightingTechnique = frameState.IndirectLightingTechnique,
             .IndirectLightingEnabled = frameState.MaxBounces > 1,

@@ -35,7 +35,7 @@
   */
 
 
-#include <d3dx12.h>
+#include <d3dx12/d3dx12.h>
 
 #include <wrl.h>
 
@@ -45,7 +45,7 @@ class RootSignature
 {
 public:
 	RootSignature();
-//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-08-19 by Hui
 	RootSignature(
 		const D3D12_ROOT_SIGNATURE_DESC1& rootSignatureDesc,
 		D3D_ROOT_SIGNATURE_VERSION rootSignatureVersion,
@@ -62,7 +62,7 @@ public:
 		return D3d12RootSignature;
 	}
 
-	//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-08-19 by Hui
 	void SetRootSignatureDesc(
 		const D3D12_ROOT_SIGNATURE_DESC1& rootSignatureDesc,
 		D3D_ROOT_SIGNATURE_VERSION rootSignatureVersion,
@@ -96,3 +96,4 @@ private:
 	// CBV, UAV, and SRV descriptor tables.
 	uint32_t DescriptorTableBitMask;
 };
+//Modify End

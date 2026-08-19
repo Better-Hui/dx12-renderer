@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-18 by Hui
 #include "RenderGraphCommandExecutor.h"
 
 #include "RenderGraphProfiler.h"
@@ -198,7 +198,6 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
     }
 }
 
-//Modify Begin:2026-07-30 by Hui
 void RenderGraph::RenderGraphCommandExecutor::ExecuteParallelDirectBatch(
     const RenderGraphRecordingBatch& batch,
     const RenderMetadata& renderMetadata,
@@ -292,7 +291,6 @@ void RenderGraph::RenderGraphCommandExecutor::ExecuteParallelDirectBatch(
 
     m_QueueScheduler.SubmitDirect(recordedCommandLists);
 }
-//Modify End
 
 void RenderGraph::RenderGraphCommandExecutor::PrepareDirectQueueDependencies(
     const std::span<RenderPass* const> passes,
@@ -333,7 +331,6 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareDirectQueueDependencies(
     }
 }
 
-//Modify Begin:2026-08-18 by Hui
 void RenderGraph::RenderGraphCommandExecutor::ExecuteNonDirectBatch(
     const RenderGraphRecordingBatch& batch,
     const RenderMetadata& renderMetadata,
@@ -488,9 +485,7 @@ void RenderGraph::RenderGraphCommandExecutor::ApplyDirectQueuePreamble(
         });
     }
 
-//Modify Begin:2026-08-13 by Hui
     ApplyExternalResourceTransitions(commandList, directPreamble.ExternalResourceTransitions);
-//Modify End
 
     for (const ResourceId outputId : directPreamble.AliasingOutputs)
     {
@@ -536,9 +531,7 @@ CommandQueue& RenderGraph::RenderGraphCommandExecutor::GetCommandQueue(const Ren
         return *m_DirectCommandQueue;
     }
 }
-//Modify End
 
-//Modify Begin:2026-08-13 by Hui
 void RenderGraph::RenderGraphCommandExecutor::ApplyExternalResourceTransitions(
     CommandList& commandList,
     const std::span<const PassExternalResourceTransition> transitions)
@@ -554,7 +547,6 @@ void RenderGraph::RenderGraphCommandExecutor::ApplyExternalResourceTransitions(
         }
     }
 }
-//Modify End
 
 void RenderGraph::RenderGraphCommandExecutor::PrepareResourcesForRenderPass(
     CommandList& commandList,
@@ -582,9 +574,7 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareResourcesForRenderPass(
         });
     }
 
-//Modify Begin:2026-08-13 by Hui
     ApplyExternalResourceTransitions(commandList, resourceStatePlan.ExternalResourceTransitions);
-//Modify End
 
     for (const ResourceId outputId : resourceStatePlan.AliasingOutputs)
     {
@@ -681,10 +671,8 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareResourcesForRenderPass(
         case Discard:
             commandList.DiscardResource(m_ResourcePool->GetResource(outputId));
             break;
-//Modify Begin:2026-08-05 by Hui
         case Preserve:
             break;
-//Modify End
         default:
             Assert(false, "Unknown resource init action.");
             break;

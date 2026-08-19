@@ -68,16 +68,14 @@ public:
 //Modify End
     ~CudaBloomPass();
 
-//Modify Begin:2026-07-28 by Hui
-    bool ExecuteInPlace(Texture& postProcessColor, uint32_t width, uint32_t height, ID3D12CommandQueue* d3d12CommandQueue);
 //Modify Begin:2026-08-16 by Hui
+    bool ExecuteInPlace(Texture& postProcessColor, uint32_t width, uint32_t height, ID3D12CommandQueue* d3d12CommandQueue);
     bool ExecuteFrameworkBloom(
         const std::shared_ptr<Texture>& source,
         const std::shared_ptr<Texture>& destination,
         CommandList& commandList,
         uint32_t width,
         uint32_t height);
-//Modify End
     void ReleaseInteropResource();
 //Modify End
     void Shutdown();

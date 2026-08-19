@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-06 by Hui
 #pragma once
 
 #include <DX12Library/Camera.h>
@@ -18,9 +18,7 @@ enum class SceneMeshKind
 {
     Unknown,
     BuiltinPlane,
-//Modify Begin:2026-08-03 by Hui
     BuiltinCube,
-//Modify End
     ExternalMesh
 };
 
@@ -92,14 +90,12 @@ struct SceneSkybox
     SceneTextureBinding Texture;
 };
 
-//Modify Begin:2026-08-06 by Hui
 struct SceneLightGroupSettings
 {
     bool DirectionalLightsEnabled = true;
     bool PointLightsEnabled = true;
     bool AreaLightsEnabled = true;
 };
-//Modify End
 
 class Scene final
 {
@@ -113,9 +109,7 @@ public:
 
     void SetCamera(const SceneCamera& camera);
     void SetSkybox(const SceneSkybox& skybox);
-//Modify Begin:2026-08-06 by Hui
     void SetLightGroupSettings(const SceneLightGroupSettings& settings);
-//Modify End
 
     uint32_t AddMaterial(SceneMaterial material);
     void AddObject(SceneObject object);
@@ -132,9 +126,7 @@ public:
     const std::filesystem::path& GetProjectRoot() const;
     const std::filesystem::path& GetAssetsRoot() const;
     const SceneSkybox& GetSkybox() const;
-//Modify Begin:2026-08-06 by Hui
     const SceneLightGroupSettings& GetLightGroupSettings() const;
-//Modify End
     const SceneCamera& GetCamera() const;
     SceneCamera& GetMutableCamera();
     Camera& GetRuntimeCamera();
@@ -150,9 +142,7 @@ private:
     std::filesystem::path m_ProjectRoot;
     std::filesystem::path m_AssetsRoot;
     SceneSkybox m_Skybox;
-//Modify Begin:2026-08-06 by Hui
     SceneLightGroupSettings m_LightGroupSettings;
-//Modify End
     SceneCamera m_Camera;
     std::vector<SceneObject> m_Objects;
     std::vector<SceneMaterial> m_Materials;

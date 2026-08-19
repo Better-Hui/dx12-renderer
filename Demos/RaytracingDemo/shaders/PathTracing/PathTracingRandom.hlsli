@@ -49,15 +49,13 @@ float AnimatedInterleavedGradientNoise(uint2 pixel, uint frameIndex)
 
 uint InitializeRandomState(uint2 pixel, uint width, uint frameIndex, uint salt)
 {
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-06 by Hui
     const uint pixelIndex = pixel.x + pixel.y * width;
     const uint xHash = Hash(pixel.x * 0x8da6b343u);
     const uint yHash = Hash(pixel.y * 0xd8163841u);
     const uint frameHash = Hash(frameIndex * 0xcb1ab31fu);
-//Modify Begin:2026-08-06 by Hui
     const float2 noise = FrameworkInterleavedGradientNoise2D(pixel, frameIndex, salt);
     return Hash(xHash ^ yHash ^ Hash(pixelIndex) ^ frameHash ^ salt ^ asuint(noise.x) ^ asuint(noise.y));
-//Modify End
 //Modify End
 }
 

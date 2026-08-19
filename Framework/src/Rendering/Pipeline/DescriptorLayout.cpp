@@ -1,12 +1,10 @@
 #include <Framework/Rendering/Pipeline/DescriptorLayout.h>
 
-//Modify Begin:2026-07-24 by Hui
+//Modify Begin:2026-07-30 by Hui
 
 #include <DX12Library/CommandList.h>
 #include <DX12Library/Helpers.h>
-//Modify Begin:2026-07-30 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
-//Modify End
 
 #include <algorithm>
 #include <stdexcept>
@@ -73,7 +71,6 @@ D3D12_SHADER_RESOURCE_VIEW_DESC DescriptorLayout::CreateNullShaderResourceViewDe
         desc.Texture3D.MipLevels = 1;
         desc.Texture3D.MostDetailedMip = 0;
         break;
-//Modify Begin:2026-07-30 by Hui
     case D3D_SRV_DIMENSION_TEXTURE2D:
         desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
         desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -82,7 +79,6 @@ D3D12_SHADER_RESOURCE_VIEW_DESC DescriptorLayout::CreateNullShaderResourceViewDe
         break;
     default:
         throw std::invalid_argument("Cannot create a null SRV for the reflected resource dimension.");
-//Modify End
     }
 
     return desc;
@@ -92,39 +88,33 @@ D3D12_UNORDERED_ACCESS_VIEW_DESC DescriptorLayout::CreateNullUnorderedAccessView
 {
     D3D12_UNORDERED_ACCESS_VIEW_DESC desc = {};
 
-//Modify Begin:2026-07-30 by Hui
     const bool isRawBuffer = uav.InputType == D3D_SIT_UAV_RWBYTEADDRESS;
     const bool isStructuredBuffer =
         uav.InputType == D3D_SIT_UAV_RWSTRUCTURED ||
         uav.InputType == D3D_SIT_UAV_APPEND_STRUCTURED ||
         uav.InputType == D3D_SIT_UAV_CONSUME_STRUCTURED ||
         uav.InputType == D3D_SIT_UAV_RWSTRUCTURED_WITH_COUNTER;
-//Modify End
 
     switch (uav.Dimension)
     {
     case D3D_SRV_DIMENSION_BUFFER:
         desc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
-//Modify Begin:2026-07-30 by Hui
         desc.Format = isRawBuffer ? DXGI_FORMAT_R32_TYPELESS : DXGI_FORMAT_UNKNOWN;
         desc.Buffer.NumElements = 1;
         desc.Buffer.StructureByteStride = isStructuredBuffer ? sizeof(uint32_t) : 0;
         desc.Buffer.Flags = isRawBuffer ? D3D12_BUFFER_UAV_FLAG_RAW : D3D12_BUFFER_UAV_FLAG_NONE;
-//Modify End
         break;
     case D3D_SRV_DIMENSION_TEXTURE3D:
         desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE3D;
         desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
         desc.Texture3D.WSize = 1;
         break;
-//Modify Begin:2026-07-30 by Hui
     case D3D_SRV_DIMENSION_TEXTURE2D:
         desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
         desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
         break;
     default:
         throw std::invalid_argument("Cannot create a null UAV for the reflected resource dimension.");
-//Modify End
     }
 
     return desc;
@@ -166,13 +156,11 @@ void DescriptorLayout::AddDefaultShaderResourceViewTable(
     const UINT descriptorCount,
     const D3D12_SHADER_RESOURCE_VIEW_DESC& srvDesc)
 {
-//Modify Begin:2026-07-30 by Hui
     Assert(m_DeviceContext != nullptr, "Descriptor layout requires a framework device context.");
     const auto& device = m_DeviceContext->GetDevice();
     DescriptorAllocation descriptors = m_DeviceContext->AllocateDescriptors(
         D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
         descriptorCount);
-//Modify End
     for (UINT i = 0; i < descriptorCount; ++i)
     {
         device->CreateShaderResourceView(nullptr, &srvDesc, descriptors.GetDescriptorHandle(i));
@@ -199,13 +187,11 @@ void DescriptorLayout::AddDefaultUnorderedAccessViewTable(
     const UINT descriptorCount,
     const D3D12_UNORDERED_ACCESS_VIEW_DESC& uavDesc)
 {
-//Modify Begin:2026-07-30 by Hui
     Assert(m_DeviceContext != nullptr, "Descriptor layout requires a framework device context.");
     const auto& device = m_DeviceContext->GetDevice();
     DescriptorAllocation descriptors = m_DeviceContext->AllocateDescriptors(
         D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
         descriptorCount);
-//Modify End
     for (UINT i = 0; i < descriptorCount; ++i)
     {
         device->CreateUnorderedAccessView(nullptr, nullptr, &uavDesc, descriptors.GetDescriptorHandle(i));
@@ -231,7 +217,6 @@ void DescriptorLayout::StageDefaultDescriptorTables(CommandList& commandList) co
     }
 }
 
-//Modify Begin:2026-07-27 by Hui
 const DescriptorAllocation* DescriptorLayout::FindDefaultDescriptorTable(const UINT rootParameterIndex) const
 {
     const auto findResult = std::find_if(
@@ -244,6 +229,5 @@ const DescriptorAllocation* DescriptorLayout::FindDefaultDescriptorTable(const U
 
     return findResult != m_DefaultDescriptorTables.end() ? &findResult->Descriptors : nullptr;
 }
-//Modify End
 
 //Modify End

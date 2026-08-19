@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-06 by Hui
 #include "ReSTIRDISceneContract.hlsli"
 #include "ReSTIRDI/ReSTIRDI.hlsli"
 #include "ReSTIRDI/ReSTIRDIConstants.hlsli"
@@ -23,7 +23,6 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         [loop]
         for (uint candidateIndex = 0u; candidateIndex < ReSTIRDI_CandidateCount; ++candidateIndex)
         {
-//Modify Begin:2026-08-06 by Hui
             const uint candidateSalt = 0x4d3a2b1cu + candidateIndex * 0x9e3779b9u;
             const uint frameSalt = ReSTIRDI_FrameIndex * 0x9e3779b9u;
             const float2 lightSelectionNoise = FrameworkNoiseHash02(
@@ -37,8 +36,6 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
                 candidateSalt ^ 0x02e5be93u).x;
             const float lightSelectionRandom = (lightSelectionNoise.x + float(candidateIndex)) /
                 float(ReSTIRDI_CandidateCount);
-//Modify End
-//Modify Begin:2026-08-06 by Hui
             uint lightIndex;
             float inverseSourcePdf;
             if (!ReSTIRDI_SampleLightIndex(lightSelectionRandom, lightIndex, inverseSourcePdf))
@@ -46,12 +43,9 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
                 continue;
             }
             const float2 sampleUv = sampleNoise;
-//Modify End
             const ReSTIRDI_LightSample sample = ReSTIRDI_SampleLight(lightIndex, surface, sampleUv);
             const float targetPdf = sample.Valid ? max(0.0f, ReSTIRDI_Luminance(sample.UnshadowedContribution)) : 0.0f;
-//Modify Begin:2026-08-06 by Hui
             ReSTIRDIStreamSample(reservoir, lightIndex, sampleUv, targetPdf, inverseSourcePdf, reservoirRandom);
-//Modify End
         }
 
         ReSTIRDIFinalizeResampling(reservoir, 1.0f, float(ReSTIRDI_CandidateCount));

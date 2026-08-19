@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-//Modify Begin:2026-08-10 by Hui
+//Modify Begin:2026-08-11 by Hui
 ReSTIRGI::ReSTIRGI(const ReSTIRGISettings settings)
 {
     SetSettings(settings);
@@ -11,9 +11,7 @@ ReSTIRGI::ReSTIRGI(const ReSTIRGISettings settings)
 void ReSTIRGI::SetSettings(const ReSTIRGISettings& settings)
 {
     m_Settings = settings;
-//Modify Begin:2026-07-30 by Hui
     m_Settings.InitialCandidateCount = std::clamp(m_Settings.InitialCandidateCount, 1u, 32u);
-//Modify End
     m_Settings.TemporalMaxHistoryLength = std::clamp(m_Settings.TemporalMaxHistoryLength, 1u, 1024u);
     m_Settings.SpatialMaxHistoryLength = std::clamp(m_Settings.SpatialMaxHistoryLength, 1u, 1024u);
     m_Settings.MaxSampleAge = std::clamp(m_Settings.MaxSampleAge, 1u, 1024u);
@@ -44,18 +42,14 @@ ReSTIRGIFrameConstants ReSTIRGI::GetFrameConstants(
         frameIndex,
         historyValid ? 1u : 0u,
 
-//Modify Begin:2026-07-30 by Hui
         m_Settings.InitialCandidateCount,
-//Modify End
         m_Settings.TemporalMaxHistoryLength,
         m_Settings.SpatialMaxHistoryLength,
         m_Settings.MaxSampleAge,
         m_Settings.SpatialNeighborCount,
-//Modify Begin:2026-07-30 by Hui
         0u,
         0u,
         0u,
-//Modify End
 
         m_Settings.TemporalNormalSimilarityThreshold,
         m_Settings.TemporalPositionSimilarityThreshold,
@@ -65,13 +59,10 @@ ReSTIRGIFrameConstants ReSTIRGI::GetFrameConstants(
         m_Settings.SpatialSamplingRadius,
         m_Settings.MaxJacobian,
         m_Settings.MaxSpatialWeight,
-//Modify Begin:2026-07-30 by Hui
         0.0f,
-//Modify End
     };
 }
 
-//Modify Begin:2026-08-11 by Hui
 ReSTIRGIVariantConfig ReSTIRGI::GetVariantConfig(const uint32_t maxPathBounces) const
 {
     return {
@@ -82,5 +73,4 @@ ReSTIRGIVariantConfig ReSTIRGI::GetVariantConfig(const uint32_t maxPathBounces) 
         m_Settings.EnableRayTracedSpatialBiasCorrection,
     };
 }
-//Modify End
 //Modify End

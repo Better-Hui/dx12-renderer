@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-08-18 by Hui
 #include <Passes/RaytracingDemoPasses.h>
 
 #include <RenderGraph/RaytracingDemoGraphResources.h>
@@ -8,7 +8,6 @@
 #include <RenderGraph/RenderContext.h>
 #include <RenderGraph/RenderGraphBuilder.h>
 
-//Modify Begin:2026-08-18 by Hui
 namespace
 {
     struct DLSSPassData
@@ -18,7 +17,6 @@ namespace
         RenderGraph::ResourceId InputColor = 0;
     };
 }
-//Modify End
 
 void RaytracingDemoPasses::Builder::AddDLSSPass(
     RenderGraph::RenderGraphBuilder& renderGraphBuilder,

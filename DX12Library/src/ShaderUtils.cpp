@@ -171,15 +171,13 @@ std::vector<ShaderUtils::ConstantBufferMetadata> ShaderUtils::GetConstantBuffers
         D3D12_SHADER_BUFFER_DESC cbufferDesc;
         ThrowIfFailed(constantBuffer->GetDesc(&cbufferDesc));
 
-//Modify Begin:2026-07-23 by Hui
+//Modify Begin:2026-07-30 by Hui
         D3D12_SHADER_INPUT_BIND_DESC inputBindDesc{};
         HRESULT bindingResult = shaderReflection->GetResourceBindingDescByName(cbufferDesc.Name, &inputBindDesc);
-//Modify Begin:2026-07-30 by Hui
         if (SUCCEEDED(bindingResult) && inputBindDesc.Type != D3D_SIT_CBUFFER)
         {
             bindingResult = E_FAIL;
         }
-//Modify End
         if (FAILED(bindingResult))
         {
             bool foundBinding = false;
@@ -249,7 +247,7 @@ std::vector<ShaderUtils::ConstantBufferMetadata> ShaderUtils::GetConstantBuffers
     return result;
 }
 
-//Modify Begin:2026-07-23 by Hui
+//Modify Begin:2026-08-18 by Hui
 std::vector<ShaderUtils::ConstantBufferMetadata> ShaderUtils::GetConstantBuffers(const Microsoft::WRL::ComPtr<ID3D12LibraryReflection>& libraryReflection)
 {
     D3D12_LIBRARY_DESC libraryDesc{};
@@ -309,11 +307,9 @@ std::vector<ShaderUtils::ConstantBufferMetadata> ShaderUtils::GetConstantBuffers
                 variableMetadata.Name = variableDesc.Name;
                 variableMetadata.Offset = variableDesc.StartOffset;
                 variableMetadata.Size = variableDesc.Size;
-//Modify Begin:2026-08-18 by Hui
                 constantBufferMetadata.Size = std::max(
                     constantBufferMetadata.Size,
                     variableMetadata.Offset + variableMetadata.Size);
-//Modify End
                 constantBufferMetadata.Variables.push_back(variableMetadata);
             }
 

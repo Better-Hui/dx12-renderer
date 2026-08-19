@@ -18,7 +18,7 @@ public:
 	/**
 	 * Create the DirectX demo using the specified window dimensions.
 	 */
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
 	Game(Application& application, const std::wstring& name, int width, int height, bool vSync);
 //Modify End
 	virtual ~Game();
@@ -47,7 +47,7 @@ public:
 	int GetClientHeight() const;
 
 protected:
-	//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
 	Application& GetApplication() const { return m_Application; }
 	//Modify End
 	friend class Window;
@@ -106,7 +106,6 @@ protected:
 	std::shared_ptr<Window> PWindow;
 
 private:
-	//Modify Begin:2026-07-30 by Hui
 	Application& m_Application;
 	//Modify End
 	std::wstring Name;
@@ -114,3 +113,4 @@ private:
 	int Height;
 	bool VSync;
 };
+//Modify End

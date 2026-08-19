@@ -137,6 +137,9 @@ list(APPEND SHADERS_HEADER_FILES
 
 set(SHADER_FILES_COMPUTE
         shaders/GBuffer/MeshletCull.cs.hlsl
+        shaders/PathTracing/ActivePixelCompaction.cs.hlsl
+        shaders/PathTracing/CompactInlineDispatchFinalize.cs.hlsl
+        shaders/PathTracing/CompactDxrDispatchFinalize.cs.hlsl
         shaders/PathTracing/DirectLighting.cs.hlsl
         ${RESTIR_DI_SHADER_FILES}
         ${RESTIR_GI_SHADER_FILES}

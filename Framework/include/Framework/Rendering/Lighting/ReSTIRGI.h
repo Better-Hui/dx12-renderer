@@ -2,17 +2,13 @@
 
 #include <cstdint>
 
-//Modify Begin:2026-08-10 by Hui
+//Modify Begin:2026-08-11 by Hui
 struct ReSTIRGISettings
 {
-//Modify Begin:2026-07-30 by Hui
     uint32_t InitialCandidateCount = 1;
-//Modify End
     bool EnableTemporalResampling = true;
     bool EnableSpatialResampling = true;
-//Modify Begin:2026-08-11 by Hui
     bool EnableRayTracedSpatialBiasCorrection = false;
-//Modify End
     bool EnableTemporalJacobian = true;
     uint32_t TemporalMaxHistoryLength = 20;
     uint32_t SpatialMaxHistoryLength = 32;
@@ -27,7 +23,6 @@ struct ReSTIRGISettings
     float MaxSpatialWeight = 32.0f;
 };
 
-//Modify Begin:2026-08-11 by Hui
 struct ReSTIRGIVariantConfig
 {
     uint32_t MaxPathBounces = 1;
@@ -36,7 +31,6 @@ struct ReSTIRGIVariantConfig
     bool EnableTemporalJacobian = true;
     bool EnableRayTracedSpatialBiasCorrection = false;
 };
-//Modify End
 
 struct ReSTIRGIFrameConstants
 {
@@ -45,9 +39,7 @@ struct ReSTIRGIFrameConstants
     uint32_t FrameIndex = 0;
     uint32_t HistoryValid = 0;
 
-//Modify Begin:2026-07-30 by Hui
     uint32_t InitialCandidateCount = 1;
-//Modify End
     uint32_t TemporalMaxHistoryLength = 20;
     uint32_t SpatialMaxHistoryLength = 32;
     uint32_t MaxSampleAge = 20;
@@ -66,9 +58,7 @@ struct ReSTIRGIFrameConstants
     float MaxSpatialWeight = 32.0f;
     float Padding3 = 0.0f;
 };
-//Modify Begin:2026-07-30 by Hui
 static_assert(sizeof(ReSTIRGIFrameConstants) == 80u);
-//Modify End
 
 class ReSTIRGI final
 {
@@ -82,9 +72,7 @@ public:
         uint32_t height,
         uint32_t frameIndex,
         bool historyValid) const;
-//Modify Begin:2026-08-11 by Hui
     ReSTIRGIVariantConfig GetVariantConfig(uint32_t maxPathBounces) const;
-//Modify End
 
 private:
     ReSTIRGISettings m_Settings;

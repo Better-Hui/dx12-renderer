@@ -1,13 +1,13 @@
 #include <Framework/Rendering/Pipeline/PipelineLayout.h>
 
-//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-08-19 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
 //Modify End
 
-//Modify Begin:2026-07-24 by Hui
+//Modify Begin:2026-08-19 by Hui
 
 #include <DX12Library/Helpers.h>
-#include <d3dx12.h>
+#include <d3dx12/d3dx12.h>
 
 #include <algorithm>
 #include <sstream>
@@ -24,7 +24,6 @@
 
 namespace
 {
-    //Modify Begin:2026-07-27 by Hui
     PipelineDescriptorRangeDesc MakeRangeFromRootDescriptor(const PipelineRootDescriptorDesc& rootDescriptor)
     {
         PipelineDescriptorRangeDesc range;
@@ -59,7 +58,6 @@ namespace
 
         return *setFindResult;
     }
-    //Modify End
 
     UINT GetDescriptorCountOverride(
         const PipelineLayoutReflectionOptions& options,
@@ -77,7 +75,6 @@ namespace
         return DescriptorLayout::NormalizeDescriptorCount(reflectedCount, options.MaxDescriptorCount);
     }
 
-//Modify Begin:2026-07-31 by Hui
     bool IsRootConstantBufferName(const PipelineLayoutReflectionOptions& options, const std::string& name)
     {
         const std::string baseName = DescriptorLayout::GetBaseResourceName(name);
@@ -89,7 +86,6 @@ namespace
                 return rootConstantName == name || rootConstantName == baseName;
             });
     }
-//Modify End
 
     const PipelineStaticSamplerContract* FindStaticSamplerContract(
         const PipelineLayoutReflectionOptions& options,
@@ -134,7 +130,6 @@ namespace
         desc.DescriptorSets.clear();
         for (const PipelineDescriptorRangeDesc& range : desc.DescriptorRanges)
         {
-            //Modify Begin:2026-07-27 by Hui
             if (range.BindingMode == PipelineDescriptorBindingMode::RootDescriptor)
             {
                 PipelineRootDescriptorDesc rootDescriptor;
@@ -174,8 +169,6 @@ namespace
     void FlattenDescriptorSets(PipelineLayoutDesc& desc)
     {
         desc.DescriptorRanges.clear();
-        //Modify Begin:2026-07-27 by Hui
-        //Modify Begin:2026-07-31 by Hui
         UINT rootParameterIndex = 0;
         for (PipelineRootConstantDesc& rootConstant : desc.RootConstants)
         {
@@ -186,7 +179,6 @@ namespace
             rootDescriptor.RootParameterIndex = rootParameterIndex++;
             desc.DescriptorRanges.push_back(MakeRangeFromRootDescriptor(rootDescriptor));
         }
-        //Modify End
         for (PipelineDescriptorSetDesc& setDesc : desc.DescriptorSets)
         {
             for (PipelineDescriptorRangeDesc& range : setDesc.Ranges)
@@ -199,7 +191,6 @@ namespace
         //Modify End
     }
 
-    //Modify Begin:2026-07-27 by Hui
     bool IsRootParameterWritten(const std::vector<bool>& writtenRootParameters, const UINT rootParameterIndex)
     {
         return rootParameterIndex < writtenRootParameters.size() && writtenRootParameters[rootParameterIndex];
@@ -280,7 +271,6 @@ namespace
     //Modify End
 }
 
-//Modify Begin:2026-08-12 by Hui
 PipelineStaticSamplerContract PipelineStaticSamplers::PointWrap(
     const UINT shaderRegister,
     const UINT registerSpace)
@@ -377,7 +367,7 @@ void PipelineStaticSamplers::AddCommonRootSignatureContracts(
 }
 //Modify End
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
 PipelineLayout::PipelineLayout(FrameworkDeviceContext& deviceContext)
     : m_DescriptorLayout(deviceContext)
     , m_DeviceContext(&deviceContext)
@@ -395,11 +385,11 @@ PipelineLayoutDesc PipelineLayout::CreateDescFromReflection(
     const ShaderReflectionMetadata& reflection,
     const PipelineLayoutReflectionOptions& options)
 {
-//Modify Begin:2026-08-12 by Hui
+//Modify Begin:2026-08-19 by Hui
     ValidateStaticSamplerContracts(options);
 //Modify End
     PipelineLayoutDesc desc;
-    //Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-08-19 by Hui
     desc.ShaderStages = options.ShaderStages;
     //Modify End
     desc.DescriptorRanges.reserve(
@@ -426,7 +416,6 @@ PipelineLayoutDesc PipelineLayout::CreateDescFromReflection(
         GetOrAddDescriptorSet(desc, registerSpace).Ranges.push_back(std::move(range));
     };
 
-    //Modify Begin:2026-07-27 by Hui
     const auto appendRootDescriptor = [&desc, &options](
         std::string name,
         const DescriptorBindingKind kind,
@@ -462,7 +451,6 @@ PipelineLayoutDesc PipelineLayout::CreateDescFromReflection(
 
     for (const auto& cbuffer : reflection.m_ConstantBuffers)
     {
-//Modify Begin:2026-07-31 by Hui
         if (IsRootConstantBufferName(options, cbuffer.Name))
         {
             appendRootConstant(
@@ -482,7 +470,7 @@ PipelineLayoutDesc PipelineLayout::CreateDescFromReflection(
 
     for (const auto& srv : reflection.m_ShaderResourceViews)
     {
-//Modify Begin:2026-08-12 by Hui
+//Modify Begin:2026-08-19 by Hui
         if (srv.InputType == D3D_SIT_RTACCELERATIONSTRUCTURE)
         {
             appendRootDescriptor(
@@ -514,7 +502,7 @@ PipelineLayoutDesc PipelineLayout::CreateDescFromReflection(
             PipelineDescriptorBindingMode::DescriptorTable);
     }
 
-//Modify Begin:2026-08-12 by Hui
+//Modify Begin:2026-08-19 by Hui
     desc.RootSamplers.reserve(options.StaticSamplerContracts.size());
     for (const PipelineStaticSamplerContract& contract : options.StaticSamplerContracts)
     {
@@ -546,7 +534,7 @@ PipelineLayoutDesc PipelineLayout::CreateDescFromReflection(
     }
 //Modify End
 
-    //Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-08-19 by Hui
     FlattenDescriptorSets(desc);
     //Modify End
     return desc;
@@ -567,7 +555,6 @@ void PipelineLayout::Reset(PipelineLayoutDesc desc)
     RebuildDescriptorLayout();
 }
 
-//Modify Begin:2026-07-27 by Hui
 void PipelineLayout::SetRootSignature(std::shared_ptr<RootSignature> rootSignature)
 {
     m_RootSignature = std::move(rootSignature);
@@ -684,12 +671,10 @@ std::shared_ptr<RootSignature> PipelineLayout::CreateRootSignature(const Pipelin
 
     try
     {
-//Modify Begin:2026-08-07 by Hui
         return std::make_shared<RootSignature>(
             rootSignatureDesc,
             D3D_ROOT_SIGNATURE_VERSION_1_1,
             *m_DeviceContext->GetDevice().Get());
-//Modify End
     }
     catch (const std::exception& exception)
     {
@@ -733,7 +718,7 @@ bool PipelineLayout::HasBinding(const std::string& name, const DescriptorBinding
     return FindRange(name, expectedKind) != nullptr;
 }
 
-//Modify Begin:2026-07-31 by Hui
+//Modify Begin:2026-08-19 by Hui
 const PipelineRootConstantDesc* PipelineLayout::FindRootConstant(const std::string& name) const
 {
     const std::string baseName = DescriptorLayout::GetBaseResourceName(name);
@@ -793,7 +778,7 @@ void PipelineLayout::StageDefaultDescriptorTables(CommandList& commandList) cons
     m_DescriptorLayout.StageDefaultDescriptorTables(commandList);
 }
 
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-08-19 by Hui
 const DescriptorAllocation* PipelineLayout::FindDefaultDescriptorTable(const UINT rootParameterIndex) const
 {
     return m_DescriptorLayout.FindDefaultDescriptorTable(rootParameterIndex);
@@ -802,7 +787,7 @@ const DescriptorAllocation* PipelineLayout::FindDefaultDescriptorTable(const UIN
 
 void PipelineLayout::RebuildDescriptorLayout()
 {
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
     Assert(m_DeviceContext != nullptr, "Pipeline layout requires a framework device context.");
     m_DescriptorLayout = DescriptorLayout(*m_DeviceContext);
 //Modify End
@@ -815,5 +800,3 @@ void PipelineLayout::RebuildDescriptorLayout()
         m_DescriptorLayout.AddBinding(range.Name, binding);
     }
 }
-
-//Modify End

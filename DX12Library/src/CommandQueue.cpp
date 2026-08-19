@@ -7,11 +7,9 @@
 #include "D3D12DeviceContext.h"
 //Modify End
 
-//Modify Begin:2026-07-28 by Hui
-#include <fstream>
 //Modify Begin:2026-07-29 by Hui
+#include <fstream>
 #include <chrono>
-//Modify End
 //Modify End
 
 //Modify Begin:2026-08-07 by Hui
@@ -33,12 +31,9 @@ CommandQueue::CommandQueue(
 	desc.NodeMask = 0;
 
 	ThrowIfFailed(device->CreateCommandQueue(&desc, IID_PPV_ARGS(&m_D3d12CommandQueue)));
-//Modify Begin:2026-07-21 by Hui
 	InitializeFenceAndWorker();
-//Modify End
 }
 
-//Modify Begin:2026-07-21 by Hui
 CommandQueue::CommandQueue(
 	const D3D12_COMMAND_LIST_TYPE type,
 	std::shared_ptr<D3D12DeviceContext> deviceContext,
@@ -74,7 +69,6 @@ void CommandQueue::InitializeFenceAndWorker()
 
 	m_ProcessInFlightCommandListsThread = std::thread(&CommandQueue::ProcessInFlightCommandLists, this);
 }
-//Modify End
 
 void CommandQueue::SetFatalErrorHandler(CommandQueueFailureHandler handler)
 {
@@ -130,20 +124,16 @@ std::shared_ptr<CommandList> CommandQueue::GetCommandList()
 {
 	std::shared_ptr<CommandList> commandList;
 
-//Modify Begin:2026-07-30 by Hui
 	// TryPop is the atomic availability check. Empty followed by TryPop is racy
 	// when multiple recording workers request command lists concurrently.
 	if (m_AvailableCommandLists.TryPop(commandList))
 	{
 		assert(commandList != nullptr);
 	}
-	//Modify End
 	else
 	{
 		// Otherwise create a new command list.
-		//Modify Begin:2026-08-07 by Hui
 		commandList = std::make_shared<CommandList>(m_CommandListType, m_DeviceContext);
-		//Modify End
 	}
 
 	return commandList;
@@ -158,9 +148,7 @@ uint64_t CommandQueue::ExecuteCommandList(std::shared_ptr<CommandList> commandLi
 
 uint64_t CommandQueue::ExecuteCommandLists(const std::vector<std::shared_ptr<CommandList>>& commandLists)
 {
-//Modify Begin:2026-07-30 by Hui
 	auto submissionScope = m_DeviceContext->GetResourceStateRegistry()->AcquireSubmissionScope();
-//Modify End
 
 	// Command lists that need to put back on the command list queue.
 	std::vector<std::shared_ptr<CommandList>> toBeQueued;
@@ -196,9 +184,7 @@ uint64_t CommandQueue::ExecuteCommandLists(const std::vector<std::shared_ptr<Com
 	{
 		m_InFlightCommandLists.Push({ fenceValue, commandList });
 	}
-//Modify Begin:2026-07-29 by Hui
 	m_ProcessInFlightCommandListsThreadCv.notify_one();
-//Modify End
 	return fenceValue;
 }
 
@@ -207,7 +193,6 @@ void CommandQueue::Wait(const CommandQueue& other)
 	Wait(other, other.m_FenceValue.load());
 }
 
-//Modify Begin:2026-08-03 by Hui
 void CommandQueue::Wait(const CommandQueue& other, const uint64_t fenceValue)
 {
 	if (fenceValue != 0u)
@@ -215,37 +200,29 @@ void CommandQueue::Wait(const CommandQueue& other, const uint64_t fenceValue)
 		m_D3d12CommandQueue->Wait(other.m_D3d12Fence.Get(), fenceValue);
 	}
 }
-//Modify End
 
 ComPtr<ID3D12CommandQueue> CommandQueue::GetD3D12CommandQueue() const
 {
 	return m_D3d12CommandQueue;
 }
 
-//Modify Begin:2026-07-30 by Hui
 std::shared_ptr<ResourceStateRegistry> CommandQueue::GetResourceStateRegistry() const
 {
 	return m_DeviceContext->GetResourceStateRegistry();
 }
-//Modify End
 
 void CommandQueue::ProcessInFlightCommandLists()
 {
 	std::unique_lock lock(m_ProcessInFlightCommandListsThreadMutex, std::defer_lock);
-//Modify Begin:2026-07-30 by Hui
 	const char* stage = "initialization";
-//Modify End
 
-//Modify Begin:2026-07-28 by Hui
 	try
 	{
-//Modify End
 	while (m_IsProcessingInFlightCommandLists)
 	{
 		stage = "dequeue in-flight command list";
 		CommandListEntry commandListEntry;
 
-//Modify Begin:2026-07-29 by Hui
 		if (!m_InFlightCommandLists.TryPop(commandListEntry))
 		{
 			lock.lock();
@@ -286,13 +263,10 @@ void CommandQueue::ProcessInFlightCommandLists()
 		stage = "return command list to available queue";
 		m_AvailableCommandLists.Push(commandList);
 		m_ProcessInFlightCommandListsThreadCv.notify_one();
-//Modify End
 	}
-//Modify Begin:2026-07-28 by Hui
 	}
 	catch (const std::exception& exception)
 	{
-		//Modify Begin:2026-08-07 by Hui
 		if (m_FatalErrorHandler)
 		{
 			m_FatalErrorHandler(CommandQueueFailure{
@@ -305,7 +279,6 @@ void CommandQueue::ProcessInFlightCommandLists()
 		{
 			std::terminate();
 		}
-		//Modify End
 	}
-//Modify End
 }
+//Modify End

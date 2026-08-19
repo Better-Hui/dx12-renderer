@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-08-13 by Hui
 #pragma once
 
 #include <Framework/Scene/Light.h>
@@ -36,18 +36,12 @@ public:
 
     void CreateDemoLights();
     void CreateFromScene(const Scene& scene);
-//Modify Begin:2026-08-06 by Hui
     void SetEmissiveMeshSurfaceEmitters(SurfaceEmitterSceneData emitterData);
-//Modify End
     void InitializeGpuBuffers(CommandList& commandList);
-//Modify Begin:2026-07-30 by Hui
     bool Upload(CommandList& commandList, uint64_t frameIndex);
-    //Modify End
     void UpdateDynamicLights(float timeSeconds);
     void BindComputeResources(CommandContext& commandContext, ComputeShader& shader);
-//Modify Begin:2026-08-13 by Hui
     void ForEachShaderResource(const std::function<void(const Resource&)>& action) const;
-//Modify End
     void BindRayTracingResources(RayTracingBindingSet& bindingSet);
 
     void FillCameraConstants(
@@ -67,9 +61,7 @@ public:
     bool AreAreaLightsEnabled() const { return m_AreaLightsEnabled; }
     void SetLightGroupSettings(bool directionalLightsEnabled, bool pointLightsEnabled, bool areaLightsEnabled);
 
-    //Modify Begin:2026-07-30 by Hui
     const std::vector<DirectionalLight>& GetDirectionalLights() const { return m_DirectionalLights; }
-//Modify End
     size_t GetPointLightCount() const { return m_PointLights.size(); }
     const std::vector<PointLight>& GetPointLights() const { return m_PointLights; }
     const std::vector<AreaLightData>& GetAreaLights() const { return m_AreaLights; }
@@ -87,9 +79,7 @@ public:
     void RemoveDirectionalLight(size_t lightIndex);
     void RemovePointLight(size_t lightIndex);
     void RemoveAreaLight(size_t lightIndex);
-//Modify Begin:2026-08-06 by Hui
     size_t GetEmissiveMeshSurfaceEmitterCount() const;
-//Modify End
 
 private:
     void RebuildGpuResources();

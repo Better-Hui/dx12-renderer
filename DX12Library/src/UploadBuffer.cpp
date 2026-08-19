@@ -6,11 +6,11 @@
 
 #include "Helpers.h"
 
-#include "d3dx12.h"
+#include <d3dx12/d3dx12.h>
 
 #include <new>
 
-//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-08-18 by Hui
 UploadBuffer::UploadBuffer(Microsoft::WRL::ComPtr<ID3D12Device2> device, const size_t pageSize) :
 	m_Device(std::move(device)),
 	m_PageSize(pageSize)
@@ -20,7 +20,6 @@ UploadBuffer::UploadBuffer(Microsoft::WRL::ComPtr<ID3D12Device2> device, const s
 
 UploadBuffer::Allocation UploadBuffer::Allocate(const size_t sizeInBytes, const size_t alignment)
 {
-//Modify Begin:2026-08-18 by Hui
 	const size_t alignedSize = Math::AlignUp(sizeInBytes, alignment);
 	if (alignedSize > m_PageSize)
 	{
@@ -28,7 +27,6 @@ UploadBuffer::Allocation UploadBuffer::Allocate(const size_t sizeInBytes, const 
 		m_LargePages.push_back(largePage);
 		return largePage->Allocate(sizeInBytes, alignment);
 	}
-//Modify End
 
 	if (!m_CurrentPage || !m_CurrentPage->HasSpace(sizeInBytes, alignment))
 	{
@@ -60,9 +58,7 @@ std::shared_ptr<UploadBuffer::Page> UploadBuffer::RequestPage()
 void UploadBuffer::Reset()
 {
 	m_CurrentPage = nullptr;
-//Modify Begin:2026-08-18 by Hui
 	m_LargePages.clear();
-//Modify End
 	// Reset all available pages
 	m_AvailablePages = m_PagePool;
 
@@ -92,10 +88,8 @@ UploadBuffer::Page::Page(Microsoft::WRL::ComPtr<ID3D12Device2> device, const siz
 	));
 
 	m_GpuPtr = m_Resource->GetGPUVirtualAddress();
-//Modify Begin:2026-07-30 by Hui
 	const D3D12_RANGE readRange = { 0, 0 };
 	ThrowIfFailed(m_Resource->Map(0, &readRange, &m_CpuPtr));
-//Modify End
 }
 //Modify End
 

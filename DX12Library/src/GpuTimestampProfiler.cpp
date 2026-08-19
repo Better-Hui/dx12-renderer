@@ -6,12 +6,12 @@
 #include "CommandQueue.h"
 #include "Helpers.h"
 
-#include "d3dx12.h"
+#include <d3dx12/d3dx12.h>
 
 #include <algorithm>
 #include <cstring>
 
-//Modify Begin:2026-07-29 by Hui
+//Modify Begin:2026-08-03 by Hui
 bool GpuTimestampProfiler::Initialize(
     Microsoft::WRL::ComPtr<ID3D12Device2> device,
     std::shared_ptr<CommandQueue> commandQueue,
@@ -25,7 +25,6 @@ bool GpuTimestampProfiler::Initialize(
         return false;
     }
 
-//Modify Begin:2026-08-03 by Hui
     if (device == nullptr || commandQueue == nullptr ||
         FAILED(commandQueue->GetD3D12CommandQueue()->GetTimestampFrequency(&m_TimestampFrequency)) ||
         m_TimestampFrequency == 0)
@@ -68,13 +67,9 @@ void GpuTimestampProfiler::Shutdown()
     m_CurrentSlotIndex = 0;
     m_CurrentFrameNumber = 0;
     m_TimestampFrequency = 0;
-//Modify Begin:2026-08-02 by Hui
     m_CpuFrameStart = {};
-//Modify End
     m_Initialized = false;
-//Modify Begin:2026-08-03 by Hui
     m_FrameActive = false;
-//Modify End
     m_LastFrameGpuMilliseconds = 0.0;
 }
 
@@ -85,7 +80,6 @@ bool GpuTimestampProfiler::BeginFrame(const uint64_t frameNumber)
         return false;
     }
 
-//Modify Begin:2026-08-03 by Hui
     for (uint32_t offset = 0; offset < FrameSlotCount; ++offset)
     {
         const uint32_t slotIndex = (m_CurrentSlotIndex + offset) % FrameSlotCount;
@@ -110,7 +104,6 @@ bool GpuTimestampProfiler::BeginFrame(const uint64_t frameNumber)
 
     m_FrameActive = false;
     return false;
-//Modify End
 }
 
 void GpuTimestampProfiler::WriteTimestamp(CommandList& commandList, const char* name)
@@ -128,10 +121,8 @@ void GpuTimestampProfiler::WriteTimestamp(CommandList& commandList, const char* 
 
     const uint32_t queryIndex = slot.TimestampCount++;
     slot.Names.emplace_back(name != nullptr ? name : "");
-//Modify Begin:2026-08-02 by Hui
     slot.CpuMilliseconds.push_back(
         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - m_CpuFrameStart).count());
-//Modify End
     commandList.GetGraphicsCommandList()->EndQuery(slot.QueryHeap.Get(), D3D12_QUERY_TYPE_TIMESTAMP, queryIndex);
 }
 
@@ -202,23 +193,19 @@ bool GpuTimestampProfiler::CollectCompletedFrame(CommandQueue& commandQueue, std
                     static_cast<double>(timestamp - frameStart) * 1000.0 / static_cast<double>(m_TimestampFrequency);
                 sample.MillisecondsFromPrevious =
                     i == 0 ? 0.0 : static_cast<double>(timestamp - previous) * 1000.0 / static_cast<double>(m_TimestampFrequency);
-//Modify Begin:2026-08-02 by Hui
                 sample.CpuMillisecondsFromFrameStart =
                     i < slot.CpuMilliseconds.size() ? slot.CpuMilliseconds[i] : 0.0;
                 sample.CpuMillisecondsFromPrevious =
                     i > 0 && i < slot.CpuMilliseconds.size()
                         ? slot.CpuMilliseconds[i] - slot.CpuMilliseconds[i - 1]
                         : 0.0;
-//Modify End
                 previous = timestamp;
                 samples.push_back(sample);
             }
             m_LastFrameGpuMilliseconds = samples.back().MillisecondsFromFrameStart;
         }
 
-//Modify Begin:2026-08-03 by Hui
         m_LastCollectedFrameNumber = slot.FrameNumber;
-//Modify End
         D3D12_RANGE writeRange = { 0, 0 };
         slot.ReadbackBuffer->Unmap(0, &writeRange);
         slot.PendingReadback = false;

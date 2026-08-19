@@ -1,9 +1,7 @@
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-12 by Hui
 #pragma once
 
-//Modify Begin:2026-08-12 by Hui
 #include "Helpers.h"
-//Modify End
 
 #include <d3d12.h>
 
@@ -100,9 +98,7 @@ public:
         ID3D12Resource* resource,
         D3D12_RESOURCE_STATES initialState)
     {
-//Modify Begin:2026-08-12 by Hui
         Assert(resource != nullptr, "Cannot register a null D3D12 resource state.");
-//Modify End
 
         std::lock_guard lock(m_Mutex);
         if (const auto registration = m_Registrations[resource].lock())

@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-10 by Hui
 #pragma once
 
 #include <d3d12.h>
@@ -40,7 +40,6 @@ public:
     D3D12_CPU_DESCRIPTOR_HANDLE GetResourceCpuHandle(uint32_t descriptorIndex = 0) const;
 
 private:
-//Modify Begin:2026-08-10 by Hui
     void UpdateShaderResourceViewLocked(
         uint32_t descriptorIndex,
         const Resource& resource,
@@ -73,18 +72,15 @@ private:
     D3D12_CPU_DESCRIPTOR_HANDLE GetCanonicalResourceCpuHandle(uint32_t descriptorIndex) const;
     D3D12_CPU_DESCRIPTOR_HANDLE GetPageResourceCpuHandle(const DescriptorPage& page, uint32_t descriptorIndex) const;
     D3D12_GPU_DESCRIPTOR_HANDLE GetPageResourceGpuHandle(const DescriptorPage& page, uint32_t descriptorIndex) const;
-//Modify End
     BindlessDescriptorHeapDesc m_Desc;
     Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> m_CanonicalResourceDescriptorHeap;
     uint32_t m_ResourceDescriptorSize = 0;
     uint32_t m_NextResourceDescriptorIndex = 0;
-//Modify Begin:2026-07-30 by Hui
     struct CachedShaderResourceDescriptor
     {
         uint32_t DescriptorIndex = 0;
         ID3D12Resource* NativeResource = nullptr;
     };
-//Modify End
     std::map<const Resource*, CachedShaderResourceDescriptor> m_DefaultShaderResourceDescriptors;
     std::map<uint64_t, CachedDescriptorTable> m_CachedDescriptorTables;
     std::vector<uint64_t> m_ResourceDescriptorRevisions;
@@ -93,8 +89,6 @@ private:
     uint64_t m_LayoutGeneration = 1;
     bool m_FrameActive = false;
     ID3D12Device2* m_Device = nullptr;
-//Modify Begin:2026-08-10 by Hui
     mutable std::mutex m_Mutex;
-//Modify End
 };
 //Modify End

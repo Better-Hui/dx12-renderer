@@ -4,7 +4,7 @@
 
 #include "CommandQueue.h"
 #include "CommandList.h"
-//Modify Begin:2026-08-12 by Hui
+//Modify Begin:2026-08-19 by Hui
 #include "D3D12DeviceContext.h"
 //Modify End
 #include "Game.h"
@@ -13,13 +13,13 @@
 #include "Texture.h"
 #include "Helpers.h"
 
-//Modify Begin:2026-07-21 by Hui
+//Modify Begin:2026-08-19 by Hui
 #include <cwchar>
 #include <algorithm>
 #include <utility>
 //Modify End
 
-//Modify Begin:2026-08-12 by Hui
+//Modify Begin:2026-08-19 by Hui
 Window::Window(
 	HWND hWnd,
 	const std::wstring& windowName,
@@ -36,7 +36,7 @@ Window::Window(
 	, Fullscreen(false)
 	, m_D3d12Context(std::move(d3d12Context))
 {
-//Modify Begin:2026-08-12 by Hui
+//Modify Begin:2026-08-19 by Hui
 	Assert(m_D3d12Context.DeviceContext != nullptr, "Window requires a D3D12 device context.");
 	Assert(m_D3d12Context.DirectCommandQueue != nullptr, "Window requires a direct command queue.");
 	Assert(m_D3d12Context.ComputeCommandQueue != nullptr, "Window requires a compute command queue.");
@@ -46,7 +46,7 @@ Window::Window(
 
 	for (int i = 0; i < BUFFER_COUNT; ++i)
 	{
-//Modify Begin:2026-08-12 by Hui
+//Modify Begin:2026-08-19 by Hui
 		BackBufferTextures[i] = std::make_shared<Texture>(
 			TextureUsageType::Other,
 			L"",
@@ -56,7 +56,7 @@ Window::Window(
 	}
 
 	DxgiSwapChain = CreateSwapChain();
-//Modify Begin:2026-07-28 by Hui
+//Modify Begin:2026-08-19 by Hui
 	FrameResources.Reset(BUFFER_COUNT);
 	FrameResources.SetCurrentIndex(CurrentBackBufferIndex);
 //Modify End
@@ -229,13 +229,13 @@ void Window::OnRender(RenderEventArgs& e)
 		RenderEventArgs renderEventArgs(RenderClock.GetDeltaSeconds(), RenderClock.GetTotalSeconds(),
 			e.FrameNumber);
 		pGame->OnRender(renderEventArgs);
-//Modify Begin:2026-07-21 by Hui
+//Modify Begin:2026-08-19 by Hui
 		UpdateFrameStatistics(renderEventArgs.ElapsedTime);
 //Modify End
 	}
 }
 
-//Modify Begin:2026-07-21 by Hui
+//Modify Begin:2026-08-19 by Hui
 void Window::SetProfilerDisplayRefreshIntervalSeconds(const double refreshIntervalSeconds)
 {
 	ProfilerDisplayRefreshIntervalSeconds = (std::max)(0.1, refreshIntervalSeconds);
@@ -274,7 +274,7 @@ void Window::UpdateFrameStatistics(const double elapsedSeconds)
 }
 //Modify End
 
-//Modify Begin:2026-08-12 by Hui
+//Modify Begin:2026-08-19 by Hui
 void Window::BeginFrame(const uint64_t frameNumber)
 {
 	m_D3d12Context.DeviceContext->SetDescriptorRetirementFrame(frameNumber);
@@ -344,7 +344,7 @@ void Window::OnMouseWheel(MouseWheelEventArgs& e)
 
 void Window::OnResize(ResizeEventArgs& e)
 {
-	//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
 	if (e.Width <= 0 || e.Height <= 0)
 	{
 		return;
@@ -357,14 +357,13 @@ void Window::OnResize(ResizeEventArgs& e)
 		ClientWidth = std::max(1, e.Width);
 		ClientHeight = std::max(1, e.Height);
 
-//Modify Begin:2026-08-12 by Hui
 		m_D3d12Context.DirectCommandQueue->Flush();
 		m_D3d12Context.ComputeCommandQueue->Flush();
 		m_D3d12Context.CopyCommandQueue->Flush();
 //Modify End
 
 		// Release all references to back buffer textures.
-//Modify Begin:2026-08-12 by Hui
+//Modify Begin:2026-08-19 by Hui
 		MRenderTarget.AttachTexture(Color0, std::make_shared<Texture>(
 			TextureUsageType::Other,
 			L"",
@@ -382,7 +381,7 @@ void Window::OnResize(ResizeEventArgs& e)
 			swapChainDesc.Flags));
 
 		CurrentBackBufferIndex = DxgiSwapChain->GetCurrentBackBufferIndex();
-//Modify Begin:2026-07-28 by Hui
+//Modify Begin:2026-08-19 by Hui
 		FrameResources.Reset(BUFFER_COUNT);
 		FrameResources.SetCurrentIndex(CurrentBackBufferIndex);
 //Modify End
@@ -398,7 +397,7 @@ void Window::OnResize(ResizeEventArgs& e)
 
 void Window::ReleaseSwapChainResources()
 {
-//Modify Begin:2026-08-12 by Hui
+//Modify Begin:2026-08-19 by Hui
 	MRenderTarget.AttachTexture(Color0, std::make_shared<Texture>(
 		TextureUsageType::Other,
 		L"",
@@ -515,7 +514,7 @@ UINT Window::Present(const Texture& texture)
 	UINT presentFlags = IsTearingSupported && !VSync ? DXGI_PRESENT_ALLOW_TEARING : 0;
 	ThrowIfFailed(DxgiSwapChain->Present(syncInterval, presentFlags));
 
-//Modify Begin:2026-07-28 by Hui
+//Modify Begin:2026-08-19 by Hui
 	FrameResources.MarkSubmitted(
 		CurrentBackBufferIndex,
 		commandQueue->Signal(),

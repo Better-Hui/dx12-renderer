@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-18 by Hui
 #include <Framework/Rendering/Pipeline/ShaderVariant.h>
 
 #include <Framework/Rendering/Pipeline/ShaderCompiler.h>
@@ -533,9 +533,7 @@ ShaderVariantManagerConfig ShaderVariantManager::CreateDefaultConfig()
         AddUniquePath(config.IncludeDirectories, config.SourceRoot / "External" / "NRD" / "Shaders");
     }
 
-//Modify Begin:2026-08-18 by Hui
     const std::wstring compilationMode = GetEnvironmentValue(L"DX12_RENDERER_SHADER_COMPILE");
-//Modify End
     config.CompilationMode = ParseCompilationMode(compilationMode);
     return config;
 }
@@ -640,9 +638,7 @@ std::shared_ptr<ShaderBlob> ShaderVariantManager::GetOrCompile(const ShaderVaria
         }
         catch (const std::exception&)
         {
-//Modify Begin:2026-07-30 by Hui
             Trace(L"Shader variant cache is invalid; rebuilding " + cachePath.wstring());
-//Modify End
             std::error_code error;
             std::filesystem::remove(cachePath, error);
         }

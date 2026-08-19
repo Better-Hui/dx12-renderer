@@ -380,9 +380,7 @@ void RenderGraph::ResourcePool::CreateResources()
             CreateBuffer(resourceId);
             break;
         default:
-//Modify Begin:2026-07-30 by Hui
             throw std::logic_error("Unsupported render graph resource type.");
-//Modify End
         }
     }
 }

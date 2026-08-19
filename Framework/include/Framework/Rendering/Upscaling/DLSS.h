@@ -58,7 +58,6 @@ struct DLSSExecutionInputs
     DirectX::XMMATRIX PreviousViewProjection = DirectX::XMMatrixIdentity();
 };
 
-//Modify Begin:2026-08-07 by Hui
 struct DLSSFrameGenerationInputs
 {
     std::shared_ptr<Texture> Depth;
@@ -76,7 +75,6 @@ struct DLSSFrameGenerationInputs
     DirectX::XMMATRIX ViewProjection = DirectX::XMMatrixIdentity();
     DirectX::XMMATRIX PreviousViewProjection = DirectX::XMMatrixIdentity();
 };
-//Modify End
 
 class DLSS final
 {
@@ -89,9 +87,7 @@ public:
 
     [[nodiscard]] bool IsSupported() const { return m_Supported; }
     [[nodiscard]] bool IsEnabled() const { return m_Supported && m_Mode != DLSSMode::Disabled; }
-//Modify Begin:2026-08-07 by Hui
     [[nodiscard]] bool IsStreamlineRuntimeInitialized() const;
-//Modify End
     [[nodiscard]] bool IsRayReconstructionSupported() const;
     [[nodiscard]] bool IsFrameGenerationSupported() const;
     [[nodiscard]] bool IsRayReconstructionEnabled() const { return m_RayReconstructionEnabled; }
@@ -107,14 +103,12 @@ public:
     void InvalidateHistory();
     void OnResourcesRecreated();
     void Execute(CommandList& commandList, const DLSSExecutionInputs& inputs);
-//Modify Begin:2026-08-07 by Hui
     void BeginFrameGeneration(uint32_t frameIndex);
     void PrepareFrameGeneration(const DLSSFrameGenerationInputs& inputs);
     void TagFrameGenerationResources(CommandList& commandList, const DLSSFrameGenerationInputs& inputs);
     void MarkFrameGenerationRenderSubmissionEnd();
     void MarkFrameGenerationPresentStart();
     void MarkFrameGenerationPresentEnd();
-//Modify End
 
 private:
     struct InternalState;
@@ -123,10 +117,8 @@ private:
     [[nodiscard]] bool EnsureInitialized();
     [[nodiscard]] bool EnsureFeature(CommandList& commandList, const DLSSExecutionInputs& inputs);
     void ExecuteRayReconstruction(CommandList& commandList, const DLSSExecutionInputs& inputs);
-//Modify Begin:2026-08-07 by Hui
     void* AcquireStreamlineFrameToken(uint32_t frameIndex);
     void ReleaseStreamlineFrameToken();
-//Modify End
     void ReleaseFeature();
     void Shutdown();
 
@@ -139,11 +131,9 @@ private:
     bool m_HistoryReset = true;
     bool m_RayReconstructionEnabled = false;
     bool m_FrameGenerationEnabled = false;
-//Modify Begin:2026-08-07 by Hui
     bool m_FrameGenerationPrepared = false;
     uint32_t m_ActiveStreamlineFrameIndex = UINT32_MAX;
     void* m_ActiveStreamlineFrameToken = nullptr;
-//Modify End
     std::string m_StatusMessage;
 };
 //Modify End

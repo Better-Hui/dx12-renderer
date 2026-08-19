@@ -601,7 +601,7 @@ float3 EvaluateDirectLighting(SurfaceData surface, inout uint rngState, out floa
         nrdDirectHitDistance);
 }
 
-//Modify Begin:2026-08-05 by Hui
+//Modify Begin:2026-08-06 by Hui
 #if defined(FRAMEWORK_RESTIR_DI_SCENE_ADAPTER) || defined(FRAMEWORK_RESTIR_GI_SCENE_ADAPTER)
 struct PathTracingDirectLightSample
 {
@@ -609,9 +609,7 @@ struct PathTracingDirectLightSample
     float3 Radiance;
     float3 UnshadowedContribution;
     float Distance;
-//Modify Begin:2026-07-30 by Hui
     bool TransportValid;
-//Modify End
     bool Valid;
 };
 
@@ -620,7 +618,6 @@ uint GetReSTIRDILightCount()
     return Camera_DirectionalLightCount + Camera_PointLightCount + Camera_SurfaceEmitterCount;
 }
 
-//Modify Begin:2026-08-06 by Hui
 bool SamplePathTracingDirectLightIndex(
     const float selectionRandom,
     out uint lightIndex,
@@ -628,7 +625,6 @@ bool SamplePathTracingDirectLightIndex(
 {
     return SampleDirectLightIndex(selectionRandom, lightIndex, inverseSourcePdf);
 }
-//Modify End
 
 PathTracingDirectLightSample SamplePathTracingDirectLight(
     const uint lightIndex,
@@ -640,9 +636,7 @@ PathTracingDirectLightSample SamplePathTracingDirectLight(
     sample.Radiance = 0.0f;
     sample.UnshadowedContribution = 0.0f;
     sample.Distance = 0.0f;
-//Modify Begin:2026-07-30 by Hui
     sample.TransportValid = false;
-//Modify End
     sample.Valid = false;
 
     uint index = lightIndex;
@@ -664,9 +658,7 @@ PathTracingDirectLightSample SamplePathTracingDirectLight(
             surface,
             sample.DirectionWs,
             sample.Radiance);
-//Modify Begin:2026-07-30 by Hui
         sample.TransportValid = MaxComponent(sample.Radiance) > 0.0f;
-//Modify End
         sample.Valid = MaxComponent(sample.UnshadowedContribution) > 0.0f;
         return sample;
     }
@@ -711,9 +703,7 @@ PathTracingDirectLightSample SamplePathTracingDirectLight(
             surface,
             sample.DirectionWs,
             sample.Radiance);
-//Modify Begin:2026-07-30 by Hui
         sample.TransportValid = MaxComponent(sample.Radiance) > 0.0f;
-//Modify End
         sample.Valid = MaxComponent(sample.UnshadowedContribution) > 0.0f;
         return sample;
     }
@@ -724,7 +714,6 @@ PathTracingDirectLightSample SamplePathTracingDirectLight(
         return sample;
     }
 
-//Modify Begin:2026-08-06 by Hui
     const SurfaceEmitterSample areaSample = SampleSurfaceEmitter(index, sampleUv);
     if (!areaSample.Valid)
     {
@@ -748,11 +737,8 @@ PathTracingDirectLightSample SamplePathTracingDirectLight(
 
     sample.Radiance = areaSample.Emission * areaSample.AreaOverTriangleSelectionPdf * lightFacing /
         max(0.001f, distanceToLight * distanceToLight);
-//Modify End
     sample.UnshadowedContribution = EvaluateMaterialLighting(surface, sample.DirectionWs, sample.Radiance);
-//Modify Begin:2026-07-30 by Hui
     sample.TransportValid = MaxComponent(sample.Radiance) > 0.0f;
-//Modify End
     sample.Valid = MaxComponent(sample.UnshadowedContribution) > 0.0f;
     return sample;
 }
@@ -774,7 +760,6 @@ bool IsPathTracingDirectLightSampleVisible(
     return IsVisibleAlongRay(rayOrigin, sample.DirectionWs, sample.Distance);
 }
 
-//Modify Begin:2026-07-30 by Hui
 bool IsPathTracingDirectLightTransportVisible(
     const SurfaceData surface,
     const PathTracingDirectLightSample sample)
@@ -791,12 +776,11 @@ bool IsPathTracingDirectLightTransportVisible(
         sample.DirectionWs);
     return IsVisibleAlongRay(rayOrigin, sample.DirectionWs, sample.Distance);
 }
-//Modify End
 
 #endif
 //Modify End
 
-//Modify Begin:2026-08-10 by Hui
+//Modify Begin:2026-08-11 by Hui
 SurfaceData MakeRayHitSurface(const RayPayload payload, const float3 positionWs)
 {
     SurfaceData surface;
@@ -812,7 +796,6 @@ SurfaceData MakeRayHitSurface(const RayPayload payload, const float3 positionWs)
     return surface;
 }
 
-//Modify Begin:2026-08-11 by Hui
 #if defined(FRAMEWORK_RESTIR_GI_SCENE_ADAPTER)
 float3 EvaluateDiffuseReflectance(const SurfaceData surface)
 {
@@ -880,7 +863,6 @@ float3 EvaluateDiffuseDirectLighting(
         return 0.0f;
     }
 
-//Modify Begin:2026-07-30 by Hui
     const float3 contribution = EvaluateDiffuseBounceContribution(
         surface,
         sample.DirectionWs,
@@ -891,7 +873,6 @@ float3 EvaluateDiffuseDirectLighting(
     }
 
     return contribution * inverseSourcePdf;
-//Modify End
 }
 
 float3 TraceDiffuseGatherPathRadiance(
@@ -943,7 +924,6 @@ float3 TraceDiffuseGatherPathRadiance(
     return radiance;
 }
 #endif
-//Modify End
 
 float3 TraceGatherPathRadiance(
     const SurfaceData initialSurface,
@@ -1070,3 +1050,4 @@ void WriteIndirectLightingOutput(uint2 pixel, uint width, uint frameIndex)
 }
 
 #endif
+//Modify End

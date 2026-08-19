@@ -15,7 +15,7 @@
 #include <string_view>
 #include <variant>
 
-//Modify Begin:2026-08-03 by Hui
+//Modify Begin:2026-08-06 by Hui
 namespace
 {
     struct JsonValue
@@ -469,12 +469,10 @@ namespace
                     }
                     DirectX::XMStoreFloat3(&direction, DirectX::XMVector3Normalize(DirectX::XMLoadFloat3(&direction)));
                     DirectionalLight light;
-//Modify Begin:2026-07-30 by Hui
                     const float angularRadius = Find(lightObject, "angularRadius") != nullptr
                         ? ReadNumber(*Find(lightObject, "angularRadius"), "light.angularRadius")
                         : 0.009f;
                     light.m_DirectionWs = { direction.x, direction.y, direction.z, std::max(0.0f, angularRadius) };
-//Modify End
                     light.m_Color = { color.x, color.y, color.z, intensity };
                     scene.AddDirectionalLight(light);
                 }
@@ -511,12 +509,10 @@ namespace
                     const float range = Find(lightObject, "range") != nullptr ? ReadNumber(*Find(lightObject, "range"), "light.range") : 20.0f;
                     PointLight light({ position.x, position.y, position.z, 1.0f }, std::max(0.1f, range));
                     light.Color = { color.x, color.y, color.z, intensity };
-//Modify Begin:2026-07-30 by Hui
                     if (const JsonValue* sourceRadius = Find(lightObject, "sourceRadius"))
                     {
                         light.SourceRadius = std::max(0.0f, ReadNumber(*sourceRadius, "light.sourceRadius"));
                     }
-//Modify End
                     light.RecalculateAttenuationCoefficients();
                     scene.AddPointLight(light);
                 }
@@ -624,7 +620,6 @@ void SceneImporter::ApplyJsonRuntimeState(
         scene.SetSkybox(skybox);
     }
 
-//Modify Begin:2026-08-06 by Hui
     if (const JsonValue* lightGroupsValue = Find(root, "lightGroups"))
     {
         const JsonValue::Object& lightGroups = lightGroupsValue->AsObject("lightGroups");
@@ -643,7 +638,6 @@ void SceneImporter::ApplyJsonRuntimeState(
         }
         scene.SetLightGroupSettings(settings);
     }
-//Modify End
 
     if (const JsonValue* lightsValue = Find(root, "directionalLights"))
     {
@@ -729,14 +723,12 @@ void SceneImporter::WriteJsonRuntimeState(
     writeFloat4(scene.GetSkybox().AmbientColorAndIntensity);
     output << " },\n";
 
-//Modify Begin:2026-08-06 by Hui
     const SceneLightGroupSettings& lightGroups = scene.GetLightGroupSettings();
     output << "  \"lightGroups\": { \"directionalEnabled\": "
         << (lightGroups.DirectionalLightsEnabled ? "true" : "false")
         << ", \"pointEnabled\": " << (lightGroups.PointLightsEnabled ? "true" : "false")
         << ", \"areaEnabled\": " << (lightGroups.AreaLightsEnabled ? "true" : "false")
         << " },\n";
-//Modify End
 
     const auto writeArrayStart = [&output](const char* name)
     {

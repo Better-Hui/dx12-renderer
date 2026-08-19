@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <cstring>
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-07-31 by Hui
 namespace
 {
     template <typename Metadata>
@@ -52,14 +52,11 @@ namespace
     }
 
     ShaderReflectionMetadata MergeMeshGraphicsReflection(
-//Modify Begin:2026-07-31 by Hui
         const ShaderReflectionMetadata* amplificationShaderMetadata,
-//Modify End
         const ShaderReflectionMetadata& meshShaderMetadata,
         const ShaderReflectionMetadata& pixelShaderMetadata)
     {
         ShaderReflectionMetadata merged;
-//Modify Begin:2026-07-31 by Hui
         if (amplificationShaderMetadata != nullptr)
         {
             AppendUniqueMetadata(amplificationShaderMetadata->m_ConstantBuffers, merged.m_ConstantBuffers, merged.m_ConstantBuffersNameCache);
@@ -67,7 +64,6 @@ namespace
             AppendUniqueMetadata(amplificationShaderMetadata->m_UnorderedAccessViews, merged.m_UnorderedAccessViews, merged.m_UnorderedAccessViewsNameCache);
             AppendUniqueMetadata(amplificationShaderMetadata->m_Samplers, merged.m_Samplers, merged.m_SamplersNameCache);
         }
-//Modify End
         AppendUniqueMetadata(meshShaderMetadata.m_ConstantBuffers, merged.m_ConstantBuffers, merged.m_ConstantBuffersNameCache);
         AppendUniqueMetadata(pixelShaderMetadata.m_ConstantBuffers, merged.m_ConstantBuffers, merged.m_ConstantBuffersNameCache);
         AppendUniqueMetadata(meshShaderMetadata.m_ShaderResourceViews, merged.m_ShaderResourceViews, merged.m_ShaderResourceViewsNameCache);
@@ -101,7 +97,6 @@ MeshShader::MeshShader(
     buildPipelineState(m_PipelineStateBuilder);
 }
 
-//Modify Begin:2026-07-31 by Hui
 MeshShader::MeshShader(
     FrameworkDeviceContext& deviceContext,
     const ShaderBlob& amplificationShader,
@@ -124,7 +119,6 @@ MeshShader::MeshShader(
         .WithMeshShaders(amplificationShader.GetBlob(), meshShader.GetBlob(), pixelShader.GetBlob());
     buildPipelineState(m_PipelineStateBuilder);
 }
-//Modify End
 
 Microsoft::WRL::ComPtr<ID3D12PipelineState> MeshShader::GetPipelineState(
     const Microsoft::WRL::ComPtr<ID3D12Device2>& device,
@@ -152,7 +146,6 @@ void MeshShader::CollectShaderMetadata(const Microsoft::WRL::ComPtr<ID3DBlob>& s
 
 void MeshShader::BuildPipelineLayout()
 {
-//Modify Begin:2026-07-31 by Hui
     if (m_PipelineLayoutOptions.MaxDescriptorCount == 1024u)
     {
         m_PipelineLayoutOptions.MaxDescriptorCount = 4096u;
@@ -168,7 +161,6 @@ void MeshShader::BuildPipelineLayout()
         nullptr :
         &m_AmplificationShaderMetadata;
     const ShaderReflectionMetadata mergedReflection = MergeMeshGraphicsReflection(amplificationReflection, m_MeshShaderMetadata, m_PixelShaderMetadata);
-//Modify End
     m_PipelineLayout = std::make_unique<PipelineLayout>(
         m_DeviceContext,
         PipelineLayout::CreateDescFromReflection(mergedReflection, m_PipelineLayoutOptions));
@@ -179,7 +171,6 @@ void MeshShader::BuildReflectedRootSignature()
 {
     Assert(m_PipelineLayout != nullptr, "Pipeline layout must be built before creating a reflected root signature.");
 
-//Modify Begin:2026-07-31 by Hui
     const ShaderReflectionMetadata* amplificationReflection = m_AmplificationShaderMetadata.m_ConstantBuffers.empty() &&
         m_AmplificationShaderMetadata.m_ShaderResourceViews.empty() &&
         m_AmplificationShaderMetadata.m_UnorderedAccessViews.empty() &&
@@ -187,7 +178,6 @@ void MeshShader::BuildReflectedRootSignature()
         nullptr :
         &m_AmplificationShaderMetadata;
     const ShaderReflectionMetadata mergedReflection = MergeMeshGraphicsReflection(amplificationReflection, m_MeshShaderMetadata, m_PixelShaderMetadata);
-//Modify End
     for (const PipelineDescriptorRangeDesc& range : m_PipelineLayout->GetDesc().DescriptorRanges)
     {
         if (range.Kind == DescriptorBindingKind::ShaderResourceView)
@@ -211,9 +201,7 @@ void MeshShader::BuildReflectedRootSignature()
     }
 
     PipelineRootSignatureBuildDesc rootSignatureBuildDesc;
-//Modify Begin:2026-07-30 by Hui
     rootSignatureBuildDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED;
-//Modify End
     m_RootSignature = m_PipelineLayout->CreateRootSignature(rootSignatureBuildDesc);
     m_PipelineLayout->SetRootSignature(m_RootSignature);
     m_DescriptorSet = m_DescriptorPool.AllocateDescriptorSet(*m_PipelineLayout);

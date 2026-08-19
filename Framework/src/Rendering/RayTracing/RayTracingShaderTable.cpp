@@ -2,12 +2,12 @@
 
 #include <DX12Library/Helpers.h>
 
-#include <d3dx12.h>
+#include <d3dx12/d3dx12.h>
 
 #include <algorithm>
 #include <cstring>
 
-//Modify Begin:2026-07-24 by Hui
+//Modify Begin:2026-07-30 by Hui
 
 void RayTracingShaderTable::Reset(
     const Microsoft::WRL::ComPtr<ID3D12Device>& device,
@@ -42,10 +42,8 @@ void RayTracingShaderTable::Reset(
     }
 
     uint8_t* mappedData = nullptr;
-//Modify Begin:2026-07-30 by Hui
     const D3D12_RANGE readRange = { 0, 0 };
     ThrowIfFailed(m_Resource->Map(0, &readRange, reinterpret_cast<void**>(&mappedData)));
-//Modify End
 
     for (size_t i = 0; i < shaderRecords.size(); ++i)
     {
@@ -58,10 +56,8 @@ void RayTracingShaderTable::Reset(
         }
     }
 
-//Modify Begin:2026-07-30 by Hui
     const D3D12_RANGE writeRange = { 0, static_cast<SIZE_T>(m_SizeInBytes) };
     m_Resource->Unmap(0, &writeRange);
-//Modify End
 }
 
 D3D12_GPU_VIRTUAL_ADDRESS RayTracingShaderTable::GetGpuVirtualAddress() const

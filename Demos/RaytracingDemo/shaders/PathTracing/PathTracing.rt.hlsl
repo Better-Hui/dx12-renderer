@@ -5,11 +5,16 @@
 [shader("raygeneration")]
 void DirectLightingRayGen()
 {
+#if RAYTRACING_DEMO_COMPACTED_DISPATCH
+    const uint pixelIndex = ActiveRayPixelIndices[DispatchRaysIndex().x];
+    const uint2 pixel = uint2(pixelIndex % Camera_Width, pixelIndex / Camera_Width);
+#else
     uint2 pixel = DispatchRaysIndex().xy;
     if (pixel.x >= Camera_Width || pixel.y >= Camera_Height)
     {
         return;
     }
+#endif
 
     WriteDirectLightingOutput(pixel, Camera_Width, Camera_FrameIndex);
 }
@@ -23,11 +28,16 @@ void RayGen()
 [shader("raygeneration")]
 void IndirectLightingRayGen()
 {
+#if RAYTRACING_DEMO_COMPACTED_DISPATCH
+    const uint pixelIndex = ActiveRayPixelIndices[DispatchRaysIndex().x];
+    const uint2 pixel = uint2(pixelIndex % Camera_Width, pixelIndex / Camera_Width);
+#else
     uint2 pixel = DispatchRaysIndex().xy;
     if (pixel.x >= Camera_Width || pixel.y >= Camera_Height)
     {
         return;
     }
+#endif
 
     WriteIndirectLightingOutput(pixel, Camera_Width, Camera_FrameIndex);
 }
@@ -78,12 +88,11 @@ void ClosestHit(inout RayPayload payload, BuiltInTriangleIntersectionAttributes 
 //Modify End
 }
 
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-07-30 by Hui
 [shader("closesthit")]
 void VisibilityClosestHit(inout RayPayload payload, BuiltInTriangleIntersectionAttributes attributes)
 {
     (void)attributes;
-//Modify Begin:2026-07-30 by Hui
     payload.BaseColor = 0.0f;
     payload.Hit = 1u;
     payload.HitT = RayTCurrent();
@@ -94,6 +103,5 @@ void VisibilityClosestHit(inout RayPayload payload, BuiltInTriangleIntersectionA
     payload.AmbientOcclusion = 1.0f;
     payload.Emission = 0.0f;
     payload.Padding0 = 0u;
-//Modify End
 }
 //Modify End

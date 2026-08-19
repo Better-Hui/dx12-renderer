@@ -108,7 +108,7 @@ std::shared_ptr<Game> CreateGame(
 }
 //Modify End
 
-//Modify Begin:2026-07-28 by Hui
+//Modify Begin:2026-07-30 by Hui
 std::string NarrowDredName(const wchar_t* value)
 {
 	if (value == nullptr)
@@ -125,7 +125,6 @@ std::string NarrowDredName(const wchar_t* value)
 	return result;
 }
 
-//Modify Begin:2026-07-30 by Hui
 void WriteDeviceRemovedDetails(Application& application, std::ostream& stream)
 {
 	try

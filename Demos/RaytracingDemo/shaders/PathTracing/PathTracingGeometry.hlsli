@@ -96,9 +96,7 @@ RayPayload MakeTrianglePayload(
         const float tangentHandedness = dot(cross(normalWs, tangent), bitangentWs) < 0.0f ? -1.0f : 1.0f;
         const float3 bitangent = cross(normalWs, tangent) * tangentHandedness;
         const float3x3 tbn = float3x3(tangent, bitangent, normalWs);
-//Modify Begin:2026-07-30 by Hui
         const float3 normalTs = UnpackNormalMap(SampleBindlessTexture2DLevel(material.NormalTextureIndex, LinearWrapSampler, uv, 0.0f).xyz);
-//Modify End
         normalWs = normalize(mul(normalTs, tbn));
     }
 

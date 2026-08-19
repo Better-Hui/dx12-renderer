@@ -46,20 +46,16 @@ Resource::Resource(const D3D12_RESOURCE_DESC& resourceDesc, const D3D12_CLEAR_VA
     SetName(name);
 }
 
-//Modify Begin:2026-07-28 by Hui
+//Modify Begin:2026-08-12 by Hui
 Resource::Resource(
     const D3D12_RESOURCE_DESC& resourceDesc,
     const D3D12_HEAP_FLAGS heapFlags,
     const D3D12_CLEAR_VALUE* clearValue,
     const std::wstring& name,
     std::shared_ptr<D3D12DeviceContext> deviceContext)
-//Modify Begin:2026-08-12 by Hui
     : m_DeviceContext(std::move(deviceContext))
-//Modify End
 {
-//Modify Begin:2026-08-12 by Hui
     Assert(m_DeviceContext != nullptr, "GPU resource creation requires an explicit D3D12 device context.");
-//Modify End
     if (clearValue)
     {
         m_d3d12ClearValue = std::make_unique<D3D12_CLEAR_VALUE>(*clearValue);

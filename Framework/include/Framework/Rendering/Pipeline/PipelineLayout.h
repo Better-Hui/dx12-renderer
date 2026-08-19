@@ -1,12 +1,10 @@
 #pragma once
 
-//Modify Begin:2026-07-24 by Hui
+//Modify Begin:2026-08-12 by Hui
 
 #include <Framework/Rendering/Pipeline/DescriptorLayout.h>
 #include <Framework/Rendering/Pipeline/ShaderReflection.h>
-//Modify Begin:2026-07-27 by Hui
 #include <DX12Library/RootSignature.h>
-//Modify End
 
 #include <d3d12.h>
 
@@ -15,9 +13,7 @@
 #include <string>
 #include <vector>
 
-//Modify Begin:2026-07-30 by Hui
 class FrameworkDeviceContext;
-//Modify End
 
 enum class PipelineDescriptorBindingMode
 {
@@ -25,7 +21,6 @@ enum class PipelineDescriptorBindingMode
     DescriptorTable
 };
 
-//Modify Begin:2026-07-27 by Hui
 enum class PipelineShaderStageFlags : uint32_t
 {
     None = 0,
@@ -33,11 +28,9 @@ enum class PipelineShaderStageFlags : uint32_t
     Pixel = 1 << 1,
     Compute = 1 << 2,
     RayTracing = 1 << 3,
-//Modify Begin:2026-07-30 by Hui
     Mesh = 1 << 4,
     AllGraphics = (1 << 0) | (1 << 1) | (1 << 4),
     All = (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4)
-//Modify End
 };
 
 inline PipelineShaderStageFlags operator|(const PipelineShaderStageFlags lhs, const PipelineShaderStageFlags rhs)
@@ -75,7 +68,6 @@ enum class PipelineDescriptorSetFlags : uint32_t
     None = 0,
     AllowUpdateAfterSet = 1 << 0
 };
-//Modify End
 
 struct PipelineDescriptorRangeDesc
 {
@@ -86,22 +78,17 @@ struct PipelineDescriptorRangeDesc
     UINT DescriptorCount = 1;
     UINT RootParameterIndex = 0;
     PipelineDescriptorBindingMode BindingMode = PipelineDescriptorBindingMode::DescriptorTable;
-//Modify Begin:2026-07-27 by Hui
     PipelineShaderStageFlags ShaderStages = PipelineShaderStageFlags::All;
     PipelineDescriptorRangeFlags Flags = PipelineDescriptorRangeFlags::None;
-//Modify End
 };
 
 struct PipelineDescriptorSetDesc
 {
     UINT RegisterSpace = 0;
     std::vector<PipelineDescriptorRangeDesc> Ranges;
-//Modify Begin:2026-07-27 by Hui
     PipelineDescriptorSetFlags Flags = PipelineDescriptorSetFlags::None;
-//Modify End
 };
 
-//Modify Begin:2026-07-27 by Hui
 struct PipelineRootConstantDesc
 {
     std::string Name;
@@ -130,9 +117,7 @@ struct PipelineRootSamplerDesc
     D3D12_STATIC_SAMPLER_DESC Desc = {};
     PipelineShaderStageFlags ShaderStages = PipelineShaderStageFlags::All;
 };
-//Modify End
 
-//Modify Begin:2026-08-12 by Hui
 struct PipelineStaticSamplerContract
 {
     std::string Name;
@@ -151,7 +136,6 @@ namespace PipelineStaticSamplers
 
     void AddCommonRootSignatureContracts(std::vector<PipelineStaticSamplerContract>& contracts);
 }
-//Modify End
 
 struct PipelineLayoutBindingOverride
 {
@@ -162,48 +146,34 @@ struct PipelineLayoutBindingOverride
 struct PipelineLayoutReflectionOptions
 {
     std::vector<PipelineLayoutBindingOverride> BindingOverrides;
-//Modify Begin:2026-08-12 by Hui
     std::vector<PipelineStaticSamplerContract> StaticSamplerContracts;
-//Modify End
-//Modify Begin:2026-07-31 by Hui
     std::vector<std::string> RootConstantBufferNames;
-//Modify End
     UINT MaxDescriptorCount = 1024;
-//Modify Begin:2026-07-27 by Hui
     PipelineShaderStageFlags ShaderStages = PipelineShaderStageFlags::All;
-//Modify End
 };
 
 struct PipelineLayoutDesc
 {
-//Modify Begin:2026-07-27 by Hui
     UINT RootRegisterSpace = 0;
     std::vector<PipelineRootConstantDesc> RootConstants;
     std::vector<PipelineRootDescriptorDesc> RootDescriptors;
     std::vector<PipelineRootSamplerDesc> RootSamplers;
-//Modify End
     std::vector<PipelineDescriptorSetDesc> DescriptorSets;
     std::vector<PipelineDescriptorRangeDesc> DescriptorRanges;
-//Modify Begin:2026-07-27 by Hui
     PipelineShaderStageFlags ShaderStages = PipelineShaderStageFlags::All;
-//Modify End
 };
 
-//Modify Begin:2026-07-27 by Hui
 struct PipelineRootSignatureBuildDesc
 {
     D3D12_ROOT_SIGNATURE_FLAGS Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
     std::vector<D3D12_STATIC_SAMPLER_DESC> StaticSamplers;
 };
-//Modify End
 
 class PipelineLayout
 {
 public:
-//Modify Begin:2026-07-30 by Hui
     explicit PipelineLayout(FrameworkDeviceContext& deviceContext);
     PipelineLayout(FrameworkDeviceContext& deviceContext, PipelineLayoutDesc desc);
-//Modify End
 
     static PipelineLayoutDesc CreateDescFromReflection(
         const ShaderReflectionMetadata& reflection,
@@ -212,20 +182,14 @@ public:
     void Reset(PipelineLayoutDesc desc);
 
     const PipelineLayoutDesc& GetDesc() const { return m_Desc; }
-//Modify Begin:2026-07-30 by Hui
     FrameworkDeviceContext& GetDeviceContext() const { return *m_DeviceContext; }
-//Modify End
     const std::vector<PipelineDescriptorSetDesc>& GetDescriptorSets() const { return m_Desc.DescriptorSets; }
-//Modify Begin:2026-07-27 by Hui
     void SetRootSignature(std::shared_ptr<RootSignature> rootSignature);
     const RootSignature* GetRootSignature() const { return m_RootSignature.get(); }
     std::shared_ptr<RootSignature> CreateRootSignature(const PipelineRootSignatureBuildDesc& buildDesc) const;
-//Modify End
 
     bool HasBinding(const std::string& name, DescriptorBindingKind expectedKind) const;
-//Modify Begin:2026-07-31 by Hui
     const PipelineRootConstantDesc* FindRootConstant(const std::string& name) const;
-//Modify End
     const PipelineDescriptorRangeDesc* FindRange(const std::string& name, DescriptorBindingKind expectedKind) const;
     const PipelineDescriptorRangeDesc* FindRangeByRootParameterIndex(UINT rootParameterIndex) const;
     const DescriptorBindingInfo& GetBinding(const std::string& name, DescriptorBindingKind expectedKind) const;
@@ -247,21 +211,15 @@ public:
         UINT descriptorCount,
         const D3D12_UNORDERED_ACCESS_VIEW_DESC& uavDesc);
     void StageDefaultDescriptorTables(CommandList& commandList) const;
-//Modify Begin:2026-07-27 by Hui
     const DescriptorAllocation* FindDefaultDescriptorTable(UINT rootParameterIndex) const;
-//Modify End
 
 private:
     void RebuildDescriptorLayout();
 
     PipelineLayoutDesc m_Desc;
     DescriptorLayout m_DescriptorLayout;
-//Modify Begin:2026-07-30 by Hui
     FrameworkDeviceContext* m_DeviceContext = nullptr;
-//Modify End
-//Modify Begin:2026-07-27 by Hui
     std::shared_ptr<RootSignature> m_RootSignature;
-//Modify End
 };
 
 //Modify End

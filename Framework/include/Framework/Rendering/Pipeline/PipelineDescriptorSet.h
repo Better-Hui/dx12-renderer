@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-08-03 by Hui
 
 #include <Framework/Rendering/Pipeline/PipelineBindingSet.h>
 #include <Framework/Rendering/Pipeline/PipelineLayout.h>
@@ -23,7 +23,6 @@ class PipelineDescriptorPool;
 class Resource;
 class StructuredBuffer;
 
-//Modify Begin:2026-07-29 by Hui
 enum class PipelineDescriptorHeapType : uint32_t
 {
     Resource = 0,
@@ -37,9 +36,7 @@ struct PipelineDescriptorSetAllocation
     std::array<uint32_t, static_cast<size_t>(PipelineDescriptorHeapType::Count)> HeapOffsets = {};
     std::array<uint32_t, static_cast<size_t>(PipelineDescriptorHeapType::Count)> DescriptorCounts = {};
 };
-//Modify End
 
-//Modify Begin:2026-07-29 by Hui
 struct PipelineDescriptorTableAllocation
 {
     PipelineDescriptorHeapType HeapType = PipelineDescriptorHeapType::Resource;
@@ -54,30 +51,23 @@ struct PipelineDescriptorTableAllocation
     uint64_t GetRevision() const { return Revision; }
     void MarkDirty() { ++Revision; }
 };
-//Modify End
 
 struct PipelineShaderResourceBinding
 {
     const Resource* Resource = nullptr;
-//Modify Begin:2026-07-30 by Hui
     ID3D12Resource* ResourceIdentity = nullptr;
-//Modify End
     D3D12_RESOURCE_STATES StateAfter = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
     UINT FirstSubresource = 0;
     UINT NumSubresources = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
     bool HasDesc = false;
     D3D12_SHADER_RESOURCE_VIEW_DESC Desc = {};
-//Modify Begin:2026-07-27 by Hui
     bool AutoTransition = true;
-//Modify End
 };
 
 struct PipelineBoundResource
 {
     std::optional<UnorderedAccessView> UnorderedAccessView;
-//Modify Begin:2026-07-30 by Hui
     ID3D12Resource* UnorderedAccessViewResourceIdentity = nullptr;
-//Modify End
     std::vector<std::optional<ShaderResourceView>> ShaderResourceViews;
     std::vector<std::optional<PipelineShaderResourceBinding>> ShaderResources;
     const StructuredBuffer* StructuredBufferResource = nullptr;
@@ -109,22 +99,17 @@ public:
         D3D12_RESOURCE_STATES stateAfter,
         const D3D12_SHADER_RESOURCE_VIEW_DESC& srvDesc);
     UINT SetUnorderedAccessView(std::string_view name, const UnorderedAccessView& unorderedAccessView);
-//Modify Begin:2026-08-03 by Hui
     UINT SetStructuredBuffer(
         std::string_view name,
         const StructuredBuffer& buffer,
         D3D12_RESOURCE_STATES stateAfter = D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
-//Modify End
     UINT SetAccelerationStructure(std::string_view name, const RayTracingAccelerationStructure& accelerationStructure);
     UINT SetConstantBufferData(std::string_view name, const void* data, size_t size);
     void ClearShaderResourceViews(std::string_view name);
 
     const PipelineLayout& GetLayout() const;
-//Modify Begin:2026-07-27 by Hui
     void SetDescriptorTableAllocation(UINT rootParameterIndex, PipelineDescriptorTableAllocation allocation);
     const PipelineDescriptorTableAllocation* FindDescriptorTableAllocation(UINT rootParameterIndex) const;
-//Modify End
-//Modify Begin:2026-07-29 by Hui
     void SetAllocationInfo(
         const PipelineDescriptorPool* descriptorPool,
         uint32_t setIndex,
@@ -137,7 +122,6 @@ public:
     uint32_t GetResourceDescriptorOffset() const { return m_ResourceDescriptorOffset; }
     uint32_t GetSamplerDescriptorOffset() const { return m_SamplerDescriptorOffset; }
     const PipelineDescriptorSetAllocation& GetAllocation() const { return m_Allocation; }
-//Modify End
     const PipelineBoundResource* FindBoundResource(UINT rootParameterIndex) const;
     const PipelineBoundResource& GetBoundResource(UINT rootParameterIndex) const;
     const std::map<UINT, PipelineBoundResource>& GetBoundResources() const { return m_BoundResources; }
@@ -147,17 +131,13 @@ private:
     PipelineBindingSet m_Bindings;
     const PipelineLayout* m_Layout = nullptr;
     std::map<UINT, PipelineBoundResource> m_BoundResources;
-//Modify Begin:2026-07-27 by Hui
     std::map<UINT, PipelineDescriptorTableAllocation> m_DescriptorTableAllocations;
     PipelineDescriptorTableAllocation* FindMutableDescriptorTableAllocation(UINT rootParameterIndex);
-//Modify End
-//Modify Begin:2026-07-29 by Hui
     const PipelineDescriptorPool* m_DescriptorPool = nullptr;
     uint32_t m_SetIndex = 0;
     uint32_t m_ResourceDescriptorOffset = 0;
     uint32_t m_SamplerDescriptorOffset = 0;
     PipelineDescriptorSetAllocation m_Allocation = {};
-//Modify End
     const RayTracingAccelerationStructure* m_AccelerationStructure = nullptr;
 };
 

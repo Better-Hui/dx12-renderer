@@ -1,13 +1,11 @@
 #ifndef RAYTRACING_DEMO_RESTIR_GI_SCENE_ADAPTER_HLSLI
 #define RAYTRACING_DEMO_RESTIR_GI_SCENE_ADAPTER_HLSLI
 
-//Modify Begin:2026-08-10 by Hui
+//Modify Begin:2026-08-11 by Hui
 #define FRAMEWORK_RESTIR_GI_SCENE_ADAPTER 1
 
-//Modify Begin:2026-08-11 by Hui
 #include <ReSTIRGI/ReSTIRGIConstants.hlsli>
 #define RAYTRACING_DEMO_MAX_BOUNCES RESTIR_GI_MAX_PATH_BOUNCES
-//Modify End
 #include "../PathTracing/PathTracing.rayquery.hlsli"
 #include "../PathTracing/PathTracingShared.hlsli"
 #include <ReSTIRGI/ReSTIRGI.hlsli>
@@ -16,7 +14,6 @@ float3 RaytracingDemoReSTIRGIEvaluateContribution(
     const SurfaceData surface,
     const ReSTIRGIReservoir reservoir)
 {
-//Modify Begin:2026-07-30 by Hui
     if (!surface.Valid || !ReSTIRGIIsValid(reservoir))
     {
         return 0.0f;
@@ -31,7 +28,6 @@ float3 RaytracingDemoReSTIRGIEvaluateContribution(
 
     const float3 directionWs = toSample * rsqrt(distanceSquared);
     return EvaluateDiffuseBounceContribution(surface, directionWs, reservoir.Radiance);
-//Modify End
 }
 
 bool RaytracingDemoReSTIRGIGenerateInitialSample(
@@ -41,7 +37,6 @@ bool RaytracingDemoReSTIRGIGenerateInitialSample(
     const float2 directionalSample,
     out ReSTIRGIReservoir reservoir)
 {
-//Modify Begin:2026-07-30 by Hui
     reservoir = ReSTIRGIEmptyReservoir();
     float3 directionWs = 0.0f;
     float sourcePdf = 0.0f;
@@ -85,7 +80,6 @@ bool RaytracingDemoReSTIRGIGenerateInitialSample(
         payload.Emission,
         randomState);
     return true;
-//Modify End
 }
 
 bool RaytracingDemoReSTIRGITestVisibility(
@@ -116,7 +110,6 @@ bool RaytracingDemoReSTIRGITestVisibility(
     return IsVisibleAlongRay(rayOrigin, directionWs, tMax);
 }
 
-//Modify Begin:2026-07-30 by Hui
 bool RaytracingDemoReSTIRGITestVisibilityAt(
     const float3 originPositionWs,
     const float3 originNormalWs,
@@ -150,7 +143,6 @@ bool RaytracingDemoReSTIRGITestVisibilityAt(
         : max(0.001f, distanceToSample - 0.01f);
     return IsVisibleAlongRay(rayOrigin, directionWs, tMax);
 }
-//Modify End
 
 #define ReSTIRGI_Surface SurfaceData
 #define ReSTIRGI_LoadSurface LoadGBufferSurface
@@ -158,9 +150,7 @@ bool RaytracingDemoReSTIRGITestVisibilityAt(
 #define ReSTIRGI_GenerateInitialSample RaytracingDemoReSTIRGIGenerateInitialSample
 #define ReSTIRGI_EvaluateContribution RaytracingDemoReSTIRGIEvaluateContribution
 #define ReSTIRGI_TestVisibility RaytracingDemoReSTIRGITestVisibility
-//Modify Begin:2026-07-30 by Hui
 #define ReSTIRGI_TestVisibilityAt RaytracingDemoReSTIRGITestVisibilityAt
-//Modify End
 #define ReSTIRGI_IndirectLighting IndirectLighting
 #define ReSTIRGI_Luminance Luminance
 #define ReSTIRGI_Random01 Random01

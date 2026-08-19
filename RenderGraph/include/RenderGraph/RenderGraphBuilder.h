@@ -31,6 +31,7 @@ namespace RenderGraph
         ResourceId ReadUav(ResourceId resourceId);
         ResourceId ReadCopySource(ResourceId resourceId);
         ResourceId ReadIndirectArgument(ResourceId resourceId);
+        void ReadIndirectArgument(const Resource& resource);
         ResourceId ReadWriteUav(ResourceId resourceId);
         ResourceId WriteTexture(ResourceId resourceId);
         ResourceId WriteUav(ResourceId resourceId);

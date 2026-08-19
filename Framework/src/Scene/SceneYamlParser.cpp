@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-29 by Hui
+//Modify Begin:2026-07-30 by Hui
 #include <Framework/Scene/SceneYamlParser.h>
 
 #include <algorithm>
@@ -14,14 +14,12 @@
 
 namespace
 {
-//Modify Begin:2026-07-30 by Hui
     std::string Trim(const std::string& value);
     bool IsUnityTopLevelProperty(const std::string& line, const char* name);
     float ParseFloatAfterColon(const std::string& line, float fallback);
     int ParseIntAfterColon(const std::string& line, int fallback);
     UnityAssetReference ParseAssetReference(const std::string& line);
     UnityColor ParseColor(const std::string& line);
-//Modify End
 
     struct UnityDocument
     {
@@ -56,10 +54,8 @@ namespace
         float Intensity = 1.0f;
         float Range = 10.0f;
         float SpotAngle = 30.0f;
-//Modify Begin:2026-07-30 by Hui
         float AngularRadius = 0.009f;
         float SourceRadius = 0.25f;
-//Modify End
         UnityVector3 AreaSize = { 1.0f, 1.0f, 0.0f };
     };
 
@@ -182,7 +178,6 @@ namespace
         return documents;
     }
 
-//Modify Begin:2026-07-30 by Hui
     std::string FormatFloat(const float value)
     {
         std::ostringstream stream;
@@ -236,7 +231,6 @@ namespace
         fileId = std::stoll(line.substr(fileBegin + 1));
         return true;
     }
-//Modify End
 
     int64_t ParseFileId(const std::string& line)
     {
@@ -313,9 +307,7 @@ namespace
         {
             return &material.BaseMap;
         }
-//Modify Begin:2026-07-30 by Hui
         if (propertyName == "_MainTex" || propertyName == "_Tex")
-//Modify End
         {
             return &material.MainTex;
         }
@@ -507,7 +499,6 @@ namespace
             {
                 light.SpotAngle = ParseFloatAfterColon(trimmed, 30.0f);
             }
-//Modify Begin:2026-07-30 by Hui
             else if (IsUnityTopLevelProperty(line, "m_ShadowAngle"))
             {
                 light.AngularRadius = std::max(0.0f, ParseFloatAfterColon(trimmed, 0.5f)) * 0.017453292519943295f;
@@ -516,7 +507,6 @@ namespace
             {
                 light.SourceRadius = std::max(0.0f, ParseFloatAfterColon(trimmed, 0.25f));
             }
-//Modify End
             else if (IsUnityTopLevelProperty(line, "m_AreaSize"))
             {
                 light.AreaSize = ParseVector3(trimmed);
@@ -666,10 +656,8 @@ namespace
                 material.Shader = ParseAssetReference(trimmed);
             }
             else if (StartsWith(trimmed, "- _BaseMap:")
-//Modify Begin:2026-07-30 by Hui
                 || StartsWith(trimmed, "- _MainTex:")
                 || StartsWith(trimmed, "- _Tex:")
-//Modify End
                 || StartsWith(trimmed, "- _BumpMap:")
                 || StartsWith(trimmed, "- _MetallicGlossMap:")
                 || StartsWith(trimmed, "- _SpecGlossMap:")
@@ -916,10 +904,8 @@ UnitySceneData SceneYamlParser::ParseFromFile(
         light.Intensity = lightData.Intensity;
         light.Range = lightData.Range;
         light.SpotAngle = lightData.SpotAngle;
-//Modify Begin:2026-07-30 by Hui
         light.AngularRadius = lightData.AngularRadius;
         light.SourceRadius = lightData.SourceRadius;
-//Modify End
         light.AreaSize = lightData.AreaSize;
         if (const auto gameObject = gameObjects.find(light.GameObjectId); gameObject != gameObjects.end())
         {
@@ -937,7 +923,6 @@ UnitySceneData SceneYamlParser::ParseFromFile(
 
     if (options.ParseMaterialAssets)
     {
-//Modify Begin:2026-07-30 by Hui
         if (!scene.RenderSettings.SkyboxMaterial.AssetPath.empty())
         {
             scene.SkyboxMaterial = ParseMaterialAsset(scene.RenderSettings.SkyboxMaterial);
@@ -946,7 +931,6 @@ UnitySceneData SceneYamlParser::ParseFromFile(
             ResolveTextureBinding(scene.SkyboxMaterial.BaseMap, guidToAssetPath);
             scene.HasSkyboxMaterial = true;
         }
-//Modify End
         for (const auto& [materialKey, materialReference] : materialReferences)
         {
             static_cast<void>(materialKey);
@@ -970,7 +954,6 @@ UnitySceneData SceneYamlParser::ParseFromFile(
     return scene;
 }
 
-//Modify Begin:2026-07-30 by Hui
 void SceneYamlParser::WriteCameraToFile(
     const std::filesystem::path& scenePath,
     const UnityCameraWriteInfo& camera)
@@ -1070,9 +1053,8 @@ void SceneYamlParser::WriteCameraToFile(
     }
 }
 //Modify End
-//Modify End
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-03 by Hui
 #include <Framework/Scene/SceneImporter.h>
 
 #include <DirectXMath.h>
@@ -1232,9 +1214,7 @@ namespace
             {
                 std::string texturePath;
                 std::getline(values, texturePath);
-//Modify Begin:2026-07-30 by Hui
                 material->NormalMap.AssetPath = ParseObjTexturePath(materialPath, texturePath);
-//Modify End
             }
         }
 
@@ -1573,9 +1553,7 @@ namespace
             {
                 DirectionalLight light{};
                 const XMFLOAT3 direction = RotateVector(unityLight.Transform.WorldRotation, { 0.0f, 0.0f, -1.0f });
-//Modify Begin:2026-07-30 by Hui
                 light.m_DirectionWs = { direction.x, direction.y, direction.z, std::max(0.0f, unityLight.AngularRadius) };
-//Modify End
                 light.m_Color = { unityLight.Color.R, unityLight.Color.G, unityLight.Color.B, unityLight.Intensity };
             scene.AddDirectionalLight(light);
             }
@@ -1590,9 +1568,7 @@ namespace
                     },
                     std::max(0.1f, unityLight.Range));
                 light.Color = { unityLight.Color.R, unityLight.Color.G, unityLight.Color.B, unityLight.Intensity };
-//Modify Begin:2026-07-30 by Hui
                 light.SourceRadius = std::max(0.0f, unityLight.SourceRadius);
-//Modify End
                 light.RecalculateAttenuationCoefficients();
                 scene.AddPointLight(light);
             }
@@ -1665,7 +1641,6 @@ namespace
                 continue;
             }
 
-//Modify Begin:2026-07-30 by Hui
             const bool referencesUnsupportedMaterial = std::ranges::any_of(
                 unityObject.Materials,
                 [&materialBySourceId](const UnityAssetReference& materialReference)
@@ -1678,7 +1653,6 @@ namespace
             {
                 continue;
             }
-//Modify End
 
             SceneObject object;
             object.Name = unityObject.Name;
@@ -1793,12 +1767,10 @@ SceneImportResult SceneImporter::ImportFromFile(
     const std::filesystem::path& scenePath,
     const SceneImportOptions& options)
 {
-//Modify Begin:2026-08-03 by Hui
     if (scenePath.extension() == ".json")
     {
         return ImportJsonFromFile(scenePath, options);
     }
-//Modify End
     if (!std::filesystem::exists(scenePath))
     {
         throw std::runtime_error("Unity scene file does not exist: " + scenePath.string());

@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-28 by Hui
+//Modify Begin:2026-08-18 by Hui
 #include <Passes/RaytracingDemoPasses.h>
 
 #include <PathTracing/PathTracingSceneBindings.h>
@@ -11,7 +11,6 @@
 
 using namespace DirectX;
 
-//Modify Begin:2026-08-18 by Hui
 namespace
 {
     struct SkyboxPassData
@@ -20,7 +19,6 @@ namespace
         RaytracingDemoPassConfig Config = {};
     };
 }
-//Modify End
 
 void RaytracingDemoPasses::Builder::AddSkyboxPass(
     RenderGraph::RenderGraphBuilder& renderGraphBuilder,
@@ -50,7 +48,6 @@ void RaytracingDemoPasses::Builder::AddSkyboxPass(
             {
                 return;
             }
-//Modify Begin:2026-08-06 by Hui
             const EnvironmentTextureProjection projection =
                 ShaderResourceView::GetEnvironmentTextureProjection(*resources.SkyboxTexture);
             ComputeShader& skyboxShader = projection == EnvironmentTextureProjection::Equirectangular
@@ -63,7 +60,6 @@ void RaytracingDemoPasses::Builder::AddSkyboxPass(
 
             commandContext.SetConstantBuffer(skyboxShader, "CameraConstants", sizeof(camera), &camera);
             commandContext.SetTexture(skyboxShader, "DepthTexture", ShaderResourceView::DepthAsFloat(context.GetTexture(DemoResourceIds::DepthBuffer)));
-//Modify Begin:2026-07-30 by Hui
             if (skyboxShader.HasShaderResourceView("SkyboxTexture"))
             {
                 commandContext.SetTexture(
@@ -71,13 +67,11 @@ void RaytracingDemoPasses::Builder::AddSkyboxPass(
                     "SkyboxTexture",
                     ShaderResourceView::EnvironmentTexture(resources.SkyboxTexture));
             }
-//Modify End
             commandContext.SetUnorderedAccessView(skyboxShader, "SceneColor", UnorderedAccessView(context.GetTexture(DemoResourceIds::SceneColor)));
             commandContext.BindPipeline(skyboxShader);
             commandContext.BindDescriptorSet(skyboxShader.GetDescriptorSet());
             commandContext.Dispatch(Math::DivideByMultiple(camera.Width, 8u), Math::DivideByMultiple(camera.Height, 8u), 1u);
             commandContext.InsertDescriptorSetOutputBarriers(skyboxShader.GetDescriptorSet());
-//Modify End
         });
 }
 //Modify End

@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-08-13 by Hui
 #pragma once
 
 #include <Scene/SceneResourceBuilders.h>
@@ -24,17 +24,13 @@ class Resource;
 class RaytracingDemoSceneResources final
 {
 public:
-//Modify Begin:2026-07-30 by Hui
     explicit RaytracingDemoSceneResources(std::shared_ptr<D3D12DeviceContext> deviceContext);
-//Modify End
 
     void Clear();
     void LoadDeferredLightingScene(CommandList& commandList);
-//Modify Begin:2026-07-30 by Hui
     bool LoadScene(CommandList& commandList, const Scene& scene, bool enableStressTestSpheres = true);
     bool SetStressTestSpheresEnabled(CommandList& commandList, bool enabled);
     bool AreStressTestSpheresEnabled() const { return m_StressTestSpheresEnabled; }
-//Modify End
     void BuildRayTracingAccelerationStructure(
         CommandList& commandList,
         RayTracingAccelerationStructureBuildSettings settings = {});
@@ -42,28 +38,16 @@ public:
     const std::vector<RaytracingDemoSceneObject>& GetSceneObjects() const { return m_GeometryResources.GetObjects(); }
     const std::vector<RaytracingDemoSceneGeometry>& GetSceneGeometries() const { return m_GeometryResources.GetGeometries(); }
     const std::vector<RaytracingDemoMaterialData>& GetMaterials() const { return m_TextureMaterialResources.GetMaterials(); }
-//Modify Begin:2026-08-06 by Hui
     SurfaceEmitterSceneData CollectEmissiveMeshSurfaceEmitters() const;
-//Modify End
     const std::vector<std::shared_ptr<Texture>>& GetTextures() const { return m_TextureMaterialResources.GetTextures(); }
-//Modify Begin:2026-08-11 by Hui
     const std::vector<ShaderResourceView>& GetTextureShaderResourceViews() const { return m_TextureMaterialResources.GetTextureShaderResourceViews(); }
-//Modify End
     const StructuredBuffer& GetMaterialBuffer() const { return m_TextureMaterialResources.GetMaterialBuffer(); }
     const StructuredBuffer& GetGeometryBuffer() const { return m_RayTracingResources.GetGeometryBuffer(); }
-//Modify Begin:2026-08-13 by Hui
     void ForEachGBufferShaderResource(const std::function<void(const Resource&)>& action) const;
     void ForEachRayTracingShaderResource(const std::function<void(const Resource&)>& action) const;
-//Modify End
-//Modify Begin:2026-07-30 by Hui
     BindlessDescriptorHeap& GetBindlessDescriptorHeap() { return m_TextureMaterialResources.GetBindlessDescriptorHeap(); }
     const BindlessDescriptorHeap& GetBindlessDescriptorHeap() const { return m_TextureMaterialResources.GetBindlessDescriptorHeap(); }
-//Modify End
-//Modify Begin:2026-07-31 by Hui
-//Modify Begin:2026-07-30 by Hui
     MeshletGpuResources GetMeshletGpuResources() { return m_MeshletResources.GetGpuResources(); }
-//Modify End
-//Modify End
     const RayTracingAccelerationStructure& GetRayTracingAccelerationStructure() const { return m_RayTracingResources.GetAccelerationStructure(); }
     RayTracingAccelerationStructure& GetRayTracingAccelerationStructure() { return m_RayTracingResources.GetAccelerationStructure(); }
     size_t GetTextureCount() const { return m_TextureMaterialResources.GetTextures().size(); }
@@ -102,26 +86,18 @@ private:
         const Scene& scene,
         const std::vector<uint32_t>& materialIndexMap,
         uint32_t defaultMaterial);
-//Modify Begin:2026-07-31 by Hui
     uint32_t AddSceneGeometry(const std::shared_ptr<Model>& model, std::vector<MeshPrototype> prototypes);
     void AddSceneObject(const DirectX::XMMATRIX& worldMatrix, uint32_t geometryIndex, uint32_t materialIndex);
-//Modify Begin:2026-07-30 by Hui
     void InitializeMeshletSceneResources();
-//Modify End
     void AddStressTestSpheres(CommandList& commandList, uint32_t whiteTextureIndex);
     void UploadMeshletBuffers(CommandList& commandList);
-//Modify End
     SceneTextureMaterialResources m_TextureMaterialResources;
     SceneGeometryResources m_GeometryResources;
     SceneMeshletResources m_MeshletResources;
     SceneRayTracingResources m_RayTracingResources;
-//Modify Begin:2026-07-30 by Hui
     std::vector<RaytracingDemoSceneObject> m_StressTestSphereObjects;
     size_t m_StressTestSphereObjectStart = 0;
-//Modify Begin:2026-07-30 by Hui
     uint32_t m_StressTestSphereMaterialIndex = (std::numeric_limits<uint32_t>::max)();
-//Modify End
     bool m_StressTestSpheresEnabled = true;
-//Modify End
 };
 //Modify End

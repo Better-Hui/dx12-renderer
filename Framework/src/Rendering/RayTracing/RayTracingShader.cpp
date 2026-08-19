@@ -1,10 +1,8 @@
-//Modify Begin:2026-07-21 by Hui
+//Modify Begin:2026-07-30 by Hui
 #include "RayTracingShaderInternal.h"
 
 #include <DX12Library/Helpers.h>
-//Modify Begin:2026-07-30 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
-//Modify End
 #include <Framework/Rendering/Pipeline/DescriptorLayout.h>
 #include <Framework/Rendering/Pipeline/ShaderBlob.h>
 
@@ -16,7 +14,6 @@
 #undef max
 #endif
 
-//Modify Begin:2026-07-27 by Hui
 using namespace RayTracingShaderInternal;
 
 namespace
@@ -56,9 +53,7 @@ RayTracingShader::Impl::Impl(
     Assert(!Desc.Bindings.empty(), "Ray tracing shader requires at least one binding.");
 
     PipelineLayoutDesc layoutDesc;
-//Modify Begin:2026-07-30 by Hui
     layoutDesc.RootSamplers = Desc.RootSamplers;
-//Modify End
     layoutDesc.DescriptorRanges.reserve(Desc.Bindings.size());
     for (uint32_t i = 0; i < Desc.Bindings.size(); ++i)
     {
@@ -82,7 +77,6 @@ RayTracingShader::Impl::Impl(
     }
 
     Layout.Reset(std::move(layoutDesc));
-//Modify Begin:2026-07-27 by Hui
     for (const RayTracingShaderBindingDesc& binding : Desc.Bindings)
     {
         if (!IsDescriptorTableBinding(binding.Type))
@@ -109,10 +103,8 @@ RayTracingShader::Impl::Impl(
             break;
         }
     }
-//Modify End
     Layout.SetRootSignature(PipelineState->GetGlobalRootSignaturePtr());
 }
-//Modify End
 
 RayTracingShader::RayTracingShader(
     FrameworkDeviceContext& deviceContext,
@@ -136,6 +128,17 @@ bool RayTracingShader::IsSupported(const FrameworkDeviceContext& deviceContext)
     return options5.RaytracingTier != D3D12_RAYTRACING_TIER_NOT_SUPPORTED;
 }
 
+bool RayTracingShader::SupportsIndirectDispatch(const FrameworkDeviceContext& deviceContext)
+{
+    D3D12_FEATURE_DATA_D3D12_OPTIONS5 options5 = {};
+    if (FAILED(deviceContext.GetDevice()->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &options5, sizeof(options5))))
+    {
+        return false;
+    }
+
+    return options5.RaytracingTier >= D3D12_RAYTRACING_TIER_1_1;
+}
+
 FrameworkDeviceContext& RayTracingShader::GetDeviceContext() const
 {
     return m_Impl->DeviceContext;
@@ -146,7 +149,6 @@ const RayTracingPipelineDesc& RayTracingShader::GetDesc() const
     return m_Impl->Desc;
 }
 
-//Modify Begin:2026-07-27 by Hui
 const RayTracingPipelineState& RayTracingShader::GetPipelineState() const
 {
     return *m_Impl->PipelineState;
@@ -181,14 +183,11 @@ D3D12_DISPATCH_RAYS_DESC RayTracingShader::BuildDispatchDesc(
 {
     return m_Impl->DispatchTables.BuildDispatchDesc(width, height, depth);
 }
-//Modify End
 
-//Modify Begin:2026-07-24 by Hui
 RayTracingBindingSet RayTracingShader::CreateBindingSet() const
 {
     return RayTracingBindingSet(*this);
 }
-//Modify End
 
 bool RayTracingShader::HasBinding(std::string_view name) const
 {

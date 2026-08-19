@@ -29,6 +29,11 @@ foreach(DX12_RENDERER_AGILITY_RUNTIME_FILE
                 message(FATAL_ERROR "DX12 renderer requires ${DX12_RENDERER_AGILITY_RUNTIME_FILE} from the Agility SDK ${DX12_RENDERER_AGILITY_SDK_VERSION} redistributable.")
         endif()
 endforeach()
+
+add_library(DX12RendererAgilitySDK INTERFACE)
+target_include_directories(DX12RendererAgilitySDK SYSTEM BEFORE INTERFACE
+        "${DX12_RENDERER_AGILITY_INCLUDE_DIRECTORY}")
+
 set(DX12_RENDERER_DXC_EXECUTABLE "${CMAKE_SOURCE_DIR}/DXC/dxc.exe")
 if (NOT EXISTS "${DX12_RENDERER_DXC_EXECUTABLE}")
         file(GLOB DX12_RENDERER_DXC_CANDIDATES "C:/Program Files (x86)/Windows Kits/10/bin/*/x64/dxc.exe")

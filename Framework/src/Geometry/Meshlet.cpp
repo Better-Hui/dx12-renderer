@@ -138,7 +138,7 @@ MeshletBuildResult MeshletBuilder::Build(const MeshPrototype& meshPrototype, con
 }
 //Modify End
 
-//Modify Begin:2026-07-31 by Hui
+//Modify Begin:2026-08-18 by Hui
 MeshletGeometrySet::MeshletGeometrySet()
     : m_VertexBuffer(L"MeshletGeometrySet Vertices")
     , m_IndexBuffer(L"MeshletGeometrySet Indices")
@@ -237,17 +237,13 @@ void MeshletGeometrySet::Upload(CommandList& commandList)
         return;
     }
 
-//Modify Begin:2026-08-18 by Hui
     ResourceUploader uploader(commandList.GetDeviceContext());
-//Modify End
     if (m_GeometryDataDirty)
     {
-//Modify Begin:2026-08-18 by Hui
         uploader.UploadStructuredBuffer(commandList, m_VertexBuffer, m_Vertices);
         uploader.UploadByteAddressBuffer(
             commandList, m_IndexBuffer, m_Indices.size() * sizeof(uint16_t), m_Indices.data());
         uploader.UploadStructuredBuffer(commandList, m_MeshletBuffer, m_Meshlets);
-//Modify End
         m_GeometryDataDirty = false;
     }
 
@@ -263,10 +259,8 @@ void MeshletGeometrySet::Upload(CommandList& commandList)
         return;
     }
 
-//Modify Begin:2026-08-18 by Hui
     uploader.UploadStructuredBuffer(commandList, m_TransformBuffer, m_Transforms);
     uploader.UploadStructuredBuffer(commandList, m_InstanceBuffer, m_Instances);
-//Modify End
 
     const uint64_t requiredCommandBufferSize = sizeof(MeshletIndirectCommand) * m_Instances.size();
     const D3D12_RESOURCE_DESC currentCommandBufferDesc = m_IndirectCommandBuffer.GetD3D12ResourceDesc();
@@ -333,7 +327,6 @@ void MeshletGeometrySet::BuildInstances()
     }
 }
 
-//Modify Begin:2026-07-30 by Hui
 void MeshletSceneResources::Clear()
 {
     m_GeometrySet.Clear();
@@ -407,15 +400,12 @@ bool MeshletSceneResources::RemoveInstance(const MeshletSceneInstanceHandle hand
     }
 
     m_Instances.pop_back();
-    // Modify Begin:2026-08-07 by Hui
     // Updating the moved instance may rehash the unordered map and invalidate indexResult.
     m_InstanceIndices.erase(handle);
-    // Modify End
     m_DrawsDirty = true;
     return true;
 }
 
-//Modify Begin:2026-07-30 by Hui
 void MeshletSceneResources::RemoveInstances(const std::span<const MeshletSceneInstanceHandle> handles)
 {
     if (handles.empty())
@@ -452,7 +442,6 @@ void MeshletSceneResources::RemoveInstances(const std::span<const MeshletSceneIn
     }
     m_DrawsDirty = true;
 }
-//Modify End
 
 void MeshletSceneResources::Upload(CommandList& commandList)
 {
@@ -486,5 +475,4 @@ void MeshletSceneResources::RebuildDraws()
     }
     m_DrawsDirty = false;
 }
-//Modify End
 //Modify End

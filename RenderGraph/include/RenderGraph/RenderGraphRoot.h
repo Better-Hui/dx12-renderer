@@ -12,11 +12,9 @@
 //Modify Begin:2026-08-07 by Hui
 #include "ExternalFrameProcessor.h"
 //Modify End
-//Modify Begin:2026-07-30 by Hui
-#include "RenderGraphCommandExecutor.h"
 //Modify Begin:2026-08-07 by Hui
+#include "RenderGraphCommandExecutor.h"
 #include "RenderGraphCompiler.h"
-//Modify End
 #include "RenderGraphExecutionPlan.h"
 #include "RenderGraphProfiler.h"
 //Modify End
@@ -77,20 +75,18 @@ namespace RenderGraph
         void SetParallelDirectCommandRecording(bool enabled) { m_ParallelDirectCommandRecording = enabled; }
 //Modify End
         void Present(const std::shared_ptr<Window>& pWindow, ResourceId resourceId = ResourceIds::GRAPH_OUTPUT);
-//Modify Begin:2026-07-28 by Hui
+//Modify Begin:2026-08-07 by Hui
         void PresentWithOverlay(const std::shared_ptr<Window>& pWindow, ResourceId resourceId, const std::function<void(CommandList&)>& drawCallback);
         void PresentWithOverlayBlit(
             const std::shared_ptr<Window>& pWindow,
             ResourceId resourceId,
             const std::function<void(CommandList&, const std::shared_ptr<Texture>&)>& blitCallback,
             const std::function<void(CommandList&)>& overlayCallback);
-//Modify Begin:2026-08-07 by Hui
         void PresentWithExternalFrameProcessor(
             const std::shared_ptr<Window>& pWindow,
             ResourceId displayResourceId,
             ExternalFrameProcessor& processor,
             const std::function<void(CommandList&)>& overlayCallback);
-//Modify End
         void CopyTexture(const RenderMetadata& renderMetadata, ResourceId sourceId, ResourceId destinationId, bool waitForCompletion = false);
         void DrawToTexture(const RenderMetadata& renderMetadata, ResourceId resourceId, const std::function<void(CommandList&)>& drawCallback);
         void TransitionTexture(const RenderMetadata& renderMetadata, ResourceId resourceId, D3D12_RESOURCE_STATES stateAfter, bool waitForCompletion = false);
@@ -110,14 +106,12 @@ namespace RenderGraph
     private:
         void RebuildIfNecessary(const RenderMetadata& renderMetadata);
         void CheckPotentiallyDirtyResources(const RenderMetadata& renderMetadata);
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-03 by Hui
         Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;
         std::shared_ptr<D3D12DeviceContext> m_DeviceContext;
         std::shared_ptr<CommandQueue> m_DirectCommandQueue;
-//Modify Begin:2026-08-03 by Hui
         std::shared_ptr<CommandQueue> m_AsyncComputeCommandQueue;
         std::shared_ptr<CommandQueue> m_CopyCommandQueue;
-//Modify End
 //Modify End
 //Modify Begin:2026-07-30 by Hui
         RenderGraphQueueScheduler m_QueueScheduler;
@@ -140,11 +134,9 @@ namespace RenderGraph
 //Modify End
 
         std::shared_ptr<ResourcePool> m_ResourcePool;
-//Modify Begin:2026-07-30 by Hui
 //Modify Begin:2026-08-07 by Hui
         std::unique_ptr<RenderGraphCompiler> m_Compiler;
         std::unique_ptr<CompiledRenderGraph> m_CompiledGraph;
-//Modify End
         RenderGraphProfiler m_Profiler;
         std::unique_ptr<RenderGraphCommandExecutor> m_CommandExecutor;
 //Modify End

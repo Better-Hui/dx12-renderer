@@ -52,16 +52,14 @@ class D3D12DeviceContext;
 class CommandQueue
 {
 public:
-	//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-08-19 by Hui
 	CommandQueue(
 		D3D12_COMMAND_LIST_TYPE type,
 		std::shared_ptr<D3D12DeviceContext> deviceContext);
-//Modify Begin:2026-07-21 by Hui
 	CommandQueue(
 		D3D12_COMMAND_LIST_TYPE type,
 		std::shared_ptr<D3D12DeviceContext> deviceContext,
 		ID3D12CommandQueue* externalCommandQueue);
-//Modify End
 	void SetFatalErrorHandler(CommandQueueFailureHandler handler);
 	//Modify End
 	virtual ~CommandQueue();
@@ -81,17 +79,16 @@ public:
 
 	// Wait for another command queue to finish.
 	void Wait(const CommandQueue& other);
-//Modify Begin:2026-08-03 by Hui
 	void Wait(const CommandQueue& other, uint64_t fenceValue);
 //Modify End
 
 	Microsoft::WRL::ComPtr<ID3D12CommandQueue> GetD3D12CommandQueue() const;
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
 	std::shared_ptr<ResourceStateRegistry> GetResourceStateRegistry() const;
 //Modify End
 
 private:
-//Modify Begin:2026-07-21 by Hui
+//Modify Begin:2026-08-19 by Hui
 	void InitializeFenceAndWorker();
 //Modify End
 	// Free any command lists that are finished processing on the command queue.
@@ -103,7 +100,7 @@ private:
 	using CommandListEntry = std::tuple<uint64_t, std::shared_ptr<CommandList>>;
 
 	D3D12_COMMAND_LIST_TYPE m_CommandListType;
-	//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-08-19 by Hui
 	std::shared_ptr<D3D12DeviceContext> m_DeviceContext;
 	CommandQueueFailureHandler m_FatalErrorHandler;
 	//Modify End
@@ -120,3 +117,4 @@ private:
 	std::mutex m_ProcessInFlightCommandListsThreadMutex;
 	std::condition_variable m_ProcessInFlightCommandListsThreadCv;
 };
+//Modify End

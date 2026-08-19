@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-08-11 by Hui
 #include <Automation/RuntimeAutomationController.h>
 
 #include <algorithm>
@@ -97,13 +97,10 @@ void DemoAutomation::RuntimeAutomationController::Initialize(const TestSuites& t
             m_Steps.resize(maxCases);
         }
     }
-//Modify Begin:2026-07-30 by Hui
     else if (mode == "restirgi-profile")
     {
         m_Steps = testSuites.ReSTIRGIProfile;
     }
-//Modify End
-//Modify Begin:2026-08-11 by Hui
     else if (mode == "restirgi-variants")
     {
         m_Steps = testSuites.ReSTIRGIVariants;
@@ -129,13 +126,10 @@ void DemoAutomation::RuntimeAutomationController::Initialize(const TestSuites& t
             m_Steps.resize(maxCases);
         }
     }
-//Modify End
     else
     {
-//Modify Begin:2026-07-30 by Hui
         throw std::runtime_error(
             "RAYTRACING_DEMO_AUTOTEST must be 'core', 'stress', 'matrix', 'restirgi-profile', 'restirgi-variants', or 'restirdi-variants'.");
-//Modify End
     }
 
     m_Enabled = !m_Steps.empty();

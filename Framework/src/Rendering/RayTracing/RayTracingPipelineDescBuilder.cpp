@@ -11,7 +11,7 @@
 //Modify End
 #include <utility>
 
-//Modify Begin:2026-07-24 by Hui
+//Modify Begin:2026-08-12 by Hui
 
 namespace
 {
@@ -55,12 +55,10 @@ RayTracingPipelineDescBuilder RayTracingPipelineDescBuilder::ReflectedDefault(co
 
     for (const auto& srv : reflection.m_ShaderResourceViews)
     {
-//Modify Begin:2026-08-12 by Hui
         RayTracingShaderBindingType bindingType =
             srv.InputType == D3D_SIT_RTACCELERATIONSTRUCTURE ?
             RayTracingShaderBindingType::AccelerationStructure :
             RayTracingShaderBindingType::StructuredBuffer;
-//Modify End
         const uint32_t descriptorCount = DescriptorLayout::NormalizeDescriptorCount(srv.BindCount, desc.MaxDescriptorCount);
 
         if (bindingType != RayTracingShaderBindingType::AccelerationStructure &&
@@ -91,7 +89,6 @@ RayTracingPipelineDescBuilder RayTracingPipelineDescBuilder::ReflectedDefault(co
         });
     }
 
-//Modify Begin:2026-07-30 by Hui
     RayTracingPipelineDescBuilder builder(std::move(desc));
     for (const auto& sampler : reflection.m_Samplers)
     {
@@ -106,12 +103,10 @@ RayTracingPipelineDescBuilder RayTracingPipelineDescBuilder::ReflectedDefault(co
         }
     }
     return builder;
-//Modify End
 }
 
 RayTracingPipelineDescBuilder& RayTracingPipelineDescBuilder::WithExport(std::wstring exportName)
 {
-//Modify Begin:2026-07-30 by Hui
     if (exportName.empty())
     {
         throw std::invalid_argument("Ray tracing export name must not be empty.");
@@ -125,7 +120,6 @@ RayTracingPipelineDescBuilder& RayTracingPipelineDescBuilder::WithExport(std::ws
     {
         m_Desc.Exports.push_back(std::move(exportName));
     }
-//Modify End
     return *this;
 }
 
@@ -135,7 +129,6 @@ RayTracingPipelineDescBuilder& RayTracingPipelineDescBuilder::WithTriangleHitGro
     std::wstring anyHitShader,
     std::wstring intersectionShader)
 {
-//Modify Begin:2026-07-30 by Hui
     RayTracingHitGroupDesc hitGroup = {
         std::move(hitGroupName),
         std::move(closestHitShader),
@@ -175,7 +168,6 @@ RayTracingPipelineDescBuilder& RayTracingPipelineDescBuilder::WithTriangleHitGro
     }
 
     m_Desc.HitGroups.push_back(std::move(hitGroup));
-//Modify End
     return *this;
 }
 
@@ -185,7 +177,6 @@ RayTracingPipelineDescBuilder& RayTracingPipelineDescBuilder::WithRayGenerationP
     std::vector<std::wstring> missShaders,
     std::vector<std::wstring> hitGroups)
 {
-//Modify Begin:2026-07-30 by Hui
     if (passName.empty() || rayGenerationShader.empty())
     {
         throw std::invalid_argument("Ray tracing pass name and ray-generation export must not be empty.");
@@ -196,7 +187,6 @@ RayTracingPipelineDescBuilder& RayTracingPipelineDescBuilder::WithRayGenerationP
     {
         WithExport(missShader);
     }
-//Modify End
     RayTracingShaderPassDesc passDesc;
     passDesc.Name = std::move(passName);
     passDesc.RayGenerationShader = std::move(rayGenerationShader);
@@ -259,7 +249,6 @@ RayTracingPipelineDescBuilder& RayTracingPipelineDescBuilder::WithTextureArray(
     return WithBinding(std::move(name), RayTracingShaderBindingType::TextureArray, shaderRegister, registerSpace, descriptorCount);
 }
 
-//Modify Begin:2026-07-30 by Hui
 RayTracingPipelineDescBuilder& RayTracingPipelineDescBuilder::WithStaticSamplerContract(
     PipelineStaticSamplerContract contract)
 {
@@ -288,7 +277,6 @@ RayTracingPipelineDescBuilder& RayTracingPipelineDescBuilder::WithStaticSamplerC
     m_Desc.RootSamplers.push_back(std::move(rootSampler));
     return *this;
 }
-//Modify End
 
 RayTracingPipelineDescBuilder& RayTracingPipelineDescBuilder::WithPayloadSize(const uint32_t payloadSizeInBytes)
 {
@@ -316,7 +304,6 @@ RayTracingPipelineDescBuilder& RayTracingPipelineDescBuilder::WithMaxDescriptorC
 
 RayTracingPipelineDesc RayTracingPipelineDescBuilder::Build() const
 {
-//Modify Begin:2026-07-30 by Hui
     for (const RayTracingShaderPassDesc& pass : m_Desc.Passes)
     {
         const auto findExport = [this](const std::wstring& exportName)
@@ -387,7 +374,6 @@ RayTracingPipelineDesc RayTracingPipelineDescBuilder::Build() const
                 "A reflected ray tracing sampler requires an explicit static sampler contract.");
         }
     }
-//Modify End
     return m_Desc;
 }
 

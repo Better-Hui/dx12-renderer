@@ -1,22 +1,17 @@
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-08-12 by Hui
 
 #include "RayTracingDispatchTables.h"
 
 #include "RayTracingShaderInternal.h"
 
 #include <DX12Library/Helpers.h>
-//Modify Begin:2026-07-30 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
-//Modify End
 
 #include <algorithm>
-//Modify Begin:2026-08-12 by Hui
 #include <stdexcept>
-//Modify End
 
 namespace
 {
-//Modify Begin:2026-07-30 by Hui
     std::string ToUtf8(const std::wstring& value)
     {
         if (value.empty())
@@ -45,7 +40,6 @@ namespace
             nullptr);
         return result;
     }
-//Modify End
 }
 
 const RayTracingShaderPassDesc& RayTracingDispatchTables::ResolvePass(
@@ -82,7 +76,6 @@ std::vector<RayTracingShaderRecord> RayTracingDispatchTables::BuildShaderRecords
     for (const RayTracingShaderRecordDesc& recordDesc : recordDescs)
     {
         const void* shaderIdentifier = pipelineState.GetShaderIdentifier(recordDesc.ExportName);
-//Modify Begin:2026-07-30 by Hui
         if (shaderIdentifier == nullptr)
         {
             throw std::runtime_error(
@@ -90,7 +83,6 @@ std::vector<RayTracingShaderRecord> RayTracingDispatchTables::BuildShaderRecords
                 ToUtf8(recordDesc.ExportName) +
                 "'.");
         }
-//Modify End
         records.push_back({ shaderIdentifier, recordDesc.LocalRootArguments });
     }
     return records;
@@ -100,7 +92,6 @@ void RayTracingDispatchTables::EnsureBuilt(
     const RayTracingPipelineState& pipelineState,
     const RayTracingShaderPassDesc& pass)
 {
-//Modify Begin:2026-07-27 by Hui
     auto tableFindResult = m_PassTables.find(pass.Name);
     if (tableFindResult == m_PassTables.end())
     {
@@ -131,7 +122,6 @@ void RayTracingDispatchTables::EnsureBuilt(
     }
 
     m_CurrentPassTables = &tableFindResult->second;
-//Modify End
 }
 
 D3D12_DISPATCH_RAYS_DESC RayTracingDispatchTables::BuildDispatchDesc(
@@ -140,7 +130,6 @@ D3D12_DISPATCH_RAYS_DESC RayTracingDispatchTables::BuildDispatchDesc(
     const uint32_t depth) const
 {
     D3D12_DISPATCH_RAYS_DESC dispatchDesc = {};
-//Modify Begin:2026-07-27 by Hui
     Assert(m_CurrentPassTables != nullptr, "Ray tracing dispatch tables have not been prepared.");
     dispatchDesc.RayGenerationShaderRecord.StartAddress = m_CurrentPassTables->RayGenerationShaderTable.GetGpuVirtualAddress();
     dispatchDesc.RayGenerationShaderRecord.SizeInBytes = m_CurrentPassTables->RayGenerationShaderTable.GetSizeInBytes();
@@ -150,7 +139,6 @@ D3D12_DISPATCH_RAYS_DESC RayTracingDispatchTables::BuildDispatchDesc(
     dispatchDesc.HitGroupTable.StartAddress = m_CurrentPassTables->HitGroupShaderTable.GetGpuVirtualAddress();
     dispatchDesc.HitGroupTable.SizeInBytes = m_CurrentPassTables->HitGroupShaderTable.GetSizeInBytes();
     dispatchDesc.HitGroupTable.StrideInBytes = m_CurrentPassTables->HitGroupShaderTable.GetStrideInBytes();
-//Modify End
     dispatchDesc.Width = width;
     dispatchDesc.Height = height;
     dispatchDesc.Depth = depth;

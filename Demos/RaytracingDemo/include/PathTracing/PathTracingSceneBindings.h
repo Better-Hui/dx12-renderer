@@ -8,7 +8,9 @@
 class CommandList;
 class CommandContext;
 class ComputeShader;
+class ByteAddressBuffer;
 class RayTracingBindingSet;
+class StructuredBuffer;
 
 namespace RenderGraph
 {
@@ -38,13 +40,16 @@ struct RaytracingDemoPassBindings
         CommandContext& commandContext,
         ComputeShader& shader,
         const RaytracingDemoRenderGraph::FrameGBufferResources& gbuffer,
-        const RaytracingDemoCameraConstants& camera);
+        const RaytracingDemoCameraConstants& camera,
+        const StructuredBuffer* activeRayPixelIndices = nullptr,
+        const ByteAddressBuffer* activeRayPixelCount = nullptr);
 
     static void BindDxrPathTracingInputs(
         const RaytracingDemoPassResources& resources,
         RayTracingBindingSet& shader,
         const RaytracingDemoRenderGraph::FrameGBufferResources& gbuffer,
-        const RaytracingDemoCameraConstants& camera);
+        const RaytracingDemoCameraConstants& camera,
+        const StructuredBuffer* activeRayPixelIndices = nullptr);
 
     static ComputeShader& BindCompositeInputs(
         const RaytracingDemoPassResources& resources,

@@ -5,7 +5,7 @@
 
 #include "Helpers.h"
 
-#include "d3dx12.h"
+#include <d3dx12/d3dx12.h>
 #include "ShaderUtils.h"
 
 //Modify Begin:2026-08-07 by Hui

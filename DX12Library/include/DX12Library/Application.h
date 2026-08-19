@@ -226,11 +226,9 @@ private:
 
     HINSTANCE m_hInstance;
 
-//Modify Begin:2026-07-30 by Hui
-    std::unique_ptr<DiagnosticReporter> m_DiagnosticReporter;
 //Modify Begin:2026-08-18 by Hui
+    std::unique_ptr<DiagnosticReporter> m_DiagnosticReporter;
     std::shared_ptr<D3D12RuntimeLifecycle> m_RuntimeLifecycle;
-//Modify End
     D3D12RenderContext m_RenderContext;
     std::atomic<DWORD> m_MessageThreadId = 0;
     std::atomic_bool m_QuitRequested = false;

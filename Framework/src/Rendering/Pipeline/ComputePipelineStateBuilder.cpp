@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-23 by Hui
+//Modify Begin:2026-07-27 by Hui
 #include <Framework/Rendering/Pipeline/ComputePipelineStateBuilder.h>
 
 #include <DX12Library/Helpers.h>
@@ -31,7 +31,6 @@ Microsoft::WRL::ComPtr<ID3D12PipelineState> ComputePipelineStateBuilder::Build(M
     return pipelineState;
 }
 
-//Modify Begin:2026-07-27 by Hui
 ComputePipelineStateKey ComputePipelineStateBuilder::CreateKey(
     const size_t definesHash,
     const uint32_t shaderModelMajor,
@@ -45,7 +44,6 @@ ComputePipelineStateKey ComputePipelineStateBuilder::CreateKey(
     key.ShaderModelMinor = shaderModelMinor;
     return key;
 }
-//Modify End
 
 ComputePipelineStateBuilder& ComputePipelineStateBuilder::WithRootSignature(std::shared_ptr<RootSignature> rootSignature)
 {

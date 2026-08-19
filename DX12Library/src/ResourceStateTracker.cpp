@@ -6,7 +6,7 @@
 #include "Resource.h"
 
 #include <d3d12.h>
-#include <d3dx12.h>
+#include <d3dx12/d3dx12.h>
 
 //Modify Begin:2026-07-30 by Hui
 ResourceStateTracker::ResourceStateTracker(std::shared_ptr<ResourceStateRegistry> resourceStateRegistry)
@@ -140,7 +140,7 @@ void ResourceStateTracker::FlushResourceBarriers(const CommandList& commandList)
 	m_ResourceBarriers.clear();
 }
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-10 by Hui
 uint32_t ResourceStateTracker::FlushPendingResourceBarriers(
     const CommandList& commandList,
     ResourceStateRegistry::SubmissionScope& submissionScope)
@@ -149,12 +149,10 @@ uint32_t ResourceStateTracker::FlushPendingResourceBarriers(
 	ResourceBarriersType resourceBarriers;
 	resourceBarriers.reserve(m_PendingAliasingBarriers.size() + m_PendingResourceBarriers.size());
 
-//Modify Begin:2026-08-10 by Hui
     resourceBarriers.insert(
         resourceBarriers.end(),
         m_PendingAliasingBarriers.begin(),
         m_PendingAliasingBarriers.end());
-//Modify End
 
     for (auto pendingBarrier : m_PendingResourceBarriers)
 	{
@@ -162,7 +160,6 @@ uint32_t ResourceStateTracker::FlushPendingResourceBarriers(
 		if (pendingBarrier.Type == D3D12_RESOURCE_BARRIER_TYPE_TRANSITION)
 		{
 			auto pendingTransition = pendingBarrier.Transition;
-//Modify Begin:2026-07-30 by Hui
             const auto iter = resourceStates.find(pendingTransition.pResource);
             Assert(
                 iter != resourceStates.end(),
@@ -210,39 +207,31 @@ uint32_t ResourceStateTracker::FlushPendingResourceBarriers(
 	}
 
 	m_PendingResourceBarriers.clear();
-//Modify Begin:2026-08-10 by Hui
     m_PendingAliasingBarriers.clear();
-//Modify End
 	return numBarriers;
 }
-//Modify End
 
-//Modify Begin:2026-07-30 by Hui
 void ResourceStateTracker::CommitFinalResourceStates(
     ResourceStateRegistry::SubmissionScope& submissionScope)
 {
     ResourceStateMapType& resourceStates = submissionScope.GetStates();
 	for (const auto& resourceState : m_FinalResourceStates)
 	{
-//Modify Begin:2026-07-30 by Hui
         const auto iter = resourceStates.find(resourceState.first);
         Assert(
             iter != resourceStates.end(),
             "D3D12 resource state was not registered before its final state was committed.");
         iter->second = resourceState.second;
-//Modify End
 	}
 
 	m_FinalResourceStates.clear();
 }
-//Modify End
 
 void ResourceStateTracker::Reset()
 {
 	m_PendingResourceBarriers.clear();
-//Modify Begin:2026-08-10 by Hui
     m_PendingAliasingBarriers.clear();
-//Modify End
 	m_ResourceBarriers.clear();
 	m_FinalResourceStates.clear();
 }
+//Modify End

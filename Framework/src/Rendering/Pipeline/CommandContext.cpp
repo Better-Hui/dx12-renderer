@@ -1,25 +1,17 @@
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-08-19 by Hui
 
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 
 #include <DX12Library/CommandList.h>
-//Modify Begin:2026-08-18 by Hui
 #include <DX12Library/CommandListInternalAccess.h>
-//Modify End
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Resource.h>
 #include <DX12Library/StructuredBuffer.h>
-//Modify Begin:2026-07-30 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
-//Modify End
-//Modify Begin:2026-07-30 by Hui
 #include <Framework/Rendering/Pipeline/BindlessDescriptorHeap.h>
-//Modify End
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
-//Modify Begin:2026-07-30 by Hui
-#include <Framework/Rendering/Pipeline/IndirectDrawCommandSignature.h>
+#include <Framework/Rendering/Pipeline/IndirectCommandSignature.h>
 #include <Framework/Rendering/Pipeline/MeshShader.h>
-//Modify End
 #include <Framework/Rendering/Pipeline/PipelineDescriptorPool.h>
 #include <Framework/Rendering/Pipeline/PipelineDescriptorSet.h>
 #include <Framework/Rendering/Pipeline/PipelineLayout.h>
@@ -35,7 +27,6 @@
 #include <set>
 #include <unordered_set>
 
-//Modify Begin:2026-07-27 by Hui
 namespace
 {
     void LogMissingConstantBufferOnce(const std::string_view name)
@@ -53,12 +44,10 @@ namespace
 
     void TransitionShaderResourceBinding(CommandList& commandList, const PipelineShaderResourceBinding& shaderResource)
     {
-//Modify Begin:2026-07-28 by Hui
         if (shaderResource.Resource == nullptr || !shaderResource.Resource->AreAutoBarriersEnabled())
         {
             return;
         }
-//Modify End
         if (shaderResource.NumSubresources < D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
         {
             for (UINT i = 0; i < shaderResource.NumSubresources; ++i)
@@ -74,12 +63,10 @@ namespace
 
     void TransitionUnorderedAccessView(CommandList& commandList, const UnorderedAccessView& unorderedAccessView)
     {
-//Modify Begin:2026-07-28 by Hui
         if (unorderedAccessView.m_Resource == nullptr || !unorderedAccessView.m_Resource->AreAutoBarriersEnabled())
         {
             return;
         }
-//Modify End
         if (unorderedAccessView.m_NumSubresources < D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
         {
             for (UINT i = 0; i < unorderedAccessView.m_NumSubresources; ++i)
@@ -108,7 +95,6 @@ namespace
     }
 
 }
-//Modify End
 
 CommandContext::CommandContext(CommandList& commandList)
     : m_CommandList(commandList)
@@ -128,13 +114,10 @@ void CommandContext::SetPipelineLayout(const PipelineBindPoint bindPoint, const 
     {
         SetComputeRootSignature(*rootSignature);
     }
-//Modify Begin:2026-07-29 by Hui
     m_DescriptorAllocator.ResetTransientBindings();
     (void)pipelineLayout;
-//Modify End
 }
 
-//Modify Begin:2026-07-29 by Hui
 void CommandContext::SetDescriptorPool(const PipelineDescriptorPool& descriptorPool) const
 {
     m_DescriptorPool = &descriptorPool;
@@ -159,11 +142,9 @@ void CommandContext::SetDescriptorSet(
     m_DescriptorSets[descriptorSetDesc.SetIndex] = &descriptorSet;
     SetDescriptorSet(bindPoint, descriptorSet);
 }
-//Modify End
 
 void CommandContext::SetDescriptorSet(const PipelineBindPoint bindPoint, const PipelineDescriptorSet& descriptorSet) const
 {
-//Modify Begin:2026-07-27 by Hui
     std::set<UINT> appliedRootParameters;
     for (const auto& [rootParameterIndex, boundResource] : descriptorSet.GetBoundResources())
     {
@@ -206,7 +187,6 @@ void CommandContext::SetDescriptorSet(const PipelineBindPoint bindPoint, const P
             break;
         }
     }
-//Modify End
 }
 
 void CommandContext::SetPipeline(Shader& shader) const
@@ -215,9 +195,7 @@ void CommandContext::SetPipeline(Shader& shader) const
     m_HasBoundPipeline = true;
     m_BoundRayTracingShader = nullptr;
 
-//Modify Begin:2026-07-30 by Hui
     const auto& device = shader.GetDeviceContext().GetDevice();
-//Modify End
     const auto& renderTargetState = m_CommandList.GetLastRenderTargetState();
     const auto pipelineState = shader.GetPipelineState(device, renderTargetState);
 
@@ -234,16 +212,13 @@ void CommandContext::SetPipeline(Shader& shader) const
     SetGraphicsPipelineState(pipelineState);
 }
 
-//Modify Begin:2026-07-30 by Hui
 void CommandContext::SetPipeline(MeshShader& shader) const
 {
     m_BoundPipelineBindPoint = PipelineBindPoint::Graphics;
     m_HasBoundPipeline = true;
     m_BoundRayTracingShader = nullptr;
 
-//Modify Begin:2026-07-30 by Hui
     const auto& device = shader.GetDeviceContext().GetDevice();
-//Modify End
     const auto& renderTargetState = m_CommandList.GetLastRenderTargetState();
     const auto pipelineState = shader.GetPipelineState(device, renderTargetState);
 
@@ -258,7 +233,6 @@ void CommandContext::SetPipeline(MeshShader& shader) const
 
     SetGraphicsPipelineState(pipelineState);
 }
-//Modify End
 
 void CommandContext::SetPipeline(const ComputeShader& shader) const
 {
@@ -266,9 +240,7 @@ void CommandContext::SetPipeline(const ComputeShader& shader) const
     m_HasBoundPipeline = true;
     m_BoundRayTracingShader = nullptr;
 
-//Modify Begin:2026-07-30 by Hui
     const auto& device = shader.GetDeviceContext().GetDevice();
-//Modify End
     const auto pipelineState = shader.GetPipelineState(device);
 
     if (shader.UsesReflectedRootSignature())
@@ -299,12 +271,10 @@ void CommandContext::BindPipeline(Shader& shader) const
     SetPipeline(shader);
 }
 
-//Modify Begin:2026-07-30 by Hui
 void CommandContext::BindPipeline(MeshShader& shader) const
 {
     SetPipeline(shader);
 }
-//Modify End
 
 void CommandContext::BindPipeline(const ComputeShader& shader) const
 {
@@ -316,7 +286,6 @@ void CommandContext::BindPipeline(const RayTracingShader& shader) const
     SetPipeline(shader);
 }
 
-//Modify Begin:2026-07-30 by Hui
 void CommandContext::BindBindlessDescriptorHeap(
     BindlessDescriptorHeap& bindlessDescriptorHeap) const
 {
@@ -325,14 +294,11 @@ void CommandContext::BindBindlessDescriptorHeap(
         bindlessDescriptorHeap.GetResourceDescriptorHeap());
     m_DescriptorAllocator.SetBindlessDescriptorHeap(&bindlessDescriptorHeap);
 }
-//Modify End
 
 void CommandContext::BindDescriptorSet(const PipelineDescriptorSetBindDesc& descriptorSetDesc) const
 {
-//Modify Begin:2026-07-29 by Hui
     Assert(m_HasBoundPipeline, "A pipeline must be bound before binding a descriptor set.");
     SetDescriptorSet(m_BoundPipelineBindPoint, descriptorSetDesc);
-//Modify End
 }
 
 void CommandContext::BindDescriptorSet(const PipelineDescriptorSet& descriptorSet) const
@@ -340,7 +306,6 @@ void CommandContext::BindDescriptorSet(const PipelineDescriptorSet& descriptorSe
     BindDescriptorSet(PipelineDescriptorSetBindDesc{ descriptorSet.GetSetIndex(), &descriptorSet });
 }
 
-//Modify Begin:2026-07-31 by Hui
 void CommandContext::SetConstantBuffer(Shader& shader, const std::string_view name, const size_t size, const void* data) const
 {
     if (!shader.HasConstantBuffer(std::string(name)))
@@ -428,12 +393,10 @@ void CommandContext::SetTexture(MeshShader& shader, const std::string_view name,
 
 void CommandContext::SetStructuredBuffer(const ComputeShader& shader, const std::string_view name, const StructuredBuffer& buffer) const
 {
-//Modify Begin:2026-08-03 by Hui
     shader.m_DescriptorSet->SetStructuredBuffer(
         name,
         buffer,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-//Modify End
 }
 
 void CommandContext::SetConstantBuffer(const ComputeShader& shader, const std::string_view name, const size_t size, const void* data) const
@@ -448,24 +411,20 @@ void CommandContext::SetConstantBuffer(const ComputeShader& shader, const std::s
 
 void CommandContext::SetShaderResourceView(const ComputeShader& shader, const std::string_view name, const ShaderResourceView& shaderResourceView) const
 {
-//Modify Begin:2026-08-03 by Hui
     shader.m_DescriptorSet->SetShaderResourceView(
         name,
         0u,
         shaderResourceView,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-//Modify End
 }
 
 void CommandContext::SetShaderResourceView(const ComputeShader& shader, const std::string_view name, const uint32_t arrayIndex, const ShaderResourceView& shaderResourceView) const
 {
-//Modify Begin:2026-08-03 by Hui
     shader.m_DescriptorSet->SetShaderResourceView(
         name,
         arrayIndex,
         shaderResourceView,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-//Modify End
 }
 
 void CommandContext::SetShaderResource(
@@ -480,12 +439,10 @@ void CommandContext::SetShaderResource(
 
 void CommandContext::SetShaderResourceViews(const ComputeShader& shader, const std::string_view name, std::span<const ShaderResourceView> shaderResourceViews) const
 {
-//Modify Begin:2026-08-03 by Hui
     shader.m_DescriptorSet->SetShaderResourceViews(
         name,
         shaderResourceViews,
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-//Modify End
 }
 
 void CommandContext::SetTexture(const ComputeShader& shader, const std::string_view name, const ShaderResourceView& shaderResourceView) const
@@ -507,7 +464,6 @@ void CommandContext::SetAccelerationStructure(const ComputeShader& shader, const
 {
     shader.m_DescriptorSet->SetAccelerationStructure(name, accelerationStructure);
 }
-//Modify End
 
 void CommandContext::SetGraphicsRootSignature(const RootSignature& rootSignature) const
 {
@@ -537,7 +493,6 @@ void CommandContext::SetRayTracingPipelineState(
     m_CommandList.SetComputeRootSignature(globalRootSignature);
 }
 
-//Modify Begin:2026-07-30 by Hui
 void CommandContext::StageDefaultDescriptorTable(
     const PipelineBindPoint bindPoint,
     const PipelineDescriptorSet& descriptorSet,
@@ -594,7 +549,6 @@ bool CommandContext::TryApplyDescriptorTableBinding(
     m_DescriptorAllocator.StageDescriptorTable(m_CommandList, bindPoint, rootParameterIndex, *allocation);
     return true;
 }
-//Modify End
 
 void CommandContext::ApplyGraphicsBinding(const PipelineDescriptorSet& descriptorSet, const UINT rootParameterIndex) const
 {
@@ -857,12 +811,10 @@ void CommandContext::StageDynamicDescriptors(
     m_CommandList.StageDynamicDescriptors(descriptorHeapType, rootParameterIndex, offset, numDescriptors, baseDescriptor);
 }
 
-//Modify Begin:2026-07-27 by Hui
 void CommandContext::InsertDescriptorSetOutputBarriers(const PipelineDescriptorSet& descriptorSet) const
 {
     InsertDescriptorSetOutputBarriersImpl(m_CommandList, descriptorSet);
 }
-//Modify End
 
 void CommandContext::TransitionShaderResource(const Resource& resource) const
 {
@@ -894,7 +846,6 @@ void CommandContext::Draw(
     m_CommandList.Draw(vertexCount, instanceCount, startVertex, startInstance);
 }
 
-//Modify Begin:2026-07-30 by Hui
 void CommandContext::DrawIndexed(
     const uint32_t indexCount,
     const uint32_t instanceCount,
@@ -904,34 +855,87 @@ void CommandContext::DrawIndexed(
 {
     m_CommandList.DrawIndexed(indexCount, instanceCount, startIndex, baseVertex, startInstance);
 }
-//Modify End
 
-//Modify Begin:2026-07-30 by Hui
-void CommandContext::DrawIndirect(
-    const IndirectDrawCommandSignature& commandSignature,
-    const uint32_t maxCommandCount,
-    StructuredBuffer& commandsBuffer) const
+void CommandContext::ExecuteIndirect(
+    const IndirectCommandSignature& commandSignature,
+    const IndirectCommandExecutionDesc& executionDesc) const
 {
-    if (commandsBuffer.AreAutoBarriersEnabled())
-    {
-        m_CommandList.TransitionBarrier(commandsBuffer, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
-        m_CommandList.TransitionBarrier(commandsBuffer.GetCounterBuffer(), D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
-    }
-
-    m_CommandList.DrawIndirect(
+    Assert(executionDesc.ArgumentBuffer != nullptr, "Indirect execution requires an argument buffer.");
+    Assert(executionDesc.MaxCommandCount > 0u, "Indirect execution requires a positive maximum command count.");
+    m_CommandList.ExecuteIndirect(
         commandSignature.GetD3D12CommandSignature(),
-        maxCommandCount,
-        commandsBuffer.GetD3D12Resource(),
-        0,
-        commandsBuffer.GetCounterBuffer().GetD3D12Resource(),
-        0);
+        commandSignature.GetD3D12ExecutionArgumentType(),
+        executionDesc.MaxCommandCount,
+        *executionDesc.ArgumentBuffer,
+        executionDesc.ArgumentBufferOffset,
+        executionDesc.CountBuffer,
+        executionDesc.CountBufferOffset);
+}
+
+void CommandContext::DrawIndirect(
+    const IndirectCommandSignature& commandSignature,
+    const IndirectCommandExecutionDesc& executionDesc) const
+{
+    const IndirectArgumentType argumentType = commandSignature.GetExecutionArgumentType();
+    Assert(
+        argumentType == IndirectArgumentType::Draw || argumentType == IndirectArgumentType::DrawIndexed,
+        "DrawIndirect requires a draw or indexed-draw command signature.");
+    ExecuteIndirect(commandSignature, executionDesc);
+}
+
+void CommandContext::DispatchIndirect(
+    const IndirectCommandSignature& commandSignature,
+    const IndirectCommandExecutionDesc& executionDesc) const
+{
+    Assert(
+        commandSignature.GetExecutionArgumentType() == IndirectArgumentType::Dispatch,
+        "DispatchIndirect requires a dispatch command signature.");
+    ExecuteIndirect(commandSignature, executionDesc);
+}
+
+void CommandContext::DispatchMeshIndirect(
+    const IndirectCommandSignature& commandSignature,
+    const IndirectCommandExecutionDesc& executionDesc) const
+{
+    Assert(
+        commandSignature.GetExecutionArgumentType() == IndirectArgumentType::DispatchMesh,
+        "DispatchMeshIndirect requires a mesh-dispatch command signature.");
+    ExecuteIndirect(commandSignature, executionDesc);
+}
+
+void CommandContext::DispatchRaysIndirect(
+    const IndirectCommandSignature& commandSignature,
+    const IndirectCommandExecutionDesc& executionDesc) const
+{
+    Assert(m_BoundRayTracingShader != nullptr, "Ray tracing pipeline must be bound before DispatchRaysIndirect.");
+    Assert(
+        commandSignature.GetExecutionArgumentType() == IndirectArgumentType::DispatchRays,
+        "DispatchRaysIndirect requires a ray-dispatch command signature.");
+    Assert(executionDesc.MaxCommandCount == 1u, "DispatchRaysIndirect supports exactly one dispatch description.");
+    Assert(executionDesc.CountBuffer == nullptr, "DispatchRaysIndirect does not support a count buffer.");
+    ExecuteIndirect(commandSignature, executionDesc);
+}
+
+D3D12_DISPATCH_RAYS_DESC CommandContext::BuildDispatchRaysArguments(
+    const RayTracingDispatchDesc& dispatchDesc) const
+{
+    Assert(m_BoundRayTracingShader != nullptr, "Ray tracing pipeline must be bound before building indirect dispatch arguments.");
+    return m_BoundRayTracingShader->BuildDispatchDesc(
+        dispatchDesc.PassName,
+        dispatchDesc.Width,
+        dispatchDesc.Height,
+        dispatchDesc.Depth);
+}
+
+void CommandContext::ClearUnorderedAccessUint(const Resource& resource, const UINT values[4]) const
+{
+    m_CommandList.ClearUnorderedAccessUint(resource, values);
 }
 
 void CommandContext::DispatchMesh(const uint32_t numGroupsX, const uint32_t numGroupsY, const uint32_t numGroupsZ) const
 {
     m_CommandList.DispatchMesh(numGroupsX, numGroupsY, numGroupsZ);
 }
-//Modify End
 
 void CommandContext::Dispatch(const uint32_t numGroupsX, const uint32_t numGroupsY, const uint32_t numGroupsZ) const
 {
@@ -940,7 +944,6 @@ void CommandContext::Dispatch(const uint32_t numGroupsX, const uint32_t numGroup
 
 void CommandContext::BindDescriptorSet(const RayTracingBindingSet& bindingSet) const
 {
-//Modify Begin:2026-07-27 by Hui
     const RayTracingShader& shader = bindingSet.GetShader();
     const PipelineDescriptorSet& descriptorSet = bindingSet.GetDescriptorSet();
     Assert(descriptorSet.GetAccelerationStructure() != nullptr, "Ray tracing acceleration structure is not bound.");
@@ -949,11 +952,8 @@ void CommandContext::BindDescriptorSet(const RayTracingBindingSet& bindingSet) c
     {
         SetPipeline(shader);
     }
-//Modify Begin:2026-07-29 by Hui
     SetDescriptorPool(bindingSet.GetDescriptorPool());
     SetDescriptorSet(PipelineBindPoint::RayTracing, PipelineDescriptorSetBindDesc{ descriptorSet.GetSetIndex(), &descriptorSet });
-//Modify End
-//Modify End
 }
 
 void CommandContext::DispatchRays(const RayTracingDispatchDesc& dispatchDesc) const

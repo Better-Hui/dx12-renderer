@@ -9,7 +9,7 @@
 
 using namespace DirectX;
 
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-08-06 by Hui
 void RaytracingDemo::DrawLightBillboards(CommandList& cmd)
 {
     if (m_LightBillboardShader == nullptr || m_LightBillboardMesh == nullptr)
@@ -25,13 +25,10 @@ void RaytracingDemo::DrawLightBillboards(CommandList& cmd)
     XMStoreFloat4(&cameraRightFloat, XMVectorSetW(cameraRight, 0.0f));
     XMStoreFloat4(&cameraUpFloat, XMVectorSetW(cameraUp, 0.0f));
 
-//Modify Begin:2026-07-29 by Hui
     CommandContext commandContext(cmd);
     commandContext.BindPipeline(*m_LightBillboardShader);
-//Modify End
     commandContext.SetConstantBuffer(*m_LightBillboardShader, "PipelineCBuffer", BuildPipelineConstants());
 
-//Modify Begin:2026-07-30 by Hui
     XMFLOAT3 cameraPosition{};
     XMStoreFloat3(&cameraPosition, GetSceneCamera().GetTranslation());
     for (const DirectionalLight& light : m_Lights.GetDirectionalLights())
@@ -61,7 +58,6 @@ void RaytracingDemo::DrawLightBillboards(CommandList& cmd)
         commandContext.BindDescriptorSet(m_LightBillboardShader->GetDescriptorSet());
         m_LightBillboardMesh->Draw(cmd);
     }
-//Modify End
 
     for (const PointLight& light : m_Lights.GetPointLights())
     {
@@ -70,9 +66,7 @@ void RaytracingDemo::DrawLightBillboards(CommandList& cmd)
             light.PositionWs.x,
             light.PositionWs.y,
             light.PositionWs.z,
-//Modify Begin:2026-08-06 by Hui
             std::clamp(light.Range * 0.006f, 0.075f, 0.18f)
-//Modify End
         };
         constants.ColorAndAlpha = {
             light.Color.x,
@@ -82,9 +76,7 @@ void RaytracingDemo::DrawLightBillboards(CommandList& cmd)
         };
         constants.CameraRight = cameraRightFloat;
         constants.CameraUp = cameraUpFloat;
-//Modify Begin:2026-07-30 by Hui
         constants.TypeAndParams = { 0.0f, 0.0f, 0.0f, 0.0f };
-//Modify End
 
         commandContext.SetConstantBuffer(*m_LightBillboardShader, "MaterialCBuffer", constants);
         commandContext.BindDescriptorSet(m_LightBillboardShader->GetDescriptorSet());
@@ -108,9 +100,7 @@ void RaytracingDemo::DrawLightBillboards(CommandList& cmd)
         };
         constants.CameraRight = cameraRightFloat;
         constants.CameraUp = cameraUpFloat;
-//Modify Begin:2026-07-30 by Hui
         constants.TypeAndParams = { 1.0f, 0.0f, 0.0f, 0.0f };
-//Modify End
 
         commandContext.SetConstantBuffer(*m_LightBillboardShader, "MaterialCBuffer", constants);
         commandContext.BindDescriptorSet(m_LightBillboardShader->GetDescriptorSet());

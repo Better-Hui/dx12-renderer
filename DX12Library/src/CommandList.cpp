@@ -15,20 +15,16 @@
 
 #include <d3d12.h>
 
-//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-08-12 by Hui
 CommandList::CommandList(
     const D3D12_COMMAND_LIST_TYPE type,
     std::shared_ptr<D3D12DeviceContext> deviceContext)
     : m_D3d12CommandListType(type)
-//Modify Begin:2026-08-12 by Hui
     , m_DeviceContext(std::move(deviceContext))
     , m_Device(m_DeviceContext != nullptr ? m_DeviceContext->GetDevice() : nullptr)
     , m_ResourceStateRegistry(m_DeviceContext != nullptr ? m_DeviceContext->GetResourceStateRegistry() : nullptr)
-//Modify End
 {
-//Modify Begin:2026-08-12 by Hui
     Assert(m_DeviceContext != nullptr, "D3D12 device context is null.");
-//Modify End
     Assert(m_Device != nullptr, "D3D12 device is null.");
     Assert(m_ResourceStateRegistry != nullptr, "Resource state registry is null.");
 
@@ -38,9 +34,7 @@ CommandList::CommandList(
         nullptr, IID_PPV_ARGS(&m_D3d12CommandList)));
 
     ThrowIfFailed(m_D3d12CommandList.As(&m_D3d12CommandList5));
-//Modify Begin:2026-07-30 by Hui
     ThrowIfFailed(m_D3d12CommandList.As(&m_D3d12CommandList6));
-//Modify End
 
     m_PUploadBuffer = std::make_unique<UploadBuffer>(m_Device);
 
@@ -48,14 +42,12 @@ CommandList::CommandList(
 
     for (int i = 0; i < D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES; ++i)
     {
-//Modify Begin:2026-07-21 by Hui
         const uint32_t numDescriptorsPerHeap =
             i == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV ? 8192u : 1024u;
         m_DynamicDescriptorHeaps[i] = std::make_unique<DynamicDescriptorHeap>(
             m_Device,
             static_cast<D3D12_DESCRIPTOR_HEAP_TYPE>(i),
             numDescriptorsPerHeap);
-//Modify End
         m_DescriptorHeaps[i] = nullptr;
     }
 }
@@ -251,7 +243,7 @@ void CommandList::CopyResource(const ComPtr<ID3D12Resource> dstRes, const ComPtr
     TrackObject(srcRes);
 }
 
-//Modify Begin:2026-08-12 by Hui
+//Modify Begin:2026-08-19 by Hui
 void CommandList::CopyBufferRegion(
     const Resource& destination,
     const uint64_t destinationOffset,
@@ -276,6 +268,32 @@ void CommandList::CopyBufferRegion(
         sizeInBytes);
     TrackObject(source);
     TrackResource(destination);
+}
+
+void CommandList::CopyBufferToReadback(
+    const Resource& source,
+    const uint64_t sourceOffset,
+    const ComPtr<ID3D12Resource> destination,
+    const uint64_t destinationOffset,
+    const uint64_t sizeInBytes)
+{
+    Assert(source.GetD3D12Resource() != nullptr, "Copy source buffer must not be null.");
+    Assert(destination != nullptr, "Readback destination buffer must not be null.");
+
+    if (source.AreAutoBarriersEnabled())
+    {
+        TransitionBarrier(source, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    }
+    FlushResourceBarriers();
+
+    m_D3d12CommandList->CopyBufferRegion(
+        destination.Get(),
+        destinationOffset,
+        source.GetD3D12Resource().Get(),
+        sourceOffset,
+        sizeInBytes);
+    TrackResource(source);
+    TrackObject(destination);
 }
 //Modify End
 
@@ -789,19 +807,72 @@ void CommandList::DrawIndexed(const uint32_t indexCount, const uint32_t instance
 
     m_D3d12CommandList->DrawIndexedInstanced(indexCount, instanceCount, startIndex, baseVertex, startInstance);
 }
-void CommandList::DrawIndirect(
+//Modify Begin:2026-08-19 by Hui
+void CommandList::ExecuteIndirect(
     const ComPtr<ID3D12CommandSignature>& pCommandSignature,
+    const D3D12_INDIRECT_ARGUMENT_TYPE executionArgumentType,
     const uint32_t maxCommandCount,
-    const ComPtr<ID3D12Resource>& pArgumentBuffer, const uint64_t argumentBufferOffset,
-    const ComPtr<ID3D12Resource>& pCountBuffer, const uint64_t countBufferOffset
+    const Resource& argumentBuffer,
+    const uint64_t argumentBufferOffset,
+    const Resource* countBuffer,
+    const uint64_t countBufferOffset
 )
 {
+    Assert(pCommandSignature != nullptr, "Indirect command signature is null.");
+    Assert(argumentBuffer.IsValid(), "Indirect argument buffer is not initialized.");
+    Assert(countBuffer == nullptr || countBuffer->IsValid(), "Indirect count buffer is not initialized.");
     FlushResourceBarriers();
 
-    CommitStagedDescriptorsForDraw();
+    switch (executionArgumentType)
+    {
+    case D3D12_INDIRECT_ARGUMENT_TYPE_DRAW:
+    case D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED:
+    case D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH_MESH:
+        CommitStagedDescriptorsForDraw();
+        break;
+    case D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH:
+    case D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH_RAYS:
+        CommitStagedDescriptorsForDispatch();
+        break;
+    default:
+        Assert(false, "Unsupported indirect execution argument type.");
+        break;
+    }
 
-    m_D3d12CommandList->ExecuteIndirect(pCommandSignature.Get(), maxCommandCount, pArgumentBuffer.Get(), argumentBufferOffset, pCountBuffer.Get(), countBufferOffset);
+    m_D3d12CommandList->ExecuteIndirect(
+        pCommandSignature.Get(),
+        maxCommandCount,
+        argumentBuffer.GetD3D12Resource().Get(),
+        argumentBufferOffset,
+        countBuffer != nullptr ? countBuffer->GetD3D12Resource().Get() : nullptr,
+        countBufferOffset);
+    TrackResource(argumentBuffer);
+    if (countBuffer != nullptr)
+    {
+        TrackResource(*countBuffer);
+    }
 }
+
+void CommandList::ClearUnorderedAccessUint(const Resource& resource, const UINT values[4])
+{
+    Assert(resource.IsValid(), "Unordered-access clear resource is not initialized.");
+    Assert(resource.SupportsUnorderedAccess(), "Unordered-access clear requires an unordered-access resource.");
+    Assert(values != nullptr, "Unordered-access clear values are null.");
+
+    const D3D12_CPU_DESCRIPTOR_HANDLE cpuDescriptor = resource.GetUnorderedAccessView(nullptr);
+    const D3D12_GPU_DESCRIPTOR_HANDLE gpuDescriptor =
+        m_DynamicDescriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->CopyDescriptor(*this, cpuDescriptor);
+    FlushResourceBarriers();
+    m_D3d12CommandList->ClearUnorderedAccessViewUint(
+        gpuDescriptor,
+        cpuDescriptor,
+        resource.GetD3D12Resource().Get(),
+        values,
+        0u,
+        nullptr);
+    TrackResource(resource);
+}
+//Modify End
 
 void CommandList::Dispatch(const uint32_t numGroupsX, const uint32_t numGroupsY, const uint32_t numGroupsZ)
 {
@@ -823,7 +894,7 @@ void CommandList::DispatchMesh(const uint32_t numGroupsX, const uint32_t numGrou
 }
 //Modify End
 
-//Modify Begin:2026-07-21 by Hui
+//Modify Begin:2026-07-30 by Hui
 void CommandList::SetRaytracingPipelineState(const ComPtr<ID3D12StateObject>& stateObject)
 {
     m_D3d12CommandList5->SetPipelineState1(stateObject.Get());
@@ -855,7 +926,6 @@ void CommandList::StageDynamicDescriptors(
     m_DynamicDescriptorHeaps[heapType]->StageDescriptors(rootParameterIndex, descriptorOffset, numDescriptors, srcDescriptor);
 }
 
-//Modify Begin:2026-07-30 by Hui
 void CommandList::BindExternalDescriptorHeap(
     const D3D12_DESCRIPTOR_HEAP_TYPE heapType,
     ID3D12DescriptorHeap* heap)
@@ -866,7 +936,6 @@ void CommandList::BindExternalDescriptorHeap(
         "Only shader-visible descriptor heap types can be bound externally.");
     SetDescriptorHeap(heapType, heap);
 }
-//Modify End
 //Modify End
 
 //Modify Begin:2026-07-30 by Hui

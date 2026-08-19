@@ -1,15 +1,11 @@
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-08-12 by Hui
 #include <Framework/Rendering/Denoising/SVGF.h>
 
 #include <DX12Library/CommandList.h>
 #include <DX12Library/Texture.h>
-//Modify Begin:2026-07-29 by Hui
 #include <Framework/Rendering/Pipeline/CommandContext.h>
-//Modify End
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
-//Modify Begin:2026-07-30 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
-//Modify End
 #include <Framework/Rendering/Texture/RenderTexture.h>
 #include <Framework/Rendering/Pipeline/ShaderBlob.h>
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
@@ -19,7 +15,7 @@
 #include <Framework/Rendering/Texture/UnorderedAccessView.h>
 
 #include <algorithm>
-#include <d3dx12.h>
+#include <d3dx12/d3dx12.h>
 
 namespace
 {
@@ -40,9 +36,7 @@ SVGF::SVGF(FrameworkDeviceContext& deviceContext)
     : m_TemporalShader(CreateReflectedComputeShader(deviceContext, ShaderBytecode_SVGFTemporal_CS, sizeof ShaderBytecode_SVGFTemporal_CS))
     , m_AtrousShader(CreateReflectedComputeShader(deviceContext, ShaderBytecode_SVGFAtrous_CS, sizeof ShaderBytecode_SVGFAtrous_CS))
     , m_CompositeShader(CreateReflectedComputeShader(deviceContext, ShaderBytecode_SVGFComposite_CS, sizeof ShaderBytecode_SVGFComposite_CS))
-//Modify Begin:2026-08-12 by Hui
     , m_DeviceContext(deviceContext)
-//Modify End
 {
 }
 
@@ -65,7 +59,6 @@ bool SVGF::EnsureCreated(const uint32_t width, const uint32_t height)
     m_HistoryIndex = 0;
     m_HistoryValid = false;
 
-//Modify Begin:2026-07-27 by Hui
     m_HistoryColor[0] = RenderTexture::CreateUav2D(m_DeviceContext, DXGI_FORMAT_R16G16B16A16_FLOAT, width, height, L"SVGF History Color 0");
     m_HistoryColor[1] = RenderTexture::CreateUav2D(m_DeviceContext, DXGI_FORMAT_R16G16B16A16_FLOAT, width, height, L"SVGF History Color 1");
     m_HistoryMoments[0] = RenderTexture::CreateUav2D(m_DeviceContext, DXGI_FORMAT_R16G16_FLOAT, width, height, L"SVGF History Moments 0");
@@ -75,7 +68,6 @@ bool SVGF::EnsureCreated(const uint32_t width, const uint32_t height)
     m_Variance = RenderTexture::CreateUav2D(m_DeviceContext, DXGI_FORMAT_R16_FLOAT, width, height, L"SVGF Variance");
     m_AtrousPing = RenderTexture::CreateUav2D(m_DeviceContext, DXGI_FORMAT_R16G16B16A16_FLOAT, width, height, L"SVGF Atrous Ping");
     m_AtrousPong = RenderTexture::CreateUav2D(m_DeviceContext, DXGI_FORMAT_R16G16B16A16_FLOAT, width, height, L"SVGF Atrous Pong");
-//Modify End
     return true;
 }
 
@@ -101,7 +93,6 @@ void SVGF::Temporal(
     constants.PhiNormal = m_Settings.PhiNormal;
     constants.PhiDepth = m_Settings.PhiDepth;
 
-//Modify Begin:2026-07-29 by Hui
     const CommandContext commandContext(commandList);
     commandContext.SetConstantBuffer(*m_TemporalShader, "SVGFTemporalConstants", constants);
     commandContext.SetTexture(*m_TemporalShader, "NoisyRadiance", ShaderResourceView(noisyRadiance));
@@ -119,13 +110,11 @@ void SVGF::Temporal(
     commandContext.BindPipeline(*m_TemporalShader);
     commandContext.BindDescriptorSet(m_TemporalShader->GetDescriptorSet());
     commandContext.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
-//Modify End
 
     m_HistoryIndex = nextIndex;
     m_HistoryValid = true;
 }
 
-//Modify Begin:2026-07-27 by Hui
 void SVGF::AtrousPass(
     CommandList& commandList,
     const std::shared_ptr<Texture>& input,
@@ -147,7 +136,6 @@ void SVGF::AtrousPass(
     constants.PhiNormal = m_Settings.PhiNormal;
     constants.PhiDepth = m_Settings.PhiDepth;
 
-//Modify Begin:2026-07-29 by Hui
     const CommandContext commandContext(commandList);
     commandContext.SetConstantBuffer(*m_AtrousShader, "SVGFAtrousConstants", constants);
     commandContext.SetTexture(*m_AtrousShader, "InputColor", ShaderResourceView(input));
@@ -159,7 +147,6 @@ void SVGF::AtrousPass(
     commandContext.BindPipeline(*m_AtrousShader);
     commandContext.BindDescriptorSet(m_AtrousShader->GetDescriptorSet());
     commandContext.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
-//Modify End
 }
 
 std::shared_ptr<Texture> SVGF::Atrous(
@@ -186,7 +173,6 @@ std::shared_ptr<Texture> SVGF::Atrous(
 
     return input;
 }
-//Modify End
 
 void SVGF::Composite(
     CommandList& commandList,
@@ -200,7 +186,6 @@ void SVGF::Composite(
     constants.Width = width;
     constants.Height = height;
 
-//Modify Begin:2026-07-29 by Hui
     const CommandContext commandContext(commandList);
     commandContext.SetConstantBuffer(*m_CompositeShader, "SVGFCompositeConstants", constants);
     commandContext.SetTexture(*m_CompositeShader, "FilteredColor", ShaderResourceView(input));
@@ -209,7 +194,6 @@ void SVGF::Composite(
     commandContext.BindPipeline(*m_CompositeShader);
     commandContext.BindDescriptorSet(m_CompositeShader->GetDescriptorSet());
     commandContext.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
-//Modify End
 }
 
 void SVGF::Execute(

@@ -43,6 +43,15 @@ namespace RenderGraph
         return resourceId;
     }
 
+    void RenderGraphPassBuilder::ReadIndirectArgument(const Resource& resource)
+    {
+        AddExternalAccess(
+            resource,
+            D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT,
+            ExternalResourceAccessMode::Read,
+            false);
+    }
+
     ResourceId RenderGraphPassBuilder::ReadBuffer(const ResourceId resourceId)
     {
         AddInput(resourceId, InputType::NonPixelShaderResource);

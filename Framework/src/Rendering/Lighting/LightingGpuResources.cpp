@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-06 by Hui
+//Modify Begin:2026-08-13 by Hui
 #include <Framework/Rendering/Lighting/LightingGpuResources.h>
 
 #include <DX12Library/CommandList.h>
@@ -425,7 +425,6 @@ void LightingGpuResources::BindComputeResources(CommandContext& commandContext, 
     }
 }
 
-//Modify Begin:2026-08-13 by Hui
 void LightingGpuResources::ForEachShaderResource(
     const std::function<void(const Resource&)>& action) const
 {
@@ -437,7 +436,6 @@ void LightingGpuResources::ForEachShaderResource(
     action(m_SurfaceEmitterTriangleCdfBuffer);
     action(m_DirectLightCdfBuffer);
 }
-//Modify End
 
 void LightingGpuResources::BindRayTracingResources(RayTracingBindingSet& bindingSet)
 {

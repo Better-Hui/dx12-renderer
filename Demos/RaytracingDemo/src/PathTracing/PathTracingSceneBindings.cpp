@@ -2,6 +2,8 @@
 
 #include <DX12Library/CommandList.h>
 #include <DX12Library/Helpers.h>
+#include <DX12Library/ByteAddressBuffer.h>
+#include <DX12Library/StructuredBuffer.h>
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 #include <Framework/Geometry/Mesh.h>
@@ -9,13 +11,13 @@
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <Framework/Rendering/Texture/UnorderedAccessView.h>
 #include <RenderGraph/RenderGraphBuilder.h>
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
 #include <Scene/SceneLightManager.h>
 //Modify End
 
 #include <vector>
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
 RaytracingDemoCameraConstants RaytracingDemoPassBindings::BuildPassCameraConstants(
     const RaytracingDemoPassResources& resources,
     const RaytracingDemoPassConfig& config,
@@ -24,7 +26,6 @@ RaytracingDemoCameraConstants RaytracingDemoPassBindings::BuildPassCameraConstan
     return ::BuildPassCameraConstants(resources, config, context);
 }
 
-//Modify Begin:2026-08-13 by Hui
 void RaytracingDemoPassBindings::DeclareRayTracingExternalResourceAccesses(
     RenderGraph::RenderGraphPassBuilder& passBuilder,
     const RaytracingDemoPassResources& resources,
@@ -41,14 +42,15 @@ void RaytracingDemoPassBindings::DeclareRayTracingExternalResourceAccesses(
         passBuilder.ReadExternal(*resources.SkyboxTexture, stateAfter);
     }
 }
-//Modify End
 
 void RaytracingDemoPassBindings::BindInlinePathTracingInputs(
     const RaytracingDemoPassResources& resources,
     CommandContext& commandContext,
     ComputeShader& shader,
     const RaytracingDemoRenderGraph::FrameGBufferResources& gbuffer,
-    const RaytracingDemoCameraConstants& camera)
+    const RaytracingDemoCameraConstants& camera,
+    const StructuredBuffer* activeRayPixelIndices,
+    const ByteAddressBuffer* activeRayPixelCount)
 {
     const RayTracingAccelerationStructure& accelerationStructure = resources.Scene.GetRayTracingAccelerationStructure();
 
@@ -56,12 +58,10 @@ void RaytracingDemoPassBindings::BindInlinePathTracingInputs(
     {
         commandContext.SetConstantBuffer(shader, "CameraConstants", sizeof(camera), &camera);
     }
-//Modify Begin:2026-07-30 by Hui
     if (shader.HasAccelerationStructure("g_InlineRayTracingScene"))
     {
         commandContext.SetAccelerationStructure(shader, "g_InlineRayTracingScene", accelerationStructure);
     }
-//Modify End
     if (shader.HasShaderResourceView("GBufferTextures"))
     {
         commandContext.SetShaderResourceView(shader, "GBufferTextures", 0u, ShaderResourceView(gbuffer.AlbedoOcclusion));
@@ -74,12 +74,21 @@ void RaytracingDemoPassBindings::BindInlinePathTracingInputs(
     {
         commandContext.SetShaderResourceView(shader, "DepthTexture", ShaderResourceView::DepthAsFloat(gbuffer.Depth));
     }
-//Modify Begin:2026-08-05 by Hui
+    if (shader.HasShaderResourceView("ActiveRayPixelIndices"))
+    {
+        Assert(activeRayPixelIndices != nullptr, "Compacted path-tracing shader requires the active-pixel index buffer.");
+        commandContext.SetShaderResource(shader, "ActiveRayPixelIndices", 0u, *activeRayPixelIndices);
+    }
+    if (shader.HasShaderResourceView("ActiveRayPixelCount"))
+    {
+        Assert(activeRayPixelCount != nullptr, "Compacted inline path-tracing shader requires the active-pixel count buffer.");
+        commandContext.SetShaderResource(shader, "ActiveRayPixelCount", 0u, *activeRayPixelCount);
+    }
+//Modify End
     if (shader.HasShaderResourceView("MotionVectorTexture"))
     {
         commandContext.SetShaderResourceView(shader, "MotionVectorTexture", ShaderResourceView(gbuffer.MotionVector));
     }
-//Modify End
     if (shader.HasShaderResourceView("Skybox"))
     {
         commandContext.SetShaderResourceView(shader, "Skybox", ShaderResourceView::EnvironmentTexture(resources.SkyboxTexture));
@@ -94,9 +103,7 @@ void RaytracingDemoPassBindings::BindInlinePathTracingInputs(
     }
     if (shader.HasShaderResourceView("BindlessTextures"))
     {
-//Modify Begin:2026-08-11 by Hui
         const std::vector<ShaderResourceView>& sceneTextures = resources.Scene.GetTextureShaderResourceViews();
-//Modify End
         commandContext.SetShaderResourceViews(shader, "BindlessTextures", sceneTextures);
     }
     resources.Lights.BindComputeResources(commandContext, shader);
@@ -106,7 +113,8 @@ void RaytracingDemoPassBindings::BindDxrPathTracingInputs(
     const RaytracingDemoPassResources& resources,
     RayTracingBindingSet& shader,
     const RaytracingDemoRenderGraph::FrameGBufferResources& gbuffer,
-    const RaytracingDemoCameraConstants& camera)
+    const RaytracingDemoCameraConstants& camera,
+    const StructuredBuffer* activeRayPixelIndices)
 {
     if (shader.HasBinding("GBufferTextures"))
     {
@@ -120,11 +128,16 @@ void RaytracingDemoPassBindings::BindDxrPathTracingInputs(
     {
         shader.SetTexture("DepthTexture", ShaderResourceView::DepthAsFloat(gbuffer.Depth));
     }
+//Modify Begin:2026-08-19 by Hui
+    if (shader.HasBinding("ActiveRayPixelIndices"))
+    {
+        Assert(activeRayPixelIndices != nullptr, "Compacted DXR path-tracing shader requires the active-pixel index buffer.");
+        shader.SetStructuredBuffer("ActiveRayPixelIndices", *activeRayPixelIndices);
+    }
+//Modify End
     if (shader.HasBinding("BindlessTextures"))
     {
-//Modify Begin:2026-08-11 by Hui
         shader.SetTextureArray("BindlessTextures", resources.Scene.GetTextureShaderResourceViews());
-//Modify End
     }
     resources.Lights.BindRayTracingResources(shader);
     if (shader.HasBinding("CameraConstants"))
@@ -194,4 +207,3 @@ ComputeShader& RaytracingDemoPassBindings::BindCompositeInputs(
     }
     return compositeShader;
 }
-//Modify End

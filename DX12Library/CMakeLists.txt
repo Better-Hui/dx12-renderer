@@ -3,7 +3,6 @@ cmake_minimum_required(VERSION 3.8.0)
 project("DX12Library")
 
 set(HEADER_FILES
-        include/d3dx12.h
         include/DX12Library/Application.h
         include/DX12Library/ApplicationResources.h
         include/DX12Library/Buffer.h
@@ -29,6 +28,7 @@ set(HEADER_FILES
         include/DX12Library/Game.h
         include/DX12Library/GenerateMipsPso.h
         include/DX12Library/GpuTimestampProfiler.h
+        include/DX12Library/GpuReadbackBuffer.h
         include/DX12Library/Helpers.h
         include/DX12Library/HighResolutionClock.h
         include/DX12Library/IndexBuffer.h
@@ -77,6 +77,7 @@ set(SOURCE_FILES
         src/FrameResourceRing.cpp
         src/GenerateMipsPso.cpp
         src/GpuTimestampProfiler.cpp
+        src/GpuReadbackBuffer.cpp
         src/HighResolutionClock.cpp
         src/IndexBuffer.cpp
         src/MipGenerator.cpp
@@ -127,12 +128,10 @@ set(EXT_LIBRARIES
 
 # Add source to this project's executable.
 add_library(${TARGET_NAME} STATIC ${HEADER_FILES} ${SOURCE_FILES} ${SHADER_FILES} ${SHADERS_HEADER_FILES})
-
-target_include_directories(${TARGET_NAME} BEFORE PUBLIC "${DX12_RENDERER_AGILITY_INCLUDE_DIRECTORY}")
 target_compile_definitions(${TARGET_NAME} PUBLIC NOMINMAX)
 
 if (DX12_RENDERER_ENABLE_D3D12_AGILITY)
-        target_compile_definitions(${TARGET_NAME} PUBLIC
+        target_compile_definitions(${TARGET_NAME} PRIVATE
                 DX12_RENDERER_ENABLE_D3D12_AGILITY=1
                 DX12_RENDERER_AGILITY_SDK_VERSION=${DX12_RENDERER_AGILITY_SDK_VERSION})
 endif()
@@ -149,5 +148,6 @@ target_include_directories(${TARGET_NAME}
         PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../WinPixEventRuntime/Include/WinPixEventRuntime/"
         )
 target_link_libraries(${TARGET_NAME}
+        PUBLIC DX12RendererAgilitySDK
         PUBLIC ${EXT_LIBRARIES}
         )

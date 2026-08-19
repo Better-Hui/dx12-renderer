@@ -103,7 +103,7 @@ bool CudaContext::InitializeForD3D12Device(ID3D12Device* d3d12Device, std::strin
         return false;
     }
 
-    //Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
     // CUDA 12.8+ exposes the current context creation entry point as cuCtxCreate_v4.
     result = cuCtxCreate_v4(&m_Context, nullptr, 0, device);
     //Modify End
@@ -293,7 +293,6 @@ bool CudaDx12InteropTexture::Import(
             return false;
         }
 
-//Modify Begin:2026-08-16 by Hui
         CUDA_TEXTURE_DESC linearTextureDesc = {};
         linearTextureDesc.addressMode[0] = CU_TR_ADDRESS_MODE_CLAMP;
         linearTextureDesc.addressMode[1] = CU_TR_ADDRESS_MODE_CLAMP;
@@ -341,7 +340,7 @@ void CudaDx12InteropTexture::Release(const CudaContext* context)
         cuTexObjectDestroy(m_TextureObject);
         m_TextureObject = 0;
     }
-//Modify Begin:2026-08-16 by Hui
+//Modify Begin:2026-08-19 by Hui
     if (m_LinearTextureObject != 0)
     {
         cuTexObjectDestroy(m_LinearTextureObject);
@@ -548,7 +547,7 @@ void CudaDeviceBufferPool::Release(const CudaContext* context)
     m_Capacities.clear();
 }
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
 CudaDeviceTexture2DPool::~CudaDeviceTexture2DPool()
 {
     Release();

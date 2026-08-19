@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include <d3d12.h>
-#include <d3dx12.h>
+#include <d3dx12/d3dx12.h>
 
 
 #include <wrl.h>
@@ -23,7 +23,7 @@ class RootSignature;
 class DynamicDescriptorHeap
 {
 public:
-//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-08-19 by Hui
 	DynamicDescriptorHeap(
 		Microsoft::WRL::ComPtr<ID3D12Device2> device,
 		D3D12_DESCRIPTOR_HEAP_TYPE heapType,
@@ -132,7 +132,7 @@ private:
 	//   * D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER
 	// This parameter also determines the type of GPU visible descriptor heap to create.
 	D3D12_DESCRIPTOR_HEAP_TYPE m_DescriptorHeapType;
-	//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-08-19 by Hui
 	Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;
 	//Modify End
 
@@ -156,3 +156,4 @@ private:
 
 	uint32_t m_NumFreeHandles;
 };
+//Modify End

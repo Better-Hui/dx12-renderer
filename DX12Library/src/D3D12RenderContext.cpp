@@ -9,17 +9,13 @@
 //Modify End
 #include <stdexcept>
 
-//Modify Begin:2026-07-28 by Hui
+//Modify Begin:2026-08-18 by Hui
 void D3D12RenderContext::InitializeOwned(Microsoft::WRL::ComPtr<ID3D12Device2> device)
 {
     Assert(device != nullptr, "D3D12 device is null.");
     m_Device = device;
-//Modify Begin:2026-07-30 by Hui
     m_ResourceStateRegistry = std::make_shared<ResourceStateRegistry>();
-//Modify End
-//Modify Begin:2026-08-07 by Hui
     CreateDeviceContext();
-//Modify End
     m_UsesExternalDevice = false;
     CreateOwnedQueues();
 }
@@ -28,12 +24,8 @@ void D3D12RenderContext::InitializeExternal(const ExternalD3D12Context& external
 {
     Assert(externalContext.Device != nullptr, "External D3D12 device is required.");
     ThrowIfFailed(externalContext.Device->QueryInterface(IID_PPV_ARGS(&m_Device)));
-//Modify Begin:2026-07-30 by Hui
     m_ResourceStateRegistry = std::make_shared<ResourceStateRegistry>();
-//Modify End
-//Modify Begin:2026-08-07 by Hui
     CreateDeviceContext();
-//Modify End
     m_UsesExternalDevice = true;
     WrapExternalQueues(externalContext);
 }
@@ -54,12 +46,10 @@ Microsoft::WRL::ComPtr<ID3D12Device2> D3D12RenderContext::GetDevice() const
     return m_Device;
 }
 
-//Modify Begin:2026-08-07 by Hui
 std::shared_ptr<D3D12DeviceContext> D3D12RenderContext::GetD3D12DeviceContext() const
 {
     return m_DeviceContext;
 }
-//Modify End
 
 std::shared_ptr<CommandQueue> D3D12RenderContext::GetCommandQueue(const D3D12_COMMAND_LIST_TYPE type) const
 {
@@ -72,25 +62,20 @@ std::shared_ptr<CommandQueue> D3D12RenderContext::GetCommandQueue(const D3D12_CO
     case D3D12_COMMAND_LIST_TYPE_COPY:
         return m_CopyCommandQueue;
     default:
-//Modify Begin:2026-07-30 by Hui
         throw std::invalid_argument("Invalid D3D12 command queue type.");
-//Modify End
     }
 }
 
-//Modify Begin:2026-07-30 by Hui
 std::shared_ptr<ResourceStateRegistry> D3D12RenderContext::GetResourceStateRegistry() const
 {
     return m_ResourceStateRegistry;
 }
-//Modify End
 
 D3D12RenderContext::~D3D12RenderContext()
 {
     Reset();
 }
 
-//Modify Begin:2026-08-18 by Hui
 void D3D12RenderContext::Reset()
 {
     m_DirectCommandQueue.reset();
@@ -101,9 +86,7 @@ void D3D12RenderContext::Reset()
     m_Device.Reset();
     m_UsesExternalDevice = false;
 }
-//Modify End
 
-//Modify Begin:2026-08-07 by Hui
 void D3D12RenderContext::CreateDeviceContext()
 {
     D3D12DeviceContextDesc deviceContextDesc;
@@ -111,33 +94,27 @@ void D3D12RenderContext::CreateDeviceContext()
     deviceContextDesc.ResourceStateRegistry = m_ResourceStateRegistry;
     m_DeviceContext = std::make_shared<D3D12DeviceContext>(std::move(deviceContextDesc));
 }
-//Modify End
 
-//Modify Begin:2026-08-07 by Hui
 void D3D12RenderContext::SetFatalErrorHandler(CommandQueueFailureHandler handler)
 {
     m_DirectCommandQueue->SetFatalErrorHandler(handler);
     m_ComputeCommandQueue->SetFatalErrorHandler(handler);
     m_CopyCommandQueue->SetFatalErrorHandler(std::move(handler));
 }
-//Modify End
 
 void D3D12RenderContext::CreateOwnedQueues()
 {
-//Modify Begin:2026-08-07 by Hui
     m_DirectCommandQueue = std::make_shared<CommandQueue>(
         D3D12_COMMAND_LIST_TYPE_DIRECT, m_DeviceContext);
     m_ComputeCommandQueue = std::make_shared<CommandQueue>(
         D3D12_COMMAND_LIST_TYPE_COMPUTE, m_DeviceContext);
     m_CopyCommandQueue = std::make_shared<CommandQueue>(
         D3D12_COMMAND_LIST_TYPE_COPY, m_DeviceContext);
-//Modify End
 }
 
 void D3D12RenderContext::WrapExternalQueues(const ExternalD3D12Context& externalContext)
 {
     m_DirectCommandQueue = externalContext.DirectCommandQueue != nullptr
-//Modify Begin:2026-08-07 by Hui
         ? std::make_shared<CommandQueue>(
             D3D12_COMMAND_LIST_TYPE_DIRECT,
             m_DeviceContext,
@@ -158,7 +135,6 @@ void D3D12RenderContext::WrapExternalQueues(const ExternalD3D12Context& external
             externalContext.CopyCommandQueue)
         : std::make_shared<CommandQueue>(
             D3D12_COMMAND_LIST_TYPE_COPY, m_DeviceContext);
-//Modify End
 }
 
 //Modify End

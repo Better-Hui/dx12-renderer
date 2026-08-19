@@ -1,9 +1,9 @@
 #include <Framework/Rendering/Pipeline/SharedUploadBuffer.h>
 
-#include <d3dx12.h>
+#include <d3dx12/d3dx12.h>
 
 #include <DX12Library/Helpers.h>
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
 //Modify End
 
@@ -23,7 +23,7 @@ void SharedUploadBuffer::Upload(CommandList& commandList, const Resource& destin
     uint8_t* pUploadPtr = SuballocateFromBuffer(bufferInfo, sizeInBytes, alignment);
     memcpy(pUploadPtr, pData, sizeInBytes);
 
-    //Modify Begin:2026-08-12 by Hui
+//Modify Begin:2026-08-19 by Hui
     commandList.CopyBufferRegion(
         destination,
         destinationOffset,
@@ -32,6 +32,7 @@ void SharedUploadBuffer::Upload(CommandList& commandList, const Resource& destin
         sizeInBytes);
     //Modify End
 }
+//Modify End
 
 SharedUploadBuffer::BufferInfo& SharedUploadBuffer::GetBufferInfoForFrame(const uint64_t frameCount)
 {

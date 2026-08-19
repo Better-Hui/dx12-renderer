@@ -1,13 +1,9 @@
 #pragma once
-//Modify Begin:2026-07-21 by Hui
+//Modify Begin:2026-07-30 by Hui
 
 #include <Framework/Rendering/RayTracing/RayTracingAccelerationStructure.h>
-//Modify Begin:2026-07-27 by Hui
 #include <Framework/Core/FrameworkDeprecated.h>
-//Modify End
-//Modify Begin:2026-07-30 by Hui
 #include <Framework/Rendering/Pipeline/PipelineLayout.h>
-//Modify End
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <Framework/Rendering/Texture/UnorderedAccessView.h>
 
@@ -23,9 +19,7 @@
 
 class CommandList;
 class PipelineDescriptorSet;
-//Modify Begin:2026-07-29 by Hui
 class PipelineDescriptorPool;
-//Modify End
 class CommandContext;
 class RayTracingPipelineState;
 class ShaderBlob;
@@ -33,9 +27,7 @@ class StructuredBuffer;
 class Texture;
 class Resource;
 class RayTracingShader;
-//Modify Begin:2026-07-30 by Hui
 class FrameworkDeviceContext;
-//Modify End
 
 enum class RayTracingShaderBindingType
 {
@@ -53,10 +45,8 @@ struct RayTracingShaderBindingDesc
     uint32_t ShaderRegister = 0;
     uint32_t RegisterSpace = 0;
     uint32_t DescriptorCount = 1;
-    //Modify Begin:2026-07-24 by Hui
     D3D12_UNORDERED_ACCESS_VIEW_DESC NullUnorderedAccessViewDesc = {};
     bool HasNullUnorderedAccessViewDesc = false;
-    //Modify End
 };
 
 struct RayTracingHitGroupDesc
@@ -87,9 +77,7 @@ struct RayTracingPipelineDesc
     std::vector<std::wstring> Exports;
     std::vector<RayTracingHitGroupDesc> HitGroups;
     std::vector<RayTracingShaderBindingDesc> Bindings;
-//Modify Begin:2026-07-30 by Hui
     std::vector<PipelineRootSamplerDesc> RootSamplers;
-//Modify End
     std::vector<RayTracingShaderPassDesc> Passes;
     uint32_t PayloadSizeInBytes = sizeof(float) * 8;
     uint32_t AttributeSizeInBytes = sizeof(float) * 2;
@@ -97,7 +85,6 @@ struct RayTracingPipelineDesc
     uint32_t MaxDescriptorCount = 2048;
 };
 
-//Modify Begin:2026-07-23 by Hui
 class RayTracingPipelineDescBuilder
 {
 public:
@@ -123,9 +110,7 @@ public:
     RayTracingPipelineDescBuilder& WithConstantBuffer(std::string name, uint32_t shaderRegister, uint32_t registerSpace = 0);
     RayTracingPipelineDescBuilder& WithStructuredBuffer(std::string name, uint32_t shaderRegister, uint32_t registerSpace = 0);
     RayTracingPipelineDescBuilder& WithTextureArray(std::string name, uint32_t shaderRegister, uint32_t registerSpace, uint32_t descriptorCount);
-//Modify Begin:2026-07-30 by Hui
     RayTracingPipelineDescBuilder& WithStaticSamplerContract(PipelineStaticSamplerContract contract);
-//Modify End
 
     RayTracingPipelineDescBuilder& WithPayloadSize(uint32_t payloadSizeInBytes);
     RayTracingPipelineDescBuilder& WithAttributeSize(uint32_t attributeSizeInBytes);
@@ -143,13 +128,9 @@ private:
         uint32_t descriptorCount);
 
     RayTracingPipelineDesc m_Desc;
-//Modify Begin:2026-07-30 by Hui
     std::vector<std::pair<uint32_t, uint32_t>> m_ReflectedStaticSamplerCoordinates;
-//Modify End
 };
-//Modify End
 
-//Modify Begin:2026-07-24 by Hui
 class RayTracingBindingSet
 {
 public:
@@ -181,18 +162,15 @@ public:
     void SetTextureArray(std::string_view name, const std::vector<ShaderResourceView>& shaderResourceViews);
 
 private:
-//Modify Begin:2026-07-29 by Hui
     friend class CommandContext;
     const RayTracingShader& GetShader() const;
     const PipelineDescriptorSet& GetDescriptorSet() const;
     const PipelineDescriptorPool& GetDescriptorPool() const;
-//Modify End
     struct Impl;
     Impl& GetImpl();
     const Impl& GetImpl() const;
     std::unique_ptr<Impl> m_Impl;
 };
-//Modify End
 
 class RayTracingShader
 {
@@ -209,27 +187,22 @@ public:
     RayTracingShader& operator=(RayTracingShader&&) noexcept;
 
     static bool IsSupported(const FrameworkDeviceContext& deviceContext);
+    static bool SupportsIndirectDispatch(const FrameworkDeviceContext& deviceContext);
 
     const RayTracingPipelineDesc& GetDesc() const;
     const PipelineLayout& GetPipelineLayout() const;
-    //Modify Begin:2026-07-24 by Hui
     RayTracingBindingSet CreateBindingSet() const;
-    //Modify End
 
     bool HasBinding(std::string_view name) const;
 
 private:
-//Modify Begin:2026-07-29 by Hui
     friend class CommandContext;
     FrameworkDeviceContext& GetDeviceContext() const;
     const RayTracingPipelineState& GetPipelineState() const;
     void PrepareDispatch(std::string_view passName) const;
     D3D12_DISPATCH_RAYS_DESC BuildDispatchDesc(std::string_view passName, uint32_t width, uint32_t height, uint32_t depth) const;
     D3D12_DISPATCH_RAYS_DESC BuildDispatchDesc(uint32_t width, uint32_t height, uint32_t depth) const;
-//Modify End
-    //Modify Begin:2026-07-24 by Hui
     friend class RayTracingBindingSet;
-    //Modify End
     struct Impl;
     std::unique_ptr<Impl> m_Impl;
 };

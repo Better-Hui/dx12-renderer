@@ -10,7 +10,7 @@ float3 DecodeNormal(float3 encoded)
     return normalize(encoded * 2.0f - 1.0f);
 }
 
-//Modify Begin:2026-08-06 by Hui
+//Modify Begin:2026-08-12 by Hui
 SurfaceData LoadGBufferSurface(uint2 pixel)
 {
     SurfaceData surface;
@@ -40,9 +40,7 @@ SurfaceData LoadGBufferSurface(uint2 pixel)
     surface.Specular = saturate(specularSmoothness.rgb);
     surface.Roughness = 1.0f - saturate(specularSmoothness.a);
     surface.PositionWs = position.xyz;
-//Modify Begin:2026-08-12 by Hui
     surface.NormalWs = DecodeNormal(normal.xyz);
-//Modify End
     surface.PositionError = ComputePositionError(surface.PositionWs);
     surface.Metallic = saturate(emissionMetallic.a);
     surface.AmbientOcclusion = saturate(albedoOcclusion.a);
@@ -51,3 +49,4 @@ SurfaceData LoadGBufferSurface(uint2 pixel)
 }
 
 #endif
+//Modify End

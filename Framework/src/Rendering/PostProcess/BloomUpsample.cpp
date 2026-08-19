@@ -28,7 +28,7 @@ namespace
 	}
 }
 
-//Modify Begin:2026-08-17 by Hui
+//Modify Begin:2026-08-19 by Hui
 BloomUpsample::BloomUpsample(FrameworkDeviceContext& deviceContext, CommandList& commandList)
 	: m_BlitMesh(Mesh::CreateBlitTriangle(commandList))
 {
@@ -78,13 +78,12 @@ void BloomUpsample::Execute(CommandList& commandList, const BloomParameters& par
 	parametersCb.TexelSize = { 0.5f / fSourceWidth , 0.5f / fSourceHeight }; // 0.5 is for more focused blur
 	m_UpsampleMaterial->SetAllVariables(parametersCb);
 
-	//Modify Begin:2026-08-17 by Hui
+//Modify Begin:2026-08-19 by Hui
 	m_UpsampleMaterial->Bind(commandList);
 	//Modify End
 	m_BlitMesh->Draw(commandList);
 }
 
-//Modify Begin:2026-08-17 by Hui
 void BloomUpsample::ExecuteComposite(
 	CommandList& commandList,
 	const BloomParameters& parameters,

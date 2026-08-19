@@ -26,18 +26,16 @@ BloomPrefilter::BloomPrefilter(FrameworkDeviceContext& deviceContext, CommandLis
 //Modify End
 	: m_BlitMesh(Mesh::CreateBlitTriangle(commandList))
 {
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-07-30 by Hui
 	auto shader = std::make_shared<Shader>(
 		deviceContext,
 		ShaderBlob(ShaderBytecode_Blit_VS, sizeof ShaderBytecode_Blit_VS),
 		ShaderBlob(ShaderBytecode_Bloom_Prefilter_PS, sizeof ShaderBytecode_Bloom_Prefilter_PS),
-//Modify Begin:2026-07-30 by Hui
         PipelineLayoutReflectionOptions{
             .StaticSamplerContracts = { PipelineStaticSamplers::LinearClamp(3u) },
             .MaxDescriptorCount = 4096u,
             .ShaderStages = PipelineShaderStageFlags::AllGraphics
         }
-//Modify End
 		);
 //Modify End
 	m_Material = Material::Create(shader);

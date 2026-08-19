@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-18 by Hui
 #pragma once
 
 #include <d3d12.h>
@@ -26,48 +26,36 @@ namespace RenderGraph
         bool InsertUavBarrier = false;
     };
 
-//Modify Begin:2026-08-13 by Hui
     struct PassExternalResourceTransition
     {
         const Resource* Resource = nullptr;
         D3D12_RESOURCE_STATES StateAfter = D3D12_RESOURCE_STATE_COMMON;
         bool InsertUavBarrier = false;
     };
-//Modify End
 
     struct PassResourceStatePlan
     {
         std::vector<PassResourceTransition> InputTransitions;
-//Modify Begin:2026-08-13 by Hui
         std::vector<PassExternalResourceTransition> ExternalResourceTransitions;
-//Modify End
         std::vector<ResourceId> AliasingOutputs;
         std::vector<PassResourceTransition> OutputTransitions;
         std::vector<ResourceId> InitOutputs;
 
-        //Modify Begin:2026-08-07 by Hui
-        //Modify Begin:2026-08-18 by Hui
         struct NonDirectQueuePreamble
         {
             std::vector<PassResourceTransition> CrossQueueInputTransitions;
-//Modify Begin:2026-08-13 by Hui
             std::vector<PassExternalResourceTransition> ExternalResourceTransitions;
-//Modify End
             std::vector<ResourceId> AliasingOutputs;
             std::vector<PassResourceTransition> OutputTransitions;
         };
 
         std::optional<NonDirectQueuePreamble> DirectPreamble;
-        //Modify End
-        //Modify End
     };
 
     struct RenderGraphRecordingBatch
     {
         std::vector<RenderPass*> Passes;
-        //Modify Begin:2026-08-18 by Hui
         RenderPassQueue Queue = RenderPassQueue::Direct;
-        //Modify End
         bool RecordInParallel = false;
     };
 

@@ -11,9 +11,7 @@
 #define ReSTIRDI_LightSample PathTracingDirectLightSample
 #define ReSTIRDI_LoadSurface LoadGBufferSurface
 #define ReSTIRDI_GetLightCount GetReSTIRDILightCount
-//Modify Begin:2026-08-06 by Hui
 #define ReSTIRDI_SampleLightIndex SamplePathTracingDirectLightIndex
-//Modify End
 #define ReSTIRDI_SampleLight SamplePathTracingDirectLight
 #define ReSTIRDI_TestVisibility IsPathTracingDirectLightSampleVisible
 #define ReSTIRDI_Luminance Luminance

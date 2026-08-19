@@ -1,7 +1,7 @@
 #ifndef FRAMEWORK_MATERIAL_EVALUATION_HLSLI
 #define FRAMEWORK_MATERIAL_EVALUATION_HLSLI
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-12 by Hui
 #ifndef FRAMEWORK_MATERIAL_SHADING_MODEL
 #define FRAMEWORK_MATERIAL_SHADING_MODEL 0
 #endif
@@ -157,7 +157,6 @@ float3 FrameworkEvaluateMaterialLighting(
         radiance * normalDotLight * surface.AmbientOcclusion;
 }
 
-//Modify Begin:2026-08-12 by Hui
 float FrameworkMaterialLuminance(const float3 value)
 {
     return dot(value, float3(0.2126f, 0.7152f, 0.0722f));
@@ -299,7 +298,6 @@ bool FrameworkSamplePbrDirection(
     sampleWeight = min(sampleWeight, 16.0f);
     return FrameworkMaterialMaxComponent(sampleWeight) > 0.0f;
 }
-//Modify End
 //Modify End
 
 #endif

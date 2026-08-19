@@ -1,7 +1,10 @@
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-08-19 by Hui
 #pragma once
 
+#include <DX12Library/GpuReadbackBuffer.h>
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
+#include <Framework/Rendering/Pipeline/IndirectCommandBuffer.h>
+#include <Framework/Rendering/Pipeline/IndirectCommandSignature.h>
 #include <Framework/Rendering/Lighting/MaterialShadingModel.h>
 #include <Framework/Rendering/RayTracing/RayTracingShader.h>
 #include <Framework/Rendering/Pipeline/ShaderVariant.h>
@@ -10,12 +13,14 @@
 #include <cstdint>
 #include <deque>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 
+class CommandList;
+class CommandQueue;
 class RayTracingAccelerationStructure;
-//Modify Begin:2026-07-30 by Hui
 class FrameworkDeviceContext;
-//Modify End
+class Resource;
 class SceneLightManager;
 class Texture;
 class RaytracingDemoSceneResources;
@@ -26,13 +31,17 @@ enum class PathTracingBackend
     ShaderTableDxr = 1,
 };
 
-//Modify Begin:2026-07-30 by Hui
+enum class PathTracingDispatchMode : uint32_t
+{
+    FullResolution = 0,
+    CompactedIndirect = 1,
+};
+
 enum class PathTracingShadowMode
 {
     HardShadows = 0,
     SoftShadows = 1,
 };
-//Modify End
 
 struct RayTracingSceneResourceLayout
 {
@@ -40,9 +49,7 @@ struct RayTracingSceneResourceLayout
 
     uint32_t TextureDescriptorCapacity = MinDescriptorArrayCapacity;
     uint32_t GeometryDescriptorCapacity = MinDescriptorArrayCapacity;
-//Modify Begin:2026-08-06 by Hui
     EnvironmentTextureProjection EnvironmentProjection = EnvironmentTextureProjection::Cubemap;
-//Modify End
 
     bool operator!=(const RayTracingSceneResourceLayout& other) const
     {
@@ -61,47 +68,62 @@ struct PathTracingCompositeFeatures
     bool UseNrdReblur = false;
 };
 
+struct PathTracingIndirectDispatch
+{
+    const IndirectCommandSignature& Signature;
+    Resource& Arguments;
+};
+
 class PathTracingPipelineController final
 {
 public:
-    explicit PathTracingPipelineController(FrameworkDeviceContext& deviceContext)
-        : m_DeviceContext(deviceContext)
-    {
-    }
+    explicit PathTracingPipelineController(FrameworkDeviceContext& deviceContext);
 
     void Reset();
-    //Modify Begin:2026-07-30 by Hui
     void EnsurePipelines(
         PathTracingBackend backend,
         PathTracingShadowMode shadowMode,
         MaterialShadingModel shadingModel,
         const RayTracingSceneResourceLayout& layout,
-        uint32_t maxPathBounces);
-    //Modify End
+        uint32_t maxPathBounces,
+        PathTracingDispatchMode dispatchMode);
     void BindRayTracingResources(
         const RayTracingAccelerationStructure& accelerationStructure,
         const RaytracingDemoSceneResources& sceneResources,
         SceneLightManager& lights,
         const std::shared_ptr<Texture>& skyboxTexture);
+    void PrepareDxrCompactedDispatchTemplate(
+        CommandList& commandList,
+        uint32_t width,
+        uint32_t height,
+        bool directLighting);
+    PathTracingIndirectDispatch GetCompactedIndirectDispatch(
+        PathTracingBackend backend,
+        bool directLighting) const;
+    void BeginActiveRayCountReadback();
+    void RecordActiveRayCountReadback(CommandList& commandList, const Resource& activeRayPixelCount);
+    void EndActiveRayCountReadback(uint64_t submittedFenceValue);
+    void CancelActiveRayCountReadback();
+    void CollectActiveRayCountReadback(CommandQueue& commandQueue);
+    std::optional<uint32_t> GetLatestActiveRayCount() const { return m_LatestActiveRayCount; }
 
     PathTracingBackend GetBackend() const { return m_Backend; }
-    //Modify Begin:2026-07-30 by Hui
+    PathTracingDispatchMode GetDispatchMode() const { return m_DispatchMode; }
     PathTracingShadowMode GetShadowMode() const { return m_ShadowMode; }
     MaterialShadingModel GetMaterialShadingModel() const { return m_MaterialShadingModel; }
-    //Modify End
     ComputeShader& GetInlineDirectLightingShader() const;
     ComputeShader& GetInlineIndirectLightingShader() const;
+    ComputeShader& GetActivePixelCompactionShader() const;
+    ComputeShader& GetInlineCompactedDispatchFinalizeShader() const;
+    ComputeShader& GetDxrCompactedDispatchFinalizeShader() const;
     ComputeShader& GetLightingCompositeShader(const PathTracingCompositeFeatures& features);
-//Modify Begin:2026-07-30 by Hui
     RayTracingShader& GetRayTracingShader() const;
-//Modify End
     RayTracingBindingSet& GetDirectRayTracingBindingSet() const;
     RayTracingBindingSet& GetIndirectRayTracingBindingSet() const;
     bool HasDxrBindingSets() const;
     const RayTracingSceneResourceLayout& GetLayout() const { return m_Layout; }
 
 private:
-//Modify Begin:2026-07-27 by Hui
     struct RetiredPipelines
     {
         uint64_t DirectFenceValue = 0;
@@ -111,12 +133,14 @@ private:
         std::unique_ptr<RayTracingBindingSet> IndirectRayTracingBindingSet;
         std::unique_ptr<ComputeShader> InlineDirectLightingShader;
         std::unique_ptr<ComputeShader> InlineIndirectLightingShader;
+        std::unique_ptr<ComputeShader> ActivePixelCompactionShader;
+        std::unique_ptr<ComputeShader> InlineCompactedDispatchFinalizeShader;
+        std::unique_ptr<ComputeShader> DxrCompactedDispatchFinalizeShader;
         std::unordered_map<uint32_t, std::unique_ptr<ComputeShader>> LightingCompositeShaders;
     };
 
     void RetireCurrentPipelines();
     void ReleaseExpiredRetiredPipelines();
-//Modify End
     std::shared_ptr<ShaderBlob> LoadShader(
         std::wstring compiledFileName,
         std::wstring sourceFileName,
@@ -126,16 +150,17 @@ private:
     static uint32_t GetLightingCompositeVariantKey(const PathTracingCompositeFeatures& features);
     void CreateInlinePipelines(const RayTracingSceneResourceLayout& layout);
     void CreateDxrPipeline(const RayTracingSceneResourceLayout& layout);
+    void CreateCompactedDispatchPipelines();
+    void CreateComputeIndirectDispatchResources();
+    void EnsureRayTracingIndirectDispatchResources();
+    void EnsureActiveRayCountReadbackResources();
 
     FrameworkDeviceContext& m_DeviceContext;
     ShaderVariantManager m_ShaderVariants;
     PathTracingBackend m_Backend = PathTracingBackend::InlineRayQuery;
-//Modify Begin:2026-07-30 by Hui
+    PathTracingDispatchMode m_DispatchMode = PathTracingDispatchMode::FullResolution;
     PathTracingShadowMode m_ShadowMode = PathTracingShadowMode::HardShadows;
-//Modify End
-//Modify Begin:2026-07-30 by Hui
     MaterialShadingModel m_MaterialShadingModel = MaterialShadingModel::Pbr;
-//Modify End
     uint32_t m_MaxPathBounces = 3u;
     RayTracingSceneResourceLayout m_Layout;
     std::unique_ptr<RayTracingShader> m_RayTracingShader;
@@ -143,9 +168,17 @@ private:
     std::unique_ptr<RayTracingBindingSet> m_IndirectRayTracingBindingSet;
     std::unique_ptr<ComputeShader> m_InlineDirectLightingShader;
     std::unique_ptr<ComputeShader> m_InlineIndirectLightingShader;
+    std::unique_ptr<ComputeShader> m_ActivePixelCompactionShader;
+    std::unique_ptr<ComputeShader> m_InlineCompactedDispatchFinalizeShader;
+    std::unique_ptr<ComputeShader> m_DxrCompactedDispatchFinalizeShader;
+    std::unique_ptr<IndirectCommandSignature> m_ComputeIndirectCommandSignature;
+    std::unique_ptr<IndirectCommandSignature> m_RayTracingIndirectCommandSignature;
+    std::unique_ptr<IndirectCommandBuffer> m_ComputeIndirectArguments;
+    std::unique_ptr<IndirectCommandBuffer> m_DirectRayTracingIndirectArguments;
+    std::unique_ptr<IndirectCommandBuffer> m_IndirectRayTracingIndirectArguments;
+    GpuReadbackBuffer m_ActiveRayCountReadback;
+    std::optional<uint32_t> m_LatestActiveRayCount;
     std::unordered_map<uint32_t, std::unique_ptr<ComputeShader>> m_LightingCompositeShaders;
-//Modify Begin:2026-07-27 by Hui
     std::deque<RetiredPipelines> m_RetiredPipelines;
-//Modify End
 };
 //Modify End

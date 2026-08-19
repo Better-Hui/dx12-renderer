@@ -27,18 +27,14 @@ cbuffer ReSTIRGIConstants : register(b1)
     uint ReSTIRGI_FrameIndex;
     uint ReSTIRGI_HistoryValid;
 
-//Modify Begin:2026-07-30 by Hui
     uint ReSTIRGI_InitialCandidateCount;
-//Modify End
     uint ReSTIRGI_TemporalMaxHistoryLength;
     uint ReSTIRGI_SpatialMaxHistoryLength;
     uint ReSTIRGI_MaxSampleAge;
     uint ReSTIRGI_SpatialNeighborCount;
-//Modify Begin:2026-07-30 by Hui
     uint ReSTIRGI_PaddingUint;
     uint ReSTIRGI_PaddingUint1;
     uint ReSTIRGI_PaddingUint2;
-//Modify End
 
     float ReSTIRGI_TemporalNormalSimilarityThreshold;
     float ReSTIRGI_TemporalPositionSimilarityThreshold;
@@ -48,9 +44,7 @@ cbuffer ReSTIRGIConstants : register(b1)
     float ReSTIRGI_SpatialSamplingRadius;
     float ReSTIRGI_MaxJacobian;
     float ReSTIRGI_MaxSpatialWeight;
-//Modify Begin:2026-07-30 by Hui
     float ReSTIRGI_PaddingFloat;
-//Modify End
 };
 //Modify End
 

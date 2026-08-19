@@ -4,9 +4,9 @@
 #include <DX12Library/Texture.h>
 #include <DX12Library/TextureUsageType.h>
 
-#include <d3dx12.h>
+#include <d3dx12/d3dx12.h>
 
-//Modify Begin:2026-07-23 by Hui
+//Modify Begin:2026-08-12 by Hui
 std::shared_ptr<Texture> RenderTexture::Create2D(
     const FrameworkDeviceContext& deviceContext,
     DXGI_FORMAT format,
@@ -27,14 +27,12 @@ std::shared_ptr<Texture> RenderTexture::Create2D(
         0,
         flags);
 
-//Modify Begin:2026-08-12 by Hui
     return std::make_shared<Texture>(
         desc,
         nullptr,
         TextureUsageType::Other,
         name,
         deviceContext.GetD3D12DeviceContext());
-//Modify End
 }
 
 std::shared_ptr<Texture> RenderTexture::CreateUav2D(

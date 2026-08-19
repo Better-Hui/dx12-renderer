@@ -44,6 +44,10 @@ namespace RaytracingDemoRenderGraph
         static inline const RenderGraph::ResourceId MotionVector = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.MotionVector");
         static inline const RenderGraph::ResourceId DirectLighting = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DirectLighting");
         static inline const RenderGraph::ResourceId IndirectLighting = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.IndirectLighting");
+//Modify Begin:2026-08-19 by Hui
+        static inline const RenderGraph::ResourceId ActiveRayPixelIndices = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ActiveRayPixelIndices");
+        static inline const RenderGraph::ResourceId ActiveRayPixelCount = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ActiveRayPixelCount");
+//Modify End
         static inline const RenderGraph::ResourceId SceneColor = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.SceneColor");
 //Modify Begin:2026-08-17 by Hui
         static inline const RenderGraph::ResourceId BloomOutput = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.BloomOutput");
@@ -63,6 +67,16 @@ namespace RaytracingDemoRenderGraph
         static inline const RenderGraph::ResourceId DepthBuffer = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DepthBuffer");
 
         static inline const RenderGraph::ResourceId BaseResourcesFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.BaseResourcesFinished");
+        static inline const RenderGraph::ResourceId SceneResourcesReadyToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.SceneResourcesReady");
+        static inline const RenderGraph::ResourceId MeshletCounterResetToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.MeshletCounterReset");
+        static inline const RenderGraph::ResourceId MeshletCullFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.MeshletCullFinished");
+        static inline const RenderGraph::ResourceId DirectLightingIndirectArgumentsReadyToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DirectLightingIndirectArgumentsReady");
+        static inline const RenderGraph::ResourceId IndirectLightingIndirectArgumentsReadyToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.IndirectLightingIndirectArgumentsReady");
+//Modify Begin:2026-08-19 by Hui
+        static inline const RenderGraph::ResourceId ActiveRayPixelCompactionFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ActiveRayPixelCompactionFinished");
+        static inline const RenderGraph::ResourceId ActiveRayPixelCountReadbackFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ActiveRayPixelCountReadbackFinished");
+        static inline const RenderGraph::ResourceId DxrCompactedDispatchTemplateFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DxrCompactedDispatchTemplateFinished");
+//Modify End
         static inline const RenderGraph::ResourceId SkyboxFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.SkyboxFinished");
         static inline const RenderGraph::ResourceId DirectLightingFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DirectLightingFinished");
         static inline const RenderGraph::ResourceId IndirectLightingFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.IndirectLightingFinished");
@@ -115,8 +129,11 @@ namespace RaytracingDemoRenderGraph
         bool includeRayReconstruction,
         bool includeFrameworkBloom);
 //Modify End
-    std::vector<RenderGraph::BufferDescription> CreateBufferDescriptions();
+    std::vector<RenderGraph::BufferDescription> CreateBufferDescriptions(bool includeCompactedPathTracing);
 //Modify Begin:2026-08-07 by Hui
-    std::vector<RenderGraph::TokenDescription> CreateTokenDescriptions(bool includeDLSS, bool includeFrameGeneration);
+    std::vector<RenderGraph::TokenDescription> CreateTokenDescriptions(
+        bool includeDLSS,
+        bool includeFrameGeneration,
+        bool includeCompactedPathTracing);
 //Modify End
 }

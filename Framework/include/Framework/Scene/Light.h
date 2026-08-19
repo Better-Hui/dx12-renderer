@@ -36,7 +36,7 @@ struct PointLight
 	float LinearAttenuation = 0.22f;
 	float QuadraticAttenuation = 0.2f;
 	float Range = 20.0f;
-	//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
 	float SourceRadius = 0.25f;
 	//Modify End
 
@@ -102,7 +102,6 @@ struct CapsuleLight
 	float _Padding[3]{};
 };
 
-//Modify Begin:2026-07-30 by Hui
 struct AreaLight
 {
 	DirectX::XMFLOAT4 PositionWs = { 0, 0, 0, 1 };

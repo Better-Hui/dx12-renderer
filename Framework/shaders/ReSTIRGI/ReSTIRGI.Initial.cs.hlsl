@@ -23,7 +23,6 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     const ReSTIRGI_Surface surface = ReSTIRGI_LoadSurface(pixel);
     if (surface.Valid)
     {
-//Modify Begin:2026-07-30 by Hui
         float weightSum = 0.0f;
         const uint candidateCount = max(1u, ReSTIRGI_InitialCandidateCount);
         [loop]
@@ -74,7 +73,6 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
             ? weightSum / (float(candidateM) * selectedTarget)
             : 0.0f;
         ReSTIRGISetAge(reservoir, 0u);
-//Modify End
     }
 
     ReSTIRGIWriteReservoir(

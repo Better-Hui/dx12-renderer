@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-18 by Hui
 #pragma once
 
 #include "RenderGraphExecutionPlan.h"
@@ -8,9 +8,7 @@
 
 #include <map>
 #include <memory>
-//Modify Begin:2026-08-12 by Hui
 #include <span>
-//Modify End
 #include <vector>
 
 class CommandList;
@@ -48,18 +46,15 @@ namespace RenderGraph
             RenderContext& context,
             const std::map<const RenderPass*, RenderTargetInfo>& renderTargets,
             const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
-//Modify Begin:2026-07-30 by Hui
         void ExecuteParallelDirectBatch(
             const RenderGraphRecordingBatch& batch,
             const RenderMetadata& renderMetadata,
             std::shared_ptr<CommandList>& directCommandList,
             const std::map<const RenderPass*, RenderTargetInfo>& renderTargets,
             const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
-//Modify End
         void PrepareDirectQueueDependencies(
             std::span<RenderPass* const> passes,
             std::shared_ptr<CommandList>& directCommandList);
-//Modify Begin:2026-08-18 by Hui
         void ExecuteNonDirectBatch(
             const RenderGraphRecordingBatch& batch,
             const RenderMetadata& renderMetadata,
@@ -77,12 +72,9 @@ namespace RenderGraph
             CommandList& commandList,
             const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
         CommandQueue& GetCommandQueue(RenderPassQueue queue) const;
-//Modify End
-//Modify Begin:2026-08-13 by Hui
         static void ApplyExternalResourceTransitions(
             CommandList& commandList,
             std::span<const PassExternalResourceTransition> transitions);
-//Modify End
 
         std::shared_ptr<CommandQueue> m_DirectCommandQueue;
         std::shared_ptr<CommandQueue> m_AsyncComputeCommandQueue;
@@ -90,9 +82,7 @@ namespace RenderGraph
         std::shared_ptr<ResourcePool> m_ResourcePool;
         RenderGraphQueueScheduler& m_QueueScheduler;
         RenderGraphProfiler& m_Profiler;
-//Modify Begin:2026-08-07 by Hui
         RenderGraphTaskScheduler m_ParallelRecordingTaskScheduler;
-//Modify End
     };
 }
 //Modify End

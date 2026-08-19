@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-28 by Hui
+//Modify Begin:2026-08-18 by Hui
 #include <RaytracingDemo.h>
 
 #include <DX12Library/CommandList.h>
@@ -7,21 +7,16 @@
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <Passes/RaytracingDemoPasses.h>
 #include <RenderGraph/RaytracingDemoGraphResources.h>
-//Modify Begin:2026-08-07 by Hui
 #include <RenderGraph/ExternalFrameProcessor.h>
-//Modify End
 #include <RenderGraph/RenderContext.h>
 #include <RenderGraph/RenderGraphBuilder.h>
 #include <RenderGraph/RenderMetadata.h>
 
 #include <array>
-//Modify Begin:2026-08-07 by Hui
 #include <span>
-//Modify End
 
 namespace
 {
-//Modify Begin:2026-08-18 by Hui
     struct CudaBloomPassData
     {
         RaytracingDemoPassResourcesSnapshot Resources;
@@ -37,9 +32,7 @@ namespace
         RaytracingDemoPassResourcesSnapshot Resources;
         RenderGraph::ResourceId SceneColor = 0;
     };
-//Modify End
 
-//Modify Begin:2026-08-07 by Hui
     class DLSSFrameGenerationProcessor final : public RenderGraph::ExternalFrameProcessor
     {
     public:
@@ -79,7 +72,6 @@ namespace
             RaytracingDemoRenderGraph::ResourceIds::MotionVector,
         };
     };
-//Modify End
 }
 
 void RaytracingDemoPasses::Builder::AddCudaBloomPass(
@@ -110,7 +102,6 @@ void RaytracingDemoPasses::Builder::AddCudaBloomPass(
         });
 }
 
-//Modify Begin:2026-08-16 by Hui
 void RaytracingDemoPasses::Builder::AddFrameworkBloomPass(
     RenderGraph::RenderGraphBuilder& renderGraphBuilder,
     const RaytracingDemoPassResources& resources,
@@ -141,9 +132,7 @@ void RaytracingDemoPasses::Builder::AddFrameworkBloomPass(
                 context.GetMetadata().m_ScreenHeight);
         });
 }
-//Modify End
 
-//Modify Begin:2026-08-07 by Hui
 void RaytracingDemoPasses::Builder::AddFrameGenerationHudLessPass(
     RenderGraph::RenderGraphBuilder& renderGraphBuilder,
     const RaytracingDemoPassResources& resources,
@@ -176,13 +165,11 @@ void RaytracingDemoPasses::Builder::AddFrameGenerationHudLessPass(
             resources.DisplayBlitMesh->Draw(commandList);
         });
 }
-//Modify End
 
 void RaytracingDemo::PresentDisplayOutput()
 {
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
     RenderGraph::RenderGraphRoot& renderGraph = m_RenderPipeline.GetRenderGraph();
-//Modify Begin:2026-08-07 by Hui
     if (m_RenderGraphFrameState->FrameGenerationEnabled)
     {
         DLSSFrameGenerationProcessor frameProcessor(m_DLSS, m_FrameGenerationInputs);
@@ -198,26 +185,21 @@ void RaytracingDemo::PresentDisplayOutput()
     }
 
     const RenderGraph::ResourceId displayColor = renderGraph.GetPresentationResourceId();
-//Modify End
 
-//Modify Begin:2026-07-28 by Hui
     renderGraph.PresentWithOverlayBlit(
         PWindow,
         displayColor,
         [this](CommandList& cmd, const std::shared_ptr<Texture>& sourceTexture)
         {
-//Modify Begin:2026-07-29 by Hui
             CommandContext commandContext(cmd);
             commandContext.SetTexture(*m_DisplayCompositeShader, "SceneColor", ShaderResourceView(sourceTexture));
             commandContext.BindPipeline(*m_DisplayCompositeShader);
             commandContext.BindDescriptorSet(m_DisplayCompositeShader->GetDescriptorSet());
-//Modify End
             m_DisplayBlitMesh->Draw(cmd);
         },
         [this](CommandList& cmd)
         {
             DrawPostBloomOverlays(cmd);
         });
-//Modify End
 }
 //Modify End

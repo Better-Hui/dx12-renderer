@@ -16,7 +16,7 @@ public:
 	{
 		void* Cpu;
 		D3D12_GPU_VIRTUAL_ADDRESS Gpu;
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-08-19 by Hui
 		Microsoft::WRL::ComPtr<ID3D12Resource> Resource;
 		size_t Offset;
 //Modify End
@@ -25,7 +25,7 @@ public:
 	/**
 	 * \param pageSize The size to use to allocate new pages in GPU memory.
 	 */
-//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-08-19 by Hui
 	UploadBuffer(Microsoft::WRL::ComPtr<ID3D12Device2> device, size_t pageSize = _2MB);
 //Modify End
 
@@ -50,7 +50,7 @@ public:
 private:
 	struct Page
 	{
-//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-08-19 by Hui
 		Page(Microsoft::WRL::ComPtr<ID3D12Device2> device, size_t sizeInBytes);
 //Modify End
 		~Page();
@@ -84,13 +84,14 @@ private:
 
 	PagePoolType m_PagePool;
 	PagePoolType m_AvailablePages;
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-08-19 by Hui
 	PagePoolType m_LargePages;
 //Modify End
 
 	std::shared_ptr<Page> m_CurrentPage;
-	//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-08-19 by Hui
 	Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;
 	//Modify End
 	size_t m_PageSize;
 };
+//Modify End

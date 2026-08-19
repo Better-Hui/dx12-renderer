@@ -24,10 +24,9 @@ Microsoft::WRL::ComPtr<ID3D12PipelineState> RasterPipelineStateBuilder::Build(Mi
     Assert(m_PixelShader != nullptr, "Pixel Shader cannot be null.");
     Assert(m_RootSignature != nullptr, "Root signature cannot be null.");
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
     if (m_MeshShader != nullptr)
     {
-//Modify Begin:2026-07-31 by Hui
         if (m_AmplificationShader != nullptr)
         {
             struct TaskMeshPipelineStateStream
@@ -71,7 +70,6 @@ Microsoft::WRL::ComPtr<ID3D12PipelineState> RasterPipelineStateBuilder::Build(Mi
             ThrowIfFailed(device->CreatePipelineState(&pipelineStateStreamDesc, IID_PPV_ARGS(&pipelineState)));
             return pipelineState;
         }
-//Modify End
 
         struct MeshPipelineStateStream
         {
@@ -163,17 +161,13 @@ Microsoft::WRL::ComPtr<ID3D12PipelineState> RasterPipelineStateBuilder::Build(Mi
     return pipelineState;
 }
 
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-08-19 by Hui
 RasterPipelineStateKey RasterPipelineStateBuilder::CreateKey(const RenderTargetState& renderTargetState) const
 {
     RasterPipelineStateKey key;
     key.VertexShader = MakePipelineShaderBytecodeKey(m_VertexShader);
-//Modify Begin:2026-07-30 by Hui
-//Modify Begin:2026-07-31 by Hui
     key.AmplificationShader = MakePipelineShaderBytecodeKey(m_AmplificationShader);
-//Modify End
     key.MeshShader = MakePipelineShaderBytecodeKey(m_MeshShader);
-//Modify End
     key.PixelShader = MakePipelineShaderBytecodeKey(m_PixelShader);
     key.LayoutHash = MakePipelineRootSignatureHash(m_RootSignature.get());
     key.RenderTarget = renderTargetState;
@@ -189,12 +183,8 @@ size_t RasterPipelineStateBuilder::BuildFixedFunctionStateHash() const
     PipelineHashBytes(seed, &m_RasterizerDesc, sizeof(m_RasterizerDesc));
     PipelineHashBytes(seed, &m_SampleDesc, sizeof(m_SampleDesc));
     PipelineHashValue(seed, m_DepthStencilFormat);
-//Modify Begin:2026-07-30 by Hui
     PipelineHashValue(seed, m_MeshShader != nullptr);
-//Modify Begin:2026-07-31 by Hui
     PipelineHashValue(seed, m_AmplificationShader != nullptr);
-//Modify End
-//Modify End
     PipelineHashValue(seed, m_RenderTargetFormats.size());
     for (const DXGI_FORMAT format : m_RenderTargetFormats)
     {
@@ -234,33 +224,28 @@ RasterPipelineStateBuilder& RasterPipelineStateBuilder::WithShaders(const Micros
     Assert(pixelShader != nullptr, "Pixel Shader cannot be null.");
 
     m_VertexShader = vertexShader;
-//Modify Begin:2026-07-30 by Hui
-//Modify Begin:2026-07-31 by Hui
+//Modify Begin:2026-08-19 by Hui
     m_AmplificationShader = nullptr;
-//Modify End
     m_MeshShader = nullptr;
 //Modify End
     m_PixelShader = pixelShader;
     return *this;
 }
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
 RasterPipelineStateBuilder& RasterPipelineStateBuilder::WithMeshShaders(const Microsoft::WRL::ComPtr<ID3DBlob>& meshShader, const Microsoft::WRL::ComPtr<ID3DBlob>& pixelShader)
 {
     Assert(meshShader != nullptr, "Mesh Shader cannot be null.");
     Assert(pixelShader != nullptr, "Pixel Shader cannot be null.");
 
     m_VertexShader = nullptr;
-//Modify Begin:2026-07-31 by Hui
     m_AmplificationShader = nullptr;
-//Modify End
     m_MeshShader = meshShader;
     m_PixelShader = pixelShader;
     m_InputLayout.clear();
     return *this;
 }
 
-//Modify Begin:2026-07-31 by Hui
 RasterPipelineStateBuilder& RasterPipelineStateBuilder::WithMeshShaders(
     const Microsoft::WRL::ComPtr<ID3DBlob>& amplificationShader,
     const Microsoft::WRL::ComPtr<ID3DBlob>& meshShader,
@@ -278,7 +263,6 @@ RasterPipelineStateBuilder& RasterPipelineStateBuilder::WithMeshShaders(
     return *this;
 }
 //Modify End
-//Modify End
 
 RasterPipelineStateBuilder& RasterPipelineStateBuilder::WithBlend(const CD3DX12_BLEND_DESC& blendDesc)
 {
@@ -295,7 +279,7 @@ RasterPipelineStateBuilder& RasterPipelineStateBuilder::WithAlphaBlend()
     rtBlendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;
     rtBlendDesc.SrcBlend = D3D12_BLEND_SRC_ALPHA;
     rtBlendDesc.DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
-    //Modify Begin:2026-07-21 by Hui
+//Modify Begin:2026-08-19 by Hui
     rtBlendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;
     //Modify End
     rtBlendDesc.DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA;
@@ -334,7 +318,6 @@ RasterPipelineStateBuilder& RasterPipelineStateBuilder::WithDisabledDepthWrite()
     return WithDepthStencil(desc);
 }
 
-//Modify Begin:2026-07-23 by Hui
 RasterPipelineStateBuilder& RasterPipelineStateBuilder::WithDepthTestNoWrite()
 {
     return WithDisabledDepthWrite();
@@ -353,7 +336,7 @@ RasterPipelineStateBuilder& RasterPipelineStateBuilder::WithRasterizer(const CD3
     return *this;
 }
 
-//Modify Begin:2026-07-23 by Hui
+//Modify Begin:2026-08-19 by Hui
 RasterPipelineStateBuilder& RasterPipelineStateBuilder::WithFrontFaceCull()
 {
     auto rasterizer = CD3DX12_RASTERIZER_DESC(CD3DX12_DEFAULT{});

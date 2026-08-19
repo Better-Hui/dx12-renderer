@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-08-18 by Hui
 #include <ShaderLibrary/Common/RootSignature.hlsli>
 #include "../../../External/NRD/Shaders/NRD.hlsli"
 
@@ -22,12 +22,10 @@ RWTexture2D<float4> NRDNormalRoughness : register(u0);
 RWTexture2D<float> NRDViewZ : register(u1);
 RWTexture2D<float4> NRDMotion : register(u2);
 
-//Modify Begin:2026-08-18 by Hui
 float3 DecodeGBufferNormal(float3 encoded)
 {
     return normalize(encoded * 2.0f - 1.0f);
 }
-//Modify End
 
 [numthreads(8, 8, 1)]
 void main(uint3 dispatchThreadId : SV_DispatchThreadID)
@@ -51,18 +49,14 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     float4 specularSmoothness = GBufferSpecularSmoothness.Load(int3(pixel, 0));
     float4 position = GBufferPosition.Load(int3(pixel, 0));
 
-//Modify Begin:2026-08-18 by Hui
     float3 normalWs = DecodeGBufferNormal(normalSample.xyz);
-//Modify End
     float roughness = 1.0f - saturate(specularSmoothness.a);
     float viewZ = mul(float4(position.xyz, 1.0f), WorldToView).z;
     float previousViewZ = mul(float4(position.xyz, 1.0f), PreviousWorldToView).z;
 
     NRDNormalRoughness[pixel] = NRD_FrontEnd_PackNormalAndRoughness(normalWs, roughness, 0.0f);
     NRDViewZ[pixel] = viewZ;
-//Modify Begin:2026-07-28 by Hui
     const float2 motionInPixels = MotionVector.Load(int3(pixel, 0)) * float2(Width, Height);
     NRDMotion[pixel] = float4(motionInPixels, previousViewZ - viewZ, 0.0f);
-//Modify End
 }
 //Modify End

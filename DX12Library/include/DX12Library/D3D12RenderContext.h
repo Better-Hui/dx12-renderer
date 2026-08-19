@@ -12,7 +12,7 @@ class CommandQueue;
 class D3D12DeviceContext;
 class ResourceStateRegistry;
 
-//Modify Begin:2026-07-28 by Hui
+//Modify Begin:2026-08-07 by Hui
 struct ExternalD3D12Context
 {
     ID3D12Device* Device = nullptr;
@@ -35,30 +35,18 @@ public:
     bool UsesExternalDevice() const;
 
     Microsoft::WRL::ComPtr<ID3D12Device2> GetDevice() const;
-//Modify Begin:2026-08-07 by Hui
     std::shared_ptr<D3D12DeviceContext> GetD3D12DeviceContext() const;
-//Modify End
     std::shared_ptr<CommandQueue> GetCommandQueue(D3D12_COMMAND_LIST_TYPE type) const;
-//Modify Begin:2026-07-30 by Hui
     std::shared_ptr<ResourceStateRegistry> GetResourceStateRegistry() const;
-//Modify End
-//Modify Begin:2026-08-07 by Hui
     void SetFatalErrorHandler(CommandQueueFailureHandler handler);
-//Modify End
 
 private:
     void CreateOwnedQueues();
     void WrapExternalQueues(const ExternalD3D12Context& externalContext);
-//Modify Begin:2026-08-07 by Hui
     void CreateDeviceContext();
-//Modify End
     Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;
-//Modify Begin:2026-07-30 by Hui
     std::shared_ptr<ResourceStateRegistry> m_ResourceStateRegistry;
-//Modify End
-//Modify Begin:2026-08-07 by Hui
     std::shared_ptr<D3D12DeviceContext> m_DeviceContext;
-//Modify End
     std::shared_ptr<CommandQueue> m_DirectCommandQueue;
     std::shared_ptr<CommandQueue> m_ComputeCommandQueue;
     std::shared_ptr<CommandQueue> m_CopyCommandQueue;

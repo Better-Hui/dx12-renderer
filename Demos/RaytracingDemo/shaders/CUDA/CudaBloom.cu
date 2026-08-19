@@ -169,7 +169,6 @@ void BloomFourTapDownsampleKernel(
             1.0f / static_cast<float>(sourceHeight)));
 }
 
-//Modify Begin:2026-08-17 by Hui
 __device__ int ClampCoordinateToExtent(const int coordinate, const unsigned int extent)
 {
     const int lastCoordinate = static_cast<int>(extent) - 1;
@@ -571,7 +570,6 @@ void BloomFourLevelSharedDownsampleKernel(
         mip2Tile,
         mip3Tile);
 }
-//Modify End
 
 extern "C" __global__
 void BloomAdditiveUpsampleKernel(

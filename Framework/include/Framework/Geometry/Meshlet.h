@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-07-31 by Hui
 
 #include <DX12Library/ByteAddressBuffer.h>
 #include <DX12Library/StructuredBuffer.h>
@@ -61,7 +61,6 @@ public:
     static MeshletBuildResult Build(const MeshPrototype& meshPrototype, const MeshletBuildOptions& options = {});
 };
 
-//Modify Begin:2026-07-31 by Hui
 struct MeshletDraw
 {
     DirectX::XMMATRIX WorldMatrix = DirectX::XMMatrixIdentity();
@@ -151,9 +150,7 @@ private:
     bool m_GeometryDataDirty = true;
     bool m_InstanceDataDirty = true;
 };
-//Modify End
 
-//Modify Begin:2026-07-30 by Hui
 struct MeshletSceneGeometrySource
 {
     const std::vector<MeshPrototype>* MeshPrototypes = nullptr;
@@ -199,6 +196,5 @@ private:
     MeshletSceneInstanceHandle m_NextInstanceHandle = 1;
     bool m_DrawsDirty = true;
 };
-//Modify End
 
 //Modify End

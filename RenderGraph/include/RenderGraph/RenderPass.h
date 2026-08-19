@@ -15,14 +15,12 @@ class Resource;
 
 namespace RenderGraph
 {
-//Modify Begin:2026-08-03 by Hui
+//Modify Begin:2026-08-18 by Hui
     enum class RenderPassQueue
     {
         Direct,
         AsyncCompute,
-        //Modify Begin:2026-08-18 by Hui
         Copy,
-        //Modify End
     };
 //Modify End
 
@@ -132,10 +130,8 @@ namespace RenderGraph
 //Modify End
 //Modify Begin:2026-08-03 by Hui
         RenderPassQueue GetQueue() const { return m_Queue; }
-//Modify Begin:2026-07-30 by Hui
         void SetParallelRecordingEligible(bool enabled) { m_ParallelRecordingEligible = enabled; }
         bool IsParallelRecordingEligible() const { return m_ParallelRecordingEligible; }
-//Modify End
 //Modify End
 
         virtual ~RenderPass() = default;

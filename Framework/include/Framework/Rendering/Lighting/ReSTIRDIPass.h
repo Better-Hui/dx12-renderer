@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-12 by Hui
 #include <Framework/Rendering/Lighting/ReSTIRDI.h>
 #include <Framework/Rendering/Lighting/MaterialShadingModel.h>
 #include <Framework/Rendering/Pipeline/PipelineLayout.h>
@@ -24,12 +24,8 @@ struct ReSTIRDIFrameState
 {
     bool Enabled = false;
     bool UseSoftShadowVariant = false;
-//Modify Begin:2026-07-30 by Hui
     MaterialShadingModel ShadingModel = MaterialShadingModel::Pbr;
-//Modify End
-//Modify Begin:2026-08-06 by Hui
     uint32_t EnvironmentProjectionVariant = 0u;
-//Modify End
     uint32_t Width = 1;
     uint32_t Height = 1;
     uint32_t FrameIndex = 0;
@@ -52,12 +48,8 @@ struct ReSTIRDIShaderSources
     std::wstring Spatial;
     std::wstring Shade;
     std::vector<ShaderVariantDefine> SoftShadowDefines;
-//Modify Begin:2026-08-06 by Hui
     std::string EnvironmentProjectionDefineName;
-//Modify End
-//Modify Begin:2026-08-12 by Hui
     std::vector<PipelineStaticSamplerContract> StaticSamplerContracts;
-//Modify End
 };
 
 class ReSTIRDIPass final
@@ -69,13 +61,11 @@ public:
     ReSTIRDIPass(const ReSTIRDIPass&) = delete;
     ReSTIRDIPass& operator=(const ReSTIRDIPass&) = delete;
 
-//Modify Begin:2026-08-06 by Hui
     void EnsurePipelines(
         bool useSoftShadowVariant,
         uint32_t environmentProjectionVariant,
         const ReSTIRDIFrameConstants& constants,
         MaterialShadingModel shadingModel);
-//Modify End
     void Execute(
         CommandList& commandList,
         const ReSTIRDIExecutionInputs& inputs);
@@ -92,7 +82,6 @@ private:
     struct PipelineSet;
     struct InternalResources;
 
-//Modify Begin:2026-08-06 by Hui
     static constexpr uint32_t EnvironmentProjectionVariantCount = 3u;
     static constexpr uint32_t PipelineVariantCount = EnvironmentProjectionVariantCount * 2u;
 
@@ -111,7 +100,6 @@ private:
         ReSTIRDIStage stage,
         const ReSTIRDIFrameConstants& constants,
         MaterialShadingModel shadingModel);
-//Modify End
     void EnsureResources(uint32_t width, uint32_t height);
     void ExecuteInitialSampling(CommandContext& commandContext, const ReSTIRDIExecutionInputs& inputs, PipelineSet& pipelines);
     void ExecuteTemporalResampling(CommandContext& commandContext, const ReSTIRDIExecutionInputs& inputs, PipelineSet& pipelines);
@@ -137,9 +125,7 @@ private:
     FrameworkDeviceContext& m_DeviceContext;
     ReSTIRDIShaderSources m_ShaderSources;
     ShaderVariantManager m_ShaderVariants;
-//Modify Begin:2026-08-06 by Hui
     std::array<std::unique_ptr<PipelineSet>, PipelineVariantCount> m_Pipelines;
-//Modify End
     std::unique_ptr<InternalResources> m_Resources;
     uint32_t m_ResourceWidth = 0;
     uint32_t m_ResourceHeight = 0;

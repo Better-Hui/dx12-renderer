@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-08-18 by Hui
 #include "RenderGraphCompiler.h"
 
 #include "RenderMetadata.h"
@@ -225,7 +225,6 @@ namespace
             std::ranges::any_of(tokens, matches);
     }
 
-//Modify Begin:2026-07-30 by Hui
     bool IsLiveGpuResource(
         const ResourceId resourceId,
         std::span<RenderPass* const> renderPasses,
@@ -248,7 +247,6 @@ namespace
                     std::ranges::any_of(renderPass->GetOutputs(), matchesResource);
             });
     }
-//Modify End
 
     bool CanRecordInParallel(const RenderPass& renderPass)
     {
@@ -257,7 +255,6 @@ namespace
             renderPass.IsParallelRecordingEligible();
     }
 
-//Modify Begin:2026-08-18 by Hui
     bool IsAsyncComputeInput(const InputType inputType)
     {
         return inputType == InputType::Token ||
@@ -383,7 +380,6 @@ namespace
         }
         return true;
     }
-//Modify End
 }
 
 RenderGraph::RenderGraphCompiler::RenderGraphCompiler(
@@ -404,7 +400,6 @@ void RenderGraph::RenderGraphCompiler::ValidateDefinition(
 {
     for (const std::unique_ptr<RenderPass>& renderPass : renderPasses)
     {
-//Modify Begin:2026-08-18 by Hui
         Assert(renderPass != nullptr, "Render graph contains a null render pass.");
         Assert(!renderPass->IsExternal() || renderPass->GetQueue() == RenderPassQueue::Direct,
             "External render passes must use the direct queue.");
@@ -457,7 +452,6 @@ void RenderGraph::RenderGraphCompiler::ValidateDefinition(
                     "Copy-queue external resources cannot request UAV barriers.");
             }
         }
-//Modify End
         for (const Input& input : renderPass->GetInputs())
         {
             Assert(IsResourceDefined(input.m_Id, textures, buffers, tokens), "Input undefined.");
@@ -497,28 +491,21 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
     m_ResourcePool->Clear(resourceRetirements);
     for (const TextureDescription& texture : textures)
     {
-//Modify Begin:2026-07-30 by Hui
         if (IsLiveGpuResource(texture.m_Id, compiledGraph.m_RenderPasses, externalOutputIds))
         {
             m_ResourcePool->RegisterTexture(texture, compiledGraph.m_RenderPasses, renderMetadata, m_Device);
         }
-//Modify End
     }
     for (const BufferDescription& buffer : buffers)
     {
-//Modify Begin:2026-07-30 by Hui
         if (IsLiveGpuResource(buffer.m_Id, compiledGraph.m_RenderPasses, externalOutputIds))
         {
             m_ResourcePool->RegisterBuffer(buffer, compiledGraph.m_RenderPasses, renderMetadata, m_Device);
         }
-//Modify End
     }
     m_ResourcePool->InitHeaps(compiledGraph.m_RenderPasses, m_Device, std::vector<ResourceId>(externalOutputIds.begin(), externalOutputIds.end()));
-//Modify Begin:2026-08-10 by Hui
     m_ResourcePool->CreateResources();
-//Modify End
 
-//Modify Begin:2026-07-30 by Hui
     std::map<ResourceId, RenderPassQueue> lastWriterQueues;
     for (uint32_t passIndex = 0; passIndex < compiledGraph.m_RenderPasses.size(); ++passIndex)
     {
@@ -543,7 +530,6 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
                 resourceStatePlan.InputTransitions.push_back({ input.m_Id, stateAfter, insertUavBarrier });
             }
         }
-//Modify Begin:2026-08-13 by Hui
         for (const ExternalResourceAccess& access : renderPass->GetExternalResourceAccesses())
         {
             Assert(access.Resource != nullptr && access.Resource->IsValid(),
@@ -554,7 +540,6 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
                 access.InsertUavBarrier
             });
         }
-//Modify End
         for (const Output& output : renderPass->GetOutputs())
         {
             if (output.m_Type == OutputType::Token)
@@ -580,7 +565,6 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
             }
         }
 
-        //Modify Begin:2026-08-07 by Hui
         if (renderPass->GetQueue() != RenderPassQueue::Direct)
         {
             PassResourceStatePlan::NonDirectQueuePreamble directPreamble = {};
@@ -603,9 +587,7 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
                 }
             }
             resourceStatePlan.InputTransitions = std::move(localInputTransitions);
-//Modify Begin:2026-08-13 by Hui
             directPreamble.ExternalResourceTransitions = std::move(resourceStatePlan.ExternalResourceTransitions);
-//Modify End
             directPreamble.AliasingOutputs = std::move(resourceStatePlan.AliasingOutputs);
             for (const PassResourceTransition& outputTransition : resourceStatePlan.OutputTransitions)
             {
@@ -633,7 +615,6 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
                 lastWriterQueues.insert_or_assign(output.m_Id, renderPass->GetQueue());
             }
         }
-//Modify End
     }
 
     RenderGraphRecordingBatch recordingBatch = {};
@@ -663,7 +644,6 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
             continue;
         }
 
-//Modify Begin:2026-08-18 by Hui
         if (renderPass->GetQueue() != RenderPassQueue::Direct)
         {
             if (!CanAppendNonDirectPass(
@@ -677,7 +657,6 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
             recordingBatch.Passes.push_back(renderPass);
             continue;
         }
-//Modify End
 
         flushRecordingBatch();
         compiledGraph.m_RecordingBatches.push_back({ { renderPass }, RenderPassQueue::Direct, false });

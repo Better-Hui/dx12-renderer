@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-08-18 by Hui
 #include <Passes/RaytracingDemoPasses.h>
 
 #include <RenderGraph/RaytracingDemoGraphResources.h>
@@ -10,7 +10,6 @@
 #include <RenderGraph/RenderContext.h>
 #include <RenderGraph/RenderGraphBuilder.h>
 
-//Modify Begin:2026-08-18 by Hui
 namespace
 {
     struct DLSSRayReconstructionPreparationPassData
@@ -18,7 +17,6 @@ namespace
         RaytracingDemoPassResourcesSnapshot Resources;
     };
 }
-//Modify End
 
 void RaytracingDemoPasses::Builder::AddDLSSRayReconstructionPreparationPass(
     RenderGraph::RenderGraphBuilder& renderGraphBuilder,

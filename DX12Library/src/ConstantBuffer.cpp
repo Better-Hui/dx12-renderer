@@ -3,7 +3,7 @@
 #include "ConstantBuffer.h"
 
 #include "D3D12DeviceContext.h"
-#include "d3dx12.h"
+#include <d3dx12/d3dx12.h>
 
 ConstantBuffer::ConstantBuffer(const std::wstring& name)
 	: Buffer(name)

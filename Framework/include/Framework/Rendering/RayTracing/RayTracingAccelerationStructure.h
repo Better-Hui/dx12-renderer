@@ -59,9 +59,7 @@ struct RayTracingAccelerationStructureBuildSettings
 class RayTracingAccelerationStructure
 {
 public:
-//Modify Begin:2026-07-30 by Hui
     explicit RayTracingAccelerationStructure(std::shared_ptr<D3D12DeviceContext> deviceContext);
-//Modify End
 
     RayTracingInstanceHandle AddInstance(const RayTracingInstanceDesc& instanceDesc);
     bool UpdateInstance(RayTracingInstanceHandle handle, const RayTracingInstanceDesc& instanceDesc);
@@ -137,10 +135,8 @@ private:
     std::vector<RayTracingGeometryData> m_GeometryData;
     RayTracingAccelerationStructureBuildSettings m_LastBuildSettings;
     uint32_t m_BuiltInstanceCount = 0;
-//Modify Begin:2026-07-30 by Hui
     std::shared_ptr<D3D12DeviceContext> m_DeviceContext;
     Microsoft::WRL::ComPtr<ID3D12Device5> m_Device;
-//Modify End
     bool m_InstanceMeshChanged = false;
 };
 //Modify End

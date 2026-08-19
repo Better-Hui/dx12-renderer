@@ -19,6 +19,10 @@ All source changes in this repository must be wrapped with:
 //Modify End
 ```
 
+- Never nest `//Modify Begin` / `//Modify End` blocks.
+- When changing code that is already inside a marker, extend the existing outer block and update its date to the newest change; do not add an inner block.
+- Every `//Modify Begin` must have exactly one matching `//Modify End`. Before committing, run a balance and nesting scan across first-party C++ and shader files.
+
 CMake files must not contain author signatures, `# Modify` markers, or similar handoff annotations. Keep CMake changes readable through target names, standard commands, and short English comments only where the intent is not obvious.
 
 Comments inside code must be English. Conversation with the user stays Chinese.

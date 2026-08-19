@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-06 by Hui
 #include <Framework/Scene/Scene.h>
 
 #include <stdexcept>
@@ -16,9 +16,7 @@ void Scene::Clear()
     m_ProjectRoot.clear();
     m_AssetsRoot.clear();
     m_Skybox = {};
-//Modify Begin:2026-08-06 by Hui
     m_LightGroupSettings = {};
-//Modify End
     m_Camera = {};
     m_Objects.clear();
     m_Materials.clear();
@@ -51,12 +49,10 @@ void Scene::SetSkybox(const SceneSkybox& skybox)
     m_Skybox = skybox;
 }
 
-//Modify Begin:2026-08-06 by Hui
 void Scene::SetLightGroupSettings(const SceneLightGroupSettings& settings)
 {
     m_LightGroupSettings = settings;
 }
-//Modify End
 
 uint32_t Scene::AddMaterial(SceneMaterial material)
 {
@@ -137,12 +133,10 @@ const SceneSkybox& Scene::GetSkybox() const
     return m_Skybox;
 }
 
-//Modify Begin:2026-08-06 by Hui
 const SceneLightGroupSettings& Scene::GetLightGroupSettings() const
 {
     return m_LightGroupSettings;
 }
-//Modify End
 
 const SceneCamera& Scene::GetCamera() const
 {

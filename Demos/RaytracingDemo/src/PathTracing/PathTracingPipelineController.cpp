@@ -1,25 +1,25 @@
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-08-19 by Hui
 #include <PathTracing/PathTracingPipelineController.h>
 
 #include <DX12Library/CommandQueue.h>
+#include <DX12Library/CommandList.h>
 #include <DX12Library/Helpers.h>
-//Modify Begin:2026-07-30 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
-//Modify End
+#include <Framework/Rendering/Pipeline/CommandContext.h>
 #include <Framework/Rendering/RayTracing/RayTracingAccelerationStructure.h>
 #include <Framework/Rendering/Pipeline/ShaderBlob.h>
-//Modify Begin:2026-07-30 by Hui
 #include <Framework/Rendering/Pipeline/ShaderTargetProfile.h>
-//Modify End
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <Scene/SceneLightManager.h>
 #include <Scene/SceneResources.h>
 
 #include <algorithm>
+#include <array>
+#include <cstddef>
+#include <span>
 
 namespace
 {
-//Modify Begin:2026-08-06 by Hui
     std::wstring GetEnvironmentProjectionShaderSuffix(const EnvironmentTextureProjection projection)
     {
         switch (projection)
@@ -48,15 +48,12 @@ namespace
     }
     }
 
-//Modify Begin:2026-08-11 by Hui
     void AddMaxPathBouncesDefine(
         std::vector<ShaderVariantDefine>& defines,
         const uint32_t maxPathBounces)
     {
         defines.push_back({ "RAYTRACING_DEMO_MAX_BOUNCES", std::to_string(maxPathBounces) });
     }
-//Modify End
-//Modify Begin:2026-07-30 by Hui
     void AddMaterialShadingModelDefine(
         std::vector<ShaderVariantDefine>& defines,
         const MaterialShadingModel shadingModel)
@@ -79,10 +76,170 @@ namespace
             throw std::invalid_argument("Unsupported material shading model.");
         }
     }
-//Modify End
-//Modify End
 }
 
+PathTracingPipelineController::PathTracingPipelineController(FrameworkDeviceContext& deviceContext)
+    : m_DeviceContext(deviceContext)
+{
+}
+
+void PathTracingPipelineController::CreateComputeIndirectDispatchResources()
+{
+    if (m_ComputeIndirectCommandSignature != nullptr)
+    {
+        return;
+    }
+
+    constexpr std::array computeArguments = {
+        IndirectArgumentDesc{ .Type = IndirectArgumentType::Dispatch },
+    };
+    m_ComputeIndirectCommandSignature = std::make_unique<IndirectCommandSignature>(
+        m_DeviceContext,
+        IndirectCommandSignatureDesc{
+            .Arguments = computeArguments,
+            .ByteStride = sizeof(D3D12_DISPATCH_ARGUMENTS),
+        });
+    m_ComputeIndirectArguments = std::make_unique<IndirectCommandBuffer>(
+        m_DeviceContext,
+        sizeof(D3D12_DISPATCH_ARGUMENTS),
+        L"Path Tracing Compute Indirect Arguments");
+}
+
+void PathTracingPipelineController::EnsureActiveRayCountReadbackResources()
+{
+    if (!m_ActiveRayCountReadback.IsInitialized())
+    {
+        m_ActiveRayCountReadback.Initialize(m_DeviceContext.GetDevice(), sizeof(uint32_t));
+    }
+}
+
+void PathTracingPipelineController::EnsureRayTracingIndirectDispatchResources()
+{
+    if (m_RayTracingIndirectCommandSignature != nullptr)
+    {
+        return;
+    }
+
+    Assert(
+        RayTracingShader::SupportsIndirectDispatch(m_DeviceContext),
+        "DispatchRaysIndirect requires DirectX Raytracing Tier 1.1 support.");
+    static_assert(offsetof(D3D12_DISPATCH_RAYS_DESC, Width) == 88u);
+    static_assert(offsetof(D3D12_DISPATCH_RAYS_DESC, Height) == 92u);
+    static_assert(offsetof(D3D12_DISPATCH_RAYS_DESC, Depth) == 96u);
+
+    constexpr std::array rayTracingArguments = {
+        IndirectArgumentDesc{ .Type = IndirectArgumentType::DispatchRays },
+    };
+    m_RayTracingIndirectCommandSignature = std::make_unique<IndirectCommandSignature>(
+        m_DeviceContext,
+        IndirectCommandSignatureDesc{
+            .Arguments = rayTracingArguments,
+            .ByteStride = sizeof(D3D12_DISPATCH_RAYS_DESC),
+        });
+    m_DirectRayTracingIndirectArguments = std::make_unique<IndirectCommandBuffer>(
+        m_DeviceContext,
+        sizeof(D3D12_DISPATCH_RAYS_DESC),
+        L"Path Tracing Direct Ray Tracing Indirect Arguments");
+    m_IndirectRayTracingIndirectArguments = std::make_unique<IndirectCommandBuffer>(
+        m_DeviceContext,
+        sizeof(D3D12_DISPATCH_RAYS_DESC),
+        L"Path Tracing Indirect Ray Tracing Indirect Arguments");
+}
+
+void PathTracingPipelineController::PrepareDxrCompactedDispatchTemplate(
+    CommandList& commandList,
+    const uint32_t width,
+    const uint32_t height,
+    const bool directLighting)
+{
+    Assert(m_DispatchMode == PathTracingDispatchMode::CompactedIndirect, "DXR compact-dispatch template requires compacted indirect mode.");
+    Assert(m_Backend == PathTracingBackend::ShaderTableDxr, "DXR compact-dispatch template requires the shader-table backend.");
+    Assert(m_RayTracingShader != nullptr, "DXR indirect dispatch requires a ray tracing pipeline.");
+    CommandContext commandContext(commandList);
+    commandContext.BindPipeline(*m_RayTracingShader);
+    const D3D12_DISPATCH_RAYS_DESC dispatchArguments = commandContext.BuildDispatchRaysArguments(
+        RayTracingDispatchDesc{
+            directLighting ? "DirectLightingRayGen" : "IndirectLightingRayGen",
+            width,
+            height,
+            1u });
+    IndirectCommandBuffer* argumentBuffer = directLighting
+        ? m_DirectRayTracingIndirectArguments.get()
+        : m_IndirectRayTracingIndirectArguments.get();
+    Assert(argumentBuffer != nullptr, "DXR compact-dispatch argument buffer is not initialized.");
+    argumentBuffer->Upload(commandList, std::as_bytes(std::span{ &dispatchArguments, 1u }));
+}
+
+PathTracingIndirectDispatch PathTracingPipelineController::GetCompactedIndirectDispatch(
+    const PathTracingBackend backend,
+    const bool directLighting) const
+{
+    Assert(m_DispatchMode == PathTracingDispatchMode::CompactedIndirect, "Compacted indirect dispatch was requested for the full-resolution pipeline.");
+    Assert(backend == m_Backend, "Compacted indirect dispatch backend does not match the active path-tracing pipeline.");
+    if (backend == PathTracingBackend::InlineRayQuery)
+    {
+        Assert(
+            m_ComputeIndirectCommandSignature != nullptr && m_ComputeIndirectArguments != nullptr,
+            "Compute indirect dispatch resources are not initialized.");
+        return { *m_ComputeIndirectCommandSignature, m_ComputeIndirectArguments->GetResource() };
+    }
+
+    Assert(m_RayTracingIndirectCommandSignature != nullptr, "DXR indirect command signature is not initialized.");
+    IndirectCommandBuffer* arguments = directLighting
+        ? m_DirectRayTracingIndirectArguments.get()
+        : m_IndirectRayTracingIndirectArguments.get();
+    Assert(arguments != nullptr, "DXR indirect dispatch arguments are not initialized.");
+    return { *m_RayTracingIndirectCommandSignature, arguments->GetResource() };
+}
+
+void PathTracingPipelineController::BeginActiveRayCountReadback()
+{
+    if (m_ActiveRayCountReadback.IsInitialized())
+    {
+        m_ActiveRayCountReadback.BeginCopy();
+    }
+}
+
+void PathTracingPipelineController::RecordActiveRayCountReadback(
+    CommandList& commandList,
+    const Resource& activeRayPixelCount)
+{
+    if (m_ActiveRayCountReadback.IsInitialized())
+    {
+        m_ActiveRayCountReadback.RecordCopy(commandList, activeRayPixelCount);
+    }
+}
+
+void PathTracingPipelineController::EndActiveRayCountReadback(const uint64_t submittedFenceValue)
+{
+    if (m_ActiveRayCountReadback.IsInitialized())
+    {
+        m_ActiveRayCountReadback.EndCopy(submittedFenceValue);
+    }
+}
+
+void PathTracingPipelineController::CancelActiveRayCountReadback()
+{
+    if (m_ActiveRayCountReadback.IsInitialized())
+    {
+        m_ActiveRayCountReadback.CancelCopy();
+    }
+}
+
+void PathTracingPipelineController::CollectActiveRayCountReadback(CommandQueue& commandQueue)
+{
+    if (!m_ActiveRayCountReadback.IsInitialized())
+    {
+        return;
+    }
+
+    uint32_t activeRayCount = 0u;
+    const std::span<std::byte> destination = std::as_writable_bytes(std::span{ &activeRayCount, 1u });
+    if (m_ActiveRayCountReadback.CollectLatestCompleted(commandQueue, destination))
+    {
+        m_LatestActiveRayCount = activeRayCount;
+    }
+}
 std::shared_ptr<ShaderBlob> PathTracingPipelineController::LoadShader(
     std::wstring compiledFileName,
     std::wstring sourceFileName,
@@ -100,7 +257,6 @@ std::shared_ptr<ShaderBlob> PathTracingPipelineController::LoadShader(
     return m_ShaderVariants.GetOrCompile(desc);
 }
 
-//Modify Begin:2026-07-27 by Hui
 void PathTracingPipelineController::RetireCurrentPipelines()
 {
     if (m_RayTracingShader == nullptr &&
@@ -108,6 +264,9 @@ void PathTracingPipelineController::RetireCurrentPipelines()
         m_IndirectRayTracingBindingSet == nullptr &&
         m_InlineDirectLightingShader == nullptr &&
         m_InlineIndirectLightingShader == nullptr &&
+        m_ActivePixelCompactionShader == nullptr &&
+        m_InlineCompactedDispatchFinalizeShader == nullptr &&
+        m_DxrCompactedDispatchFinalizeShader == nullptr &&
         m_LightingCompositeShaders.empty())
     {
         return;
@@ -125,6 +284,9 @@ void PathTracingPipelineController::RetireCurrentPipelines()
     retired.IndirectRayTracingBindingSet = std::move(m_IndirectRayTracingBindingSet);
     retired.InlineDirectLightingShader = std::move(m_InlineDirectLightingShader);
     retired.InlineIndirectLightingShader = std::move(m_InlineIndirectLightingShader);
+    retired.ActivePixelCompactionShader = std::move(m_ActivePixelCompactionShader);
+    retired.InlineCompactedDispatchFinalizeShader = std::move(m_InlineCompactedDispatchFinalizeShader);
+    retired.DxrCompactedDispatchFinalizeShader = std::move(m_DxrCompactedDispatchFinalizeShader);
     retired.LightingCompositeShaders = std::move(m_LightingCompositeShaders);
     m_RetiredPipelines.push_back(std::move(retired));
 }
@@ -146,68 +308,76 @@ void PathTracingPipelineController::ReleaseExpiredRetiredPipelines()
         m_RetiredPipelines.pop_front();
     }
 }
-//Modify End
 
 void PathTracingPipelineController::Reset()
 {
-//Modify Begin:2026-07-27 by Hui
     RetireCurrentPipelines();
     m_RetiredPipelines.clear();
-//Modify End
     m_LightingCompositeShaders.clear();
+    m_DxrCompactedDispatchFinalizeShader.reset();
+    m_InlineCompactedDispatchFinalizeShader.reset();
+    m_ActivePixelCompactionShader.reset();
     m_InlineIndirectLightingShader.reset();
     m_InlineDirectLightingShader.reset();
     m_IndirectRayTracingBindingSet.reset();
     m_DirectRayTracingBindingSet.reset();
     m_RayTracingShader.reset();
+    m_ActiveRayCountReadback.Reset();
+    m_LatestActiveRayCount.reset();
     m_ShaderVariants.Clear();
-//Modify Begin:2026-07-30 by Hui
     m_ShadowMode = PathTracingShadowMode::HardShadows;
-//Modify End
-//Modify Begin:2026-07-30 by Hui
+    m_DispatchMode = PathTracingDispatchMode::FullResolution;
     m_MaterialShadingModel = MaterialShadingModel::Pbr;
-//Modify End
-//Modify Begin:2026-08-11 by Hui
     m_MaxPathBounces = 3u;
-//Modify End
     m_Layout = {};
 }
 
 void PathTracingPipelineController::EnsurePipelines(
     const PathTracingBackend backend,
-//Modify Begin:2026-07-30 by Hui
     const PathTracingShadowMode shadowMode,
-//Modify End
     const MaterialShadingModel shadingModel,
     const RayTracingSceneResourceLayout& layout,
-    const uint32_t maxPathBounces)
+    const uint32_t maxPathBounces,
+    const PathTracingDispatchMode dispatchMode)
 {
-//Modify Begin:2026-07-27 by Hui
     ReleaseExpiredRetiredPipelines();
-//Modify End
-//Modify Begin:2026-08-11 by Hui
     const uint32_t clampedMaxPathBounces = std::clamp(maxPathBounces, 1u, 5u);
-//Modify End
     const bool layoutChanged = m_Layout != layout;
     const bool backendChanged = m_Backend != backend;
-//Modify Begin:2026-07-30 by Hui
     const bool shadowModeChanged = m_ShadowMode != shadowMode;
-//Modify End
     const bool shadingModelChanged = m_MaterialShadingModel != shadingModel;
-//Modify Begin:2026-08-11 by Hui
     const bool maxPathBouncesChanged = m_MaxPathBounces != clampedMaxPathBounces;
-//Modify End
+    const bool dispatchModeChanged = m_DispatchMode != dispatchMode;
     const bool needsDxrPipeline = backend == PathTracingBackend::ShaderTableDxr;
+    const bool needsCompactedDispatch = dispatchMode == PathTracingDispatchMode::CompactedIndirect;
+
+    if (dispatchModeChanged)
+    {
+        m_LatestActiveRayCount.reset();
+    }
+
+    if (needsCompactedDispatch)
+    {
+        CreateComputeIndirectDispatchResources();
+        EnsureActiveRayCountReadbackResources();
+        if (needsDxrPipeline)
+        {
+            EnsureRayTracingIndirectDispatchResources();
+        }
+    }
 
     if (!layoutChanged &&
         !backendChanged &&
-//Modify Begin:2026-07-30 by Hui
         !shadowModeChanged &&
-//Modify End
         !shadingModelChanged &&
         !maxPathBouncesChanged &&
+        !dispatchModeChanged &&
         m_InlineDirectLightingShader != nullptr &&
         m_InlineIndirectLightingShader != nullptr &&
+        (!needsCompactedDispatch ||
+            (m_ActivePixelCompactionShader != nullptr &&
+                m_InlineCompactedDispatchFinalizeShader != nullptr &&
+                (!needsDxrPipeline || m_DxrCompactedDispatchFinalizeShader != nullptr))) &&
         (!needsDxrPipeline ||
             (m_RayTracingShader != nullptr &&
                 m_DirectRayTracingBindingSet != nullptr &&
@@ -217,25 +387,18 @@ void PathTracingPipelineController::EnsurePipelines(
     }
 
     m_Backend = backend;
-//Modify Begin:2026-07-30 by Hui
     m_ShadowMode = shadowMode;
-//Modify End
     m_MaterialShadingModel = shadingModel;
-//Modify Begin:2026-08-11 by Hui
     m_MaxPathBounces = clampedMaxPathBounces;
-//Modify End
+    m_DispatchMode = dispatchMode;
     m_Layout = layout;
 
-//Modify Begin:2026-07-27 by Hui
     if (layoutChanged || backendChanged
-//Modify Begin:2026-07-30 by Hui
-        || shadowModeChanged || shadingModelChanged || maxPathBouncesChanged
-//Modify End
+        || shadowModeChanged || shadingModelChanged || maxPathBouncesChanged || dispatchModeChanged
         )
     {
         RetireCurrentPipelines();
     }
-//Modify End
 
     if (needsDxrPipeline)
     {
@@ -249,21 +412,26 @@ void PathTracingPipelineController::EnsurePipelines(
     }
 
     CreateInlinePipelines(layout);
+    if (needsCompactedDispatch)
+    {
+        CreateCompactedDispatchPipelines();
+    }
 }
 
 void PathTracingPipelineController::CreateDxrPipeline(const RayTracingSceneResourceLayout& layout)
 {
-//Modify Begin:2026-07-30 by Hui
     const bool useSoftShadows = m_ShadowMode == PathTracingShadowMode::SoftShadows;
     std::wstring shaderFileName = L"PathTracing" + GetEnvironmentProjectionShaderSuffix(layout.EnvironmentProjection);
     if (useSoftShadows)
     {
         shaderFileName += L".softshadow";
     }
-//Modify Begin:2026-08-11 by Hui
     shaderFileName += L".bounces" + std::to_wstring(m_MaxPathBounces);
-//Modify End
     shaderFileName += GetMaterialShadingModelShaderSuffix(m_MaterialShadingModel);
+    if (m_DispatchMode == PathTracingDispatchMode::CompactedIndirect)
+    {
+        shaderFileName += L".compact";
+    }
     shaderFileName += L".rt.cso";
     std::vector<ShaderVariantDefine> defines;
     AddEnvironmentProjectionDefine(defines, layout.EnvironmentProjection);
@@ -271,10 +439,12 @@ void PathTracingPipelineController::CreateDxrPipeline(const RayTracingSceneResou
     {
         defines.push_back({ "RAYTRACING_DEMO_SOFT_SHADOWS", "1" });
     }
-//Modify Begin:2026-08-11 by Hui
     AddMaxPathBouncesDefine(defines, m_MaxPathBounces);
-//Modify End
     AddMaterialShadingModelDefine(defines, m_MaterialShadingModel);
+    if (m_DispatchMode == PathTracingDispatchMode::CompactedIndirect)
+    {
+        defines.push_back({ "RAYTRACING_DEMO_COMPACTED_DISPATCH", "1" });
+    }
     constexpr const char* targetProfile = ShaderTargetProfile::RayTracingLibrary();
     const std::shared_ptr<ShaderBlob> pathTracingShader = LoadShader(
         shaderFileName,
@@ -282,20 +452,13 @@ void PathTracingPipelineController::CreateDxrPipeline(const RayTracingSceneResou
         targetProfile,
         defines,
         "");
-//Modify End
     const RayTracingPipelineDesc rayTracingDesc = RayTracingPipelineDescBuilder::ReflectedDefault(*pathTracingShader)
-//Modify Begin:2026-07-30 by Hui
         .WithStaticSamplerContract(PipelineStaticSamplers::LinearWrap(0u))
-//Modify End
-//Modify Begin:2026-07-27 by Hui
         .WithTriangleHitGroup(L"HitGroup", L"ClosestHit")
         .WithTriangleHitGroup(L"VisibilityHitGroup", L"VisibilityClosestHit")
         .WithRayGenerationPass("DirectLightingRayGen", L"DirectLightingRayGen", { L"Miss" }, { L"HitGroup", L"VisibilityHitGroup" })
         .WithRayGenerationPass("IndirectLightingRayGen", L"IndirectLightingRayGen", { L"Miss" }, { L"HitGroup", L"VisibilityHitGroup" })
-//Modify End
-//Modify Begin:2026-08-06 by Hui
         .WithPayloadSize(80)
-//Modify End
         .Build();
     m_RayTracingShader = std::make_unique<RayTracingShader>(m_DeviceContext, *pathTracingShader, rayTracingDesc);
     m_DirectRayTracingBindingSet = std::make_unique<RayTracingBindingSet>(m_RayTracingShader->CreateBindingSet());
@@ -304,7 +467,6 @@ void PathTracingPipelineController::CreateDxrPipeline(const RayTracingSceneResou
 
 void PathTracingPipelineController::CreateInlinePipelines(const RayTracingSceneResourceLayout& layout)
 {
-//Modify Begin:2026-07-30 by Hui
     const bool useSoftShadows = m_ShadowMode == PathTracingShadowMode::SoftShadows;
     std::vector<ShaderVariantDefine> directShaderDefines;
     AddEnvironmentProjectionDefine(directShaderDefines, layout.EnvironmentProjection);
@@ -312,12 +474,15 @@ void PathTracingPipelineController::CreateInlinePipelines(const RayTracingSceneR
     {
         directShaderDefines.push_back({ "RAYTRACING_DEMO_SOFT_SHADOWS", "1" });
     }
-//Modify Begin:2026-08-11 by Hui
     std::vector<ShaderVariantDefine> indirectShaderDefines = directShaderDefines;
     AddMaxPathBouncesDefine(indirectShaderDefines, m_MaxPathBounces);
-//Modify End
     AddMaterialShadingModelDefine(directShaderDefines, m_MaterialShadingModel);
     AddMaterialShadingModelDefine(indirectShaderDefines, m_MaterialShadingModel);
+    if (m_DispatchMode == PathTracingDispatchMode::CompactedIndirect)
+    {
+        directShaderDefines.push_back({ "RAYTRACING_DEMO_COMPACTED_DISPATCH", "1" });
+        indirectShaderDefines.push_back({ "RAYTRACING_DEMO_COMPACTED_DISPATCH", "1" });
+    }
     std::wstring directLightingShaderFileName = L"DirectLighting";
     std::wstring indirectLightingShaderFileName = L"IndirectLighting";
     const std::wstring environmentProjectionSuffix = GetEnvironmentProjectionShaderSuffix(layout.EnvironmentProjection);
@@ -328,12 +493,15 @@ void PathTracingPipelineController::CreateInlinePipelines(const RayTracingSceneR
         directLightingShaderFileName += L".softshadow";
         indirectLightingShaderFileName += L".softshadow";
     }
-//Modify Begin:2026-08-11 by Hui
     indirectLightingShaderFileName += L".bounces" + std::to_wstring(m_MaxPathBounces);
-//Modify End
     const std::wstring materialShadingModelSuffix = GetMaterialShadingModelShaderSuffix(m_MaterialShadingModel);
     directLightingShaderFileName += materialShadingModelSuffix;
     indirectLightingShaderFileName += materialShadingModelSuffix;
+    if (m_DispatchMode == PathTracingDispatchMode::CompactedIndirect)
+    {
+        directLightingShaderFileName += L".compact";
+        indirectLightingShaderFileName += L".compact";
+    }
     directLightingShaderFileName += L".cs.cso";
     indirectLightingShaderFileName += L".cs.cso";
     const std::shared_ptr<ShaderBlob> inlineDirectLightingShader = LoadShader(
@@ -341,30 +509,56 @@ void PathTracingPipelineController::CreateInlinePipelines(const RayTracingSceneR
         L"Demos/RaytracingDemo/shaders/PathTracing/DirectLighting.cs.hlsl",
         ShaderTargetProfile::Compute(),
         directShaderDefines);
-//Modify End
     const ComputePipelineDesc inlineDirectLightingDesc = ComputePipelineDescBuilder::ReflectedDefault(*inlineDirectLightingShader)
-//Modify Begin:2026-07-30 by Hui
         .WithDirectlyIndexedResourceHeap()
-//Modify End
         .WithStaticSamplerContract(PipelineStaticSamplers::LinearWrap(1u))
         .Build();
     m_InlineDirectLightingShader = std::make_unique<ComputeShader>(m_DeviceContext, *inlineDirectLightingShader, inlineDirectLightingDesc);
 
-    //Modify Begin:2026-07-30 by Hui
     const std::shared_ptr<ShaderBlob> inlineIndirectLightingShader = LoadShader(
         std::move(indirectLightingShaderFileName),
         L"Demos/RaytracingDemo/shaders/PathTracing/IndirectLighting.cs.hlsl",
         ShaderTargetProfile::Compute(),
         indirectShaderDefines);
-    //Modify End
     const ComputePipelineDesc inlineIndirectLightingDesc = ComputePipelineDescBuilder::ReflectedDefault(*inlineIndirectLightingShader)
-//Modify Begin:2026-07-30 by Hui
         .WithDirectlyIndexedResourceHeap()
-//Modify End
         .WithStaticSamplerContract(PipelineStaticSamplers::LinearWrap(1u))
         .Build();
     m_InlineIndirectLightingShader = std::make_unique<ComputeShader>(m_DeviceContext, *inlineIndirectLightingShader, inlineIndirectLightingDesc);
 
+}
+
+void PathTracingPipelineController::CreateCompactedDispatchPipelines()
+{
+    const std::shared_ptr<ShaderBlob> compactionShader = LoadShader(
+        L"PathTracing.ActivePixelCompaction.cs.cso",
+        L"Demos/RaytracingDemo/shaders/PathTracing/ActivePixelCompaction.cs.hlsl",
+        ShaderTargetProfile::Compute());
+    m_ActivePixelCompactionShader = std::make_unique<ComputeShader>(
+        m_DeviceContext,
+        *compactionShader,
+        ComputePipelineDescBuilder::ReflectedDefault(*compactionShader).Build());
+
+    const std::shared_ptr<ShaderBlob> inlineFinalizeShader = LoadShader(
+        L"PathTracing.CompactInlineDispatchFinalize.cs.cso",
+        L"Demos/RaytracingDemo/shaders/PathTracing/CompactInlineDispatchFinalize.cs.hlsl",
+        ShaderTargetProfile::Compute());
+    m_InlineCompactedDispatchFinalizeShader = std::make_unique<ComputeShader>(
+        m_DeviceContext,
+        *inlineFinalizeShader,
+        ComputePipelineDescBuilder::ReflectedDefault(*inlineFinalizeShader).Build());
+
+    if (m_Backend == PathTracingBackend::ShaderTableDxr)
+    {
+        const std::shared_ptr<ShaderBlob> dxrFinalizeShader = LoadShader(
+            L"PathTracing.CompactDxrDispatchFinalize.cs.cso",
+            L"Demos/RaytracingDemo/shaders/PathTracing/CompactDxrDispatchFinalize.cs.hlsl",
+            ShaderTargetProfile::Compute());
+        m_DxrCompactedDispatchFinalizeShader = std::make_unique<ComputeShader>(
+            m_DeviceContext,
+            *dxrFinalizeShader,
+            ComputePipelineDescBuilder::ReflectedDefault(*dxrFinalizeShader).Build());
+    }
 }
 
 void PathTracingPipelineController::BindRayTracingResources(
@@ -413,6 +607,24 @@ ComputeShader& PathTracingPipelineController::GetInlineIndirectLightingShader() 
     return *m_InlineIndirectLightingShader;
 }
 
+ComputeShader& PathTracingPipelineController::GetActivePixelCompactionShader() const
+{
+    Assert(m_ActivePixelCompactionShader != nullptr, "Active-pixel compaction shader is unavailable for the full-resolution pipeline.");
+    return *m_ActivePixelCompactionShader;
+}
+
+ComputeShader& PathTracingPipelineController::GetInlineCompactedDispatchFinalizeShader() const
+{
+    Assert(m_InlineCompactedDispatchFinalizeShader != nullptr, "Inline compact-dispatch finalizer is unavailable for the full-resolution pipeline.");
+    return *m_InlineCompactedDispatchFinalizeShader;
+}
+
+ComputeShader& PathTracingPipelineController::GetDxrCompactedDispatchFinalizeShader() const
+{
+    Assert(m_DxrCompactedDispatchFinalizeShader != nullptr, "DXR compact-dispatch finalizer is unavailable for the current pipeline.");
+    return *m_DxrCompactedDispatchFinalizeShader;
+}
+
 uint32_t PathTracingPipelineController::GetLightingCompositeVariantKey(
     const PathTracingCompositeFeatures& features)
 {
@@ -453,12 +665,10 @@ ComputeShader& PathTracingPipelineController::GetLightingCompositeShader(
     return *shaderIt->second;
 }
 
-//Modify Begin:2026-07-30 by Hui
 RayTracingShader& PathTracingPipelineController::GetRayTracingShader() const
 {
     return *m_RayTracingShader;
 }
-//Modify End
 
 RayTracingBindingSet& PathTracingPipelineController::GetDirectRayTracingBindingSet() const
 {

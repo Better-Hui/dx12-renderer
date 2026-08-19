@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-07-30 by Hui
 #pragma once
 
 #include <cstdint>
@@ -9,9 +9,7 @@
 
 class CommandList;
 class ComputeShader;
-//Modify Begin:2026-07-30 by Hui
 class FrameworkDeviceContext;
-//Modify End
 class Resource;
 class Texture;
 
@@ -164,9 +162,7 @@ private:
         uint32_t width,
         uint32_t height);
 
-    //Modify Begin:2026-07-30 by Hui
     FrameworkDeviceContext& m_DeviceContext;
-    //Modify End
     std::unique_ptr<ComputeShader> m_PrepareShader;
     std::unique_ptr<ComputeShader> m_CompositeShader;
     std::unique_ptr<class NRDImpl> m_Impl;

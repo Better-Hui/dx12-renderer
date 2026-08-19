@@ -2,17 +2,15 @@
 #include <DX12Library/Helpers.h>
 #include <DX12Library/ShaderUtils.h>
 //Modify Begin:2026-07-31 by Hui
-#include <Framework/Rendering/Pipeline/IndirectDrawCommandSignature.h>
+#include <Framework/Rendering/Pipeline/IndirectCommandSignature.h>
 //Modify End
 //Modify Begin:2026-07-30 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
 //Modify End
 
-//Modify Begin:2026-07-24 by Hui
-#include <algorithm>
 //Modify Begin:2026-07-31 by Hui
+#include <algorithm>
 #include <utility>
-//Modify End
 
 namespace
 {
@@ -71,10 +69,8 @@ namespace
         AppendUniqueMetadata(vertexShaderMetadata.m_UnorderedAccessViews, merged.m_UnorderedAccessViews, merged.m_UnorderedAccessViewsNameCache);
         AppendUniqueMetadata(pixelShaderMetadata.m_UnorderedAccessViews, merged.m_UnorderedAccessViews, merged.m_UnorderedAccessViewsNameCache);
 
-//Modify Begin:2026-07-27 by Hui
         AppendUniqueMetadata(vertexShaderMetadata.m_Samplers, merged.m_Samplers, merged.m_SamplersNameCache);
         AppendUniqueMetadata(pixelShaderMetadata.m_Samplers, merged.m_Samplers, merged.m_SamplersNameCache);
-//Modify End
 
         return merged;
     }
@@ -158,19 +154,31 @@ bool Shader::HasUnorderedAccessView(const std::string& variableName) const
 //Modify End
 
 //Modify Begin:2026-07-31 by Hui
-std::unique_ptr<IndirectDrawCommandSignature> Shader::CreateIndirectDrawCommandSignature(
+std::unique_ptr<IndirectCommandSignature> Shader::CreateIndirectDrawCommandSignature(
     const std::string& rootConstantBufferName,
     const UINT byteStride) const
 {
     Assert(m_PipelineLayout != nullptr && m_RootSignature != nullptr, "Shader pipeline layout and root signature must be created.");
     const PipelineRootConstantDesc* rootConstant = m_PipelineLayout->FindRootConstant(rootConstantBufferName);
     Assert(rootConstant != nullptr, "Root constant buffer was not found in shader pipeline layout.");
-    return std::make_unique<IndirectDrawCommandSignature>(
+    const IndirectArgumentDesc arguments[] = {
+        {
+            .Type = IndirectArgumentType::RootConstants,
+            .RootParameterIndex = rootConstant->RootParameterIndex,
+            .RootConstantOffset = 0u,
+            .RootConstantCount = static_cast<uint32_t>((rootConstant->SizeInBytes + 3u) / 4u),
+        },
+        {
+            .Type = IndirectArgumentType::Draw,
+        },
+    };
+    return std::make_unique<IndirectCommandSignature>(
         m_DeviceContext,
-        *m_RootSignature,
-        rootConstant->RootParameterIndex,
-        static_cast<UINT>((rootConstant->SizeInBytes + 3u) / 4u),
-        byteStride);
+        IndirectCommandSignatureDesc{
+            .Arguments = arguments,
+            .ByteStride = byteStride,
+            .RootSignatureRef = m_RootSignature.get(),
+        });
 }
 //Modify End
 
@@ -208,13 +216,11 @@ void Shader::SetTexture(CommandList& commandList, const std::string& variableNam
     SetTexture(commandList, variableName, ShaderResourceView(texture));
 }
 
-//Modify Begin:2026-07-23 by Hui
+//Modify Begin:2026-07-24 by Hui
 void Shader::SetUnorderedAccessView(CommandList& commandList, const std::string& variableName, const UnorderedAccessView& unorderedAccessView)
 {
-    //Modify Begin:2026-07-24 by Hui
     (void)commandList;
     m_DescriptorSet->SetUnorderedAccessView(variableName, unorderedAccessView);
-    //Modify End
 }
 //Modify End
 
@@ -242,7 +248,7 @@ void Shader::CollectShaderMetadata(const Microsoft::WRL::ComPtr<ID3DBlob>& shade
     *outMetadata = ShaderReflection::CollectShader(shader);
 }
 
-//Modify Begin:2026-07-24 by Hui
+//Modify Begin:2026-07-30 by Hui
 void Shader::BuildPipelineLayout()
 {
     const ShaderReflectionMetadata mergedReflection = MergeGraphicsReflection(m_VertexShaderMetadata, m_PixelShaderMetadata);
@@ -281,16 +287,12 @@ void Shader::BuildReflectedRootSignature()
     }
 
     PipelineRootSignatureBuildDesc rootSignatureBuildDesc;
-//Modify Begin:2026-07-30 by Hui
     rootSignatureBuildDesc.Flags =
         D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |
         D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED;
-//Modify End
     m_RootSignature = m_PipelineLayout->CreateRootSignature(rootSignatureBuildDesc);
-//Modify Begin:2026-07-27 by Hui
     m_PipelineLayout->SetRootSignature(m_RootSignature);
     m_DescriptorSet = m_DescriptorPool.AllocateDescriptorSet(*m_PipelineLayout);
-//Modify End
 }
 
 const PipelineDescriptorRangeDesc* Shader::FindPipelineBinding(

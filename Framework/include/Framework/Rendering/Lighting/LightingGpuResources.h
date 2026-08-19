@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-08-06 by Hui
+//Modify Begin:2026-08-13 by Hui
 #include <DX12Library/StructuredBuffer.h>
 
 #include <Framework/Rendering/Lighting/LightingData.h>
@@ -51,9 +51,7 @@ public:
     void Initialize(CommandList& commandList);
     bool Upload(CommandList& commandList, uint64_t frameIndex);
     void BindComputeResources(CommandContext& commandContext, ComputeShader& shader);
-//Modify Begin:2026-08-13 by Hui
     void ForEachShaderResource(const std::function<void(const Resource&)>& action) const;
-//Modify End
     void BindRayTracingResources(RayTracingBindingSet& bindingSet);
 
     uint32_t GetDirectionalLightCount() const;

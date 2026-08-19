@@ -3,16 +3,16 @@
 #include <memory.h>
 
 #include <d3d12.h>
-#include <d3dx12.h>
+#include <d3dx12/d3dx12.h>
 #include <wrl.h>
 
 #include <DX12Library/CommandList.h>
-//Modify Begin:2026-07-23 by Hui
+//Modify Begin:2026-08-19 by Hui
 #include <DX12Library/ShaderUtils.h>
 //Modify End
 
 #include <Framework/Rendering/Pipeline/ComputePipelineStateBuilder.h>
-//Modify Begin:2026-07-24 by Hui
+//Modify Begin:2026-08-19 by Hui
 #include <Framework/Rendering/Pipeline/PipelineBindingSet.h>
 #include <Framework/Rendering/Pipeline/PipelineDescriptorPool.h>
 #include <Framework/Rendering/Pipeline/PipelineDescriptorSet.h>
@@ -22,7 +22,7 @@
 //Modify End
 #include <Framework/Rendering/Pipeline/ShaderBlob.h>
 #include <Framework/Rendering/Pipeline/ShaderReflection.h>
-//Modify Begin:2026-07-23 by Hui
+//Modify Begin:2026-08-19 by Hui
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <Framework/Rendering/Texture/UnorderedAccessView.h>
 
@@ -34,11 +34,11 @@
 
 class CommandContext;
 class StructuredBuffer;
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
 class FrameworkDeviceContext;
 //Modify End
 
-//Modify Begin:2026-07-23 by Hui
+//Modify Begin:2026-08-19 by Hui
 struct ComputePipelineDesc
 {
     struct BindingOverride
@@ -48,13 +48,9 @@ struct ComputePipelineDesc
     };
 
     std::vector<BindingOverride> BindingOverrides;
-//Modify Begin:2026-08-12 by Hui
     std::vector<PipelineStaticSamplerContract> StaticSamplerContracts;
-//Modify End
     UINT MaxDescriptorCount = 1024;
-//Modify Begin:2026-07-30 by Hui
     D3D12_ROOT_SIGNATURE_FLAGS RootSignatureFlags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
-//Modify End
 };
 
 class ComputePipelineDescBuilder
@@ -63,15 +59,11 @@ public:
     static ComputePipelineDescBuilder ReflectedDefault(const ShaderBlob& shader);
 
     ComputePipelineDescBuilder& WithDescriptorArrayCount(std::string name, UINT descriptorCount);
-//Modify Begin:2026-08-12 by Hui
     ComputePipelineDescBuilder& WithStaticSamplerContract(PipelineStaticSamplerContract contract);
     ComputePipelineDescBuilder& WithCommonRootSignatureStaticSamplers();
-//Modify End
     ComputePipelineDescBuilder& WithMaxDescriptorCount(UINT maxDescriptorCount);
-//Modify Begin:2026-07-30 by Hui
     ComputePipelineDescBuilder& WithRootSignatureFlags(D3D12_ROOT_SIGNATURE_FLAGS flags);
     ComputePipelineDescBuilder& WithDirectlyIndexedResourceHeap();
-//Modify End
 
     ComputePipelineDesc Build() const;
 
@@ -94,17 +86,16 @@ public:
     using ShaderMetadata = ShaderReflectionMetadata;
 
     const ShaderMetadata& GetShaderMetadata() const { return m_ShaderMetadata; }
-//Modify Begin:2026-07-28 by Hui
+//Modify Begin:2026-08-19 by Hui
     const PipelineDescriptorSet& GetDescriptorSet() const { return *m_DescriptorSet; }
 //Modify End
 
 
 private:
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
     FrameworkDeviceContext& GetDeviceContext() const { return m_DeviceContext; }
 //Modify End
-    //Modify Begin:2026-07-23 by Hui
-//Modify Begin:2026-07-29 by Hui
+//Modify Begin:2026-08-19 by Hui
     friend class CommandContext;
     void SetConstantBuffer(CommandList& commandList, const std::string& variableName, size_t size, const void* data) const;
 
@@ -129,7 +120,6 @@ private:
     const PipelineDescriptorPool& GetDescriptorPool() const { return m_DescriptorPool; }
     bool UsesReflectedRootSignature() const { return true; }
     void StageDefaultDescriptorTables(CommandList& commandList) const;
-//Modify End
     void CollectShaderMetadata(const Microsoft::WRL::ComPtr<ID3DBlob>& shader, ShaderMetadata* outMetadata);
     void BuildReflectedRootSignature(const ComputePipelineDesc& desc);
     const DescriptorBindingInfo& GetReflectedBinding(const std::string& variableName, DescriptorBindingKind expectedKind) const;
@@ -142,11 +132,8 @@ private:
     std::unique_ptr<PipelineLayout> m_PipelineLayout;
     std::unique_ptr<PipelineBindingSet> m_BindingSet;
     std::unique_ptr<PipelineDescriptorSet> m_DescriptorSet;
-//Modify Begin:2026-07-27 by Hui
     PipelineDescriptorPool m_DescriptorPool;
-//Modify End
-//Modify Begin:2026-07-27 by Hui
     mutable PipelineStateCache<ComputePipelineStateKey, Microsoft::WRL::ComPtr<ID3D12PipelineState>> m_PipelineStateCache;
-//Modify End
     //Modify End
 };
+//Modify End

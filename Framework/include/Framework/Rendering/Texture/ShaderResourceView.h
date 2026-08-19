@@ -6,7 +6,7 @@
 #include <memory>
 #include <stdexcept>
 
-//Modify Begin:2026-08-06 by Hui
+//Modify Begin:2026-08-19 by Hui
 enum class EnvironmentTextureProjection : uint32_t
 {
     Cubemap = 0u,
@@ -17,7 +17,7 @@ enum class EnvironmentTextureProjection : uint32_t
 
 struct ShaderResourceView
 {
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
     static EnvironmentTextureProjection GetEnvironmentTextureProjection(const Resource& resource)
     {
         const D3D12_RESOURCE_DESC resourceDesc = resource.GetD3D12ResourceDesc();
@@ -69,7 +69,7 @@ struct ShaderResourceView
     }
 //Modify End
 
-    //Modify Begin:2026-07-23 by Hui
+//Modify Begin:2026-08-19 by Hui
     static ShaderResourceView TextureCube(const std::shared_ptr<Resource>& resource)
     {
         return ShaderResourceView(resource, CreateTextureCubeDesc(*resource));
@@ -159,3 +159,4 @@ struct ShaderResourceView
     bool m_IsDescValid;
     D3D12_SHADER_RESOURCE_VIEW_DESC m_Desc;
 };
+//Modify End

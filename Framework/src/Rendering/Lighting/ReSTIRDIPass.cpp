@@ -1,6 +1,6 @@
 #include <Framework/Rendering/Lighting/ReSTIRDIPass.h>
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-12 by Hui
 #include <DX12Library/CommandList.h>
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Texture.h>
@@ -8,9 +8,7 @@
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 #include <Framework/Rendering/Pipeline/ComputePipelineStateBuilder.h>
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
-//Modify Begin:2026-07-30 by Hui
 #include <Framework/Rendering/Pipeline/ShaderTargetProfile.h>
-//Modify End
 #include <Framework/Rendering/Texture/RenderTexture.h>
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <Framework/Rendering/Texture/UnorderedAccessView.h>
@@ -152,7 +150,6 @@ void ReSTIRDIPass::EnsureResources(const uint32_t width, const uint32_t height)
     }
 
     m_Resources = std::make_unique<InternalResources>();
-//Modify Begin:2026-08-12 by Hui
     const auto createReservoir = [this, width, height](const wchar_t* name)
     {
         return RenderTexture::CreateUav2D(m_DeviceContext, RESERVOIR_FORMAT, width, height, name);
@@ -165,7 +162,6 @@ void ReSTIRDIPass::EnsureResources(const uint32_t width, const uint32_t height)
     {
         return RenderTexture::CreateUav2D(m_DeviceContext, HISTORY_SHADING_FORMAT, width, height, name);
     };
-//Modify End
 
     m_Resources->ReservoirA = createReservoir(L"ReSTIR DI Reservoir A");
     m_Resources->ReservoirB = createReservoir(L"ReSTIR DI Reservoir B");
@@ -305,12 +301,10 @@ size_t ReSTIRDIPass::GetPipelineVariantIndex(
     const bool useSoftShadowVariant,
     const uint32_t environmentProjectionVariant)
 {
-//Modify Begin:2026-08-06 by Hui
     Assert(
         environmentProjectionVariant < EnvironmentProjectionVariantCount,
         "Unsupported ReSTIR DI environment projection variant.");
     return static_cast<size_t>(environmentProjectionVariant * 2u + (useSoftShadowVariant ? 1u : 0u));
-//Modify End
 }
 
 uint32_t ReSTIRDIPass::GetStageVariantKey(
@@ -502,7 +496,6 @@ std::unique_ptr<ComputeShader> ReSTIRDIPass::CreateComputeShader(
     {
         shaderDesc.Defines = m_ShaderSources.SoftShadowDefines;
     }
-//Modify Begin:2026-08-06 by Hui
     if (environmentProjectionVariant != 0u)
     {
         Assert(
@@ -514,14 +507,12 @@ std::unique_ptr<ComputeShader> ReSTIRDIPass::CreateComputeShader(
             std::to_string(environmentProjectionVariant)
         });
     }
-//Modify End
     shaderDesc.Defines.insert(
         shaderDesc.Defines.end(),
         std::make_move_iterator(featureDefines.begin()),
         std::make_move_iterator(featureDefines.end()));
 
     const std::shared_ptr<ShaderBlob> shaderBlob = m_ShaderVariants.GetOrCompile(shaderDesc);
-//Modify Begin:2026-08-12 by Hui
     ComputePipelineDescBuilder pipelineDescBuilder =
         ComputePipelineDescBuilder::ReflectedDefault(*shaderBlob)
             .WithDirectlyIndexedResourceHeap();
@@ -533,6 +524,5 @@ std::unique_ptr<ComputeShader> ReSTIRDIPass::CreateComputeShader(
         m_DeviceContext,
         *shaderBlob,
         pipelineDescBuilder.Build());
-//Modify End
 }
 //Modify End

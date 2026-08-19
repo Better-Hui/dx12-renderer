@@ -75,9 +75,7 @@ float GetGBufferRoughness(uint2 pixel)
 float GetGBufferViewZ(uint2 pixel)
 {
     const float3 positionWs = GBufferTextures[GBuffer_Position].Load(int3(pixel, 0)).xyz;
-//Modify Begin:2026-07-28 by Hui
     const float3 cameraForward = normalize(mul(Camera_InverseView, float4(0.0f, 0.0f, 1.0f, 0.0f)).xyz);
-//Modify End
     return max(0.001f, dot(positionWs - Camera_Position.xyz, cameraForward));
 }
 
@@ -109,21 +107,17 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     }
 
     const float depth = DepthTexture.Load(int3(pixel, 0));
-//Modify Begin:2026-07-28 by Hui
+//Modify Begin:2026-07-30 by Hui
     if (depth >= 0.999999f)
     {
-//Modify Begin:2026-07-30 by Hui
 #if RAYTRACING_DEMO_COMPOSITE_DENOISER_MODE == 1
             NRDNoisyRadiance[pixel] = 0.0f;
 #elif RAYTRACING_DEMO_COMPOSITE_DENOISER_MODE == 2
             NoisyRadiance[pixel] = 0.0f;
 #endif
-//Modify End
-//Modify Begin:2026-07-30 by Hui
 #if RAYTRACING_DEMO_COMPOSITE_ACCUMULATION
             HistoryColor[pixel] = 0.0f;
 #endif
-//Modify End
         SceneColor[pixel] = 0.0f;
         return;
     }
@@ -139,7 +133,6 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     sampleColor += emission;
 //Modify End
 //Modify Begin:2026-08-06 by Hui
-//Modify Begin:2026-07-30 by Hui
 #if RAYTRACING_DEMO_COMPOSITE_DIRECT_LIGHTING
         const float4 directLightingSample = DirectLightingTexture.Load(int3(pixel, 0));
         directLighting = directLightingSample.rgb;
@@ -152,7 +145,6 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         indirectHitDistance = indirectLighting.a;
         sampleColor += indirectLightingColor;
 #endif
-//Modify End
 
     const float directLuminance = dot(max(directLighting, 0.0f), float3(0.2126f, 0.7152f, 0.0722f));
     const float indirectLuminance = dot(max(indirectLightingColor, 0.0f), float3(0.2126f, 0.7152f, 0.0722f));
@@ -160,7 +152,6 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     directHitDistanceContribution = min(directHitDistanceContribution, 0.5f);
     const float hitDistance = lerp(indirectHitDistance, directHitDistance, directHitDistanceContribution);
 
-//Modify Begin:2026-07-30 by Hui
 #if RAYTRACING_DEMO_COMPOSITE_DENOISER_MODE == 1
     const float viewZ = GetGBufferViewZ(pixel);
     const float roughness = GetGBufferRoughness(pixel);
@@ -169,9 +160,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
 #elif RAYTRACING_DEMO_COMPOSITE_DENOISER_MODE == 2
         NoisyRadiance[pixel] = float4(SanitizeNRDRadiance(sampleColor), hitDistance);
 #endif
-//Modify End
 
-//Modify Begin:2026-07-30 by Hui
 #if !RAYTRACING_DEMO_COMPOSITE_ACCUMULATION
         SceneColor[pixel] = float4(SanitizeNRDRadiance(sampleColor), 1.0f);
         return;
@@ -188,5 +177,5 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     HistoryColor[pixel] = float4(accumulatedColor, float(previousSampleCount + 1u));
     SceneColor[pixel] = float4(SanitizeNRDRadiance(accumulatedColor), 1.0f);
 #endif
-//Modify End
 }
+//Modify End

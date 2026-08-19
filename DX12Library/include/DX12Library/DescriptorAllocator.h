@@ -2,7 +2,7 @@
 
 #include "DescriptorAllocation.h"
 
-#include "d3dx12.h"
+#include <d3dx12/d3dx12.h>
 
 #include <cstdint>
 #include <mutex>

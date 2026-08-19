@@ -1,9 +1,7 @@
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-08-06 by Hui
 #include <RaytracingDemo.h>
 
-//Modify Begin:2026-07-30 by Hui
 #include <DX12Library/Application.h>
-//Modify End
 #include <DX12Library/Events.h>
 
 #include <algorithm>
@@ -22,9 +20,7 @@ namespace
 void RaytracingDemo::OnUpdate(UpdateEventArgs& e)
 {
     Base::OnUpdate(e);
-//Modify Begin:2026-07-30 by Hui
     UpdateRuntimeAutomation(e.TotalTime);
-//Modify End
     m_DeltaTime = static_cast<float>(e.ElapsedTime);
     if (m_SceneRuntime.UpdateAnimatedLights(m_Lights, static_cast<float>(e.TotalTime)))
     {
@@ -160,9 +156,7 @@ void RaytracingDemo::OnMouseMoved(MouseMotionEventArgs& e)
     {
         if (e.RelX != 0 || e.RelY != 0)
         {
-//Modify Begin:2026-08-06 by Hui
             m_LeftMouseDragSincePress = true;
-//Modify End
             m_CameraController.Pitch = ClampCameraValue(m_CameraController.Pitch + e.RelY * m_MouseRotateSpeed, -90.0f, 90.0f);
             m_CameraController.Yaw += e.RelX * m_MouseRotateSpeed;
             ResetAccumulation(false, false);
@@ -200,7 +194,6 @@ void RaytracingDemo::OnMouseMoved(MouseMotionEventArgs& e)
     }
 }
 
-//Modify Begin:2026-07-30 by Hui
 void RaytracingDemo::OnMouseButtonPressed(MouseButtonEventArgs& e)
 {
     if (m_ImGui != nullptr && m_ImGui->WantsToCaptureMouse())
@@ -214,16 +207,12 @@ void RaytracingDemo::OnMouseButtonPressed(MouseButtonEventArgs& e)
         return;
     }
 
-//Modify Begin:2026-08-06 by Hui
     m_LeftMouseDragSincePress = false;
     m_LeftMouseNativeDoubleClick = e.DoubleClick;
     m_LeftMousePressX = e.X;
     m_LeftMousePressY = e.Y;
-//Modify End
 }
-//Modify End
 
-//Modify Begin:2026-08-06 by Hui
 void RaytracingDemo::OnMouseButtonReleased(MouseButtonEventArgs& e)
 {
     if (m_ImGui != nullptr && m_ImGui->WantsToCaptureMouse())
@@ -252,7 +241,6 @@ void RaytracingDemo::OnMouseButtonReleased(MouseButtonEventArgs& e)
     m_LeftMouseDragSincePress = false;
     m_LeftMouseNativeDoubleClick = false;
 }
-//Modify End
 
 void RaytracingDemo::OnMouseWheel(MouseWheelEventArgs& e)
 {

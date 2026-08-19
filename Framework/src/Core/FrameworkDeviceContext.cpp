@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-07 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
 
 #include <DX12Library/CommandQueue.h>
@@ -10,9 +10,7 @@
 FrameworkDeviceContext::FrameworkDeviceContext(FrameworkDeviceContextDesc desc)
     : m_Desc(std::move(desc))
 {
-//Modify Begin:2026-08-07 by Hui
     Assert(m_Desc.DeviceContext != nullptr, "Framework device context requires a D3D12 device context.");
-//Modify End
     Assert(m_Desc.DirectQueue != nullptr, "Framework device context requires a direct queue.");
     Assert(m_Desc.ComputeQueue != nullptr, "Framework device context requires a compute queue.");
     Assert(m_Desc.CopyQueue != nullptr, "Framework device context requires a copy queue.");
@@ -30,9 +28,7 @@ std::shared_ptr<CommandQueue> FrameworkDeviceContext::GetCommandQueue(
     case D3D12_COMMAND_LIST_TYPE_COPY:
         return m_Desc.CopyQueue;
     default:
-//Modify Begin:2026-07-30 by Hui
         throw std::invalid_argument("Unsupported framework command queue type.");
-//Modify End
     }
 }
 

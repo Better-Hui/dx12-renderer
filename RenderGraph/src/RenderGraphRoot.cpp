@@ -28,14 +28,12 @@ RenderGraph::RenderGraphRoot::RenderGraphRoot(
     , RenderGraphOutputResources outputs
 //Modify End
 )
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-03 by Hui
     : m_DeviceContext(std::move(deviceContext))
     , m_Device(std::move(device))
     , m_DirectCommandQueue(std::move(directCommandQueue))
-//Modify Begin:2026-08-03 by Hui
     , m_AsyncComputeCommandQueue(std::move(asyncComputeCommandQueue))
     , m_CopyCommandQueue(std::move(copyCommandQueue))
-//Modify End
 //Modify End
 //Modify Begin:2026-07-30 by Hui
     , m_QueueScheduler(m_DirectCommandQueue, m_AsyncComputeCommandQueue, m_CopyCommandQueue)
@@ -74,7 +72,7 @@ RenderGraph::RenderGraphRoot::RenderGraphRoot(
     }
 //Modify End
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-07 by Hui
     m_CommandExecutor = std::make_unique<RenderGraphCommandExecutor>(
         m_DirectCommandQueue,
         m_AsyncComputeCommandQueue,
@@ -82,7 +80,6 @@ RenderGraph::RenderGraphRoot::RenderGraphRoot(
         m_ResourcePool,
         m_QueueScheduler,
         m_Profiler);
-//Modify Begin:2026-08-07 by Hui
         m_Compiler = std::make_unique<RenderGraphCompiler>(
             m_Device,
         m_ResourcePool);
@@ -91,7 +88,6 @@ RenderGraph::RenderGraphRoot::RenderGraphRoot(
         m_TextureDescriptions,
         m_BufferDescriptions,
         m_TokenDescriptions);
-//Modify End
 //Modify End
 
     {
@@ -151,7 +147,7 @@ void RenderGraph::RenderGraphRoot::Present(const std::shared_ptr<Window>& pWindo
     pWindow->Present(*pTexture);
 }
 
-//Modify Begin:2026-07-28 by Hui
+//Modify Begin:2026-08-07 by Hui
 void RenderGraph::RenderGraphRoot::PresentWithOverlay(
     const std::shared_ptr<Window>& pWindow,
     const ResourceId resourceId,
@@ -159,9 +155,7 @@ void RenderGraph::RenderGraphRoot::PresentWithOverlay(
 {
     const auto& pTexture = m_ResourcePool->GetTexture(resourceId);
 
-//Modify Begin:2026-07-30 by Hui
     auto pCommandList = m_DirectCommandQueue->GetCommandList();
-//Modify End
     auto& commandList = *pCommandList;
 
     {
@@ -196,14 +190,11 @@ void RenderGraph::RenderGraphRoot::PresentWithOverlay(
         }
     }
 
-//Modify Begin:2026-07-30 by Hui
     m_QueueScheduler.TrackExternalResource(resourceId, RenderPassQueue::Direct);
     m_QueueScheduler.SubmitDirect(pCommandList);
-//Modify End
     pWindow->Present();
 }
 
-//Modify Begin:2026-08-07 by Hui
 void RenderGraph::RenderGraphRoot::PresentWithExternalFrameProcessor(
     const std::shared_ptr<Window>& pWindow,
     const ResourceId displayResourceId,
@@ -252,7 +243,6 @@ void RenderGraph::RenderGraphRoot::PresentWithExternalFrameProcessor(
     pWindow->Present();
     processor.AfterPresent();
 }
-//Modify End
 
 void RenderGraph::RenderGraphRoot::PresentWithOverlayBlit(
     const std::shared_ptr<Window>& pWindow,
@@ -262,9 +252,7 @@ void RenderGraph::RenderGraphRoot::PresentWithOverlayBlit(
 {
     const auto& pTexture = m_ResourcePool->GetTexture(resourceId);
 
-//Modify Begin:2026-07-30 by Hui
     auto pCommandList = m_DirectCommandQueue->GetCommandList();
-//Modify End
     auto& commandList = *pCommandList;
 
     {
@@ -287,10 +275,8 @@ void RenderGraph::RenderGraphRoot::PresentWithOverlayBlit(
         }
     }
 
-//Modify Begin:2026-07-30 by Hui
     m_QueueScheduler.TrackExternalResource(resourceId, RenderPassQueue::Direct);
     m_QueueScheduler.SubmitDirect(pCommandList);
-//Modify End
     pWindow->Present();
 }
 
@@ -302,18 +288,14 @@ void RenderGraph::RenderGraphRoot::TransitionTexture(
 {
     RebuildIfNecessary(renderMetadata);
 
-//Modify Begin:2026-07-30 by Hui
     auto pCommandList = m_DirectCommandQueue->GetCommandList();
-//Modify End
     const auto& pTexture = m_ResourcePool->GetTexture(resourceId);
 
     pCommandList->TransitionBarrier(*pTexture, stateAfter);
     CommandListInternalAccess::FlushResourceBarriers(*pCommandList);
 
-//Modify Begin:2026-07-30 by Hui
     m_QueueScheduler.TrackExternalResource(resourceId, RenderPassQueue::Direct);
     const uint64_t fenceValue = m_QueueScheduler.SubmitDirect(pCommandList);
-//Modify End
     if (waitForCompletion)
     {
         m_DirectCommandQueue->WaitForFenceValue(fenceValue);
@@ -328,9 +310,7 @@ void RenderGraph::RenderGraphRoot::CopyTexture(
 {
     RebuildIfNecessary(renderMetadata);
 
-//Modify Begin:2026-07-30 by Hui
     auto pCommandList = m_DirectCommandQueue->GetCommandList();
-//Modify End
     auto& commandList = *pCommandList;
     const auto& source = m_ResourcePool->GetTexture(sourceId);
     const auto& destination = m_ResourcePool->GetTexture(destinationId);
@@ -341,11 +321,9 @@ void RenderGraph::RenderGraphRoot::CopyTexture(
 
     commandList.CopyResource(*destination, *source);
 
-//Modify Begin:2026-07-30 by Hui
     m_QueueScheduler.TrackExternalResource(sourceId, RenderPassQueue::Direct);
     m_QueueScheduler.TrackExternalResource(destinationId, RenderPassQueue::Direct);
     const uint64_t fenceValue = m_QueueScheduler.SubmitDirect(pCommandList);
-//Modify End
     if (waitForCompletion)
     {
         m_DirectCommandQueue->WaitForFenceValue(fenceValue);
@@ -359,9 +337,7 @@ void RenderGraph::RenderGraphRoot::DrawToTexture(
 {
     RebuildIfNecessary(renderMetadata);
 
-//Modify Begin:2026-07-30 by Hui
     auto pCommandList = m_DirectCommandQueue->GetCommandList();
-//Modify End
     auto& commandList = *pCommandList;
     const auto& pTexture = m_ResourcePool->GetTexture(resourceId);
 
@@ -375,10 +351,8 @@ void RenderGraph::RenderGraphRoot::DrawToTexture(
 
     drawCallback(commandList);
 
-//Modify Begin:2026-07-30 by Hui
     m_QueueScheduler.TrackExternalResource(resourceId, RenderPassQueue::Direct);
     m_QueueScheduler.SubmitDirect(pCommandList);
-//Modify End
 }
 //Modify End
 
