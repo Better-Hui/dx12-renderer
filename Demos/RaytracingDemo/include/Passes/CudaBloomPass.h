@@ -93,7 +93,7 @@ public:
     const std::string& GetStatus() const { return m_Status; }
     Settings GetSettings() const;
     void SetSettings(const Settings& settings);
-    const TimingStats& GetTimingStats() const { return m_LastCudaTiming; }
+    std::vector<TimingStats> ConsumeCompletedTimingStats();
 //Modify Begin:2026-08-17 by Hui
     void SetBackend(Backend backend) { m_Backend = backend; }
     void SetCudaMethod(CudaMethod method) { m_CudaMethod = method; }
@@ -194,7 +194,7 @@ private:
 //Modify End
 //Modify Begin:2026-07-30 by Hui
     std::array<CudaTimingFrame, CudaTimingFrameCount> m_CudaTimingFrames = {};
-    TimingStats m_LastCudaTiming = {};
+    std::vector<TimingStats> m_CompletedCudaTimingSamples;
     uint32_t m_CudaTimingFrameCursor = 0;
     uint64_t m_CudaTimingFrameCounter = 0;
     int32_t m_ActiveCudaTimingFrameIndex = -1;

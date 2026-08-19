@@ -12,6 +12,9 @@ struct GraphicsSettings
 	};
 
 	bool VSync = false;
+//Modify Begin:2026-08-18 by Hui
+	float ProfilerDisplayRefreshIntervalSeconds = 1.0f;
+//Modify End
 
 	ShadowsSettings DirectionalLightShadows{ 2048, 1.0f, 0.002f, 750.0f };
 	// resolution is only a single cubemap side

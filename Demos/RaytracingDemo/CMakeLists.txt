@@ -6,6 +6,7 @@ set(HEADER_FILES
         include/Denoising/DenoiserController.h
         include/Automation/RuntimeAutomationController.h
         include/Automation/RaytracingDemoAutomation.h
+        include/Profiling/ProfilerDisplayController.h
         include/Profiling/RenderGraphTimingHistory.h
         include/RaytracingDemo.h
         include/RenderGraph/RaytracingDemoRenderGraphBuilder.h
@@ -31,6 +32,7 @@ set(SOURCE_FILES
         src/Denoising/DenoiserController.cpp
         src/Automation/RuntimeAutomationController.cpp
         src/Automation/RaytracingDemoAutomation.cpp
+        src/Profiling/ProfilerDisplayController.cpp
         src/Profiling/RenderGraphTimingHistory.cpp
         src/RaytracingDemoCamera.cpp
         src/RaytracingDemo.cpp

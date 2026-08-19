@@ -9,6 +9,7 @@
 #include <Denoising/DenoiserController.h>
 //Modify Begin:2026-08-07 by Hui
 #include <Automation/RuntimeAutomationController.h>
+#include <Profiling/ProfilerDisplayController.h>
 #include <Profiling/RenderGraphTimingHistory.h>
 //Modify End
 //Modify Begin:2026-07-30 by Hui
@@ -145,7 +146,8 @@ private:
 //Modify Begin:2026-07-28 by Hui
     void RebuildRenderGraph();
     void EnsureRenderGraphTopology();
-    void ResetRenderGraphTimingDisplay();
+    void ResetProfilerDisplay();
+    void SetProfilerDisplayRefreshIntervalSeconds(double refreshIntervalSeconds);
 //Modify Begin:2026-07-30 by Hui
     void UpdateRenderGraphFrameState();
 //Modify End
@@ -215,33 +217,22 @@ private:
 //Modify End
 //Modify Begin:2026-07-29 by Hui
     GpuTimestampProfiler m_GpuTimestampProfiler;
-    DemoProfiling::GpuTimestampSampleAverager m_GpuTimestampAverager;
-    std::vector<GpuTimestampSample> m_GpuTimestampDisplaySamples;
 //Modify Begin:2026-08-03 by Hui
     GpuTimestampProfiler m_AsyncComputeGpuTimestampProfiler;
-    DemoProfiling::GpuTimestampSampleAverager m_AsyncComputeGpuTimestampAverager;
-    std::vector<GpuTimestampSample> m_AsyncComputeGpuTimestampDisplaySamples;
 //Modify Begin:2026-08-18 by Hui
     GpuTimestampProfiler m_CopyGpuTimestampProfiler;
-    DemoProfiling::GpuTimestampSampleAverager m_CopyGpuTimestampAverager;
-    std::vector<GpuTimestampSample> m_CopyGpuTimestampDisplaySamples;
 //Modify End
 //Modify End
+    DemoProfiling::ProfilerDisplayController m_ProfilerDisplay;
 //Modify Begin:2026-08-07 by Hui
     DemoProfiling::RenderGraphTimingHistory m_RenderGraphTimingHistory;
 //Modify End
-    double m_LastGpuTimingUiUpdateTime = -1.0;
 //Modify Begin:2026-08-03 by Hui
     bool m_GpuTimingEnabled = false;
     bool m_RenderGraphTimingCaptureEnabled = false;
 //Modify End
 //Modify Begin:2026-08-11 by Hui
     bool m_ReSTIRGIStageTimingEnabled = false;
-//Modify End
-//Modify Begin:2026-08-02 by Hui
-    double m_RenderGraphCpuDisplayMilliseconds = 0.0;
-    double m_RenderGraphCpuAccumulatedMilliseconds = 0.0;
-    uint64_t m_RenderGraphCpuTimingFrameCount = 0;
 //Modify End
 //Modify End
     RaytracingDemoSceneResources m_SceneResources;

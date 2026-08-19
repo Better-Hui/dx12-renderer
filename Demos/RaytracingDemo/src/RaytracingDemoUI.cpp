@@ -1,6 +1,7 @@
 //Modify Begin:2026-07-27 by Hui
 #include <RaytracingDemo.h>
 
+#include <DX12Library/Window.h>
 #include <imgui.h>
 #include <Framework/UI/NumericWidgets.h>
 
@@ -9,7 +10,12 @@
 //Modify Begin:2026-08-18 by Hui
 namespace
 {
-    bool DrawCudaBloomControls(CudaBloomPass& cudaBloom, const uint32_t width, const uint32_t height)
+    bool DrawCudaBloomControls(
+        CudaBloomPass& cudaBloom,
+        const DemoProfiling::ProfilerDisplayController::CudaTimingSample& timingStats,
+        const double refreshIntervalSeconds,
+        const uint32_t width,
+        const uint32_t height)
     {
         if (!ImGui::CollapsingHeader("CUDA Bloom"))
         {
@@ -67,15 +73,15 @@ namespace
             changed |= ImGui::DragFloat("Box Filter Sigma", &settings.BoxFilterSigma, 0.01f, 0.1f, 16.0f, "%.2f");
         }
 
-        const CudaBloomPass::TimingStats& timingStats = cudaBloom.GetTimingStats();
         if (timingStats.Valid)
         {
             ImGui::Text(
-                "CUDA timing: wait %.3f ms, kernels %.3f ms, signal %.3f ms, stream %.3f ms",
-                timingStats.D3DToCudaWaitMs,
-                timingStats.KernelsMs,
-                timingStats.CudaSignalMs,
-                timingStats.TotalCudaStreamMs);
+                "CUDA timing (%.1f s avg): wait %.3f ms, kernels %.3f ms, signal %.3f ms, stream %.3f ms",
+                refreshIntervalSeconds,
+                timingStats.D3DToCudaWaitMilliseconds,
+                timingStats.KernelsMilliseconds,
+                timingStats.CudaSignalMilliseconds,
+                timingStats.TotalCudaStreamMilliseconds);
         }
         ImGui::TextWrapped("%s", cudaBloom.GetStatus().c_str());
 
@@ -95,8 +101,21 @@ void RaytracingDemo::OnImGui()
     ImGui::Begin("Raytracing");
 //Modify End
     ImGui::Text("GBuffer Path Tracing");
-    ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+    ImGui::Text(
+        "FPS: %.1f (%.2f ms)",
+        PWindow != nullptr ? PWindow->GetFramesPerSecond() : 0.0,
+        PWindow != nullptr ? PWindow->GetFrameMilliseconds() : 0.0);
     ImGui::Text("Resolution: %d x %d", m_Width, m_Height);
+    float profilerRefreshInterval = static_cast<float>(m_ProfilerDisplay.GetRefreshIntervalSeconds());
+    if (FrameworkImGui::SliderFloat(
+        "Profiler Refresh Interval (s)",
+        &profilerRefreshInterval,
+        0.1f,
+        5.0f,
+        "%.1f"))
+    {
+        SetProfilerDisplayRefreshIntervalSeconds(profilerRefreshInterval);
+    }
     ImGui::Text("Frame: %u", m_FrameIndex);
     ImGui::Text("Accumulation: %u", m_AccumulationFrameIndex);
 //Modify Begin:2026-07-30 by Hui
@@ -125,7 +144,7 @@ void RaytracingDemo::OnImGui()
     {
         if (ImGui::Checkbox("Enable RG Timing", &m_GpuTimingEnabled))
         {
-            ResetRenderGraphTimingDisplay();
+            ResetProfilerDisplay();
 //Modify Begin:2026-08-03 by Hui
             if (!m_GpuTimingEnabled)
             {
@@ -167,30 +186,38 @@ void RaytracingDemo::OnImGui()
             }
 //Modify End
 //Modify Begin:2026-08-02 by Hui
+            const double refreshIntervalSeconds = m_ProfilerDisplay.GetRefreshIntervalSeconds();
+            const std::vector<GpuTimestampSample>& directQueueSamples = m_ProfilerDisplay.GetDirectQueueSamples();
+            const std::vector<GpuTimestampSample>& asyncComputeQueueSamples =
+                m_ProfilerDisplay.GetAsyncComputeQueueSamples();
+            const std::vector<GpuTimestampSample>& copyQueueSamples = m_ProfilerDisplay.GetCopyQueueSamples();
             ImGui::Text(
-                "RG Direct Queue (1 s avg): gpu %.3f ms, cpu %.3f ms",
-                m_GpuTimestampDisplaySamples.empty()
+                "RG Direct Queue (%.1f s avg): gpu %.3f ms, cpu %.3f ms",
+                refreshIntervalSeconds,
+                directQueueSamples.empty()
                     ? 0.0
-                    : m_GpuTimestampDisplaySamples.back().MillisecondsFromFrameStart,
-                m_RenderGraphCpuDisplayMilliseconds);
+                    : directQueueSamples.back().MillisecondsFromFrameStart,
+                m_ProfilerDisplay.GetRenderGraphCpuMilliseconds());
 //Modify End
             ImGui::Text(
-                "RG Async Compute Queue (1 s avg): gpu %.3f ms",
-                m_AsyncComputeGpuTimestampDisplaySamples.empty()
+                "RG Async Compute Queue (%.1f s avg): gpu %.3f ms",
+                refreshIntervalSeconds,
+                asyncComputeQueueSamples.empty()
                     ? 0.0
-                    : m_AsyncComputeGpuTimestampDisplaySamples.back().MillisecondsFromFrameStart);
+                    : asyncComputeQueueSamples.back().MillisecondsFromFrameStart);
 //Modify Begin:2026-08-18 by Hui
             ImGui::Text(
-                "RG Copy Queue (1 s avg): gpu %.3f ms",
-                m_CopyGpuTimestampDisplaySamples.empty()
+                "RG Copy Queue (%.1f s avg): gpu %.3f ms",
+                refreshIntervalSeconds,
+                copyQueueSamples.empty()
                     ? 0.0
-                    : m_CopyGpuTimestampDisplaySamples.back().MillisecondsFromFrameStart);
+                    : copyQueueSamples.back().MillisecondsFromFrameStart);
 //Modify End
-            if (!m_GpuTimestampDisplaySamples.empty() && ImGui::CollapsingHeader("GPU RG Timing: Direct"))
+            if (!directQueueSamples.empty() && ImGui::CollapsingHeader("GPU RG Timing: Direct"))
             {
 //Modify Begin:2026-08-02 by Hui
                 ImGui::Text("gpu/cpu delta: since previous marker, gpu/cpu total: since RG begin");
-                for (const GpuTimestampSample& sample : m_GpuTimestampDisplaySamples)
+                for (const GpuTimestampSample& sample : directQueueSamples)
                 {
                     ImGui::Text(
                         "%s: gpu %.3f/%.3f ms, cpu %.3f/%.3f ms",
@@ -202,10 +229,10 @@ void RaytracingDemo::OnImGui()
                 }
 //Modify End
             }
-            if (!m_AsyncComputeGpuTimestampDisplaySamples.empty() && ImGui::CollapsingHeader("GPU RG Timing: Async Compute"))
+            if (!asyncComputeQueueSamples.empty() && ImGui::CollapsingHeader("GPU RG Timing: Async Compute"))
             {
                 ImGui::Text("gpu/cpu delta: since previous marker, gpu/cpu total: since async queue begin");
-                for (const GpuTimestampSample& sample : m_AsyncComputeGpuTimestampDisplaySamples)
+                for (const GpuTimestampSample& sample : asyncComputeQueueSamples)
                 {
                     ImGui::Text(
                         "%s: gpu %.3f/%.3f ms, cpu %.3f/%.3f ms",
@@ -217,10 +244,10 @@ void RaytracingDemo::OnImGui()
                 }
             }
 //Modify Begin:2026-08-18 by Hui
-            if (!m_CopyGpuTimestampDisplaySamples.empty() && ImGui::CollapsingHeader("GPU RG Timing: Copy"))
+            if (!copyQueueSamples.empty() && ImGui::CollapsingHeader("GPU RG Timing: Copy"))
             {
                 ImGui::Text("gpu/cpu delta: since previous marker, gpu/cpu total: since copy queue begin");
-                for (const GpuTimestampSample& sample : m_CopyGpuTimestampDisplaySamples)
+                for (const GpuTimestampSample& sample : copyQueueSamples)
                 {
                     ImGui::Text(
                         "%s: gpu %.3f/%.3f ms, cpu %.3f/%.3f ms",
@@ -766,9 +793,12 @@ void RaytracingDemo::OnImGui()
 //Modify Begin:2026-07-27 by Hui
     if (DrawCudaBloomControls(
         m_CudaBloom,
+        m_ProfilerDisplay.GetCudaTiming(),
+        m_ProfilerDisplay.GetRefreshIntervalSeconds(),
         static_cast<uint32_t>((std::max)(m_Width, 1)),
         static_cast<uint32_t>((std::max)(m_Height, 1))))
     {
+        ResetProfilerDisplay();
         ResetAccumulation(false);
     }
 //Modify End

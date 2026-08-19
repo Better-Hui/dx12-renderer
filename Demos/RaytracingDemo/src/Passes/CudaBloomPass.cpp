@@ -119,6 +119,14 @@ void CudaBloomPass::SetSettings(const Settings& settings)
     m_UseSharedMemoryDownsampling = settings.UseSharedMemoryDownsampling;
     m_ThreadBlockSize = settings.BlockSize;
 }
+
+std::vector<CudaBloomPass::TimingStats> CudaBloomPass::ConsumeCompletedTimingStats()
+{
+    std::vector<TimingStats> completedSamples;
+    completedSamples.swap(m_CompletedCudaTimingSamples);
+    std::ranges::sort(completedSamples, {}, &TimingStats::FrameIndex);
+    return completedSamples;
+}
 //Modify End
 
 //Modify Begin:2026-08-16 by Hui
@@ -449,7 +457,7 @@ void CudaBloomPass::CollectCompletedCudaTimingFrames()
         cuEventElapsedTime(&timingStats.KernelsMs, timingFrame.KernelsBegin, timingFrame.KernelsEnd);
         cuEventElapsedTime(&timingStats.CudaSignalMs, timingFrame.SignalBegin, timingFrame.SignalEnd);
         cuEventElapsedTime(&timingStats.TotalCudaStreamMs, timingFrame.D3DWaitBegin, timingFrame.SignalEnd);
-        m_LastCudaTiming = timingStats;
+        m_CompletedCudaTimingSamples.push_back(timingStats);
         timingFrame.Pending = false;
     }
 }
@@ -499,7 +507,7 @@ void CudaBloomPass::ReleaseCudaTimingFrames()
         timingFrame.FrameIndex = 0;
     }
 
-    m_LastCudaTiming = {};
+    m_CompletedCudaTimingSamples.clear();
     m_CudaTimingFrameCursor = 0;
     m_CudaTimingFrameCounter = 0;
     m_ActiveCudaTimingFrameIndex = -1;

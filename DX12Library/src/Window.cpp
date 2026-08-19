@@ -15,6 +15,7 @@
 
 //Modify Begin:2026-07-21 by Hui
 #include <cwchar>
+#include <algorithm>
 #include <utility>
 //Modify End
 
@@ -235,18 +236,25 @@ void Window::OnRender(RenderEventArgs& e)
 }
 
 //Modify Begin:2026-07-21 by Hui
+void Window::SetProfilerDisplayRefreshIntervalSeconds(const double refreshIntervalSeconds)
+{
+	ProfilerDisplayRefreshIntervalSeconds = (std::max)(0.1, refreshIntervalSeconds);
+	FrameStatisticsElapsedSeconds = 0.0;
+	FrameStatisticsCount = 0;
+}
+
 void Window::UpdateFrameStatistics(const double elapsedSeconds)
 {
 	FrameStatisticsElapsedSeconds += elapsedSeconds;
 	++FrameStatisticsCount;
 
-	if (FrameStatisticsElapsedSeconds < 0.5)
+	if (FrameStatisticsElapsedSeconds < ProfilerDisplayRefreshIntervalSeconds)
 	{
 		return;
 	}
 
-	const double fps = static_cast<double>(FrameStatisticsCount) / FrameStatisticsElapsedSeconds;
-	const double frameMilliseconds = fps > 0.0 ? 1000.0 / fps : 0.0;
+	FramesPerSecond = static_cast<double>(FrameStatisticsCount) / FrameStatisticsElapsedSeconds;
+	FrameMilliseconds = FramesPerSecond > 0.0 ? 1000.0 / FramesPerSecond : 0.0;
 
 	wchar_t title[256] = {};
 	const int written = swprintf_s(
@@ -254,8 +262,8 @@ void Window::UpdateFrameStatistics(const double elapsedSeconds)
 		_countof(title),
 		L"%s - %.1f FPS (%.2f ms)",
 		WindowName.c_str(),
-		fps,
-		frameMilliseconds);
+		FramesPerSecond,
+		FrameMilliseconds);
 	if (written > 0)
 	{
 		SetWindowTextW(HWnd, title);
