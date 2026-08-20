@@ -652,9 +652,13 @@ private:
 //Modify End
     Microsoft::WRL::ComPtr<ID3D12CommandAllocator> m_D3d12CommandAllocator;
 
-    // Keep track of the currently bound root signatures to minimize root
-    // signature changes.
-    ID3D12RootSignature* m_RootSignature;
+//Modify Begin:2026-08-20 by Hui
+    // Graphics and compute root signatures are independent D3D12 state.
+    // Descriptor-table parsing follows the most recently prepared layout.
+    ID3D12RootSignature* m_GraphicsRootSignature = nullptr;
+    ID3D12RootSignature* m_ComputeRootSignature = nullptr;
+    ID3D12RootSignature* m_DescriptorTableRootSignature = nullptr;
+//Modify End
 
     // Resource created in an upload heap. Useful for drawing of dynamic geometry
     // or for uploading constant buffer data that changes every draw call.

@@ -1,11 +1,12 @@
 #include "ReSTIRGI/ReSTIRGISceneContract.hlsli"
 #include "ReSTIRGI/ReSTIRGI.hlsli"
 #include "ReSTIRGI/ReSTIRGIConstants.hlsli"
+#include <Common/ActivePixelList.hlsli>
 //Modify Begin:2026-07-30 by Hui
 #include <Common/Noise.hlsli>
 //Modify End
 
-//Modify Begin:2026-08-11 by Hui
+//Modify Begin:2026-08-19 by Hui
 Texture2D<uint4> ReSTIRGIInitialCreation : register(t12, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
 Texture2D<uint4> ReSTIRGIInitialHit : register(t13, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
 Texture2D<uint4> ReSTIRGIInitialLight : register(t14, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
@@ -27,11 +28,18 @@ bool ReSTIRGIIsTemporallyCompatible(
         length(surface.PositionWs - history.CreationPosition) <= ReSTIRGI_TemporalPositionSimilarityThreshold;
 }
 
-[numthreads(8, 8, 1)]
+[numthreads(
+    FRAMEWORK_RAY_TRACED_PIXEL_THREAD_GROUP_SIZE_X,
+    FRAMEWORK_RAY_TRACED_PIXEL_THREAD_GROUP_SIZE_Y,
+    1)]
 void main(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
-    const uint2 pixel = dispatchThreadId.xy;
-    if (pixel.x >= ReSTIRGI_Width || pixel.y >= ReSTIRGI_Height)
+    uint2 pixel;
+    if (!FrameworkResolveRayTracedPixel(
+        dispatchThreadId,
+        ReSTIRGI_Width,
+        ReSTIRGI_Height,
+        pixel))
     {
         return;
     }

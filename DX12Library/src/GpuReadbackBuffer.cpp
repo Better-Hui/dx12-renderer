@@ -99,7 +99,7 @@ void GpuReadbackBuffer::EndCopy(const uint64_t submittedFenceValue)
     Slot& slot = m_Slots[m_ActiveSlotIndex];
     if (m_ActiveCopyRecorded)
     {
-        Assert(submittedFenceValue != 0u, "GPU readback copy requires a submitted direct-queue fence.");
+        Assert(submittedFenceValue != 0u, "GPU readback copy requires a submitted queue fence.");
         slot.SubmittedFenceValue = submittedFenceValue;
         slot.Pending = true;
     }

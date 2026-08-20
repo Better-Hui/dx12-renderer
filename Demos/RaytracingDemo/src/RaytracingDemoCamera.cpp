@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-06 by Hui
+//Modify Begin:2026-08-20 by Hui
 #include <RaytracingDemo.h>
 
 #include <DX12Library/Application.h>
@@ -20,6 +20,8 @@ namespace
 void RaytracingDemo::OnUpdate(UpdateEventArgs& e)
 {
     Base::OnUpdate(e);
+    const auto directCommandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
+    m_ActivePixels.CollectCountReadback(*directCommandQueue);
     UpdateRuntimeAutomation(e.TotalTime);
     m_DeltaTime = static_cast<float>(e.ElapsedTime);
     if (m_SceneRuntime.UpdateAnimatedLights(m_Lights, static_cast<float>(e.TotalTime)))

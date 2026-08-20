@@ -40,7 +40,11 @@ public:
         }
 
         const auto& depthStencil = renderTarget.GetTexture(DepthStencil);
-        m_DepthStencilFormat = depthStencil->IsValid() ? depthStencil->GetD3D12ResourceDesc().Format : DXGI_FORMAT_UNKNOWN;
+//Modify Begin:2026-08-20 by Hui
+        m_DepthStencilFormat = depthStencil->IsValid()
+            ? depthStencil->GetDepthStencilViewFormat()
+            : DXGI_FORMAT_UNKNOWN;
+//Modify End
     }
 
     inline UINT GetCount() const { return m_Count; }

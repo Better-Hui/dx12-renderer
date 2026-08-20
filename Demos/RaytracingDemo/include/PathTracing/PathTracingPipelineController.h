@@ -1,7 +1,6 @@
 //Modify Begin:2026-08-19 by Hui
 #pragma once
 
-#include <DX12Library/GpuReadbackBuffer.h>
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
 #include <Framework/Rendering/Pipeline/IndirectCommandBuffer.h>
 #include <Framework/Rendering/Pipeline/IndirectCommandSignature.h>
@@ -13,11 +12,9 @@
 #include <cstdint>
 #include <deque>
 #include <memory>
-#include <optional>
 #include <unordered_map>
 
 class CommandList;
-class CommandQueue;
 class RayTracingAccelerationStructure;
 class FrameworkDeviceContext;
 class Resource;
@@ -100,20 +97,12 @@ public:
     PathTracingIndirectDispatch GetCompactedIndirectDispatch(
         PathTracingBackend backend,
         bool directLighting) const;
-    void BeginActiveRayCountReadback();
-    void RecordActiveRayCountReadback(CommandList& commandList, const Resource& activeRayPixelCount);
-    void EndActiveRayCountReadback(uint64_t submittedFenceValue);
-    void CancelActiveRayCountReadback();
-    void CollectActiveRayCountReadback(CommandQueue& commandQueue);
-    std::optional<uint32_t> GetLatestActiveRayCount() const { return m_LatestActiveRayCount; }
-
     PathTracingBackend GetBackend() const { return m_Backend; }
     PathTracingDispatchMode GetDispatchMode() const { return m_DispatchMode; }
     PathTracingShadowMode GetShadowMode() const { return m_ShadowMode; }
     MaterialShadingModel GetMaterialShadingModel() const { return m_MaterialShadingModel; }
     ComputeShader& GetInlineDirectLightingShader() const;
     ComputeShader& GetInlineIndirectLightingShader() const;
-    ComputeShader& GetActivePixelCompactionShader() const;
     ComputeShader& GetInlineCompactedDispatchFinalizeShader() const;
     ComputeShader& GetDxrCompactedDispatchFinalizeShader() const;
     ComputeShader& GetLightingCompositeShader(const PathTracingCompositeFeatures& features);
@@ -133,7 +122,6 @@ private:
         std::unique_ptr<RayTracingBindingSet> IndirectRayTracingBindingSet;
         std::unique_ptr<ComputeShader> InlineDirectLightingShader;
         std::unique_ptr<ComputeShader> InlineIndirectLightingShader;
-        std::unique_ptr<ComputeShader> ActivePixelCompactionShader;
         std::unique_ptr<ComputeShader> InlineCompactedDispatchFinalizeShader;
         std::unique_ptr<ComputeShader> DxrCompactedDispatchFinalizeShader;
         std::unordered_map<uint32_t, std::unique_ptr<ComputeShader>> LightingCompositeShaders;
@@ -153,7 +141,6 @@ private:
     void CreateCompactedDispatchPipelines();
     void CreateComputeIndirectDispatchResources();
     void EnsureRayTracingIndirectDispatchResources();
-    void EnsureActiveRayCountReadbackResources();
 
     FrameworkDeviceContext& m_DeviceContext;
     ShaderVariantManager m_ShaderVariants;
@@ -168,7 +155,6 @@ private:
     std::unique_ptr<RayTracingBindingSet> m_IndirectRayTracingBindingSet;
     std::unique_ptr<ComputeShader> m_InlineDirectLightingShader;
     std::unique_ptr<ComputeShader> m_InlineIndirectLightingShader;
-    std::unique_ptr<ComputeShader> m_ActivePixelCompactionShader;
     std::unique_ptr<ComputeShader> m_InlineCompactedDispatchFinalizeShader;
     std::unique_ptr<ComputeShader> m_DxrCompactedDispatchFinalizeShader;
     std::unique_ptr<IndirectCommandSignature> m_ComputeIndirectCommandSignature;
@@ -176,8 +162,6 @@ private:
     std::unique_ptr<IndirectCommandBuffer> m_ComputeIndirectArguments;
     std::unique_ptr<IndirectCommandBuffer> m_DirectRayTracingIndirectArguments;
     std::unique_ptr<IndirectCommandBuffer> m_IndirectRayTracingIndirectArguments;
-    GpuReadbackBuffer m_ActiveRayCountReadback;
-    std::optional<uint32_t> m_LatestActiveRayCount;
     std::unordered_map<uint32_t, std::unique_ptr<ComputeShader>> m_LightingCompositeShaders;
     std::deque<RetiredPipelines> m_RetiredPipelines;
 };

@@ -29,6 +29,11 @@
 #include <RenderGraph/RaytracingDemoGraphResources.h>
 #include <RenderGraph/RenderMetadata.h>
 
+//Modify Begin:2026-08-20 by Hui
+#include <DirectXTex.h>
+#include <array>
+#include <wincodec.h>
+//Modify End
 #include <DirectXMath.h>
 #include <d3dx12/d3dx12.h>
 #include <imgui.h>
@@ -448,6 +453,7 @@ RaytracingDemo::RaytracingDemo(
     , m_FrameworkDeviceContext(CreateFrameworkDeviceContext(application, std::move(frameFeatureServices)))
     , m_DLSS(m_FrameworkDeviceContext)
     , m_PathTracingPipelines(m_FrameworkDeviceContext)
+    , m_ActivePixels(m_FrameworkDeviceContext)
     , m_DirectLightingReSTIRDIPass(
         m_FrameworkDeviceContext,
         {
@@ -682,7 +688,7 @@ RaytracingDemo::RaytracingDemo(
 
 }
 
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-20 by Hui
 void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::filesystem::path& scenePath)
 {
     const SceneImportResult sceneImport = SceneImporter::ImportFromFile(scenePath);
@@ -1216,6 +1222,52 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         break;
     case RuntimeAutomationAction::Wait:
         break;
+    case RuntimeAutomationAction::VerifyActiveRayTracedPixelCount:
+    {
+        if (m_PathTracingDispatchMode != PathTracingDispatchMode::CompactedIndirect)
+        {
+            m_RuntimeAutomation.AppendDiagnosticLog("Active ray-traced pixel verification skipped: full-resolution dispatch.");
+            break;
+        }
+
+        const ActivePixelReadbackStatus readbackStatus = m_ActivePixels.GetCountReadbackStatus();
+        if (readbackStatus == ActivePixelReadbackStatus::NotQueued)
+        {
+            throw std::runtime_error("Compacted ray-traced pixel dispatch readback was not queued.");
+        }
+        if (readbackStatus == ActivePixelReadbackStatus::NotCompleted)
+        {
+            throw std::runtime_error("Compacted ray-traced pixel dispatch readback did not complete.");
+        }
+
+        const std::optional<ActivePixelDispatchDiagnostics> diagnostics = m_ActivePixels.GetLatestDiagnostics();
+        if (!diagnostics.has_value())
+        {
+            throw std::runtime_error("Completed compacted ray-traced pixel dispatch readback has no diagnostics.");
+        }
+        if (!diagnostics->HasConsistentDispatchArguments())
+        {
+            throw std::runtime_error(
+                "Compacted ray-traced pixel dispatch arguments do not match the active-pixel count: count=" +
+                std::to_string(diagnostics->ActivePixelCount) +
+                ", dispatch=(" + std::to_string(diagnostics->DispatchX) + ", " +
+                std::to_string(diagnostics->DispatchY) + ", " +
+                std::to_string(diagnostics->DispatchZ) + ").");
+        }
+        if (diagnostics->ActivePixelCount == 0u &&
+            (m_DirectLightingTechnique != RaytracingDemoLightingTechnique::None ||
+                (m_IndirectLightingTechnique != RaytracingDemoLightingTechnique::None && m_MaxBounces > 1)))
+        {
+            throw std::runtime_error("Compacted ray-traced pixel count unexpectedly returned zero.");
+        }
+
+        m_RuntimeAutomation.AppendDiagnosticLog(
+            "Latest completed active ray-traced pixels: " + std::to_string(diagnostics->ActivePixelCount) +
+            "; dispatch: (" + std::to_string(diagnostics->DispatchX) + ", " +
+            std::to_string(diagnostics->DispatchY) + ", " +
+            std::to_string(diagnostics->DispatchZ) + ").");
+        break;
+    }
     case RuntimeAutomationAction::AsyncCompute:
         if (m_PathTracingBackend == PathTracingBackend::InlineRayQuery)
         {
@@ -1313,10 +1365,209 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         ResetAccumulation(false, true);
         break;
     }
+    case RuntimeAutomationAction::CaptureScreenshot:
+        if (value > static_cast<uint32_t>(RaytracingDemoAutomation::ScreenshotCapture::ReSTIRGI))
+        {
+            throw std::out_of_range("Runtime automation screenshot capture index is out of range.");
+        }
+        m_PendingAutomationScreenshot = value;
+        break;
     case RuntimeAutomationAction::MatrixCase:
         ApplyRuntimeAutomationMatrixCase(value);
         break;
     }
+}
+
+void RaytracingDemo::CapturePendingAutomationScreenshot()
+{
+    if (!m_PendingAutomationScreenshot.has_value())
+    {
+        return;
+    }
+    if (m_RenderGraphFrameState->FrameGenerationEnabled)
+    {
+        throw std::runtime_error("Automation screenshots do not support frame generation.");
+    }
+
+    const uint32_t captureIndex = m_PendingAutomationScreenshot.value();
+    const std::array<std::wstring, 4> fileNames = {
+        L"pt-direct.png",
+        L"pt-indirect.png",
+        L"restir-di.png",
+        L"restir-gi.png",
+    };
+    const std::array<std::string, 4> captureNames = {
+        "PT Direct",
+        "PT Indirect",
+        "ReSTIR DI",
+        "ReSTIR GI",
+    };
+
+    RenderGraph::RenderGraphRoot& renderGraph = m_RenderPipeline.GetRenderGraph();
+    const std::shared_ptr<Texture>& presentationTexture =
+        renderGraph.GetTexture(renderGraph.GetPresentationResourceId());
+    const auto directQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
+
+    const Microsoft::WRL::ComPtr<ID3D12Device2> device = m_FrameworkDeviceContext.GetDevice();
+    const Microsoft::WRL::ComPtr<ID3D12Resource> sourceResource = presentationTexture->GetD3D12Resource();
+    const D3D12_RESOURCE_DESC sourceDescription = sourceResource->GetDesc();
+    if (sourceDescription.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D ||
+        sourceDescription.DepthOrArraySize != 1u || sourceDescription.SampleDesc.Count != 1u)
+    {
+        throw std::runtime_error("Automation screenshot source must be a single-sample 2D texture.");
+    }
+
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
+    UINT rowCount = 0u;
+    UINT64 rowSizeInBytes = 0u;
+    UINT64 readbackSizeInBytes = 0u;
+    device->GetCopyableFootprints(
+        &sourceDescription,
+        0u,
+        1u,
+        0u,
+        &footprint,
+        &rowCount,
+        &rowSizeInBytes,
+        &readbackSizeInBytes);
+
+    const CD3DX12_HEAP_PROPERTIES readbackHeapProperties(D3D12_HEAP_TYPE_READBACK);
+    const CD3DX12_RESOURCE_DESC readbackDescription = CD3DX12_RESOURCE_DESC::Buffer(readbackSizeInBytes);
+    Microsoft::WRL::ComPtr<ID3D12Resource> readbackResource;
+    ThrowIfFailed(device->CreateCommittedResource(
+        &readbackHeapProperties,
+        D3D12_HEAP_FLAG_NONE,
+        &readbackDescription,
+        D3D12_RESOURCE_STATE_COPY_DEST,
+        nullptr,
+        IID_PPV_ARGS(&readbackResource)));
+
+    const std::shared_ptr<CommandList> captureCommandList = directQueue->GetCommandList();
+    captureCommandList->TransitionBarrier(*presentationTexture, D3D12_RESOURCE_STATE_COPY_SOURCE, 0u, true);
+    const CD3DX12_TEXTURE_COPY_LOCATION sourceLocation(sourceResource.Get(), 0u);
+    const CD3DX12_TEXTURE_COPY_LOCATION destinationLocation(readbackResource.Get(), footprint);
+    captureCommandList->GetGraphicsCommandList()->CopyTextureRegion(
+        &destinationLocation,
+        0u,
+        0u,
+        0u,
+        &sourceLocation,
+        nullptr);
+    captureCommandList->TransitionBarrier(
+        *presentationTexture,
+        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+        0u,
+        true);
+    const uint64_t captureFenceValue = directQueue->ExecuteCommandList(captureCommandList);
+    directQueue->WaitForFenceValue(captureFenceValue);
+
+    DirectX::ScratchImage capturedImage;
+    ThrowIfFailed(capturedImage.Initialize2D(
+        sourceDescription.Format,
+        static_cast<size_t>(sourceDescription.Width),
+        sourceDescription.Height,
+        1u,
+        1u));
+    const DirectX::Image* capturedSubresource = capturedImage.GetImage(0u, 0u, 0u);
+    if (capturedSubresource == nullptr || rowCount != capturedSubresource->height ||
+        rowSizeInBytes > capturedSubresource->rowPitch)
+    {
+        throw std::runtime_error("Automation screenshot readback footprint is incompatible with the output image.");
+    }
+
+    const D3D12_RANGE readRange = { footprint.Offset, footprint.Offset + readbackSizeInBytes };
+    void* mappedData = nullptr;
+    ThrowIfFailed(readbackResource->Map(0u, &readRange, &mappedData));
+    const uint8_t* mappedReadback = static_cast<const uint8_t*>(mappedData);
+    for (UINT row = 0u; row < rowCount; ++row)
+    {
+        std::memcpy(
+            capturedSubresource->pixels + static_cast<size_t>(row) * capturedSubresource->rowPitch,
+            mappedReadback + footprint.Offset + static_cast<size_t>(row) * footprint.Footprint.RowPitch,
+            static_cast<size_t>(rowSizeInBytes));
+    }
+    const D3D12_RANGE writeRange = { 0u, 0u };
+    readbackResource->Unmap(0u, &writeRange);
+
+    const DirectX::Image* sourceImage = capturedImage.GetImage(0u, 0u, 0u);
+    if (sourceImage == nullptr)
+    {
+        throw std::runtime_error("Automation screenshot capture returned no image.");
+    }
+
+    DirectX::ScratchImage convertedImage;
+    const DirectX::Image* outputImage = sourceImage;
+    if (sourceImage->format != DXGI_FORMAT_R8G8B8A8_UNORM)
+    {
+        ThrowIfFailed(DirectX::Convert(
+            *sourceImage,
+            DXGI_FORMAT_R8G8B8A8_UNORM,
+            DirectX::TEX_FILTER_DEFAULT,
+            DirectX::TEX_THRESHOLD_DEFAULT,
+            convertedImage));
+        outputImage = convertedImage.GetImage(0u, 0u, 0u);
+    }
+    if (outputImage == nullptr || outputImage->width == 0u || outputImage->height == 0u)
+    {
+        throw std::runtime_error("Automation screenshot conversion returned an invalid image.");
+    }
+
+    const std::filesystem::path outputDirectory =
+        std::filesystem::current_path() / "Saved" / "AutomationScreenshots";
+    std::filesystem::create_directories(outputDirectory);
+    const std::filesystem::path outputPath = outputDirectory / fileNames[captureIndex];
+    std::error_code removeError;
+    std::filesystem::remove(outputPath, removeError);
+    if (removeError)
+    {
+        throw std::runtime_error("Failed to replace automation screenshot: " + outputPath.string());
+    }
+    ThrowIfFailed(DirectX::SaveToWICFile(
+        *outputImage,
+        DirectX::WIC_FLAGS_FORCE_SRGB,
+        GUID_ContainerFormatPng,
+        outputPath.c_str()));
+
+    uint64_t nonBlackPixelCount = 0u;
+    uint64_t redSum = 0u;
+    uint64_t greenSum = 0u;
+    uint64_t blueSum = 0u;
+    for (size_t y = 0u; y < outputImage->height; ++y)
+    {
+        const uint8_t* row = outputImage->pixels + y * outputImage->rowPitch;
+        for (size_t x = 0u; x < outputImage->width; ++x)
+        {
+            const uint8_t* pixel = row + x * 4u;
+            redSum += pixel[0];
+            greenSum += pixel[1];
+            blueSum += pixel[2];
+            if ((std::max)({ pixel[0], pixel[1], pixel[2] }) > 2u)
+            {
+                ++nonBlackPixelCount;
+            }
+        }
+    }
+
+    const uint64_t pixelCount = outputImage->width * outputImage->height;
+    const double normalization = 1.0 / (static_cast<double>(pixelCount) * 255.0);
+    const double meanRed = static_cast<double>(redSum) * normalization;
+    const double meanGreen = static_cast<double>(greenSum) * normalization;
+    const double meanBlue = static_cast<double>(blueSum) * normalization;
+    const double nonBlackRatio = static_cast<double>(nonBlackPixelCount) / static_cast<double>(pixelCount);
+    if (nonBlackRatio < 0.001 || (std::max)({ meanRed, meanGreen, meanBlue }) < 0.0005)
+    {
+        throw std::runtime_error(
+            "Automation screenshot is black or near-black: " + captureNames[captureIndex] + ".");
+    }
+
+    m_RuntimeAutomation.AppendDiagnosticLog(
+        "Screenshot " + captureNames[captureIndex] +
+        ": path=" + outputPath.string() +
+        "; size=" + std::to_string(outputImage->width) + "x" + std::to_string(outputImage->height) +
+        "; meanRGB=(" + std::to_string(meanRed) + ", " + std::to_string(meanGreen) + ", " +
+        std::to_string(meanBlue) + ")" +
+        "; nonBlackRatio=" + std::to_string(nonBlackRatio) + ".");
+    m_PendingAutomationScreenshot.reset();
 }
 
 std::shared_ptr<ShaderBlob> RaytracingDemo::LoadShaderVariant(
@@ -1381,6 +1632,7 @@ bool RaytracingDemo::LoadContent()
     PipelineLayoutReflectionOptions gBufferLayoutOptions;
     gBufferLayoutOptions.MaxDescriptorCount = 4096u;
     gBufferLayoutOptions.ShaderStages = PipelineShaderStageFlags::AllGraphics;
+    gBufferLayoutOptions.UsesBindlessResourceHeap = true;
     gBufferLayoutOptions.StaticSamplerContracts = {
         PipelineStaticSamplers::PointWrap(0u),
         PipelineStaticSamplers::LinearWrap(1u),
@@ -1419,6 +1671,7 @@ bool RaytracingDemo::LoadContent()
     PipelineLayoutReflectionOptions taskMeshLayoutOptions;
     taskMeshLayoutOptions.MaxDescriptorCount = 4096u;
     taskMeshLayoutOptions.ShaderStages = PipelineShaderStageFlags::AllGraphics;
+    taskMeshLayoutOptions.UsesBindlessResourceHeap = true;
     taskMeshLayoutOptions.StaticSamplerContracts = {
         PipelineStaticSamplers::PointWrap(0u),
         PipelineStaticSamplers::LinearWrap(1u),
@@ -1452,6 +1705,7 @@ bool RaytracingDemo::LoadContent()
     PipelineLayoutReflectionOptions meshletIndirectLayoutOptions;
     meshletIndirectLayoutOptions.MaxDescriptorCount = 4096u;
     meshletIndirectLayoutOptions.ShaderStages = PipelineShaderStageFlags::AllGraphics;
+    meshletIndirectLayoutOptions.UsesBindlessResourceHeap = true;
     meshletIndirectLayoutOptions.RootConstantBufferNames.push_back("MeshletDrawCBuffer");
     meshletIndirectLayoutOptions.StaticSamplerContracts = {
         PipelineStaticSamplers::PointWrap(0u),
@@ -1654,6 +1908,7 @@ void RaytracingDemo::UnloadContent()
     m_SkyboxTexture.reset();
 //Modify Begin:2026-08-19 by Hui
     m_PathTracingPipelines.Reset();
+    m_ActivePixels.Reset();
 //Modify End
 //Modify Begin:2026-08-19 by Hui
     m_GpuTimestampProfiler.Shutdown();
@@ -1691,11 +1946,20 @@ void RaytracingDemo::EnsureRayTracingPipelines()
         layout,
         static_cast<uint32_t>(m_MaxBounces),
         m_PathTracingDispatchMode);
+    const bool compactedDispatchEnabled =
+        m_PathTracingDispatchMode == PathTracingDispatchMode::CompactedIndirect;
+    const bool restirDICompactedDispatch = compactedDispatchEnabled &&
+        m_DirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRDI;
+    if (compactedDispatchEnabled)
+    {
+        m_ActivePixels.EnsurePipelines();
+    }
     m_DirectLightingReSTIRDIPass.EnsurePipelines(
         m_SoftShadowsEnabled,
         static_cast<uint32_t>(layout.EnvironmentProjection),
         restirDIConstants,
-        m_MaterialShadingModel);
+        m_MaterialShadingModel,
+        restirDICompactedDispatch);
     const bool restirGIActive =
         m_PathTracingBackend == PathTracingBackend::InlineRayQuery &&
         m_IndirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRGI &&
@@ -1708,7 +1972,8 @@ void RaytracingDemo::EnsureRayTracingPipelines()
             m_SoftShadowsEnabled,
             static_cast<uint32_t>(layout.EnvironmentProjection),
             restirGIVariantConfig,
-            m_MaterialShadingModel);
+            m_MaterialShadingModel,
+            compactedDispatchEnabled);
     }
     if (m_SceneResources.GetRayTracingAccelerationStructure().GetInstanceCount() > 0)
     {
@@ -1765,6 +2030,14 @@ void RaytracingDemo::PrewarmRuntimeShadowVariants()
     const PathTracingShadowMode alternateShadowMode = currentShadowMode == PathTracingShadowMode::SoftShadows
         ? PathTracingShadowMode::HardShadows
         : PathTracingShadowMode::SoftShadows;
+    const bool compactedDispatchEnabled =
+        m_PathTracingDispatchMode == PathTracingDispatchMode::CompactedIndirect;
+    const bool restirDICompactedDispatch = compactedDispatchEnabled &&
+        m_DirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRDI;
+    if (compactedDispatchEnabled)
+    {
+        m_ActivePixels.EnsurePipelines();
+    }
 
     m_PathTracingPipelines.EnsurePipelines(
         m_PathTracingBackend,
@@ -1777,7 +2050,8 @@ void RaytracingDemo::PrewarmRuntimeShadowVariants()
         alternateShadowMode == PathTracingShadowMode::SoftShadows,
         static_cast<uint32_t>(layout.EnvironmentProjection),
         restirDIConstants,
-        m_MaterialShadingModel);
+        m_MaterialShadingModel,
+        restirDICompactedDispatch);
     const bool restirGIActive =
         m_PathTracingBackend == PathTracingBackend::InlineRayQuery &&
         m_IndirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRGI &&
@@ -1790,7 +2064,8 @@ void RaytracingDemo::PrewarmRuntimeShadowVariants()
             alternateShadowMode == PathTracingShadowMode::SoftShadows,
             static_cast<uint32_t>(layout.EnvironmentProjection),
             restirGIVariantConfig,
-            m_MaterialShadingModel);
+            m_MaterialShadingModel,
+            compactedDispatchEnabled);
     }
     m_PathTracingPipelines.EnsurePipelines(
         m_PathTracingBackend,
@@ -1803,14 +2078,16 @@ void RaytracingDemo::PrewarmRuntimeShadowVariants()
         currentShadowMode == PathTracingShadowMode::SoftShadows,
         static_cast<uint32_t>(layout.EnvironmentProjection),
         restirDIConstants,
-        m_MaterialShadingModel);
+        m_MaterialShadingModel,
+        restirDICompactedDispatch);
     if (restirGIActive)
     {
         m_IndirectLightingReSTIRGIPass.EnsurePipelines(
             currentShadowMode == PathTracingShadowMode::SoftShadows,
             static_cast<uint32_t>(layout.EnvironmentProjection),
             restirGIVariantConfig,
-            m_MaterialShadingModel);
+            m_MaterialShadingModel,
+            compactedDispatchEnabled);
     }
     BindRayTracingShaderResources();
 }
@@ -1968,6 +2245,7 @@ RaytracingDemoPassResources RaytracingDemo::CreatePassResources()
         m_SceneResources,
         m_Lights,
         m_PathTracingPipelines,
+        m_ActivePixels,
         m_DirectLightingReSTIRDI,
         m_DirectLightingReSTIRDIPass,
         m_IndirectLightingReSTIRGI,
@@ -2064,11 +2342,10 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
 {
     Base::OnRender(e);
 
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-20 by Hui
     const auto directCommandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
     const auto asyncComputeCommandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE);
     const auto copyCommandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COPY);
-    m_PathTracingPipelines.CollectActiveRayCountReadback(*directCommandQueue);
     const auto collectGpuTimingFrames = [this](
         GpuTimestampProfiler& profiler,
         CommandQueue& commandQueue,
@@ -2191,16 +2468,10 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
         m_GpuTimingEnabled ? &m_CopyGpuTimestampProfiler : nullptr);
     renderGraph.SetDebugSerializeAsyncCompute(m_DebugSerializeAsyncCompute);
     const auto renderGraphCpuStart = std::chrono::steady_clock::now();
-    const bool readsCompactedPathTracingRayCount =
-        m_RenderGraphFrameState->DispatchMode == PathTracingDispatchMode::CompactedIndirect &&
-        ((m_RenderGraphFrameState->UsesDirectLighting() &&
-                m_RenderGraphFrameState->DirectLightingTechnique == RaytracingDemoLightingTechnique::PathTracing) ||
-            (m_RenderGraphFrameState->UsesIndirectLighting() &&
-                m_RenderGraphFrameState->IndirectLightingTechnique == RaytracingDemoLightingTechnique::PathTracing));
-    if (readsCompactedPathTracingRayCount)
-    {
-        m_PathTracingPipelines.BeginActiveRayCountReadback();
-    }
+    const bool readsCompactedRayTracedPixelCount =
+        m_RenderGraphFrameState->UsesCompactedRayTracedPixelDispatch();
+    const bool activeRayCountReadbackQueued =
+        readsCompactedRayTracedPixelCount && m_ActivePixels.BeginCountReadback();
     BindlessDescriptorHeap& bindlessDescriptorHeap = m_SceneResources.GetBindlessDescriptorHeap();
     bindlessDescriptorHeap.BeginFrame(*directCommandQueue, *asyncComputeCommandQueue);
     bool bindlessFrameEnded = false;
@@ -2216,14 +2487,14 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
         bindlessFrameEnded = true;
     };
     bool activeRayCountReadbackEnded = false;
-    const auto endActiveRayCountReadback = [&renderGraph, &activeRayCountReadbackEnded, this]()
+    const auto endActiveRayCountReadback = [&renderGraph, &activeRayCountReadbackEnded, activeRayCountReadbackQueued, this]()
     {
-        if (activeRayCountReadbackEnded)
+        if (!activeRayCountReadbackQueued || activeRayCountReadbackEnded)
         {
             return;
         }
 
-        m_PathTracingPipelines.EndActiveRayCountReadback(renderGraph.GetFrameSubmissionFences().Direct);
+        m_ActivePixels.EndCountReadback(renderGraph.GetFrameSubmissionFences().Direct);
         activeRayCountReadbackEnded = true;
     };
     try
@@ -2235,13 +2506,16 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     catch (const std::exception& exception)
     {
         endBindlessFrame();
-        if (renderGraph.GetFrameSubmissionFences().Direct != 0u)
+        if (activeRayCountReadbackQueued && renderGraph.GetFrameSubmissionFences().Direct != 0u)
         {
             endActiveRayCountReadback();
         }
         else
         {
-            m_PathTracingPipelines.CancelActiveRayCountReadback();
+            if (activeRayCountReadbackQueued)
+            {
+                m_ActivePixels.CancelCountReadback();
+            }
         }
         throw std::runtime_error(std::string("RaytracingDemo::OnRender RenderGraph.Execute failed: ") + exception.what());
     }
@@ -2255,6 +2529,7 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     try
     {
         PresentDisplayOutput();
+        CapturePendingAutomationScreenshot();
     }
     catch (const std::exception& exception)
     {

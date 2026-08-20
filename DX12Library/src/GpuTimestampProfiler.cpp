@@ -11,7 +11,7 @@
 #include <algorithm>
 #include <cstring>
 
-//Modify Begin:2026-08-03 by Hui
+//Modify Begin:2026-08-19 by Hui
 bool GpuTimestampProfiler::Initialize(
     Microsoft::WRL::ComPtr<ID3D12Device2> device,
     std::shared_ptr<CommandQueue> commandQueue,
@@ -39,7 +39,9 @@ bool GpuTimestampProfiler::Initialize(
     for (FrameSlot& slot : m_FrameSlots)
     {
         D3D12_QUERY_HEAP_DESC queryHeapDesc = {};
-        queryHeapDesc.Type = D3D12_QUERY_HEAP_TYPE_TIMESTAMP;
+        queryHeapDesc.Type = commandListType == D3D12_COMMAND_LIST_TYPE_COPY
+            ? D3D12_QUERY_HEAP_TYPE_COPY_QUEUE_TIMESTAMP
+            : D3D12_QUERY_HEAP_TYPE_TIMESTAMP;
         queryHeapDesc.Count = maxTimestampCount;
         queryHeapDesc.NodeMask = 0;
         ThrowIfFailed(device->CreateQueryHeap(&queryHeapDesc, IID_PPV_ARGS(&slot.QueryHeap)));

@@ -32,6 +32,7 @@
 class CommandQueue;
 class GpuTimestampProfiler;
 class IndirectCommandSignature;
+class ActivePixelListController;
 
 namespace RenderGraph
 {
@@ -125,6 +126,7 @@ struct RaytracingDemoPassResources
     RaytracingDemoSceneResources& Scene;
     SceneLightManager& Lights;
     PathTracingPipelineController& Pipelines;
+    ActivePixelListController& ActivePixels;
     ReSTIRDI& DirectLightingReSTIRDI;
     ReSTIRDIPass& DirectLightingReSTIRDIPass;
     ReSTIRGI& IndirectLightingReSTIRGI;
@@ -217,6 +219,12 @@ struct RaytracingDemoFrameState
             (IndirectLightingTechnique == RaytracingDemoLightingTechnique::PathTracing ||
                 (IndirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRGI &&
                     Backend == PathTracingBackend::InlineRayQuery));
+    }
+
+    bool UsesCompactedRayTracedPixelDispatch() const
+    {
+        return DispatchMode == PathTracingDispatchMode::CompactedIndirect &&
+            (UsesDirectLighting() || UsesIndirectLighting());
     }
 
     PathTracingCompositeFeatures GetCompositeFeatures() const

@@ -62,7 +62,9 @@ DXGI_FORMAT RenderTarget::GetDepthStencilFormat() const
 	const auto& depthStencilTexture = m_Textures[DepthStencil];
 	if (depthStencilTexture->IsValid())
 	{
-		dsvFormat = depthStencilTexture->GetD3D12ResourceDesc().Format;
+//Modify Begin:2026-08-20 by Hui
+		dsvFormat = depthStencilTexture->GetDepthStencilViewFormat();
+//Modify End
 	}
 
 	return dsvFormat;

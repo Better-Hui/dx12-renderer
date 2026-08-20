@@ -25,6 +25,7 @@ namespace DemoAutomation
         std::vector<Step> ReSTIRGIProfile;
         std::vector<Step> ReSTIRGIVariants;
         std::vector<Step> ReSTIRDIVariants;
+        std::vector<Step> Visual;
     };
 
     class RuntimeAutomationController final

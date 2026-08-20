@@ -192,6 +192,11 @@ public:
     const RayTracingPipelineDesc& GetDesc() const;
     const PipelineLayout& GetPipelineLayout() const;
     RayTracingBindingSet CreateBindingSet() const;
+    D3D12_DISPATCH_RAYS_DESC BuildIndirectDispatchArguments(
+        std::string_view passName,
+        uint32_t width,
+        uint32_t height,
+        uint32_t depth) const;
 
     bool HasBinding(std::string_view name) const;
 

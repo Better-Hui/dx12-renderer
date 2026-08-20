@@ -1,6 +1,7 @@
 #pragma once
 
-//Modify Begin:2026-08-12 by Hui
+//Modify Begin:2026-08-19 by Hui
+#include <Framework/Rendering/Lighting/ActivePixelList.h>
 #include <Framework/Rendering/Lighting/ReSTIRDI.h>
 #include <Framework/Rendering/Lighting/MaterialShadingModel.h>
 #include <Framework/Rendering/Pipeline/PipelineLayout.h>
@@ -37,6 +38,7 @@ struct ReSTIRDIExecutionInputs
     ReSTIRDIFrameState FrameState;
     std::shared_ptr<Texture> DirectLighting;
     std::shared_ptr<Texture> MotionVector;
+    ActivePixelDispatch CompactedDispatch = {};
     std::function<void(CommandContext&)> PrepareCommandContext;
     std::function<void(CommandContext&, ComputeShader&)> BindSceneInputs;
 };
@@ -65,7 +67,8 @@ public:
         bool useSoftShadowVariant,
         uint32_t environmentProjectionVariant,
         const ReSTIRDIFrameConstants& constants,
-        MaterialShadingModel shadingModel);
+        MaterialShadingModel shadingModel,
+        bool useCompactedDispatch);
     void Execute(
         CommandList& commandList,
         const ReSTIRDIExecutionInputs& inputs);
@@ -75,6 +78,7 @@ private:
     {
         RIS,
         Temporal,
+        BoilingFilter,
         Spatial,
         Shade,
     };
@@ -89,20 +93,24 @@ private:
     static uint32_t GetStageVariantKey(
         ReSTIRDIStage stage,
         const ReSTIRDIFrameConstants& constants,
-        MaterialShadingModel shadingModel);
+        MaterialShadingModel shadingModel,
+        bool useCompactedDispatch);
     static std::vector<ShaderVariantDefine> GetStageVariantDefines(
         ReSTIRDIStage stage,
         const ReSTIRDIFrameConstants& constants,
-        MaterialShadingModel shadingModel);
+        MaterialShadingModel shadingModel,
+        bool useCompactedDispatch);
     PipelineSet& GetPipelines(bool useSoftShadowVariant, uint32_t environmentProjectionVariant);
     ComputeShader& GetStageShader(
         PipelineSet& pipelines,
         ReSTIRDIStage stage,
         const ReSTIRDIFrameConstants& constants,
-        MaterialShadingModel shadingModel);
+        MaterialShadingModel shadingModel,
+        bool useCompactedDispatch);
     void EnsureResources(uint32_t width, uint32_t height);
     void ExecuteInitialSampling(CommandContext& commandContext, const ReSTIRDIExecutionInputs& inputs, PipelineSet& pipelines);
     void ExecuteTemporalResampling(CommandContext& commandContext, const ReSTIRDIExecutionInputs& inputs, PipelineSet& pipelines);
+    void ExecuteBoilingFilter(CommandContext& commandContext, const ReSTIRDIExecutionInputs& inputs, PipelineSet& pipelines);
     void ExecuteSpatialResampling(
         CommandContext& commandContext,
         const ReSTIRDIExecutionInputs& inputs,

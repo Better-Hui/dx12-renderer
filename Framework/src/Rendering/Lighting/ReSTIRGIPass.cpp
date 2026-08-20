@@ -1,12 +1,15 @@
 #include <Framework/Rendering/Lighting/ReSTIRGIPass.h>
 
 #include <DX12Library/CommandList.h>
+#include <DX12Library/ByteAddressBuffer.h>
 #include <DX12Library/Helpers.h>
+#include <DX12Library/StructuredBuffer.h>
 #include <DX12Library/Texture.h>
 #include <Framework/Core/FrameworkDeviceContext.h>
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 #include <Framework/Rendering/Pipeline/ComputePipelineStateBuilder.h>
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
+#include <Framework/Rendering/Pipeline/IndirectCommandSignature.h>
 #include <Framework/Rendering/Pipeline/ShaderTargetProfile.h>
 #include <Framework/Rendering/Texture/RenderTexture.h>
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
@@ -15,7 +18,7 @@
 #include <algorithm>
 #include <utility>
 
-//Modify Begin:2026-08-12 by Hui
+//Modify Begin:2026-08-20 by Hui
 struct ReSTIRGIPass::PipelineSet
 {
     bool UseSoftShadowVariant = false;
@@ -70,6 +73,50 @@ namespace
         commandList.UavBarrier(*hit);
         commandList.UavBarrier(*light);
     }
+
+    void BindActivePixelList(
+        CommandContext& commandContext,
+        ComputeShader& shader,
+        const ActivePixelDispatch& dispatch)
+    {
+        if (!dispatch.IsValid())
+        {
+            return;
+        }
+
+        commandContext.SetShaderResource(
+            shader,
+            "FrameworkActivePixelIndices",
+            0u,
+            *dispatch.Pixels.Indices);
+        commandContext.SetShaderResource(
+            shader,
+            "FrameworkActivePixelCount",
+            0u,
+            *dispatch.Pixels.Count);
+    }
+
+    void DispatchReSTIRStage(
+        CommandContext& commandContext,
+        const ReSTIRGIFrameState& frameState,
+        const ActivePixelDispatch& dispatch)
+    {
+        if (dispatch.IsValid())
+        {
+            commandContext.DispatchIndirect(
+                *dispatch.Signature,
+                IndirectCommandExecutionDesc{
+                    .ArgumentBuffer = dispatch.Arguments,
+                    .ArgumentBufferOffset = dispatch.ArgumentBufferOffset,
+                });
+            return;
+        }
+
+        commandContext.Dispatch(
+            Math::DivideByMultiple(frameState.Constants.Width, 8u),
+            Math::DivideByMultiple(frameState.Constants.Height, 8u),
+            1u);
+    }
 }
 
 ReSTIRGIPass::ReSTIRGIPass(
@@ -86,21 +133,22 @@ void ReSTIRGIPass::EnsurePipelines(
     const bool useSoftShadowVariant,
     const uint32_t environmentProjectionVariant,
     const ReSTIRGIVariantConfig& variantConfig,
-    const MaterialShadingModel shadingModel)
+    const MaterialShadingModel shadingModel,
+    const bool useCompactedDispatch)
 {
     Assert(variantConfig.MaxPathBounces >= 1u && variantConfig.MaxPathBounces <= 5u,
         "ReSTIR GI path bounce variant is out of range.");
     PipelineSet& pipelines = GetPipelines(useSoftShadowVariant, environmentProjectionVariant);
-    static_cast<void>(GetStageShader(pipelines, ReSTIRGIStage::Initial, variantConfig, shadingModel));
+    static_cast<void>(GetStageShader(pipelines, ReSTIRGIStage::Initial, variantConfig, shadingModel, useCompactedDispatch));
     if (variantConfig.EnableTemporalResampling)
     {
-        static_cast<void>(GetStageShader(pipelines, ReSTIRGIStage::Temporal, variantConfig, shadingModel));
+        static_cast<void>(GetStageShader(pipelines, ReSTIRGIStage::Temporal, variantConfig, shadingModel, useCompactedDispatch));
     }
     if (variantConfig.EnableSpatialResampling)
     {
-        static_cast<void>(GetStageShader(pipelines, ReSTIRGIStage::Spatial, variantConfig, shadingModel));
+        static_cast<void>(GetStageShader(pipelines, ReSTIRGIStage::Spatial, variantConfig, shadingModel, useCompactedDispatch));
     }
-    static_cast<void>(GetStageShader(pipelines, ReSTIRGIStage::Shade, variantConfig, shadingModel));
+    static_cast<void>(GetStageShader(pipelines, ReSTIRGIStage::Shade, variantConfig, shadingModel, useCompactedDispatch));
 }
 
 void ReSTIRGIPass::Execute(
@@ -132,6 +180,11 @@ void ReSTIRGIPass::Execute(
     const bool spatialResamplingEnabled = variantConfig.EnableSpatialResampling;
 
     CommandContext commandContext(commandList);
+    if (executionInputs.CompactedDispatch.IsValid())
+    {
+        const UINT clearValues[4] = { 0u, 0u, 0u, 0u };
+        commandContext.ClearUnorderedAccessUint(*executionInputs.IndirectLighting, clearValues);
+    }
     if (executionInputs.PrepareCommandContext)
     {
         executionInputs.PrepareCommandContext(commandContext);
@@ -246,18 +299,17 @@ void ReSTIRGIPass::ExecuteInitialSampling(
         pipelines,
         ReSTIRGIStage::Initial,
         inputs.FrameState.VariantConfig,
-        inputs.FrameState.ShadingModel);
+        inputs.FrameState.ShadingModel,
+        inputs.CompactedDispatch.IsValid());
     inputs.BindSceneInputs(commandContext, shader);
+    BindActivePixelList(commandContext, shader, inputs.CompactedDispatch);
     commandContext.SetConstantBuffer(shader, "ReSTIRGIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
     commandContext.SetUnorderedAccessView(shader, "ReSTIRGIInitialCreation", UnorderedAccessView(m_Resources->Initial.Creation));
     commandContext.SetUnorderedAccessView(shader, "ReSTIRGIInitialHit", UnorderedAccessView(m_Resources->Initial.Hit));
     commandContext.SetUnorderedAccessView(shader, "ReSTIRGIInitialLight", UnorderedAccessView(m_Resources->Initial.Light));
     commandContext.BindPipeline(shader);
     commandContext.BindDescriptorSet(shader.GetDescriptorSet());
-    commandContext.Dispatch(
-        Math::DivideByMultiple(inputs.FrameState.Constants.Width, 8u),
-        Math::DivideByMultiple(inputs.FrameState.Constants.Height, 8u),
-        1u);
+    DispatchReSTIRStage(commandContext, inputs.FrameState, inputs.CompactedDispatch);
 }
 
 void ReSTIRGIPass::ExecuteTemporalResampling(
@@ -269,8 +321,10 @@ void ReSTIRGIPass::ExecuteTemporalResampling(
         pipelines,
         ReSTIRGIStage::Temporal,
         inputs.FrameState.VariantConfig,
-        inputs.FrameState.ShadingModel);
+        inputs.FrameState.ShadingModel,
+        inputs.CompactedDispatch.IsValid());
     inputs.BindSceneInputs(commandContext, shader);
+    BindActivePixelList(commandContext, shader, inputs.CompactedDispatch);
     commandContext.SetConstantBuffer(shader, "ReSTIRGIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
     commandContext.SetShaderResourceView(shader, "ReSTIRGIInitialCreation", ShaderResourceView(m_Resources->Initial.Creation));
     commandContext.SetShaderResourceView(shader, "ReSTIRGIInitialHit", ShaderResourceView(m_Resources->Initial.Hit));
@@ -291,10 +345,7 @@ void ReSTIRGIPass::ExecuteTemporalResampling(
     commandContext.SetUnorderedAccessView(shader, "ReSTIRGITemporalLight", UnorderedAccessView(historyWrite.Light));
     commandContext.BindPipeline(shader);
     commandContext.BindDescriptorSet(shader.GetDescriptorSet());
-    commandContext.Dispatch(
-        Math::DivideByMultiple(inputs.FrameState.Constants.Width, 8u),
-        Math::DivideByMultiple(inputs.FrameState.Constants.Height, 8u),
-        1u);
+    DispatchReSTIRStage(commandContext, inputs.FrameState, inputs.CompactedDispatch);
 }
 
 void ReSTIRGIPass::ExecuteSpatialResampling(
@@ -309,8 +360,10 @@ void ReSTIRGIPass::ExecuteSpatialResampling(
         pipelines,
         ReSTIRGIStage::Spatial,
         inputs.FrameState.VariantConfig,
-        inputs.FrameState.ShadingModel);
+        inputs.FrameState.ShadingModel,
+        inputs.CompactedDispatch.IsValid());
     inputs.BindSceneInputs(commandContext, shader);
+    BindActivePixelList(commandContext, shader, inputs.CompactedDispatch);
     commandContext.SetConstantBuffer(shader, "ReSTIRGIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
     const InternalResources::ReservoirSet& spatialOutput = m_Resources->History[1u - m_HistoryReadIndex].Spatial;
     commandContext.SetShaderResourceView(shader, "ReSTIRGITemporalCreation", ShaderResourceView(sourceCreation));
@@ -321,10 +374,7 @@ void ReSTIRGIPass::ExecuteSpatialResampling(
     commandContext.SetUnorderedAccessView(shader, "ReSTIRGIHistoryLight", UnorderedAccessView(spatialOutput.Light));
     commandContext.BindPipeline(shader);
     commandContext.BindDescriptorSet(shader.GetDescriptorSet());
-    commandContext.Dispatch(
-        Math::DivideByMultiple(inputs.FrameState.Constants.Width, 8u),
-        Math::DivideByMultiple(inputs.FrameState.Constants.Height, 8u),
-        1u);
+    DispatchReSTIRStage(commandContext, inputs.FrameState, inputs.CompactedDispatch);
 }
 
 void ReSTIRGIPass::ExecuteFinalShading(
@@ -339,8 +389,10 @@ void ReSTIRGIPass::ExecuteFinalShading(
         pipelines,
         ReSTIRGIStage::Shade,
         inputs.FrameState.VariantConfig,
-        inputs.FrameState.ShadingModel);
+        inputs.FrameState.ShadingModel,
+        inputs.CompactedDispatch.IsValid());
     inputs.BindSceneInputs(commandContext, shader);
+    BindActivePixelList(commandContext, shader, inputs.CompactedDispatch);
     commandContext.SetConstantBuffer(shader, "ReSTIRGIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
     commandContext.SetShaderResourceView(shader, "ReSTIRGIHistoryCreation", ShaderResourceView(reservoirCreation));
     commandContext.SetShaderResourceView(shader, "ReSTIRGIHistoryHit", ShaderResourceView(reservoirHit));
@@ -348,10 +400,7 @@ void ReSTIRGIPass::ExecuteFinalShading(
     commandContext.SetUnorderedAccessView(shader, "IndirectLighting", UnorderedAccessView(inputs.IndirectLighting));
     commandContext.BindPipeline(shader);
     commandContext.BindDescriptorSet(shader.GetDescriptorSet());
-    commandContext.Dispatch(
-        Math::DivideByMultiple(inputs.FrameState.Constants.Width, 8u),
-        Math::DivideByMultiple(inputs.FrameState.Constants.Height, 8u),
-        1u);
+    DispatchReSTIRStage(commandContext, inputs.FrameState, inputs.CompactedDispatch);
 }
 
 uint32_t ReSTIRGIPass::GetPipelineVariantIndex(
@@ -384,7 +433,8 @@ ReSTIRGIPass::PipelineSet& ReSTIRGIPass::GetPipelines(
 uint32_t ReSTIRGIPass::GetStageVariantKey(
     const ReSTIRGIStage stage,
     const ReSTIRGIVariantConfig& variantConfig,
-    const MaterialShadingModel shadingModel) const
+    const MaterialShadingModel shadingModel,
+    const bool useCompactedDispatch) const
 {
     uint32_t featureKey = 0u;
     switch (stage)
@@ -407,13 +457,16 @@ uint32_t ReSTIRGIPass::GetStageVariantKey(
         break;
     }
 
-    return featureKey | (static_cast<uint32_t>(shadingModel) << 8u);
+    return featureKey |
+        ((useCompactedDispatch ? 1u : 0u) << 7u) |
+        (static_cast<uint32_t>(shadingModel) << 8u);
 }
 
 std::vector<ShaderVariantDefine> ReSTIRGIPass::GetStageVariantDefines(
     const ReSTIRGIStage stage,
     const ReSTIRGIVariantConfig& variantConfig,
-    const MaterialShadingModel shadingModel) const
+    const MaterialShadingModel shadingModel,
+    const bool useCompactedDispatch) const
 {
     const auto booleanDefine = [](const char* name, const bool value)
     {
@@ -454,6 +507,10 @@ std::vector<ShaderVariantDefine> ReSTIRGIPass::GetStageVariantDefines(
         "FRAMEWORK_MATERIAL_SHADING_MODEL",
         std::to_string(static_cast<uint32_t>(shadingModel))
     });
+    defines.push_back({
+        "FRAMEWORK_ACTIVE_PIXEL_LIST",
+        useCompactedDispatch ? "1" : "0"
+    });
     return defines;
 }
 
@@ -461,7 +518,8 @@ ComputeShader& ReSTIRGIPass::GetStageShader(
     PipelineSet& pipelines,
     const ReSTIRGIStage stage,
     const ReSTIRGIVariantConfig& variantConfig,
-    const MaterialShadingModel shadingModel)
+    const MaterialShadingModel shadingModel,
+    const bool useCompactedDispatch)
 {
     std::unordered_map<uint32_t, std::unique_ptr<ComputeShader>>* stageVariants = nullptr;
     const std::wstring* sourceFileName = nullptr;
@@ -491,7 +549,7 @@ ComputeShader& ReSTIRGIPass::GetStageShader(
     }
 
     Assert(stageVariants != nullptr && sourceFileName != nullptr, "Unsupported ReSTIR GI stage.");
-    const uint32_t variantKey = GetStageVariantKey(stage, variantConfig, shadingModel);
+    const uint32_t variantKey = GetStageVariantKey(stage, variantConfig, shadingModel, useCompactedDispatch);
     auto [shaderIt, inserted] = stageVariants->try_emplace(variantKey);
     if (inserted)
     {
@@ -500,7 +558,7 @@ ComputeShader& ReSTIRGIPass::GetStageShader(
             *sourceFileName,
             pipelines.UseSoftShadowVariant,
             pipelines.EnvironmentProjectionVariant,
-            GetStageVariantDefines(stage, variantConfig, shadingModel));
+            GetStageVariantDefines(stage, variantConfig, shadingModel, useCompactedDispatch));
     }
 
     Assert(shaderIt->second != nullptr, "ReSTIR GI stage shader creation failed.");

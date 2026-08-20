@@ -26,6 +26,8 @@ set(SHADER_FILES_PIXEL
         )
 
 set(SHADER_FILES_COMPUTE
+        "shaders/Lighting/ActivePixelCompaction.cs.hlsl"
+        "shaders/Lighting/ActivePixelDispatchFinalize.cs.hlsl"
         "shaders/MSAADepthResolve_CS.hlsl"
         "shaders/NRD/NRDInputAdapter_CS.hlsl"
         "shaders/NRD/NRDOutputComposite_CS.hlsl"
@@ -39,6 +41,7 @@ set(SHADER_FILES_COMPUTE
 set(FRAMEWORK_RESTIR_DI_SHADER_FILES
         "shaders/ReSTIRDI/ReSTIRDI.RIS.cs.hlsl"
         "shaders/ReSTIRDI/ReSTIRDI.Temporal.cs.hlsl"
+        "shaders/ReSTIRDI/ReSTIRDI.Boiling.cs.hlsl"
         "shaders/ReSTIRDI/ReSTIRDI.Spatial.cs.hlsl"
         "shaders/ReSTIRDI/ReSTIRDI.Shade.cs.hlsl"
         )
@@ -62,6 +65,7 @@ set(FRAMEWORK_RESTIR_GI_ALL_SHADER_FILES
         )
 
 set(SHADERS_HEADER_FILES
+        "shaders/Common/ActivePixelList.hlsli"
         "shaders/Common/Noise.hlsli"
         "shaders/Common/EnvironmentTexture.hlsli"
         "shaders/Bindless/BindlessResources.hlsli"

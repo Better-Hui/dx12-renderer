@@ -1,16 +1,24 @@
-//Modify Begin:2026-08-06 by Hui
+//Modify Begin:2026-08-19 by Hui
 #include "ReSTIRDISceneContract.hlsli"
 #include "ReSTIRDI/ReSTIRDI.hlsli"
 #include "ReSTIRDI/ReSTIRDIConstants.hlsli"
+#include <Common/ActivePixelList.hlsli>
 
 RWTexture2D<uint4> ReSTIRDIRISReservoir : register(u2);
 RWTexture2D<uint4> ReSTIRDIRISReservoirState : register(u3);
 
-[numthreads(8, 8, 1)]
+[numthreads(
+    FRAMEWORK_RAY_TRACED_PIXEL_THREAD_GROUP_SIZE_X,
+    FRAMEWORK_RAY_TRACED_PIXEL_THREAD_GROUP_SIZE_Y,
+    1)]
 void main(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
-    const uint2 pixel = dispatchThreadId.xy;
-    if (pixel.x >= ReSTIRDI_ScreenWidth || pixel.y >= ReSTIRDI_ScreenHeight)
+    uint2 pixel;
+    if (!FrameworkResolveRayTracedPixel(
+        dispatchThreadId,
+        ReSTIRDI_ScreenWidth,
+        ReSTIRDI_ScreenHeight,
+        pixel))
     {
         return;
     }

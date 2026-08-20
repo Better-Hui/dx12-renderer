@@ -137,7 +137,6 @@ list(APPEND SHADERS_HEADER_FILES
 
 set(SHADER_FILES_COMPUTE
         shaders/GBuffer/MeshletCull.cs.hlsl
-        shaders/PathTracing/ActivePixelCompaction.cs.hlsl
         shaders/PathTracing/CompactInlineDispatchFinalize.cs.hlsl
         shaders/PathTracing/CompactDxrDispatchFinalize.cs.hlsl
         shaders/PathTracing/DirectLighting.cs.hlsl
@@ -161,9 +160,11 @@ set_source_files_properties(${SHADER_FILES_RAYTRACING} PROPERTIES HEADER_FILE_ON
 set_source_files_properties(${SHADER_FILES_MESH} PROPERTIES HEADER_FILE_ONLY TRUE)
 set_source_files_properties(shaders/CUDA/CudaBloom.cu PROPERTIES HEADER_FILE_ONLY TRUE)
 
+find_package(directxtex CONFIG REQUIRED)
 target_link_libraries(${TARGET_NAME}
         PUBLIC Framework
         PRIVATE FrameworkNvidiaFeatures
+        PRIVATE Microsoft::DirectXTex
         PUBLIC RenderGraph
         )
 

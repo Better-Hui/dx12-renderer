@@ -126,10 +126,14 @@ void DemoAutomation::RuntimeAutomationController::Initialize(const TestSuites& t
             m_Steps.resize(maxCases);
         }
     }
+    else if (mode == "visual")
+    {
+        m_Steps = testSuites.Visual;
+    }
     else
     {
         throw std::runtime_error(
-            "RAYTRACING_DEMO_AUTOTEST must be 'core', 'stress', 'matrix', 'restirgi-profile', 'restirgi-variants', or 'restirdi-variants'.");
+            "RAYTRACING_DEMO_AUTOTEST must be 'core', 'stress', 'matrix', 'restirgi-profile', 'restirgi-variants', 'restirdi-variants', or 'visual'.");
     }
 
     m_Enabled = !m_Steps.empty();

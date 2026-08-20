@@ -144,6 +144,9 @@ public:
      */
     virtual D3D12_CPU_DESCRIPTOR_HANDLE GetDepthStencilView() const;
     virtual D3D12_CPU_DESCRIPTOR_HANDLE GetDepthStencilViewArray(uint32_t index, uint32_t mipLevel = 0) const;
+//Modify Begin:2026-08-20 by Hui
+    [[nodiscard]] DXGI_FORMAT GetDepthStencilViewFormat() const;
+//Modify End
 
     bool CheckSrvSupport() const
     {

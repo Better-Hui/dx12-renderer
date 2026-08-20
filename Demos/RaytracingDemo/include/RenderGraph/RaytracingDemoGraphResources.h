@@ -44,9 +44,10 @@ namespace RaytracingDemoRenderGraph
         static inline const RenderGraph::ResourceId MotionVector = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.MotionVector");
         static inline const RenderGraph::ResourceId DirectLighting = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DirectLighting");
         static inline const RenderGraph::ResourceId IndirectLighting = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.IndirectLighting");
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-20 by Hui
         static inline const RenderGraph::ResourceId ActiveRayPixelIndices = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ActiveRayPixelIndices");
         static inline const RenderGraph::ResourceId ActiveRayPixelCount = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ActiveRayPixelCount");
+        static inline const RenderGraph::ResourceId ActivePixelDispatchData = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ActivePixelDispatchData");
 //Modify End
         static inline const RenderGraph::ResourceId SceneColor = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.SceneColor");
 //Modify Begin:2026-08-17 by Hui
@@ -72,8 +73,10 @@ namespace RaytracingDemoRenderGraph
         static inline const RenderGraph::ResourceId MeshletCullFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.MeshletCullFinished");
         static inline const RenderGraph::ResourceId DirectLightingIndirectArgumentsReadyToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DirectLightingIndirectArgumentsReady");
         static inline const RenderGraph::ResourceId IndirectLightingIndirectArgumentsReadyToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.IndirectLightingIndirectArgumentsReady");
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-20 by Hui
         static inline const RenderGraph::ResourceId ActiveRayPixelCompactionFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ActiveRayPixelCompactionFinished");
+        static inline const RenderGraph::ResourceId ActivePixelDispatchFinalizedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ActivePixelDispatchFinalized");
+        static inline const RenderGraph::ResourceId ActivePixelComputeDispatchReadyToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ActivePixelComputeDispatchReady");
         static inline const RenderGraph::ResourceId ActiveRayPixelCountReadbackFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.ActiveRayPixelCountReadbackFinished");
         static inline const RenderGraph::ResourceId DxrCompactedDispatchTemplateFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DxrCompactedDispatchTemplateFinished");
 //Modify End

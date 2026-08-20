@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-08-19 by Hui
 #include <Automation/RuntimeAutomationController.h>
 #include <Passes/RaytracingDemoPassResources.h>
 #include <PathTracing/PathTracingPipelineController.h>
@@ -40,7 +40,17 @@ namespace RaytracingDemoAutomation
         ReSTIRDIConfig,
         MaxBounces,
         Wait,
+        VerifyActiveRayTracedPixelCount,
+        CaptureScreenshot,
         MatrixCase,
+    };
+
+    enum class ScreenshotCapture : uint32_t
+    {
+        PathTracingDirect,
+        PathTracingIndirect,
+        ReSTIRDI,
+        ReSTIRGI,
     };
 
     struct MatrixCase

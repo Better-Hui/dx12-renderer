@@ -24,6 +24,7 @@
 //Modify End
 #include <Framework/Rendering/RayTracing/RayTracingShader.h>
 #include <Framework/Rendering/Lighting/ReSTIRDIPass.h>
+#include <Framework/Rendering/Lighting/ActivePixelListController.h>
 #include <Framework/Rendering/Lighting/MaterialShadingModel.h>
 //Modify Begin:2026-08-19 by Hui
 #include <Framework/Rendering/Lighting/ReSTIRGIPass.h>
@@ -53,6 +54,9 @@
 //Modify End
 //Modify Begin:2026-08-19 by Hui
 #include <chrono>
+//Modify End
+//Modify Begin:2026-08-20 by Hui
+#include <optional>
 //Modify End
 #include <filesystem>
 #include <memory>
@@ -172,6 +176,7 @@ private:
     void UpdateRuntimeAutomation(double totalTime);
     void ApplyRuntimeAutomationAction(uint32_t action, uint32_t value);
     void ApplyRuntimeAutomationMatrixCase(uint32_t caseIndex);
+    void CapturePendingAutomationScreenshot();
     void SaveCurrentScene();
     void SaveCurrentCameraToUnityScene();
 //Modify End
@@ -190,6 +195,7 @@ private:
     std::shared_ptr<ComputeShader> m_DLSSRayReconstructionPrepareShader;
     ShaderVariantManager m_ShaderVariants;
     PathTracingPipelineController m_PathTracingPipelines;
+    ActivePixelListController m_ActivePixels;
     ReSTIRDIPass m_DirectLightingReSTIRDIPass;
     ReSTIRGIPass m_IndirectLightingReSTIRGIPass;
 //Modify End
@@ -275,6 +281,7 @@ private:
     int m_LeftMousePressY = 0;
 
     DemoAutomation::RuntimeAutomationController m_RuntimeAutomation;
+    std::optional<uint32_t> m_PendingAutomationScreenshot;
     bool m_UseMeshletGBuffer = true;
     bool m_DebugMeshletClusters = false;
     bool m_UseTaskShaderMeshlets = true;

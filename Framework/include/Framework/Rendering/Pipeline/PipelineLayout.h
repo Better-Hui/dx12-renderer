@@ -150,6 +150,7 @@ struct PipelineLayoutReflectionOptions
     std::vector<std::string> RootConstantBufferNames;
     UINT MaxDescriptorCount = 1024;
     PipelineShaderStageFlags ShaderStages = PipelineShaderStageFlags::All;
+    bool UsesBindlessResourceHeap = false;
 };
 
 struct PipelineLayoutDesc

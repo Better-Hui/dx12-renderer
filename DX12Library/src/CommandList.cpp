@@ -476,60 +476,75 @@ void CommandList::SetPipelineState(const ComPtr<ID3D12PipelineState>& pipelineSt
     TrackObject(pipelineState);
 }
 
+//Modify Begin:2026-08-20 by Hui
 void CommandList::SetGraphicsRootSignature(const RootSignature& rootSignature)
 {
     const auto d3d12RootSignature = rootSignature.GetRootSignature().Get();
-    if (m_RootSignature != d3d12RootSignature)
+    if (m_DescriptorTableRootSignature != d3d12RootSignature)
     {
-        m_RootSignature = d3d12RootSignature;
-
         for (int i = 0; i < D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES; ++i)
         {
             m_DynamicDescriptorHeaps[i]->ParseRootSignature(rootSignature);
         }
+        m_DescriptorTableRootSignature = d3d12RootSignature;
+    }
 
-        m_D3d12CommandList->SetGraphicsRootSignature(m_RootSignature);
+    if (m_GraphicsRootSignature != d3d12RootSignature)
+    {
+        m_GraphicsRootSignature = d3d12RootSignature;
+        m_D3d12CommandList->SetGraphicsRootSignature(m_GraphicsRootSignature);
 
-        TrackObject(m_RootSignature);
+        TrackObject(m_GraphicsRootSignature);
     }
 }
 
 void CommandList::SetComputeRootSignature(const RootSignature& rootSignature)
 {
     const auto d3d12RootSignature = rootSignature.GetRootSignature().Get();
-    if (m_RootSignature != d3d12RootSignature)
+    if (m_DescriptorTableRootSignature != d3d12RootSignature)
     {
-        m_RootSignature = d3d12RootSignature;
-
         for (int i = 0; i < D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES; ++i)
         {
             m_DynamicDescriptorHeaps[i]->ParseRootSignature(rootSignature);
         }
+        m_DescriptorTableRootSignature = d3d12RootSignature;
+    }
 
-        m_D3d12CommandList->SetComputeRootSignature(m_RootSignature);
+    if (m_ComputeRootSignature != d3d12RootSignature)
+    {
+        m_ComputeRootSignature = d3d12RootSignature;
+        m_D3d12CommandList->SetComputeRootSignature(m_ComputeRootSignature);
 
-        TrackObject(m_RootSignature);
+        TrackObject(m_ComputeRootSignature);
     }
 }
 
 void CommandList::SetGraphicsAndComputeRootSignature(const RootSignature& rootSignature)
 {
     const auto d3d12RootSignature = rootSignature.GetRootSignature().Get();
-    if (m_RootSignature != d3d12RootSignature)
+    if (m_DescriptorTableRootSignature != d3d12RootSignature)
     {
-        m_RootSignature = d3d12RootSignature;
-
         for (int i = 0; i < D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES; ++i)
         {
             m_DynamicDescriptorHeaps[i]->ParseRootSignature(rootSignature);
         }
-
-        m_D3d12CommandList->SetGraphicsRootSignature(m_RootSignature);
-        m_D3d12CommandList->SetComputeRootSignature(m_RootSignature);
-
-        TrackObject(m_RootSignature);
+        m_DescriptorTableRootSignature = d3d12RootSignature;
     }
+
+    if (m_GraphicsRootSignature != d3d12RootSignature)
+    {
+        m_GraphicsRootSignature = d3d12RootSignature;
+        m_D3d12CommandList->SetGraphicsRootSignature(m_GraphicsRootSignature);
+    }
+    if (m_ComputeRootSignature != d3d12RootSignature)
+    {
+        m_ComputeRootSignature = d3d12RootSignature;
+        m_D3d12CommandList->SetComputeRootSignature(m_ComputeRootSignature);
+    }
+
+    TrackObject(d3d12RootSignature);
 }
+//Modify End
 
 void CommandList::SetShaderResourceView(const uint32_t rootParameterIndex, const uint32_t descriptorOffset,
     const Resource& resource, const D3D12_RESOURCE_STATES stateAfter,
@@ -870,6 +885,7 @@ void CommandList::ClearUnorderedAccessUint(const Resource& resource, const UINT 
         values,
         0u,
         nullptr);
+    UavBarrier(resource);
     TrackResource(resource);
 }
 //Modify End
@@ -934,6 +950,7 @@ void CommandList::BindExternalDescriptorHeap(
     Assert(
         heapType == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV || heapType == D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER,
         "Only shader-visible descriptor heap types can be bound externally.");
+    m_DynamicDescriptorHeaps[heapType]->Reset();
     SetDescriptorHeap(heapType, heap);
 }
 //Modify End
@@ -980,7 +997,11 @@ void CommandList::Reset()
         m_DescriptorHeaps[i] = nullptr;
     }
 
-    m_RootSignature = nullptr;
+//Modify Begin:2026-08-20 by Hui
+    m_GraphicsRootSignature = nullptr;
+    m_ComputeRootSignature = nullptr;
+    m_DescriptorTableRootSignature = nullptr;
+//Modify End
 }
 
 void CommandList::TrackObject(const ComPtr<ID3D12Object>& object)
@@ -1009,10 +1030,12 @@ void CommandList::SetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE heapType, ID3D12D
     }
 }
 
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-08-20 by Hui
 void CommandList::InvalidateCachedNativeState()
 {
-    m_RootSignature = nullptr;
+    m_GraphicsRootSignature = nullptr;
+    m_ComputeRootSignature = nullptr;
+    m_DescriptorTableRootSignature = nullptr;
     for (ID3D12DescriptorHeap*& descriptorHeap : m_DescriptorHeaps)
     {
         descriptorHeap = nullptr;

@@ -1,7 +1,8 @@
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
 #include "ReSTIRDISceneContract.hlsli"
 #include "ReSTIRDI/ReSTIRDI.hlsli"
 #include "ReSTIRDI/ReSTIRDIConstants.hlsli"
+#include <Common/ActivePixelList.hlsli>
 
 Texture2D<uint4> ReSTIRDIFinalReservoir : register(t12, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
 Texture2D<uint4> ReSTIRDIFinalReservoirState : register(t13, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
@@ -12,11 +13,18 @@ RWTexture2D<float4> ReSTIRDICurrentNormalRoughness : register(u6);
 RWTexture2D<float4> ReSTIRDICurrentDiffuseMetallic : register(u7);
 RWTexture2D<float4> ReSTIRDICurrentSpecularOcclusion : register(u8);
 
-[numthreads(8, 8, 1)]
+[numthreads(
+    FRAMEWORK_RAY_TRACED_PIXEL_THREAD_GROUP_SIZE_X,
+    FRAMEWORK_RAY_TRACED_PIXEL_THREAD_GROUP_SIZE_Y,
+    1)]
 void main(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
-    const uint2 pixel = dispatchThreadId.xy;
-    if (pixel.x >= ReSTIRDI_ScreenWidth || pixel.y >= ReSTIRDI_ScreenHeight)
+    uint2 pixel;
+    if (!FrameworkResolveRayTracedPixel(
+        dispatchThreadId,
+        ReSTIRDI_ScreenWidth,
+        ReSTIRDI_ScreenHeight,
+        pixel))
     {
         return;
     }

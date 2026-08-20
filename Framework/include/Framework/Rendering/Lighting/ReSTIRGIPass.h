@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Framework/Rendering/Lighting/ActivePixelList.h>
 #include <Framework/Rendering/Lighting/ReSTIRGI.h>
 #include <Framework/Rendering/Lighting/MaterialShadingModel.h>
 #include <Framework/Rendering/Pipeline/PipelineLayout.h>
@@ -34,6 +35,7 @@ struct ReSTIRGIExecutionInputs
     ReSTIRGIFrameState FrameState;
     std::shared_ptr<Texture> IndirectLighting;
     std::shared_ptr<Texture> MotionVector;
+    ActivePixelDispatch CompactedDispatch = {};
     std::function<void(CommandContext&)> PrepareCommandContext;
     std::function<void(CommandContext&, ComputeShader&)> BindSceneInputs;
     bool EnableStageTiming = false;
@@ -64,7 +66,8 @@ public:
         bool useSoftShadowVariant,
         uint32_t environmentProjectionVariant,
         const ReSTIRGIVariantConfig& variantConfig,
-        MaterialShadingModel shadingModel);
+        MaterialShadingModel shadingModel,
+        bool useCompactedDispatch);
     void Execute(CommandList& commandList, const ReSTIRGIExecutionInputs& inputs);
 
 private:
@@ -85,11 +88,13 @@ private:
     uint32_t GetStageVariantKey(
         ReSTIRGIStage stage,
         const ReSTIRGIVariantConfig& variantConfig,
-        MaterialShadingModel shadingModel) const;
+        MaterialShadingModel shadingModel,
+        bool useCompactedDispatch) const;
     std::vector<ShaderVariantDefine> GetStageVariantDefines(
         ReSTIRGIStage stage,
         const ReSTIRGIVariantConfig& variantConfig,
-        MaterialShadingModel shadingModel) const;
+        MaterialShadingModel shadingModel,
+        bool useCompactedDispatch) const;
     PipelineSet& GetPipelines(
         bool useSoftShadowVariant,
         uint32_t environmentProjectionVariant);
@@ -97,7 +102,8 @@ private:
         PipelineSet& pipelines,
         ReSTIRGIStage stage,
         const ReSTIRGIVariantConfig& variantConfig,
-        MaterialShadingModel shadingModel);
+        MaterialShadingModel shadingModel,
+        bool useCompactedDispatch);
     bool EnsureResources(uint32_t width, uint32_t height);
     void ExecuteInitialSampling(CommandContext& commandContext, const ReSTIRGIExecutionInputs& inputs, PipelineSet& pipelines);
     void ExecuteTemporalResampling(CommandContext& commandContext, const ReSTIRGIExecutionInputs& inputs, PipelineSet& pipelines);

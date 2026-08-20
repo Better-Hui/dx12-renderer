@@ -159,6 +159,15 @@ const PipelineLayout& RayTracingShader::GetPipelineLayout() const
     return m_Impl->Layout;
 }
 
+D3D12_DISPATCH_RAYS_DESC RayTracingShader::BuildIndirectDispatchArguments(
+    const std::string_view passName,
+    const uint32_t width,
+    const uint32_t height,
+    const uint32_t depth) const
+{
+    return BuildDispatchDesc(passName, width, height, depth);
+}
+
 void RayTracingShader::PrepareDispatch(const std::string_view passName) const
 {
     const RayTracingShaderPassDesc& pass = m_Impl->DispatchTables.ResolvePass(m_Impl->Desc, passName);

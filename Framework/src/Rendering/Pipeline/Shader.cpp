@@ -288,8 +288,13 @@ void Shader::BuildReflectedRootSignature()
 
     PipelineRootSignatureBuildDesc rootSignatureBuildDesc;
     rootSignatureBuildDesc.Flags =
-        D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |
-        D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED;
+        D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+    if (m_PipelineLayoutOptions.UsesBindlessResourceHeap)
+    {
+        rootSignatureBuildDesc.Flags = static_cast<D3D12_ROOT_SIGNATURE_FLAGS>(
+            rootSignatureBuildDesc.Flags |
+            D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED);
+    }
     m_RootSignature = m_PipelineLayout->CreateRootSignature(rootSignatureBuildDesc);
     m_PipelineLayout->SetRootSignature(m_RootSignature);
     m_DescriptorSet = m_DescriptorPool.AllocateDescriptorSet(*m_PipelineLayout);

@@ -4,14 +4,17 @@
 #include <RenderGraph/RaytracingDemoGraphResources.h>
 
 #include <DX12Library/CommandList.h>
-//Modify Begin:2026-08-11 by Hui
+//Modify Begin:2026-08-19 by Hui
+#include <DX12Library/ByteAddressBuffer.h>
 #include <DX12Library/GpuTimestampProfiler.h>
+#include <DX12Library/StructuredBuffer.h>
+#include <Framework/Rendering/Lighting/ActivePixelListController.h>
 //Modify End
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 #include <RenderGraph/RenderContext.h>
 #include <RenderGraph/RenderGraphBuilder.h>
 
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-08-20 by Hui
 namespace
 {
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
@@ -20,6 +23,7 @@ namespace
     {
         RaytracingDemoPassResourcesSnapshot Resources;
         RaytracingDemoPassConfig Config = {};
+        bool UseCompactedDispatch = false;
     };
 }
 
@@ -29,24 +33,33 @@ void RaytracingDemoPasses::Builder::AddReSTIRGIPass(
     const RaytracingDemoPassConfig& config)
 {
     using namespace RenderGraph;
+    const bool useCompactedDispatch = config.FrameState->UsesCompactedRayTracedPixelDispatch();
     renderGraphBuilder.AddPass<ReSTIRGIPassData>(
         L"ReSTIR GI",
-        [&resources, config](RenderGraphPassBuilder& passBuilder, ReSTIRGIPassData& passData)
+        [&resources, config, useCompactedDispatch](RenderGraphPassBuilder& passDataBuilder, ReSTIRGIPassData& passData)
         {
             passData.Resources.emplace(resources);
             passData.Config = config;
-            passBuilder.ReadToken(DemoResourceIds::BaseResourcesFinishedToken);
-            passBuilder.ReadBuffer(DemoResourceIds::GBufferAlbedoOcclusion);
-            passBuilder.ReadBuffer(DemoResourceIds::GBufferSpecularSmoothness);
-            passBuilder.ReadBuffer(DemoResourceIds::GBufferNormal);
-            passBuilder.ReadBuffer(DemoResourceIds::GBufferEmissionMetallic);
-            passBuilder.ReadBuffer(DemoResourceIds::GBufferPosition);
-            passBuilder.ReadBuffer(DemoResourceIds::MotionVector);
-            passBuilder.ReadBuffer(DemoResourceIds::DepthBuffer);
-            passBuilder.WriteUav(DemoResourceIds::IndirectLighting);
-            passBuilder.WriteToken(DemoResourceIds::IndirectLightingFinishedToken);
+            passData.UseCompactedDispatch = useCompactedDispatch;
+            passDataBuilder.ReadToken(DemoResourceIds::BaseResourcesFinishedToken);
+            passDataBuilder.ReadBuffer(DemoResourceIds::GBufferAlbedoOcclusion);
+            passDataBuilder.ReadBuffer(DemoResourceIds::GBufferSpecularSmoothness);
+            passDataBuilder.ReadBuffer(DemoResourceIds::GBufferNormal);
+            passDataBuilder.ReadBuffer(DemoResourceIds::GBufferEmissionMetallic);
+            passDataBuilder.ReadBuffer(DemoResourceIds::GBufferPosition);
+            passDataBuilder.ReadBuffer(DemoResourceIds::MotionVector);
+            passDataBuilder.ReadBuffer(DemoResourceIds::DepthBuffer);
+            if (useCompactedDispatch)
+            {
+                passDataBuilder.ReadToken(DemoResourceIds::ActivePixelComputeDispatchReadyToken);
+                passDataBuilder.ReadIndirectArgument(DemoResourceIds::ActivePixelDispatchData);
+                passDataBuilder.ReadBuffer(DemoResourceIds::ActiveRayPixelIndices);
+                passDataBuilder.ReadBuffer(DemoResourceIds::ActiveRayPixelCount);
+            }
+            passDataBuilder.WriteUav(DemoResourceIds::IndirectLighting);
+            passDataBuilder.WriteToken(DemoResourceIds::IndirectLightingFinishedToken);
             RaytracingDemoPassBindings::DeclareRayTracingExternalResourceAccesses(
-                passBuilder,
+                passDataBuilder,
                 resources,
                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         },
@@ -54,6 +67,7 @@ void RaytracingDemoPasses::Builder::AddReSTIRGIPass(
         {
             const RaytracingDemoPassResources& resources = passData.Resources.value();
             const RaytracingDemoPassConfig& config = passData.Config;
+            const bool useCompactedDispatch = passData.UseCompactedDispatch;
             const RaytracingDemoRenderGraph::FrameGBufferResources gbuffer =
                 RaytracingDemoRenderGraph::GetFrameGBufferResources(context);
             const RaytracingDemoCameraConstants camera =
@@ -75,6 +89,21 @@ void RaytracingDemoPasses::Builder::AddReSTIRGIPass(
                 config.FrameState->ReSTIRGIHistoryValid);
             inputs.IndirectLighting = context.GetTexture(DemoResourceIds::IndirectLighting);
             inputs.MotionVector = gbuffer.MotionVector;
+            if (useCompactedDispatch)
+            {
+                const std::shared_ptr<StructuredBuffer> activePixelIndices =
+                    std::dynamic_pointer_cast<StructuredBuffer>(context.GetBuffer(DemoResourceIds::ActiveRayPixelIndices));
+                const std::shared_ptr<ByteAddressBuffer> activePixelCount =
+                    std::dynamic_pointer_cast<ByteAddressBuffer>(context.GetBuffer(DemoResourceIds::ActiveRayPixelCount));
+                const std::shared_ptr<ByteAddressBuffer> activePixelDispatchData =
+                    std::dynamic_pointer_cast<ByteAddressBuffer>(context.GetBuffer(DemoResourceIds::ActivePixelDispatchData));
+                Assert(activePixelIndices != nullptr && activePixelCount != nullptr && activePixelDispatchData != nullptr,
+                    "Compacted ReSTIR GI requires active-pixel index, count, and dispatch-data buffers.");
+                inputs.CompactedDispatch = resources.ActivePixels.GetComputeDispatch(
+                    *activePixelIndices,
+                    *activePixelCount,
+                    *activePixelDispatchData);
+            }
             inputs.EnableStageTiming = config.FrameState->ReSTIRGIStageTimingEnabled;
             inputs.WriteTimestamp = [profiler = resources.DirectGpuTimestampProfiler](
                 CommandList& timestampCommandList,

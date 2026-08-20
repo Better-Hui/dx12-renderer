@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-08-19 by Hui
 #include <Automation/RaytracingDemoAutomation.h>
 
 #include <utility>
@@ -201,6 +201,8 @@ DemoAutomation::TestSuites RaytracingDemoAutomation::CreateTestSuites()
     testSuites.Core = {
         makeStep(Action::GpuTiming, 1u, "timing=1"),
         makeStep(Action::TimingCapture, 1u, "timingcapture=1"),
+        makeStep(Action::Wait, 0u, "active-ray-traced-pixels-warmup"),
+        makeStep(Action::VerifyActiveRayTracedPixelCount, 0u, "active-ray-traced-pixels"),
         makeStep(Action::SoftShadows, 0u, "soft=0"),
         makeStep(Action::SoftShadows, 1u, "soft=1"),
         makeStep(Action::StressSpheres, 1u, "stress=1"),
@@ -251,6 +253,49 @@ DemoAutomation::TestSuites RaytracingDemoAutomation::CreateTestSuites()
         makeStep(Action::StressSpheres, 0u, "stress=0"),
         makeStep(Action::StressSpheres, 1u, "stress=1"),
         makeStep(Action::StressSpheres, 0u, "stress=0"),
+    };
+    testSuites.Visual = {
+        makeStep(Action::DLSS, static_cast<uint32_t>(DLSSMode::Disabled), "visual-dlss=off"),
+        makeStep(Action::MaterialShading, static_cast<uint32_t>(MaterialShadingModel::Pbr), "visual-shading=pbr"),
+        makeStep(Action::PathTracingBackend, static_cast<uint32_t>(PathTracingBackend::InlineRayQuery), "visual-backend=inline"),
+        makeStep(Action::AsyncCompute, 0u, "visual-async=0"),
+        makeStep(Action::ParallelDirectCommandRecording, 1u, "visual-parallelrecording=1"),
+        makeStep(Action::SoftShadows, 0u, "visual-soft=0"),
+        makeStep(Action::Skybox, 1u, "visual-skybox=1"),
+        makeStep(Action::Accumulation, 0u, "visual-accumulation=0"),
+
+        makeStep(Action::DirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::PathTracing), "visual-pt-direct-direct=pathtracing"),
+        makeStep(Action::IndirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::None), "visual-pt-direct-indirect=none"),
+        makeStep(Action::MaxBounces, 1u, "visual-pt-direct-bounces=1"),
+        makeStep(Action::Wait, 0u, "visual-pt-direct-warmup=1"),
+        makeStep(Action::Wait, 0u, "visual-pt-direct-warmup=2"),
+        makeStep(Action::VerifyActiveRayTracedPixelCount, 0u, "visual-pt-direct-active-pixels"),
+        makeStep(Action::CaptureScreenshot, static_cast<uint32_t>(ScreenshotCapture::PathTracingDirect), "visual-capture=pt-direct"),
+
+        makeStep(Action::DirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::None), "visual-pt-indirect-direct=none"),
+        makeStep(Action::IndirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::PathTracing), "visual-pt-indirect-indirect=pathtracing"),
+        makeStep(Action::MaxBounces, 3u, "visual-pt-indirect-bounces=3"),
+        makeStep(Action::Wait, 0u, "visual-pt-indirect-warmup=1"),
+        makeStep(Action::Wait, 0u, "visual-pt-indirect-warmup=2"),
+        makeStep(Action::VerifyActiveRayTracedPixelCount, 0u, "visual-pt-indirect-active-pixels"),
+        makeStep(Action::CaptureScreenshot, static_cast<uint32_t>(ScreenshotCapture::PathTracingIndirect), "visual-capture=pt-indirect"),
+
+        makeStep(Action::DirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::ReSTIRDI), "visual-restirdi-direct=restirdi"),
+        makeStep(Action::IndirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::None), "visual-restirdi-indirect=none"),
+        makeStep(Action::MaxBounces, 1u, "visual-restirdi-bounces=1"),
+        makeStep(Action::Wait, 0u, "visual-restirdi-warmup=1"),
+        makeStep(Action::Wait, 0u, "visual-restirdi-warmup=2"),
+        makeStep(Action::VerifyActiveRayTracedPixelCount, 0u, "visual-restirdi-active-pixels"),
+        makeStep(Action::CaptureScreenshot, static_cast<uint32_t>(ScreenshotCapture::ReSTIRDI), "visual-capture=restirdi"),
+
+        makeStep(Action::DirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::None), "visual-restirgi-direct=none"),
+        makeStep(Action::IndirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::ReSTIRGI), "visual-restirgi-indirect=restirgi"),
+        makeStep(Action::MaxBounces, 3u, "visual-restirgi-bounces=3"),
+        makeStep(Action::Wait, 0u, "visual-restirgi-warmup=1"),
+        makeStep(Action::Wait, 0u, "visual-restirgi-warmup=2"),
+        makeStep(Action::Wait, 0u, "visual-restirgi-warmup=3"),
+        makeStep(Action::VerifyActiveRayTracedPixelCount, 0u, "visual-restirgi-active-pixels"),
+        makeStep(Action::CaptureScreenshot, static_cast<uint32_t>(ScreenshotCapture::ReSTIRGI), "visual-capture=restirgi"),
     };
     testSuites.ReSTIRGIProfile = {
         makeStep(Action::GpuTiming, 1u, "timing=1"),

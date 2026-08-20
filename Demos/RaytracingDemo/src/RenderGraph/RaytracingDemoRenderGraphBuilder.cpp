@@ -25,17 +25,21 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
     const bool usePathTracingIndirectLighting =
         frameState.UsesIndirectLighting() &&
         frameState.IndirectLightingTechnique == RaytracingDemoLightingTechnique::PathTracing;
-    const bool useCompactedPathTracing =
-        (usePathTracingDirectLighting || usePathTracingIndirectLighting) &&
-        frameState.DispatchMode == PathTracingDispatchMode::CompactedIndirect;
-    if (useCompactedPathTracing)
+    const bool useCompactedRayTracedPixels = frameState.UsesCompactedRayTracedPixelDispatch();
+    const bool prepareCompactedComputeDispatch =
+        (frameState.UsesDirectLighting() &&
+            frameState.DirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRDI) ||
+        (frameState.UsesIndirectLighting() &&
+            frameState.IndirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRGI);
+    if (useCompactedRayTracedPixels)
     {
-        RaytracingDemoPasses::Builder::AddPathTracingCompactedDispatchPasses(
+        RaytracingDemoPasses::Builder::AddActivePixelCompactionPasses(
             renderGraphBuilder,
             resources,
             config,
             usePathTracingDirectLighting,
-            usePathTracingIndirectLighting);
+            usePathTracingIndirectLighting,
+            prepareCompactedComputeDispatch);
     }
     if (frameState.UsesIndirectLighting())
     {
@@ -192,7 +196,7 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
         displayColor,
         sceneReadyToken,
     };
-    if (useCompactedPathTracing)
+    if (useCompactedRayTracedPixels)
     {
         externalOutputs.emplace_back(RaytracingDemoRenderGraph::ResourceIds::ActiveRayPixelCountReadbackFinishedToken);
     }
@@ -214,11 +218,11 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
             frameState.FrameGenerationEnabled,
             frameState.DLSSEnabled && frameState.RayReconstructionEnabled,
             useFrameworkRasterBloom),
-        RaytracingDemoRenderGraph::CreateBufferDescriptions(useCompactedPathTracing),
+        RaytracingDemoRenderGraph::CreateBufferDescriptions(useCompactedRayTracedPixels),
         RaytracingDemoRenderGraph::CreateTokenDescriptions(
             frameState.DLSSEnabled,
             frameState.FrameGenerationEnabled,
-            useCompactedPathTracing),
+            useCompactedRayTracedPixels),
         RenderGraph::RenderGraphOutputResources{
             .Presentation = displayColor,
             .External = std::move(externalOutputs),

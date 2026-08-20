@@ -32,6 +32,8 @@ IndirectCommandBuffer::IndirectCommandBuffer(
     m_Buffer->SetAutoBarriersEnabled(false);
 }
 
+IndirectCommandBuffer::~IndirectCommandBuffer() = default;
+
 void IndirectCommandBuffer::Upload(
     CommandList& commandList,
     const std::span<const std::byte> commandData)

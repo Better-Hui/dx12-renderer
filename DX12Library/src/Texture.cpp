@@ -133,6 +133,36 @@ Texture& Texture::operator=(Texture&& other)
 Texture::~Texture()
 {}
 
+//Modify Begin:2026-08-20 by Hui
+DXGI_FORMAT Texture::GetDepthStencilViewFormat() const
+{
+    const D3D12_RESOURCE_DESC resourceDesc = GetD3D12ResourceDesc();
+    if ((resourceDesc.Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL) == 0)
+    {
+        return DXGI_FORMAT_UNKNOWN;
+    }
+
+    if (m_d3d12ClearValue != nullptr && m_d3d12ClearValue->Format != DXGI_FORMAT_UNKNOWN)
+    {
+        return m_d3d12ClearValue->Format;
+    }
+
+    switch (resourceDesc.Format)
+    {
+    case DXGI_FORMAT_R32G8X24_TYPELESS:
+        return DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
+    case DXGI_FORMAT_R32_TYPELESS:
+        return DXGI_FORMAT_D32_FLOAT;
+    case DXGI_FORMAT_R24G8_TYPELESS:
+        return DXGI_FORMAT_D24_UNORM_S8_UINT;
+    case DXGI_FORMAT_R16_TYPELESS:
+        return DXGI_FORMAT_D16_UNORM;
+    default:
+        return resourceDesc.Format;
+    }
+}
+//Modify End
+
 void Texture::Resize(CommandList& commandList, uint32_t width, uint32_t height, uint32_t depthOrArraySize)
 {
     // Resource can't be resized if it was never created in the first place.
@@ -264,11 +294,40 @@ void Texture::CreateViews()
 
             }
         }
+//Modify Begin:2026-08-20 by Hui
+        const DXGI_FORMAT depthStencilViewFormat = GetDepthStencilViewFormat();
         if ((desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL) != 0 &&
-            CheckDsvSupport())
+            depthStencilViewFormat != DXGI_FORMAT_UNKNOWN)
         {
             m_DepthStencilView = deviceContext->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, numDescriptors);
-            device->CreateDepthStencilView(m_d3d12Resource.Get(), nullptr,
+            D3D12_DEPTH_STENCIL_VIEW_DESC wholeDsvDesc{};
+            wholeDsvDesc.Format = depthStencilViewFormat;
+            if (desc.SampleDesc.Count == 1)
+            {
+                if (arraySize > 1)
+                {
+                    wholeDsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
+                    wholeDsvDesc.Texture2DArray.ArraySize = arraySize;
+                    wholeDsvDesc.Texture2DArray.MipSlice = 0;
+                    wholeDsvDesc.Texture2DArray.FirstArraySlice = 0;
+                }
+                else
+                {
+                    wholeDsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+                    wholeDsvDesc.Texture2D.MipSlice = 0;
+                }
+            }
+            else if (arraySize > 1)
+            {
+                wholeDsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DMSARRAY;
+                wholeDsvDesc.Texture2DMSArray.ArraySize = arraySize;
+                wholeDsvDesc.Texture2DMSArray.FirstArraySlice = 0;
+            }
+            else
+            {
+                wholeDsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DMS;
+            }
+            device->CreateDepthStencilView(m_d3d12Resource.Get(), &wholeDsvDesc,
                 m_DepthStencilView.GetDescriptorHandle(0));
 
             for (UINT16 arrayIndex = 0; arrayIndex < arraySize; ++arrayIndex)
@@ -276,7 +335,7 @@ void Texture::CreateViews()
                 for (UINT16 mipLevel = 0; mipLevel < mipLevels; ++mipLevel)
                 {
                     D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
-                    dsvDesc.Format = desc.Format;
+                    dsvDesc.Format = depthStencilViewFormat;
                     if (desc.SampleDesc.Count == 1)
                     {
                         dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
@@ -297,6 +356,7 @@ void Texture::CreateViews()
                 }
             }
         }
+//Modify End
     }
 
     std::lock_guard<std::mutex> lock(m_ShaderResourceViewsMutex);
@@ -499,6 +559,11 @@ DXGI_FORMAT Texture::GetTypelessFormat(DXGI_FORMAT format)
     case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
         typelessFormat = DXGI_FORMAT_R32G8X24_TYPELESS;
         break;
+//Modify Begin:2026-08-20 by Hui
+    case DXGI_FORMAT_D24_UNORM_S8_UINT:
+        typelessFormat = DXGI_FORMAT_R24G8_TYPELESS;
+        break;
+//Modify End
     case DXGI_FORMAT_R10G10B10A2_UNORM:
     case DXGI_FORMAT_R10G10B10A2_UINT:
         typelessFormat = DXGI_FORMAT_R10G10B10A2_TYPELESS;
@@ -536,6 +601,9 @@ DXGI_FORMAT Texture::GetTypelessFormat(DXGI_FORMAT format)
     case DXGI_FORMAT_R16_SNORM:
     case DXGI_FORMAT_R16_SINT:
         typelessFormat = DXGI_FORMAT_R16_TYPELESS;
+//Modify Begin:2026-08-20 by Hui
+        break;
+//Modify End
     case DXGI_FORMAT_R8_UNORM:
     case DXGI_FORMAT_R8_UINT:
     case DXGI_FORMAT_R8_SNORM:

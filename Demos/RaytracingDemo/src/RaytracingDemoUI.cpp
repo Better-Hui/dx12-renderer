@@ -736,41 +736,51 @@ void RaytracingDemo::OnImGui()
         m_PathTracingBackend = static_cast<PathTracingBackend>(selectedMode);
         ResetAccumulation();
     }
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-20 by Hui
     const char* dispatchModeNames[] = { "Full Resolution", "Compacted Indirect" };
     int selectedDispatchMode = static_cast<int>(m_PathTracingDispatchMode);
-    if (ImGui::Combo("Ray Tracing Dispatch", &selectedDispatchMode, dispatchModeNames, IM_ARRAYSIZE(dispatchModeNames)))
+    if (ImGui::Combo("Ray-Traced Pixel Dispatch", &selectedDispatchMode, dispatchModeNames, IM_ARRAYSIZE(dispatchModeNames)))
     {
         m_PathTracingDispatchMode = static_cast<PathTracingDispatchMode>(selectedDispatchMode);
         ResetAccumulation();
     }
-    const bool pathTracingDirectLighting = m_DirectLightingTechnique == RaytracingDemoLightingTechnique::PathTracing;
-    const bool pathTracingIndirectLighting =
-        m_MaxBounces > 1 && m_IndirectLightingTechnique == RaytracingDemoLightingTechnique::PathTracing;
+    const bool rayTracedDirectLighting = m_RenderGraphFrameState->UsesDirectLighting();
+    const bool rayTracedIndirectLighting = m_RenderGraphFrameState->UsesIndirectLighting();
+    const bool hasCompactedRayTracedPixelConsumer =
+        m_RenderGraphFrameState->UsesCompactedRayTracedPixelDispatch();
     const uint64_t fullResolutionDispatchPixelCount =
         static_cast<uint64_t>(m_RenderGraphFrameState->Width) * m_RenderGraphFrameState->Height;
-    const std::optional<uint32_t> activePathTracedPixelCount = m_PathTracingPipelines.GetLatestActiveRayCount();
-    if (!pathTracingDirectLighting && !pathTracingIndirectLighting)
+    const ActivePixelReadbackStatus activePixelReadbackStatus = m_ActivePixels.GetCountReadbackStatus();
+    const std::optional<ActivePixelDispatchDiagnostics> activePixelDiagnostics =
+        m_ActivePixels.GetLatestDiagnostics();
+    if (!rayTracedDirectLighting && !rayTracedIndirectLighting)
     {
-        ImGui::TextDisabled("Active path-traced pixels: 0 (PathTracing is disabled)");
+        ImGui::TextDisabled("Ray-traced pixel dispatch: inactive for the selected techniques");
     }
-    else if (m_PathTracingDispatchMode == PathTracingDispatchMode::CompactedIndirect)
+    else if (hasCompactedRayTracedPixelConsumer)
     {
-        if (!activePathTracedPixelCount.has_value())
+        if (activePixelReadbackStatus == ActivePixelReadbackStatus::NotQueued)
         {
-            ImGui::TextDisabled("Active path-traced pixels: GPU readback pending");
+            ImGui::TextDisabled("Active ray-traced pixels: GPU readback not queued");
         }
-        else
+        else if (activePixelReadbackStatus == ActivePixelReadbackStatus::NotCompleted)
+        {
+            ImGui::TextDisabled("Active ray-traced pixels: GPU readback pending");
+        }
+        else if (activePixelDiagnostics.has_value())
         {
             ImGui::Text(
-                "Active path-traced pixels: %u (unique scene pixels, GPU readback)",
-                *activePathTracedPixelCount);
+                "Latest active ray-traced pixels: %u; dispatch: (%u, %u, %u)",
+                activePixelDiagnostics->ActivePixelCount,
+                activePixelDiagnostics->DispatchX,
+                activePixelDiagnostics->DispatchY,
+                activePixelDiagnostics->DispatchZ);
         }
     }
     else
     {
         ImGui::TextDisabled(
-            "Path-tracing dispatch pixels: %llu (full-resolution; active pixels are not measured)",
+            "Ray-traced dispatch lanes: %llu (full-resolution; active pixels are not measured)",
             static_cast<unsigned long long>(fullResolutionDispatchPixelCount));
     }
 //Modify End

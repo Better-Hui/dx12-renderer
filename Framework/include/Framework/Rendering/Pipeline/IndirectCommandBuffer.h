@@ -19,6 +19,7 @@ public:
         FrameworkDeviceContext& deviceContext,
         uint64_t capacityInBytes,
         std::wstring name);
+    ~IndirectCommandBuffer();
 
     void Upload(CommandList& commandList, std::span<const std::byte> commandData);
 

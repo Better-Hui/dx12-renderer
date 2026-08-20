@@ -30,12 +30,13 @@ namespace RaytracingDemoPasses
             RenderGraph::RenderGraphBuilder& renderGraphBuilder,
             const RaytracingDemoPassResources& resources,
             const RaytracingDemoPassConfig& config);
-        static void AddPathTracingCompactedDispatchPasses(
+        static void AddActivePixelCompactionPasses(
             RenderGraph::RenderGraphBuilder& renderGraphBuilder,
             const RaytracingDemoPassResources& resources,
             const RaytracingDemoPassConfig& config,
-            bool prepareDirectLighting,
-            bool prepareIndirectLighting);
+            bool preparePathTracingDirectLighting,
+            bool preparePathTracingIndirectLighting,
+            bool prepareComputeDispatch);
         static void AddIndirectLightingPass(
             RenderGraph::RenderGraphBuilder& renderGraphBuilder,
             const RaytracingDemoPassResources& resources,

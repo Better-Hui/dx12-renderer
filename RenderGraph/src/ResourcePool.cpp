@@ -460,11 +460,16 @@ void RenderGraph::ResourcePool::RegisterTexture(const TextureDescription& desc, 
     const auto width = desc.m_WidthExpression(renderMetadata);
     const auto height = desc.m_HeightExpression(renderMetadata);
 
-    auto dxDesc = CD3DX12_RESOURCE_DESC::Tex2D(desc.m_Format,
+//Modify Begin:2026-08-20 by Hui
+    const DXGI_FORMAT resourceFormat = textureUsageType == TextureUsageType::Depth
+        ? Texture::GetTypelessFormat(desc.m_Format)
+        : desc.m_Format;
+    auto dxDesc = CD3DX12_RESOURCE_DESC::Tex2D(resourceFormat,
         width, height,
         desc.m_ArraySize, desc.m_MipLevels,
         desc.m_SampleCount, msaaQualityLevels,
         resourceFlags);
+//Modify End
 
     ResourceDescription description = {};
     description.m_Id = desc.m_Id;

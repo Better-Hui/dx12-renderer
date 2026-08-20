@@ -1,5 +1,7 @@
 #include <RenderGraph/RaytracingDemoGraphResources.h>
 
+#include <Framework/Rendering/Lighting/ActivePixelList.h>
+
 namespace RaytracingDemoRenderGraph
 {
     std::vector<RenderGraph::TextureDescription> CreateTextureDescriptions(
@@ -10,7 +12,7 @@ namespace RaytracingDemoRenderGraph
     {
         const RenderGraph::RenderMetadataExpression<uint32_t> renderWidthExpression = [](const RenderGraph::RenderMetadata& metadata) { return metadata.m_ScreenWidth; };
         const RenderGraph::RenderMetadataExpression<uint32_t> renderHeightExpression = [](const RenderGraph::RenderMetadata& metadata) { return metadata.m_ScreenHeight; };
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-20 by Hui
         const RenderGraph::RenderMetadataExpression<uint32_t> displayWidthExpression = [](const RenderGraph::RenderMetadata& metadata) { return metadata.m_DisplayWidth; };
         const RenderGraph::RenderMetadataExpression<uint32_t> displayHeightExpression = [](const RenderGraph::RenderMetadata& metadata) { return metadata.m_DisplayHeight; };
 //Modify End
@@ -120,6 +122,14 @@ namespace RaytracingDemoRenderGraph
                 RenderGraph::BufferKind::Raw,
                 RenderGraph::BufferUsage::ShaderResource | RenderGraph::BufferUsage::UnorderedAccess,
             },
+            {
+                ResourceIds::ActivePixelDispatchData,
+                [](const RenderGraph::RenderMetadata&) { return sizeof(ActivePixelDispatchDiagnostics); },
+                size_t{ 1u },
+                RenderGraph::ResourceInitAction::Discard,
+                RenderGraph::BufferKind::Raw,
+                RenderGraph::BufferUsage::UnorderedAccess,
+            },
         };
 //Modify End
     }
@@ -129,7 +139,7 @@ namespace RaytracingDemoRenderGraph
         const bool includeFrameGeneration,
         const bool includeCompactedPathTracing)
     {
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-20 by Hui
         std::vector<RenderGraph::TokenDescription> tokenDescriptions = {
             { ResourceIds::BaseResourcesFinishedToken },
             { ResourceIds::SceneResourcesReadyToken },
@@ -146,6 +156,8 @@ namespace RaytracingDemoRenderGraph
         if (includeCompactedPathTracing)
         {
             tokenDescriptions.emplace_back(ResourceIds::ActiveRayPixelCompactionFinishedToken);
+            tokenDescriptions.emplace_back(ResourceIds::ActivePixelDispatchFinalizedToken);
+            tokenDescriptions.emplace_back(ResourceIds::ActivePixelComputeDispatchReadyToken);
             tokenDescriptions.emplace_back(ResourceIds::ActiveRayPixelCountReadbackFinishedToken);
             tokenDescriptions.emplace_back(ResourceIds::DxrCompactedDispatchTemplateFinishedToken);
             tokenDescriptions.emplace_back(ResourceIds::DirectLightingIndirectArgumentsReadyToken);

@@ -1,7 +1,8 @@
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-19 by Hui
 #include "ReSTIRDISceneContract.hlsli"
 #include "ReSTIRDI/ReSTIRDI.hlsli"
 #include "ReSTIRDI/ReSTIRDIConstants.hlsli"
+#include <Common/ActivePixelList.hlsli>
 
 Texture2D<uint4> ReSTIRDIRISReservoir : register(t12, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
 Texture2D<uint4> ReSTIRDIRISReservoirState : register(t13, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
@@ -16,13 +17,6 @@ RWTexture2D<uint4> ReSTIRDITemporalReservoir : register(u2);
 RWTexture2D<uint4> ReSTIRDITemporalReservoirState : register(u3);
 
 #include "ReSTIRDI/ReSTIRDISurface.hlsli"
-
-#if RESTIR_DI_USE_TEMPORAL_BOILING_FILTER
-static const uint ReSTIRDIBoilingFilterGroupSize = 8u;
-static const uint ReSTIRDIBoilingFilterSharedWaveCount = 2u;
-groupshared float ReSTIRDIBoilingFilterWeights[ReSTIRDIBoilingFilterSharedWaveCount];
-groupshared uint ReSTIRDIBoilingFilterCounts[ReSTIRDIBoilingFilterSharedWaveCount];
-#endif
 
 ReSTIRDI_Surface ReSTIRDI_LoadHistorySurface(const uint2 pixel)
 {
@@ -48,44 +42,6 @@ ReSTIRDI_Surface ReSTIRDI_LoadHistorySurface(const uint2 pixel)
     return surface;
 }
 
-#if RESTIR_DI_USE_TEMPORAL_BOILING_FILTER
-void ApplyReSTIRDIBoilingFilter(const uint2 localIndex, inout ReSTIRDIReservoir reservoir)
-{
-    const uint linearIndex = localIndex.x + localIndex.y * ReSTIRDIBoilingFilterGroupSize;
-    float waveWeight = WaveActiveSum(reservoir.WeightSum);
-    uint waveCount = WaveActiveCountBits(reservoir.WeightSum > 0.0f);
-    const uint waveIndex = linearIndex / WaveGetLaneCount();
-    if (WaveIsFirstLane())
-    {
-        ReSTIRDIBoilingFilterWeights[waveIndex] = waveWeight;
-        ReSTIRDIBoilingFilterCounts[waveIndex] = waveCount;
-    }
-
-    GroupMemoryBarrierWithGroupSync();
-
-    const uint reductionLaneCount = (ReSTIRDIBoilingFilterGroupSize * ReSTIRDIBoilingFilterGroupSize + WaveGetLaneCount() - 1u) / WaveGetLaneCount();
-    if (linearIndex < reductionLaneCount)
-    {
-        waveWeight = ReSTIRDIBoilingFilterWeights[linearIndex];
-        waveCount = ReSTIRDIBoilingFilterCounts[linearIndex];
-        waveWeight = WaveActiveSum(waveWeight);
-        waveCount = WaveActiveSum(waveCount);
-        if (linearIndex == 0u)
-        {
-            ReSTIRDIBoilingFilterWeights[0] = waveCount > 0u ? waveWeight / float(waveCount) : 0.0f;
-        }
-    }
-
-    GroupMemoryBarrierWithGroupSync();
-
-    const float thresholdMultiplier = 10.0f / clamp(ReSTIRDI_BoilingFilterStrength, 0.000001f, 1.0f) - 9.0f;
-    if (reservoir.WeightSum > ReSTIRDIBoilingFilterWeights[0] * thresholdMultiplier)
-    {
-        reservoir = ReSTIRDIEmptyReservoir();
-    }
-}
-#endif
-
 #if RESTIR_DI_USE_TEMPORAL_PERMUTATION_SAMPLING
 int2 ApplyReSTIRDIPermutationSampling(const int2 pixel)
 {
@@ -98,11 +54,23 @@ int2 ApplyReSTIRDIPermutationSampling(const int2 pixel)
 }
 #endif
 
-[numthreads(8, 8, 1)]
-void main(uint3 dispatchThreadId : SV_DispatchThreadID, uint3 groupThreadId : SV_GroupThreadID)
+[numthreads(
+    FRAMEWORK_RAY_TRACED_PIXEL_THREAD_GROUP_SIZE_X,
+    FRAMEWORK_RAY_TRACED_PIXEL_THREAD_GROUP_SIZE_Y,
+    1)]
+void main(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
-    const uint2 pixel = dispatchThreadId.xy;
-    const bool pixelInBounds = pixel.x < ReSTIRDI_ScreenWidth && pixel.y < ReSTIRDI_ScreenHeight;
+    uint2 pixel;
+    if (!FrameworkResolveRayTracedPixel(
+        dispatchThreadId,
+        ReSTIRDI_ScreenWidth,
+        ReSTIRDI_ScreenHeight,
+        pixel))
+    {
+        return;
+    }
+
+    const bool pixelInBounds = true;
     ReSTIRDIReservoir result = ReSTIRDIEmptyReservoir();
 
     if (pixelInBounds)
@@ -242,9 +210,6 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID, uint3 groupThreadId : SV
         }
     }
 
-#if RESTIR_DI_USE_TEMPORAL_BOILING_FILTER
-    ApplyReSTIRDIBoilingFilter(groupThreadId.xy, result);
-#endif
     if (pixelInBounds)
     {
         ReSTIRDITemporalReservoir[pixel] = ReSTIRDIPackReservoirCore(result);

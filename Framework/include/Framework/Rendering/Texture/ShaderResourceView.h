@@ -6,7 +6,7 @@
 #include <memory>
 #include <stdexcept>
 
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-20 by Hui
 enum class EnvironmentTextureProjection : uint32_t
 {
     Cubemap = 0u,
@@ -17,7 +17,7 @@ enum class EnvironmentTextureProjection : uint32_t
 
 struct ShaderResourceView
 {
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-20 by Hui
     static EnvironmentTextureProjection GetEnvironmentTextureProjection(const Resource& resource)
     {
         const D3D12_RESOURCE_DESC resourceDesc = resource.GetD3D12ResourceDesc();
@@ -69,7 +69,7 @@ struct ShaderResourceView
     }
 //Modify End
 
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-20 by Hui
     static ShaderResourceView TextureCube(const std::shared_ptr<Resource>& resource)
     {
         return ShaderResourceView(resource, CreateTextureCubeDesc(*resource));
@@ -77,7 +77,11 @@ struct ShaderResourceView
 
     static ShaderResourceView DepthAsFloat(const std::shared_ptr<Resource>& resource)
     {
-        return ShaderResourceView(resource, 0, 1, CreateDepthAsFloatDesc());
+        if (resource == nullptr)
+        {
+            throw std::invalid_argument("Depth SRV resource must not be null.");
+        }
+        return ShaderResourceView(resource, 0, 1, CreateDepthAsFloatDesc(*resource));
     }
 
     static D3D12_SHADER_RESOURCE_VIEW_DESC CreateTextureCubeDesc(const Resource& resource)
@@ -92,10 +96,25 @@ struct ShaderResourceView
         return desc;
     }
 
-    static D3D12_SHADER_RESOURCE_VIEW_DESC CreateDepthAsFloatDesc()
+    static D3D12_SHADER_RESOURCE_VIEW_DESC CreateDepthAsFloatDesc(const Resource& resource)
     {
+        DXGI_FORMAT shaderResourceFormat = DXGI_FORMAT_UNKNOWN;
+        switch (resource.GetD3D12ResourceDesc().Format)
+        {
+        case DXGI_FORMAT_R32_TYPELESS:
+            shaderResourceFormat = DXGI_FORMAT_R32_FLOAT;
+            break;
+        case DXGI_FORMAT_R24G8_TYPELESS:
+            shaderResourceFormat = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+            break;
+        case DXGI_FORMAT_R16_TYPELESS:
+            shaderResourceFormat = DXGI_FORMAT_R16_UNORM;
+            break;
+        default:
+            throw std::invalid_argument("DepthAsFloat requires a typeless depth resource with a typed DSV.");
+        }
         D3D12_SHADER_RESOURCE_VIEW_DESC desc = {};
-        desc.Format = DXGI_FORMAT_R32_FLOAT;
+        desc.Format = shaderResourceFormat;
         desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
         desc.Texture2D.MipLevels = 1;
@@ -159,4 +178,3 @@ struct ShaderResourceView
     bool m_IsDescValid;
     D3D12_SHADER_RESOURCE_VIEW_DESC m_Desc;
 };
-//Modify End
