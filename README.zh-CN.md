@@ -18,7 +18,7 @@
 - **Framework 层接口**：围绕 `CommandContext` 提供 pipeline、descriptor set、bindless descriptor、DXR、mesh shader 和通用 rendering feature 等封装，demo 作者通常通过这些接口完成资源绑定和命令录制。
 - **RenderGraph**：pass 只需声明逻辑资源读写；Compiler 将其编译为不可变的排序、resource state、aliasing、queue dependency 与 execution plan，Executor 统一处理 barrier、queue wait、提交和可选的分 queue GPU timing。demo pass 不需要自行处理 raw DX12 同步。
 - **显式异步计算**：pass 可以指定使用 `Direct` 或 `AsyncCompute` queue；RenderGraph 负责跨 queue 的 GPU fence 等待与资源交接。
-- **光线追踪与降噪**：同一场景可在 inline ray query 和 shader-table DXR 之间切换，并可使用 NRD 或 SVGF。
+- **光线追踪与降噪**：同一场景可在 inline ray query 和 shader-table DXR 之间切换，并可使用 NRD 或 SVGF；Compacted Indirect 会先生成有效像素列表，再驱动后续光追/ReSTIR 阶段。
 - **材质着色模型**：默认 GGX 金属度/粗糙度 PBR 评估已归入 Framework；sample UI 可选择实验性的 `Stylized Comic` 风格化 PBR-NPR 变体。
 - **Meshlet 实验路径**：包含 Meshlet 构建、GPU 资源、task shader / compute-indirect 两种 GBuffer 后端，以及只更新实例数据的增量路径。
 - **ReSTIR DI 直接光**：提供 RIS、时域/Boiling/空域复用、各阶段的可见性与 bias correction 配置，以及最终着色。
@@ -66,7 +66,9 @@ auto pass = RenderGraph::RenderPass::Create(
 | 方向 | 具体内容 |
 | --- | --- |
 | GBuffer | 常规 raster GBuffer，以及实验性的 Meshlet GBuffer 路径。 |
-| 光线追踪 | inline ray query compute shader 与 shader-table DXR，可在运行时切换。 |
+| 场景资产 | `Framework::ModelLoader` 通过 Assimp 加载 FBX mesh；完整 FBX 节点/材质/纹理/光源场景导入仍未实现。 |
+| 光线追踪 | inline ray query compute shader 与 shader-table DXR，可在运行时切换；shader-table DXR 不支持当前仅有 Inline 实现的 ReSTIR DI/GI 阶段。 |
+| Compacted dispatch | 深度筛选有效像素并用原子追加建立 active-pixel list；Inline compute 使用 `ceil(activeCount / 64)` 个 thread groups，DXR 使用 `Width = activeCount`。 |
 | 材质着色 | Framework 统一的 GGX 金属度/粗糙度 PBR，以及 sample 可选的 `Stylized Comic` 风格化 PBR-NPR 变体。 |
 | 光照 | direct lighting 与 indirect lighting 分离后再 composite；直接光可选 ReSTIR DI，Inline Ray Query 间接光可选 ReSTIR GI。 |
 | 软阴影 | 平行光和点光源使用预编译 Hard/Soft Shader 变体；面积光继续采样真实发光面。 |
@@ -192,11 +194,14 @@ CMake 生成的工程会保持各 target 的真实源码目录。`DX12Library`�
 - transient resource 会按本帧实际记录的 Direct/Async Compute/Copy fence 做延迟退休。aliasing 仍采取保守策略：不同 queue 使用的资源不会互相 alias，后续再设计更一般的多 queue allocator。
 - 当前 Framework 和 RenderGraph 的执行路径由应用组合根显式注入 device、queue 和 descriptor 分配器。独立运行时的 application/window 生命周期，以及少量 legacy resource-wrapper 兼容路径，仍保留 `Application` 依赖。
 - `RaytracingDemoSceneResources` 内部已拆成 texture/material、geometry、meshlet、RTAS 四个 builder；facade 仍是 sample 层入口。
+- Compacted Indirect 的 `ActivePixelCount` 是有效像素数，不是光线数量。Finalize 对 Inline compute 写入 `{ ceil(activeCount / 64), 1, 1 }`；因此 UI 同时显示 dispatch groups、实际启动线程数和 DXR ray-generation invocation 数。最后一个 compute group 的 padding threads 会由 count guard 早退，收益主要来自移除天空/空区域的完整 lighting 与 ray-query 工作，而不是依靠 padding 线程早退。
+- 手动把 backend 切到 Shader-table DXR 时，若当前选择了只支持 Inline 的 lighting stage，UI 会弹出兼容性提示并持续显示红色警告；自动化切换不会打开模态框，以免阻塞无人值守测试。
 - RenderGraph timing 分别记录每条 queue 上的 pass 时长；判断跨 queue overlap、wait 和 GPU bubble 时，请使用 PIX Timing Capture。
 - Meshlet 路径是实验性 GBuffer 后端，不是完整的 visibility / streaming 系统，也不代表已达到最优 Meshlet 性能。
 - `Stylized Comic` 是实验性的风格化 PBR/PBR-NPR 材质评估：它保留金属度、粗糙度和 GGX 材质输入，同时加入分段漫反射、冷色阴影和图形化高光；这不是完整的 Spider-Verse 复刻，线稿、网点、套印、hatching 与时间风格化仍不属于该材质模型。
 - ReSTIR DI 是实验性的 inline ray-query 直接光 sample。它的光源采样、自发光表面发射体、时空复用和可见性测试选项仍在演进；图像质量、稳定性和性能均未作为等价 RTXDI 的实现完成验收。
 - ReSTIR GI 是实验性的 inline ray-query 间接光 sample，参考 [DQLin/ReSTIR_PT](https://github.com/DQLin/ReSTIR_PT) 中 ReSTIR GI 的数据流实现。当前目标是 one-bounce transport，使用持久化 packed reservoir；现阶段只有构建与自动化覆盖，画质、时域稳定性、显存占用和性能仍需要在目标硬件上验收。
+- Active Pixel Compaction 已实现并覆盖 PT Direct/Indirect、ReSTIR DI/GI 的 compacted 消费路径；它仍需在不同 active-pixel 密度和目标硬件上完成收益边界验证。
 - 软阴影当前使用固定 4 次采样的变体：平行光读取 angular radius，点光源读取 source radius；自适应采样和质量档位尚未实现。
 - Shader 变体只在启动期或创建 pipeline 时编译；运行期源码热更新、后台编译和项目级 variant manifest 还没有实现。
 - **DLSS、Ray Reconstruction 和 Frame Generation 均为实验性功能，尚未完成可交付验证。** sample 已接入 Native NGX SR/DLAA，并在评估 Streamline RR/FG。RR/FG 需要带 `--streamline-interposer` 重启程序；这是有意的启动期 opt-in，默认 D3D12 device、queue 和 swapchain 不会经过 Streamline proxy。当前只有 build、startup 与自动化安全覆盖，尚未在支持 RR/FG 的硬件上完成功能正确性、画质、稳定性、timing 和性能验证，仍可能存在未知问题。最终是否可用以运行时 capability query 为准：当前 RTX 2060 开发机不支持 FG，且当前 adapter 上 RR 报告不可用。不要把仓库中的任意 DLSS 模式视为保证可用或可直接交付的功能。

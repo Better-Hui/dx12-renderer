@@ -92,6 +92,10 @@ The compiler performs pass culling, dependency ordering, resource-state planning
 - `RenderGraphPassBuilder::UseCopyQueue()` routes copy-compatible passes through the compiled plan, executor, queue scheduler, profiler, and transient retirement path. The maintained sample does not currently declare a Copy-queue pass.
 - Transient resources retire against the actual Direct/Compute/Copy fence values of the frame. Aliasing is intentionally conservative: only same-queue lifetimes are reused; cross-queue aliasing remains disabled.
 
+### Active-pixel compaction
+
+When `RaytracingDemo` selects `CompactedIndirect`, the graph reads depth and appends valid geometry pixels to an active-pixel list with a global atomic counter. PT, ReSTIR DI, and ReSTIR GI Inline compute stages recover logical screen coordinates from that list and dispatch `ceil(activeCount / 64)` 64-thread groups. The DXR path uses a separate `D3D12_DISPATCH_RAYS_DESC` whose `Width` is `activeCount`. `ActivePixelCount` is therefore a valid-pixel count, not a ray count and not the Inline dispatch X value. Finalize, graph tokens, and readback validate that the count and indirect arguments agree.
+
 ### Recording model
 
 The compiler groups consecutive explicitly parallel-safe Direct passes into recording batches, including passes with GPU resource dependencies. `RenderGraphTaskScheduler` supplies persistent workers and drains already accepted work during shutdown; every worker uses an exclusive command allocator/list and temporary descriptor allocation. The compiler's stable topological order is retained for submission, and pending aliasing barriers are emitted before their first-use transitions. A bindless frame page is retained by both Direct and Async Compute fences, so descriptor-table mirroring never overwrites a page still referenced by GPU work. Parallel recording therefore lowers CPU recording cost without making one Direct queue execute GPU work in parallel.
@@ -128,6 +132,8 @@ For ReSTIR DI, the graph contains one `ReSTIR DI` pass. The pass calls Framework
 
 For ReSTIR GI, the graph instead selects one `ReSTIR GI` indirect-lighting producer. It calls Framework `ReSTIRGIPass::Execute`, which records initial BSDF sampling, temporal reservoir reuse, spatial reservoir reuse, and final visibility/shading in one command-list scope. The demo adapter supplies its GBuffer, TLAS, bindless scene data, direct-light sampling, emission, and environment contract; the feature is Inline Ray Query only.
 
+Shader-table DXR and Inline share the scene/resource model, but ReSTIR DI/GI are currently Inline-only. A manual switch to DXR opens a compatibility popup when the selected configuration would skip those stages and keeps a red warning visible; automated backend changes intentionally avoid the modal popup.
+
 ### Diagnostics and automation
 
 - Runtime UI groups technique selection, scene/light controls, denoising, upscaling, stress content, and debugging controls.
@@ -139,6 +145,7 @@ For ReSTIR GI, the graph instead selects one `ReSTIR GI` indirect-lighting produ
 - The repository targets Windows/x64/D3D12 with Shader Model 6.8.
 - Explicit async compute can reduce GPU wall time only when dependencies and hardware allow overlap; fence waits, cache pressure, and bandwidth contention can make it slower.
 - Meshlets are an experimental GBuffer backend, not a complete visibility, streaming, residency, or LOD system.
+- `Framework::ModelLoader` already supports FBX mesh import through Assimp; a standalone Framework contract for complete FBX scenes (nodes, materials, textures, and lights) is still outside the current scope.
 - ReSTIR DI/GI, CUDA Bloom, DLSS SR/DLAA, Streamline RR/FG, and Unity interop are engineering experiments. They require per-hardware functional, image-quality, stability, memory, and performance validation before any delivery use.
 
 For sample-facing API examples and detailed feature limitations, see [RaytracingDemo API Guide](RaytracingSampleApi.md).

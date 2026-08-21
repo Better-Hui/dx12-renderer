@@ -21,10 +21,12 @@ The renderer now mirrors `ReSTIRDIPass`, not the Falcor pass API:
 
     struct ReSTIRGIExecutionInputs
     {
+        ReSTIRGIFrameState FrameState;
         std::shared_ptr<Texture> IndirectLighting;
         std::shared_ptr<Texture> MotionVector;
-        ReSTIRGIFrameState FrameState;
-        std::function<void(CommandList&, ComputeShader&)> BindSceneInputs;
+        ActivePixelDispatch CompactedDispatch = {};
+        std::function<void(CommandContext&)> PrepareCommandContext;
+        std::function<void(CommandContext&, ComputeShader&)> BindSceneInputs;
     };
 
     class ReSTIRGIPass
@@ -33,10 +35,10 @@ The renderer now mirrors `ReSTIRDIPass`, not the Falcor pass API:
         void Execute(CommandList&, const ReSTIRGIExecutionInputs&);
     };
 
-`ReSTIRGIPass` owns `Initial`, `Temporal`, and persistent `History` packed reservoir sets, plus the six hard/soft-shadow and environment-projection shader-variant combinations. The demo provides only the GBuffer, TLAS, bindless scene adapter, direct-light/emission/environment evaluation, and output resource. The RenderGraph constructs exactly one indirect-lighting producer: PathTracing, ReSTIR GI, or a disabled producer; there are never two runtime-gated writers of the same output.
+`ReSTIRGIPass` owns `Initial`, `Temporal`, and persistent `History` packed reservoir sets, plus hard/soft-shadow, environment-projection, material-shading, algorithm-setting, and compacted-dispatch shader variants. The demo provides the GBuffer, TLAS, bindless scene adapter, direct-light/emission/environment evaluation, optional `ActivePixelDispatch`, and output resource. The RenderGraph constructs exactly one indirect-lighting producer: PathTracing, ReSTIR GI, or a disabled producer; there are never two runtime-gated writers of the same output.
 
 ## Current boundaries
 
-The implemented path resamples one secondary transport vertex. Its stored radiance uses the same bounded continuation estimator as ordinary indirect path tracing. `RAYTRACING_DEMO_MAX_BOUNCES` and `RESTIR_GI_MAX_PATH_BOUNCES` are discrete shader variants, so the fixed bounce count can be unrolled without changing the reservoir representation. Previous-frame TLAS, reuse of multi-bounce path segments, ReSTIR-N, full source-equivalent unbiased spatial correction, and final quality/performance acceptance remain separate milestones. The packed resources use approximately 144 bytes per pixel before allocator overhead, so memory cost must be measured before enabling it at high resolution.
+The implemented path resamples one secondary transport vertex. Its stored radiance uses the same bounded continuation estimator as ordinary indirect path tracing. `RAYTRACING_DEMO_MAX_BOUNCES` and `RESTIR_GI_MAX_PATH_BOUNCES` are discrete shader variants, so the fixed bounce count can be unrolled without changing the reservoir representation. In compacted mode, all four stages consume the common active-pixel list and indirect compute arguments; `ActivePixelCount` remains a pixel count rather than a ray count. Previous-frame TLAS, reuse of multi-bounce path segments, ReSTIR-N, full source-equivalent unbiased spatial correction, and final quality/performance acceptance remain separate milestones. The packed resources use approximately 144 bytes per pixel before allocator overhead, so memory cost must be measured before enabling it at high resolution.
 
 The GI reservoir cannot reuse the current DI light-index-only reservoir format. It must represent a secondary transport sample and its proposal. Dynamic geometry must not be hidden behind an unconditional history reset; invalidation and GPU resource retirement need explicit lifetime rules.

@@ -134,6 +134,23 @@ NRD uses this path to batch its adapter/input/output transitions. Without a Rend
 
 This is an explicit queue API, not an automatic multi-queue scheduler. It does not decide queue placement, split or batch passes, optimize overlap, or schedule a Copy queue. A pass may become slower when dependencies expose its compute tail or when graphics and compute contend for GPU execution/cache/bandwidth.
 
+### Compacted ray-traced pixel dispatch
+
+`RaytracingDemo` can build an active-pixel list before PT or ReSTIR work. The compaction shader reads the depth resource and uses a global `InterlockedAdd` counter to append each valid pixel's linear index. This is an atomic append, not a prefix-sum scan.
+
+- `ActivePixelCount` counts valid geometry pixels; it does not count rays. One valid pixel can issue multiple visibility, soft-shadow, bounce, or ReSTIR rays.
+- Inline compacted consumers use `D3D12_DISPATCH_ARGUMENTS = { ceil(ActivePixelCount / 64), 1, 1 }`. The UI labels this as compute dispatch groups and also shows the resulting launched thread count; the final group can contain padding threads guarded by the shader.
+- Compacted shader-table DXR uses a separate `D3D12_DISPATCH_RAYS_DESC` with `Width = ActivePixelCount`, so DXR ray-generation invocations are one per active pixel. Do not interpret the compute dispatch X value as the DXR invocation count.
+- Compaction adds a full-screen depth scan, atomic UAV writes, finalize work, barriers, and readback/diagnostic plumbing. Its gain comes from removing inactive-pixel lighting and ray-query work; it is not primarily a benefit from padding-thread early exits, and it can shrink when most pixels are active.
+
+The runtime diagnostics distinguish `NotQueued`, `NotCompleted`, and `Completed` readback states. They validate that the active count and finalized indirect arguments agree without changing the rendered result.
+
+### DXR backend compatibility
+
+The shader-table backend currently supports the Path Tracing direct and indirect stages. ReSTIR DI and ReSTIR GI remain Inline Ray Query only, and Async Compute is meaningful only for the Inline backend. `RaytracingDemoFrameState::SupportsDirectLighting`, `SupportsIndirectLighting`, and `SupportsAsyncCompute` are the shared capability predicates used by graph construction and UI warnings.
+
+When a user manually selects DXR while an Inline-only stage is selected, the UI opens a compatibility popup with the option to switch back to Inline or keep DXR, then leaves a red warning listing the skipped/ignored stages. Automated backend changes do not open the modal popup so unattended tests are not blocked.
+
 ## Profiling
 
 RenderGraph timing captures queue-local GPU timestamp samples and exports CSV history. Use it for repeated fixed-scene A/B pass-duration measurements.
@@ -157,6 +174,7 @@ The current soft variant uses four shadow samples. This is a sample-quality fixe
 ## Feature notes
 
 - **Ray tracing:** inline ray query is the default path; shader-table DXR uses ray-generation, miss, and hit groups. Both share scene resources.
+- **Root descriptors:** D3D12 root descriptors write a buffer GPU virtual address directly into a root-signature slot and are useful for buffer CBV/SRV/UAV bindings, but they are not the texture binding path and were used only as a diagnostic A/B during the compact-dispatch investigation.
 - **Meshlets:** task-shader and compute-indirect GBuffer backends plus cluster debugging. This is not yet a production visibility, streaming, residency, or LOD system.
 - **Surface emitters:** rectangular area lights and emissive meshes are represented by reusable geometry-level triangle CDF data plus per-instance data, then uploaded with the other light buffers.
 - **CUDA Bloom:** imports shared D3D12 resources/fences once and uses timeline values for D3D12-to-CUDA and CUDA-to-D3D12 ordering. It must not overwrite history or overlay resources.
@@ -168,7 +186,7 @@ The current soft variant uses four shadow samples. This is a sample-quality fixe
 - Sampler reflection/binding and root constants/root descriptors are not fully unified.
 - Pipeline cache keys do not yet represent every raster, compute, and DXR state dimension.
 - Soft-shadow quality is currently fixed at four samples; no runtime quality presets or adaptive sampling are available.
-- RenderGraph supports explicit async queue placement but no automatic scheduling or Copy-queue path.
+- RenderGraph supports explicit Direct/Async Compute/Copy queue placement but no automatic queue selection; the main sample does not yet contain a Copy-queue pass.
 - `RenderGraphRoot::Execute` is now a graph entry point. `RenderGraphCommandExecutor` owns pass recording/submission, while `RenderGraphProfiler` owns optional per-queue timestamp lifetime and markers.
 - Transient resources are retired from actual Direct/Async Compute fence values. Aliasing is conservative and only combines lifetimes that are proven to use the same queue; cross-queue aliasing is intentionally disabled.
 - Pass construction uses explicit `RaytracingDemoPassResources` and `RaytracingDemoPassConfig` rather than capturing `RaytracingDemo&` or using friend access.

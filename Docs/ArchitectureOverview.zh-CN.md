@@ -92,6 +92,10 @@ RenderPass 声明
 - copy-compatible pass 可通过 `RenderGraphPassBuilder::UseCopyQueue()` 进入编译计划、Executor、QueueScheduler、Profiler 和 transient retirement 路径；当前主 sample 尚未声明 Copy-queue pass。
 - transient resource 按本帧实际的 Direct/Compute/Copy fence 延迟退休。aliasing 目前是保守的：仅复用可证明在同一 queue 上的 lifetime，跨 queue aliasing 仍禁用。
 
+### Active Pixel Compaction
+
+当 `RaytracingDemo` 选择 `CompactedIndirect` 时，图先读取深度并通过全局原子计数把有效几何像素追加到 active-pixel list。PT、ReSTIR DI 和 ReSTIR GI 的 Inline compute 阶段根据该列表恢复逻辑屏幕坐标，只派发 `ceil(activeCount / 64)` 个 64-thread groups；DXR 阶段使用独立的 `D3D12_DISPATCH_RAYS_DESC`，其 `Width` 等于 `activeCount`。因此 `ActivePixelCount` 是有效像素数，不是光线数量，也不等于 Inline dispatch X。Finalize、token 和 readback 会校验 count 与 indirect arguments 的一致性。
+
 ### 多线程命令录制
 
 Compiler 会把连续、显式声明为 parallel-safe 的 Direct pass 组成 recording batch；即使这些 pass 存在 GPU resource 依赖也可以并行录制。`RenderGraphTaskScheduler` 提供常驻 worker，并在关闭时 drain 已接受任务；每个 worker 独占 command allocator/list 和临时 descriptor 分配。提交始终采用 Compiler 生成的稳定拓扑顺序，pending aliasing barrier 会先于首次使用的 transition 写入。bindless frame page 同时由 Direct 与 Async Compute fence 退休，因此 descriptor table 镜像不会覆盖仍被 GPU 引用的页。因此它降低的是 CPU recording 成本，而不是让同一 Direct queue 的 GPU 工作并行执行。
@@ -128,6 +132,8 @@ ReSTIR DI 在图中只有一个 `ReSTIR DI` pass。该 pass 调用 Framework 的
 
 ReSTIR GI 同样只作为一个 `ReSTIR GI` 间接光 producer 进入图。它调用 Framework 的 `ReSTIRGIPass::Execute`，在同一个 command-list scope 内依次录制初始 BSDF 采样、temporal reservoir reuse、spatial reservoir reuse 和最终可见性/着色。Demo adapter 提供 GBuffer、TLAS、bindless scene data、直接光采样、自发光和环境光契约；该路径当前只支持 Inline Ray Query。
 
+shader-table DXR 与 Inline 共用 scene/resource model，但当前 ReSTIR DI/GI 仅由 Inline 实现。手动切换到 DXR 时，若选择会跳过这些阶段，UI 会显示一次兼容性弹窗并持续显示红色警告；自动化切换不打开模态框。
+
 ### 调试和自动化
 
 - 运行时 UI 按技术选择、场景/光源、降噪、upscaling、压力内容与调试控制分类。
@@ -139,6 +145,7 @@ ReSTIR GI 同样只作为一个 `ReSTIR GI` 间接光 producer 进入图。它�
 - 平台是 Windows/x64/D3D12，Shader Model 6.8 为基线。
 - Async Compute 只有依赖和硬件允许 overlap 时才可能降低 GPU wall time；额外 fence、cache 与带宽竞争也可能令它变慢。
 - Meshlet 是实验性的 GBuffer backend，不是完整的 visibility、streaming、residency 或 LOD 系统。
+- `Framework::ModelLoader` 已通过 Assimp 支持 FBX mesh 导入；完整 FBX 场景（节点、材质、纹理和光源）导入契约仍不是独立的 Framework 目标。
 - ReSTIR DI/GI、CUDA Bloom、DLSS SR/DLAA、Streamline RR/FG、Unity interop 都是工程实验；用于交付前必须逐硬件完成正确性、画质、稳定性、显存和性能验证。
 
 使用示例和更细的功能边界见 [RaytracingDemo API Guide](RaytracingSampleApi.md)。
