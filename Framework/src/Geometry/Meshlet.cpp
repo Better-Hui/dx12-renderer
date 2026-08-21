@@ -16,7 +16,7 @@
 
 using namespace DirectX;
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-21 by Hui
 namespace
 {
     void CopyFloat3(XMFLOAT3& destination, const float source[3])
@@ -133,6 +133,7 @@ MeshletBuildResult MeshletBuilder::Build(const MeshPrototype& meshPrototype, con
     MeshletBuildResult result;
     result.Mesh = MeshPrototype(std::move(compactVertices), std::move(compactIndices), true, false);
     result.Mesh.m_Name = meshPrototype.m_Name;
+    result.Mesh.m_SourceMeshIndex = meshPrototype.m_SourceMeshIndex;
     result.Meshlets = std::move(meshlets);
     return result;
 }

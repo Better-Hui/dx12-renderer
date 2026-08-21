@@ -163,6 +163,8 @@ Do not infer global overlap from separate queue timestamp origins. Use PIX Timin
 
 PIX is the authority for cross-queue wall-clock overlap; CSV is the lightweight repeatable companion measurement.
 
+The current profiler and runtime automation are sample-specific. The planned [Framework Diagnostics contract](FrameworkDiagnosticsPlan.md) will add machine-readable sessions, registered controls/observations, schedule and submission snapshots, structured invariants, and reproducible artifacts without desktop input injection. This is a roadmap, not an implemented API.
+
 ## Soft-shadow variants
 
 `PathTracingPipelineController` selects either hard-shadow or soft-shadow precompiled shader artifacts for both inline ray-query compute and shader-table DXR. The runtime toggle changes pipeline variants; the shader does not branch on a soft-shadow boolean.
@@ -191,6 +193,9 @@ The current soft variant uses four shadow samples. This is a sample-quality fixe
 - Transient resources are retired from actual Direct/Async Compute fence values. Aliasing is conservative and only combines lifetimes that are proven to use the same queue; cross-queue aliasing is intentionally disabled.
 - Pass construction uses explicit `RaytracingDemoPassResources` and `RaytracingDemoPassConfig` rather than capturing `RaytracingDemo&` or using friend access.
 - Scene-to-GPU conversion is organized by four builders: texture/material, geometry, meshlet, and RTAS. `RaytracingDemoSceneResources` remains the sample-facing facade.
+- Scene loading uses the static `SceneImporter::ImportFromFile()` dispatcher for `.unity`, project `.json`, and `.fbx`. FBX nodes, transforms, material factors/maps, external/embedded textures, cameras, and directional/point/spot/area lights are normalized into `Scene`; `SceneMeshReference::SubmeshIndex` is preferred over mesh-name matching when the demo selects a prototype.
+- `SceneImportOptions::GenerateFallbackCamera` is intended for direct FBX assets without a camera. `RequireCamera` remains available for strict tools/tests. The importer selects one active camera, preserves Spot Lights, and reports the point-light fallback used by the current sample GPU lighting path. Advanced transparency/clearcoat/transmission and animation playback are not implied by the FBX importer.
+- `UnitySceneDump <scene.{unity,json,fbx}> [--allow-missing-camera]` is a no-window developer-tool smoke test for the same importer path.
 - DLSS/Streamline integration is experimental. Native NGX SR/DLAA and tentative Streamline RR/FG paths are present, but they have not completed supported-hardware image-quality, stability, timing, or performance validation. Runtime capability queries gate RR/FG; the current RTX 2060 development machine reports RR unavailable and cannot support FG. Do not treat this sample path as a production-ready DLSS integration.
 - RR/FG interposition is an explicit process-start choice: launch with `--streamline-interposer`. The default path keeps the native D3D12 device, queues, and swapchain unproxied; enabling RR/FG later requires a restart. The sample deploys a project-owned Streamline configuration with console logging disabled.
 

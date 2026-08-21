@@ -120,6 +120,20 @@ Scene
 
 `RaytracingDemoSceneResources` 是四个 builder 的 sample-facing facade。
 
+### SceneImporter 契约
+
+Demo 使用格式无关的静态入口 `SceneImporter::ImportFromFile()`：`.unity` 进入 Unity YAML parser，`.json` 进入项目场景 parser，`.fbx` 进入 Assimp FBX scene importer。三种格式最终都生成同一份 `Scene`：
+
+```text
+Scene
+  -> nodes（局部/世界矩阵、父子关系）
+  -> objects（节点引用、mesh 引用、稳定子网格索引、材质索引）
+  -> materials（PBR 因子、UV scale/offset、纹理绑定）
+  -> camera + 平行光/点光/Spot/面积光
+```
+
+FBX 外部纹理在成功解析后保留文件路径；嵌入纹理复制到拥有所有权的 `SceneEmbeddedTexture`。Demo resource builder 通过 `TextureLoader` 对两种来源使用同一套 GPU 上传和缓存流程，因此不需要先把 FBX 转成 Unity 场景或项目 JSON。mesh 导入启用 Assimp 的结构校验、三角化、非法数据过滤、四骨骼权重限制和 16 位索引安全的大 mesh 拆分；非法面、索引和骨骼引用在运行时明确报错，而不是依赖只在 Debug 生效的 assert。
+
 ### 已演示的渲染路径
 
 - GBuffer：普通 raster、task/mesh shader，或 compute cull + `ExecuteIndirect`。
@@ -139,13 +153,14 @@ shader-table DXR 与 Inline 共用 scene/resource model，但当前 ReSTIR DI/GI
 - 运行时 UI 按技术选择、场景/光源、降噪、upscaling、压力内容与调试控制分类。
 - `RAYTRACING_DEMO_AUTOTEST=core`、`stress`、`matrix` 可以进行非交互启动与功能组合 smoke test。它用于发现崩溃/回归，不能替代画面验收。
 - RenderGraph timestamp CSV 用于可重复的 pass timing；完整 queue 时间线应看 PIX。
+- 当前路径仍是 Demo-specific，尚不能用一个机器可读 capture 同时解释 graph schedule、queue submission、resource/descriptor state、约束、readback 和复现元数据。下一工具优先级是 [Framework 诊断、自动化与 Profiler 规划](FrameworkDiagnosticsPlan.zh-CN.md) 中定义的 Framework-owned 契约。
 
 ## 当前边界
 
 - 平台是 Windows/x64/D3D12，Shader Model 6.8 为基线。
 - Async Compute 只有依赖和硬件允许 overlap 时才可能降低 GPU wall time；额外 fence、cache 与带宽竞争也可能令它变慢。
 - Meshlet 是实验性的 GBuffer backend，不是完整的 visibility、streaming、residency 或 LOD 系统。
-- `Framework::ModelLoader` 已通过 Assimp 支持 FBX mesh 导入；完整 FBX 场景（节点、材质、纹理和光源）导入契约仍不是独立的 Framework 目标。
+- FBX 场景导入已经进入 Framework `SceneImporter` 契约，但当前只选择一个活动相机并支持实用的 PBR 子集。Spot Light 会保留在 `Scene` 中，而 sample 当前 GPU 光照路径通过点光 fallback 显示；透明、clearcoat、transmission、动画播放和动态蒙皮场景更新仍需要单独契约。
 - ReSTIR DI/GI、CUDA Bloom、DLSS SR/DLAA、Streamline RR/FG、Unity interop 都是工程实验；用于交付前必须逐硬件完成正确性、画质、稳定性、显存和性能验证。
 
 使用示例和更细的功能边界见 [RaytracingDemo API Guide](RaytracingSampleApi.md)。

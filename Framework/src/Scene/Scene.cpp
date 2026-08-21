@@ -1,13 +1,14 @@
-//Modify Begin:2026-08-06 by Hui
+//Modify Begin:2026-08-21 by Hui
 #include <Framework/Scene/Scene.h>
 
+#include <algorithm>
 #include <stdexcept>
 
 using namespace DirectX;
 
 bool SceneTextureBinding::IsValid() const
 {
-    return !AssetPath.empty();
+    return !AssetPath.empty() || (EmbeddedTexture != nullptr && EmbeddedTexture->IsValid());
 }
 
 void Scene::Clear()
@@ -18,10 +19,12 @@ void Scene::Clear()
     m_Skybox = {};
     m_LightGroupSettings = {};
     m_Camera = {};
+    m_Nodes.clear();
     m_Objects.clear();
     m_Materials.clear();
     m_DirectionalLights.clear();
     m_PointLights.clear();
+    m_SpotLights.clear();
     m_AreaLights.clear();
 }
 
@@ -54,6 +57,42 @@ void Scene::SetLightGroupSettings(const SceneLightGroupSettings& settings)
     m_LightGroupSettings = settings;
 }
 
+uint32_t Scene::AddNode(SceneNode node)
+{
+    const uint32_t index = static_cast<uint32_t>(m_Nodes.size());
+    node.Children.clear();
+    m_Nodes.push_back(std::move(node));
+    return index;
+}
+
+void Scene::SetNodeParent(const uint32_t nodeIndex, const uint32_t parentIndex)
+{
+    if (nodeIndex >= m_Nodes.size())
+    {
+        throw std::out_of_range("Scene node index is invalid.");
+    }
+    if (parentIndex != SceneNode::InvalidNodeIndex && parentIndex >= m_Nodes.size())
+    {
+        throw std::out_of_range("Scene parent node index is invalid.");
+    }
+    if (nodeIndex == parentIndex)
+    {
+        throw std::invalid_argument("Scene node cannot be its own parent.");
+    }
+
+    SceneNode& node = m_Nodes[nodeIndex];
+    if (node.ParentIndex != SceneNode::InvalidNodeIndex)
+    {
+        std::vector<uint32_t>& oldChildren = m_Nodes[node.ParentIndex].Children;
+        oldChildren.erase(std::remove(oldChildren.begin(), oldChildren.end(), nodeIndex), oldChildren.end());
+    }
+    node.ParentIndex = parentIndex;
+    if (parentIndex != SceneNode::InvalidNodeIndex)
+    {
+        m_Nodes[parentIndex].Children.push_back(nodeIndex);
+    }
+}
+
 uint32_t Scene::AddMaterial(SceneMaterial material)
 {
     const uint32_t index = static_cast<uint32_t>(m_Materials.size());
@@ -76,6 +115,11 @@ void Scene::AddPointLight(const PointLight& light)
     m_PointLights.push_back(light);
 }
 
+void Scene::AddSpotLight(const SpotLight& light)
+{
+    m_SpotLights.push_back(light);
+}
+
 void Scene::AddAreaLight(const AreaLight& light)
 {
     m_AreaLights.push_back(light);
@@ -89,6 +133,11 @@ void Scene::SetDirectionalLights(std::vector<DirectionalLight> lights)
 void Scene::SetPointLights(std::vector<PointLight> lights)
 {
     m_PointLights = std::move(lights);
+}
+
+void Scene::SetSpotLights(std::vector<SpotLight> lights)
+{
+    m_SpotLights = std::move(lights);
 }
 
 void Scene::SetAreaLights(std::vector<AreaLight> lights)
@@ -143,6 +192,11 @@ const SceneCamera& Scene::GetCamera() const
     return m_Camera;
 }
 
+bool Scene::HasCamera() const
+{
+    return !m_Camera.Name.empty() && m_Camera.RuntimeCamera != nullptr;
+}
+
 SceneCamera& Scene::GetMutableCamera()
 {
     return m_Camera;
@@ -166,6 +220,11 @@ const Camera& Scene::GetRuntimeCamera() const
     return *m_Camera.RuntimeCamera;
 }
 
+const std::vector<SceneNode>& Scene::GetNodes() const
+{
+    return m_Nodes;
+}
+
 const std::vector<SceneObject>& Scene::GetObjects() const
 {
     return m_Objects;
@@ -184,6 +243,11 @@ const std::vector<DirectionalLight>& Scene::GetDirectionalLights() const
 const std::vector<PointLight>& Scene::GetPointLights() const
 {
     return m_PointLights;
+}
+
+const std::vector<SpotLight>& Scene::GetSpotLights() const
+{
+    return m_SpotLights;
 }
 
 const std::vector<AreaLight>& Scene::GetAreaLights() const

@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-13 by Hui
+//Modify Begin:2026-08-21 by Hui
 #include <Scene/SceneLightManager.h>
 
 #include <DX12Library/CommandList.h>
@@ -72,7 +72,9 @@ void SceneLightManager::CreateDemoLights()
 {
     m_DirectionalLights.clear();
     m_PointLights.clear();
+    m_SpotLights.clear();
     m_AreaLights.clear();
+    m_ImportedPointLightCount = 0;
     m_MeshSurfaceEmitterData = {};
     m_PointLightBaseY.clear();
     m_PointLightPhase.clear();
@@ -128,6 +130,7 @@ void SceneLightManager::CreateDemoLights()
         m_PointLightOrbitCenter.push_back(orbitCenter);
         m_PointLightAnimated.push_back(1);
     }
+    m_ImportedPointLightCount = m_PointLights.size();
 
     AreaLightData areaLight{};
     areaLight.PositionAndRange = { -18.0f, 10.0f, 18.0f, 35.0f };
@@ -144,7 +147,9 @@ void SceneLightManager::CreateFromScene(const Scene& scene)
 {
     m_DirectionalLights.clear();
     m_PointLights.clear();
+    m_SpotLights.clear();
     m_AreaLights.clear();
+    m_ImportedPointLightCount = 0;
     m_MeshSurfaceEmitterData = {};
     m_PointLightBaseY.clear();
     m_PointLightPhase.clear();
@@ -180,6 +185,28 @@ void SceneLightManager::CreateFromScene(const Scene& scene)
         m_PointLightOrbitRadius.push_back(0.0f);
         m_PointLightOrbitSpeed.push_back(0.0f);
         m_PointLightOrbitCenter.push_back({ light.PositionWs.x, light.PositionWs.y, light.PositionWs.z });
+        m_PointLightAnimated.push_back(0);
+    }
+    m_ImportedPointLightCount = m_PointLights.size();
+
+    for (const SpotLight& spotLight : scene.GetSpotLights())
+    {
+        m_SpotLights.push_back(spotLight);
+        PointLight fallback(
+            spotLight.PositionWs,
+            std::max(0.1f, spotLight.Range));
+        fallback.Color = spotLight.Color;
+        fallback.Color.w *= spotLight.Intensity;
+        fallback.ConstantAttenuation = spotLight.ConstantAttenuation;
+        fallback.LinearAttenuation = spotLight.LinearAttenuation;
+        fallback.QuadraticAttenuation = spotLight.QuadraticAttenuation;
+        fallback.SourceRadius = spotLight.SourceRadius;
+        m_PointLights.push_back(fallback);
+        m_PointLightBaseY.push_back(fallback.PositionWs.y);
+        m_PointLightPhase.push_back(0.0f);
+        m_PointLightOrbitRadius.push_back(0.0f);
+        m_PointLightOrbitSpeed.push_back(0.0f);
+        m_PointLightOrbitCenter.push_back({ fallback.PositionWs.x, fallback.PositionWs.y, fallback.PositionWs.z });
         m_PointLightAnimated.push_back(0);
     }
 
@@ -283,7 +310,15 @@ void SceneLightManager::ApplyToScene(Scene& scene) const
         m_AreaLightsEnabled
     });
     scene.SetDirectionalLights(m_DirectionalLights);
-    scene.SetPointLights(m_PointLights);
+    std::vector<PointLight> importedPointLights;
+    importedPointLights.reserve((std::min)(m_ImportedPointLightCount, m_PointLights.size()));
+    importedPointLights.insert(
+        importedPointLights.end(),
+        m_PointLights.begin(),
+        m_PointLights.begin() + static_cast<std::ptrdiff_t>(
+            (std::min)(m_ImportedPointLightCount, m_PointLights.size())));
+    scene.SetPointLights(std::move(importedPointLights));
+    scene.SetSpotLights(m_SpotLights);
     scene.SetAreaLights(std::move(areaLights));
 }
 

@@ -193,10 +193,12 @@ MeshPrototype::MeshPrototype(VertexCollectionType&& vertices, IndexCollectionTyp
         throw std::exception("Empty index buffer.");
     }
 
-    if (m_Vertices.size() >= USHRT_MAX)
+//Modify Begin:2026-08-21 by Hui
+    if (m_Vertices.size() > static_cast<size_t>((std::numeric_limits<uint16_t>::max)()) + 1u)
     {
         throw std::exception("Too many vertices for 16-bit index buffer");
     }
+//Modify End
 
     if (!rhCoords)
     {
@@ -683,8 +685,10 @@ std::shared_ptr<Mesh> Mesh::CreateMesh(CommandList& commandList, const MeshProto
 void Mesh::Initialize(CommandList& commandList, VertexCollectionType& vertices, IndexCollectionType& indices,
     bool rhCoords)
 {
-    if (vertices.size() >= USHRT_MAX)
+//Modify Begin:2026-08-21 by Hui
+    if (vertices.size() > static_cast<size_t>((std::numeric_limits<uint16_t>::max)()) + 1u)
         throw std::exception("Too many vertices for 16-bit index buffer");
+//Modify End
 
     if (!rhCoords)
         ReverseWinding(indices, vertices);

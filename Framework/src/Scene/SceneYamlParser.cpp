@@ -1054,7 +1054,7 @@ void SceneYamlParser::WriteCameraToFile(
 }
 //Modify End
 
-//Modify Begin:2026-08-03 by Hui
+//Modify Begin:2026-08-21 by Hui
 #include <Framework/Scene/SceneImporter.h>
 
 #include <DirectXMath.h>
@@ -1311,6 +1311,20 @@ namespace
         XMStoreFloat3(&axisV, axisVVector);
     }
 
+    XMMATRIX BuildLocalMatrix(const UnityTransformInfo& transform)
+    {
+        const XMVECTOR rotation = XMVectorSet(
+            transform.LocalRotation.X,
+            transform.LocalRotation.Y,
+            transform.LocalRotation.Z,
+            transform.LocalRotation.W);
+
+        return
+            XMMatrixScaling(transform.LocalScale.X, transform.LocalScale.Y, transform.LocalScale.Z) *
+            XMMatrixRotationQuaternion(rotation) *
+            XMMatrixTranslation(transform.LocalPosition.X, transform.LocalPosition.Y, transform.LocalPosition.Z);
+    }
+
     XMMATRIX BuildWorldMatrix(const UnityTransformInfo& transform)
     {
         const XMVECTOR rotation = XMVectorSet(
@@ -1510,7 +1524,47 @@ namespace
         return nullptr;
     }
 
-    SceneCamera ConvertCamera(const UnityCameraInfo& camera)
+    std::unordered_map<int64_t, uint32_t> ConvertNodes(const UnitySceneData& unityScene, Scene& scene)
+    {
+        std::unordered_map<int64_t, uint32_t> nodeByObjectId;
+        std::unordered_map<int64_t, uint32_t> nodeByTransformId;
+        nodeByObjectId.reserve(unityScene.Objects.size());
+        nodeByTransformId.reserve(unityScene.Objects.size());
+
+        for (const UnitySceneObject& unityObject : unityScene.Objects)
+        {
+            SceneNode node;
+            node.Name = unityObject.Name;
+            node.SourceId = "unity:gameObject:" + std::to_string(unityObject.GameObjectId);
+            node.LocalMatrix = BuildLocalMatrix(unityObject.Transform);
+            node.WorldMatrix = BuildWorldMatrix(unityObject.Transform);
+            const uint32_t nodeIndex = scene.AddNode(std::move(node));
+            nodeByObjectId.insert_or_assign(unityObject.GameObjectId, nodeIndex);
+            if (unityObject.Transform.FileId != 0)
+            {
+                nodeByTransformId.insert_or_assign(unityObject.Transform.FileId, nodeIndex);
+            }
+        }
+
+        for (const UnitySceneObject& unityObject : unityScene.Objects)
+        {
+            const auto node = nodeByObjectId.find(unityObject.GameObjectId);
+            if (node == nodeByObjectId.end() || unityObject.Transform.ParentTransformId == 0)
+            {
+                continue;
+            }
+            if (const auto parent = nodeByTransformId.find(unityObject.Transform.ParentTransformId);
+                parent != nodeByTransformId.end())
+            {
+                scene.SetNodeParent(node->second, parent->second);
+            }
+        }
+        return nodeByObjectId;
+    }
+
+    SceneCamera ConvertCamera(
+        const UnityCameraInfo& camera,
+        const std::unordered_map<int64_t, uint32_t>& nodeByObjectId)
     {
         SceneCamera result;
         result.Name = camera.Name;
@@ -1528,6 +1582,10 @@ namespace
         result.SourceBinding.ParentTransformId = camera.Transform.ParentTransformId;
         result.SourceBinding.LocalPosition = ToFloat3(camera.Transform.LocalPosition);
         result.SourceBinding.LocalRotation = ToFloat4(camera.Transform.LocalRotation);
+        if (const auto node = nodeByObjectId.find(camera.GameObjectId); node != nodeByObjectId.end())
+        {
+            result.SourceBinding.NodeIndex = node->second;
+        }
         return result;
     }
 
@@ -1557,7 +1615,7 @@ namespace
                 light.m_Color = { unityLight.Color.R, unityLight.Color.G, unityLight.Color.B, unityLight.Intensity };
             scene.AddDirectionalLight(light);
             }
-            else if (unityLight.Type == UnityLightType::Point || unityLight.Type == UnityLightType::Spot)
+            else if (unityLight.Type == UnityLightType::Point)
             {
                 PointLight light(
                     {
@@ -1571,6 +1629,34 @@ namespace
                 light.SourceRadius = std::max(0.0f, unityLight.SourceRadius);
                 light.RecalculateAttenuationCoefficients();
                 scene.AddPointLight(light);
+            }
+            else if (unityLight.Type == UnityLightType::Spot)
+            {
+                const XMFLOAT3 direction = NormalizeVector(
+                    RotateVector(unityLight.Transform.WorldRotation, { 0.0f, 0.0f, -1.0f }));
+                const float outerConeAngle = XMConvertToRadians(
+                    std::clamp(unityLight.SpotAngle * 0.5f, 0.1f, 89.9f));
+                const PointLight attenuationSource(
+                    {
+                        unityLight.Transform.WorldPosition.X,
+                        unityLight.Transform.WorldPosition.Y,
+                        unityLight.Transform.WorldPosition.Z,
+                        1.0f
+                    },
+                    std::max(0.1f, unityLight.Range));
+                SpotLight light;
+                light.PositionWs = attenuationSource.PositionWs;
+                light.DirectionWs = { direction.x, direction.y, direction.z, 0.0f };
+                light.Color = { unityLight.Color.R, unityLight.Color.G, unityLight.Color.B, 1.0f };
+                light.Intensity = unityLight.Intensity;
+                light.InnerConeAngle = outerConeAngle * 0.8f;
+                light.OuterConeAngle = outerConeAngle;
+                light.Range = attenuationSource.Range;
+                light.ConstantAttenuation = attenuationSource.ConstantAttenuation;
+                light.LinearAttenuation = attenuationSource.LinearAttenuation;
+                light.QuadraticAttenuation = attenuationSource.QuadraticAttenuation;
+                light.SourceRadius = std::max(0.0f, unityLight.SourceRadius);
+                scene.AddSpotLight(light);
             }
             else if (unityLight.Type == UnityLightType::Area)
             {
@@ -1628,7 +1714,8 @@ namespace
     void ConvertObjects(
         const UnitySceneData& unityScene,
         Scene& scene,
-        std::unordered_map<std::string, uint32_t>& materialBySourceId)
+        std::unordered_map<std::string, uint32_t>& materialBySourceId,
+        const std::unordered_map<int64_t, uint32_t>& nodeByObjectId)
     {
         std::unordered_map<std::string, std::unordered_map<int64_t, std::string>> fileIdNameCache;
         std::unordered_map<std::string, ObjMaterialLibrary> objMaterialLibraries;
@@ -1657,6 +1744,10 @@ namespace
             SceneObject object;
             object.Name = unityObject.Name;
             object.WorldMatrix = BuildWorldMatrix(unityObject.Transform);
+            if (const auto node = nodeByObjectId.find(unityObject.GameObjectId); node != nodeByObjectId.end())
+            {
+                object.NodeIndex = node->second;
+            }
             if (!unityObject.Materials.empty())
             {
                 const auto material = materialBySourceId.find(MakeAssetReferenceKey(unityObject.Materials.front()));
@@ -1734,16 +1825,17 @@ namespace
     {
         Scene scene;
         scene.SetSourcePaths(unityScene.ScenePath, unityScene.ProjectRoot, unityScene.AssetsRoot);
+        const std::unordered_map<int64_t, uint32_t> nodeByObjectId = ConvertNodes(unityScene, scene);
 
         const UnityCameraInfo* primaryCamera = FindPrimaryCamera(unityScene);
         if (primaryCamera != nullptr)
         {
-            scene.SetCamera(ConvertCamera(*primaryCamera));
+            scene.SetCamera(ConvertCamera(*primaryCamera, nodeByObjectId));
         }
 
         std::unordered_map<std::string, uint32_t> materialBySourceId;
         ConvertMaterials(unityScene, scene, materialBySourceId);
-        ConvertObjects(unityScene, scene, materialBySourceId);
+        ConvertObjects(unityScene, scene, materialBySourceId, nodeByObjectId);
         ConvertLights(unityScene, scene);
         ConvertSkybox(unityScene, scene);
         return scene;
@@ -1753,10 +1845,12 @@ namespace
     {
         std::ostringstream stream;
         stream << "Imported Unity scene: sourceObjects=" << unityScene.Objects.size()
+               << ", nodes=" << scene.GetNodes().size()
                << ", sceneObjects=" << scene.GetObjects().size()
                << ", cameras=" << unityScene.Cameras.size()
                << ", directionalLights=" << scene.GetDirectionalLights().size()
                << ", pointLights=" << scene.GetPointLights().size()
+               << ", spotLights=" << scene.GetSpotLights().size()
                << ", areaLights=" << scene.GetAreaLights().size()
                << ", materials=" << scene.GetMaterials().size();
         return stream.str();
@@ -1767,9 +1861,20 @@ SceneImportResult SceneImporter::ImportFromFile(
     const std::filesystem::path& scenePath,
     const SceneImportOptions& options)
 {
-    if (scenePath.extension() == ".json")
+    const std::string extension = ToLower(scenePath.extension().string());
+    if (extension == ".json")
     {
         return ImportJsonFromFile(scenePath, options);
+    }
+    if (extension == ".fbx")
+    {
+        return ImportFbxFromFile(scenePath, options);
+    }
+    if (extension != ".unity")
+    {
+        throw std::invalid_argument(
+            "Unsupported scene format '" + scenePath.extension().string() +
+            "'. Supported formats are .unity, .json, and .fbx.");
     }
     if (!std::filesystem::exists(scenePath))
     {

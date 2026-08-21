@@ -1,4 +1,4 @@
-﻿//Modify Begin:2026-08-13 by Hui
+﻿//Modify Begin:2026-08-21 by Hui
 #include <Scene/SceneResources.h>
 #include <Scene/SceneStressTestFactory.h>
 
@@ -16,6 +16,7 @@
 #include <cmath>
 #include <cstddef>
 #include <filesystem>
+#include <ranges>
 #include <stdexcept>
 #include <unordered_map>
 #include <utility>
@@ -33,31 +34,6 @@ namespace
         return value;
     }
 
-    const MeshPrototype& FindMeshPrototypeByName(
-        const std::vector<MeshPrototype>& prototypes,
-        const std::string& expectedName)
-    {
-        const std::string expectedLower = ToLower(expectedName);
-        for (const MeshPrototype& prototype : prototypes)
-        {
-            if (ToLower(prototype.m_Name) == expectedLower)
-            {
-                return prototype;
-            }
-        }
-
-        for (const MeshPrototype& prototype : prototypes)
-        {
-            const std::string prototypeName = ToLower(prototype.m_Name);
-            if (!expectedLower.empty() && prototypeName.find(expectedLower) != std::string::npos)
-            {
-                return prototype;
-            }
-        }
-
-        throw std::runtime_error("Scene mesh submesh name does not exist in the imported model.");
-    }
-
     std::wstring ToWidePath(const std::filesystem::path& path)
     {
         return path.wstring();
@@ -65,7 +41,8 @@ namespace
 
     std::string ToUtf8Path(const std::filesystem::path& path)
     {
-        return path.string();
+        const std::u8string value = path.u8string();
+        return { reinterpret_cast<const char*>(value.data()), value.size() };
     }
 
     RaytracingDemoMaterialData MakeSceneMaterial(
@@ -90,8 +67,8 @@ namespace
         output.EmissionTextureIndex = emissionTextureIndex;
         output.HasDiffuseMap = material.BaseMap.IsValid() ? 1u : 0u;
         output.HasNormalMap = material.NormalMap.IsValid() ? 1u : 0u;
-        output.HasMetallicMap = material.MetallicGlossMap.IsValid() ? 1u : 0u;
-        output.HasRoughnessMap = material.MetallicGlossMap.IsValid() ? 1u : 0u;
+        output.HasMetallicMap = (material.MetallicMap.IsValid() || material.MetallicGlossMap.IsValid()) ? 1u : 0u;
+        output.HasRoughnessMap = (material.RoughnessMap.IsValid() || material.MetallicGlossMap.IsValid()) ? 1u : 0u;
         output.HasAmbientOcclusionMap = material.OcclusionMap.IsValid() ? 1u : 0u;
         output.HasEmissionMap = material.EmissionMap.IsValid() ? 1u : 0u;
         output.Metallic = material.Metallic;
@@ -520,6 +497,10 @@ std::vector<uint32_t> RaytracingDemoSceneResources::LoadSceneMaterials(
         const SceneTextureBinding& binding,
         const TextureUsageType usage) -> LoadedTexture
         {
+            if (binding.EmbeddedTexture != nullptr && binding.EmbeddedTexture->IsValid())
+            {
+                return { m_TextureMaterialResources.AddTexture(commandList, binding, usage), true };
+            }
             if (!binding.AssetPath.empty() &&
                 std::filesystem::exists(binding.AssetPath) &&
                 ToLower(binding.AssetPath.extension().string()) != ".exr")
@@ -541,8 +522,14 @@ std::vector<uint32_t> RaytracingDemoSceneResources::LoadSceneMaterials(
 
         const LoadedTexture diffuseTexture = addTextureOrFallback(sceneMaterial.BaseMap, TextureUsageType::Albedo);
         const LoadedTexture normalTexture = addTextureOrFallback(sceneMaterial.NormalMap, TextureUsageType::Normalmap);
-        const LoadedTexture metallicTexture = addTextureOrFallback(sceneMaterial.MetallicGlossMap, TextureUsageType::Other);
-        const LoadedTexture roughnessTexture = addTextureOrFallback(sceneMaterial.MetallicGlossMap, TextureUsageType::Other);
+        const SceneTextureBinding& metallicBinding = sceneMaterial.MetallicMap.IsValid()
+            ? sceneMaterial.MetallicMap
+            : sceneMaterial.MetallicGlossMap;
+        const SceneTextureBinding& roughnessBinding = sceneMaterial.RoughnessMap.IsValid()
+            ? sceneMaterial.RoughnessMap
+            : sceneMaterial.MetallicGlossMap;
+        const LoadedTexture metallicTexture = addTextureOrFallback(metallicBinding, TextureUsageType::Other);
+        const LoadedTexture roughnessTexture = addTextureOrFallback(roughnessBinding, TextureUsageType::Other);
         const LoadedTexture occlusionTexture = addTextureOrFallback(sceneMaterial.OcclusionMap, TextureUsageType::Other);
         const LoadedTexture emissionTexture = addTextureOrFallback(sceneMaterial.EmissionMap, TextureUsageType::Albedo);
 
@@ -616,11 +603,46 @@ void RaytracingDemoSceneResources::LoadSceneObjects(
         {
             throw std::runtime_error("Imported mesh does not contain any renderable prototypes.");
         }
-        const MeshPrototype& prototype = object.Mesh.SubmeshName.empty()
-            ? prototypeIterator->second.front()
-            : FindMeshPrototypeByName(prototypeIterator->second, object.Mesh.SubmeshName);
-        auto model = modelLoader.Load(commandList, std::vector<MeshPrototype>{ prototype });
-        const uint32_t geometryIndex = AddSceneGeometry(model, std::vector<MeshPrototype>{ prototype });
+        const MeshPrototype* prototype = nullptr;
+        if (object.Mesh.SubmeshIndex != SceneMeshReference::InvalidSubmeshIndex)
+        {
+            const auto sourceMesh = std::ranges::find_if(
+                prototypeIterator->second,
+                [&object](const MeshPrototype& candidate)
+                {
+                    return candidate.m_SourceMeshIndex == object.Mesh.SubmeshIndex;
+                });
+            if (sourceMesh != prototypeIterator->second.end())
+            {
+                prototype = &*sourceMesh;
+            }
+        }
+        if (prototype == nullptr && !object.Mesh.SubmeshName.empty())
+        {
+            const auto namedMesh = std::ranges::find_if(
+                prototypeIterator->second,
+                [&object](const MeshPrototype& candidate)
+                {
+                    return ToLower(candidate.m_Name) == ToLower(object.Mesh.SubmeshName);
+                });
+            if (namedMesh != prototypeIterator->second.end())
+            {
+                prototype = &*namedMesh;
+            }
+        }
+        if (prototype == nullptr && object.Mesh.SubmeshIndex == SceneMeshReference::InvalidSubmeshIndex && object.Mesh.SubmeshName.empty())
+        {
+            prototype = &prototypeIterator->second.front();
+        }
+        if (prototype == nullptr)
+        {
+            throw std::runtime_error(
+                "Imported mesh submesh was not found: path='" + meshPath.string() +
+                "', index=" + std::to_string(object.Mesh.SubmeshIndex) +
+                ", name='" + object.Mesh.SubmeshName + "'.");
+        }
+        auto model = modelLoader.Load(commandList, std::vector<MeshPrototype>{ *prototype });
+        const uint32_t geometryIndex = AddSceneGeometry(model, std::vector<MeshPrototype>{ *prototype });
         AddSceneObject(object.WorldMatrix, geometryIndex, materialIndex);
     }
 }

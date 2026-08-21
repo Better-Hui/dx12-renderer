@@ -2,7 +2,7 @@
 
 > An experimental DirectX 12 renderer and Windows sample collection for exploring renderer architecture, RenderGraph execution, ray tracing, meshlets, and CUDA/D3D12 interop.
 
-[中文文档](README.zh-CN.md) · [Architecture Overview](Docs/ArchitectureOverview.md) · [RaytracingDemo API Guide](Docs/RaytracingSampleApi.md)
+[中文文档](README.zh-CN.md) · [Architecture Overview](Docs/ArchitectureOverview.md) · [RaytracingDemo API Guide](Docs/RaytracingSampleApi.md) · [Framework Diagnostics Plan](Docs/FrameworkDiagnosticsPlan.md)
 
 ## Fork and attribution
 
@@ -79,7 +79,7 @@ Queue submission and last-writer fence tracking live in `RenderGraphQueueSchedul
 | Feature | Demonstrated usage |
 | --- | --- |
 | Base resources | GBuffer-style normal/depth/material data, motion/world-position data, history/display resources, and raster or meshlet GBuffer generation. |
-| Scene assets | `Framework::ModelLoader` loads FBX meshes through Assimp; complete FBX node/material/texture/light scene import is not implemented. |
+| Scene assets | `SceneImporter::ImportFromFile()` accepts `.unity`, project `.json`, and `.fbx`. FBX import preserves node hierarchy, local/world transforms, PBR factors/maps, external or embedded textures, cameras, and directional/point/spot/area lights. |
 | Ray tracing | Inline ray-query compute shaders and shader-table DXR, with a compatibility popup/red warning when the selected DXR configuration skips Inline-only stages. |
 | Compacted dispatch | Active-pixel compaction, indirect compute/DXR dispatch finalization, and readback diagnostics for active count and dispatch arguments. |
 | Material shading | Framework-owned GGX metallic/roughness PBR, plus the sample-selectable `Stylized Comic` PBR-NPR variant. |
@@ -90,6 +90,26 @@ Queue submission and last-writer fence tracking live in `RenderGraphQueueSchedul
 | Meshlets | Task-shader and compute-indirect GBuffer backends with cluster debugging. |
 | CUDA Bloom | External D3D12/CUDA post process with shared-resource and shared-fence synchronization. |
 | Profiling | PIX scopes and RenderGraph GPU timestamp history exported as CSV. |
+
+### Scene import and direct FBX use
+
+The sample resolves its scene through one static entry point:
+
+```cpp
+SceneImportOptions options;
+options.GenerateFallbackCamera = true;
+const SceneImportResult result = SceneImporter::ImportFromFile(scenePath, options);
+```
+
+`SceneImporter` dispatches by case-insensitive extension. Unity YAML and project JSON keep their existing asset conventions; FBX is imported as a complete scene through Assimp. A node that instances several meshes creates one `SceneObject` per submesh and stores the original Assimp mesh index in `SceneMeshReference::SubmeshIndex`, so the demo does not depend on duplicate or missing mesh names. Embedded FBX textures are decoded from memory by `TextureLoader` and participate in the same cache as file textures.
+
+The importer preserves Spot Light data in `Scene`. The current sample lighting GPU contract has directional, point, and area producers only, so `SceneLightManager` temporarily adds a point-light fallback for a Spot Light while retaining the original spot data for scene round-tripping. Only the first active FBX camera is selected; `GenerateFallbackCamera` frames the imported world-space bounds when an asset has no camera. Transparency, clearcoat, transmission, animation playback, and other advanced material models remain outside this sample contract.
+
+For a no-window parser check, enable the developer tool and run:
+
+```text
+UnitySceneDump <scene.unity|scene.json|scene.fbx> [--allow-missing-camera]
+```
 
 ## Requirements
 
@@ -202,6 +222,7 @@ The startup compiler currently covers the shaders directly owned by `RaytracingD
 
 - [Architecture Overview](Docs/ArchitectureOverview.md) maps the DX12Library, Framework, RenderGraph, and RaytracingDemo responsibilities and data flow.
 - [RaytracingDemo API Guide](Docs/RaytracingSampleApi.md) explains sample APIs, RenderGraph behavior, profiling, and boundaries.
+- [Framework Diagnostics Plan](Docs/FrameworkDiagnosticsPlan.md) defines the planned machine-readable diagnostics, deterministic automation, invariant, artifact, and profiling contract. It is a roadmap, not a completed feature.
 - Keep maintained sample passes framework-facing; avoid raw D3D12 calls where an existing API covers the operation.
 - This fork preserves upstream and third-party notices. Review the upstream project and vendored license files before use or redistribution; this README introduces no replacement repository-wide license.
 - `External/DLSS/`, `External/NRI/`, `External/NRD/`, and the NVIDIA components used by `External/Streamline/` retain their upstream terms. A Git submodule link does not transfer or replace those terms. Keeping an SDK under `External/` does not make it open source and does not grant a sublicense. Preserve all notices and licenses, do not treat this repository as a standalone SDK mirror, and obtain a legal/license review before publishing source, redistributing binaries, or making a commercial release that includes these components.

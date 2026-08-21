@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-13 by Hui
+//Modify Begin:2026-08-21 by Hui
 #pragma once
 
 #include <Framework/Scene/Light.h>
@@ -88,6 +88,7 @@ private:
     SkyLightData m_SkyLight = {};
     std::vector<DirectionalLight> m_DirectionalLights;
     std::vector<PointLight> m_PointLights;
+    std::vector<SpotLight> m_SpotLights;
     std::vector<AreaLightData> m_AreaLights;
     SurfaceEmitterSceneData m_MeshSurfaceEmitterData;
 
@@ -97,6 +98,7 @@ private:
     std::vector<float> m_PointLightOrbitSpeed;
     std::vector<DirectX::XMFLOAT3> m_PointLightOrbitCenter;
     std::vector<uint8_t> m_PointLightAnimated;
+    size_t m_ImportedPointLightCount = 0;
 
     bool m_DirectionalLightsEnabled = true;
     bool m_PointLightsEnabled = true;

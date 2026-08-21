@@ -36,9 +36,8 @@ struct PointLight
 	float LinearAttenuation = 0.22f;
 	float QuadraticAttenuation = 0.2f;
 	float Range = 20.0f;
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-21 by Hui
 	float SourceRadius = 0.25f;
-	//Modify End
 
 	void RecalculateAttenuationCoefficients();
 
@@ -79,8 +78,9 @@ struct SpotLight
 		, DirectionWs(0.0f, 0.0f, 1.0f, 0.0f)
 		, Color(1.0f, 1.0f, 1.0f, 1.0f)
 		, Intensity(1.0f)
-		, SpotAngle(DirectX::XM_PIDIV2)
-		, Attenuation(0.0f)
+		, InnerConeAngle(DirectX::XM_PIDIV4)
+		, OuterConeAngle(DirectX::XM_PIDIV2)
+		, Range(20.0f)
 	{
 	}
 
@@ -88,9 +88,13 @@ struct SpotLight
 	DirectX::XMFLOAT4 DirectionWs;
 	DirectX::XMFLOAT4 Color;
 	float Intensity;
-	float SpotAngle;
-	float Attenuation;
-	float _Padding{};
+	float InnerConeAngle;
+	float OuterConeAngle;
+	float Range;
+	float ConstantAttenuation = 1.0f;
+	float LinearAttenuation = 0.22f;
+	float QuadraticAttenuation = 0.2f;
+	float SourceRadius = 0.0f;
 };
 
 struct CapsuleLight

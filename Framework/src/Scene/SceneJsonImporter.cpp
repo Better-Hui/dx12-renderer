@@ -15,7 +15,7 @@
 #include <string_view>
 #include <variant>
 
-//Modify Begin:2026-08-06 by Hui
+//Modify Begin:2026-08-21 by Hui
 namespace
 {
     struct JsonValue
@@ -374,6 +374,8 @@ namespace
             material.BaseMap.AssetPath = ResolveAssetPath(assetsRoot, Find(materialObject, "baseMap"), "baseMap");
             material.NormalMap.AssetPath = ResolveAssetPath(assetsRoot, Find(materialObject, "normalMap"), "normalMap");
             material.MetallicGlossMap.AssetPath = ResolveAssetPath(assetsRoot, Find(materialObject, "metallicGlossMap"), "metallicGlossMap");
+            material.MetallicMap.AssetPath = ResolveAssetPath(assetsRoot, Find(materialObject, "metallicMap"), "metallicMap");
+            material.RoughnessMap.AssetPath = ResolveAssetPath(assetsRoot, Find(materialObject, "roughnessMap"), "roughnessMap");
             material.OcclusionMap.AssetPath = ResolveAssetPath(assetsRoot, Find(materialObject, "occlusionMap"), "occlusionMap");
             material.EmissionMap.AssetPath = ResolveAssetPath(assetsRoot, Find(materialObject, "emissionMap"), "emissionMap");
             materialIndices.emplace(name, scene.AddMaterial(std::move(material)));
@@ -388,11 +390,19 @@ namespace
     {
         const JsonValue* gameObjectsValue = Find(root, "gameObjects");
         if (gameObjectsValue == nullptr) return;
-        for (const JsonValue& gameObjectValue : gameObjectsValue->AsArray("gameObjects"))
+        const JsonValue::Array& gameObjects = gameObjectsValue->AsArray("gameObjects");
+        for (size_t gameObjectIndex = 0; gameObjectIndex < gameObjects.size(); ++gameObjectIndex)
         {
+            const JsonValue& gameObjectValue = gameObjects[gameObjectIndex];
             const JsonValue::Object& gameObject = gameObjectValue.AsObject("gameObject");
-            if (const JsonValue* active = Find(gameObject, "active"); active != nullptr && !ReadBool(*active, "gameObject.active")) continue;
             const std::string name = Find(gameObject, "name") != nullptr ? ReadString(*Find(gameObject, "name"), "gameObject.name") : "GameObject";
+            SceneNode node;
+            node.Name = name;
+            node.SourceId = "json:gameObject:" + std::to_string(gameObjectIndex);
+            node.LocalMatrix = ReadWorldMatrix(gameObject);
+            node.WorldMatrix = node.LocalMatrix;
+            const uint32_t nodeIndex = scene.AddNode(std::move(node));
+            if (const JsonValue* active = Find(gameObject, "active"); active != nullptr && !ReadBool(*active, "gameObject.active")) continue;
             const DirectX::XMFLOAT3 position = ReadPosition(gameObject);
             const DirectX::XMVECTOR rotation = ReadRotation(gameObject);
 
@@ -407,6 +417,7 @@ namespace
                 if (const JsonValue* value = Find(cameraObject, "fieldOfView")) camera.FieldOfView = ReadNumber(*value, "camera.fieldOfView");
                 if (const JsonValue* value = Find(cameraObject, "nearClipPlane")) camera.NearClipPlane = ReadNumber(*value, "camera.nearClipPlane");
                 if (const JsonValue* value = Find(cameraObject, "farClipPlane")) camera.FarClipPlane = ReadNumber(*value, "camera.farClipPlane");
+                camera.SourceBinding.NodeIndex = nodeIndex;
                 scene.SetCamera(camera);
             }
 
@@ -418,6 +429,7 @@ namespace
                 SceneObject object;
                 object.Name = name;
                 object.WorldMatrix = ReadWorldMatrix(gameObject);
+                object.NodeIndex = nodeIndex;
                 if (std::holds_alternative<std::string>(meshValue->Data))
                 {
                     object.Mesh.Kind = SceneMeshKind::ExternalMesh;
@@ -504,6 +516,53 @@ namespace
                     if (const JsonValue* range = Find(lightObject, "range")) light.Range = ReadNumber(*range, "light.range");
                     scene.AddAreaLight(light);
                 }
+                else if (type == "spot")
+                {
+                    DirectX::XMFLOAT3 direction{};
+                    if (const JsonValue* directionValue = Find(lightObject, "direction"))
+                    {
+                        direction = ReadFloat3(*directionValue, "light.direction");
+                    }
+                    else
+                    {
+                        DirectX::XMStoreFloat3(
+                            &direction,
+                            DirectX::XMVector3Rotate(DirectX::XMVectorSet(0, 0, -1, 0), rotation));
+                    }
+                    DirectX::XMStoreFloat3(
+                        &direction,
+                        DirectX::XMVector3Normalize(DirectX::XMLoadFloat3(&direction)));
+                    const float range = Find(lightObject, "range") != nullptr
+                        ? ReadNumber(*Find(lightObject, "range"), "light.range")
+                        : 20.0f;
+                    const float outerAngleDegrees = Find(lightObject, "spotAngle") != nullptr
+                        ? ReadNumber(*Find(lightObject, "spotAngle"), "light.spotAngle") * 0.5f
+                        : 15.0f;
+                    const float innerAngleDegrees = Find(lightObject, "innerSpotAngle") != nullptr
+                        ? ReadNumber(*Find(lightObject, "innerSpotAngle"), "light.innerSpotAngle") * 0.5f
+                        : outerAngleDegrees * 0.8f;
+                    const PointLight attenuationSource(
+                        { position.x, position.y, position.z, 1.0f },
+                        std::max(0.1f, range));
+                    SpotLight light;
+                    light.PositionWs = attenuationSource.PositionWs;
+                    light.DirectionWs = { direction.x, direction.y, direction.z, 0.0f };
+                    light.Color = { color.x, color.y, color.z, 1.0f };
+                    light.Intensity = intensity;
+                    light.InnerConeAngle = DirectX::XMConvertToRadians(
+                        std::clamp(innerAngleDegrees, 0.0f, outerAngleDegrees));
+                    light.OuterConeAngle = DirectX::XMConvertToRadians(
+                        std::clamp(outerAngleDegrees, 0.1f, 89.9f));
+                    light.Range = attenuationSource.Range;
+                    light.ConstantAttenuation = attenuationSource.ConstantAttenuation;
+                    light.LinearAttenuation = attenuationSource.LinearAttenuation;
+                    light.QuadraticAttenuation = attenuationSource.QuadraticAttenuation;
+                    if (const JsonValue* sourceRadius = Find(lightObject, "sourceRadius"))
+                    {
+                        light.SourceRadius = std::max(0.0f, ReadNumber(*sourceRadius, "light.sourceRadius"));
+                    }
+                    scene.AddSpotLight(light);
+                }
                 else
                 {
                     const float range = Find(lightObject, "range") != nullptr ? ReadNumber(*Find(lightObject, "range"), "light.range") : 20.0f;
@@ -557,7 +616,7 @@ SceneImportResult SceneImporter::ImportJsonFromFile(
     }
 
     AddGameObjects(root, assetsRoot, result.SceneData, materialIndices);
-    if (options.RequireCamera && result.SceneData.GetCamera().Name.empty())
+    if (options.RequireCamera && !result.SceneData.HasCamera())
     {
         throw std::runtime_error("JSON scene has no camera: " + absoluteScenePath.string());
     }
@@ -568,9 +627,11 @@ SceneImportResult SceneImporter::ImportJsonFromFile(
 
     result.Diagnostics.push_back(
         "Imported JSON scene: objects=" + std::to_string(result.SceneData.GetObjects().size()) +
+        ", nodes=" + std::to_string(result.SceneData.GetNodes().size()) +
         ", materials=" + std::to_string(result.SceneData.GetMaterials().size()) +
         ", directionalLights=" + std::to_string(result.SceneData.GetDirectionalLights().size()) +
         ", pointLights=" + std::to_string(result.SceneData.GetPointLights().size()) +
+        ", spotLights=" + std::to_string(result.SceneData.GetSpotLights().size()) +
         ", areaLights=" + std::to_string(result.SceneData.GetAreaLights().size()));
     return result;
 }

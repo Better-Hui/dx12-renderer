@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-13 by Hui
+//Modify Begin:2026-08-21 by Hui
 #include <Scene/SceneResourceBuilders.h>
 
 #include <DX12Library/CommandList.h>
@@ -12,8 +12,25 @@
 #include <algorithm>
 #include <cwctype>
 #include <filesystem>
+#include <stdexcept>
 #include <system_error>
 #include <utility>
+
+namespace
+{
+    std::wstring ToWidePath(const std::filesystem::path& path)
+    {
+        return path.wstring();
+    }
+
+    std::wstring ToWideUtf8(const std::string& value)
+    {
+        const std::u8string utf8(
+            reinterpret_cast<const char8_t*>(value.data()),
+            reinterpret_cast<const char8_t*>(value.data() + value.size()));
+        return std::filesystem::path(utf8).wstring();
+    }
+}
 
 SceneTextureMaterialResources::SceneTextureMaterialResources(Microsoft::WRL::ComPtr<ID3D12Device2> device)
     : m_MaterialBuffer(L"Ray Tracing Materials")
@@ -47,6 +64,48 @@ uint32_t SceneTextureMaterialResources::AddTexture(
         L"",
         commandList.GetDeviceContext());
     TextureLoader(commandList.GetDeviceContext()).Load(commandList, *texture, path, usage);
+    const uint32_t textureIndex = m_BindlessDescriptorHeap.AddShaderResourceView(*texture);
+    m_Textures.push_back(texture);
+    m_TextureShaderResourceViews.emplace_back(texture);
+    m_TextureIndices.emplace(cacheKey, textureIndex);
+    return textureIndex;
+}
+
+uint32_t SceneTextureMaterialResources::AddTexture(
+    CommandList& commandList,
+    const SceneTextureBinding& binding,
+    const TextureUsageType usage)
+{
+    if (binding.EmbeddedTexture == nullptr || !binding.EmbeddedTexture->IsValid())
+    {
+        if (binding.AssetPath.empty())
+        {
+            throw std::invalid_argument("Scene texture binding has neither an external path nor embedded data.");
+        }
+        return AddTexture(commandList, ToWidePath(binding.AssetPath), usage);
+    }
+
+    const std::wstring cacheKey = BuildTextureCacheKey(
+        ToWideUtf8(binding.EmbeddedTexture->CacheKey),
+        usage);
+    if (const auto existing = m_TextureIndices.find(cacheKey); existing != m_TextureIndices.end())
+    {
+        return existing->second;
+    }
+
+    auto texture = std::make_shared<Texture>(
+        TextureUsageType::Other,
+        L"",
+        commandList.GetDeviceContext());
+    const TextureMemorySource source{
+        binding.EmbeddedTexture->Data,
+        ToWideUtf8(binding.EmbeddedTexture->CacheKey),
+        binding.EmbeddedTexture->FormatHint,
+        binding.EmbeddedTexture->Width,
+        binding.EmbeddedTexture->Height,
+        binding.EmbeddedTexture->Encoding == SceneEmbeddedTextureEncoding::Bgra8
+    };
+    TextureLoader(commandList.GetDeviceContext()).Load(commandList, *texture, source, usage);
     const uint32_t textureIndex = m_BindlessDescriptorHeap.AddShaderResourceView(*texture);
     m_Textures.push_back(texture);
     m_TextureShaderResourceViews.emplace_back(texture);

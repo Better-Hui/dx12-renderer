@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-03 by Hui
+//Modify Begin:2026-08-21 by Hui
 #pragma once
 
 #include <Framework/Scene/Scene.h>
@@ -13,6 +13,7 @@ struct SceneImportOptions
     UnitySceneParseOptions ParseOptions;
     bool RequireCamera = true;
     bool RequireRenderableObject = true;
+    bool GenerateFallbackCamera = false;
 };
 
 struct SceneImportResult
@@ -27,12 +28,15 @@ struct SceneImportResult
 class SceneImporter final
 {
 public:
-    // Imports Unity YAML scenes and Unity-style JSON scenes into the shared Scene representation.
+    // Imports Unity YAML, Unity-style JSON, and FBX scenes into the shared Scene representation.
     static SceneImportResult ImportFromFile(
         const std::filesystem::path& scenePath,
         const SceneImportOptions& options = {});
 
     static SceneImportResult ImportJsonFromFile(
+        const std::filesystem::path& scenePath,
+        const SceneImportOptions& options = {});
+    static SceneImportResult ImportFbxFromFile(
         const std::filesystem::path& scenePath,
         const SceneImportOptions& options = {});
     static void ApplyJsonRuntimeState(

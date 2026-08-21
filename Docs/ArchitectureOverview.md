@@ -120,6 +120,20 @@ Scene
 
 `RaytracingDemoSceneResources` is a sample-facing facade over these four builders. It provides incremental stress-instance add/remove: shared geometry and existing BLAS data stay intact while meshlet instance data and the TLAS are updated.
 
+### Scene importer contract
+
+`SceneImporter::ImportFromFile()` is the format-neutral static entry point used by the demo. It dispatches `.unity` to the Unity YAML parser, `.json` to the project scene parser, and `.fbx` to the Assimp FBX scene importer. All three produce the same `Scene` contract:
+
+```text
+Scene
+  -> nodes (local/world matrices and parent/child links)
+  -> objects (node reference, mesh reference, stable submesh index, material index)
+  -> materials (PBR factors, UV scale/offset, texture bindings)
+  -> camera + directional/point/spot/area lights
+```
+
+FBX import keeps external texture paths when they resolve and copies embedded textures into an owned `SceneEmbeddedTexture` payload. The demo resource builder decodes either source through `TextureLoader`, so an FBX does not need to be converted to a Unity scene or project JSON before loading. Mesh loading uses Assimp validation, triangulation, invalid-data filtering, four-weight limiting, and 16-bit-safe large-mesh splitting; runtime checks reject invalid faces, indices, and bone references instead of relying on debug-only assertions.
+
 ### Render paths demonstrated
 
 - GBuffer generation through ordinary raster, task/mesh shaders, or compute culling plus `ExecuteIndirect`.
@@ -139,13 +153,14 @@ Shader-table DXR and Inline share the scene/resource model, but ReSTIR DI/GI are
 - Runtime UI groups technique selection, scene/light controls, denoising, upscaling, stress content, and debugging controls.
 - `RAYTRACING_DEMO_AUTOTEST=core`, `stress`, or `matrix` runs non-interactive startup/feature-toggle coverage. It is a crash/regression smoke test, not a substitute for visual validation.
 - RenderGraph timestamp CSV is useful for repeatable pass timing; PIX is required for full queue timelines.
+- The current paths are Demo-specific and do not yet provide one machine-readable explanation of graph schedule, queue submissions, resource/descriptor state, assertions, readbacks, and reproduction metadata. The next tooling priority is the planned Framework-owned contract in [Framework Diagnostics, Automation, and Profiling Plan](FrameworkDiagnosticsPlan.md).
 
 ## Current boundaries
 
 - The repository targets Windows/x64/D3D12 with Shader Model 6.8.
 - Explicit async compute can reduce GPU wall time only when dependencies and hardware allow overlap; fence waits, cache pressure, and bandwidth contention can make it slower.
 - Meshlets are an experimental GBuffer backend, not a complete visibility, streaming, residency, or LOD system.
-- `Framework::ModelLoader` already supports FBX mesh import through Assimp; a standalone Framework contract for complete FBX scenes (nodes, materials, textures, and lights) is still outside the current scope.
+- FBX scene import is now part of the Framework `SceneImporter` contract, but it intentionally selects one active camera and supports a practical PBR subset. Spot Lights are preserved in `Scene` while the current sample GPU lighting path renders them through a point-light fallback. Transparency, clearcoat, transmission, animation playback, and dynamic skinned-scene updates still require separate contracts.
 - ReSTIR DI/GI, CUDA Bloom, DLSS SR/DLAA, Streamline RR/FG, and Unity interop are engineering experiments. They require per-hardware functional, image-quality, stability, memory, and performance validation before any delivery use.
 
 For sample-facing API examples and detailed feature limitations, see [RaytracingDemo API Guide](RaytracingSampleApi.md).

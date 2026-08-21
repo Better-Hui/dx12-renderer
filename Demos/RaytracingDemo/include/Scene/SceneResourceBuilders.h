@@ -1,7 +1,8 @@
-//Modify Begin:2026-08-13 by Hui
+//Modify Begin:2026-08-21 by Hui
 #pragma once
 
 #include <Scene/SceneResourceTypes.h>
+#include <Framework/Scene/Scene.h>
 
 #include <DX12Library/StructuredBuffer.h>
 #include <DX12Library/Texture.h>
@@ -34,6 +35,7 @@ public:
 
     void Clear();
     uint32_t AddTexture(CommandList& commandList, const std::wstring& path, TextureUsageType usage = TextureUsageType::Albedo);
+    uint32_t AddTexture(CommandList& commandList, const SceneTextureBinding& binding, TextureUsageType usage = TextureUsageType::Albedo);
     uint32_t AddMaterial(const RaytracingDemoMaterialData& material);
     uint32_t AddPbrMaterial(
         const DirectX::XMFLOAT4& diffuse,

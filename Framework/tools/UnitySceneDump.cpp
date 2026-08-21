@@ -1,11 +1,11 @@
-//Modify Begin:2026-07-29 by Hui
+//Modify Begin:2026-08-21 by Hui
 #include <Framework/Scene/SceneImporter.h>
 #include <Framework/Geometry/Mesh.h>
 #include <Framework/Geometry/ModelLoader.h>
-//Modify End
 
 #include <algorithm>
 #include <cfloat>
+#include <cstring>
 #include <iostream>
 #include <set>
 
@@ -36,13 +36,18 @@ int main(int argc, char** argv)
 {
     if (argc < 2)
     {
-        std::cerr << "Usage: UnitySceneDump <scene.unity>\n";
+        std::cerr << "Usage: UnitySceneDump <scene.{unity,json,fbx}> [--allow-missing-camera]\n";
         return 1;
     }
 
     try
     {
-        const SceneImportResult importResult = SceneImporter::ImportFromFile(argv[1]);
+        SceneImportOptions options;
+        if (argc >= 3 && std::strcmp(argv[2], "--allow-missing-camera") == 0)
+        {
+            options.RequireCamera = false;
+        }
+        const SceneImportResult importResult = SceneImporter::ImportFromFile(argv[1], options);
         const Scene& scene = importResult.SceneData;
         std::cout << "Scene: " << scene.GetSourcePath().string() << "\n";
         std::cout << "ProjectRoot: " << scene.GetProjectRoot().string() << "\n";
@@ -51,10 +56,22 @@ int main(int argc, char** argv)
             std::cout << "Diagnostic: " << diagnostic << "\n";
         }
 
-        std::cout << "Camera: " << scene.GetCamera().Name
+        std::cout << "Camera: " << (scene.HasCamera() ? scene.GetCamera().Name : "<none>")
             << " fov=" << scene.GetCamera().FieldOfView
             << " near=" << scene.GetCamera().NearClipPlane
-            << " far=" << scene.GetCamera().FarClipPlane << "\n";
+            << " far=" << scene.GetCamera().FarClipPlane
+            << " node=" << scene.GetCamera().SourceBinding.NodeIndex << "\n";
+
+        std::cout << "Nodes: " << scene.GetNodes().size() << "\n";
+        for (size_t nodeIndex = 0; nodeIndex < scene.GetNodes().size(); ++nodeIndex)
+        {
+            const SceneNode& node = scene.GetNodes()[nodeIndex];
+            std::cout << "  Node #" << nodeIndex
+                << " name=" << node.Name
+                << " source=" << node.SourceId
+                << " parent=" << node.ParentIndex
+                << " children=" << node.Children.size() << "\n";
+        }
 
         std::cout << "Skybox: ambient=(";
         PrintFloat4(scene.GetSkybox().AmbientColorAndIntensity);
@@ -69,13 +86,16 @@ int main(int argc, char** argv)
             if (!object.Mesh.AssetPath.empty())
             {
                 std::cout << " asset=" << object.Mesh.AssetPath.string()
-                    << " submesh=" << object.Mesh.SubmeshName;
+                    << " submesh=" << object.Mesh.SubmeshName
+                    << " submeshIndex=" << object.Mesh.SubmeshIndex;
             }
+            std::cout << " node=" << object.NodeIndex;
             std::cout << "\n";
         }
 
         std::cout << "Lights: directional=" << scene.GetDirectionalLights().size()
             << " point=" << scene.GetPointLights().size()
+            << " spot=" << scene.GetSpotLights().size()
             << " area=" << scene.GetAreaLights().size() << "\n";
 
         std::cout << "Materials: " << scene.GetMaterials().size() << "\n";
@@ -88,10 +108,16 @@ int main(int argc, char** argv)
             PrintFloat4(material.BaseColor);
             std::cout << ") metallic=" << material.Metallic
                 << " roughness=" << material.Roughness
-                << " baseMap=" << material.BaseMap.AssetPath.string() << "\n";
+                << " baseMap=" << material.BaseMap.AssetPath.string()
+                << " embedded=" << (material.BaseMap.EmbeddedTexture != nullptr ? "true" : "false");
+            if (material.BaseMap.EmbeddedTexture != nullptr)
+            {
+                std::cout << " bytes=" << material.BaseMap.EmbeddedTexture->Data.size()
+                    << " format=" << material.BaseMap.EmbeddedTexture->FormatHint;
+            }
+            std::cout << "\n";
         }
 
-//Modify Begin:2026-07-29 by Hui
         std::set<std::string> meshAssetPaths;
         for (const SceneObject& object : scene.GetObjects())
         {
@@ -126,13 +152,13 @@ int main(int argc, char** argv)
                     << " boundsMax=(" << maxValue.x << ", " << maxValue.y << ", " << maxValue.z << ")\n";
             }
         }
-//Modify End
 
         return 0;
     }
     catch (const std::exception& exception)
     {
-        std::cerr << "UnitySceneDump failed: " << exception.what() << "\n";
+        std::cerr << "Scene dump failed: " << exception.what() << "\n";
         return 2;
     }
 }
+//Modify End

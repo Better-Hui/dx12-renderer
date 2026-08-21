@@ -164,7 +164,7 @@ Device/queue work in demo feature code must use the injected `FrameworkDeviceCon
 
 Current major pieces:
 
-- `Scene` from Framework stores camera, objects, materials, lights, skybox.
+- `Scene` from Framework stores nodes, camera, objects, materials, lights, and skybox. `SceneImporter::ImportFromFile()` is the common `.unity` / project `.json` / `.fbx` entry point.
 - `RaytracingDemoSceneResources` converts `Scene` to GPU-side textures/material buffers/geometry buffers/RTAS/meshlet buffers.
 - `SceneLightManager` owns editable lights and GPU light buffers.
 - `PathTracingPipelineController` owns inline ray query and DXR pipeline setup.
@@ -172,6 +172,8 @@ Current major pieces:
 - `ActivePixelListController` owns the shared compacted ray-traced pixel list, compute indirect arguments, and diagnostics readback used by PT Direct, PT Indirect, ReSTIR DI, and ReSTIR GI.
 - RenderGraph schedules base resources, lighting, denoise, skybox, postprocess, overlays.
 - CUDA Bloom is a RaytracingDemo-specific external pass/tool path under `Demos/RaytracingDemo`; it must not be moved into Framework or corrupt history resources.
+
+FBX scene import uses the same Assimp geometry flags in `SceneFbxImporter` and `ModelLoader`: validation, left-handed conversion, triangulation, invalid-data filtering, four-weight limiting, and 16-bit-safe large-mesh splitting. `SceneMeshReference::SubmeshIndex` maps to `MeshPrototype::m_SourceMeshIndex`; prefer this stable index before mesh-name lookup. External and embedded FBX textures both flow through `TextureLoader`. The importer preserves Spot Lights, but the current demo GPU lighting contract renders them as point-light fallbacks while retaining the original spot data. It selects one FBX camera, can generate a bounds-framing fallback camera, and does not claim advanced transparency/clearcoat/transmission or animation playback.
 
 `PathTracingDispatchMode::CompactedIndirect` is an optional ray-traced pixel-dispatch mode. Its graph contract is `Base Resources -> Active Pixel Compaction -> Dispatch Finalize`, after which PT/ReSTIR and diagnostics readback consume the finalized data independently. Compaction keeps only `DepthTexture < 1.0f` pixels; Finalize writes `{ activePixelCount, D3D12_DISPATCH_ARGUMENTS }`, with indirect dispatch arguments starting after the count. All compacted compute passes must bind the current frame's scene `BindlessDescriptorHeap` before binding reflected descriptor sets. Do not restore the old `DynamicDescriptorHeap` submission path or duplicate the active-pixel implementation under the demo.
 
@@ -260,9 +262,10 @@ uses `IUnityGraphicsD3D12v7::GetDevice()` / `GetCommandQueue()`, Unity render ev
 
 Recommended next steps:
 
+- Make the Framework diagnostics/automation/profiler contract in `Docs/FrameworkDiagnosticsPlan.md` the next tooling priority: machine-readable capture sessions, RenderGraph/queue/resource/descriptor snapshots, deterministic registered controls and observations, structured invariants, and bounded reproduction artifacts. Keep Demo scenarios in the Demo and do not inject desktop input.
 - Keep C++20 as the project baseline and actively modernize suitable legacy C++11-style code with C++20 facilities. Keep modern HLSL features capability-gated by the Shader Model 6.8 baseline and hardware support.
-- Split `RaytracingDemoSceneResources` into clearer scene-to-GPU resource builders.
-- Add task/amplification shader and GPU culling to the meshlet path.
+- Continue reducing the remaining responsibilities in `RaytracingDemoSceneResources`; texture/material, geometry, meshlet, and RTAS builders already exist.
+- Extend the existing task/mesh and compute-indirect meshlet backends only with measured visibility/LOD work; do not list their already implemented baseline as future work.
 - Add sample-grade object picking and transform gizmo only after selection/render ID infrastructure is in place.
 - Build Unity plugin external render context: wrap Unity device/queue/resources and run the internal graph without owning swapchain/present.
 - Continue reducing direct D3D12 usage in demo code; keep low-level details inside Framework/DX12Library.

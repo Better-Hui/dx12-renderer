@@ -2,7 +2,7 @@
 
 > 一个基于 DirectX 12 的实验性渲染器仓库。它用于验证和学习渲染器架构、RenderGraph、光线追踪、Meshlet，以及 CUDA/D3D12 互操作。
 
-[English README](README.md) · [架构总览](Docs/ArchitectureOverview.zh-CN.md) · [RaytracingDemo API 说明（英文）](Docs/RaytracingSampleApi.md)
+[English README](README.md) · [架构总览](Docs/ArchitectureOverview.zh-CN.md) · [RaytracingDemo API 说明（英文）](Docs/RaytracingSampleApi.md) · [Framework 诊断工具规划](Docs/FrameworkDiagnosticsPlan.zh-CN.md)
 
 ## 这是什么项目
 
@@ -66,7 +66,7 @@ auto pass = RenderGraph::RenderPass::Create(
 | 方向 | 具体内容 |
 | --- | --- |
 | GBuffer | 常规 raster GBuffer，以及实验性的 Meshlet GBuffer 路径。 |
-| 场景资产 | `Framework::ModelLoader` 通过 Assimp 加载 FBX mesh；完整 FBX 节点/材质/纹理/光源场景导入仍未实现。 |
+| 场景资产 | `SceneImporter::ImportFromFile()` 统一接受 `.unity`、项目 `.json` 和 `.fbx`；FBX 会导入节点层级、局部/世界变换、PBR 因子/纹理、外部或嵌入纹理、相机，以及平行光/点光/Spot/面积光。 |
 | 光线追踪 | inline ray query compute shader 与 shader-table DXR，可在运行时切换；shader-table DXR 不支持当前仅有 Inline 实现的 ReSTIR DI/GI 阶段。 |
 | Compacted dispatch | 深度筛选有效像素并用原子追加建立 active-pixel list；Inline compute 使用 `ceil(activeCount / 64)` 个 thread groups，DXR 使用 `Width = activeCount`。 |
 | 材质着色 | Framework 统一的 GGX 金属度/粗糙度 PBR，以及 sample 可选的 `Stylized Comic` 风格化 PBR-NPR 变体。 |
@@ -77,6 +77,26 @@ auto pass = RenderGraph::RenderPass::Create(
 | Meshlet | task shader 和 compute-indirect 后端，以及 cluster 调试显示。 |
 | CUDA 互操作 | 基于 shared resource / shared fence 的 Bloom 后处理。 |
 | 性能分析 | PIX scope，以及 Direct、Compute queue 分别记录的 RenderGraph GPU timing / CSV。 |
+
+### 场景导入和直接 FBX
+
+Demo 通过一个静态入口拿到统一的 `Scene`：
+
+```cpp
+SceneImportOptions options;
+options.GenerateFallbackCamera = true;
+const SceneImportResult result = SceneImporter::ImportFromFile(scenePath, options);
+```
+
+`SceneImporter` 按不区分大小写的扩展名分发。Unity YAML 和项目 JSON 保留原有资产约定；FBX 通过 Assimp 作为完整场景导入。一个节点实例化多个 mesh 时，会为每个子网格生成一个 `SceneObject`，并在 `SceneMeshReference::SubmeshIndex` 保存原始 Assimp mesh index，因此不会依赖重复或空的 mesh 名称。FBX 嵌入纹理会从内存交给 `TextureLoader` 解码，并和文件纹理共用缓存。
+
+Importer 会在 `Scene` 中保留 Spot Light 的语义。当前 sample 的 GPU 光照契约只有平行光、点光和面积光 producer，因此 `SceneLightManager` 暂时用点光回退显示 Spot Light，同时保留原始 Spot 数据以便场景回写。FBX 多相机只选择第一个相机；没有相机时，`GenerateFallbackCamera` 会根据导入后的世界空间包围盒生成观察相机。透明、clearcoat、transmission、动画播放等高级材质/动态场景能力仍不属于当前 sample 契约。
+
+不启动窗口即可检查解析结果。打开 developer tool 后运行：
+
+```text
+UnitySceneDump <scene.unity|scene.json|scene.fbx> [--allow-missing-camera]
+```
 
 ## 环境与依赖
 
@@ -210,6 +230,7 @@ CMake 生成的工程会保持各 target 的真实源码目录。`DX12Library`�
 
 - [架构总览](Docs/ArchitectureOverview.zh-CN.md)：按 DX12Library、Framework、RenderGraph、RaytracingDemo 分层说明职责、数据流和当前技术边界。
 - [RaytracingDemo API 说明（英文）](Docs/RaytracingSampleApi.md)：介绍 Framework 用法、RenderGraph、profiling 和功能边界。
+- [Framework 诊断工具规划](Docs/FrameworkDiagnosticsPlan.zh-CN.md)：定义计划中的机器可读诊断、确定性自动化、约束检查、产物和 profiler 契约；它是路线设计，不代表功能已经实现。
 - 使用或再分发本仓库前，请保留上游与第三方组件的声明，并审阅对应的许可证文件。
 - 本 README 不引入替代性的仓库级许可证。
 - `External/DLSS/`、`External/NRI/`、`External/NRD/` 以及 `External/Streamline/` 中的 NVIDIA 组件均保留上游条款；Git submodule 链接不会转移或替换这些条款。SDK 放在 `External/` 不代表它变成开源，也不代表本仓库向任何人授予 NVIDIA SDK 的再许可；请保留全部 notice 与 license，不要把本仓库当作可独立分发的 SDK 镜像。在公开源码、再分发二进制或包含这些组件的商业发布前，应单独完成法务/许可证审查。

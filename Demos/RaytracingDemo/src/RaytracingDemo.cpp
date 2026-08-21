@@ -72,7 +72,7 @@ using RuntimeAutomationMatrixCase = RaytracingDemoAutomation::MatrixCase;
 
 namespace
 {
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-21 by Hui
     FrameworkDeviceContext CreateFrameworkDeviceContext(
         Application& application,
         FrameFeatureServices frameFeatureServices)
@@ -86,8 +86,6 @@ namespace
         desc.FrameGeneration = std::move(frameFeatureServices.FrameGeneration);
         return FrameworkDeviceContext(std::move(desc));
     }
-    //Modify End
-
     uint32_t ComputeDescriptorArrayCapacity(const size_t resourceCount, const size_t resourceCapacity)
     {
         return static_cast<uint32_t>(std::max<size_t>(
@@ -352,7 +350,7 @@ namespace
     };
 //Modify End
 
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-21 by Hui
     std::filesystem::path GetScenePath()
     {
         char* scenePath = nullptr;
@@ -403,7 +401,7 @@ namespace
             searchDirectory = parentDirectory;
         }
 
-        throw std::runtime_error("Default Sponza scene file does not exist. Set RAYTRACING_DEMO_SCENE to a .json or .unity file.");
+        throw std::runtime_error("Default Sponza scene file does not exist. Set RAYTRACING_DEMO_SCENE to a .json, .unity, or .fbx file.");
     }
 //Modify End
 
@@ -688,10 +686,12 @@ RaytracingDemo::RaytracingDemo(
 
 }
 
-//Modify Begin:2026-08-20 by Hui
+//Modify Begin:2026-08-21 by Hui
 void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::filesystem::path& scenePath)
 {
-    const SceneImportResult sceneImport = SceneImporter::ImportFromFile(scenePath);
+    SceneImportOptions importOptions;
+    importOptions.GenerateFallbackCamera = true;
+    const SceneImportResult sceneImport = SceneImporter::ImportFromFile(scenePath, importOptions);
     m_Scene = sceneImport.SceneData;
     std::filesystem::path runtimeStatePath = scenePath;
     runtimeStatePath += ".runtime.json";
@@ -739,7 +739,7 @@ void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::files
     }
     m_Lights.SetEmissiveMeshSurfaceEmitters(m_SceneResources.CollectEmissiveMeshSurfaceEmitters());
     m_SkyboxEnabled = !skyboxTexturePath.empty() && std::filesystem::exists(skyboxTexturePath);
-    m_HasSceneCamera = sceneCamera.RuntimeCamera != nullptr;
+    m_HasSceneCamera = m_Scene.HasCamera();
 
     ApplySceneCamera(GetSceneCamera(), sceneCamera, m_Width, m_Height);
     const XMFLOAT3 forward = RotateCameraVector(GetSceneCamera().GetRotation(), { 0.0f, 0.0f, 1.0f });

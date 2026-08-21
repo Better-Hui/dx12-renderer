@@ -8,8 +8,9 @@
 #include <Framework/Geometry/Model.h>
 #include <Framework/Geometry/Bone.h>
 #include <Framework/Geometry/Animation.h>
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-08-21 by Hui
 #include <Framework/Rendering/Texture/TextureLoader.h>
+#include "AssimpImportSettings.h"
 //Modify End
 
 #include <assimp/Importer.hpp>      // C++ importer interface
@@ -18,6 +19,10 @@
 
 #include <filesystem>
 #include <memory>
+//Modify Begin:2026-08-21 by Hui
+#include <limits>
+#include <stdexcept>
+//Modify End
 
 using namespace DirectX;
 namespace fs = std::filesystem;
@@ -81,32 +86,53 @@ namespace
     }
 }
 
-std::vector<MeshPrototype> ModelLoader::LoadAsMeshPrototypes(const std::string& path, const bool flipNormals) const
+//Modify Begin:2026-08-21 by Hui
+std::vector<MeshPrototype> ModelLoader::LoadAsMeshPrototypes(
+    const std::string& path,
+    const bool flipNormals) const
 {
     Assimp::Importer importer;
-
-    constexpr auto flags = AI_FLAGS |
-    aiProcess_CalcTangentSpace |
-    aiProcess_Triangulate |
-    aiProcess_JoinIdenticalVertices |
-    aiProcess_SortByPType |
-    aiProcess_GenSmoothNormals |
-    aiProcess_PopulateArmatureData |
-    aiProcess_LimitBoneWeights;
-
-    const aiScene* scene = importer.ReadFile(path.c_str(), flags);
+    FrameworkAssimp::ConfigureGeometryImporter(importer);
+    const aiScene* scene = importer.ReadFile(path.c_str(), FrameworkAssimp::GeometryImportFlags);
 
     if (scene == nullptr)
     {
-        const std::string errorString = importer.GetErrorString();
-        throw std::exception(errorString.c_str());
+        throw std::runtime_error(
+            "Assimp failed to import mesh file '" + path + "': " + importer.GetErrorString());
+    }
+    if ((scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE) != 0)
+    {
+        throw std::runtime_error("Assimp returned an incomplete mesh scene for '" + path + "'.");
     }
 
     std::vector<MeshPrototype> outputMeshes;
+    outputMeshes.reserve(scene->mNumMeshes);
 
     for (unsigned int meshIndex = 0; meshIndex < scene->mNumMeshes; ++meshIndex)
     {
         const auto mesh = scene->mMeshes[meshIndex];
+        if (mesh == nullptr)
+        {
+            throw std::runtime_error(
+                "Assimp returned a null mesh at index " + std::to_string(meshIndex) +
+                " for '" + path + "'.");
+        }
+        if ((mesh->mPrimitiveTypes & aiPrimitiveType_TRIANGLE) == 0)
+        {
+            continue;
+        }
+        if (!mesh->HasPositions() || mesh->mNumVertices == 0 || mesh->mNumFaces == 0)
+        {
+            throw std::runtime_error(
+                "Renderable mesh #" + std::to_string(meshIndex) +
+                " has no positions or triangle faces in '" + path + "'.");
+        }
+        if (mesh->mNumVertices > static_cast<uint64_t>((std::numeric_limits<uint16_t>::max)()) + 1ull)
+        {
+            throw std::runtime_error(
+                "Assimp did not split mesh #" + std::to_string(meshIndex) +
+                " to the 16-bit index limit for '" + path + "'.");
+        }
 
         VertexCollectionType outputVertices;
         outputVertices.reserve(mesh->mNumVertices);
@@ -142,22 +168,36 @@ std::vector<MeshPrototype> ModelLoader::LoadAsMeshPrototypes(const std::string& 
 
         IndexCollectionType outputIndices;
         constexpr unsigned int indicesInTriangle = 3;
-        outputVertices.reserve(mesh->mNumFaces * indicesInTriangle);
+        outputIndices.reserve(static_cast<size_t>(mesh->mNumFaces) * indicesInTriangle);
 
         for (unsigned int faceIndex = 0; faceIndex < mesh->mNumFaces; ++faceIndex)
         {
-            const auto face = mesh->mFaces[faceIndex];
-            assert(face.mNumIndices == indicesInTriangle);
-
-            outputIndices.push_back(face.mIndices[0]);
-            outputIndices.push_back(face.mIndices[1]);
-            outputIndices.push_back(face.mIndices[2]);
+            const aiFace& face = mesh->mFaces[faceIndex];
+            if (face.mNumIndices != indicesInTriangle || face.mIndices == nullptr)
+            {
+                throw std::runtime_error(
+                    "Mesh #" + std::to_string(meshIndex) + " face #" +
+                    std::to_string(faceIndex) + " is not a valid triangle in '" + path + "'.");
+            }
+            for (unsigned int corner = 0; corner < indicesInTriangle; ++corner)
+            {
+                const unsigned int vertexIndex = face.mIndices[corner];
+                if (vertexIndex >= mesh->mNumVertices ||
+                    vertexIndex > (std::numeric_limits<uint16_t>::max)())
+                {
+                    throw std::runtime_error(
+                        "Mesh #" + std::to_string(meshIndex) + " face #" +
+                        std::to_string(faceIndex) + " has an out-of-range index in '" + path + "'.");
+                }
+                outputIndices.push_back(static_cast<uint16_t>(vertexIndex));
+            }
         }
 
         MeshPrototype& meshPrototype = outputMeshes.emplace_back(std::move(outputVertices), std::move(outputIndices), true, false);
-//Modify Begin:2026-07-29 by Hui
-        meshPrototype.m_Name = mesh->mName.C_Str();
-//Modify End
+        meshPrototype.m_Name = mesh->mName.length > 0
+            ? mesh->mName.C_Str()
+            : "Mesh_" + std::to_string(meshIndex);
+        meshPrototype.m_SourceMeshIndex = meshIndex;
 
         if (mesh->HasBones())
         {
@@ -180,19 +220,31 @@ std::vector<MeshPrototype> ModelLoader::LoadAsMeshPrototypes(const std::string& 
 
                 for (unsigned int weightIndex = 0; weightIndex < meshBone->mNumWeights; ++weightIndex)
                 {
-                    auto& weight = meshBone->mWeights[weightIndex];
+                    const auto& weight = meshBone->mWeights[weightIndex];
+                    if (weight.mVertexId >= outputSkinningVertices.size())
+                    {
+                        throw std::runtime_error(
+                            "Mesh #" + std::to_string(meshIndex) +
+                            " has a bone weight with an invalid vertex index in '" + path + "'.");
+                    }
                     auto& vertexAttributes = outputSkinningVertices[weight.mVertexId];
 
-                    // try put the weight into any of the available slots of the vertex
+                    bool inserted = false;
                     for (uint32_t vertexAttributeId = 0; vertexAttributeId < SkinningVertexAttributes::BONES_PER_VERTEX; vertexAttributeId++)
                     {
-                        // search for the first 0 weight and fill it
                         if (vertexAttributes.Weights[vertexAttributeId] == 0.0)
                         {
                             vertexAttributes.BoneIds[vertexAttributeId] = boneIndex;
                             vertexAttributes.Weights[vertexAttributeId] = weight.mWeight;
+                            inserted = true;
                             break;
                         }
+                    }
+                    if (!inserted)
+                    {
+                        throw std::runtime_error(
+                            "Assimp did not limit bone influences to four for mesh #" +
+                            std::to_string(meshIndex) + " in '" + path + "'.");
                     }
                 }
             }
@@ -210,6 +262,12 @@ std::vector<MeshPrototype> ModelLoader::LoadAsMeshPrototypes(const std::string& 
                 std::vector<size_t> childrenIndices;
 
                 const auto meshBoneNode = mesh->mBones[boneIndex]->mNode;
+                if (meshBoneNode == nullptr)
+                {
+                    throw std::runtime_error(
+                        "Mesh #" + std::to_string(meshIndex) +
+                        " has a bone without an armature node in '" + path + "'.");
+                }
                 auto& bone = armature.GetBone(boneIndex);
                 bone.LocalTransform = ToXMATRIX(meshBoneNode->mTransformation);
 
@@ -233,8 +291,13 @@ std::vector<MeshPrototype> ModelLoader::LoadAsMeshPrototypes(const std::string& 
         }
     }
 
+    if (outputMeshes.empty())
+    {
+        throw std::runtime_error("Mesh file contains no triangle meshes: '" + path + "'.");
+    }
     return outputMeshes;
 }
+//Modify End
 
 std::shared_ptr<Model> ModelLoader::Load(CommandList& commandList, const std::string& path, bool flipNormals) const
 {

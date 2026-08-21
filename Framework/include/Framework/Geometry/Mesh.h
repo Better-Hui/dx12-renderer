@@ -40,6 +40,9 @@
 #include <wrl.h>
 
 #include <memory> // For std::unique_ptr
+//Modify Begin:2026-08-21 by Hui
+#include <limits>
+//Modify End
 #include <vector>
 #include <map>
 #include <string>
@@ -131,6 +134,10 @@ struct MeshPrototype
 {
 //Modify Begin:2026-07-29 by Hui
     std::string m_Name;
+//Modify End
+//Modify Begin:2026-08-21 by Hui
+    static constexpr uint32_t InvalidSourceMeshIndex = (std::numeric_limits<uint32_t>::max)();
+    uint32_t m_SourceMeshIndex = InvalidSourceMeshIndex;
 //Modify End
     VertexCollectionType m_Vertices;
     IndexCollectionType m_Indices;
