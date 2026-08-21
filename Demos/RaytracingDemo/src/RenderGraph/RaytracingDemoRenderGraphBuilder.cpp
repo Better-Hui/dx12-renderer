@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-20 by Hui
 #include <RenderGraph/RaytracingDemoRenderGraphBuilder.h>
 
 #include <RenderGraph/RaytracingDemoGraphResources.h>
@@ -49,11 +49,8 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
             RaytracingDemoPasses::Builder::AddIndirectLightingPass(renderGraphBuilder, resources, config);
             break;
         case RaytracingDemoLightingTechnique::ReSTIRGI:
-            if (frameState.Backend == PathTracingBackend::InlineRayQuery)
-            {
-                RaytracingDemoPasses::Builder::AddReSTIRGIPass(renderGraphBuilder, resources, config);
-                break;
-            }
+            RaytracingDemoPasses::Builder::AddReSTIRGIPass(renderGraphBuilder, resources, config);
+            break;
         default:
             break;
         }

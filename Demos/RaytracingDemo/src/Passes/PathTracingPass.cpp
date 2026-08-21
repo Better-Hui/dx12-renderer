@@ -488,7 +488,7 @@ void RaytracingDemoPasses::Builder::AddDirectLightingPass(
 }
 //Modify End
 
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-20 by Hui
 void RaytracingDemoPasses::Builder::AddIndirectLightingPass(
     RenderGraph::RenderGraphBuilder& renderGraphBuilder,
     const RaytracingDemoPassResources& resources,
@@ -498,7 +498,7 @@ void RaytracingDemoPasses::Builder::AddIndirectLightingPass(
     const PathTracingBackend backend = config.FrameState->Backend;
     const PathTracingDispatchMode dispatchMode = config.FrameState->DispatchMode;
     const bool useAsyncCompute =
-        config.FrameState->AsyncComputeEnabled && backend == PathTracingBackend::InlineRayQuery;
+        config.FrameState->AsyncComputeEnabled && RaytracingDemoFrameState::SupportsAsyncCompute(backend);
 
     renderGraphBuilder.AddPass<PathTracingLightingPassData>(
         L"Indirect Lighting",

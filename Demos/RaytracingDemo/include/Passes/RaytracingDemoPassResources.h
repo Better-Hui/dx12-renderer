@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-08-20 by Hui
 #pragma once
 
 #include <Denoising/DenoiserController.h>
@@ -206,19 +206,56 @@ struct RaytracingDemoFrameState
     bool HasPreviousViewProjection = false;
     DirectX::XMMATRIX PreviousViewProjection = DirectX::XMMatrixIdentity();
 
-    bool UsesDirectLighting() const
+    static constexpr bool SupportsDirectLighting(
+        const PathTracingBackend backend,
+        const RaytracingDemoLightingTechnique technique) noexcept
     {
-        return DirectLightingTechnique == RaytracingDemoLightingTechnique::PathTracing ||
-            (DirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRDI &&
-                Backend == PathTracingBackend::InlineRayQuery);
+        switch (technique)
+        {
+        case RaytracingDemoLightingTechnique::None:
+        case RaytracingDemoLightingTechnique::PathTracing:
+            return true;
+        case RaytracingDemoLightingTechnique::ReSTIRDI:
+            return backend == PathTracingBackend::InlineRayQuery;
+        case RaytracingDemoLightingTechnique::ReSTIRGI:
+        default:
+            return false;
+        }
     }
 
-    bool UsesIndirectLighting() const
+    static constexpr bool SupportsIndirectLighting(
+        const PathTracingBackend backend,
+        const RaytracingDemoLightingTechnique technique) noexcept
+    {
+        switch (technique)
+        {
+        case RaytracingDemoLightingTechnique::None:
+        case RaytracingDemoLightingTechnique::PathTracing:
+            return true;
+        case RaytracingDemoLightingTechnique::ReSTIRGI:
+            return backend == PathTracingBackend::InlineRayQuery;
+        case RaytracingDemoLightingTechnique::ReSTIRDI:
+        default:
+            return false;
+        }
+    }
+
+    static constexpr bool SupportsAsyncCompute(const PathTracingBackend backend) noexcept
+    {
+        return backend == PathTracingBackend::InlineRayQuery;
+    }
+
+    bool UsesDirectLighting() const noexcept
+    {
+        return DirectLightingTechnique != RaytracingDemoLightingTechnique::None &&
+            SupportsDirectLighting(Backend, DirectLightingTechnique);
+    }
+
+    bool UsesIndirectLighting() const noexcept
     {
         return MaxBounces > 1 &&
-            (IndirectLightingTechnique == RaytracingDemoLightingTechnique::PathTracing ||
-                (IndirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRGI &&
-                    Backend == PathTracingBackend::InlineRayQuery));
+            IndirectLightingTechnique != RaytracingDemoLightingTechnique::None &&
+            SupportsIndirectLighting(Backend, IndirectLightingTechnique);
     }
 
     bool UsesCompactedRayTracedPixelDispatch() const

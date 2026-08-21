@@ -168,6 +168,7 @@ Current major pieces:
 - `RaytracingDemoSceneResources` converts `Scene` to GPU-side textures/material buffers/geometry buffers/RTAS/meshlet buffers.
 - `SceneLightManager` owns editable lights and GPU light buffers.
 - `PathTracingPipelineController` owns inline ray query and DXR pipeline setup.
+- Backend compatibility is defined by `RaytracingDemoFrameState::SupportsDirectLighting`, `SupportsIndirectLighting`, and `SupportsAsyncCompute`. The UI uses the same rules as RenderGraph: incompatible DXR selections remain selected but are reported by a persistent red warning, and a manual switch to DXR opens a one-shot modal with an Inline fallback. Runtime automation and startup configuration must not open the modal.
 - `ActivePixelListController` owns the shared compacted ray-traced pixel list, compute indirect arguments, and diagnostics readback used by PT Direct, PT Indirect, ReSTIR DI, and ReSTIR GI.
 - RenderGraph schedules base resources, lighting, denoise, skybox, postprocess, overlays.
 - CUDA Bloom is a RaytracingDemo-specific external pass/tool path under `Demos/RaytracingDemo`; it must not be moved into Framework or corrupt history resources.

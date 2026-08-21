@@ -263,7 +263,7 @@ private:
     ReSTIRGI m_IndirectLightingReSTIRGI;
     bool m_ReSTIRGIHistoryValid = false;
 //Modify End
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-20 by Hui
     bool m_AsyncComputeEnabled = false;
     bool m_DebugSerializeAsyncCompute = false;
     bool m_ParallelDirectCommandRecordingEnabled = true;
@@ -295,6 +295,7 @@ private:
     float m_MouseDollySpeed = 0.04f;
     float m_MouseWheelDollySpeed = 0.5f;
     PathTracingBackend m_PathTracingBackend = PathTracingBackend::InlineRayQuery;
+    bool m_OpenDxrCompatibilityPopup = false;
     PathTracingDispatchMode m_PathTracingDispatchMode = PathTracingDispatchMode::FullResolution;
     int m_Width = 1;
     int m_Height = 1;

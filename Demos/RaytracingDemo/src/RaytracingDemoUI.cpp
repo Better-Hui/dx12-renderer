@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-08-20 by Hui
 #include <RaytracingDemo.h>
 
 #include <DX12Library/Window.h>
@@ -9,6 +9,87 @@
 
 namespace
 {
+    struct DxrCompatibilityIssues
+    {
+        bool DirectLightingSkipped = false;
+        bool IndirectLightingSkipped = false;
+        bool AsyncComputeIgnored = false;
+
+        bool HasAny() const noexcept
+        {
+            return DirectLightingSkipped || IndirectLightingSkipped || AsyncComputeIgnored;
+        }
+    };
+
+    const char* GetLightingTechniqueName(const RaytracingDemoLightingTechnique technique)
+    {
+        switch (technique)
+        {
+        case RaytracingDemoLightingTechnique::PathTracing:
+            return "Path Tracing";
+        case RaytracingDemoLightingTechnique::ReSTIRDI:
+            return "ReSTIR DI";
+        case RaytracingDemoLightingTechnique::ReSTIRGI:
+            return "ReSTIR GI";
+        case RaytracingDemoLightingTechnique::None:
+        default:
+            return "None";
+        }
+    }
+
+    DxrCompatibilityIssues GetDxrCompatibilityIssues(
+        const PathTracingBackend backend,
+        const RaytracingDemoLightingTechnique directLightingTechnique,
+        const RaytracingDemoLightingTechnique indirectLightingTechnique,
+        const bool asyncComputeEnabled)
+    {
+        if (backend != PathTracingBackend::ShaderTableDxr)
+        {
+            return {};
+        }
+
+        return {
+            .DirectLightingSkipped =
+                directLightingTechnique != RaytracingDemoLightingTechnique::None &&
+                !RaytracingDemoFrameState::SupportsDirectLighting(backend, directLightingTechnique),
+            .IndirectLightingSkipped =
+                indirectLightingTechnique != RaytracingDemoLightingTechnique::None &&
+                !RaytracingDemoFrameState::SupportsIndirectLighting(backend, indirectLightingTechnique),
+            .AsyncComputeIgnored =
+                asyncComputeEnabled && !RaytracingDemoFrameState::SupportsAsyncCompute(backend),
+        };
+    }
+
+    void DrawDxrCompatibilityIssues(
+        const DxrCompatibilityIssues& issues,
+        const RaytracingDemoLightingTechnique directLightingTechnique,
+        const RaytracingDemoLightingTechnique indirectLightingTechnique,
+        const bool drawHeading)
+    {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.15f, 0.15f, 1.0f));
+        if (drawHeading)
+        {
+            ImGui::TextWrapped("DXR BACKEND COMPATIBILITY WARNING");
+        }
+        if (issues.DirectLightingSkipped)
+        {
+            ImGui::BulletText(
+                "Direct Lighting: %s is skipped (Inline Ray Query only).",
+                GetLightingTechniqueName(directLightingTechnique));
+        }
+        if (issues.IndirectLightingSkipped)
+        {
+            ImGui::BulletText(
+                "Indirect Lighting: %s is skipped (Inline Ray Query only).",
+                GetLightingTechniqueName(indirectLightingTechnique));
+        }
+        if (issues.AsyncComputeIgnored)
+        {
+            ImGui::BulletText("Async Compute is ignored by the DXR backend.");
+        }
+        ImGui::PopStyleColor();
+    }
+
     bool DrawCudaBloomControls(
         CudaBloomPass& cudaBloom,
         const DemoProfiling::ProfilerDisplayController::CudaTimingSample& timingStats,
@@ -252,10 +333,14 @@ void RaytracingDemo::OnImGui()
         m_DirectLightingTechnique = static_cast<RaytracingDemoLightingTechnique>(directLightingTechnique);
         ResetAccumulation();
     }
-    if (m_DirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRDI &&
-        m_PathTracingBackend != PathTracingBackend::InlineRayQuery)
+    if (!RaytracingDemoFrameState::SupportsDirectLighting(
+        m_PathTracingBackend,
+        m_DirectLightingTechnique))
     {
-        ImGui::TextDisabled("ReSTIR DI currently requires Inline Ray Query.");
+        ImGui::TextColored(
+            ImVec4(1.0f, 0.15f, 0.15f, 1.0f),
+            "%s stage is skipped by the DXR backend.",
+            GetLightingTechniqueName(m_DirectLightingTechnique));
     }
     else if (m_DirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRDI)
     {
@@ -442,10 +527,14 @@ void RaytracingDemo::OnImGui()
         }
         ResetAccumulation();
     }
-    if (m_IndirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRGI &&
-        m_PathTracingBackend != PathTracingBackend::InlineRayQuery)
+    if (!RaytracingDemoFrameState::SupportsIndirectLighting(
+        m_PathTracingBackend,
+        m_IndirectLightingTechnique))
     {
-        ImGui::TextDisabled("ReSTIR GI currently requires Inline Ray Query.");
+        ImGui::TextColored(
+            ImVec4(1.0f, 0.15f, 0.15f, 1.0f),
+            "%s stage is skipped by the DXR backend.",
+            GetLightingTechniqueName(m_IndirectLightingTechnique));
     }
     else if (m_IndirectLightingTechnique == RaytracingDemoLightingTechnique::ReSTIRGI &&
         ImGui::CollapsingHeader("ReSTIR GI Settings"))
@@ -729,14 +818,72 @@ void RaytracingDemo::OnImGui()
     }
 //Modify End
 
+//Modify Begin:2026-08-20 by Hui
     const char* modeNames[] = { "Inline Ray Query", "Shader Table DXR" };
     int selectedMode = static_cast<int>(m_PathTracingBackend);
     if (ImGui::Combo("Mode", &selectedMode, modeNames, 2))
     {
         m_PathTracingBackend = static_cast<PathTracingBackend>(selectedMode);
+        const DxrCompatibilityIssues newCompatibilityIssues = GetDxrCompatibilityIssues(
+            m_PathTracingBackend,
+            m_DirectLightingTechnique,
+            m_IndirectLightingTechnique,
+            m_AsyncComputeEnabled);
+        if (newCompatibilityIssues.HasAny())
+        {
+            m_OpenDxrCompatibilityPopup = true;
+        }
         ResetAccumulation();
     }
-//Modify Begin:2026-08-20 by Hui
+
+    const DxrCompatibilityIssues dxrCompatibilityIssues = GetDxrCompatibilityIssues(
+        m_PathTracingBackend,
+        m_DirectLightingTechnique,
+        m_IndirectLightingTechnique,
+        m_AsyncComputeEnabled);
+    if (dxrCompatibilityIssues.HasAny())
+    {
+        DrawDxrCompatibilityIssues(
+            dxrCompatibilityIssues,
+            m_DirectLightingTechnique,
+            m_IndirectLightingTechnique,
+            true);
+    }
+
+    if (m_OpenDxrCompatibilityPopup)
+    {
+        ImGui::OpenPopup("DXR Backend Compatibility");
+        m_OpenDxrCompatibilityPopup = false;
+    }
+    ImGui::SetNextWindowSize(ImVec2(540.0f, 0.0f), ImGuiCond_Appearing);
+    if (ImGui::BeginPopupModal(
+        "DXR Backend Compatibility",
+        nullptr,
+        ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        ImGui::TextWrapped(
+            "The DXR backend cannot execute every currently selected stage. "
+            "Skipped stages can leave the lighting output black without indicating a GPU failure.");
+        DrawDxrCompatibilityIssues(
+            dxrCompatibilityIssues,
+            m_DirectLightingTechnique,
+            m_IndirectLightingTechnique,
+            false);
+        ImGui::Separator();
+        if (ImGui::Button("Switch to Inline Ray Query"))
+        {
+            m_PathTracingBackend = PathTracingBackend::InlineRayQuery;
+            ResetAccumulation();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Keep DXR"))
+        {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+
     const char* dispatchModeNames[] = { "Full Resolution", "Compacted Indirect" };
     int selectedDispatchMode = static_cast<int>(m_PathTracingDispatchMode);
     if (ImGui::Combo("Ray-Traced Pixel Dispatch", &selectedDispatchMode, dispatchModeNames, IM_ARRAYSIZE(dispatchModeNames)))
