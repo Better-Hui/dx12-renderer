@@ -235,9 +235,7 @@ void RunSharedDownsampleCascade(
     unsigned int mip4Width,
     unsigned int mip4Height,
     float3* mip0Tile,
-    float3* mip1Tile,
-    float3* mip2Tile,
-    float3* mip3Tile)
+    float3* mip1Tile)
 {
     using Layout = SharedDownsampleCascadeLayout<CascadeLevels>;
     constexpr int mip0InteriorSize = Layout::Mip0InteriorSize;
@@ -343,7 +341,7 @@ void RunSharedDownsampleCascade(
                 const int mip2Y = ClampCoordinateToExtent(mip2TileOriginY + localY, mip2Height);
                 const int mip1SourceX = mip2X * 2 - 1 - mip1TileOriginX;
                 const int mip1SourceY = mip2Y * 2 - 1 - mip1TileOriginY;
-                mip2Tile[index] = AverageSharedTile4x4(mip1Tile, mip1TileSize, mip1SourceX, mip1SourceY);
+                mip0Tile[index] = AverageSharedTile4x4(mip1Tile, mip1TileSize, mip1SourceX, mip1SourceY);
             }
             __syncthreads();
 
@@ -353,7 +351,7 @@ void RunSharedDownsampleCascade(
                 const int mip2Y = mip2OriginY + localThreadY;
                 if (mip2X < static_cast<int>(mip2Width) && mip2Y < static_cast<int>(mip2Height))
                 {
-                    const float3 value = mip2Tile[(localThreadY + mip2TileOffset) * mip2TileSize + localThreadX + mip2TileOffset];
+                    const float3 value = mip0Tile[(localThreadY + mip2TileOffset) * mip2TileSize + localThreadX + mip2TileOffset];
                     StoreBloomRgb(mip2Output, static_cast<unsigned int>(mip2X), static_cast<unsigned int>(mip2Y), value);
                 }
             }
@@ -370,7 +368,7 @@ void RunSharedDownsampleCascade(
                     {
                         const int mip2SourceX = mip3X * 2 - 1 - mip2TileOriginX;
                         const int mip2SourceY = mip3Y * 2 - 1 - mip2TileOriginY;
-                        const float3 value = AverageSharedTile4x4(mip2Tile, mip2TileSize, mip2SourceX, mip2SourceY);
+                        const float3 value = AverageSharedTile4x4(mip0Tile, mip2TileSize, mip2SourceX, mip2SourceY);
                         StoreBloomRgb(mip3Output, static_cast<unsigned int>(mip3X), static_cast<unsigned int>(mip3Y), value);
                     }
                 }
@@ -389,7 +387,7 @@ void RunSharedDownsampleCascade(
                     const int mip3Y = ClampCoordinateToExtent(mip3TileOriginY + localY, mip3Height);
                     const int mip2SourceX = mip3X * 2 - 1 - mip2TileOriginX;
                     const int mip2SourceY = mip3Y * 2 - 1 - mip2TileOriginY;
-                    mip3Tile[index] = AverageSharedTile4x4(mip2Tile, mip2TileSize, mip2SourceX, mip2SourceY);
+                    mip1Tile[index] = AverageSharedTile4x4(mip0Tile, mip2TileSize, mip2SourceX, mip2SourceY);
                 }
                 __syncthreads();
 
@@ -399,14 +397,14 @@ void RunSharedDownsampleCascade(
                     const int mip3Y = mip3OriginY + localThreadY;
                     if (mip3X < static_cast<int>(mip3Width) && mip3Y < static_cast<int>(mip3Height))
                     {
-                        const float3 value = mip3Tile[(localThreadY + mip3TileOffset) * mip3TileSize + localThreadX + mip3TileOffset];
+                        const float3 value = mip1Tile[(localThreadY + mip3TileOffset) * mip3TileSize + localThreadX + mip3TileOffset];
                         StoreBloomRgb(mip3Output, static_cast<unsigned int>(mip3X), static_cast<unsigned int>(mip3Y), value);
                     }
                 }
 
                 if (localThreadX == 0 && localThreadY == 0 && blockIdx.x < mip4Width && blockIdx.y < mip4Height)
                 {
-                    const float3 value = AverageSharedTile4x4(mip3Tile, mip3TileSize, 0, 0);
+                    const float3 value = AverageSharedTile4x4(mip1Tile, mip3TileSize, 0, 0);
                     StoreBloomRgb(mip4Output, blockIdx.x, blockIdx.y, value);
                 }
             }
@@ -443,8 +441,6 @@ void BloomOneLevelSharedDownsampleKernel(
         0u,
         0u,
         mip0Tile,
-        nullptr,
-        nullptr,
         nullptr);
 }
 
@@ -480,9 +476,7 @@ void BloomTwoLevelSharedDownsampleKernel(
         0u,
         0u,
         mip0Tile,
-        mip1Tile,
-        nullptr,
-        nullptr);
+        mip1Tile);
 }
 
 extern "C" __global__
@@ -503,7 +497,6 @@ void BloomThreeLevelSharedDownsampleKernel(
     using Layout = SharedDownsampleCascadeLayout<3>;
     __shared__ float3 mip0Tile[Layout::Mip0TileSize * Layout::Mip0TileSize];
     __shared__ float3 mip1Tile[Layout::Mip1TileSize * Layout::Mip1TileSize];
-    __shared__ float3 mip2Tile[Layout::Mip2TileSize * Layout::Mip2TileSize];
     RunSharedDownsampleCascade<3>(
         mip0Input,
         mip1Output,
@@ -521,9 +514,7 @@ void BloomThreeLevelSharedDownsampleKernel(
         0u,
         0u,
         mip0Tile,
-        mip1Tile,
-        mip2Tile,
-        nullptr);
+        mip1Tile);
 }
 
 extern "C" __global__
@@ -547,8 +538,6 @@ void BloomFourLevelSharedDownsampleKernel(
     using Layout = SharedDownsampleCascadeLayout<4>;
     __shared__ float3 mip0Tile[Layout::Mip0TileSize * Layout::Mip0TileSize];
     __shared__ float3 mip1Tile[Layout::Mip1TileSize * Layout::Mip1TileSize];
-    __shared__ float3 mip2Tile[Layout::Mip2TileSize * Layout::Mip2TileSize];
-    __shared__ float3 mip3Tile[Layout::Mip3TileSize * Layout::Mip3TileSize];
     RunSharedDownsampleCascade<4>(
         mip0Input,
         mip1Output,
@@ -566,9 +555,7 @@ void BloomFourLevelSharedDownsampleKernel(
         mip4Width,
         mip4Height,
         mip0Tile,
-        mip1Tile,
-        mip2Tile,
-        mip3Tile);
+        mip1Tile);
 }
 
 extern "C" __global__
