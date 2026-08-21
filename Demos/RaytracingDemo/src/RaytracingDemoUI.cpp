@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-20 by Hui
+//Modify Begin:2026-08-21 by Hui
 #include <RaytracingDemo.h>
 
 #include <DX12Library/Window.h>
@@ -916,12 +916,26 @@ void RaytracingDemo::OnImGui()
         }
         else if (activePixelDiagnostics.has_value())
         {
+            const uint64_t compactedComputeThreadCount =
+                static_cast<uint64_t>(activePixelDiagnostics->DispatchX) *
+                activePixelDiagnostics->DispatchY *
+                activePixelDiagnostics->DispatchZ *
+                64u;
             ImGui::Text(
-                "Latest active ray-traced pixels: %u; dispatch: (%u, %u, %u)",
-                activePixelDiagnostics->ActivePixelCount,
+                "Latest active ray-traced pixels: %u",
+                activePixelDiagnostics->ActivePixelCount);
+            ImGui::Text(
+                "Compacted compute dispatch groups: (%u, %u, %u); launched threads: %llu",
                 activePixelDiagnostics->DispatchX,
                 activePixelDiagnostics->DispatchY,
-                activePixelDiagnostics->DispatchZ);
+                activePixelDiagnostics->DispatchZ,
+                static_cast<unsigned long long>(compactedComputeThreadCount));
+            if (m_PathTracingBackend == PathTracingBackend::ShaderTableDxr)
+            {
+                ImGui::Text(
+                    "Shader-table DXR ray-generation invocations: %u",
+                    activePixelDiagnostics->ActivePixelCount);
+            }
         }
     }
     else
