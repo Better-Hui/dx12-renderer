@@ -63,6 +63,15 @@ set(SOURCE_FILES
         src/Scene/SceneResources.cpp
         )
 
+# These Framework implementations are demo-owned adapters: compile them into
+# the consuming executable while keeping the core Framework target free of
+# DLSS/Streamline link dependencies and avoiding an extra IDE project.
+set(FRAMEWORK_NVIDIA_FEATURE_SOURCE_FILES
+        "${CMAKE_SOURCE_DIR}/Framework/src/Rendering/Upscaling/DLSS.cpp"
+        "${CMAKE_SOURCE_DIR}/Framework/src/Rendering/Upscaling/StreamlineRuntime.cpp"
+        )
+list(APPEND SOURCE_FILES ${FRAMEWORK_NVIDIA_FEATURE_SOURCE_FILES})
+
 set(SHADER_FILES_RAYTRACING
         shaders/PathTracing/PathTracing.rt.hlsl
         shaders/PathTracing/PathTracing.softshadow.rt.hlsl
@@ -156,6 +165,15 @@ set(TARGET_NAME RaytracingDemo)
 include(${CMAKE_SOURCE_DIR}/CMakeIncludes/ProjectBase.cmake)
 include(${CMAKE_SOURCE_DIR}/CMakeIncludes/DemoBase.cmake)
 
+if (CMAKE_GENERATOR MATCHES "^Visual Studio")
+        set_property(SOURCE ${FRAMEWORK_NVIDIA_FEATURE_SOURCE_FILES} APPEND PROPERTY
+                VS_SETTINGS "Visible=false")
+endif ()
+
+target_include_directories(${TARGET_NAME}
+        PRIVATE "${DX12_RENDERER_DLSS_INCLUDE_DIRECTORY}"
+        PRIVATE "${DX12_RENDERER_STREAMLINE_INCLUDE_DIRECTORY}")
+
 set_source_files_properties(${SHADER_FILES_RAYTRACING} PROPERTIES HEADER_FILE_ONLY TRUE)
 set_source_files_properties(${SHADER_FILES_MESH} PROPERTIES HEADER_FILE_ONLY TRUE)
 set_source_files_properties(shaders/CUDA/CudaBloom.cu PROPERTIES HEADER_FILE_ONLY TRUE)
@@ -163,7 +181,8 @@ set_source_files_properties(shaders/CUDA/CudaBloom.cu PROPERTIES HEADER_FILE_ONL
 find_package(directxtex CONFIG REQUIRED)
 target_link_libraries(${TARGET_NAME}
         PUBLIC Framework
-        PRIVATE FrameworkNvidiaFeatures
+        PRIVATE "${DX12_RENDERER_DLSS_LIBRARY}"
+        PRIVATE "${DX12_RENDERER_STREAMLINE_LIBRARY}"
         PRIVATE Microsoft::DirectXTex
         PUBLIC RenderGraph
         )

@@ -65,7 +65,7 @@ DX12Library
 - `ReSTIRDIPass` 拥有 ReSTIR DI 的 history、pipeline variant，以及 RIS、temporal、spatial、final shading 的 dispatch 序列。调用方提供输出、motion vector、frame constant 和场景绑定回调。
 - `ReSTIRGIPass` 拥有 packed GI reservoir、pipeline variant，以及 initial sampling、temporal、spatial、final shading 的 dispatch 序列。调用方提供间接光输出、motion vector、frame constant 和 Inline Ray Query 场景绑定回调。
 - `Taa`、`NRD`、`SVGF` 是抗锯齿和降噪模块；NRD 会通过 `RenderContext` 把 native 状态变化回报给 RenderGraph。
-- `DLSS` 管理 Native NGX DLSS SR/DLAA 评估与实验性 Streamline RR/FG frame-feature 路径。`DLSS.cpp` 与 `StreamlineRuntime.cpp` 由独立的 `FrameworkNvidiaFeatures` 适配目标编译，普通 `Framework` 使用者不会继承厂商 SDK include 路径，也不会链接 `sl.interposer.lib`。Framework 的 `StreamlineRuntime` 在创建 D3D12 设备前执行 `slInit`，设备创建后执行 `slSetD3DDevice`，并负责 capability query 与 Frame Generation 所需的通用 presentation 重建请求；queue/swap-chain 拦截完全交给自动 interposer。DX12Library 不再引用 Streamline，也不再定义 Frame Generation/Ray Reconstruction 能力接口。RR/FG 尚未完成支持硬件上的完整验证。
+- `DLSS` 管理 Native NGX DLSS SR/DLAA 评估与实验性 Streamline RR/FG frame-feature 路径。`RaytracingDemo` 将 `DLSS.cpp` 与 `StreamlineRuntime.cpp` 作为隐藏的外部源直接编译，因此普通 `Framework` 使用者不会继承厂商 SDK include 路径，也不会链接 `sl.interposer.lib`，同时 CMake 不会生成额外的 `FrameworkNvidiaFeatures` 工程。Framework 的 `StreamlineRuntime` 在创建 D3D12 设备前执行 `slInit`，设备创建后执行 `slSetD3DDevice`，并负责 capability query 与 Frame Generation 所需的通用 presentation 重建请求；queue/swap-chain 拦截完全交给自动 interposer。DX12Library 不再引用 Streamline，也不再定义 Frame Generation/Ray Reconstruction 能力接口。RR/FG 尚未完成支持硬件上的完整验证。
 - CUDA interop 封装 shared D3D12 resource 与 external fence/semaphore 同步；当前 CUDA Bloom 使用此路径。
 
 Framework 模块以复用为目标，但接口仍在演进，不能把它们理解为成熟公共渲染 SDK 的兼容层。

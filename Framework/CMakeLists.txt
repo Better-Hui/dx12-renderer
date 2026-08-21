@@ -81,16 +81,14 @@ set(TARGET_NAME Framework)
 set(SHADERS_OUTPUT_HEADERS TRUE)
 include(${CMAKE_SOURCE_DIR}/CMakeIncludes/ProjectBase.cmake)
 
+# These implementations are consumed by RaytracingDemo. Keep them out of the
+# core Framework archive so vendor SDK dependencies do not leak to Framework
+# consumers.
 set(FRAMEWORK_NVIDIA_FEATURE_SOURCE_FILES
         "${CMAKE_CURRENT_SOURCE_DIR}/src/Rendering/Upscaling/DLSS.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/Rendering/Upscaling/StreamlineRuntime.cpp"
         )
-set(FRAMEWORK_NVIDIA_FEATURE_HEADER_FILES
-        "${CMAKE_CURRENT_SOURCE_DIR}/include/Framework/Rendering/Upscaling/DLSS.h"
-        "${CMAKE_CURRENT_SOURCE_DIR}/include/Framework/Rendering/Upscaling/StreamlineRuntime.h"
-        )
 list(REMOVE_ITEM SOURCE_FILES ${FRAMEWORK_NVIDIA_FEATURE_SOURCE_FILES})
-list(REMOVE_ITEM HEADER_FILES ${FRAMEWORK_NVIDIA_FEATURE_HEADER_FILES})
 
 set_source_files_properties(
         ${FRAMEWORK_RESTIR_DI_SHADER_FILES}
@@ -171,24 +169,6 @@ target_link_libraries(${TARGET_NAME}
         PRIVATE OpenEXR::OpenEXR
         PRIVATE Microsoft::DirectXMesh
         )
-
-add_library(FrameworkNvidiaFeatures STATIC
-        ${FRAMEWORK_NVIDIA_FEATURE_HEADER_FILES}
-        ${FRAMEWORK_NVIDIA_FEATURE_SOURCE_FILES})
-set_target_properties(FrameworkNvidiaFeatures PROPERTIES
-        CXX_STANDARD 20
-        CXX_STANDARD_REQUIRED TRUE)
-target_compile_options(FrameworkNvidiaFeatures PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
-target_include_directories(FrameworkNvidiaFeatures
-        PRIVATE "${DX12_RENDERER_DLSS_INCLUDE_DIRECTORY}"
-        PRIVATE "${DX12_RENDERER_STREAMLINE_INCLUDE_DIRECTORY}")
-target_link_libraries(FrameworkNvidiaFeatures
-        PUBLIC Framework
-        PRIVATE "${DX12_RENDERER_DLSS_LIBRARY}"
-        PRIVATE "${DX12_RENDERER_STREAMLINE_LIBRARY}")
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES
-        ${FRAMEWORK_NVIDIA_FEATURE_HEADER_FILES}
-        ${FRAMEWORK_NVIDIA_FEATURE_SOURCE_FILES})
 
 if (DX12_RENDERER_BUILD_DEVELOPER_TOOLS)
         add_executable(UnitySceneDump "tools/UnitySceneDump.cpp")
