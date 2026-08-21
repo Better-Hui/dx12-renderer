@@ -14,6 +14,7 @@
 //Modify End
 //Modify Begin:2026-08-19 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
+#include <Framework/Diagnostics/DiagnosticsSession.h>
 //Modify End
 #include <Framework/UI/ImGuiImpl.h>
 #include <Framework/Geometry/Model.h>
@@ -54,6 +55,9 @@
 //Modify End
 //Modify Begin:2026-08-19 by Hui
 #include <chrono>
+//Modify End
+//Modify Begin:2026-08-21 by Hui
+#include <exception>
 //Modify End
 //Modify Begin:2026-08-20 by Hui
 #include <optional>
@@ -100,7 +104,6 @@ protected:
     void OnKeyReleased(KeyEventArgs& e) override;
     void OnMouseMoved(MouseMotionEventArgs& e) override;
     void OnMouseButtonPressed(MouseButtonEventArgs& e) override;
-//Modify End
 //Modify Begin:2026-08-19 by Hui
     void OnMouseButtonReleased(MouseButtonEventArgs& e) override;
 //Modify End
@@ -172,6 +175,8 @@ private:
     void LoadSceneContent(CommandList& commandList, const std::filesystem::path& scenePath);
     void ResetCameraToInitialSceneState();
     void LoadStartupConfiguration();
+    void InitializeDiagnostics();
+    void RecordDiagnosticsFailure(std::string stage, const std::exception& exception);
     void InitializeRuntimeAutomation();
     void UpdateRuntimeAutomation(double totalTime);
     void ApplyRuntimeAutomationAction(uint32_t action, uint32_t value);
@@ -186,10 +191,10 @@ private:
     RaytracingDemoRenderPipelineController m_RenderPipeline;
     //Modify End
     std::shared_ptr<RaytracingDemoFrameState> m_RenderGraphFrameState = std::make_shared<RaytracingDemoFrameState>();
-//Modify End
     int m_DebugTextureTarget = 0;
 //Modify Begin:2026-08-19 by Hui
     FrameworkDeviceContext m_FrameworkDeviceContext;
+    FrameworkDiagnostics::DiagnosticsSession m_Diagnostics;
     DLSS m_DLSS;
     DLSSFrameGenerationInputs m_FrameGenerationInputs;
     std::shared_ptr<ComputeShader> m_DLSSRayReconstructionPrepareShader;

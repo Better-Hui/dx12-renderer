@@ -2,7 +2,7 @@
 
 > 一个基于 DirectX 12 的实验性渲染器仓库。它用于验证和学习渲染器架构、RenderGraph、光线追踪、Meshlet，以及 CUDA/D3D12 互操作。
 
-[English README](README.md) · [架构总览](Docs/ArchitectureOverview.zh-CN.md) · [RaytracingDemo API 说明（英文）](Docs/RaytracingSampleApi.md) · [Framework 诊断工具规划](Docs/FrameworkDiagnosticsPlan.zh-CN.md)
+[English README](README.md) · [架构总览](Docs/ArchitectureOverview.zh-CN.md) · [RaytracingDemo API 说明（英文）](Docs/RaytracingSampleApi.md) · [Framework Diagnostics](Docs/FrameworkDiagnosticsPlan.zh-CN.md)
 
 ## 这是什么项目
 
@@ -25,7 +25,7 @@
 - **ReSTIR GI 间接光**：基于 Inline Ray Query，提供初始 BSDF 采样、时域复用、空域复用、Jacobian correction 和最终可见性/着色。
 - **CUDA Bloom**：演示 D3D12 shared resource、shared fence 与 CUDA external semaphore 的互操作流程。
 - **实验性帧特性**：接入 Native NGX DLSS SR/DLAA，以及 Framework 管理的 Streamline Ray Reconstruction 和 Frame Generation。DX12Library 只暴露通用的设备创建前/后 runtime 生命周期；queue 与 swap chain 仍走普通 D3D12/DXGI 创建路径，由链接的 Streamline interposer 完成拦截。这些路径尚未完成可交付验证。
-- **调试与分析工具**：集成 PIX event、RenderGraph timing history/CSV 和运行时调试 UI。
+- **调试与分析工具**：除 PIX event、RenderGraph timing history/CSV 和运行时调试 UI 外，Framework 还提供可选的机器可读 Diagnostics session、无桌面输入自动化、结构化 invariant、关联查询、baseline diff 与复现工具。
 
 这些内容的定位是“可运行的工程实验和 API 示例”。其中不少封装仍在演进，尤其是异步计算和 Meshlet；请把它们视为当前仓库的实现方式，而不是通用最佳实践。
 
@@ -169,6 +169,33 @@ cmake --build ..\build --config Release --target RaytracingDemo
 & ..\build\bin\Release\RaytracingDemo.exe
 ```
 
+### 面向 AI/自动化的 Diagnostics
+
+`RendererDiagnostics` 是 developer-only target，默认关闭，因而不会改变仓库默认 solution 的工程集合。需要时重新配置并构建：
+
+```powershell
+cmake -S . -B ..\build -DDX12_RENDERER_BUILD_DEVELOPER_TOOLS=ON
+cmake --build ..\build --config Release --target RendererDiagnostics RaytracingDemo
+```
+
+工具源码实际位于 `Framework/tools/`，并始终按该物理目录显示在 `Framework` 工程中；`DX12_RENDERER_BUILD_DEVELOPER_TOOLS` 只控制是否生成和编译工具 target，不会把源码移动到虚拟目录。
+
+它直接启动 Demo 已注册的 scenario，不注入鼠标或键盘。所有分析结果使用 JSON/JSONL 和稳定退出码，便于 AI 形成“运行 → 检查 → 定向查询 → 与 baseline 比较 → 复现”的闭环：
+
+```powershell
+$tool = '..\build\bin\Release\RendererDiagnostics.exe'
+$demo = '..\build\bin\Release\RaytracingDemo.exe'
+$capture = '..\build\bin\Release\Saved\Diagnostics\stress-001'
+
+& $tool run --exe $demo --scenario stress --output $capture
+& $tool inspect $capture
+& $tool query $capture --category command_queue --limit 100
+& $tool diff <baseline-capture> $capture
+& $tool reproduce $capture --execute
+```
+
+`inspect` 会区分 `passed`、`failed` 与 `incomplete`。事件缓冲有界；如果出现丢事件、capture 没有终态或仍有 unknown assertion，工具返回退出码 `12` 和 partial confidence，而不是把缺少错误证据或未决约束当成通过。详见 [Framework Diagnostics](Docs/FrameworkDiagnosticsPlan.zh-CN.md)。
+
 ### Visual Studio 与 Rider 工程层级
 
 CMake 生成的工程会保持各 target 的真实源码目录。`DX12Library`、`Framework`、`RenderGraph` 和 `RaytracingDemo` 的项目根节点下，先显示该 target 自己的 `CMakeLists.txt`，其余内容继续按照磁盘上的 `include/`、`shaders/`、`src/`、`tools/` 层级展开。Visual Studio 使用 `source_group(TREE ...)` 生成的 filter；Rider 则直接读取同一组未经虚拟重映射的物理路径。
@@ -209,7 +236,7 @@ CMake 生成的工程会保持各 target 的真实源码目录。`DX12Library`�
 - `RaytracingDemo` 是集成 sample，不是 production renderer，也不承诺稳定的公开 API 兼容性。
 - CUDA 在运行时可以关闭，但仍是当前构建流程的硬依赖；将它做成真正可选的模块仍需调整 build system。
 - Direct、Async Compute 和 Copy queue 都由 pass **显式指定**。RenderGraph 不会自动选择 queue、拆分 pass 或优化 overlap；Copy queue 已具备底层调度能力，但当前主 sample 还没有对应 pass。
-- 连续的 async pass 目前逐 pass 提交，尚未合并成更大的 compute segment。
+- Compiler 会把 queue 相同且资源交接兼容的连续 Async Compute/Copy pass 合并为 non-direct recording/submission batch；遇到 aliasing 或需要中途 Direct preamble 的资源关系时仍会拆开。
 - `RenderGraphRoot::Execute()` 现在只是图执行入口；pass 录制/提交由 `RenderGraphCommandExecutor` 负责，Direct/Async Compute/Copy 的可选 timestamp 生命周期由 `RenderGraphProfiler` 负责。Root 仍负责图构建和拓扑编排。
 - transient resource 会按本帧实际记录的 Direct/Async Compute/Copy fence 做延迟退休。aliasing 仍采取保守策略：不同 queue 使用的资源不会互相 alias，后续再设计更一般的多 queue allocator。
 - 当前 Framework 和 RenderGraph 的执行路径由应用组合根显式注入 device、queue 和 descriptor 分配器。独立运行时的 application/window 生命周期，以及少量 legacy resource-wrapper 兼容路径，仍保留 `Application` 依赖。
@@ -230,7 +257,7 @@ CMake 生成的工程会保持各 target 的真实源码目录。`DX12Library`�
 
 - [架构总览](Docs/ArchitectureOverview.zh-CN.md)：按 DX12Library、Framework、RenderGraph、RaytracingDemo 分层说明职责、数据流和当前技术边界。
 - [RaytracingDemo API 说明（英文）](Docs/RaytracingSampleApi.md)：介绍 Framework 用法、RenderGraph、profiling 和功能边界。
-- [Framework 诊断工具规划](Docs/FrameworkDiagnosticsPlan.zh-CN.md)：定义计划中的机器可读诊断、确定性自动化、约束检查、产物和 profiler 契约；它是路线设计，不代表功能已经实现。
+- [Framework Diagnostics](Docs/FrameworkDiagnosticsPlan.zh-CN.md)：说明已落地的机器可读 capture、确定性自动化、AI 证据查询、约束检查、复现与 profiler 契约，以及仍待实现的 DRED/readback/retention 能力。
 - 使用或再分发本仓库前，请保留上游与第三方组件的声明，并审阅对应的许可证文件。
 - 本 README 不引入替代性的仓库级许可证。
 - `External/DLSS/`、`External/NRI/`、`External/NRD/` 以及 `External/Streamline/` 中的 NVIDIA 组件均保留上游条款；Git submodule 链接不会转移或替换这些条款。SDK 放在 `External/` 不代表它变成开源，也不代表本仓库向任何人授予 NVIDIA SDK 的再许可；请保留全部 notice 与 license，不要把本仓库当作可独立分发的 SDK 镜像。在公开源码、再分发二进制或包含这些组件的商业发布前，应单独完成法务/许可证审查。

@@ -26,6 +26,8 @@ The maintained first-party CMake targets are `DX12Library`, `Framework`, `Render
 
 `CMakeIncludes/ProjectBase.cmake` applies `source_group(TREE ...)` for Visual Studio without assigning virtual MSBuild `Link` paths to project-owned files. This keeps Visual Studio filters and Rider's physical project view consistent, including CMake's automatically generated regeneration item for each target-local `CMakeLists.txt`. External implementation files may be hidden from a target view, but they must not be copied into `build/` or presented as if they were owned by that target. The generated build tree is disposable and never owns editable source.
 
+`Framework/tools/` is always shown in the `Framework` project as its physical source directory; project-owned tool files are never remapped through MSBuild `Link` metadata. `Framework/tools/CMakeLists.txt` creates the `RendererDiagnostics` and `UnitySceneDump` targets only when `DX12_RENDERER_BUILD_DEVELOPER_TOOLS=ON`. The option controls whether those targets build, not whether `Framework` exposes its real `tools/` tree, so the default solution keeps the tools visible without adding developer-tool projects.
+
 ## DX12Library
 
 `DX12Library/` is the native D3D12 boundary. Its important responsibilities are:
@@ -67,6 +69,7 @@ This layer deliberately exposes D3D12 concepts. `Framework` is responsible for p
 - `Taa`, `NRD`, and `SVGF` provide temporal anti-aliasing and denoising integration. NRD reports its native state transitions back to RenderGraph through `RenderContext`.
 - `DLSS` owns native NGX DLSS SR/DLAA evaluation and the experimental Streamline RR/FG frame-feature path. `RaytracingDemo` compiles `DLSS.cpp` and `StreamlineRuntime.cpp` as hidden external sources, so ordinary `Framework` consumers neither inherit the vendor SDK include paths nor link `sl.interposer.lib`, and CMake does not create an extra `FrameworkNvidiaFeatures` project. Framework's `StreamlineRuntime` performs `slInit` before D3D12 creation, calls `slSetD3DDevice` after device creation, owns capability queries, and requests generic presentation reconfiguration for Frame Generation. Automatic interposition owns queue/swap-chain interception; DX12Library never references Streamline or Frame Generation/Ray Reconstruction capability types. RR/FG have not completed supported-hardware validation.
 - CUDA interop wraps shared D3D12 resources and external fence/semaphore synchronization. CUDA Bloom is the current consumer.
+- `Framework/Diagnostics` owns machine-readable capture sessions, the typed event schema, bounded buffering, deterministic automation, and artifact export. `DX12Library` and `RenderGraph` only receive an optional non-owning telemetry sink and never depend upward on Framework; the Demo only registers its controls, observations, and scenarios.
 
 Framework modules are reusable building blocks, but their interfaces are still evolving. They should not be interpreted as a compatibility layer comparable to a mature public rendering SDK.
 
@@ -90,6 +93,7 @@ The compiler performs pass culling, dependency ordering, resource-state planning
 - `RenderGraphQueueScheduler` tracks a logical resource's last producer queue and submitted fence value. A dependent consumer receives a GPU-side wait before its work is submitted.
 - `PassResourceStatePlan` stores immutable per-pass transition, UAV, aliasing, initialization, and async-handoff work. The executor records that plan in the command list that owns the pass; `CommandList` resolves initial transition states through the shared `ResourceStateRegistry` when lists are closed in final submission order.
 - `RenderGraphPassBuilder::UseCopyQueue()` routes copy-compatible passes through the compiled plan, executor, queue scheduler, profiler, and transient retirement path. The maintained sample does not currently declare a Copy-queue pass.
+- The compiler merges consecutive same-queue Async Compute/Copy passes into a non-direct batch when their Direct preambles and aliasing relationships are compatible; incompatible resource handoffs start a new batch.
 - Transient resources retire against the actual Direct/Compute/Copy fence values of the frame. Aliasing is intentionally conservative: only same-queue lifetimes are reused; cross-queue aliasing remains disabled.
 
 ### Active-pixel compaction
@@ -151,9 +155,10 @@ Shader-table DXR and Inline share the scene/resource model, but ReSTIR DI/GI are
 ### Diagnostics and automation
 
 - Runtime UI groups technique selection, scene/light controls, denoising, upscaling, stress content, and debugging controls.
-- `RAYTRACING_DEMO_AUTOTEST=core`, `stress`, or `matrix` runs non-interactive startup/feature-toggle coverage. It is a crash/regression smoke test, not a substitute for visual validation.
-- RenderGraph timestamp CSV is useful for repeatable pass timing; PIX is required for full queue timelines.
-- The current paths are Demo-specific and do not yet provide one machine-readable explanation of graph schedule, queue submissions, resource/descriptor state, assertions, readbacks, and reproduction metadata. The next tooling priority is the planned Framework-owned contract in [Framework Diagnostics, Automation, and Profiling Plan](FrameworkDiagnosticsPlan.md).
+- `RAYTRACING_DEMO_AUTOTEST=core`, `stress`, or `matrix` is registered by the Demo as a named Framework automation scenario. It changes state through controls and observations without desktop input injection. These remain crash/regression smoke tests rather than visual acceptance.
+- The optional `RendererDiagnostics` developer tool provides `run`, `inspect`, `query`, `diff`, `reproduce`, and `selftest`. One capture correlates RenderGraph schedule/state/lifetime, queue submissions/fences, resource/descriptor identity, assertions, CPU/GPU timing, and reproduction metadata.
+- `inspect` emits an agent-oriented JSON verdict, capture completeness, suspected domain, hypothesis, correlated evidence, and suggested next action. Dropped events or a non-terminal capture are `incomplete`, never a clean pass.
+- RenderGraph timestamp CSV supports repeatable pass timing. Per-queue timestamps are not a calibrated global overlap timeline; full queue timing and driver behavior still require PIX or RenderDoc.
 
 ## Current boundaries
 
@@ -161,6 +166,7 @@ Shader-table DXR and Inline share the scene/resource model, but ReSTIR DI/GI are
 - Explicit async compute can reduce GPU wall time only when dependencies and hardware allow overlap; fence waits, cache pressure, and bandwidth contention can make it slower.
 - Meshlets are an experimental GBuffer backend, not a complete visibility, streaming, residency, or LOD system.
 - FBX scene import is now part of the Framework `SceneImporter` contract, but it intentionally selects one active camera and supports a practical PBR subset. Spot Lights are preserved in `Scene` while the current sample GPU lighting path renders them through a point-light fallback. Transparency, clearcoat, transmission, animation playback, and dynamic skinned-scene updates still require separate contracts.
+- Diagnostics does not yet provide generic GPU texture/buffer readback, image assertions, DRED attachments, background writing, compression, or retention policy. High-event captures can be large; use `--max-events` and `dropped_event_count` to reason about evidence completeness.
 - ReSTIR DI/GI, CUDA Bloom, DLSS SR/DLAA, Streamline RR/FG, and Unity interop are engineering experiments. They require per-hardware functional, image-quality, stability, memory, and performance validation before any delivery use.
 
 For sample-facing API examples and detailed feature limitations, see [RaytracingDemo API Guide](RaytracingSampleApi.md).

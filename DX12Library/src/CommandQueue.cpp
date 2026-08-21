@@ -7,9 +7,23 @@
 #include "D3D12DeviceContext.h"
 //Modify End
 
-//Modify Begin:2026-07-29 by Hui
+//Modify Begin:2026-08-21 by Hui
 #include <fstream>
 #include <chrono>
+
+namespace
+{
+	const char* GetQueueTypeName(const D3D12_COMMAND_LIST_TYPE type)
+	{
+		switch (type)
+		{
+		case D3D12_COMMAND_LIST_TYPE_DIRECT: return "Direct";
+		case D3D12_COMMAND_LIST_TYPE_COMPUTE: return "Compute";
+		case D3D12_COMMAND_LIST_TYPE_COPY: return "Copy";
+		default: return "Unknown";
+		}
+	}
+}
 //Modify End
 
 //Modify Begin:2026-08-07 by Hui
@@ -75,6 +89,24 @@ void CommandQueue::SetFatalErrorHandler(CommandQueueFailureHandler handler)
 	m_FatalErrorHandler = std::move(handler);
 }
 
+void CommandQueue::SetDiagnosticTelemetrySink(DiagnosticTelemetrySink* sink) noexcept
+{
+	m_DiagnosticTelemetrySink.store(sink, std::memory_order_release);
+}
+
+void CommandQueue::EmitTelemetry(DiagnosticTelemetryEvent event) const noexcept
+{
+	if (DiagnosticTelemetrySink* sink = m_DiagnosticTelemetrySink.load(std::memory_order_acquire))
+	{
+		sink->RecordTelemetry(std::move(event));
+	}
+}
+
+bool CommandQueue::HasDiagnosticTelemetrySink() const noexcept
+{
+	return m_DiagnosticTelemetrySink.load(std::memory_order_acquire) != nullptr;
+}
+
 CommandQueue::~CommandQueue()
 {
 	m_IsProcessingInFlightCommandLists = false;
@@ -84,7 +116,19 @@ CommandQueue::~CommandQueue()
 uint64_t CommandQueue::Signal()
 {
 	uint64_t fenceValue = ++m_FenceValue;
-	m_D3d12CommandQueue->Signal(m_D3d12Fence.Get(), fenceValue);
+	ThrowIfFailed(m_D3d12CommandQueue->Signal(m_D3d12Fence.Get(), fenceValue));
+	if (HasDiagnosticTelemetrySink())
+	{
+		EmitTelemetry({
+		.Category = "command_queue.signal",
+		.Name = "signal",
+		.CorrelationId = MakeDiagnosticQueueFenceCorrelationId(GetQueueTypeName(m_CommandListType), fenceValue),
+		.Fields = {
+			{ "queue", std::string(GetQueueTypeName(m_CommandListType)) },
+			{ "fence", fenceValue },
+		},
+		});
+	}
 	return fenceValue;
 }
 
@@ -97,6 +141,8 @@ void CommandQueue::WaitForFenceValue(uint64_t fenceValue)
 {
 	if (!IsFenceComplete(fenceValue))
 	{
+		const bool captureTelemetry = HasDiagnosticTelemetrySink();
+		const auto waitStart = captureTelemetry ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
 		auto event = ::CreateEvent(nullptr, FALSE, FALSE, nullptr);
 		assert(event && "Failed to create fence event handle.");
 
@@ -105,6 +151,21 @@ void CommandQueue::WaitForFenceValue(uint64_t fenceValue)
 		WaitForSingleObject(event, DWORD_MAX);
 
 		CloseHandle(event);
+		if (captureTelemetry)
+		{
+			const double durationMilliseconds = std::chrono::duration<double, std::milli>(
+				std::chrono::steady_clock::now() - waitStart).count();
+			EmitTelemetry({
+			.Category = "profiler.cpu",
+			.Name = "queue_fence_wait",
+			.CorrelationId = MakeDiagnosticQueueFenceCorrelationId(GetQueueTypeName(m_CommandListType), fenceValue),
+			.Fields = {
+				{ "queue", std::string(GetQueueTypeName(m_CommandListType)) },
+				{ "fence", fenceValue },
+				{ "cpu_duration_ms", durationMilliseconds },
+			},
+			});
+		}
 	}
 }
 
@@ -148,6 +209,31 @@ uint64_t CommandQueue::ExecuteCommandList(std::shared_ptr<CommandList> commandLi
 
 uint64_t CommandQueue::ExecuteCommandLists(const std::vector<std::shared_ptr<CommandList>>& commandLists)
 {
+	if (commandLists.empty())
+	{
+		throw std::invalid_argument("Cannot submit an empty command-list collection.");
+	}
+	for (const std::shared_ptr<CommandList>& commandList : commandLists)
+	{
+		if (commandList == nullptr || commandList->GetCommandListType() != m_CommandListType)
+		{
+			EmitTelemetry({
+				.Category = "assertion",
+				.Name = "command_list_queue_compatibility",
+				.Severity = DiagnosticTelemetrySeverity::Error,
+				.Fields = {
+					{ "result", std::string("fail") },
+					{ "message", std::string("Submitted command-list type does not match the native queue.") },
+					{ "queue", std::string(GetQueueTypeName(m_CommandListType)) },
+					{ "command_list_type", commandList != nullptr
+						? std::string(GetQueueTypeName(commandList->GetCommandListType()))
+						: std::string("null") },
+				},
+			});
+			throw std::invalid_argument("Submitted command-list type does not match the command queue.");
+		}
+	}
+
 	auto submissionScope = m_DeviceContext->GetResourceStateRegistry()->AcquireSubmissionScope();
 
 	// Command lists that need to put back on the command list queue.
@@ -158,6 +244,7 @@ uint64_t CommandQueue::ExecuteCommandLists(const std::vector<std::shared_ptr<Com
 	std::vector<ID3D12CommandList*> d3d12CommandLists;
 	d3d12CommandLists.reserve(commandLists.size() * 2); // 2x since each command list will have a pending command list.
 
+	uint64_t pendingBarrierCommandListCount = 0;
 	for (auto commandList : commandLists)
 	{
 		auto pendingCommandList = GetCommandList();
@@ -167,6 +254,7 @@ uint64_t CommandQueue::ExecuteCommandLists(const std::vector<std::shared_ptr<Com
 		// execute an empty command list on the command queue.
 		if (hasPendingBarriers)
 		{
+			++pendingBarrierCommandListCount;
 			d3d12CommandLists.push_back(pendingCommandList->GetGraphicsCommandList().Get());
 		}
 		d3d12CommandLists.push_back(commandList->GetGraphicsCommandList().Get());
@@ -178,6 +266,21 @@ uint64_t CommandQueue::ExecuteCommandLists(const std::vector<std::shared_ptr<Com
 	UINT numCommandLists = static_cast<UINT>(d3d12CommandLists.size());
 	m_D3d12CommandQueue->ExecuteCommandLists(numCommandLists, d3d12CommandLists.data());
 	uint64_t fenceValue = Signal();
+	if (HasDiagnosticTelemetrySink())
+	{
+		EmitTelemetry({
+		.Category = "command_queue.submission",
+		.Name = "execute_command_lists",
+		.CorrelationId = MakeDiagnosticQueueFenceCorrelationId(GetQueueTypeName(m_CommandListType), fenceValue),
+		.Fields = {
+			{ "queue", std::string(GetQueueTypeName(m_CommandListType)) },
+			{ "fence", fenceValue },
+			{ "logical_command_list_count", static_cast<uint64_t>(commandLists.size()) },
+			{ "native_command_list_count", static_cast<uint64_t>(numCommandLists) },
+			{ "pending_barrier_command_list_count", pendingBarrierCommandListCount },
+		},
+		});
+	}
 
 	// Queue command lists for reuse.
 	for (auto commandList : toBeQueued)
@@ -197,7 +300,20 @@ void CommandQueue::Wait(const CommandQueue& other, const uint64_t fenceValue)
 {
 	if (fenceValue != 0u)
 	{
-		m_D3d12CommandQueue->Wait(other.m_D3d12Fence.Get(), fenceValue);
+		ThrowIfFailed(m_D3d12CommandQueue->Wait(other.m_D3d12Fence.Get(), fenceValue));
+		if (HasDiagnosticTelemetrySink())
+		{
+			EmitTelemetry({
+			.Category = "command_queue.wait",
+			.Name = "queue_wait",
+			.CorrelationId = MakeDiagnosticQueueFenceCorrelationId(GetQueueTypeName(other.m_CommandListType), fenceValue),
+			.Fields = {
+				{ "consumer_queue", std::string(GetQueueTypeName(m_CommandListType)) },
+				{ "producer_queue", std::string(GetQueueTypeName(other.m_CommandListType)) },
+				{ "producer_fence", fenceValue },
+			},
+			});
+		}
 	}
 }
 
@@ -267,6 +383,16 @@ void CommandQueue::ProcessInFlightCommandLists()
 	}
 	catch (const std::exception& exception)
 	{
+		EmitTelemetry({
+			.Category = "command_queue.failure",
+			.Name = "worker_failure",
+			.Severity = DiagnosticTelemetrySeverity::Fatal,
+			.Fields = {
+				{ "queue", std::string(GetQueueTypeName(m_CommandListType)) },
+				{ "stage", std::string(stage) },
+				{ "message", std::string(exception.what()) },
+			},
+		});
 		if (m_FatalErrorHandler)
 		{
 			m_FatalErrorHandler(CommandQueueFailure{

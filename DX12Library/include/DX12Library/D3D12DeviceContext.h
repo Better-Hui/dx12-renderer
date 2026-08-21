@@ -1,14 +1,16 @@
 #pragma once
 
-//Modify Begin:2026-08-12 by Hui
+//Modify Begin:2026-08-21 by Hui
 #include "DescriptorAllocator.h"
 #include "DescriptorRetirementClock.h"
+#include "DiagnosticTelemetry.h"
 #include "ResourceStateRegistry.h"
 
 #include <d3d12.h>
 #include <wrl.h>
 
 #include <cstdint>
+#include <atomic>
 #include <cassert>
 #include <functional>
 #include <map>
@@ -67,7 +69,38 @@ public:
         const D3D12_DESCRIPTOR_HEAP_TYPE type,
         const uint32_t descriptorCount = 1) const
     {
-        return m_DescriptorAllocators[type]->Allocate(descriptorCount);
+        DescriptorAllocation allocation = m_DescriptorAllocators[type]->Allocate(descriptorCount);
+        if (HasDiagnosticTelemetrySink())
+        {
+            RecordDiagnosticTelemetry({
+                .Category = "descriptor.allocation",
+                .Name = "allocate_cpu_descriptors",
+                .Fields = {
+                    { "heap_type", static_cast<uint64_t>(type) },
+                    { "descriptor_count", static_cast<uint64_t>(descriptorCount) },
+                    { "retirement_frame", GetDescriptorRetirementFrame() },
+                },
+            });
+        }
+        return allocation;
+    }
+
+    void SetDiagnosticTelemetrySink(DiagnosticTelemetrySink* sink) noexcept
+    {
+        m_DiagnosticTelemetrySink.store(sink, std::memory_order_release);
+    }
+
+    [[nodiscard]] bool HasDiagnosticTelemetrySink() const noexcept
+    {
+        return m_DiagnosticTelemetrySink.load(std::memory_order_acquire) != nullptr;
+    }
+
+    void RecordDiagnosticTelemetry(DiagnosticTelemetryEvent event) const noexcept
+    {
+        if (DiagnosticTelemetrySink* sink = m_DiagnosticTelemetrySink.load(std::memory_order_acquire))
+        {
+            sink->RecordTelemetry(std::move(event));
+        }
     }
 
     void ReleaseStaleDescriptors(const uint64_t frameNumber) const
@@ -122,5 +155,6 @@ private:
     std::unique_ptr<DescriptorAllocator> m_DescriptorAllocators[D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES];
     std::map<D3D12TextureCacheKey, D3D12TextureCacheEntry> m_TextureCache;
     mutable std::mutex m_TextureCacheMutex;
+    mutable std::atomic<DiagnosticTelemetrySink*> m_DiagnosticTelemetrySink = nullptr;
 };
 //Modify End

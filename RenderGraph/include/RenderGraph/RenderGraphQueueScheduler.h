@@ -14,6 +14,8 @@
 
 class CommandList;
 class CommandQueue;
+class DiagnosticTelemetrySink;
+struct DiagnosticTelemetryEvent;
 
 namespace RenderGraph
 {
@@ -24,6 +26,8 @@ namespace RenderGraph
             std::shared_ptr<CommandQueue> directCommandQueue,
             std::shared_ptr<CommandQueue> asyncComputeCommandQueue,
             std::shared_ptr<CommandQueue> copyCommandQueue);
+
+        void SetDiagnosticTelemetrySink(DiagnosticTelemetrySink* sink) noexcept;
 
         void BeginFrame();
         uint64_t SubmitDirect(std::shared_ptr<CommandList>& commandList);
@@ -66,10 +70,13 @@ namespace RenderGraph
             const ExternalResourceAccess& access,
             RenderPassQueue queue,
             uint64_t fenceValue);
+        void EmitTelemetry(DiagnosticTelemetryEvent event) const noexcept;
+        [[nodiscard]] bool HasDiagnosticTelemetrySink() const noexcept { return m_DiagnosticTelemetrySink != nullptr; }
 
         std::shared_ptr<CommandQueue> m_DirectCommandQueue;
         std::shared_ptr<CommandQueue> m_AsyncComputeCommandQueue;
         std::shared_ptr<CommandQueue> m_CopyCommandQueue;
+        DiagnosticTelemetrySink* m_DiagnosticTelemetrySink = nullptr;
         std::map<ResourceId, RenderPassQueue> m_LastWriterQueues;
         std::map<ResourceId, uint64_t> m_LastWriterFenceValues;
         std::map<const Resource*, ExternalResourceUsage> m_ExternalResourceUsages;

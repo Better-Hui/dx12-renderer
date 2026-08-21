@@ -163,7 +163,15 @@ Do not infer global overlap from separate queue timestamp origins. Use PIX Timin
 
 PIX is the authority for cross-queue wall-clock overlap; CSV is the lightweight repeatable companion measurement.
 
-The current profiler and runtime automation are sample-specific. The planned [Framework Diagnostics contract](FrameworkDiagnosticsPlan.md) will add machine-readable sessions, registered controls/observations, schedule and submission snapshots, structured invariants, and reproducible artifacts without desktop input injection. This is a roadmap, not an implemented API.
+The Framework [Diagnostics contract](FrameworkDiagnosticsPlan.md) is now implemented as an optional path:
+
+- `DiagnosticsSession` owns the typed, frame/sequence/correlation/thread-aware event buffer and exports the manifest, summary, domain snapshots, timings, assertions, and reproduction recipe.
+- `Application`, the three `CommandQueue` instances, and `RenderGraphRoot` accept the same optional non-owning telemetry sink. Disabled checks occur before timing or diagnostic string construction on hot paths.
+- `RaytracingDemo` creates the session from environment state, attaches it to Application and RenderGraph, and registers sample-specific controls, observations, and scenarios through the Framework `AutomationRunner`.
+- `RendererDiagnostics` runs scenarios without desktop input injection and exposes JSON/JSONL `inspect`, `query`, `diff`, and `reproduce` operations for a developer or coding agent.
+- A bounded capture that dropped events is explicitly `incomplete`; critical error/fatal/assertion records receive retention priority, but a partial capture cannot prove the absence of a problem.
+
+Generic GPU texture/buffer readback requests, image assertions, DRED attachments, background writing, compression, and retention policy are not yet part of this Framework contract. The existing Demo `visual` scenario remains a sample-specific image/readback test.
 
 ## Soft-shadow variants
 

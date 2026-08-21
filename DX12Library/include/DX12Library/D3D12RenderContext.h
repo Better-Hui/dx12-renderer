@@ -11,6 +11,9 @@
 class CommandQueue;
 class D3D12DeviceContext;
 class ResourceStateRegistry;
+//Modify Begin:2026-08-21 by Hui
+class DiagnosticTelemetrySink;
+//Modify End
 
 //Modify Begin:2026-08-07 by Hui
 struct ExternalD3D12Context
@@ -39,6 +42,7 @@ public:
     std::shared_ptr<CommandQueue> GetCommandQueue(D3D12_COMMAND_LIST_TYPE type) const;
     std::shared_ptr<ResourceStateRegistry> GetResourceStateRegistry() const;
     void SetFatalErrorHandler(CommandQueueFailureHandler handler);
+    void SetDiagnosticTelemetrySink(DiagnosticTelemetrySink* sink) const noexcept;
 
 private:
     void CreateOwnedQueues();

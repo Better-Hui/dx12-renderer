@@ -5,6 +5,9 @@
 
 #include "CommandQueue.h"
 #include "DiagnosticReporter.h"
+//Modify Begin:2026-08-21 by Hui
+#include "DiagnosticTelemetry.h"
+//Modify End
 #include "D3D12RuntimeLifecycle.h"
 #include "Game.h"
 //Modify Begin:2026-08-07 by Hui
@@ -638,6 +641,20 @@ std::shared_ptr<D3D12DeviceContext> Application::GetD3D12DeviceContext() const
 {
     return m_RenderContext.GetD3D12DeviceContext();
 }
+
+void Application::SetDiagnosticTelemetrySink(DiagnosticTelemetrySink* sink) noexcept
+{
+    m_DiagnosticTelemetrySink.store(sink, std::memory_order_release);
+    m_RenderContext.SetDiagnosticTelemetrySink(sink);
+}
+
+void Application::RecordDiagnosticTelemetry(DiagnosticTelemetryEvent event) const noexcept
+{
+    if (DiagnosticTelemetrySink* sink = m_DiagnosticTelemetrySink.load(std::memory_order_acquire))
+    {
+        sink->RecordTelemetry(std::move(event));
+    }
+}
 //Modify End
 
 //Modify Begin:2026-07-30 by Hui
@@ -1048,6 +1065,15 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
         if (gs_pSingelton != nullptr)
         {
             gs_pSingelton->WriteDiagnostic("WindowCallbackException", report.str());
+            gs_pSingelton->RecordDiagnosticTelemetry({
+                .Category = "device.failure",
+                .Name = "window_callback_exception",
+                .Severity = DiagnosticTelemetrySeverity::Fatal,
+                .Fields = {
+                    { "window_message", static_cast<uint64_t>(message) },
+                    { "report", report.str() },
+                },
+            });
         }
         PostQuitMessage(4);
         return 0;
@@ -1060,6 +1086,15 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
         if (gs_pSingelton != nullptr)
         {
             gs_pSingelton->WriteDiagnostic("WindowCallbackException", report.str());
+            gs_pSingelton->RecordDiagnosticTelemetry({
+                .Category = "device.failure",
+                .Name = "window_callback_unknown_exception",
+                .Severity = DiagnosticTelemetrySeverity::Fatal,
+                .Fields = {
+                    { "window_message", static_cast<uint64_t>(message) },
+                    { "report", report.str() },
+                },
+            });
         }
         PostQuitMessage(4);
         return 0;

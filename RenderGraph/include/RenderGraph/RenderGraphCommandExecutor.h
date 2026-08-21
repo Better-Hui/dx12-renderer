@@ -13,6 +13,8 @@
 
 class CommandList;
 class CommandQueue;
+class DiagnosticTelemetrySink;
+struct DiagnosticTelemetryEvent;
 class Resource;
 
 namespace RenderGraph
@@ -38,6 +40,7 @@ namespace RenderGraph
             const CompiledRenderGraph& compiledGraph,
             bool debugSerializeAsyncCompute,
             bool enableParallelDirectRecording);
+        void SetDiagnosticTelemetrySink(DiagnosticTelemetrySink* sink) noexcept;
 
     private:
         void PrepareResourcesForRenderPass(
@@ -75,6 +78,13 @@ namespace RenderGraph
         static void ApplyExternalResourceTransitions(
             CommandList& commandList,
             std::span<const PassExternalResourceTransition> transitions);
+        void EmitTelemetry(DiagnosticTelemetryEvent event) const noexcept;
+        [[nodiscard]] bool HasDiagnosticTelemetrySink() const noexcept { return m_DiagnosticTelemetrySink != nullptr; }
+        void EmitCpuPassTiming(
+            const RenderPass& pass,
+            double durationMilliseconds,
+            std::string recordingMode) const noexcept;
+        static uint64_t GetPassCorrelationId(const RenderPass& pass) noexcept;
 
         std::shared_ptr<CommandQueue> m_DirectCommandQueue;
         std::shared_ptr<CommandQueue> m_AsyncComputeCommandQueue;
@@ -82,6 +92,7 @@ namespace RenderGraph
         std::shared_ptr<ResourcePool> m_ResourcePool;
         RenderGraphQueueScheduler& m_QueueScheduler;
         RenderGraphProfiler& m_Profiler;
+        DiagnosticTelemetrySink* m_DiagnosticTelemetrySink = nullptr;
         RenderGraphTaskScheduler m_ParallelRecordingTaskScheduler;
     };
 }

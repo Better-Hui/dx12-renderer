@@ -53,6 +53,10 @@ class CommandQueue;
 class D3D12DeviceContext;
 class D3D12RuntimeLifecycle;
 class DiagnosticReporter;
+//Modify Begin:2026-08-21 by Hui
+class DiagnosticTelemetrySink;
+struct DiagnosticTelemetryEvent;
+//Modify End
 class DescriptorAllocator;
 class Game;
 class ResourceStateRegistry;
@@ -166,6 +170,7 @@ public:
     std::shared_ptr<CommandQueue> GetCommandQueue(D3D12_COMMAND_LIST_TYPE type = D3D12_COMMAND_LIST_TYPE_DIRECT) const;
 //Modify Begin:2026-07-30 by Hui
     std::shared_ptr<ResourceStateRegistry> GetResourceStateRegistry() const;
+    void SetDiagnosticTelemetrySink(DiagnosticTelemetrySink* sink) noexcept;
 //Modify End
     bool ReconfigurePresentation(const std::function<bool()>& configureRuntime) override;
 
@@ -218,6 +223,7 @@ protected:
     Microsoft::WRL::ComPtr<ID3D12Device2> CreateDevice(Microsoft::WRL::ComPtr<IDXGIAdapter4> adapter);
     bool CheckTearingSupport();
     void WriteDiagnostic(std::string_view reportName, std::string_view contents) const noexcept;
+    void RecordDiagnosticTelemetry(DiagnosticTelemetryEvent event) const noexcept;
 
 private:
     friend LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
@@ -226,8 +232,9 @@ private:
 
     HINSTANCE m_hInstance;
 
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-08-21 by Hui
     std::unique_ptr<DiagnosticReporter> m_DiagnosticReporter;
+    std::atomic<DiagnosticTelemetrySink*> m_DiagnosticTelemetrySink = nullptr;
     std::shared_ptr<D3D12RuntimeLifecycle> m_RuntimeLifecycle;
     D3D12RenderContext m_RenderContext;
     std::atomic<DWORD> m_MessageThreadId = 0;

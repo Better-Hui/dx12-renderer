@@ -1,6 +1,6 @@
-# Framework 诊断、自动化与 Profiler 规划
+# Framework 诊断、自动化与 Profiler
 
-> 状态：规划中。本文定义预期的 Framework 契约，不代表功能已经实现。
+> 状态：基础能力已落地并通过真实 Demo 自动化验证；GPU readback/image assertion、DRED attachment、后台写盘和 retention policy 仍待实现。
 
 ## 目标
 
@@ -10,7 +10,7 @@
 
 ## 归属和分层
 
-`Framework/Diagnostics` 负责公开服务、capture session、产物 schema、自动化 runner、约束检查和轻量 profiler 聚合。`RaytracingDemo` 只注册 sample 控制项、场景和 sample-specific provider。
+`Framework/Diagnostics` 负责 capture session、产物 schema、自动化 runner、约束检查和轻量 profiler 聚合。`RaytracingDemo` 只注册 sample control、observation 与 scenario。
 
 底层不能反向依赖 Framework。`DX12Library` 与 `RenderGraph` 只暴露范围受控的 typed snapshot 或可选、非 owning telemetry hook，用于 queue submission、fence、资源状态、compiled batch、descriptor 和 device removal；Framework adapter 把这些记录聚合到 capture session。
 
@@ -26,44 +26,67 @@ RaytracingDemo scenario/control ----/
 每次 capture 在 `Saved/Diagnostics` 下生成一个自包含目录：
 
 ```text
-manifest.json          GPU/驱动、分辨率、场景/配置 hash、build/commit
+manifest.json          schema、状态、应用、session、时间、计数、metadata 与产物表
 summary.txt            供人和 Agent 快速阅读的结论、失败约束和下一步
 events.jsonl           CPU、录制、提交、wait、signal 与错误的有序事件
-render_graph.json      pass、资源、裁剪后拓扑、batch 和 queue 分类
+render_graph.json      pass、batch、queue、resource state plan 与生命周期事件
 queue_submissions.json command-list 类型/顺序、wait、signal 和 fence value
-resources.json         description、state plan、ownership、aliasing、retirement fence
-descriptors.json       layout、实际绑定资源身份和校验失败
+resources.json         resource identity、description、state 与生命周期事件
+descriptors.json       allocation、descriptor-set revision 与绑定资源身份
 timings.csv            关联后的 CPU scope 与各 queue GPU timestamp
 assertions.json        结构化 pass/fail/unknown 结果
-screenshots/           可选 presentation/readback 图片与图像指标
+reproduction.json      scenario、环境与实际 control 变更序列
 ```
 
-默认不导出大型 GPU resource。manifest 记录稳定名称、尺寸、格式、hash 和显式 opt-in attachment，使 capture 有界且便于分享。
+默认不导出大型 GPU resource。内存事件缓冲有明确上限，普通事件和已通过 assertion 在压力下可以被淘汰，但 error/fatal/failed/unknown assertion 会优先保留；manifest 记录 `dropped_event_count`。`RendererDiagnostics inspect` 对丢事件、非终态 capture 或 unknown assertion 返回 `incomplete` 和退出码 `12`，不会把证据缺失或未决约束误判为通过。命令行自动化默认上限为 262,144 条事件，可用 `--max-events` 调整。
 
 ## 自动化契约
 
-Framework 提供确定性的 frame-step runner。应用注册具名 control 和 observation；scenario 通过名字访问它们，不能直接访问 Demo 私有成员，也不能注入桌面输入。
+Framework 已提供确定性的 frame-step runner。应用注册具名 control 和 observation；scenario 通过名字访问它们，不能直接访问 Demo 私有成员，也不能注入桌面输入。
 
-必须支持：
+当前支持：
 
 - 设置 typed runtime control；
-- 按帧数、fence、readback 或稳定 predicate 等待，并带超时；
-- 开始/结束诊断或 timing capture；
-- 请求 texture/buffer readback；
-- 检查 invariant、数值容差或图像容差；
+- 按帧数或具名 observation/predicate 等待，并带 frame/seconds 双重超时；
+- 对 observation 做 typed 比较、数值容差和结构化 assertion；
+- 在步骤中 flush capture；
 - 输出可复现包并返回明确进程退出码。
 
-命令行或环境入口建议支持：
+Developer tool 仅在 `DX12_RENDERER_BUILD_DEVELOPER_TOOLS=ON` 时生成：
 
 ```text
-RendererDiagnostics run --scenario compacted-restir-gi --frames 120 --output Saved/Diagnostics/run-001
+RendererDiagnostics run --exe RaytracingDemo.exe --scenario stress --output Saved/Diagnostics/run-001
 RendererDiagnostics inspect Saved/Diagnostics/run-001
+RendererDiagnostics query Saved/Diagnostics/run-001 --frame 42 --category command_queue --limit 100
 RendererDiagnostics diff baseline current
+RendererDiagnostics reproduce Saved/Diagnostics/run-001 --execute
+RendererDiagnostics selftest
 ```
 
-runner 必须保持非交互，不得合成鼠标或键盘输入。
+`Framework/tools/` 在两种配置下都会继续显示在 `Framework` 工程中；开关只控制 developer-tool target 是否生成。`core` 是通用渲染 smoke test，不再执行只适用于 compacted dispatch 的 active-pixel readback assertion。验证 active-pixel 数量和间接派发参数时，应使用 `RAYTRACING_DEMO_RAY_TRACING_DISPATCH=compacted` 运行 `visual` 场景。
 
-## 第一批约束检查
+所有命令输出 JSON 或 JSONL；`inspect` 会给出 verdict、capture 完整性、疑似问题域、假设、相关证据窗口和下一条查询建议。`query` 支持 frame/category/name/correlation/severity/field 过滤，并明确报告截断。`diff` 比较 graph pass、首次出现的失败 assertion 以及 CPU/GPU mean/P95，并携带样本数。runner 始终保持非交互，不合成鼠标或键盘输入。
+
+## 已落地约束与待补项
+
+- 已检查每个 recording batch 只包含一种 queue；
+- 已检查 submitted command-list type 与 native queue 类型兼容；
+- 已记录 Direct/Compute/Copy submission、signal、wait、fence completion 与 CPU wait，并使用 queue+fence 唯一 correlation ID；
+- 已记录 RenderGraph pass/batch/resource/state-plan/lifecycle；
+- 已记录 descriptor allocation、descriptor-set revision 与资源身份；
+- 已检查 compacted active count 与 finalized indirect arguments/dispatch 的一致性；
+- 自动化 control、observation、timeout 和 assertion failure 使用稳定退出码 `20`–`24`。
+
+仍待补齐：
+
+- 对 cross-queue producer/consumer wait 做离线或在线闭环验证；
+- 验证 RenderGraph 实际访问完全符合声明 usage/state plan；
+- 验证 transient/replaced resource 的多 queue retirement；
+- 通用 texture/buffer readback、图像容差与 capture attachment；
+- device removal 时自动附加 DRED；
+- backend capability 与实际调度 pass 的通用 Framework invariant。
+
+最初规划的完整约束集合是：
 
 - 每个 recording batch 只能包含一种 queue；
 - 每个 CommandList 类型必须与实际 native queue 兼容；
@@ -78,22 +101,22 @@ runner 必须保持非交互，不得合成鼠标或键盘输入。
 
 ## Profiler 模型
 
-通过 frame/pass/batch/submission ID 关联：
+当前通过 frame/pass/batch/submission/correlation ID 关联：
 
 - CPU update、graph compile、pass recording、submission 和 present；
 - worker 录制开始/结束与等待时间；
 - Direct/Compute/Copy GPU timestamp；
 - queue wait、signal、Framework 可见的 idle gap 与 fence completion；
-- descriptor/upload/readback 分配和 high-water mark。
+- descriptor allocation/binding；upload/readback high-water mark 尚未统一接入。
 
 如果多个 queue timestamp 没有校准到同一时钟，不能把它们伪装成全局 overlap 结论。需要完整跨 queue 时间线时，capture 应明确引导使用 PIX。
 
-## 交付阶段
+## 交付状态
 
-1. 实现 `Framework/Diagnostics` session、事件 schema、有界 ring buffer、JSONL/JSON/CSV sink 和 manifest。
-2. 接入 RenderGraph compiled schedule/submission snapshot，以及第一批 queue/resource invariant。
-3. 用具名 control、observation 和确定性 scenario 替换 Demo-specific automation plumbing。
-4. 增加可选 readback/image assertion、capture diff 和失败复现包。
-5. 正确性稳定后再增加后台写盘和保留策略。
+1. [x] `Framework/Diagnostics` session、typed event schema、有界缓冲、JSONL/JSON/CSV sink 和 manifest。
+2. [x] RenderGraph schedule/state/lifecycle、queue submission/fence 和 descriptor/resource telemetry。
+3. [x] 具名 control/observation、确定性 scenario、timeout、assertion 与失败自动 finalize。
+4. [x] `run`、`inspect`、`query`、`diff`、`reproduce`、`selftest` 命令行闭环。
+5. [ ] 通用 GPU readback/image assertion、DRED attachment、后台写盘、压缩与保留策略。
 
 关闭诊断时不得分配 GPU resource、插入 readback 或改变 pass topology。开启 capture 时必须限制内存，不得每条事件同步刷盘，并显式标记所有可能造成 GPU/CPU stall 的操作。

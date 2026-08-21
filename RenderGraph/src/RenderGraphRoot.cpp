@@ -1,5 +1,6 @@
 #include "RenderGraphRoot.h"
 
+#include <algorithm>
 #include <functional>
 //Modify Begin:2026-07-30 by Hui
 #include <utility>
@@ -9,8 +10,64 @@
 
 #include <DX12Library/Buffer.h>
 #include <DX12Library/CommandListInternalAccess.h>
+#include <DX12Library/DiagnosticTelemetry.h>
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Texture.h>
+
+//Modify Begin:2026-08-21 by Hui
+#include <string>
+
+namespace
+{
+    const char* GetDiagnosticQueueName(const RenderGraph::RenderPassQueue queue)
+    {
+        switch (queue)
+        {
+        case RenderGraph::RenderPassQueue::Direct: return "Direct";
+        case RenderGraph::RenderPassQueue::AsyncCompute: return "AsyncCompute";
+        case RenderGraph::RenderPassQueue::Copy: return "Copy";
+        default: return "Unknown";
+        }
+    }
+
+    std::string NarrowDiagnosticName(const std::wstring& value)
+    {
+        std::string result;
+        result.reserve(value.size());
+        for (const wchar_t character : value)
+        {
+            result.push_back(character >= 0 && character < 128 ? static_cast<char>(character) : '?');
+        }
+        return result;
+    }
+
+    uint64_t GetDiagnosticPassId(const RenderGraph::RenderPass& pass)
+    {
+        uint64_t hash = 14695981039346656037ull;
+        for (const wchar_t character : pass.GetPassName())
+        {
+            hash ^= static_cast<uint64_t>(character);
+            hash *= 1099511628211ull;
+        }
+        hash ^= static_cast<uint64_t>(pass.GetQueue());
+        return hash * 1099511628211ull;
+    }
+
+    uint64_t GetDiagnosticSnapshotItemId(
+        const uint64_t snapshotIndex,
+        const uint64_t itemIndex,
+        const uint64_t itemType)
+    {
+        uint64_t hash = 14695981039346656037ull;
+        hash ^= snapshotIndex;
+        hash *= 1099511628211ull;
+        hash ^= itemIndex;
+        hash *= 1099511628211ull;
+        hash ^= itemType;
+        return hash * 1099511628211ull;
+    }
+}
+//Modify End
 
 RenderGraph::RenderGraphRoot::RenderGraphRoot(
 //Modify Begin:2026-07-30 by Hui
@@ -146,6 +203,18 @@ void RenderGraph::RenderGraphRoot::Present(const std::shared_ptr<Window>& pWindo
 //Modify End
     pWindow->Present(*pTexture);
 }
+
+//Modify Begin:2026-08-21 by Hui
+void RenderGraph::RenderGraphRoot::SetDiagnosticTelemetrySink(DiagnosticTelemetrySink* sink) noexcept
+{
+    m_DiagnosticTelemetrySink = sink;
+    m_QueueScheduler.SetDiagnosticTelemetrySink(sink);
+    m_CommandExecutor->SetDiagnosticTelemetrySink(sink);
+    m_DirectCommandQueue->SetDiagnosticTelemetrySink(sink);
+    m_AsyncComputeCommandQueue->SetDiagnosticTelemetrySink(sink);
+    m_CopyCommandQueue->SetDiagnosticTelemetrySink(sink);
+}
+//Modify End
 
 //Modify Begin:2026-08-07 by Hui
 void RenderGraph::RenderGraphRoot::PresentWithOverlay(
@@ -382,6 +451,230 @@ void RenderGraph::RenderGraphRoot::MarkDirty()
     m_Dirty = true;
 }
 
+//Modify Begin:2026-08-21 by Hui
+void RenderGraph::RenderGraphRoot::EmitCompiledGraphSnapshot(const RenderMetadata& renderMetadata) noexcept
+{
+    if (m_DiagnosticTelemetrySink == nullptr || m_CompiledGraph == nullptr)
+    {
+        return;
+    }
+    try
+    {
+        const uint64_t snapshotIndex = ++m_DiagnosticSnapshotIndex;
+        const auto emit = [this](DiagnosticTelemetryEvent event)
+        {
+            m_DiagnosticTelemetrySink->RecordTelemetry(std::move(event));
+        };
+        emit({
+            .Category = "render_graph.compile",
+            .Name = "snapshot",
+            .FrameIndex = renderMetadata.m_FrameIndex,
+            .CorrelationId = snapshotIndex,
+            .Fields = {
+                { "snapshot_index", snapshotIndex },
+                { "pass_count", static_cast<uint64_t>(m_CompiledGraph->GetRenderPasses().size()) },
+                { "batch_count", static_cast<uint64_t>(m_CompiledGraph->GetRecordingBatches().size()) },
+                { "screen_width", static_cast<uint64_t>(renderMetadata.m_ScreenWidth) },
+                { "screen_height", static_cast<uint64_t>(renderMetadata.m_ScreenHeight) },
+                { "display_width", static_cast<uint64_t>(renderMetadata.m_DisplayWidth) },
+                { "display_height", static_cast<uint64_t>(renderMetadata.m_DisplayHeight) },
+            },
+        });
+
+        uint64_t passIndex = 0;
+        for (const RenderPass* pass : m_CompiledGraph->GetRenderPasses())
+        {
+            if (pass == nullptr)
+            {
+                continue;
+            }
+            std::vector<DiagnosticTelemetryField> fields = {
+                { "snapshot_index", snapshotIndex },
+                { "pass_index", passIndex++ },
+                { "queue", std::string(GetDiagnosticQueueName(pass->GetQueue())) },
+                { "input_count", static_cast<uint64_t>(pass->GetInputs().size()) },
+                { "output_count", static_cast<uint64_t>(pass->GetOutputs().size()) },
+                { "external_access_count", static_cast<uint64_t>(pass->GetExternalResourceAccesses().size()) },
+                { "external", pass->IsExternal() },
+                { "parallel_recording_eligible", pass->IsParallelRecordingEligible() },
+            };
+            const auto statePlan = m_CompiledGraph->GetResourceStatePlans().find(pass);
+            if (statePlan != m_CompiledGraph->GetResourceStatePlans().end())
+            {
+                const PassResourceStatePlan& plan = statePlan->second;
+                fields.push_back({ "state_plan.input_transition_count", static_cast<uint64_t>(plan.InputTransitions.size()) });
+                fields.push_back({ "state_plan.output_transition_count", static_cast<uint64_t>(plan.OutputTransitions.size()) });
+                fields.push_back({ "state_plan.external_transition_count", static_cast<uint64_t>(plan.ExternalResourceTransitions.size()) });
+                fields.push_back({ "state_plan.aliasing_output_count", static_cast<uint64_t>(plan.AliasingOutputs.size()) });
+                fields.push_back({ "state_plan.init_output_count", static_cast<uint64_t>(plan.InitOutputs.size()) });
+                fields.push_back({ "state_plan.has_direct_preamble", plan.DirectPreamble.has_value() });
+                for (size_t transitionIndex = 0; transitionIndex < plan.InputTransitions.size(); ++transitionIndex)
+                {
+                    const PassResourceTransition& transition = plan.InputTransitions[transitionIndex];
+                    const std::string prefix = "state_plan.input." + std::to_string(transitionIndex);
+                    fields.push_back({ prefix + ".resource_id", static_cast<uint64_t>(transition.Id) });
+                    fields.push_back({ prefix + ".state_after", static_cast<uint64_t>(transition.StateAfter) });
+                    fields.push_back({ prefix + ".uav_barrier", transition.InsertUavBarrier });
+                }
+                for (size_t transitionIndex = 0; transitionIndex < plan.OutputTransitions.size(); ++transitionIndex)
+                {
+                    const PassResourceTransition& transition = plan.OutputTransitions[transitionIndex];
+                    const std::string prefix = "state_plan.output." + std::to_string(transitionIndex);
+                    fields.push_back({ prefix + ".resource_id", static_cast<uint64_t>(transition.Id) });
+                    fields.push_back({ prefix + ".state_after", static_cast<uint64_t>(transition.StateAfter) });
+                    fields.push_back({ prefix + ".uav_barrier", transition.InsertUavBarrier });
+                }
+                if (plan.DirectPreamble.has_value())
+                {
+                    fields.push_back({
+                        "state_plan.direct_preamble.cross_queue_input_count",
+                        static_cast<uint64_t>(plan.DirectPreamble->CrossQueueInputTransitions.size()),
+                    });
+                    fields.push_back({
+                        "state_plan.direct_preamble.output_transition_count",
+                        static_cast<uint64_t>(plan.DirectPreamble->OutputTransitions.size()),
+                    });
+                    fields.push_back({
+                        "state_plan.direct_preamble.aliasing_output_count",
+                        static_cast<uint64_t>(plan.DirectPreamble->AliasingOutputs.size()),
+                    });
+                }
+            }
+            for (size_t inputIndex = 0; inputIndex < pass->GetInputs().size(); ++inputIndex)
+            {
+                const Input& input = pass->GetInputs()[inputIndex];
+                const std::string prefix = "input." + std::to_string(inputIndex);
+                fields.push_back({ prefix + ".id", static_cast<uint64_t>(input.m_Id) });
+                fields.push_back({ prefix + ".name", NarrowDiagnosticName(ResourceIds::GetResourceName(input.m_Id)) });
+                fields.push_back({ prefix + ".usage", static_cast<uint64_t>(input.m_Type) });
+            }
+            for (size_t outputIndex = 0; outputIndex < pass->GetOutputs().size(); ++outputIndex)
+            {
+                const Output& output = pass->GetOutputs()[outputIndex];
+                const std::string prefix = "output." + std::to_string(outputIndex);
+                fields.push_back({ prefix + ".id", static_cast<uint64_t>(output.m_Id) });
+                fields.push_back({ prefix + ".name", NarrowDiagnosticName(ResourceIds::GetResourceName(output.m_Id)) });
+                fields.push_back({ prefix + ".usage", static_cast<uint64_t>(output.m_Type) });
+            }
+            emit({
+                .Category = "render_graph.pass",
+                .Name = NarrowDiagnosticName(pass->GetPassName()),
+                .FrameIndex = renderMetadata.m_FrameIndex,
+                .CorrelationId = GetDiagnosticPassId(*pass),
+                .Fields = std::move(fields),
+            });
+        }
+
+        uint64_t batchIndex = 0;
+        for (const RenderGraphRecordingBatch& batch : m_CompiledGraph->GetRecordingBatches())
+        {
+            const uint64_t currentBatchIndex = batchIndex++;
+            const uint64_t correlationId = GetDiagnosticSnapshotItemId(snapshotIndex, currentBatchIndex, 1u);
+            const bool queueHomogeneous = std::ranges::all_of(batch.Passes, [&batch](const RenderPass* pass)
+            {
+                return pass != nullptr && pass->GetQueue() == batch.Queue;
+            });
+            std::vector<DiagnosticTelemetryField> fields = {
+                { "snapshot_index", snapshotIndex },
+                { "batch_index", currentBatchIndex },
+                { "queue", std::string(GetDiagnosticQueueName(batch.Queue)) },
+                { "parallel", batch.RecordInParallel },
+                { "pass_count", static_cast<uint64_t>(batch.Passes.size()) },
+            };
+            for (size_t index = 0; index < batch.Passes.size(); ++index)
+            {
+                if (batch.Passes[index] != nullptr)
+                {
+                    fields.push_back({
+                        "pass." + std::to_string(index),
+                        NarrowDiagnosticName(batch.Passes[index]->GetPassName()),
+                    });
+                }
+            }
+            emit({
+                .Category = "assertion",
+                .Name = "render_graph_batch_queue_homogeneous",
+                .Severity = queueHomogeneous
+                    ? DiagnosticTelemetrySeverity::Info
+                    : DiagnosticTelemetrySeverity::Error,
+                .FrameIndex = renderMetadata.m_FrameIndex,
+                .CorrelationId = correlationId,
+                .Fields = {
+                    { "result", std::string(queueHomogeneous ? "pass" : "fail") },
+                    { "message", std::string("Compiled recording batch contains exactly one queue type.") },
+                    { "snapshot_index", snapshotIndex },
+                    { "batch_index", currentBatchIndex },
+                    { "pass_count", static_cast<uint64_t>(batch.Passes.size()) },
+                },
+            });
+            emit({
+                .Category = "render_graph.compile.batch",
+                .Name = "batch",
+                .FrameIndex = renderMetadata.m_FrameIndex,
+                .CorrelationId = correlationId,
+                .Fields = std::move(fields),
+            });
+        }
+
+        m_ResourcePool->ForEachResource([&](const ResourceDescription& description)
+        {
+            const char* typeName = description.m_ResourceType == ResourceType::Texture
+                ? "Texture"
+                : description.m_ResourceType == ResourceType::Buffer ? "Buffer" : "Token";
+            std::vector<DiagnosticTelemetryField> fields = {
+                { "snapshot_index", snapshotIndex },
+                { "resource_id", static_cast<uint64_t>(description.m_Id) },
+                { "resource_name", NarrowDiagnosticName(ResourceIds::GetResourceName(description.m_Id)) },
+                { "type", std::string(typeName) },
+                { "total_size_bytes", description.m_TotalSize },
+                { "alignment", description.m_Alignment },
+                { "dedicated", description.m_DedicatedResource },
+            };
+            if (m_ResourcePool->HasResourceLifecycle(description.m_Id))
+            {
+                const auto& lifecycle = m_ResourcePool->GetResourceLifecycle(description.m_Id);
+                fields.push_back({ "lifecycle.begin_pass_index", static_cast<uint64_t>(lifecycle.m_BeginPassIndex) });
+                fields.push_back({ "lifecycle.end_pass_index", static_cast<uint64_t>(lifecycle.m_EndPassIndex) });
+                fields.push_back({ "lifecycle.queue_mask", static_cast<uint64_t>(lifecycle.m_QueueMask) });
+            }
+            if (description.m_ResourceType == ResourceType::Texture)
+            {
+                fields.push_back({ "width", description.m_DxDesc.Width });
+                fields.push_back({ "height", static_cast<uint64_t>(description.m_DxDesc.Height) });
+                fields.push_back({ "format", static_cast<uint64_t>(description.m_DxDesc.Format) });
+                fields.push_back({ "flags", static_cast<uint64_t>(description.m_DxDesc.Flags) });
+                fields.push_back({ "mip_levels", static_cast<uint64_t>(description.m_DxDesc.MipLevels) });
+            }
+            else if (description.m_ResourceType == ResourceType::Buffer)
+            {
+                fields.push_back({ "element_count", description.m_ElementsCount });
+                fields.push_back({ "stride", static_cast<uint64_t>(description.m_BufferDescription.m_Stride) });
+                fields.push_back({ "kind", static_cast<uint64_t>(description.m_BufferDescription.m_Kind) });
+                fields.push_back({ "usage", static_cast<uint64_t>(description.m_BufferDescription.m_Usage) });
+            }
+            emit({
+                .Category = "render_graph.resource",
+                .Name = NarrowDiagnosticName(ResourceIds::GetResourceName(description.m_Id)),
+                .FrameIndex = renderMetadata.m_FrameIndex,
+                .CorrelationId = description.m_Id,
+                .Fields = std::move(fields),
+            });
+            return true;
+        });
+    }
+    catch (const std::exception& exception)
+    {
+        m_DiagnosticTelemetrySink->RecordTelemetry({
+            .Category = "render_graph.compile",
+            .Name = "snapshot_failure",
+            .Severity = DiagnosticTelemetrySeverity::Error,
+            .FrameIndex = renderMetadata.m_FrameIndex,
+            .Fields = { { "message", std::string(exception.what()) } },
+        });
+    }
+}
+//Modify End
+
 void RenderGraph::RenderGraphRoot::RebuildIfNecessary(const RenderMetadata& renderMetadata)
 {
     CheckPotentiallyDirtyResources(renderMetadata);
@@ -396,6 +689,9 @@ void RenderGraph::RenderGraphRoot::RebuildIfNecessary(const RenderMetadata& rend
             m_ExternalOutputIds,
             renderMetadata,
             m_QueueScheduler.GetResourceRetirements()));
+//Modify Begin:2026-08-21 by Hui
+        EmitCompiledGraphSnapshot(renderMetadata);
+//Modify End
         m_Dirty = false;
     }
 }

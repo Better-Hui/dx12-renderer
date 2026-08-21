@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-21 by Hui
 
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 
@@ -23,9 +23,12 @@
 #include <Framework/Rendering/Texture/UnorderedAccessView.h>
 
 #include <cstring>
+#include <functional>
+#include <map>
 #include <mutex>
 #include <set>
 #include <unordered_set>
+#include <vector>
 
 namespace
 {
@@ -94,6 +97,125 @@ namespace
         }
     }
 
+    uint64_t HashDescriptorSet(const PipelineDescriptorSet& descriptorSet)
+    {
+        uint64_t hash = 14695981039346656037ull;
+        const auto combine = [&hash](const uint64_t value)
+        {
+            hash ^= value;
+            hash *= 1099511628211ull;
+        };
+        combine(descriptorSet.GetSetIndex());
+        for (const auto& [rootParameterIndex, boundResource] : descriptorSet.GetBoundResources())
+        {
+            combine(rootParameterIndex);
+            combine(boundResource.ConstantBufferData.size());
+            combine(reinterpret_cast<uintptr_t>(boundResource.UnorderedAccessViewResourceIdentity));
+            combine(reinterpret_cast<uintptr_t>(boundResource.AccelerationStructure));
+            for (const auto& shaderResource : boundResource.ShaderResources)
+            {
+                combine(shaderResource.has_value()
+                    ? reinterpret_cast<uintptr_t>(shaderResource->ResourceIdentity)
+                    : 0u);
+            }
+            if (const PipelineDescriptorTableAllocation* allocation =
+                descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
+            {
+                combine(allocation->GetRevision());
+            }
+        }
+        return hash;
+    }
+
+    bool ShouldEmitDescriptorSetTelemetry(
+        const PipelineBindPoint bindPoint,
+        const PipelineDescriptorSet& descriptorSet)
+    {
+        static std::mutex mutex;
+        static std::map<std::pair<uintptr_t, uint32_t>, uint64_t> revisions;
+        const uint64_t revision = HashDescriptorSet(descriptorSet);
+        std::lock_guard lock(mutex);
+        const auto key = std::pair(
+            reinterpret_cast<uintptr_t>(&descriptorSet),
+            static_cast<uint32_t>(bindPoint));
+        const auto existing = revisions.find(key);
+        if (existing != revisions.end() && existing->second == revision)
+        {
+            return false;
+        }
+        revisions.insert_or_assign(key, revision);
+        return true;
+    }
+
+    const char* GetBindPointName(const PipelineBindPoint bindPoint)
+    {
+        switch (bindPoint)
+        {
+        case PipelineBindPoint::Graphics: return "Graphics";
+        case PipelineBindPoint::Compute: return "Compute";
+        case PipelineBindPoint::RayTracing: return "RayTracing";
+        default: return "Unknown";
+        }
+    }
+
+    void EmitDescriptorSetTelemetry(
+        const PipelineBindPoint bindPoint,
+        const PipelineDescriptorSet& descriptorSet)
+    {
+        FrameworkDeviceContext& deviceContext = descriptorSet.GetLayout().GetDeviceContext();
+        if (!deviceContext.HasDiagnosticTelemetrySink() ||
+            !ShouldEmitDescriptorSetTelemetry(bindPoint, descriptorSet))
+        {
+            return;
+        }
+
+        std::vector<DiagnosticTelemetryField> fields = {
+            { "bind_point", std::string(GetBindPointName(bindPoint)) },
+            { "set_index", static_cast<uint64_t>(descriptorSet.GetSetIndex()) },
+            { "resource_descriptor_offset", static_cast<uint64_t>(descriptorSet.GetResourceDescriptorOffset()) },
+            { "sampler_descriptor_offset", static_cast<uint64_t>(descriptorSet.GetSamplerDescriptorOffset()) },
+            { "bound_root_parameter_count", static_cast<uint64_t>(descriptorSet.GetBoundResources().size()) },
+        };
+        size_t bindingIndex = 0;
+        for (const auto& [rootParameterIndex, boundResource] : descriptorSet.GetBoundResources())
+        {
+            const std::string prefix = "binding." + std::to_string(bindingIndex++);
+            fields.push_back({ prefix + ".root_parameter", static_cast<uint64_t>(rootParameterIndex) });
+            fields.push_back({ prefix + ".srv_count", static_cast<uint64_t>(boundResource.ShaderResources.size()) });
+            fields.push_back({ prefix + ".has_uav", boundResource.UnorderedAccessView.has_value() });
+            fields.push_back({ prefix + ".constant_buffer_bytes", static_cast<uint64_t>(boundResource.ConstantBufferData.size()) });
+            fields.push_back({ prefix + ".has_acceleration_structure", boundResource.AccelerationStructure != nullptr });
+            fields.push_back({
+                prefix + ".uav_resource_identity",
+                static_cast<uint64_t>(reinterpret_cast<uintptr_t>(boundResource.UnorderedAccessViewResourceIdentity)),
+            });
+            if (const PipelineDescriptorTableAllocation* allocation =
+                descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
+            {
+                fields.push_back({ prefix + ".table_heap_offset", static_cast<uint64_t>(allocation->HeapOffset) });
+                fields.push_back({ prefix + ".table_descriptor_count", static_cast<uint64_t>(allocation->GetNumHandles()) });
+                fields.push_back({ prefix + ".table_revision", allocation->GetRevision() });
+            }
+            for (size_t resourceIndex = 0; resourceIndex < boundResource.ShaderResources.size(); ++resourceIndex)
+            {
+                const auto& shaderResource = boundResource.ShaderResources[resourceIndex];
+                if (shaderResource.has_value())
+                {
+                    fields.push_back({
+                        prefix + ".srv." + std::to_string(resourceIndex) + ".resource_identity",
+                        static_cast<uint64_t>(reinterpret_cast<uintptr_t>(shaderResource->ResourceIdentity)),
+                    });
+                }
+            }
+        }
+        deviceContext.RecordDiagnosticTelemetry({
+            .Category = "descriptor.binding",
+            .Name = "set_descriptor_set",
+            .CorrelationId = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(&descriptorSet)),
+            .Fields = std::move(fields),
+        });
+    }
+
 }
 
 CommandContext::CommandContext(CommandList& commandList)
@@ -145,6 +267,7 @@ void CommandContext::SetDescriptorSet(
 
 void CommandContext::SetDescriptorSet(const PipelineBindPoint bindPoint, const PipelineDescriptorSet& descriptorSet) const
 {
+    EmitDescriptorSetTelemetry(bindPoint, descriptorSet);
     std::set<UINT> appliedRootParameters;
     for (const auto& [rootParameterIndex, boundResource] : descriptorSet.GetBoundResources())
     {

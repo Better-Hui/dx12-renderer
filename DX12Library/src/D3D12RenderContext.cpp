@@ -102,6 +102,26 @@ void D3D12RenderContext::SetFatalErrorHandler(CommandQueueFailureHandler handler
     m_CopyCommandQueue->SetFatalErrorHandler(std::move(handler));
 }
 
+void D3D12RenderContext::SetDiagnosticTelemetrySink(DiagnosticTelemetrySink* sink) const noexcept
+{
+    if (m_DeviceContext != nullptr)
+    {
+        m_DeviceContext->SetDiagnosticTelemetrySink(sink);
+    }
+    if (m_DirectCommandQueue != nullptr)
+    {
+        m_DirectCommandQueue->SetDiagnosticTelemetrySink(sink);
+    }
+    if (m_ComputeCommandQueue != nullptr)
+    {
+        m_ComputeCommandQueue->SetDiagnosticTelemetrySink(sink);
+    }
+    if (m_CopyCommandQueue != nullptr)
+    {
+        m_CopyCommandQueue->SetDiagnosticTelemetrySink(sink);
+    }
+}
+
 void D3D12RenderContext::CreateOwnedQueues()
 {
     m_DirectCommandQueue = std::make_shared<CommandQueue>(

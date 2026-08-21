@@ -7,10 +7,25 @@
 
 #include <DX12Library/CommandList.h>
 #include <DX12Library/CommandQueue.h>
+#include <DX12Library/DiagnosticTelemetry.h>
 #include <DX12Library/Helpers.h>
 
 namespace RenderGraph
 {
+    namespace
+    {
+        const char* GetQueueName(const RenderPassQueue queue)
+        {
+            switch (queue)
+            {
+            case RenderPassQueue::Direct: return "Direct";
+            case RenderPassQueue::AsyncCompute: return "AsyncCompute";
+            case RenderPassQueue::Copy: return "Copy";
+            default: return "Unknown";
+            }
+        }
+    }
+
     RenderGraphQueueScheduler::RenderGraphQueueScheduler(
         std::shared_ptr<CommandQueue> directCommandQueue,
         std::shared_ptr<CommandQueue> asyncComputeCommandQueue,
@@ -22,6 +37,19 @@ namespace RenderGraph
         Assert(m_DirectCommandQueue != nullptr, "Render graph requires a direct command queue.");
         Assert(m_AsyncComputeCommandQueue != nullptr, "Render graph requires an async compute command queue.");
         Assert(m_CopyCommandQueue != nullptr, "Render graph requires a copy command queue.");
+    }
+
+    void RenderGraphQueueScheduler::SetDiagnosticTelemetrySink(DiagnosticTelemetrySink* sink) noexcept
+    {
+        m_DiagnosticTelemetrySink = sink;
+    }
+
+    void RenderGraphQueueScheduler::EmitTelemetry(DiagnosticTelemetryEvent event) const noexcept
+    {
+        if (m_DiagnosticTelemetrySink != nullptr)
+        {
+            m_DiagnosticTelemetrySink->RecordTelemetry(std::move(event));
+        }
     }
 
     void RenderGraphQueueScheduler::BeginFrame()
@@ -54,6 +82,19 @@ namespace RenderGraph
 
         const uint64_t fenceValue = m_DirectCommandQueue->ExecuteCommandList(commandList);
         FinalizeDirectSubmission(fenceValue);
+        if (HasDiagnosticTelemetrySink())
+        {
+            EmitTelemetry({
+                .Category = "render_graph.queue.submission",
+                .Name = "submit",
+                .CorrelationId = MakeDiagnosticQueueFenceCorrelationId("Direct", fenceValue),
+                .Fields = {
+                    { "queue", std::string("Direct") },
+                    { "fence", fenceValue },
+                    { "command_list_count", uint64_t{ 1 } },
+                },
+            });
+        }
         commandList.reset();
         return fenceValue;
     }
@@ -68,6 +109,19 @@ namespace RenderGraph
 
         const uint64_t fenceValue = m_DirectCommandQueue->ExecuteCommandLists(commandLists);
         FinalizeDirectSubmission(fenceValue);
+        if (HasDiagnosticTelemetrySink())
+        {
+            EmitTelemetry({
+                .Category = "render_graph.queue.submission",
+                .Name = "submit",
+                .CorrelationId = MakeDiagnosticQueueFenceCorrelationId("Direct", fenceValue),
+                .Fields = {
+                    { "queue", std::string("Direct") },
+                    { "fence", fenceValue },
+                    { "command_list_count", static_cast<uint64_t>(commandLists.size()) },
+                },
+            });
+        }
         commandLists.clear();
         return fenceValue;
     }
@@ -99,6 +153,21 @@ namespace RenderGraph
             QueueFence(m_FrameSubmissionFences, queue),
             fenceValue);
         commandList.reset();
+
+        if (HasDiagnosticTelemetrySink())
+        {
+            EmitTelemetry({
+                .Category = "render_graph.queue.submission",
+                .Name = "submit",
+                .CorrelationId = MakeDiagnosticQueueFenceCorrelationId(GetQueueName(queue), fenceValue),
+                .Fields = {
+                    { "queue", std::string(GetQueueName(queue)) },
+                    { "fence", fenceValue },
+                    { "command_list_count", uint64_t{ 1 } },
+                    { "cpu_wait_for_completion", waitForCompletion },
+                },
+            });
+        }
 
         if (waitForCompletion)
         {
@@ -204,6 +273,19 @@ namespace RenderGraph
             if (fenceValue != 0)
             {
                 consumer.Wait(GetCommandQueue(producerQueue), fenceValue);
+                if (HasDiagnosticTelemetrySink())
+                {
+                    EmitTelemetry({
+                        .Category = "render_graph.queue.wait",
+                        .Name = "dependency",
+                        .CorrelationId = MakeDiagnosticQueueFenceCorrelationId(GetQueueName(producerQueue), fenceValue),
+                        .Fields = {
+                            { "consumer_queue", std::string(GetQueueName(waitingQueue)) },
+                            { "producer_queue", std::string(GetQueueName(producerQueue)) },
+                            { "producer_fence", fenceValue },
+                        },
+                    });
+                }
             }
         }
 
@@ -228,6 +310,19 @@ namespace RenderGraph
         if (fenceValue != 0)
         {
             GetCommandQueue(waitingQueue).Wait(*m_DirectCommandQueue, fenceValue);
+            if (HasDiagnosticTelemetrySink())
+            {
+                EmitTelemetry({
+                    .Category = "render_graph.queue.wait",
+                    .Name = "direct_preamble",
+                    .CorrelationId = MakeDiagnosticQueueFenceCorrelationId("Direct", fenceValue),
+                    .Fields = {
+                        { "consumer_queue", std::string(GetQueueName(waitingQueue)) },
+                        { "producer_queue", std::string("Direct") },
+                        { "producer_fence", fenceValue },
+                    },
+                });
+            }
         }
     }
 

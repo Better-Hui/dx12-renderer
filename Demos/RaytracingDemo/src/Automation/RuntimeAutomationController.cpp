@@ -1,9 +1,13 @@
-//Modify Begin:2026-08-11 by Hui
+//Modify Begin:2026-08-21 by Hui
 #include <Automation/RuntimeAutomationController.h>
+
+#include <Framework/Diagnostics/DiagnosticsSession.h>
 
 #include <algorithm>
 #include <cstdlib>
 #include <fstream>
+#include <limits>
+#include <map>
 #include <stdexcept>
 #include <utility>
 
@@ -35,15 +39,21 @@ namespace
     }
 }
 
-void DemoAutomation::RuntimeAutomationController::Initialize(const TestSuites& testSuites)
+void DemoAutomation::RuntimeAutomationController::Initialize(
+    const TestSuites& testSuites,
+    FrameworkDiagnostics::DiagnosticsSession* diagnostics,
+    const ActionHandler& actionHandler,
+    const CompletionHandler& completionHandler)
 {
-    m_Steps.clear();
+    if (m_Runner.IsRunning())
+    {
+        m_Runner.Cancel("Automation controller was reinitialized.");
+    }
+    m_Runner.ClearRegistry();
+    m_Diagnostics = diagnostics;
     m_LogPath.clear();
-    m_StepIndex = 0;
     m_StepIntervalSeconds = 1.0;
-    m_Enabled = false;
     m_QuitOnComplete = false;
-    m_Completed = false;
 
     const std::string mode = GetEnvironmentVariable("RAYTRACING_DEMO_AUTOTEST");
     if (mode.empty() || mode == "0" || mode == "off")
@@ -68,17 +78,19 @@ void DemoAutomation::RuntimeAutomationController::Initialize(const TestSuites& t
     const std::string quitOnComplete = GetEnvironmentVariable("RAYTRACING_DEMO_AUTOTEST_QUIT");
     m_QuitOnComplete = !quitOnComplete.empty() && quitOnComplete != "0";
 
+    std::vector<Step> steps;
+
     if (mode == "core")
     {
-        m_Steps = testSuites.Core;
+        steps = testSuites.Core;
     }
     else if (mode == "stress")
     {
-        m_Steps = testSuites.Stress;
+        steps = testSuites.Stress;
     }
     else if (mode == "matrix")
     {
-        m_Steps = testSuites.Matrix;
+        steps = testSuites.Matrix;
         if (stepMilliseconds.empty())
         {
             m_StepIntervalSeconds = 0.25;
@@ -87,27 +99,27 @@ void DemoAutomation::RuntimeAutomationController::Initialize(const TestSuites& t
         const size_t startCase = GetEnvironmentSize("RAYTRACING_DEMO_AUTOTEST_START_CASE");
         if (startCase > 0)
         {
-            const size_t firstStep = std::min(startCase - 1, m_Steps.size());
-            m_Steps.erase(m_Steps.begin(), m_Steps.begin() + static_cast<std::ptrdiff_t>(firstStep));
+            const size_t firstStep = std::min(startCase - 1, steps.size());
+            steps.erase(steps.begin(), steps.begin() + static_cast<std::ptrdiff_t>(firstStep));
         }
 
         const size_t maxCases = GetEnvironmentSize("RAYTRACING_DEMO_AUTOTEST_MAX_CASES");
-        if (maxCases > 0 && m_Steps.size() > maxCases)
+        if (maxCases > 0 && steps.size() > maxCases)
         {
-            m_Steps.resize(maxCases);
+            steps.resize(maxCases);
         }
     }
     else if (mode == "restirgi-profile")
     {
-        m_Steps = testSuites.ReSTIRGIProfile;
+        steps = testSuites.ReSTIRGIProfile;
     }
     else if (mode == "restirgi-variants")
     {
-        m_Steps = testSuites.ReSTIRGIVariants;
+        steps = testSuites.ReSTIRGIVariants;
     }
     else if (mode == "restirdi-variants")
     {
-        m_Steps = testSuites.ReSTIRDIVariants;
+        steps = testSuites.ReSTIRDIVariants;
         if (stepMilliseconds.empty())
         {
             m_StepIntervalSeconds = 0.5;
@@ -116,19 +128,19 @@ void DemoAutomation::RuntimeAutomationController::Initialize(const TestSuites& t
         const size_t startCase = GetEnvironmentSize("RAYTRACING_DEMO_AUTOTEST_START_CASE");
         if (startCase > 0)
         {
-            const size_t firstStep = std::min(startCase - 1, m_Steps.size());
-            m_Steps.erase(m_Steps.begin(), m_Steps.begin() + static_cast<std::ptrdiff_t>(firstStep));
+            const size_t firstStep = std::min(startCase - 1, steps.size());
+            steps.erase(steps.begin(), steps.begin() + static_cast<std::ptrdiff_t>(firstStep));
         }
 
         const size_t maxCases = GetEnvironmentSize("RAYTRACING_DEMO_AUTOTEST_MAX_CASES");
-        if (maxCases > 0 && m_Steps.size() > maxCases)
+        if (maxCases > 0 && steps.size() > maxCases)
         {
-            m_Steps.resize(maxCases);
+            steps.resize(maxCases);
         }
     }
     else if (mode == "visual")
     {
-        m_Steps = testSuites.Visual;
+        steps = testSuites.Visual;
     }
     else
     {
@@ -136,41 +148,97 @@ void DemoAutomation::RuntimeAutomationController::Initialize(const TestSuites& t
             "RAYTRACING_DEMO_AUTOTEST must be 'core', 'stress', 'matrix', 'restirgi-profile', 'restirgi-variants', 'restirdi-variants', or 'visual'.");
     }
 
-    m_Enabled = !m_Steps.empty();
-    m_LastStepTime = -m_StepIntervalSeconds;
     AppendLog("Mode=" + mode + ", step interval=" + std::to_string(m_StepIntervalSeconds) + " seconds.");
+
+    std::map<std::string, uint32_t, std::less<>> registeredActions;
+    for (const Step& step : steps)
+    {
+        if (step.Kind != FrameworkDiagnostics::AutomationStepKind::SetControl)
+        {
+            continue;
+        }
+        const auto [existing, inserted] = registeredActions.emplace(step.Control, step.Action);
+        if (!inserted && existing->second != step.Action)
+        {
+            throw std::logic_error("Automation control name maps to multiple actions: " + step.Control + ".");
+        }
+        if (!inserted)
+        {
+            continue;
+        }
+        m_Runner.RegisterControl(step.Control, [action = step.Action, actionHandler](
+            const DiagnosticTelemetryValue& value,
+            std::string& error)
+        {
+            const uint64_t* unsignedValue = std::get_if<uint64_t>(&value);
+            if (unsignedValue == nullptr || *unsignedValue > (std::numeric_limits<uint32_t>::max)())
+            {
+                error = "Demo automation controls require an unsigned 32-bit value.";
+                return false;
+            }
+            actionHandler(action, static_cast<uint32_t>(*unsignedValue));
+            return true;
+        });
+    }
+
+    FrameworkDiagnostics::AutomationScenario scenario;
+    scenario.Name = mode;
+    scenario.Steps.reserve(steps.size());
+    for (const Step& step : steps)
+    {
+        FrameworkDiagnostics::AutomationStep runnerStep;
+        runnerStep.Kind = step.Kind;
+        runnerStep.Name = step.Name;
+        runnerStep.Target = step.Control;
+        runnerStep.Value = static_cast<uint64_t>(step.Value);
+        runnerStep.FrameCount = 1;
+        runnerStep.MinimumSeconds = step.Kind == FrameworkDiagnostics::AutomationStepKind::WaitFrames
+            ? m_StepIntervalSeconds
+            : 0.0;
+        scenario.Steps.push_back(std::move(runnerStep));
+    }
+
+    FrameworkDiagnostics::AutomationRunnerOptions runnerOptions;
+    runnerOptions.DefaultSettleFrames = 1;
+    runnerOptions.DefaultSettleSeconds = m_StepIntervalSeconds;
+    runnerOptions.FinalizeDiagnosticsOnCompletion = true;
+    if (!m_Runner.Start(
+        std::move(scenario),
+        diagnostics,
+        runnerOptions,
+        [this, completionHandler](const int exitCode)
+        {
+            if (m_QuitOnComplete || exitCode != 0)
+            {
+                completionHandler(exitCode);
+            }
+        },
+        [this](const std::string_view message)
+        {
+            AppendLog(std::string(message));
+        }))
+    {
+        throw std::runtime_error("Failed to start Framework automation runner.");
+    }
 }
 
 void DemoAutomation::RuntimeAutomationController::Update(
-    const double totalTime,
-    const ActionHandler& actionHandler,
-    const CompletionHandler& completionHandler)
+    const uint64_t frameIndex,
+    const double totalTime)
 {
-    if (!m_Enabled || m_Completed || totalTime - m_LastStepTime < m_StepIntervalSeconds)
-    {
-        return;
-    }
-
-    if (m_StepIndex >= m_Steps.size())
-    {
-        m_Completed = true;
-        AppendLog("Runtime automation completed.");
-        if (m_QuitOnComplete)
-        {
-            completionHandler();
-        }
-        return;
-    }
-
-    const Step& step = m_Steps[m_StepIndex++];
-    AppendLog("Begin " + step.Name + ".");
-    actionHandler(step.Action, step.Value);
-    m_LastStepTime = totalTime;
-    AppendLog("Applied " + step.Name + ".");
+    m_Runner.Tick(frameIndex, totalTime);
 }
 
 void DemoAutomation::RuntimeAutomationController::AppendDiagnosticLog(const std::string& message) const
 {
+    if (m_Diagnostics != nullptr)
+    {
+        m_Diagnostics->Record(
+            "automation.diagnostic",
+            "message",
+            DiagnosticTelemetrySeverity::Info,
+            { { "message", message } });
+    }
     AppendLog(message);
 }
 

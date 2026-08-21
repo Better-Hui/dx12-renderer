@@ -1,8 +1,9 @@
-//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-08-21 by Hui
 #pragma once
 
 #include <DX12Library/DescriptorAllocation.h>
 #include <DX12Library/D3D12DeviceContext.h>
+#include <DX12Library/DiagnosticTelemetry.h>
 #include <Framework/Rendering/Upscaling/FrameFeaturesRuntime.h>
 
 #include <d3d12.h>
@@ -38,6 +39,14 @@ public:
         uint32_t descriptorCount = 1) const
     {
         return m_Desc.DeviceContext->AllocateDescriptors(type, descriptorCount);
+    }
+    [[nodiscard]] bool HasDiagnosticTelemetrySink() const noexcept
+    {
+        return m_Desc.DeviceContext->HasDiagnosticTelemetrySink();
+    }
+    void RecordDiagnosticTelemetry(DiagnosticTelemetryEvent event) const noexcept
+    {
+        m_Desc.DeviceContext->RecordDiagnosticTelemetry(std::move(event));
     }
     void Flush() const;
 

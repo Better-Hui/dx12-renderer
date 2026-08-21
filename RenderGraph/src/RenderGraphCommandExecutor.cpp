@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-08-21 by Hui
 #include "RenderGraphCommandExecutor.h"
 
 #include "RenderGraphProfiler.h"
@@ -9,17 +9,31 @@
 #include <DX12Library/CommandList.h>
 #include <DX12Library/CommandListInternalAccess.h>
 #include <DX12Library/CommandQueue.h>
+#include <DX12Library/DiagnosticTelemetry.h>
 #include <DX12Library/Helpers.h>
 #include <DX12Library/RenderTarget.h>
 #include <DX12Library/Resource.h>
 #include <DX12Library/Texture.h>
 
 #include <algorithm>
+#include <chrono>
 #include <exception>
 #include <future>
 #include <stdexcept>
 #include <string>
 #include <utility>
+
+namespace
+{
+    uint64_t MakeBatchCorrelationId(const uint64_t frameIndex, const uint64_t batchIndex) noexcept
+    {
+        uint64_t hash = 14695981039346656037ull;
+        hash ^= frameIndex;
+        hash *= 1099511628211ull;
+        hash ^= batchIndex;
+        return hash * 1099511628211ull;
+    }
+}
 
 RenderGraph::RenderGraphCommandExecutor::RenderGraphCommandExecutor(
     std::shared_ptr<CommandQueue> directCommandQueue,
@@ -41,6 +55,55 @@ RenderGraph::RenderGraphCommandExecutor::RenderGraphCommandExecutor(
     Assert(m_ResourcePool != nullptr, "Render graph executor requires a resource pool.");
 }
 
+void RenderGraph::RenderGraphCommandExecutor::SetDiagnosticTelemetrySink(DiagnosticTelemetrySink* sink) noexcept
+{
+    m_DiagnosticTelemetrySink = sink;
+}
+
+void RenderGraph::RenderGraphCommandExecutor::EmitTelemetry(DiagnosticTelemetryEvent event) const noexcept
+{
+    if (m_DiagnosticTelemetrySink != nullptr)
+    {
+        m_DiagnosticTelemetrySink->RecordTelemetry(std::move(event));
+    }
+}
+
+uint64_t RenderGraph::RenderGraphCommandExecutor::GetPassCorrelationId(const RenderPass& pass) noexcept
+{
+    uint64_t hash = 14695981039346656037ull;
+    for (const wchar_t character : pass.GetPassName())
+    {
+        hash ^= static_cast<uint64_t>(character);
+        hash *= 1099511628211ull;
+    }
+    hash ^= static_cast<uint64_t>(pass.GetQueue());
+    return hash * 1099511628211ull;
+}
+
+void RenderGraph::RenderGraphCommandExecutor::EmitCpuPassTiming(
+    const RenderPass& pass,
+    const double durationMilliseconds,
+    std::string recordingMode) const noexcept
+{
+    if (!HasDiagnosticTelemetrySink())
+    {
+        return;
+    }
+    const char* queueName = pass.GetQueue() == RenderPassQueue::Direct
+        ? "Direct"
+        : pass.GetQueue() == RenderPassQueue::AsyncCompute ? "AsyncCompute" : "Copy";
+    EmitTelemetry({
+        .Category = "profiler.cpu",
+        .Name = RenderGraphProfiler::NarrowPassName(pass.GetPassName()),
+        .CorrelationId = GetPassCorrelationId(pass),
+        .Fields = {
+            { "queue", std::string(queueName) },
+            { "recording_mode", std::move(recordingMode) },
+            { "cpu_duration_ms", durationMilliseconds },
+        },
+    });
+}
+
 void RenderGraph::RenderGraphCommandExecutor::Execute(
     const RenderMetadata& renderMetadata,
     const CompiledRenderGraph& compiledGraph,
@@ -52,6 +115,19 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
     const std::map<const RenderPass*, RenderTargetInfo>& renderTargets = compiledGraph.GetRenderTargets();
     const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans = compiledGraph.GetResourceStatePlans();
     m_QueueScheduler.BeginFrame();
+    if (HasDiagnosticTelemetrySink())
+    {
+        EmitTelemetry({
+            .Category = "render_graph.frame",
+            .Name = "begin",
+            .FrameIndex = renderMetadata.m_FrameIndex,
+            .Fields = {
+                { "pass_count", static_cast<uint64_t>(renderPasses.size()) },
+                { "batch_count", static_cast<uint64_t>(recordingBatches.size()) },
+                { "parallel_direct_recording", enableParallelDirectRecording },
+            },
+        });
+    }
 
     auto directCommandList = m_DirectCommandQueue->GetCommandList();
 
@@ -76,11 +152,55 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
 
     m_ResourcePool->BeginFrame(*directCommandList);
 
+    uint64_t batchIndex = 0;
     for (const RenderGraphRecordingBatch& recordingBatch : recordingBatches)
     {
+        const uint64_t currentBatchIndex = batchIndex++;
         Assert(!recordingBatch.Passes.empty(), "Render-graph recording batch cannot be empty.");
         Assert(recordingBatch.Passes.front()->GetQueue() == recordingBatch.Queue,
             "Render-graph recording batch queue does not match its passes.");
+        if (HasDiagnosticTelemetrySink())
+        {
+            const uint64_t batchCorrelationId = MakeBatchCorrelationId(
+                renderMetadata.m_FrameIndex,
+                currentBatchIndex);
+            const bool batchQueueValid = std::ranges::all_of(
+                recordingBatch.Passes,
+                [&recordingBatch](const RenderPass* pass)
+                {
+                    return pass != nullptr && pass->GetQueue() == recordingBatch.Queue;
+                });
+            if (!batchQueueValid)
+            {
+                EmitTelemetry({
+                    .Category = "assertion",
+                    .Name = "render_graph_batch_queue_homogeneous",
+                    .Severity = DiagnosticTelemetrySeverity::Error,
+                    .FrameIndex = renderMetadata.m_FrameIndex,
+                    .CorrelationId = batchCorrelationId,
+                    .Fields = {
+                        { "result", std::string("fail") },
+                        { "message", std::string("Recording batch contains exactly one queue type.") },
+                        { "batch_index", currentBatchIndex },
+                        { "pass_count", static_cast<uint64_t>(recordingBatch.Passes.size()) },
+                    },
+                });
+            }
+            EmitTelemetry({
+                .Category = "render_graph.batch",
+                .Name = "record",
+                .FrameIndex = renderMetadata.m_FrameIndex,
+                .CorrelationId = batchCorrelationId,
+                .Fields = {
+                    { "batch_index", currentBatchIndex },
+                    { "queue", std::string(recordingBatch.Queue == RenderPassQueue::Direct
+                        ? "Direct"
+                        : recordingBatch.Queue == RenderPassQueue::AsyncCompute ? "AsyncCompute" : "Copy") },
+                    { "pass_count", static_cast<uint64_t>(recordingBatch.Passes.size()) },
+                    { "parallel", recordingBatch.RecordInParallel },
+                },
+            });
+        }
 
         if (recordingBatch.Queue != RenderPassQueue::Direct)
         {
@@ -126,6 +246,9 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
 
             CommandList& commandList = *directCommandList;
             context.SetRenderTargetInfo({});
+            const auto passRecordStart = HasDiagnosticTelemetrySink()
+                ? std::chrono::steady_clock::now()
+                : std::chrono::steady_clock::time_point{};
             if (renderPass->IsExternal())
             {
                 {
@@ -179,6 +302,14 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
                 m_Profiler.WritePassTimestamp(RenderPassQueue::Direct, commandList, renderPass->GetPassName());
                 m_QueueScheduler.TrackPassResources(*renderPass, 0u);
             }
+            if (HasDiagnosticTelemetrySink())
+            {
+                EmitCpuPassTiming(
+                    *renderPass,
+                    std::chrono::duration<double, std::milli>(
+                        std::chrono::steady_clock::now() - passRecordStart).count(),
+                    renderPass->IsExternal() ? "external" : "sequential");
+            }
         }
     }
 
@@ -195,6 +326,14 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
     else if (directCommandList != nullptr)
     {
         m_QueueScheduler.SubmitDirect(directCommandList);
+    }
+    if (HasDiagnosticTelemetrySink())
+    {
+        EmitTelemetry({
+            .Category = "render_graph.frame",
+            .Name = "end",
+            .FrameIndex = renderMetadata.m_FrameIndex,
+        });
     }
 }
 
@@ -222,6 +361,9 @@ void RenderGraph::RenderGraphCommandExecutor::ExecuteParallelDirectBatch(
         recordingTasks.push_back(m_ParallelRecordingTaskScheduler.Enqueue(
             [this, renderPass, &renderMetadata, &renderTargets, &resourceStatePlans]()
             {
+                const auto passRecordStart = HasDiagnosticTelemetrySink()
+                    ? std::chrono::steady_clock::now()
+                    : std::chrono::steady_clock::time_point{};
                 auto commandList = m_DirectCommandQueue->GetCommandList();
                 FrameContext context(m_ResourcePool, renderMetadata);
                 const auto renderTargetIt = renderTargets.find(renderPass);
@@ -247,6 +389,14 @@ void RenderGraph::RenderGraphCommandExecutor::ExecuteParallelDirectBatch(
                         "RenderGraph parallel direct pass '" +
                         RenderGraphProfiler::NarrowPassName(renderPass->GetPassName()) +
                         "' execution failed: " + exception.what());
+                }
+                if (HasDiagnosticTelemetrySink())
+                {
+                    EmitCpuPassTiming(
+                        *renderPass,
+                        std::chrono::duration<double, std::milli>(
+                            std::chrono::steady_clock::now() - passRecordStart).count(),
+                        "parallel");
                 }
                 return commandList;
             }));
@@ -361,6 +511,9 @@ void RenderGraph::RenderGraphCommandExecutor::ExecuteNonDirectBatch(
     FrameContext context(m_ResourcePool, renderMetadata);
     for (RenderPass* pass : batch.Passes)
     {
+        const auto passRecordStart = HasDiagnosticTelemetrySink()
+            ? std::chrono::steady_clock::now()
+            : std::chrono::steady_clock::time_point{};
         context.SetRenderTargetInfo({});
         try
         {
@@ -384,6 +537,14 @@ void RenderGraph::RenderGraphCommandExecutor::ExecuteNonDirectBatch(
                 "' execution failed: " + exception.what());
         }
         m_Profiler.WritePassTimestamp(batch.Queue, *commandList, pass->GetPassName());
+        if (HasDiagnosticTelemetrySink())
+        {
+            EmitCpuPassTiming(
+                *pass,
+                std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now() - passRecordStart).count(),
+                "sequential");
+        }
     }
 
     const bool containsLastQueuePass = lastQueuePass != nullptr &&

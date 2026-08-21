@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-21 by Hui
 #include <Automation/RaytracingDemoAutomation.h>
 
 #include <utility>
@@ -56,6 +56,41 @@ namespace
         default:
             return "pbr";
         }
+    }
+}
+
+const char* RaytracingDemoAutomation::GetActionControlName(const Action action)
+{
+    switch (action)
+    {
+    case Action::SoftShadows: return "render.soft_shadows";
+    case Action::StressSpheres: return "scene.stress_spheres";
+    case Action::MeshletGBuffer: return "render.gbuffer.meshlet.enabled";
+    case Action::MeshletTaskShader: return "render.gbuffer.meshlet.task_shader";
+    case Action::PathTracingBackend: return "raytracing.backend";
+    case Action::DirectLighting: return "lighting.direct.technique";
+    case Action::IndirectLighting: return "lighting.indirect.technique";
+    case Action::AsyncCompute: return "render_graph.async_compute";
+    case Action::ParallelDirectCommandRecording: return "render_graph.parallel_direct_recording";
+    case Action::Skybox: return "render.skybox";
+    case Action::Accumulation: return "raytracing.accumulation";
+    case Action::GpuTiming: return "profiler.gpu_timing";
+    case Action::TimingCapture: return "profiler.capture";
+    case Action::ReSTIRGIStageTiming: return "profiler.restirgi_stages";
+    case Action::ReSTIRGITemporalResampling: return "restirgi.temporal_resampling";
+    case Action::ReSTIRGISpatialResampling: return "restirgi.spatial_resampling";
+    case Action::ReSTIRGITemporalJacobian: return "restirgi.temporal_jacobian";
+    case Action::ReSTIRGISpatialRayTracedBiasCorrection: return "restirgi.spatial_raytraced_bias";
+    case Action::DumpTiming: return "profiler.export";
+    case Action::DLSS: return "upscaling.dlss_mode";
+    case Action::MaterialShading: return "material.shading_model";
+    case Action::ReSTIRDIConfig: return "restirdi.variant_bits";
+    case Action::MaxBounces: return "raytracing.max_bounces";
+    case Action::Wait: return "automation.wait";
+    case Action::VerifyActiveRayTracedPixelCount: return "assert.active_pixel_dispatch";
+    case Action::CaptureScreenshot: return "capture.screenshot";
+    case Action::MatrixCase: return "scenario.matrix_case";
+    default: return "unknown";
     }
 }
 
@@ -194,15 +229,21 @@ DemoAutomation::TestSuites RaytracingDemoAutomation::CreateTestSuites()
 {
     const auto makeStep = [](const Action action, const uint32_t value, std::string name)
     {
-        return DemoAutomation::Step{ static_cast<uint32_t>(action), value, std::move(name) };
+        DemoAutomation::Step step;
+        step.Action = static_cast<uint32_t>(action);
+        step.Value = value;
+        step.Control = GetActionControlName(action);
+        step.Name = std::move(name);
+        step.Kind = action == Action::Wait
+            ? FrameworkDiagnostics::AutomationStepKind::WaitFrames
+            : FrameworkDiagnostics::AutomationStepKind::SetControl;
+        return step;
     };
 
     DemoAutomation::TestSuites testSuites;
     testSuites.Core = {
         makeStep(Action::GpuTiming, 1u, "timing=1"),
         makeStep(Action::TimingCapture, 1u, "timingcapture=1"),
-        makeStep(Action::Wait, 0u, "active-ray-traced-pixels-warmup"),
-        makeStep(Action::VerifyActiveRayTracedPixelCount, 0u, "active-ray-traced-pixels"),
         makeStep(Action::SoftShadows, 0u, "soft=0"),
         makeStep(Action::SoftShadows, 1u, "soft=1"),
         makeStep(Action::StressSpheres, 1u, "stress=1"),

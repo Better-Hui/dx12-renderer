@@ -1,6 +1,8 @@
 #pragma once
 
-//Modify Begin:2026-08-11 by Hui
+//Modify Begin:2026-08-21 by Hui
+#include <Framework/Diagnostics/AutomationRunner.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -14,7 +16,9 @@ namespace DemoAutomation
     {
         uint32_t Action = 0;
         uint32_t Value = 0;
+        std::string Control;
         std::string Name;
+        FrameworkDiagnostics::AutomationStepKind Kind = FrameworkDiagnostics::AutomationStepKind::SetControl;
     };
 
     struct TestSuites
@@ -32,23 +36,24 @@ namespace DemoAutomation
     {
     public:
         using ActionHandler = std::function<void(uint32_t action, uint32_t value)>;
-        using CompletionHandler = std::function<void()>;
+        using CompletionHandler = std::function<void(int exitCode)>;
 
-        void Initialize(const TestSuites& testSuites);
-        void Update(double totalTime, const ActionHandler& actionHandler, const CompletionHandler& completionHandler);
+        void Initialize(
+            const TestSuites& testSuites,
+            FrameworkDiagnostics::DiagnosticsSession* diagnostics,
+            const ActionHandler& actionHandler,
+            const CompletionHandler& completionHandler);
+        void Update(uint64_t frameIndex, double totalTime);
         void AppendDiagnosticLog(const std::string& message) const;
 
     private:
         void AppendLog(const std::string& message) const;
 
-        std::vector<Step> m_Steps;
+        FrameworkDiagnostics::AutomationRunner m_Runner;
+        FrameworkDiagnostics::DiagnosticsSession* m_Diagnostics = nullptr;
         std::filesystem::path m_LogPath;
-        size_t m_StepIndex = 0;
-        double m_LastStepTime = 0.0;
         double m_StepIntervalSeconds = 1.0;
-        bool m_Enabled = false;
         bool m_QuitOnComplete = false;
-        bool m_Completed = false;
     };
 }
 //Modify End

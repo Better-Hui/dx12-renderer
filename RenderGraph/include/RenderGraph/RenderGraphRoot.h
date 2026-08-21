@@ -27,6 +27,9 @@
 
 class Texture;
 class D3D12DeviceContext;
+//Modify Begin:2026-08-21 by Hui
+class DiagnosticTelemetrySink;
+//Modify End
 //Modify Begin:2026-07-29 by Hui
 //Modify End
 
@@ -67,6 +70,7 @@ namespace RenderGraph
 //Modify Begin:2026-08-03 by Hui
         void SetAsyncComputeGpuTimestampProfiler(GpuTimestampProfiler* profiler) { m_Profiler.SetQueueProfiler(RenderPassQueue::AsyncCompute, profiler); }
         void SetCopyGpuTimestampProfiler(GpuTimestampProfiler* profiler) { m_Profiler.SetQueueProfiler(RenderPassQueue::Copy, profiler); }
+        void SetDiagnosticTelemetrySink(DiagnosticTelemetrySink* sink) noexcept;
 //Modify End
 //Modify Begin:2026-07-30 by Hui
         void SetDebugSerializeAsyncCompute(bool enabled) { m_DebugSerializeAsyncCompute = enabled; }
@@ -106,6 +110,7 @@ namespace RenderGraph
     private:
         void RebuildIfNecessary(const RenderMetadata& renderMetadata);
         void CheckPotentiallyDirtyResources(const RenderMetadata& renderMetadata);
+        void EmitCompiledGraphSnapshot(const RenderMetadata& renderMetadata) noexcept;
 //Modify Begin:2026-08-03 by Hui
         Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;
         std::shared_ptr<D3D12DeviceContext> m_DeviceContext;
@@ -139,6 +144,8 @@ namespace RenderGraph
         std::unique_ptr<CompiledRenderGraph> m_CompiledGraph;
         RenderGraphProfiler m_Profiler;
         std::unique_ptr<RenderGraphCommandExecutor> m_CommandExecutor;
+        DiagnosticTelemetrySink* m_DiagnosticTelemetrySink = nullptr;
+        uint64_t m_DiagnosticSnapshotIndex = 0;
 //Modify End
 
         bool m_Dirty = true;

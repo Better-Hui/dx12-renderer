@@ -26,6 +26,8 @@ DX12Library
 
 `CMakeIncludes/ProjectBase.cmake` 使用 `source_group(TREE ...)` 为 Visual Studio 生成 filter，但不会给项目自身源码添加虚拟 MSBuild `Link` 路径。这样 Visual Studio 与 Rider 都以同一份真实目录为准，CMake 自动加入的 target-local `CMakeLists.txt` regeneration 条目也能停留在项目根节点。外部实现文件可以从 target 视图隐藏，但不能复制到 `build/`，也不能伪装成该 target 自己的 `include`、`src` 或 `shaders`。构建目录随时可以重新生成，不拥有任何需要编辑的源码。
 
+`Framework/tools/` 始终作为 `Framework` 工程的真实物理目录显示，工具源码不会通过 MSBuild `Link` 映射到虚拟路径。`Framework/tools/CMakeLists.txt` 只负责在 `DX12_RENDERER_BUILD_DEVELOPER_TOOLS=ON` 时生成 `RendererDiagnostics` 和 `UnitySceneDump`；该开关控制是否构建工具 target，不控制 `Framework` 工程树是否显示 `tools/`。因此工具关闭时仍能在解决方案中看到磁盘上的完整目录，默认 solution 则不增加工具工程。
+
 ## DX12Library：D3D12 边界
 
 `DX12Library/` 保留 D3D12 的原生概念，主要包含：
@@ -67,6 +69,7 @@ DX12Library
 - `Taa`、`NRD`、`SVGF` 是抗锯齿和降噪模块；NRD 会通过 `RenderContext` 把 native 状态变化回报给 RenderGraph。
 - `DLSS` 管理 Native NGX DLSS SR/DLAA 评估与实验性 Streamline RR/FG frame-feature 路径。`RaytracingDemo` 将 `DLSS.cpp` 与 `StreamlineRuntime.cpp` 作为隐藏的外部源直接编译，因此普通 `Framework` 使用者不会继承厂商 SDK include 路径，也不会链接 `sl.interposer.lib`，同时 CMake 不会生成额外的 `FrameworkNvidiaFeatures` 工程。Framework 的 `StreamlineRuntime` 在创建 D3D12 设备前执行 `slInit`，设备创建后执行 `slSetD3DDevice`，并负责 capability query 与 Frame Generation 所需的通用 presentation 重建请求；queue/swap-chain 拦截完全交给自动 interposer。DX12Library 不再引用 Streamline，也不再定义 Frame Generation/Ray Reconstruction 能力接口。RR/FG 尚未完成支持硬件上的完整验证。
 - CUDA interop 封装 shared D3D12 resource 与 external fence/semaphore 同步；当前 CUDA Bloom 使用此路径。
+- `Framework/Diagnostics` 拥有机器可读 capture session、typed event schema、有界缓冲、确定性 automation runner 和产物导出。`DX12Library`/`RenderGraph` 只接收可选的 non-owning telemetry sink，不反向依赖 Framework；Demo 只注册自己的 control、observation 与 scenario。
 
 Framework 模块以复用为目标，但接口仍在演进，不能把它们理解为成熟公共渲染 SDK 的兼容层。
 
@@ -90,6 +93,7 @@ RenderPass 声明
 - `RenderGraphQueueScheduler` 保存每个逻辑 resource 的 last producer queue 与 submitted fence value；有依赖的 consumer 提交前会收到 GPU-side wait。
 - `PassResourceStatePlan` 保存不可变的 per-pass transition、UAV、aliasing、初始化和 async handoff 工作。Executor 将该计划录入拥有该 pass 的 command list；各 list 在最终提交顺序中关闭时，`CommandList` 通过共享 `ResourceStateRegistry` 解析 transition 的初始状态。
 - copy-compatible pass 可通过 `RenderGraphPassBuilder::UseCopyQueue()` 进入编译计划、Executor、QueueScheduler、Profiler 和 transient retirement 路径；当前主 sample 尚未声明 Copy-queue pass。
+- Compiler 会把 queue 相同且 direct preamble/aliasing 关系兼容的连续 Async Compute/Copy pass 合并为 non-direct batch；不兼容的资源交接会形成新的 batch。
 - transient resource 按本帧实际的 Direct/Compute/Copy fence 延迟退休。aliasing 目前是保守的：仅复用可证明在同一 queue 上的 lifetime，跨 queue aliasing 仍禁用。
 
 ### Active Pixel Compaction
@@ -151,9 +155,10 @@ shader-table DXR 与 Inline 共用 scene/resource model，但当前 ReSTIR DI/GI
 ### 调试和自动化
 
 - 运行时 UI 按技术选择、场景/光源、降噪、upscaling、压力内容与调试控制分类。
-- `RAYTRACING_DEMO_AUTOTEST=core`、`stress`、`matrix` 可以进行非交互启动与功能组合 smoke test。它用于发现崩溃/回归，不能替代画面验收。
-- RenderGraph timestamp CSV 用于可重复的 pass timing；完整 queue 时间线应看 PIX。
-- 当前路径仍是 Demo-specific，尚不能用一个机器可读 capture 同时解释 graph schedule、queue submission、resource/descriptor state、约束、readback 和复现元数据。下一工具优先级是 [Framework 诊断、自动化与 Profiler 规划](FrameworkDiagnosticsPlan.zh-CN.md) 中定义的 Framework-owned 契约。
+- `RAYTRACING_DEMO_AUTOTEST=core`、`stress`、`matrix` 由 Demo 注册为具名 Framework automation scenario；它们通过 control/observation 切换状态，不注入桌面输入。smoke test 用于发现崩溃/回归，不能替代画面验收。
+- 可选的 `RendererDiagnostics` developer tool 提供 `run`、`inspect`、`query`、`diff`、`reproduce`、`selftest`。单个 capture 同时关联 RenderGraph schedule/state/lifecycle、queue submission/fence、resource/descriptor identity、assertion、CPU/GPU timing 和复现元数据。
+- `inspect` 输出面向 AI 的 JSON verdict、capture 完整性、疑似问题域、假设、相关证据和下一条建议；丢事件或非终态 capture 是 `incomplete`，不会被当作 clean pass。
+- RenderGraph timestamp CSV 用于可重复的 pass timing；不同 queue 的 timestamp 不是校准后的全局 overlap 时间线，完整 queue 时间线和驱动行为仍应看 PIX/RenderDoc。
 
 ## 当前边界
 
@@ -161,6 +166,7 @@ shader-table DXR 与 Inline 共用 scene/resource model，但当前 ReSTIR DI/GI
 - Async Compute 只有依赖和硬件允许 overlap 时才可能降低 GPU wall time；额外 fence、cache 与带宽竞争也可能令它变慢。
 - Meshlet 是实验性的 GBuffer backend，不是完整的 visibility、streaming、residency 或 LOD 系统。
 - FBX 场景导入已经进入 Framework `SceneImporter` 契约，但当前只选择一个活动相机并支持实用的 PBR 子集。Spot Light 会保留在 `Scene` 中，而 sample 当前 GPU 光照路径通过点光 fallback 显示；透明、clearcoat、transmission、动画播放和动态蒙皮场景更新仍需要单独契约。
+- Diagnostics 当前尚未通用化 GPU texture/buffer readback、图像 assertion、DRED attachment、后台写盘、压缩和 retention policy；高事件量 capture 可能很大，应使用 `--max-events` 和 `dropped_event_count` 判断证据完整性。
 - ReSTIR DI/GI、CUDA Bloom、DLSS SR/DLAA、Streamline RR/FG、Unity interop 都是工程实验；用于交付前必须逐硬件完成正确性、画质、稳定性、显存和性能验证。
 
 使用示例和更细的功能边界见 [RaytracingDemo API Guide](RaytracingSampleApi.md)。

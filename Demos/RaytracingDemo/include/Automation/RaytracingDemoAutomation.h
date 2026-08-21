@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-21 by Hui
 #include <Automation/RuntimeAutomationController.h>
 #include <Passes/RaytracingDemoPassResources.h>
 #include <PathTracing/PathTracingPipelineController.h>
@@ -73,6 +73,7 @@ namespace RaytracingDemoAutomation
     };
 
     const std::vector<MatrixCase>& GetMatrixCases();
+    const char* GetActionControlName(Action action);
     DemoAutomation::TestSuites CreateTestSuites();
 }
 //Modify End

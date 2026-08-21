@@ -5,12 +5,19 @@ project("Framework")
 # Framework C++ files are collected recursively so the source tree can stay organized by module.
 
 option(DX12_RENDERER_BUILD_DEVELOPER_TOOLS "Build developer-only command-line tools." OFF)
-if (NOT DX12_RENDERER_BUILD_DEVELOPER_TOOLS)
-        set(DX12_RENDERER_IDE_ONLY_FILES
-                "tools/UnitySceneDump.cpp"
-                )
-        set_source_files_properties(${DX12_RENDERER_IDE_ONLY_FILES} PROPERTIES HEADER_FILE_ONLY TRUE)
-endif ()
+set(DX12_RENDERER_IDE_ONLY_FILES
+        "tools/CMakeLists.txt"
+        "tools/RendererDiagnostics.cpp"
+        "tools/RendererDiagnosticsAnalyze.cpp"
+        "tools/RendererDiagnosticsCapture.cpp"
+        "tools/RendererDiagnosticsCapture.h"
+        "tools/RendererDiagnosticsCommands.h"
+        "tools/RendererDiagnosticsJson.h"
+        "tools/RendererDiagnosticsRun.cpp"
+        "tools/RendererDiagnosticsSelfTest.cpp"
+        "tools/UnitySceneDump.cpp"
+        )
+set_source_files_properties(${DX12_RENDERER_IDE_ONLY_FILES} PROPERTIES HEADER_FILE_ONLY TRUE)
 
 set(SHADER_FILES_VERTEX
         "shaders/Blit_VS.hlsl"
@@ -171,10 +178,5 @@ target_link_libraries(${TARGET_NAME}
         )
 
 if (DX12_RENDERER_BUILD_DEVELOPER_TOOLS)
-        add_executable(UnitySceneDump "tools/UnitySceneDump.cpp")
-        source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES "tools/UnitySceneDump.cpp")
-        target_compile_options(UnitySceneDump PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
-        target_compile_features(UnitySceneDump PRIVATE cxx_std_20)
-        target_link_libraries(UnitySceneDump PRIVATE Framework)
-        set_target_properties(UnitySceneDump PROPERTIES FOLDER "Tools")
+        add_subdirectory(tools)
 endif()

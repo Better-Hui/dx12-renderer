@@ -2,7 +2,7 @@
 
 > An experimental DirectX 12 renderer and Windows sample collection for exploring renderer architecture, RenderGraph execution, ray tracing, meshlets, and CUDA/D3D12 interop.
 
-[中文文档](README.zh-CN.md) · [Architecture Overview](Docs/ArchitectureOverview.md) · [RaytracingDemo API Guide](Docs/RaytracingSampleApi.md) · [Framework Diagnostics Plan](Docs/FrameworkDiagnosticsPlan.md)
+[中文文档](README.zh-CN.md) · [Architecture Overview](Docs/ArchitectureOverview.md) · [RaytracingDemo API Guide](Docs/RaytracingSampleApi.md) · [Framework Diagnostics](Docs/FrameworkDiagnosticsPlan.md)
 
 ## Fork and attribution
 
@@ -26,7 +26,7 @@ The upstream renderer remains the foundation. This fork adds framework and sampl
 | Meshlets | Meshlet generation/GPU resources, task-shader and compute-indirect GBuffer backends, and incremental instance-buffer updates. |
 | Denoising and interop | NRD/SVGF sample paths, RenderGraph-aware NRD resource-state handoff, and CUDA Bloom using D3D12 shared resources with external fence/semaphore synchronization. |
 | Experimental frame features | Native NGX DLSS SR/DLAA plus Framework-owned Streamline Ray Reconstruction and Frame Generation integration. DX12Library exposes only a generic pre-device/post-device runtime lifecycle; queue and swap-chain creation remain ordinary D3D12/DXGI code while the linked Streamline interposer performs interception. These paths are experimental and not validated for delivery. |
-| Investigation | PIX scopes, RenderGraph timing history/CSV export, and runtime UI controls. |
+| Diagnostics | PIX scopes, RenderGraph timing history/CSV, runtime UI controls, and an optional Framework-owned machine-readable capture/automation/query/diff/reproduction loop for developers and coding agents. |
 
 ## Repository layout
 
@@ -175,6 +175,33 @@ cmake --build ..\build --config Release --target RaytracingDemo
 & ..\build\bin\Release\RaytracingDemo.exe
 ```
 
+### AI and automation diagnostics
+
+`RendererDiagnostics` is a developer-only target and is disabled by default, so it does not change the normal solution project set. Opt in and build it explicitly:
+
+```powershell
+cmake -S . -B ..\build -DDX12_RENDERER_BUILD_DEVELOPER_TOOLS=ON
+cmake --build ..\build --config Release --target RendererDiagnostics RaytracingDemo
+```
+
+The tool sources physically live under `Framework/tools/` and are always shown under that directory in the `Framework` project. `DX12_RENDERER_BUILD_DEVELOPER_TOOLS` controls whether the tool targets are generated and built; it does not move or hide the real source tree behind virtual folders.
+
+The tool launches registered Demo scenarios without mouse or keyboard injection. JSON/JSONL output and stable exit codes support an agent loop of run, inspect, focused query, baseline diff, and reproduction:
+
+```powershell
+$tool = '..\build\bin\Release\RendererDiagnostics.exe'
+$demo = '..\build\bin\Release\RaytracingDemo.exe'
+$capture = '..\build\bin\Release\Saved\Diagnostics\stress-001'
+
+& $tool run --exe $demo --scenario stress --output $capture
+& $tool inspect $capture
+& $tool query $capture --category command_queue --limit 100
+& $tool diff <baseline-capture> $capture
+& $tool reproduce $capture --execute
+```
+
+`inspect` distinguishes `passed`, `failed`, and `incomplete`. The event buffer is bounded; dropped events, a non-terminal manifest, or unknown assertions produce exit code `12` and partial confidence instead of treating missing evidence or unresolved invariants as a clean result. See [Framework Diagnostics](Docs/FrameworkDiagnosticsPlan.md).
+
 ### Generated Visual Studio and Rider layout
 
 The generated projects intentionally mirror each target's physical source tree. `DX12Library`, `Framework`, `RenderGraph`, and `RaytracingDemo` show their target-local `CMakeLists.txt` at the project root, followed by the real `include/`, `shaders/`, `src/`, and optional `tools/` directories. CMake's `source_group(TREE ...)` supplies Visual Studio filters, while Rider reads the same unmodified physical source paths.
@@ -201,7 +228,7 @@ The startup compiler currently covers the shaders directly owned by `RaytracingD
 - `RaytracingDemo` is a maintained integration sample, not a production renderer or public API compatibility promise.
 - CUDA 12.8 is required at configure time even when CUDA Bloom is disabled at runtime; fully optional CUDA remains build-system work.
 - Direct, Async Compute, and Copy queue placement is **explicitly assigned per pass**. The graph does not automatically choose queues, split passes, or optimize overlap; Copy queue support currently has infrastructure coverage but no maintained sample pass.
-- Consecutive async passes are currently submitted per pass rather than batch-scheduled as a larger compute segment.
+- The compiler merges consecutive same-queue Async Compute/Copy passes into a non-direct recording/submission batch when their resource handoffs are compatible. Aliasing or a required intermediate Direct preamble still splits the batch.
 - `RenderGraphRoot::Execute` is now a thin graph entry point; `RenderGraphCommandExecutor` owns pass recording/submission and `RenderGraphProfiler` owns optional Direct/Async Compute/Copy timestamp lifetimes. Graph build/topology orchestration remains in `RenderGraphRoot`.
 - Transient resources are retired using the actual Direct/Async Compute/Copy fence values recorded for the frame. Aliasing is deliberately conservative: resources used by different queues are not aliased until a more general multi-queue allocator is designed.
 - Device and queue state is injected through the application composition root for the current Framework and RenderGraph execution paths. Standalone application/window lifecycle code and a small set of legacy resource-wrapper compatibility paths still retain `Application` dependencies.
@@ -222,7 +249,7 @@ The startup compiler currently covers the shaders directly owned by `RaytracingD
 
 - [Architecture Overview](Docs/ArchitectureOverview.md) maps the DX12Library, Framework, RenderGraph, and RaytracingDemo responsibilities and data flow.
 - [RaytracingDemo API Guide](Docs/RaytracingSampleApi.md) explains sample APIs, RenderGraph behavior, profiling, and boundaries.
-- [Framework Diagnostics Plan](Docs/FrameworkDiagnosticsPlan.md) defines the planned machine-readable diagnostics, deterministic automation, invariant, artifact, and profiling contract. It is a roadmap, not a completed feature.
+- [Framework Diagnostics](Docs/FrameworkDiagnosticsPlan.md) documents the implemented machine-readable capture, deterministic automation, agent-oriented evidence queries, invariants, reproduction, and profiling contract, plus the remaining DRED/readback/retention work.
 - Keep maintained sample passes framework-facing; avoid raw D3D12 calls where an existing API covers the operation.
 - This fork preserves upstream and third-party notices. Review the upstream project and vendored license files before use or redistribution; this README introduces no replacement repository-wide license.
 - `External/DLSS/`, `External/NRI/`, `External/NRD/`, and the NVIDIA components used by `External/Streamline/` retain their upstream terms. A Git submodule link does not transfer or replace those terms. Keeping an SDK under `External/` does not make it open source and does not grant a sublicense. Preserve all notices and licenses, do not treat this repository as a standalone SDK mirror, and obtain a legal/license review before publishing source, redistributing binaries, or making a commercial release that includes these components.

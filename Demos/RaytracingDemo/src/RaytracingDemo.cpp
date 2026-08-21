@@ -86,6 +86,28 @@ namespace
         desc.FrameGeneration = std::move(frameFeatureServices.FrameGeneration);
         return FrameworkDeviceContext(std::move(desc));
     }
+
+    std::string GetEnvironmentValue(const char* variableName)
+    {
+        char* value = nullptr;
+        size_t valueLength = 0;
+        _dupenv_s(&value, &valueLength, variableName);
+        const std::string result = value != nullptr ? value : "";
+        std::free(value);
+        return result;
+    }
+
+    std::string GetExecutablePath()
+    {
+        std::vector<wchar_t> buffer(32768u, L'\0');
+        const DWORD length = GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+        if (length == 0u || length >= buffer.size())
+        {
+            return {};
+        }
+        return std::filesystem::path(std::wstring(buffer.data(), length)).string();
+    }
+
     uint32_t ComputeDescriptorArrayCapacity(const size_t resourceCount, const size_t resourceCapacity)
     {
         return static_cast<uint32_t>(std::max<size_t>(
@@ -1127,23 +1149,96 @@ void RaytracingDemo::LoadStartupConfiguration()
     }
 }
 
-void RaytracingDemo::InitializeRuntimeAutomation()
+void RaytracingDemo::InitializeDiagnostics()
 {
-    m_RuntimeAutomation.Initialize(RaytracingDemoAutomation::CreateTestSuites());
+    const std::string automationModeValue = GetEnvironmentValue("RAYTRACING_DEMO_AUTOTEST");
+    const bool automationEnabled = !automationModeValue.empty() &&
+        automationModeValue != "0" && automationModeValue != "off";
+
+    if (!m_Diagnostics.BeginFromEnvironment("RaytracingDemo", automationEnabled))
+    {
+        if (automationEnabled)
+        {
+            throw std::runtime_error(
+                "Runtime automation requires Diagnostics: " + m_Diagnostics.GetLastError());
+        }
+        return;
+    }
+    m_Diagnostics.AddMetadata("diagnostics_schema", "1");
+    m_Diagnostics.AddMetadata("automation_mode", automationEnabled ? automationModeValue : "off");
+    m_Diagnostics.AddMetadata("scene_path", GetScenePath().string());
+    m_Diagnostics.AddMetadata("initial_width", std::to_string(m_Width));
+    m_Diagnostics.AddMetadata("initial_height", std::to_string(m_Height));
+    m_Diagnostics.AddMetadata("executable_path", GetExecutablePath());
+    m_Diagnostics.AddMetadata("command_line", GetCommandLineA() != nullptr ? GetCommandLineA() : "");
+    constexpr const char* reproductionEnvironment[] = {
+        "RAYTRACING_DEMO_AUTOTEST",
+        "RAYTRACING_DEMO_AUTOTEST_START_CASE",
+        "RAYTRACING_DEMO_AUTOTEST_MAX_CASES",
+        "RAYTRACING_DEMO_AUTOTEST_STEP_MS",
+        "RAYTRACING_DEMO_SCENE",
+        "RAYTRACING_DEMO_UNITY_SCENE",
+        "RAYTRACING_DEMO_MODE",
+        "RAYTRACING_DEMO_RAY_TRACING_DISPATCH",
+        "RAYTRACING_DEMO_BOUNCES",
+        "RAYTRACING_DEMO_MATERIAL_SHADING",
+        "RAYTRACING_DEMO_SOFT_SHADOWS",
+        "RAYTRACING_DEMO_NRD",
+        "RAYTRACING_DEMO_DENOISER",
+        "RAYTRACING_DEMO_DLSS",
+        "RAYTRACING_DEMO_DLSS_RR",
+        "RAYTRACING_DEMO_DLSS_FRAME_GENERATION",
+        "RAYTRACING_DEMO_ASYNC_COMPUTE",
+        "RAYTRACING_DEMO_PARALLEL_DIRECT_RECORDING",
+        "RAYTRACING_DEMO_CUDA_BLOOM",
+        "RAYTRACING_DEMO_MESHLET_GBUFFER",
+        "RAYTRACING_DEMO_MESHLET_DEBUG",
+        "RAYTRACING_DEMO_MESHLET_BACKEND",
+    };
+    for (const char* variableName : reproductionEnvironment)
+    {
+        const std::string value = GetEnvironmentValue(variableName);
+        if (!value.empty())
+        {
+            m_Diagnostics.AddMetadata(std::string("env.") + variableName, value);
+        }
+    }
+    GetApplication().SetDiagnosticTelemetrySink(&m_Diagnostics);
+    m_Diagnostics.Record("application.lifecycle", "load_content_begin");
 }
 
-void RaytracingDemo::UpdateRuntimeAutomation(const double totalTime)
+void RaytracingDemo::RecordDiagnosticsFailure(std::string stage, const std::exception& exception)
 {
-    m_RuntimeAutomation.Update(
-        totalTime,
+    if (!m_Diagnostics.IsEnabled())
+    {
+        return;
+    }
+    m_Diagnostics.RecordAssertion(
+        "runtime." + stage,
+        FrameworkDiagnostics::AssertionResult::Failed,
+        exception.what(),
+        { { "stage", stage } });
+    m_Diagnostics.Finalize(FrameworkDiagnostics::SessionStatus::Failed, exception.what());
+}
+
+void RaytracingDemo::InitializeRuntimeAutomation()
+{
+    m_RuntimeAutomation.Initialize(
+        RaytracingDemoAutomation::CreateTestSuites(),
+        m_Diagnostics.IsEnabled() ? &m_Diagnostics : nullptr,
         [this](const uint32_t action, const uint32_t value)
         {
             ApplyRuntimeAutomationAction(action, value);
         },
-        [this]()
+        [this](const int exitCode)
         {
-            GetApplication().Quit(0);
+            GetApplication().Quit(exitCode);
         });
+}
+
+void RaytracingDemo::UpdateRuntimeAutomation(const double totalTime)
+{
+    m_RuntimeAutomation.Update(m_FrameIndex, totalTime);
 }
 
 void RaytracingDemo::ApplyRuntimeAutomationMatrixCase(const uint32_t caseIndex)
@@ -1224,30 +1319,48 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         break;
     case RuntimeAutomationAction::VerifyActiveRayTracedPixelCount:
     {
+        const auto failActivePixelAssertion = [this](std::string message)
+        {
+            if (m_Diagnostics.IsEnabled())
+            {
+                m_Diagnostics.RecordAssertion(
+                    "active_pixel_dispatch",
+                    FrameworkDiagnostics::AssertionResult::Failed,
+                    message);
+            }
+            throw std::runtime_error(std::move(message));
+        };
         if (m_PathTracingDispatchMode != PathTracingDispatchMode::CompactedIndirect)
         {
             m_RuntimeAutomation.AppendDiagnosticLog("Active ray-traced pixel verification skipped: full-resolution dispatch.");
+            if (m_Diagnostics.IsEnabled())
+            {
+                m_Diagnostics.RecordAssertion(
+                    "active_pixel_dispatch",
+                    FrameworkDiagnostics::AssertionResult::Unknown,
+                    "Verification is not applicable to full-resolution dispatch.");
+            }
             break;
         }
 
         const ActivePixelReadbackStatus readbackStatus = m_ActivePixels.GetCountReadbackStatus();
         if (readbackStatus == ActivePixelReadbackStatus::NotQueued)
         {
-            throw std::runtime_error("Compacted ray-traced pixel dispatch readback was not queued.");
+            failActivePixelAssertion("Compacted ray-traced pixel dispatch readback was not queued.");
         }
         if (readbackStatus == ActivePixelReadbackStatus::NotCompleted)
         {
-            throw std::runtime_error("Compacted ray-traced pixel dispatch readback did not complete.");
+            failActivePixelAssertion("Compacted ray-traced pixel dispatch readback did not complete.");
         }
 
         const std::optional<ActivePixelDispatchDiagnostics> diagnostics = m_ActivePixels.GetLatestDiagnostics();
         if (!diagnostics.has_value())
         {
-            throw std::runtime_error("Completed compacted ray-traced pixel dispatch readback has no diagnostics.");
+            failActivePixelAssertion("Completed compacted ray-traced pixel dispatch readback has no diagnostics.");
         }
         if (!diagnostics->HasConsistentDispatchArguments())
         {
-            throw std::runtime_error(
+            failActivePixelAssertion(
                 "Compacted ray-traced pixel dispatch arguments do not match the active-pixel count: count=" +
                 std::to_string(diagnostics->ActivePixelCount) +
                 ", dispatch=(" + std::to_string(diagnostics->DispatchX) + ", " +
@@ -1258,7 +1371,21 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
             (m_DirectLightingTechnique != RaytracingDemoLightingTechnique::None ||
                 (m_IndirectLightingTechnique != RaytracingDemoLightingTechnique::None && m_MaxBounces > 1)))
         {
-            throw std::runtime_error("Compacted ray-traced pixel count unexpectedly returned zero.");
+            failActivePixelAssertion("Compacted ray-traced pixel count unexpectedly returned zero.");
+        }
+
+        if (m_Diagnostics.IsEnabled())
+        {
+            m_Diagnostics.RecordAssertion(
+                "active_pixel_dispatch",
+                FrameworkDiagnostics::AssertionResult::Passed,
+                "Active-pixel count and finalized indirect dispatch arguments agree.",
+                {
+                    { "active_pixel_count", static_cast<uint64_t>(diagnostics->ActivePixelCount) },
+                    { "dispatch_x", static_cast<uint64_t>(diagnostics->DispatchX) },
+                    { "dispatch_y", static_cast<uint64_t>(diagnostics->DispatchY) },
+                    { "dispatch_z", static_cast<uint64_t>(diagnostics->DispatchZ) },
+                });
         }
 
         m_RuntimeAutomation.AppendDiagnosticLog(
@@ -1587,7 +1714,13 @@ std::shared_ptr<ShaderBlob> RaytracingDemo::LoadShaderVariant(
 //Modify End
 
 bool RaytracingDemo::LoadContent()
+//Modify Begin:2026-08-21 by Hui
+try
+//Modify End
 {
+//Modify Begin:2026-08-21 by Hui
+    InitializeDiagnostics();
+//Modify End
     Assert(RayTracingShader::IsSupported(m_FrameworkDeviceContext), "DirectX Raytracing is not supported by the selected adapter.");
     SetProfilerDisplayRefreshIntervalSeconds(m_ProfilerDisplay.GetRefreshIntervalSeconds());
 
@@ -1872,11 +2005,49 @@ bool RaytracingDemo::LoadContent()
 //Modify Begin:2026-08-19 by Hui
     InitializeRuntimeAutomation();
 //Modify End
+//Modify Begin:2026-08-21 by Hui
+    if (m_Diagnostics.IsEnabled())
+    {
+        m_Diagnostics.Record("application.lifecycle", "load_content_complete");
+    }
+//Modify End
     return true;
 }
+//Modify Begin:2026-08-21 by Hui
+catch (const std::exception& exception)
+{
+    RecordDiagnosticsFailure("load_content", exception);
+    throw;
+}
+catch (...)
+{
+    if (m_Diagnostics.IsEnabled())
+    {
+        m_Diagnostics.RecordAssertion(
+            "runtime.load_content",
+            FrameworkDiagnostics::AssertionResult::Failed,
+            "A non-standard exception escaped RaytracingDemo::LoadContent.",
+            { { "stage", std::string("load_content") } });
+        m_Diagnostics.Finalize(
+            FrameworkDiagnostics::SessionStatus::Failed,
+            "A non-standard exception escaped RaytracingDemo::LoadContent.");
+    }
+    throw;
+}
+//Modify End
 
 void RaytracingDemo::UnloadContent()
 {
+//Modify Begin:2026-08-21 by Hui
+    if (m_Diagnostics.IsEnabled())
+    {
+        m_Diagnostics.Record("application.lifecycle", "unload_content_begin");
+    }
+    if (m_RenderPipeline.HasRenderGraph())
+    {
+        m_RenderPipeline.GetRenderGraph().SetDiagnosticTelemetrySink(nullptr);
+    }
+//Modify End
 //Modify Begin:2026-08-19 by Hui
     m_CudaBloom.ReleaseInteropResource();
 //Modify End
@@ -1916,6 +2087,15 @@ void RaytracingDemo::UnloadContent()
     m_CopyGpuTimestampProfiler.Shutdown();
 //Modify End
     m_SceneResources.Clear();
+//Modify Begin:2026-08-21 by Hui
+    GetApplication().SetDiagnosticTelemetrySink(nullptr);
+    if (m_Diagnostics.IsEnabled())
+    {
+        m_Diagnostics.Finalize(
+            FrameworkDiagnostics::SessionStatus::Passed,
+            "RaytracingDemo unloaded normally.");
+    }
+//Modify End
 }
 
 RayTracingSceneResourceLayout RaytracingDemo::BuildRayTracingSceneResourceLayout() const
@@ -2145,6 +2325,7 @@ void RaytracingDemo::RebuildRenderGraph()
         },
         [this](RenderGraph::RenderGraphRoot& renderGraph)
         {
+            renderGraph.SetDiagnosticTelemetrySink(m_Diagnostics.IsEnabled() ? &m_Diagnostics : nullptr);
             renderGraph.SetGpuTimestampProfiler(m_GpuTimingEnabled ? &m_GpuTimestampProfiler : nullptr);
             renderGraph.SetAsyncComputeGpuTimestampProfiler(
                 m_GpuTimingEnabled ? &m_AsyncComputeGpuTimestampProfiler : nullptr);
@@ -2342,6 +2523,13 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
 {
     Base::OnRender(e);
 
+//Modify Begin:2026-08-21 by Hui
+    if (m_Diagnostics.IsEnabled())
+    {
+        m_Diagnostics.SetFrameIndex(m_FrameIndex);
+    }
+//Modify End
+
 //Modify Begin:2026-08-20 by Hui
     const auto directCommandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
     const auto asyncComputeCommandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE);
@@ -2355,6 +2543,13 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
         std::vector<GpuTimestampSample> completedSamples;
         while (profiler.CollectCompletedFrame(commandQueue, completedSamples))
         {
+            if (m_Diagnostics.IsEnabled())
+            {
+                m_Diagnostics.RecordGpuTimings(
+                    profiler.GetLastCollectedFrameNumber(),
+                    queueName,
+                    completedSamples);
+            }
             accumulateSamples(completedSamples);
             if (m_RenderGraphTimingCaptureEnabled)
             {
@@ -2442,6 +2637,7 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
 
     EnsureRenderGraphTopology();
     RenderGraph::RenderGraphRoot& renderGraph = m_RenderPipeline.GetRenderGraph();
+    renderGraph.SetDiagnosticTelemetrySink(m_Diagnostics.IsEnabled() ? &m_Diagnostics : nullptr);
     if (m_RenderGraphFrameState->FrameGenerationEnabled)
     {
         m_FrameGenerationInputs = {};
@@ -2517,6 +2713,7 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
                 m_ActivePixels.CancelCountReadback();
             }
         }
+        RecordDiagnosticsFailure("render_graph_execute", exception);
         throw std::runtime_error(std::string("RaytracingDemo::OnRender RenderGraph.Execute failed: ") + exception.what());
     }
     const double renderGraphCpuMilliseconds = std::chrono::duration<double, std::milli>(
@@ -2524,6 +2721,14 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     if (m_GpuTimingEnabled)
     {
         m_ProfilerDisplay.AccumulateRenderGraphCpuMilliseconds(renderGraphCpuMilliseconds);
+    }
+    if (m_Diagnostics.IsEnabled())
+    {
+        m_Diagnostics.Record(
+            "profiler.cpu",
+            "render_graph_execute",
+            DiagnosticTelemetrySeverity::Info,
+            { { "cpu_duration_ms", renderGraphCpuMilliseconds } });
     }
 
     try
@@ -2533,6 +2738,7 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     }
     catch (const std::exception& exception)
     {
+        RecordDiagnosticsFailure("present", exception);
         const char* backendName = m_PathTracingBackend == PathTracingBackend::InlineRayQuery
             ? "InlineRayQuery"
             : "ShaderTableDxr";
