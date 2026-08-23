@@ -27,6 +27,12 @@ namespace
         RaytracingDemoPassResourcesSnapshot Resources;
     };
 
+    struct AutoExposurePassData
+    {
+        RaytracingDemoPassResourcesSnapshot Resources;
+        RenderGraph::ResourceId InputColor = 0;
+    };
+
     struct FrameGenerationHudLessPassData
     {
         RaytracingDemoPassResourcesSnapshot Resources;
@@ -166,6 +172,45 @@ void RaytracingDemoPasses::Builder::AddFrameGenerationHudLessPass(
         });
 }
 
+void RaytracingDemoPasses::Builder::AddAutoExposurePass(
+    RenderGraph::RenderGraphBuilder& renderGraphBuilder,
+    const RaytracingDemoPassResources& resources,
+    const RenderGraph::ResourceId inputColor,
+    const RenderGraph::ResourceId sceneReadyToken)
+{
+    using namespace RenderGraph;
+    using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
+
+    renderGraphBuilder.AddPass<AutoExposurePassData>(
+        L"Auto Exposure",
+        [&resources, inputColor, sceneReadyToken](RenderGraphPassBuilder& passBuilder, AutoExposurePassData& passData)
+        {
+            passData.Resources.emplace(resources);
+            passData.InputColor = inputColor;
+            passBuilder.ReadToken(sceneReadyToken);
+            passBuilder.ReadBuffer(inputColor);
+            passBuilder.WriteUav(DemoResourceIds::AutoExposureOutput);
+            passBuilder.WriteToken(DemoResourceIds::AutoExposureFinishedToken);
+        },
+        [](const AutoExposurePassData& passData, const RenderContext& context, CommandList& commandList)
+        {
+            const RaytracingDemoPassResources& resources = passData.Resources.value();
+            const std::shared_ptr<Texture>& input = context.GetTexture(passData.InputColor);
+            const std::shared_ptr<Texture>& output = context.GetTexture(RaytracingDemoRenderGraph::ResourceIds::AutoExposureOutput);
+            const D3D12_RESOURCE_DESC inputDesc = input->GetD3D12ResourceDesc();
+            const D3D12_RESOURCE_DESC outputDesc = output->GetD3D12ResourceDesc();
+            resources.Exposure.Execute(
+                commandList,
+                input,
+                output,
+                static_cast<uint32_t>(inputDesc.Width),
+                inputDesc.Height,
+                static_cast<uint32_t>(outputDesc.Width),
+                outputDesc.Height,
+                context.GetMetadata().m_DeltaTime);
+        });
+}
+
 void RaytracingDemo::PresentDisplayOutput()
 {
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
@@ -184,19 +229,9 @@ void RaytracingDemo::PresentDisplayOutput()
         return;
     }
 
-    const RenderGraph::ResourceId displayColor = renderGraph.GetPresentationResourceId();
-
-    renderGraph.PresentWithOverlayBlit(
+    renderGraph.PresentWithOverlay(
         PWindow,
-        displayColor,
-        [this](CommandList& cmd, const std::shared_ptr<Texture>& sourceTexture)
-        {
-            CommandContext commandContext(cmd);
-            commandContext.SetTexture(*m_DisplayCompositeShader, "SceneColor", ShaderResourceView(sourceTexture));
-            commandContext.BindPipeline(*m_DisplayCompositeShader);
-            commandContext.BindDescriptorSet(m_DisplayCompositeShader->GetDescriptorSet());
-            m_DisplayBlitMesh->Draw(cmd);
-        },
+        renderGraph.GetPresentationResourceId(),
         [this](CommandList& cmd)
         {
             DrawPostBloomOverlays(cmd);

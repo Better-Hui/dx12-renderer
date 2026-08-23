@@ -17,6 +17,7 @@
 #include <Framework/Rendering/Pipeline/Shader.h>
 #include <Framework/Rendering/RayTracing/RayTracingShader.h>
 #include <Framework/Rendering/Upscaling/DLSS.h>
+#include <Framework/Rendering/PostProcess/AutoExposure.h>
 
 #include <DX12Library/Camera.h>
 
@@ -135,6 +136,7 @@ struct RaytracingDemoPassResources
     std::shared_ptr<ComputeShader> DLSSRayReconstructionPrepareShader;
     DenoiserController& Denoisers;
     CudaBloomPass& CudaBloom;
+    AutoExposure& Exposure;
     std::shared_ptr<Shader> GBufferShader;
     std::shared_ptr<Shader> GBufferMeshletIndirectShader;
     std::shared_ptr<MeshShader> GBufferTaskMeshShader;

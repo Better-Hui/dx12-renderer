@@ -51,6 +51,18 @@ namespace RaytracingDemoRenderGraph
                 D3D12_HEAP_FLAG_NONE,
                 true);
         }
+//Modify Begin:2026-08-23 by Hui
+        textureDescriptions.emplace_back(
+            ResourceIds::AutoExposureOutput,
+            displayWidthExpression,
+            displayHeightExpression,
+            OUTPUT_FORMAT,
+            OUTPUT_CLEAR_COLOR,
+            RenderGraph::ResourceInitAction::Discard,
+            D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+            D3D12_HEAP_FLAG_NONE,
+            true);
+//Modify End
         if (includeDLSS)
         {
             textureDescriptions.emplace_back(
@@ -151,6 +163,9 @@ namespace RaytracingDemoRenderGraph
             { ResourceIds::RayTracingFinishedToken },
             { ResourceIds::DenoiseFinishedToken },
             { ResourceIds::CudaBloomFinishedToken },
+//Modify Begin:2026-08-23 by Hui
+            { ResourceIds::AutoExposureFinishedToken },
+//Modify End
             { ResourceIds::DebugOutputFinishedToken },
         };
         if (includeCompactedPathTracing)

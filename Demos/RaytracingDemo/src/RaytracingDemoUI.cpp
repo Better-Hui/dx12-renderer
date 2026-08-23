@@ -139,19 +139,21 @@ namespace
             ImGui::TextDisabled("Experimental: cascades four downsample levels per dispatch.");
         }
 
-        changed |= ImGui::DragFloat("Bloom Threshold", &settings.Threshold, 0.01f, 0.0f, 5.0f, "%.2f");
-        changed |= ImGui::DragFloat("Bloom Soft Knee", &settings.SoftThreshold, 0.01f, 0.0f, 2.0f, "%.2f");
-        changed |= ImGui::DragFloat("Bloom Intensity", &settings.Intensity, 0.01f, 0.0f, 5.0f, "%.2f");
+//Modify Begin:2026-08-23 by Hui
+        changed |= FrameworkImGui::SliderFloat("Bloom Threshold", &settings.Threshold, 0.0f, 5.0f, "%.2f");
+        changed |= FrameworkImGui::SliderFloat("Bloom Soft Knee", &settings.SoftThreshold, 0.0f, 2.0f, "%.2f");
+        changed |= FrameworkImGui::SliderFloat("Bloom Intensity", &settings.Intensity, 0.0f, 5.0f, "%.2f");
         const int maxPyramidLevels = static_cast<int>(CudaBloomPass::ComputeMaxPyramidLevels(width, height));
         settings.PyramidLevels = std::clamp(settings.PyramidLevels, 1, maxPyramidLevels);
-        changed |= ImGui::DragInt("Bloom Pyramid Levels", &settings.PyramidLevels, 0.1f, 1, maxPyramidLevels);
+        changed |= FrameworkImGui::SliderInt("Bloom Pyramid Levels", &settings.PyramidLevels, 1, maxPyramidLevels);
 
         if (settings.SelectedBackend == CudaBloomPass::Backend::Cuda &&
             (settings.Method == CudaBloomPass::CudaMethod::BoxFilterApproximation ||
                 settings.Method == CudaBloomPass::CudaMethod::BoxFilterOriginalPaper))
         {
-            changed |= ImGui::DragFloat("Box Filter Sigma", &settings.BoxFilterSigma, 0.01f, 0.1f, 16.0f, "%.2f");
+            changed |= FrameworkImGui::SliderFloat("Box Filter Sigma", &settings.BoxFilterSigma, 0.1f, 16.0f, "%.2f");
         }
+//Modify End
 
         if (timingStats.Valid)
         {
@@ -171,6 +173,26 @@ namespace
         }
         return changed;
     }
+
+//Modify Begin:2026-08-23 by Hui
+    void DrawAutoExposureControls(AutoExposure& autoExposure)
+    {
+        if (!ImGui::CollapsingHeader("Auto Exposure"))
+        {
+            return;
+        }
+
+        AutoExposure::Settings settings = autoExposure.GetSettings();
+        bool changed = ImGui::Checkbox("Enable Auto Exposure", &settings.Enabled);
+        changed |= FrameworkImGui::SliderFloat("Adaptation Tau", &settings.Tau, 0.01f, 8.0f, "%.2f");
+        changed |= FrameworkImGui::SliderFloat("Min Log Luminance", &settings.MinLogLuminance, -16.0f, 0.0f, "%.2f");
+        changed |= FrameworkImGui::SliderFloat("Max Log Luminance", &settings.MaxLogLuminance, 0.0f, 8.0f, "%.2f");
+        if (changed)
+        {
+            autoExposure.SetSettings(settings);
+        }
+    }
+//Modify End
 }
 
 void RaytracingDemo::OnImGui()
@@ -815,7 +837,25 @@ void RaytracingDemo::OnImGui()
         ResetProfilerDisplay();
         ResetAccumulation(false);
     }
+//Modify Begin:2026-08-23 by Hui
+    DrawAutoExposureControls(m_AutoExposure);
+//Modify End
     }
+//Modify End
+
+//Modify Begin:2026-08-23 by Hui
+    DxrCompatibilityIssues dxrCompatibilityIssues = {};
+    bool fovChanged = false;
+    bool nearClipChanged = false;
+    bool farClipChanged = false;
+    bool rotateSpeedChanged = false;
+    bool panSpeedChanged = false;
+    bool dollySpeedChanged = false;
+    bool wheelSpeedChanged = false;
+    int requestedMaxBounces = m_MaxBounces;
+    bool bouncesChanged = false;
+    if (ImGui::CollapsingHeader("Camera"))
+    {
 //Modify End
 
 //Modify Begin:2026-08-20 by Hui
@@ -836,11 +876,12 @@ void RaytracingDemo::OnImGui()
         ResetAccumulation();
     }
 
-    const DxrCompatibilityIssues dxrCompatibilityIssues = GetDxrCompatibilityIssues(
+    dxrCompatibilityIssues = GetDxrCompatibilityIssues(
         m_PathTracingBackend,
         m_DirectLightingTechnique,
         m_IndirectLightingTechnique,
         m_AsyncComputeEnabled);
+
     if (dxrCompatibilityIssues.HasAny())
     {
         DrawDxrCompatibilityIssues(
@@ -848,40 +889,6 @@ void RaytracingDemo::OnImGui()
             m_DirectLightingTechnique,
             m_IndirectLightingTechnique,
             true);
-    }
-
-    if (m_OpenDxrCompatibilityPopup)
-    {
-        ImGui::OpenPopup("DXR Backend Compatibility");
-        m_OpenDxrCompatibilityPopup = false;
-    }
-    ImGui::SetNextWindowSize(ImVec2(540.0f, 0.0f), ImGuiCond_Appearing);
-    if (ImGui::BeginPopupModal(
-        "DXR Backend Compatibility",
-        nullptr,
-        ImGuiWindowFlags_AlwaysAutoResize))
-    {
-        ImGui::TextWrapped(
-            "The DXR backend cannot execute every currently selected stage. "
-            "Skipped stages can leave the lighting output black without indicating a GPU failure.");
-        DrawDxrCompatibilityIssues(
-            dxrCompatibilityIssues,
-            m_DirectLightingTechnique,
-            m_IndirectLightingTechnique,
-            false);
-        ImGui::Separator();
-        if (ImGui::Button("Switch to Inline Ray Query"))
-        {
-            m_PathTracingBackend = PathTracingBackend::InlineRayQuery;
-            ResetAccumulation();
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Keep DXR"))
-        {
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::EndPopup();
     }
 
     const char* dispatchModeNames[] = { "Full Resolution", "Compacted Indirect" };
@@ -959,8 +966,7 @@ void RaytracingDemo::OnImGui()
     ImGui::TextDisabled("Stylized Comic keeps GGX material inputs and applies PBR-NPR banding, shadow tint, and graphic highlights.");
 //Modify End
 //Modify Begin:2026-08-11 by Hui
-    int requestedMaxBounces = m_MaxBounces;
-    const bool bouncesChanged = FrameworkImGui::SliderInt(
+    bouncesChanged = FrameworkImGui::SliderInt(
         "Bounces",
         &requestedMaxBounces,
         1,
@@ -969,32 +975,64 @@ void RaytracingDemo::OnImGui()
         ImGuiSliderFlags_AlwaysClamp);
 //Modify End
 //Modify Begin:2026-08-11 by Hui
-    bool fovChanged = false;
-    bool nearClipChanged = false;
-    bool farClipChanged = false;
-    bool rotateSpeedChanged = false;
-    bool panSpeedChanged = false;
-    bool dollySpeedChanged = false;
-    bool wheelSpeedChanged = false;
-    if (ImGui::CollapsingHeader("Camera"))
+    fovChanged = FrameworkImGui::SliderFloat("FOV", &m_CameraFov, 12.0f, 90.0f, "%.1f");
+    nearClipChanged = FrameworkImGui::SliderFloat("Near Clip", &m_CameraNearClipPlane, 0.001f, 100.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    if (m_CameraFarClipPlane <= m_CameraNearClipPlane)
     {
-        fovChanged = FrameworkImGui::SliderFloat("FOV", &m_CameraFov, 12.0f, 90.0f, "%.1f");
-        nearClipChanged = FrameworkImGui::SliderFloat("Near Clip", &m_CameraNearClipPlane, 0.001f, 100.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-        if (m_CameraFarClipPlane <= m_CameraNearClipPlane)
+        m_CameraFarClipPlane = m_CameraNearClipPlane + 0.001f;
+    }
+    farClipChanged = FrameworkImGui::SliderFloat(
+        "Far Clip",
+        &m_CameraFarClipPlane,
+        m_CameraNearClipPlane + 0.001f,
+        100000.0f,
+        "%.1f",
+        ImGuiSliderFlags_AlwaysClamp);
+    rotateSpeedChanged = FrameworkImGui::SliderFloat("Mouse Rotate", &m_MouseRotateSpeed, 0.01f, 0.5f, "%.3f");
+    panSpeedChanged = FrameworkImGui::SliderFloat("Mouse Pan", &m_MousePanSpeed, 0.005f, 0.25f, "%.3f");
+    dollySpeedChanged = FrameworkImGui::SliderFloat("Mouse Dolly", &m_MouseDollySpeed, 0.005f, 0.25f, "%.3f");
+    wheelSpeedChanged = FrameworkImGui::SliderFloat("Wheel Dolly", &m_MouseWheelDollySpeed, 0.05f, 5.0f, "%.2f");
+    }
+//Modify End
+
+//Modify Begin:2026-08-23 by Hui
+    dxrCompatibilityIssues = GetDxrCompatibilityIssues(
+        m_PathTracingBackend,
+        m_DirectLightingTechnique,
+        m_IndirectLightingTechnique,
+        m_AsyncComputeEnabled);
+    if (m_OpenDxrCompatibilityPopup)
+    {
+        ImGui::OpenPopup("DXR Backend Compatibility");
+        m_OpenDxrCompatibilityPopup = false;
+    }
+    ImGui::SetNextWindowSize(ImVec2(540.0f, 0.0f), ImGuiCond_Appearing);
+    if (ImGui::BeginPopupModal(
+        "DXR Backend Compatibility",
+        nullptr,
+        ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        ImGui::TextWrapped(
+            "The DXR backend cannot execute every currently selected stage. "
+            "Skipped stages can leave the lighting output black without indicating a GPU failure.");
+        DrawDxrCompatibilityIssues(
+            dxrCompatibilityIssues,
+            m_DirectLightingTechnique,
+            m_IndirectLightingTechnique,
+            false);
+        ImGui::Separator();
+        if (ImGui::Button("Switch to Inline Ray Query"))
         {
-            m_CameraFarClipPlane = m_CameraNearClipPlane + 0.001f;
+            m_PathTracingBackend = PathTracingBackend::InlineRayQuery;
+            ResetAccumulation();
+            ImGui::CloseCurrentPopup();
         }
-        farClipChanged = FrameworkImGui::SliderFloat(
-            "Far Clip",
-            &m_CameraFarClipPlane,
-            m_CameraNearClipPlane + 0.001f,
-            100000.0f,
-            "%.1f",
-            ImGuiSliderFlags_AlwaysClamp);
-        rotateSpeedChanged = FrameworkImGui::SliderFloat("Mouse Rotate", &m_MouseRotateSpeed, 0.01f, 0.5f, "%.3f");
-        panSpeedChanged = FrameworkImGui::SliderFloat("Mouse Pan", &m_MousePanSpeed, 0.005f, 0.25f, "%.3f");
-        dollySpeedChanged = FrameworkImGui::SliderFloat("Mouse Dolly", &m_MouseDollySpeed, 0.005f, 0.25f, "%.3f");
-        wheelSpeedChanged = FrameworkImGui::SliderFloat("Wheel Dolly", &m_MouseWheelDollySpeed, 0.05f, 5.0f, "%.2f");
+        ImGui::SameLine();
+        if (ImGui::Button("Keep DXR"))
+        {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
     }
 //Modify End
 

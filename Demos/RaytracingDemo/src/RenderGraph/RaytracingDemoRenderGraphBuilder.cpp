@@ -178,17 +178,13 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
         sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::DLSSFinishedToken;
         displayColor = RaytracingDemoRenderGraph::ResourceIds::DLSSOutput;
     }
-    if (frameState.FrameGenerationEnabled)
-    {
-        RaytracingDemoPasses::Builder::AddFrameGenerationHudLessPass(
-            renderGraphBuilder,
-            resources,
-            displayColor,
-            sceneReadyToken);
-        sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::FrameGenerationHudLessFinishedToken;
-        displayColor = RaytracingDemoRenderGraph::ResourceIds::FrameGenerationHudLess;
-    }
-
+    RaytracingDemoPasses::Builder::AddAutoExposurePass(
+        renderGraphBuilder,
+        resources,
+        displayColor,
+        sceneReadyToken);
+    sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::AutoExposureFinishedToken;
+    displayColor = RaytracingDemoRenderGraph::ResourceIds::AutoExposureOutput;
     std::vector<RenderGraph::ResourceId> externalOutputs = {
         displayColor,
         sceneReadyToken,

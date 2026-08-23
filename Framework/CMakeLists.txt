@@ -35,6 +35,9 @@ set(SHADER_FILES_PIXEL
 set(SHADER_FILES_COMPUTE
         "shaders/Lighting/ActivePixelCompaction.cs.hlsl"
         "shaders/Lighting/ActivePixelDispatchFinalize.cs.hlsl"
+        "shaders/AutoExposureBuildHistogram_CS.hlsl"
+        "shaders/AutoExposureAverageHistogram_CS.hlsl"
+        "shaders/AutoExposureApply_CS.hlsl"
         "shaders/MSAADepthResolve_CS.hlsl"
         "shaders/NRD/NRDInputAdapter_CS.hlsl"
         "shaders/NRD/NRDOutputComposite_CS.hlsl"

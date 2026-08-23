@@ -96,6 +96,7 @@ set(SHADERS_HEADER_FILES
         shaders/Scene/SceneGeometry.hlsli
         shaders/Scene/SceneResources.hlsli
         shaders/Scene/SceneLighting.hlsli
+        shaders/Skybox/SkyboxSun.hlsli
         )
 list(APPEND SHADERS_HEADER_FILES ${SHADER_FILES_RAYTRACING})
 

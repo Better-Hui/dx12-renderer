@@ -70,6 +70,11 @@ namespace RaytracingDemoPasses
             RenderGraph::RenderGraphBuilder& renderGraphBuilder,
             const RaytracingDemoPassResources& resources,
             RenderGraph::ResourceId sceneReadyToken);
+        static void AddAutoExposurePass(
+            RenderGraph::RenderGraphBuilder& renderGraphBuilder,
+            const RaytracingDemoPassResources& resources,
+            RenderGraph::ResourceId inputColor,
+            RenderGraph::ResourceId sceneReadyToken);
         static void AddDLSSPass(
             RenderGraph::RenderGraphBuilder& renderGraphBuilder,
             const RaytracingDemoPassResources& resources,

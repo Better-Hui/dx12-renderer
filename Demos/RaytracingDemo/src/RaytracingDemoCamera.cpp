@@ -20,10 +20,16 @@ namespace
 void RaytracingDemo::OnUpdate(UpdateEventArgs& e)
 {
     Base::OnUpdate(e);
+//Modify Begin:2026-08-23 by Hui
+    m_DeltaTime = static_cast<float>(e.ElapsedTime);
+    if (!IsStartupLoadComplete())
+    {
+        return;
+    }
+//Modify End
     const auto directCommandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
     m_ActivePixels.CollectCountReadback(*directCommandQueue);
     UpdateRuntimeAutomation(e.TotalTime);
-    m_DeltaTime = static_cast<float>(e.ElapsedTime);
     if (m_SceneRuntime.UpdateAnimatedLights(m_Lights, static_cast<float>(e.TotalTime)))
     {
         ResetAccumulation(false);

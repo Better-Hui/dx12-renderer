@@ -1,6 +1,9 @@
 //Modify Begin:2026-07-30 by Hui
 #include <ShaderLibrary/Common/RootSignature.hlsli>
 #include "../Scene/SceneCamera.hlsli"
+//Modify Begin:2026-08-23 by Hui
+#include "SkyboxSun.hlsli"
+//Modify End
 
 Texture2D<float> DepthTexture : register(t0, space0);
 TextureCube SkyboxTexture : register(t1, space0);
@@ -35,6 +38,8 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     const float3 skyColor = SkyboxTexture.SampleLevel(g_Common_LinearClampSampler, directionWs, 0.0f).rgb *
         Camera_SkyLight.ColorAndIntensity.rgb *
         Camera_SkyLight.ColorAndIntensity.w;
-    SceneColor[pixel] = float4(skyColor, 1.0f);
+//Modify Begin:2026-08-23 by Hui
+    SceneColor[pixel] = float4(AddSkyboxSunDisk(skyColor, directionWs), 1.0f);
+//Modify End
 }
 //Modify End

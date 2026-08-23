@@ -53,6 +53,9 @@ namespace RaytracingDemoRenderGraph
 //Modify Begin:2026-08-17 by Hui
         static inline const RenderGraph::ResourceId BloomOutput = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.BloomOutput");
 //Modify End
+//Modify Begin:2026-08-23 by Hui
+        static inline const RenderGraph::ResourceId AutoExposureOutput = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.AutoExposureOutput");
+//Modify End
 //Modify Begin:2026-08-07 by Hui
         static inline const RenderGraph::ResourceId DLSSOutput = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DLSSOutput");
         static inline const RenderGraph::ResourceId DLSSNormalRoughness = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DLSSNormalRoughness");
@@ -86,6 +89,9 @@ namespace RaytracingDemoRenderGraph
         static inline const RenderGraph::ResourceId RayTracingFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.RayTracingFinished");
         static inline const RenderGraph::ResourceId DenoiseFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DenoiseFinished");
         static inline const RenderGraph::ResourceId CudaBloomFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.CudaBloomFinished");
+//Modify Begin:2026-08-23 by Hui
+        static inline const RenderGraph::ResourceId AutoExposureFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.AutoExposureFinished");
+//Modify End
 //Modify Begin:2026-08-07 by Hui
         static inline const RenderGraph::ResourceId DLSSFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DLSSFinished");
         static inline const RenderGraph::ResourceId FrameGenerationHudLessFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.FrameGenerationHudLessFinished");

@@ -1,5 +1,10 @@
 #include <RaytracingDemo.h>
 
+//Modify Begin:2026-08-23 by Hui
+#include <imgui.h>
+#include <thread>
+//Modify End
+
 #include <DX12Library/Application.h>
 #include <DX12Library/CommandList.h>
 #include <DX12Library/CommandQueue.h>
@@ -497,6 +502,7 @@ RaytracingDemo::RaytracingDemo(
             { PipelineStaticSamplers::LinearWrap(1u) },
         })
     , m_CudaBloom(m_FrameworkDeviceContext)
+    , m_AutoExposure(m_FrameworkDeviceContext)
     , m_ProfilerDisplay(graphicsSettings.ProfilerDisplayRefreshIntervalSeconds)
     , m_SceneResources(m_FrameworkDeviceContext.GetD3D12DeviceContext())
     , m_Lights(m_FrameworkDeviceContext)
@@ -711,9 +717,23 @@ RaytracingDemo::RaytracingDemo(
 //Modify Begin:2026-08-21 by Hui
 void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::filesystem::path& scenePath)
 {
+//Modify Begin:2026-08-23 by Hui
     SceneImportOptions importOptions;
     importOptions.GenerateFallbackCamera = true;
-    const SceneImportResult sceneImport = SceneImporter::ImportFromFile(scenePath, importOptions);
+    SceneImportResult sceneImport;
+    if (m_StartupSceneImport.valid())
+    {
+        if (m_StartupSceneImport.wait_for(std::chrono::seconds::zero()) != std::future_status::ready)
+        {
+            throw std::logic_error("Startup scene import is not complete.");
+        }
+        sceneImport = m_StartupSceneImport.get();
+    }
+    else
+    {
+        sceneImport = SceneImporter::ImportFromFile(scenePath, importOptions);
+    }
+//Modify End
     m_Scene = sceneImport.SceneData;
     std::filesystem::path runtimeStatePath = scenePath;
     runtimeStatePath += ".runtime.json";
@@ -1713,29 +1733,89 @@ std::shared_ptr<ShaderBlob> RaytracingDemo::LoadShaderVariant(
 }
 //Modify End
 
-bool RaytracingDemo::LoadContent()
+//Modify Begin:2026-08-23 by Hui
+bool RaytracingDemo::AdvanceStartupLoad()
+//Modify End
 //Modify Begin:2026-08-21 by Hui
 try
 //Modify End
 {
-//Modify Begin:2026-08-21 by Hui
-    InitializeDiagnostics();
+//Modify Begin:2026-08-23 by Hui
+    if (m_StartupLoadStage == StartupLoadStage::Bootstrap)
+    {
+        InitializeDiagnostics();
+        Assert(RayTracingShader::IsSupported(m_FrameworkDeviceContext), "DirectX Raytracing is not supported by the selected adapter.");
+        SetProfilerDisplayRefreshIntervalSeconds(m_ProfilerDisplay.GetRefreshIntervalSeconds());
+
+        const auto commandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
+        const auto commandList = commandQueue->GetCommandList();
+        m_ImGui = std::make_unique<ImGuiImpl>(m_FrameworkDeviceContext, *commandList, *PWindow);
+        m_LightBillboardMesh = Mesh::CreateVerticalQuad(*commandList);
+        m_DisplayBlitMesh = Mesh::CreateBlitTriangle(*commandList);
+        commandQueue->ExecuteCommandList(commandList);
+
+        m_StartupScenePath = GetScenePath();
+        SceneImportOptions importOptions;
+        importOptions.GenerateFallbackCamera = true;
+        m_StartupSceneImport = std::async(
+            std::launch::async,
+            [scenePath = m_StartupScenePath, importOptions]()
+            {
+                return SceneImporter::ImportFromFile(scenePath, importOptions);
+            });
+        m_StartupLoadStartTime = std::chrono::steady_clock::now();
+        SetStartupLoadStage(StartupLoadStage::ImportScene, "Parsing scene description", 0.08f);
+        return true;
+    }
+
+    if (m_StartupLoadStage == StartupLoadStage::ImportScene)
+    {
+        if (!m_StartupSceneImport.valid())
+        {
+            throw std::logic_error("Startup scene import task was not created.");
+        }
+        if (m_StartupSceneImport.wait_for(std::chrono::seconds::zero()) != std::future_status::ready)
+        {
+//Modify Begin:2026-08-23 by Hui
+            // Prevent the loading loop from monopolizing a CPU core while the importer runs.
+            std::this_thread::sleep_for(std::chrono::milliseconds(16));
 //Modify End
-    Assert(RayTracingShader::IsSupported(m_FrameworkDeviceContext), "DirectX Raytracing is not supported by the selected adapter.");
-    SetProfilerDisplayRefreshIntervalSeconds(m_ProfilerDisplay.GetRefreshIntervalSeconds());
+            return true;
+        }
+
+        SetStartupLoadStage(StartupLoadStage::UploadScene, "Loading scene geometry and textures", 0.22f);
+        return true;
+    }
 
     const auto commandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
+    if (m_StartupLoadStage == StartupLoadStage::WaitForGpu)
+    {
+        if (m_StartupGpuFenceValue == 0u || !commandQueue->IsFenceComplete(m_StartupGpuFenceValue))
+        {
+            return true;
+        }
+
+        InitializeRuntimeAutomation();
+        if (m_Diagnostics.IsEnabled())
+        {
+            m_Diagnostics.Record("application.lifecycle", "load_content_complete");
+        }
+        SetStartupLoadStage(StartupLoadStage::Complete, "Ready", 1.0f);
+        return true;
+    }
+    if (m_StartupLoadStage == StartupLoadStage::Complete)
+    {
+        return true;
+    }
+
     const auto commandList = commandQueue->GetCommandList();
-
-//Modify Begin:2026-08-19 by Hui
-    LoadSceneContent(*commandList, GetScenePath());
-//Modify End
-
-    m_ImGui = std::make_unique<ImGuiImpl>(m_FrameworkDeviceContext, *commandList, *PWindow);
-
-    m_LightBillboardMesh = Mesh::CreateVerticalQuad(*commandList);
-//Modify Begin:2026-08-19 by Hui
-    m_DisplayBlitMesh = Mesh::CreateBlitTriangle(*commandList);
+    if (m_StartupLoadStage == StartupLoadStage::UploadScene)
+    {
+        LoadSceneContent(*commandList, m_StartupScenePath);
+        commandQueue->ExecuteCommandList(commandList);
+        SetStartupLoadStage(StartupLoadStage::CreateGeometryPipelines, "Creating geometry pipelines", 0.48f);
+        return true;
+    }
 //Modify End
 
 //Modify Begin:2026-08-19 by Hui
@@ -1751,6 +1831,10 @@ try
         }
     };
 
+//Modify Begin:2026-08-23 by Hui
+    if (m_StartupLoadStage == StartupLoadStage::CreateGeometryPipelines)
+    {
+//Modify End
     withShaderCreateContext("GBuffer", [&]()
     {
 //Modify End
@@ -1873,6 +1957,16 @@ try
         sizeof(MeshletIndirectCommand));
     });
 
+//Modify Begin:2026-08-23 by Hui
+        SetStartupLoadStage(StartupLoadStage::CreatePostProcessPipelines, "Creating post-processing pipelines", 0.66f);
+        return true;
+    }
+
+//Modify Begin:2026-08-23 by Hui
+    if (m_StartupLoadStage == StartupLoadStage::CreatePostProcessPipelines)
+{
+//Modify End
+
 //Modify Begin:2026-08-19 by Hui
     withShaderCreateContext("DisplayComposite", [&]()
     {
@@ -1942,11 +2036,24 @@ try
             L"DLSSRayReconstructionPrepare.cs.cso",
             L"Demos/RaytracingDemo/shaders/Upscaling/DLSSRayReconstructionPrepare.cs.hlsl",
             ShaderTargetProfile::Compute());
-        m_DLSSRayReconstructionPrepareShader = std::make_shared<ComputeShader>(
+    m_DLSSRayReconstructionPrepareShader = std::make_shared<ComputeShader>(
             m_FrameworkDeviceContext,
             *rayReconstructionPrepareShader,
             ComputePipelineDescBuilder::ReflectedDefault(*rayReconstructionPrepareShader).Build());
     });
+//Modify End
+
+//Modify Begin:2026-08-23 by Hui
+    SetStartupLoadStage(StartupLoadStage::CreateLightingPipeline, "Creating lighting pipeline", 0.80f);
+    return true;
+
+//Modify Begin:2026-08-23 by Hui
+    }
+//Modify End
+
+//Modify Begin:2026-08-23 by Hui
+    if (m_StartupLoadStage == StartupLoadStage::CreateLightingPipeline)
+    {
 //Modify End
 
     withShaderCreateContext("LightBillboard", [&]()
@@ -1968,6 +2075,21 @@ try
             builder.WithAlphaBlend().WithDepthTestNoWrite().WithNoCull();
         });
     });
+
+//Modify Begin:2026-08-23 by Hui
+    SetStartupLoadStage(StartupLoadStage::FinalizeRendering, "Building ray-tracing resources", 0.90f);
+    return true;
+
+//Modify Begin:2026-08-23 by Hui
+    }
+//Modify End
+
+//Modify Begin:2026-08-23 by Hui
+    if (m_StartupLoadStage != StartupLoadStage::FinalizeRendering)
+    {
+        return true;
+    }
+//Modify End
 
     m_Denoisers.Initialize(m_FrameworkDeviceContext);
     RayTracingAccelerationStructureBuildSettings accelerationStructureSettings{};
@@ -2000,16 +2122,9 @@ try
     RebuildRenderGraph();
 //Modify End
 
-    const uint64_t fenceValue = commandQueue->ExecuteCommandList(commandList);
-    commandQueue->WaitForFenceValue(fenceValue);
-//Modify Begin:2026-08-19 by Hui
-    InitializeRuntimeAutomation();
-//Modify End
-//Modify Begin:2026-08-21 by Hui
-    if (m_Diagnostics.IsEnabled())
-    {
-        m_Diagnostics.Record("application.lifecycle", "load_content_complete");
-    }
+//Modify Begin:2026-08-23 by Hui
+    m_StartupGpuFenceValue = commandQueue->ExecuteCommandList(commandList);
+    SetStartupLoadStage(StartupLoadStage::WaitForGpu, "Waiting for initial GPU uploads", 0.98f);
 //Modify End
     return true;
 }
@@ -2033,6 +2148,85 @@ catch (...)
             "A non-standard exception escaped RaytracingDemo::LoadContent.");
     }
     throw;
+}
+//Modify End
+
+//Modify Begin:2026-08-23 by Hui
+bool RaytracingDemo::LoadContent()
+{
+    return AdvanceStartupLoad();
+}
+
+void RaytracingDemo::SetStartupLoadStage(
+    const StartupLoadStage stage,
+    std::string status,
+    const float progress)
+{
+    m_StartupLoadStage = stage;
+    m_StartupLoadStatus = std::move(status);
+    m_StartupLoadProgress = std::clamp(progress, 0.0f, 1.0f);
+
+    if (m_Diagnostics.IsEnabled() && m_StartupLoadStartTime.time_since_epoch().count() != 0)
+    {
+        const double elapsedMilliseconds = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - m_StartupLoadStartTime).count();
+        m_Diagnostics.Record(
+            "application.startup",
+            "stage",
+            DiagnosticTelemetrySeverity::Info,
+            {
+                { "status", m_StartupLoadStatus },
+                { "progress", static_cast<double>(m_StartupLoadProgress) },
+                { "elapsed_milliseconds", elapsedMilliseconds },
+            });
+    }
+}
+
+void RaytracingDemo::RenderStartupLoadingScreen()
+{
+    if (m_ImGui == nullptr)
+    {
+        return;
+    }
+
+    m_ImGui->BeginFrame();
+
+    ImGuiIO& io = ImGui::GetIO();
+    constexpr float PanelWidth = 440.0f;
+    const ImVec2 panelPosition(
+        (std::max)(0.0f, (io.DisplaySize.x - PanelWidth) * 0.5f),
+        (std::max)(0.0f, (io.DisplaySize.y - 150.0f) * 0.5f));
+    ImGui::SetNextWindowPos(panelPosition, ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(PanelWidth, 0.0f), ImGuiCond_Always);
+    constexpr ImGuiWindowFlags LoadingWindowFlags =
+        ImGuiWindowFlags_NoCollapse |
+        ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoNav |
+        ImGuiWindowFlags_NoBringToFrontOnFocus;
+    ImGui::Begin("Startup Loading", nullptr, LoadingWindowFlags);
+    ImGui::TextUnformatted("Starting Raytracing Demo");
+    ImGui::Spacing();
+    ImGui::TextUnformatted(m_StartupLoadStatus.c_str());
+    ImGui::ProgressBar(m_StartupLoadProgress, ImVec2(-1.0f, 0.0f));
+    const double elapsedSeconds = m_StartupLoadStartTime.time_since_epoch().count() == 0
+        ? 0.0
+        : std::chrono::duration<double>(std::chrono::steady_clock::now() - m_StartupLoadStartTime).count();
+    ImGui::Text("%.0f%%  |  %.1f s", m_StartupLoadProgress * 100.0f, elapsedSeconds);
+    ImGui::End();
+    m_ImGui->Render();
+
+    const auto commandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
+    const auto commandList = commandQueue->GetCommandList();
+    const RenderTarget& backBufferRenderTarget = PWindow->GetRenderTarget();
+    constexpr float ClearColor[] = { 0.025f, 0.030f, 0.045f, 1.0f };
+    commandList->SetRenderTarget(backBufferRenderTarget);
+    commandList->SetAutomaticViewportAndScissorRect(backBufferRenderTarget);
+    commandList->ClearRenderTarget(backBufferRenderTarget, ClearColor, static_cast<D3D12_CLEAR_FLAGS>(0));
+    m_ImGui->DrawToRenderTarget(*commandList);
+    commandQueue->ExecuteCommandList(commandList);
+    PWindow->Present();
 }
 //Modify End
 
@@ -2435,6 +2629,7 @@ RaytracingDemoPassResources RaytracingDemo::CreatePassResources()
         m_DLSSRayReconstructionPrepareShader,
         m_Denoisers,
         m_CudaBloom,
+        m_AutoExposure,
         m_GBufferShader,
         m_GBufferMeshletIndirectShader,
         m_GBufferTaskMeshShader,
@@ -2522,6 +2717,26 @@ void RaytracingDemo::UpdateRenderGraphFrameState()
 void RaytracingDemo::OnRender(RenderEventArgs& e)
 {
     Base::OnRender(e);
+
+//Modify Begin:2026-08-23 by Hui
+    if (!IsStartupLoadComplete())
+    {
+        try
+        {
+            RenderStartupLoadingScreen();
+            if (!AdvanceStartupLoad())
+            {
+                throw std::runtime_error("RaytracingDemo startup loading did not complete successfully.");
+            }
+        }
+        catch (const std::exception& exception)
+        {
+            RecordDiagnosticsFailure("startup_load", exception);
+            throw;
+        }
+        return;
+    }
+//Modify End
 
 //Modify Begin:2026-08-21 by Hui
     if (m_Diagnostics.IsEnabled())
@@ -2634,6 +2849,9 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     metadata.m_DisplayHeight = m_RenderGraphFrameState->DisplayHeight;
     metadata.m_FrameIndex = m_FrameIndex;
     metadata.m_Time = e.TotalTime;
+//Modify Begin:2026-08-23 by Hui
+    metadata.m_DeltaTime = m_DeltaTime;
+//Modify End
 
     EnsureRenderGraphTopology();
     RenderGraph::RenderGraphRoot& renderGraph = m_RenderPipeline.GetRenderGraph();
@@ -2643,7 +2861,7 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
         m_FrameGenerationInputs = {};
         m_FrameGenerationInputs.Depth = renderGraph.GetTexture(RaytracingDemoRenderGraph::ResourceIds::DepthBuffer);
         m_FrameGenerationInputs.MotionVectors = renderGraph.GetTexture(RaytracingDemoRenderGraph::ResourceIds::MotionVector);
-        m_FrameGenerationInputs.HudLessColor = renderGraph.GetTexture(RaytracingDemoRenderGraph::ResourceIds::FrameGenerationHudLess);
+        m_FrameGenerationInputs.HudLessColor = renderGraph.GetTexture(RaytracingDemoRenderGraph::ResourceIds::AutoExposureOutput);
         m_FrameGenerationInputs.RenderWidth = m_RenderGraphFrameState->Width;
         m_FrameGenerationInputs.RenderHeight = m_RenderGraphFrameState->Height;
         m_FrameGenerationInputs.DisplayWidth = m_RenderGraphFrameState->DisplayWidth;

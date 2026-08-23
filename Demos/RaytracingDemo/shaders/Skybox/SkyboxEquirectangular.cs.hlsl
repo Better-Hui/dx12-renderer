@@ -1,5 +1,8 @@
 #include <ShaderLibrary/Common/RootSignature.hlsli>
 #include "../Scene/SceneCamera.hlsli"
+//Modify Begin:2026-08-23 by Hui
+#include "SkyboxSun.hlsli"
+//Modify End
 
 Texture2D<float> DepthTexture : register(t0, space0);
 Texture2D SkyboxTexture : register(t1, space0);
@@ -31,11 +34,14 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
+//Modify Begin:2026-08-23 by Hui
+    const float3 directionWs = BuildSkyboxDirection(pixel);
     const float3 skyColor = SkyboxTexture.SampleLevel(
         g_Common_LinearWrapSampler,
-        DirectionToEquirectangularUv(BuildSkyboxDirection(pixel)),
+        DirectionToEquirectangularUv(directionWs),
         0.0f).rgb *
         Camera_SkyLight.ColorAndIntensity.rgb *
         Camera_SkyLight.ColorAndIntensity.w;
-    SceneColor[pixel] = float4(skyColor, 1.0f);
+    SceneColor[pixel] = float4(AddSkyboxSunDisk(skyColor, directionWs), 1.0f);
+//Modify End
 }

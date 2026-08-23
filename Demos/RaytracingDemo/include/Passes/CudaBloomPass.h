@@ -40,13 +40,17 @@ public:
 
     struct Settings
     {
-        bool Enabled = false;
-        Backend SelectedBackend = Backend::Cuda;
+//Modify Begin:2026-08-23 by Hui
+        bool Enabled = true;
+        Backend SelectedBackend = Backend::FrameworkRaster;
+//Modify End
         CudaMethod Method = CudaMethod::ClassicPyramid;
         float Threshold = 0.55f;
         float SoftThreshold = 0.30f;
         float Intensity = 0.75f;
-        int PyramidLevels = 16;
+//Modify Begin:2026-08-23 by Hui
+        int PyramidLevels = 4;
+//Modify End
         float BoxFilterSigma = 1.0f;
         bool UseSharedMemoryDownsampling = false;
         ThreadBlockSize BlockSize = ThreadBlockSize::Size16x16;
@@ -143,17 +147,23 @@ private:
 //Modify End
     bool RunCudaBloom(uint32_t width, uint32_t height);
 
-    bool m_Enabled = false;
+//Modify Begin:2026-08-23 by Hui
+    bool m_Enabled = true;
+//Modify End
     bool m_AvailabilityChecked = false;
     bool m_CudaAvailable = false;
     float m_Threshold = 0.55f;
     float m_SoftThreshold = 0.30f;
     float m_Intensity = 0.75f;
 //Modify Begin:2026-08-17 by Hui
-    int m_PyramidLevels = 16;
+//Modify Begin:2026-08-23 by Hui
+    int m_PyramidLevels = 4;
+//Modify End
 //Modify End
 //Modify Begin:2026-08-17 by Hui
-    Backend m_Backend = Backend::Cuda;
+//Modify Begin:2026-08-23 by Hui
+    Backend m_Backend = Backend::FrameworkRaster;
+//Modify End
     CudaMethod m_CudaMethod = CudaMethod::ClassicPyramid;
     float m_BoxFilterSigma = 1.0f;
     bool m_UseSharedMemoryDownsampling = false;

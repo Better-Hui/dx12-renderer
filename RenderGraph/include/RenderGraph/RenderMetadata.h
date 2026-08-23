@@ -13,6 +13,9 @@ namespace RenderGraph
         uint32_t m_DisplayHeight = 1;
 //Modify End
         double m_Time = 0.0;
+//Modify Begin:2026-08-23 by Hui
+        float m_DeltaTime = 0.0f;
+//Modify End
         uint64_t m_FrameIndex = 0;
     };
 }

@@ -31,8 +31,12 @@
 #include <Framework/Rendering/Lighting/ReSTIRGIPass.h>
 //Modify End
 #include <Framework/Rendering/Upscaling/DLSS.h>
+#include <Framework/Rendering/PostProcess/AutoExposure.h>
 #include <Framework/Rendering/Upscaling/FrameFeaturesRuntime.h>
 #include <Framework/Scene/Scene.h>
+//Modify Begin:2026-08-23 by Hui
+#include <Framework/Scene/SceneImporter.h>
+//Modify End
 #include <Framework/Rendering/Pipeline/Shader.h>
 //Modify Begin:2026-08-19 by Hui
 #include <Framework/Rendering/Pipeline/ShaderVariant.h>
@@ -58,6 +62,9 @@
 //Modify End
 //Modify Begin:2026-08-21 by Hui
 #include <exception>
+//Modify End
+//Modify Begin:2026-08-23 by Hui
+#include <future>
 //Modify End
 //Modify Begin:2026-08-20 by Hui
 #include <optional>
@@ -129,6 +136,21 @@ private:
 //Modify End
     };
 
+//Modify Begin:2026-08-23 by Hui
+    enum class StartupLoadStage : uint8_t
+    {
+        Bootstrap,
+        ImportScene,
+        UploadScene,
+        CreateGeometryPipelines,
+        CreatePostProcessPipelines,
+        CreateLightingPipeline,
+        FinalizeRendering,
+        WaitForGpu,
+        Complete,
+    };
+//Modify End
+
     RayTracingSceneResourceLayout BuildRayTracingSceneResourceLayout() const;
     void EnsureRayTracingPipelines();
 //Modify Begin:2026-08-19 by Hui
@@ -173,6 +195,12 @@ private:
 //Modify End
 //Modify Begin:2026-08-19 by Hui
     void LoadSceneContent(CommandList& commandList, const std::filesystem::path& scenePath);
+//Modify Begin:2026-08-23 by Hui
+    bool AdvanceStartupLoad();
+    void RenderStartupLoadingScreen();
+    void SetStartupLoadStage(StartupLoadStage stage, std::string status, float progress);
+    bool IsStartupLoadComplete() const { return m_StartupLoadStage == StartupLoadStage::Complete; }
+//Modify End
     void ResetCameraToInitialSceneState();
     void LoadStartupConfiguration();
     void InitializeDiagnostics();
@@ -207,6 +235,7 @@ private:
     DenoiserController m_Denoisers;
 //Modify Begin:2026-08-19 by Hui
     CudaBloomPass m_CudaBloom;
+    AutoExposure m_AutoExposure;
 //Modify End
 //Modify Begin:2026-08-19 by Hui
     GpuTimestampProfiler m_GpuTimestampProfiler;
@@ -308,6 +337,16 @@ private:
     bool m_HasSceneCamera = false;
     std::string m_CameraSaveStatus;
     std::string m_StartupConfigurationStatus;
+
+//Modify Begin:2026-08-23 by Hui
+    StartupLoadStage m_StartupLoadStage = StartupLoadStage::Bootstrap;
+    std::filesystem::path m_StartupScenePath;
+    std::future<SceneImportResult> m_StartupSceneImport;
+    uint64_t m_StartupGpuFenceValue = 0;
+    float m_StartupLoadProgress = 0.0f;
+    std::string m_StartupLoadStatus = "Preparing renderer";
+    std::chrono::steady_clock::time_point m_StartupLoadStartTime;
+//Modify End
 
     struct
     {
