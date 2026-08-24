@@ -1,3 +1,4 @@
+//Modify Begin:2026-08-24 by Hui
 #pragma once
 
 #include <Framework/Rendering/Lighting/ActivePixelList.h>
@@ -5,6 +6,7 @@
 #include <Framework/Rendering/Lighting/MaterialShadingModel.h>
 #include <Framework/Rendering/Pipeline/PipelineLayout.h>
 #include <Framework/Rendering/Pipeline/ShaderVariant.h>
+#include <RenderGraph/RenderGraphBuilder.h>
 
 #include <cstdint>
 #include <functional>
@@ -19,7 +21,6 @@ class ComputeShader;
 class FrameworkDeviceContext;
 class Texture;
 
-//Modify Begin:2026-08-12 by Hui
 struct ReSTIRGIFrameState
 {
     bool Enabled = false;
@@ -53,6 +54,20 @@ struct ReSTIRGIShaderSources
     std::vector<PipelineStaticSamplerContract> StaticSamplerContracts;
 };
 
+struct ReSTIRGIGraphInputs
+{
+    RenderGraph::ResourceId IndirectLighting = 0;
+    RenderGraph::ResourceId InputToken = 0;
+    RenderGraph::ResourceId OutputToken = 0;
+    uint32_t Width = 1u;
+    uint32_t Height = 1u;
+    bool UseCompactedDispatch = false;
+    std::function<uint32_t()> GetFrameIndex;
+    std::function<ReSTIRGIVariantConfig()> ResolveVariantConfig;
+    std::function<void(RenderGraph::RenderGraphPassBuilder&)> DeclareSharedResources;
+    std::function<ReSTIRGIExecutionInputs(const RenderGraph::RenderContext&)> ResolveFrameInputs;
+};
+
 class ReSTIRGIPass final
 {
 public:
@@ -68,7 +83,7 @@ public:
         const ReSTIRGIVariantConfig& variantConfig,
         MaterialShadingModel shadingModel,
         bool useCompactedDispatch);
-    void Execute(CommandList& commandList, const ReSTIRGIExecutionInputs& inputs);
+    void AddPasses(RenderGraph::RenderGraphBuilder& builder, ReSTIRGIGraphInputs inputs);
 
 private:
     enum class ReSTIRGIStage : uint8_t
@@ -135,7 +150,6 @@ private:
     std::unique_ptr<InternalResources> m_Resources;
     uint32_t m_ResourceWidth = 0;
     uint32_t m_ResourceHeight = 0;
-    uint32_t m_HistoryReadIndex = 0;
     bool m_HistoryValid = false;
 };
 //Modify End

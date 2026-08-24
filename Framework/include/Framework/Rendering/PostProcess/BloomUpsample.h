@@ -1,38 +1,45 @@
 #pragma once
 
+//Modify Begin:2026-08-24 by Hui
 #include <Framework/Rendering/PostProcess/BloomParameters.h>
-#include <memory>
 #include <Framework/Scene/Material.h>
 
-class Mesh;
-//Modify Begin:2026-07-30 by Hui
-class FrameworkDeviceContext;
-//Modify End
+#include <memory>
 
-class BloomUpsample
+class CommandList;
+class FrameworkDeviceContext;
+class Mesh;
+class RenderTarget;
+class Texture;
+
+class BloomUpsample final
 {
 public:
-//Modify Begin:2026-07-27 by Hui
-	explicit BloomUpsample(FrameworkDeviceContext& deviceContext, CommandList& commandList);
-//Modify End
+    BloomUpsample(FrameworkDeviceContext& deviceContext, CommandList& commandList);
 
-	void Execute(CommandList& commandList,
-		const BloomParameters& parameters,
-		const std::shared_ptr<Texture>& source,
-		const RenderTarget& destination);
+    void Execute(
+        CommandList& commandList,
+        const BloomParameters& parameters,
+        const std::shared_ptr<Texture>& lowResolutionSource,
+        const std::shared_ptr<Texture>& highResolutionSource,
+        const RenderTarget& destination);
 
-//Modify Begin:2026-08-17 by Hui
-	void ExecuteComposite(CommandList& commandList,
-		const BloomParameters& parameters,
-		const std::shared_ptr<Texture>& sourceColor,
-		const std::shared_ptr<Texture>& bloom,
-		const RenderTarget& destination);
-//Modify End
+    void ExecuteComposite(
+        CommandList& commandList,
+        const BloomParameters& parameters,
+        const std::shared_ptr<Texture>& sourceColor,
+        const std::shared_ptr<Texture>& bloom,
+        const RenderTarget& destination);
 
 private:
-//Modify Begin:2026-08-17 by Hui
-	std::shared_ptr<Material> m_UpsampleMaterial;
-	std::shared_ptr<Material> m_CompositeMaterial;
-//Modify End
-	std::shared_ptr<Mesh> m_BlitMesh;
+    void ExecuteInternal(
+        CommandList& commandList,
+        const BloomParameters& parameters,
+        const std::shared_ptr<Texture>& sourceColor,
+        const std::shared_ptr<Texture>& bloom,
+        const RenderTarget& destination);
+
+    std::shared_ptr<Material> m_Material;
+    std::shared_ptr<Mesh> m_BlitMesh;
 };
+//Modify End

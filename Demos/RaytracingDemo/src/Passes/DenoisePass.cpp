@@ -3,16 +3,7 @@
 #include <RenderGraph/RaytracingDemoGraphResources.h>
 #include <RenderGraph/RenderGraphBuilder.h>
 
-//Modify Begin:2026-08-18 by Hui
-namespace
-{
-    struct DenoisePassData
-    {
-        RaytracingDemoPassResourcesSnapshot Resources;
-        DenoiserController::Algorithm Algorithm = DenoiserController::Algorithm::Off;
-    };
-}
-//Modify End
+#include <utility>
 
 //Modify Begin:2026-07-30 by Hui
 void RaytracingDemoPasses::Builder::AddDenoisePass(
@@ -25,71 +16,56 @@ void RaytracingDemoPasses::Builder::AddDenoisePass(
     const DenoiserController::Algorithm algorithm = config.FrameState->DenoiserAlgorithm;
     Assert(algorithm != DenoiserController::Algorithm::Off, "Denoise pass requires an active algorithm.");
 
-    renderGraphBuilder.AddPass<DenoisePassData>(
-        L"Denoise",
-        [&resources, algorithm](RenderGraphPassBuilder& passBuilder, DenoisePassData& passData)
+    if (algorithm == DenoiserController::Algorithm::NRD)
+    {
+        NRD::GraphInputs inputs = {};
+        inputs.GBufferSpecularSmoothness = DemoResourceIds::GBufferSpecularSmoothness;
+        inputs.GBufferNormal = DemoResourceIds::GBufferNormal;
+        inputs.GBufferPosition = DemoResourceIds::GBufferPosition;
+        inputs.Depth = DemoResourceIds::DepthBuffer;
+        inputs.MotionVector = DemoResourceIds::MotionVector;
+        inputs.NoisyRadiance = DemoResourceIds::NRDNoisyRadiance;
+        inputs.GBufferAlbedoOcclusion = DemoResourceIds::GBufferAlbedoOcclusion;
+        inputs.GBufferEmissionMetallic = DemoResourceIds::GBufferEmissionMetallic;
+        inputs.NormalRoughness = DemoResourceIds::NRDNormalRoughness;
+        inputs.ViewZ = DemoResourceIds::NRDViewZ;
+        inputs.Motion = DemoResourceIds::NRDMotion;
+        inputs.DenoisedRadiance = DemoResourceIds::NRDDenoisedRadiance;
+        inputs.Output = DemoResourceIds::SceneColor;
+        inputs.InputToken = DemoResourceIds::RayTracingFinishedToken;
+        inputs.OutputToken = DemoResourceIds::DenoiseFinishedToken;
+        inputs.Width = config.FrameState->Width;
+        inputs.Height = config.FrameState->Height;
+        inputs.ResolveFrameMatrices = [frameState = config.FrameState]()
         {
-            passData.Resources.emplace(resources);
-            passData.Algorithm = algorithm;
-            passBuilder.ReadToken(DemoResourceIds::RayTracingFinishedToken);
-            passBuilder.ReadBuffer(DemoResourceIds::GBufferNormal);
-            passBuilder.ReadBuffer(DemoResourceIds::GBufferPosition);
-            passBuilder.ReadBuffer(DemoResourceIds::MotionVector);
-            passBuilder.ReadBuffer(DemoResourceIds::DepthBuffer);
-            passBuilder.WriteUav(DemoResourceIds::SceneColor);
-            passBuilder.WriteToken(DemoResourceIds::DenoiseFinishedToken);
-            if (algorithm == DenoiserController::Algorithm::NRD)
-            {
-                passBuilder.ReadBuffer(DemoResourceIds::GBufferAlbedoOcclusion);
-                passBuilder.ReadBuffer(DemoResourceIds::GBufferSpecularSmoothness);
-                passBuilder.ReadBuffer(DemoResourceIds::GBufferEmissionMetallic);
-                passBuilder.ReadBuffer(DemoResourceIds::NRDNoisyRadiance);
-                passBuilder.WriteUav(DemoResourceIds::NRDNormalRoughness);
-                passBuilder.WriteUav(DemoResourceIds::NRDViewZ);
-                passBuilder.WriteUav(DemoResourceIds::NRDMotion);
-                passBuilder.WriteUav(DemoResourceIds::NRDDenoisedRadiance);
-            }
-            else
-            {
-                passBuilder.ReadBuffer(DemoResourceIds::NoisyRadiance);
-            }
-        },
-        [](const DenoisePassData& passData, const RenderContext& context, CommandList& cmd)
-        {
-            const RaytracingDemoPassResources& resources = passData.Resources.value();
-            const DenoiserController::Algorithm algorithm = passData.Algorithm;
-            const RaytracingDemoRenderGraph::FrameGBufferResources gbuffer = RaytracingDemoRenderGraph::GetFrameGBufferResources(context);
-            const uint32_t width = context.GetMetadata().m_ScreenWidth;
-            const uint32_t height = context.GetMetadata().m_ScreenHeight;
-
-            RaytracingDemoRenderGraph::LightingResources lighting = {};
-            lighting.SceneColor = context.GetTexture(DemoResourceIds::SceneColor);
-            if (algorithm == DenoiserController::Algorithm::NRD)
-            {
-                lighting.NRDNoisyRadiance = context.GetTexture(DemoResourceIds::NRDNoisyRadiance);
-            }
-            else
-            {
-                lighting.NoisyRadiance = context.GetTexture(DemoResourceIds::NoisyRadiance);
-            }
-            RaytracingDemoRenderGraph::NRDResources nrd = {};
-            if (algorithm == DenoiserController::Algorithm::NRD)
-            {
-                nrd = RaytracingDemoRenderGraph::GetNRDResources(context);
-            }
-            const NRD::FrameMatrices frameMatrices = {
-                resources.SceneCamera.GetViewMatrix(),
-                resources.SceneCamera.GetProjectionMatrix(),
+            return NRD::FrameMatrices{
+                frameState->View,
+                frameState->Projection,
             };
+        };
+        inputs.DiagnosticNamePrefix = L"RaytracingDemo.NRD";
+        resources.Denoisers.AddNRDPasses(renderGraphBuilder, std::move(inputs));
+        return;
+    }
 
-            resources.Denoisers.Execute(
-                cmd,
-                frameMatrices,
-                gbuffer,
-                lighting,
-                nrd,
-                width,
-                height);
-        });
+    SVGF::GraphInputs inputs = {};
+    inputs.NoisyRadiance = DemoResourceIds::NoisyRadiance;
+    inputs.GBufferNormal = DemoResourceIds::GBufferNormal;
+    inputs.GBufferPosition = DemoResourceIds::GBufferPosition;
+    inputs.MotionVector = DemoResourceIds::MotionVector;
+    inputs.Depth = DemoResourceIds::DepthBuffer;
+    inputs.Output = DemoResourceIds::SceneColor;
+    inputs.InputToken = DemoResourceIds::RayTracingFinishedToken;
+    inputs.OutputToken = DemoResourceIds::DenoiseFinishedToken;
+    inputs.Width = config.FrameState->Width;
+    inputs.Height = config.FrameState->Height;
+    inputs.WidthExpression = [](const RenderMetadata& metadata) { return metadata.m_ScreenWidth; };
+    inputs.HeightExpression = [](const RenderMetadata& metadata) { return metadata.m_ScreenHeight; };
+    inputs.ResolveFrameIndex = [frameState = config.FrameState]()
+    {
+        return static_cast<uint64_t>(frameState->FrameIndex);
+    };
+    inputs.DiagnosticNamePrefix = L"RaytracingDemo.SVGF";
+    resources.Denoisers.AddSVGFPasses(renderGraphBuilder, std::move(inputs));
 }
 //Modify End

@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-08-24 by Hui
 #include "RenderGraphBuilder.h"
 
 #include <DX12Library/Helpers.h>
@@ -123,6 +123,37 @@ namespace RenderGraph
         AddExternalAccess(resource, stateAfter, ExternalResourceAccessMode::Write, insertUavBarrier);
     }
 
+    ResourceId RenderGraphPassBuilder::ReadImported(
+        const ImportedResourceHandle& resource,
+        const D3D12_RESOURCE_STATES stateAfter,
+        const bool insertUavBarrier)
+    {
+        AddInput(resource.GetId(), InputType::ExternalAccess);
+        AddImportedAccess(resource, stateAfter, ExternalResourceAccessMode::Read, insertUavBarrier);
+        return resource.GetId();
+    }
+
+    ResourceId RenderGraphPassBuilder::WriteImported(
+        const ImportedResourceHandle& resource,
+        const D3D12_RESOURCE_STATES stateAfter,
+        const bool insertUavBarrier)
+    {
+        AddOutput(resource.GetId(), OutputType::ExternalAccess);
+        AddImportedAccess(resource, stateAfter, ExternalResourceAccessMode::Write, insertUavBarrier);
+        return resource.GetId();
+    }
+
+    ResourceId RenderGraphPassBuilder::ReadWriteImported(
+        const ImportedResourceHandle& resource,
+        const D3D12_RESOURCE_STATES stateAfter,
+        const bool insertUavBarrier)
+    {
+        AddInput(resource.GetId(), InputType::ExternalAccess);
+        AddOutput(resource.GetId(), OutputType::ExternalAccess);
+        AddImportedAccess(resource, stateAfter, ExternalResourceAccessMode::Write, insertUavBarrier);
+        return resource.GetId();
+    }
+
     void RenderGraphPassBuilder::UseAsyncComputeWhenSupported()
     {
         if (m_Options.AsyncComputeSupported)
@@ -208,19 +239,52 @@ namespace RenderGraph
     {
         Assert(!m_Built, "Cannot modify a render pass after it is built.");
         Assert(resource.IsValid(), "External render-pass resource must be initialized.");
-        m_ExternalAccesses.push_back({ &resource, stateAfter, mode, insertUavBarrier });
+        m_ExternalAccesses.push_back({
+            .StaticResource = &resource,
+            .StateAfter = stateAfter,
+            .Mode = mode,
+            .InsertUavBarrier = insertUavBarrier,
+        });
+    }
+
+    void RenderGraphPassBuilder::AddImportedAccess(
+        const ImportedResourceHandle& resource,
+        const D3D12_RESOURCE_STATES stateAfter,
+        const ExternalResourceAccessMode mode,
+        const bool insertUavBarrier)
+    {
+        Assert(!m_Built, "Cannot modify a render pass after it is built.");
+        Assert(resource.IsValid(), "Imported render-pass resource handle is invalid.");
+        static_cast<void>(resource.Resolve());
+        m_ExternalAccesses.push_back({
+            .Imported = resource,
+            .StateAfter = stateAfter,
+            .Mode = mode,
+            .InsertUavBarrier = insertUavBarrier,
+        });
     }
 
     void RenderGraphPassBuilder::ApplyExternalAccesses(RenderPass& renderPass) const
     {
         for (const PendingExternalAccess& access : m_ExternalAccesses)
         {
-            Assert(access.Resource != nullptr, "External render-pass resource is null.");
-            renderPass.AddExternalResourceAccess(
-                *access.Resource,
-                access.StateAfter,
-                access.Mode,
-                access.InsertUavBarrier);
+            if (access.Imported.IsValid())
+            {
+                renderPass.AddImportedResourceAccess(
+                    access.Imported,
+                    access.StateAfter,
+                    access.Mode,
+                    access.InsertUavBarrier);
+            }
+            else
+            {
+                Assert(access.StaticResource != nullptr, "External render-pass resource is null.");
+                renderPass.AddExternalResourceAccess(
+                    *access.StaticResource,
+                    access.StateAfter,
+                    access.Mode,
+                    access.InsertUavBarrier);
+            }
         }
     }
 
@@ -244,9 +308,94 @@ namespace RenderGraph
         m_RenderPasses.push_back(std::move(renderPass));
     }
 
+    ImportedResourceHandle RenderGraphBuilder::ImportResource(
+        const wchar_t* diagnosticName,
+        std::function<const Resource&()> resolver)
+    {
+        Assert(diagnosticName != nullptr && diagnosticName[0] != L'\0',
+            "Imported render-graph resource requires a diagnostic name.");
+        Assert(static_cast<bool>(resolver), "Imported render-graph resource requires a resolver.");
+        const ResourceId resourceId = ResourceIds::GetResourceId(diagnosticName);
+        const auto duplicate = std::ranges::find_if(
+            m_ImportedResources,
+            [resourceId](const std::shared_ptr<const ImportedResourceHandle::Definition>& definition)
+            {
+                return definition->Id == resourceId;
+            });
+        Assert(duplicate == m_ImportedResources.end(),
+            "Imported render-graph resource was registered more than once.");
+
+        auto definition = std::make_shared<ImportedResourceHandle::Definition>();
+        definition->Id = resourceId;
+        definition->Resolver = std::move(resolver);
+        const ImportedResourceHandle handle(definition);
+        static_cast<void>(handle.Resolve());
+        m_ImportedResources.push_back(std::move(definition));
+        return handle;
+    }
+
+    ResourceId RenderGraphBuilder::CreateTexture(
+        const wchar_t* diagnosticName,
+        RenderMetadataExpression<uint32_t> widthExpression,
+        RenderMetadataExpression<uint32_t> heightExpression,
+        const DXGI_FORMAT format,
+        const ClearValue::COLOR clearColor,
+        const ResourceInitAction initAction,
+        const D3D12_RESOURCE_FLAGS extraResourceFlags,
+        const D3D12_HEAP_FLAGS heapFlags,
+        const bool dedicatedResource)
+    {
+        Assert(diagnosticName != nullptr && diagnosticName[0] != L'\0',
+            "Render-graph texture requires a diagnostic name.");
+        Assert(static_cast<bool>(widthExpression) && static_cast<bool>(heightExpression),
+            "Render-graph texture requires width and height expressions.");
+        Assert(format != DXGI_FORMAT_UNKNOWN, "Render-graph texture format is invalid.");
+        const ResourceId resourceId = ResourceIds::GetResourceId(diagnosticName);
+        const auto duplicate = std::ranges::find_if(
+            m_TextureDescriptions,
+            [resourceId](const TextureDescription& texture) { return texture.m_Id == resourceId; });
+        Assert(duplicate == m_TextureDescriptions.end(),
+            "Render-graph texture was registered more than once by this builder.");
+
+        m_TextureDescriptions.emplace_back(
+            resourceId,
+            widthExpression,
+            heightExpression,
+            format,
+            clearColor,
+            initAction,
+            extraResourceFlags,
+            heapFlags,
+            dedicatedResource);
+        return resourceId;
+    }
+
+    ResourceId RenderGraphBuilder::CreateToken(const wchar_t* diagnosticName)
+    {
+        Assert(diagnosticName != nullptr && diagnosticName[0] != L'\0',
+            "Render-graph token requires a diagnostic name.");
+        const ResourceId resourceId = ResourceIds::GetResourceId(diagnosticName);
+        const auto duplicate = std::ranges::find_if(
+            m_TokenDescriptions,
+            [resourceId](const TokenDescription& token) { return token.m_Id == resourceId; });
+        Assert(duplicate == m_TokenDescriptions.end(), "Render-graph token was registered more than once.");
+        m_TokenDescriptions.push_back({ resourceId });
+        return resourceId;
+    }
+
     std::vector<std::unique_ptr<RenderPass>> RenderGraphBuilder::ReleasePasses()
     {
         return std::move(m_RenderPasses);
+    }
+
+    std::vector<TextureDescription> RenderGraphBuilder::ReleaseTextureDescriptions()
+    {
+        return std::move(m_TextureDescriptions);
+    }
+
+    std::vector<TokenDescription> RenderGraphBuilder::ReleaseTokenDescriptions()
+    {
+        return std::move(m_TokenDescriptions);
     }
 }
 //Modify End

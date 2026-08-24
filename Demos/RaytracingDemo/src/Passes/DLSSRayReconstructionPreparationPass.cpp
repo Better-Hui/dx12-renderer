@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-08-24 by Hui
 #include <Passes/RaytracingDemoPasses.h>
 
 #include <RenderGraph/RaytracingDemoGraphResources.h>
@@ -63,7 +63,6 @@ void RaytracingDemoPasses::Builder::AddDLSSRayReconstructionPreparationPass(
                 Math::DivideByMultiple(context.GetMetadata().m_ScreenWidth, 8u),
                 Math::DivideByMultiple(context.GetMetadata().m_ScreenHeight, 8u),
                 1u);
-            commandContext.InsertDescriptorSetOutputBarriers(shader.GetDescriptorSet());
         });
 }
 //Modify End

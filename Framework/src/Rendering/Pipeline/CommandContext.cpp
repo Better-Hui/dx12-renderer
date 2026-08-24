@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-08-24 by Hui
 
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 
@@ -42,58 +42,6 @@ namespace
         {
             const std::string message = "CommandContext: skipped missing constant buffer '" + key + "'.\n";
             OutputDebugStringA(message.c_str());
-        }
-    }
-
-    void TransitionShaderResourceBinding(CommandList& commandList, const PipelineShaderResourceBinding& shaderResource)
-    {
-        if (shaderResource.Resource == nullptr || !shaderResource.Resource->AreAutoBarriersEnabled())
-        {
-            return;
-        }
-        if (shaderResource.NumSubresources < D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
-        {
-            for (UINT i = 0; i < shaderResource.NumSubresources; ++i)
-            {
-                commandList.TransitionBarrier(*shaderResource.Resource, shaderResource.StateAfter, shaderResource.FirstSubresource + i);
-            }
-        }
-        else
-        {
-            commandList.TransitionBarrier(*shaderResource.Resource, shaderResource.StateAfter);
-        }
-    }
-
-    void TransitionUnorderedAccessView(CommandList& commandList, const UnorderedAccessView& unorderedAccessView)
-    {
-        if (unorderedAccessView.m_Resource == nullptr || !unorderedAccessView.m_Resource->AreAutoBarriersEnabled())
-        {
-            return;
-        }
-        if (unorderedAccessView.m_NumSubresources < D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
-        {
-            for (UINT i = 0; i < unorderedAccessView.m_NumSubresources; ++i)
-            {
-                commandList.TransitionBarrier(*unorderedAccessView.m_Resource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, unorderedAccessView.m_FirstSubresource + i);
-            }
-        }
-        else
-        {
-            commandList.TransitionBarrier(*unorderedAccessView.m_Resource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        }
-    }
-
-    void InsertDescriptorSetOutputBarriersImpl(CommandList& commandList, const PipelineDescriptorSet& descriptorSet)
-    {
-        for (const auto& [rootParameterIndex, boundResource] : descriptorSet.GetBoundResources())
-        {
-            (void)rootParameterIndex;
-            if (boundResource.UnorderedAccessView.has_value() &&
-                boundResource.UnorderedAccessView->m_Resource != nullptr &&
-                boundResource.UnorderedAccessView->m_Resource->AreAutoBarriersEnabled())
-            {
-                commandList.UavBarrier(*boundResource.UnorderedAccessView->m_Resource);
-            }
         }
     }
 
@@ -454,9 +402,9 @@ void CommandContext::SetShaderResourceViews(Shader& shader, const std::string_vi
     shader.m_DescriptorSet->SetShaderResourceViews(name, shaderResourceViews);
 }
 
-void CommandContext::SetShaderResource(Shader& shader, const std::string_view name, const Resource& resource, const D3D12_RESOURCE_STATES stateAfter) const
+void CommandContext::SetShaderResource(Shader& shader, const std::string_view name, const Resource& resource) const
 {
-    shader.m_DescriptorSet->SetShaderResource(name, 0u, resource, stateAfter);
+    shader.m_DescriptorSet->SetShaderResource(name, 0u, resource);
 }
 
 void CommandContext::SetStructuredBuffer(Shader& shader, const std::string_view name, const StructuredBuffer& buffer) const
@@ -494,9 +442,9 @@ void CommandContext::SetShaderResourceViews(MeshShader& shader, const std::strin
     shader.m_DescriptorSet->SetShaderResourceViews(name, shaderResourceViews);
 }
 
-void CommandContext::SetShaderResource(MeshShader& shader, const std::string_view name, const Resource& resource, const D3D12_RESOURCE_STATES stateAfter) const
+void CommandContext::SetShaderResource(MeshShader& shader, const std::string_view name, const Resource& resource) const
 {
-    shader.m_DescriptorSet->SetShaderResource(name, 0u, resource, stateAfter);
+    shader.m_DescriptorSet->SetShaderResource(name, 0u, resource);
 }
 
 void CommandContext::SetStructuredBuffer(MeshShader& shader, const std::string_view name, const StructuredBuffer& buffer) const
@@ -518,8 +466,7 @@ void CommandContext::SetStructuredBuffer(const ComputeShader& shader, const std:
 {
     shader.m_DescriptorSet->SetStructuredBuffer(
         name,
-        buffer,
-        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        buffer);
 }
 
 void CommandContext::SetConstantBuffer(const ComputeShader& shader, const std::string_view name, const size_t size, const void* data) const
@@ -534,38 +481,26 @@ void CommandContext::SetConstantBuffer(const ComputeShader& shader, const std::s
 
 void CommandContext::SetShaderResourceView(const ComputeShader& shader, const std::string_view name, const ShaderResourceView& shaderResourceView) const
 {
-    shader.m_DescriptorSet->SetShaderResourceView(
-        name,
-        0u,
-        shaderResourceView,
-        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    shader.m_DescriptorSet->SetShaderResourceView(name, 0u, shaderResourceView);
 }
 
 void CommandContext::SetShaderResourceView(const ComputeShader& shader, const std::string_view name, const uint32_t arrayIndex, const ShaderResourceView& shaderResourceView) const
 {
-    shader.m_DescriptorSet->SetShaderResourceView(
-        name,
-        arrayIndex,
-        shaderResourceView,
-        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    shader.m_DescriptorSet->SetShaderResourceView(name, arrayIndex, shaderResourceView);
 }
 
 void CommandContext::SetShaderResource(
     const ComputeShader& shader,
     const std::string_view name,
     const uint32_t arrayIndex,
-    const Resource& resource,
-    const D3D12_RESOURCE_STATES stateAfter) const
+    const Resource& resource) const
 {
-    shader.m_DescriptorSet->SetShaderResource(name, arrayIndex, resource, stateAfter);
+    shader.m_DescriptorSet->SetShaderResource(name, arrayIndex, resource);
 }
 
 void CommandContext::SetShaderResourceViews(const ComputeShader& shader, const std::string_view name, std::span<const ShaderResourceView> shaderResourceViews) const
 {
-    shader.m_DescriptorSet->SetShaderResourceViews(
-        name,
-        shaderResourceViews,
-        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    shader.m_DescriptorSet->SetShaderResourceViews(name, shaderResourceViews);
 }
 
 void CommandContext::SetTexture(const ComputeShader& shader, const std::string_view name, const ShaderResourceView& shaderResourceView) const
@@ -651,19 +586,11 @@ bool CommandContext::TryApplyDescriptorTableBinding(
             }
 
             Assert(shaderResource->Resource != nullptr, "Pipeline SRV resource is not bound.");
-            if (shaderResource->AutoTransition && shaderResource->Resource->AreAutoBarriersEnabled())
-            {
-                TransitionShaderResourceBinding(m_CommandList, *shaderResource);
-            }
         }
         break;
     case DescriptorBindingKind::UnorderedAccessView:
         Assert(boundResource.UnorderedAccessView.has_value(), "Pipeline UAV resource is not bound.");
         Assert(boundResource.UnorderedAccessView->m_Resource != nullptr, "Pipeline UAV resource is not bound.");
-        if (boundResource.UnorderedAccessView->m_Resource->AreAutoBarriersEnabled())
-        {
-            TransitionUnorderedAccessView(m_CommandList, *boundResource.UnorderedAccessView);
-        }
         break;
     default:
         return false;
@@ -726,27 +653,13 @@ void CommandContext::ApplyGraphicsBinding(const PipelineDescriptorSet& descripto
             const PipelineShaderResourceBinding& shaderResource = *boundResource->ShaderResources[i];
             Assert(shaderResource.Resource != nullptr, "Pipeline SRV resource is not bound.");
             const D3D12_SHADER_RESOURCE_VIEW_DESC* srvDesc = shaderResource.HasDesc ? &shaderResource.Desc : nullptr;
-            if (shaderResource.AutoTransition && shaderResource.Resource->AreAutoBarriersEnabled())
-            {
-                m_CommandList.SetShaderResourceView(
-                    rootParameterIndex,
-                    i,
-                    *shaderResource.Resource,
-                    shaderResource.StateAfter,
-                    shaderResource.FirstSubresource,
-                    shaderResource.NumSubresources,
-                    srvDesc);
-            }
-            else
-            {
-                m_CommandList.SetShaderResourceView(
-                    rootParameterIndex,
-                    i,
-                    *shaderResource.Resource,
-                    shaderResource.FirstSubresource,
-                    shaderResource.NumSubresources,
-                    srvDesc);
-            }
+            m_CommandList.SetShaderResourceView(
+                rootParameterIndex,
+                i,
+                *shaderResource.Resource,
+                shaderResource.FirstSubresource,
+                shaderResource.NumSubresources,
+                srvDesc);
         }
         return;
     }
@@ -764,27 +677,13 @@ void CommandContext::ApplyGraphicsBinding(const PipelineDescriptorSet& descripto
         {
             return;
         }
-        if (unorderedAccessView.m_Resource->AreAutoBarriersEnabled())
-        {
-            m_CommandList.SetUnorderedAccessView(
-                rootParameterIndex,
-                0u,
-                *unorderedAccessView.m_Resource,
-                D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                unorderedAccessView.m_FirstSubresource,
-                unorderedAccessView.m_NumSubresources,
-                unorderedAccessView.GetDescOrNullptr());
-        }
-        else
-        {
-            m_CommandList.SetUnorderedAccessView(
-                rootParameterIndex,
-                0u,
-                *unorderedAccessView.m_Resource,
-                unorderedAccessView.m_FirstSubresource,
-                unorderedAccessView.m_NumSubresources,
-                unorderedAccessView.GetDescOrNullptr());
-        }
+        m_CommandList.SetUnorderedAccessView(
+            rootParameterIndex,
+            0u,
+            *unorderedAccessView.m_Resource,
+            unorderedAccessView.m_FirstSubresource,
+            unorderedAccessView.m_NumSubresources,
+            unorderedAccessView.GetDescOrNullptr());
     }
 }
 
@@ -831,10 +730,6 @@ void CommandContext::ApplyComputeBinding(const PipelineDescriptorSet& descriptor
         if (range->BindingMode == PipelineDescriptorBindingMode::RootDescriptor)
         {
             Assert(boundResource->StructuredBufferResource != nullptr, "Pipeline root SRV structured buffer is not bound.");
-            if (boundResource->StructuredBufferResource->AreAutoBarriersEnabled())
-            {
-                m_CommandList.TransitionBarrier(*boundResource->StructuredBufferResource, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-            }
             m_CommandList.SetComputeRootShaderResourceView(
                 rootParameterIndex,
                 boundResource->StructuredBufferResource->GetD3D12Resource()->GetGPUVirtualAddress());
@@ -862,27 +757,13 @@ void CommandContext::ApplyComputeBinding(const PipelineDescriptorSet& descriptor
             const PipelineShaderResourceBinding& shaderResource = *boundResource->ShaderResources[i];
             Assert(shaderResource.Resource != nullptr, "Pipeline SRV resource is not bound.");
             const D3D12_SHADER_RESOURCE_VIEW_DESC* srvDesc = shaderResource.HasDesc ? &shaderResource.Desc : nullptr;
-            if (shaderResource.AutoTransition && shaderResource.Resource->AreAutoBarriersEnabled())
-            {
-                m_CommandList.SetShaderResourceView(
-                    rootParameterIndex,
-                    i,
-                    *shaderResource.Resource,
-                    shaderResource.StateAfter,
-                    shaderResource.FirstSubresource,
-                    shaderResource.NumSubresources,
-                    srvDesc);
-            }
-            else
-            {
-                m_CommandList.SetShaderResourceView(
-                    rootParameterIndex,
-                    i,
-                    *shaderResource.Resource,
-                    shaderResource.FirstSubresource,
-                    shaderResource.NumSubresources,
-                    srvDesc);
-            }
+            m_CommandList.SetShaderResourceView(
+                rootParameterIndex,
+                i,
+                *shaderResource.Resource,
+                shaderResource.FirstSubresource,
+                shaderResource.NumSubresources,
+                srvDesc);
         }
         return;
     }
@@ -900,27 +781,13 @@ void CommandContext::ApplyComputeBinding(const PipelineDescriptorSet& descriptor
         {
             return;
         }
-        if (unorderedAccessView.m_Resource->AreAutoBarriersEnabled())
-        {
-            m_CommandList.SetUnorderedAccessView(
-                rootParameterIndex,
-                0u,
-                *unorderedAccessView.m_Resource,
-                D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                unorderedAccessView.m_FirstSubresource,
-                unorderedAccessView.m_NumSubresources,
-                unorderedAccessView.GetDescOrNullptr());
-        }
-        else
-        {
-            m_CommandList.SetUnorderedAccessView(
-                rootParameterIndex,
-                0u,
-                *unorderedAccessView.m_Resource,
-                unorderedAccessView.m_FirstSubresource,
-                unorderedAccessView.m_NumSubresources,
-                unorderedAccessView.GetDescOrNullptr());
-        }
+        m_CommandList.SetUnorderedAccessView(
+            rootParameterIndex,
+            0u,
+            *unorderedAccessView.m_Resource,
+            unorderedAccessView.m_FirstSubresource,
+            unorderedAccessView.m_NumSubresources,
+            unorderedAccessView.GetDescOrNullptr());
     }
 }
 
@@ -932,32 +799,6 @@ void CommandContext::StageDynamicDescriptors(
     const D3D12_CPU_DESCRIPTOR_HANDLE baseDescriptor) const
 {
     m_CommandList.StageDynamicDescriptors(descriptorHeapType, rootParameterIndex, offset, numDescriptors, baseDescriptor);
-}
-
-void CommandContext::InsertDescriptorSetOutputBarriers(const PipelineDescriptorSet& descriptorSet) const
-{
-    InsertDescriptorSetOutputBarriersImpl(m_CommandList, descriptorSet);
-}
-
-void CommandContext::TransitionShaderResource(const Resource& resource) const
-{
-    if (resource.AreAutoBarriersEnabled())
-    {
-        m_CommandList.TransitionBarrier(resource, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    }
-}
-
-void CommandContext::TransitionUnorderedAccess(const Resource& resource) const
-{
-    if (resource.AreAutoBarriersEnabled())
-    {
-        m_CommandList.TransitionBarrier(resource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    }
-}
-
-void CommandContext::UavBarrier(const Resource& resource) const
-{
-    m_CommandList.UavBarrier(resource);
 }
 
 void CommandContext::Draw(
@@ -1088,11 +929,6 @@ void CommandContext::DispatchRays(const RayTracingDispatchDesc& dispatchDesc) co
         dispatchDesc.Height,
         dispatchDesc.Depth);
     m_CommandList.DispatchRays(d3d12DispatchDesc);
-}
-
-void CommandContext::InsertDescriptorSetOutputBarriers(const RayTracingBindingSet& bindingSet) const
-{
-    InsertDescriptorSetOutputBarriers(bindingSet.GetDescriptorSet());
 }
 
 //Modify End

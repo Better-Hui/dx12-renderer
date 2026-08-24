@@ -167,10 +167,6 @@ public:
             (GetD3D12ResourceDesc().Flags & D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS) != 0;
     }
 //Modify End
-    bool AreAutoBarriersEnabled() const { return m_AutoBarriersEnabled; }
-    void SetAutoBarriersEnabled(bool enable) { m_AutoBarriersEnabled = enable; }
-
-
     virtual void ForEachResourceRecursive(const std::function<void(const Resource&)>& action) const
     {
         action(*this);
@@ -203,5 +199,4 @@ protected:
 private:
     // Check the format support and populate the m_FormatSupport structure.
     void CheckFeatureSupport();
-    bool m_AutoBarriersEnabled = true;
 };

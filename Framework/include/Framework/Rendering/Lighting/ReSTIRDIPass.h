@@ -1,11 +1,12 @@
 #pragma once
 
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-24 by Hui
 #include <Framework/Rendering/Lighting/ActivePixelList.h>
 #include <Framework/Rendering/Lighting/ReSTIRDI.h>
 #include <Framework/Rendering/Lighting/MaterialShadingModel.h>
 #include <Framework/Rendering/Pipeline/PipelineLayout.h>
 #include <Framework/Rendering/Pipeline/ShaderVariant.h>
+#include <RenderGraph/RenderGraphBuilder.h>
 
 #include <array>
 #include <cstdint>
@@ -54,6 +55,22 @@ struct ReSTIRDIShaderSources
     std::vector<PipelineStaticSamplerContract> StaticSamplerContracts;
 };
 
+struct ReSTIRDIGraphInputs
+{
+    RenderGraph::ResourceId DirectLighting = 0;
+    RenderGraph::ResourceId InputToken = 0;
+    RenderGraph::ResourceId OutputToken = 0;
+    uint32_t Width = 1u;
+    uint32_t Height = 1u;
+    bool UseCompactedDispatch = false;
+    bool EnableTemporalResampling = false;
+    bool EnableBoilingFilter = false;
+    bool EnableSpatialResampling = false;
+    std::function<uint32_t()> GetFrameIndex;
+    std::function<void(RenderGraph::RenderGraphPassBuilder&)> DeclareSharedResources;
+    std::function<ReSTIRDIExecutionInputs(const RenderGraph::RenderContext&)> ResolveFrameInputs;
+};
+
 class ReSTIRDIPass final
 {
 public:
@@ -69,9 +86,9 @@ public:
         const ReSTIRDIFrameConstants& constants,
         MaterialShadingModel shadingModel,
         bool useCompactedDispatch);
-    void Execute(
-        CommandList& commandList,
-        const ReSTIRDIExecutionInputs& inputs);
+    void AddPasses(
+        RenderGraph::RenderGraphBuilder& builder,
+        ReSTIRDIGraphInputs inputs);
 
 private:
     enum class ReSTIRDIStage : uint8_t

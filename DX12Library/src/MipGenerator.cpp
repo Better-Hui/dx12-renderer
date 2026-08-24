@@ -12,7 +12,7 @@
 #include <memory>
 #include <stdexcept>
 
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-08-24 by Hui
 MipGenerator::MipGenerator(std::shared_ptr<D3D12DeviceContext> deviceContext)
     : m_DeviceContext(std::move(deviceContext))
 {
@@ -96,12 +96,32 @@ void MipGenerator::Generate(CommandList& commandList, Texture& texture)
         m_DeviceContext);
     CommandListInternalAccess::TrackResourceLifetime(commandList, unorderedAccessTexture);
 
-    commandList.AliasingBarrier(nullptr, aliasResource);
+    CommandListInternalAccess::AliasingBarrier(commandList, nullptr, aliasResource);
+    CommandListInternalAccess::TransitionBarrier(
+        commandList,
+        texture,
+        D3D12_RESOURCE_STATE_COPY_SOURCE);
+    CommandListInternalAccess::TransitionBarrier(
+        commandList,
+        aliasTexture,
+        D3D12_RESOURCE_STATE_COPY_DEST);
     commandList.CopyResource(aliasTexture, texture);
-    commandList.AliasingBarrier(aliasResource, unorderedAccessResource);
+    CommandListInternalAccess::AliasingBarrier(commandList, aliasResource, unorderedAccessResource);
     GenerateUnorderedAccessMips(commandList, unorderedAccessTexture, resourceDesc.Format);
-    commandList.AliasingBarrier(unorderedAccessResource, aliasResource);
+    CommandListInternalAccess::AliasingBarrier(commandList, unorderedAccessResource, aliasResource);
+    CommandListInternalAccess::TransitionBarrier(
+        commandList,
+        aliasTexture,
+        D3D12_RESOURCE_STATE_COPY_SOURCE);
+    CommandListInternalAccess::TransitionBarrier(
+        commandList,
+        texture,
+        D3D12_RESOURCE_STATE_COPY_DEST);
     commandList.CopyResource(texture, aliasTexture);
+    CommandListInternalAccess::TransitionBarrier(
+        commandList,
+        texture,
+        D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
 }
 
 void MipGenerator::GenerateUnorderedAccessMips(
@@ -152,11 +172,15 @@ void MipGenerator::GenerateUnorderedAccessMips(
         constants.TexelSize.x = 1.0f / static_cast<float>(destinationWidth);
         constants.TexelSize.y = 1.0f / static_cast<float>(destinationHeight);
         commandList.SetCompute32BitConstants(GenerateMips::GenerateMipsCb, constants);
+        CommandListInternalAccess::TransitionBarrier(
+            commandList,
+            texture,
+            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+            sourceMip);
         commandList.SetShaderResourceView(
             GenerateMips::SrcMip,
             0u,
             texture,
-            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
             sourceMip,
             1u,
             &srvDesc);
@@ -167,11 +191,15 @@ void MipGenerator::GenerateUnorderedAccessMips(
             viewDesc.Format = resourceDesc.Format;
             viewDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
             viewDesc.Texture2D.MipSlice = sourceMip + mip + 1u;
+            CommandListInternalAccess::TransitionBarrier(
+                commandList,
+                texture,
+                D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                viewDesc.Texture2D.MipSlice);
             commandList.SetUnorderedAccessView(
                 GenerateMips::OutMip,
                 mip,
                 texture,
-                D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                 viewDesc.Texture2D.MipSlice,
                 1u,
                 &viewDesc);
@@ -190,8 +218,12 @@ void MipGenerator::GenerateUnorderedAccessMips(
         commandList.Dispatch(
             Math::DivideByMultiple(destinationWidth, 8u),
             Math::DivideByMultiple(destinationHeight, 8u));
-        commandList.UavBarrier(texture);
+        CommandListInternalAccess::UavBarrier(commandList, texture);
         sourceMip += mipCount;
     }
+    CommandListInternalAccess::TransitionBarrier(
+        commandList,
+        texture,
+        D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
 }
 //Modify End

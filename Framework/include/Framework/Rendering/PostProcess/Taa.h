@@ -1,74 +1,92 @@
 #pragma once
 
-#include <wrl.h>
-#include <d3d12.h>
-#include <memory>
-#include <DX12Library/Texture.h>
-#include <DX12Library/RenderTarget.h>
+//Modify Begin:2026-08-24 by Hui
+#include <RenderGraph/ResourceId.h>
+
 #include <DirectXMath.h>
-#include <Framework/Scene/Material.h>
+#include <d3d12.h>
+
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <string>
 
 class CommandList;
-//Modify Begin:2026-07-30 by Hui
 class FrameworkDeviceContext;
-//Modify End
+class Material;
 class Mesh;
+class RenderTarget;
+class Texture;
 
-class TAA
+namespace RenderGraph
+{
+    class RenderGraphBuilder;
+}
+
+class TAA final
 {
 public:
-//Modify Begin:2026-07-27 by Hui
-    explicit TAA(FrameworkDeviceContext& deviceContext, CommandList& commandList, DXGI_FORMAT backBufferFormat, uint32_t width, uint32_t height);
-//Modify End
+    struct GraphInputs
+    {
+        RenderGraph::ResourceId CurrentColor = 0;
+        RenderGraph::ResourceId Velocity = 0;
+        RenderGraph::ResourceId Output = 0;
+        RenderGraph::ResourceId InputToken = 0;
+        RenderGraph::ResourceId OutputToken = 0;
+        uint32_t Width = 1;
+        uint32_t Height = 1;
+        std::function<float()> ResolveModulationFactor;
+        std::wstring DiagnosticNamePrefix = L"Framework.TAA";
+    };
+
+    TAA(
+        FrameworkDeviceContext& deviceContext,
+        CommandList& commandList,
+        DXGI_FORMAT backBufferFormat,
+        uint32_t width,
+        uint32_t height);
 
     [[nodiscard]] DirectX::XMFLOAT2 ComputeJitterOffset() const;
     [[nodiscard]] const DirectX::XMMATRIX& GetPreviousViewProjectionMatrix() const;
 
-    void Resolve(CommandList& commandList, const std::shared_ptr<Texture>& currentBuffer, const std::shared_ptr<Texture>& velocityBuffer, float modulationFactor = 0.9f);
-    void Resize(CommandList& commandList, uint32_t width, uint32_t height);
-    [[nodiscard]] const std::shared_ptr<Texture>& GetResolvedTexture() const;
+    void AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs inputs);
+    void ResetHistory();
 
     [[nodiscard]] DirectX::XMFLOAT2 GetCurrentJitterOffset() const;
     void OnRenderedFrame(const DirectX::XMMATRIX& viewProjectionMatrix);
 
 private:
-//Modify Begin:2026-08-12 by Hui
-    FrameworkDeviceContext& m_DeviceContext;
-//Modify End
-    RenderTarget m_ResolveRenderTarget;
+    bool EnsureCreated(uint32_t width, uint32_t height);
+    void RecordResolve(
+        CommandList& commandList,
+        const std::shared_ptr<Texture>& currentBuffer,
+        const std::shared_ptr<Texture>& historyBuffer,
+        const std::shared_ptr<Texture>& velocityBuffer,
+        const RenderTarget& destination,
+        float modulationFactor,
+        uint32_t width,
+        uint32_t height);
 
     std::shared_ptr<Mesh> m_BlitMesh;
     std::shared_ptr<Material> m_Material;
-    std::shared_ptr<Texture> m_HistoryBuffer;
+    FrameworkDeviceContext& m_DeviceContext;
+    DXGI_FORMAT m_Format = DXGI_FORMAT_UNKNOWN;
 
     constexpr static DirectX::XMFLOAT2 JITTER_OFFSETS[]{
-        // Quincunx
         {0, 0},
         {0.5f, 0.5f},
         {0.5f, -0.5f},
         {-0.5f, -0.5f},
         {-0.5f, 0.5f},
-        // Halton sequence
-        /*{0.500000f, 0.333333f},
-        {0.250000f, 0.666667f},
-        {0.750000f, 0.111111f},
-        {0.125000f, 0.444444f},
-        {0.625000f, 0.777778f},
-        {0.375000f, 0.222222f},
-        {0.875000f, 0.555556f},
-        {0.062500f, 0.888889f},
-        {0.562500f, 0.037037f},
-        {0.312500f, 0.370370f},
-        {0.812500f, 0.703704f},
-        {0.187500f, 0.148148f},
-        {0.687500f, 0.481481f},
-        {0.437500f, 0.814815f},
-        {0.937500f, 0.259259f},
-        {0.031250f, 0.592593f},*/
     };
     constexpr static uint32_t JITTER_OFFSETS_COUNT = _countof(JITTER_OFFSETS);
-    DirectX::XMMATRIX m_PreviousViewProjectionMatrix;
+    DirectX::XMMATRIX m_PreviousViewProjectionMatrix = DirectX::XMMatrixIdentity();
     uint32_t m_FrameIndex = 0;
-
-    uint32_t m_Width, m_Height;
+    uint32_t m_Width = 1;
+    uint32_t m_Height = 1;
+    uint32_t m_HistoryIndex = 0;
+    bool m_HistoryValid = false;
+    bool m_HistoryCapturePending = false;
+    std::shared_ptr<Texture> m_HistoryBuffers[2];
 };
+//Modify End

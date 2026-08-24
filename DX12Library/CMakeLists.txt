@@ -9,6 +9,7 @@ set(HEADER_FILES
         include/DX12Library/ByteAddressBuffer.h
         include/DX12Library/Camera.h
         include/DX12Library/CommandList.h
+        include/DX12Library/CommandListInternalAccess.h
         include/DX12Library/CommandQueue.h
         include/DX12Library/CommandQueueFailure.h
         include/DX12Library/ConstantBuffer.h
@@ -63,6 +64,7 @@ set(SOURCE_FILES
         src/ByteAddressBuffer.cpp
         src/Camera.cpp
         src/CommandList.cpp
+        src/CommandListInternalAccess.cpp
         src/CommandQueue.cpp
         src/ConstantBuffer.cpp
         src/Cubemap.cpp

@@ -3,7 +3,6 @@
 //Modify End
 
 #include <DX12Library/Helpers.h>
-#include <DX12Library/RenderTarget.h>
 #include <DX12Library/Texture.h>
 #include <Framework/Core/FrameworkDeviceContext.h>
 #include <Framework/Rendering/PostProcess/Bloom.h>
@@ -58,11 +57,8 @@ CudaBloomPass::~CudaBloomPass()
 
 void CudaBloomPass::Shutdown()
 {
-//Modify Begin:2026-08-16 by Hui
+//Modify Begin:2026-08-24 by Hui
     m_FrameworkBloom.reset();
-    m_FrameworkBloomWidth = 0;
-    m_FrameworkBloomHeight = 0;
-    m_FrameworkBloomPyramidLevels = 0;
 //Modify End
     ReleaseInteropResource();
 //Modify Begin:2026-07-30 by Hui
@@ -127,50 +123,20 @@ std::vector<CudaBloomPass::TimingStats> CudaBloomPass::ConsumeCompletedTimingSta
 }
 //Modify End
 
-//Modify Begin:2026-08-16 by Hui
-bool CudaBloomPass::ExecuteFrameworkBloom(
-    const std::shared_ptr<Texture>& source,
-    const std::shared_ptr<Texture>& destination,
-    CommandList& commandList,
-    const uint32_t width,
-    const uint32_t height)
+//Modify Begin:2026-08-24 by Hui
+void CudaBloomPass::InitializeFrameworkBloom(CommandList& commandList)
 {
-    if (!m_Enabled || !IsFrameworkRaster() || source == nullptr || destination == nullptr)
+    if (m_FrameworkBloom == nullptr)
     {
-        return false;
+        m_FrameworkBloom = std::make_unique<Bloom>(m_DeviceContext, commandList);
     }
+}
 
-    Assert(source.get() != destination.get(), "Framework raster bloom requires distinct source and destination textures.");
-
-    const uint32_t maxPyramidLevels = ComputeMaxPyramidLevels(width, height);
-    const int pyramidLevels = std::clamp(m_PyramidLevels, 1, static_cast<int>(maxPyramidLevels));
-    if (m_FrameworkBloom == nullptr ||
-        m_FrameworkBloomWidth != width ||
-        m_FrameworkBloomHeight != height ||
-        m_FrameworkBloomPyramidLevels != pyramidLevels)
-    {
-        m_FrameworkBloom = std::make_unique<Bloom>(
-            m_DeviceContext,
-            commandList,
-            width,
-            height,
-            DXGI_FORMAT_R32G32B32A32_FLOAT,
-            static_cast<size_t>(pyramidLevels) + 1u);
-        m_FrameworkBloomWidth = width;
-        m_FrameworkBloomHeight = height;
-        m_FrameworkBloomPyramidLevels = pyramidLevels;
-    }
-
-    RenderTarget destinationRenderTarget;
-    destinationRenderTarget.AttachTexture(Color0, destination);
-
-    BloomParameters parameters = {};
-    parameters.Intensity = m_Intensity;
-    parameters.Threshold = m_Threshold;
-    parameters.SoftThreshold = m_SoftThreshold;
-    m_FrameworkBloom->Draw(commandList, source, destinationRenderTarget, parameters);
+Bloom& CudaBloomPass::GetFrameworkBloom()
+{
+    Assert(m_FrameworkBloom != nullptr, "Framework raster bloom has not been initialized.");
     m_Status = "Built-in raster bloom is active.";
-    return true;
+    return *m_FrameworkBloom;
 }
 //Modify End
 

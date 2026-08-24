@@ -1,16 +1,23 @@
-//Modify Begin:2026-08-12 by Hui
+//Modify Begin:2026-08-24 by Hui
 #pragma once
 
+#include <RenderGraph/ResourceDescription.h>
+#include <RenderGraph/ResourceId.h>
+
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
-
-#include <d3d12.h>
 
 class CommandList;
 class ComputeShader;
 class FrameworkDeviceContext;
 class Texture;
+
+namespace RenderGraph
+{
+    class RenderGraphBuilder;
+}
 
 class SVGF
 {
@@ -25,6 +32,24 @@ public:
         float PhiDepth = 1.0f;
     };
 
+    struct GraphInputs
+    {
+        RenderGraph::ResourceId NoisyRadiance = 0;
+        RenderGraph::ResourceId GBufferNormal = 0;
+        RenderGraph::ResourceId GBufferPosition = 0;
+        RenderGraph::ResourceId MotionVector = 0;
+        RenderGraph::ResourceId Depth = 0;
+        RenderGraph::ResourceId Output = 0;
+        RenderGraph::ResourceId InputToken = 0;
+        RenderGraph::ResourceId OutputToken = 0;
+        uint32_t Width = 1;
+        uint32_t Height = 1;
+        RenderGraph::RenderMetadataExpression<uint32_t> WidthExpression;
+        RenderGraph::RenderMetadataExpression<uint32_t> HeightExpression;
+        std::function<uint64_t()> ResolveFrameIndex;
+        std::wstring DiagnosticNamePrefix = L"Framework.SVGF";
+    };
+
     explicit SVGF(FrameworkDeviceContext& deviceContext);
     ~SVGF();
 
@@ -34,16 +59,7 @@ public:
     bool IsEnabled() const { return m_Enabled; }
     void ResetHistory();
 
-    void Execute(
-        CommandList& commandList,
-        const std::shared_ptr<Texture>& noisyRadiance,
-        const std::shared_ptr<Texture>& gBufferNormal,
-        const std::shared_ptr<Texture>& gBufferPosition,
-        const std::shared_ptr<Texture>& motionVector,
-        const std::shared_ptr<Texture>& depthTexture,
-        const std::shared_ptr<Texture>& output,
-        uint32_t width,
-        uint32_t height);
+    void AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs inputs);
 
 private:
     struct TemporalConstants
@@ -79,26 +95,28 @@ private:
     };
 
     bool EnsureCreated(uint32_t width, uint32_t height);
-    void Temporal(
+
+    void RecordTemporal(
         CommandList& commandList,
         const std::shared_ptr<Texture>& noisyRadiance,
         const std::shared_ptr<Texture>& gBufferNormal,
         const std::shared_ptr<Texture>& gBufferPosition,
         const std::shared_ptr<Texture>& motionVector,
         const std::shared_ptr<Texture>& depthTexture,
+        const std::shared_ptr<Texture>& historyColor,
+        const std::shared_ptr<Texture>& historyMoments,
+        const std::shared_ptr<Texture>& temporalColor,
+        const std::shared_ptr<Texture>& temporalMoments,
+        const std::shared_ptr<Texture>& variance,
+        const std::shared_ptr<Texture>& outputHistoryColor,
+        const std::shared_ptr<Texture>& outputHistoryMoments,
         uint32_t width,
         uint32_t height);
-    std::shared_ptr<Texture> Atrous(
-        CommandList& commandList,
-        const std::shared_ptr<Texture>& gBufferNormal,
-        const std::shared_ptr<Texture>& gBufferPosition,
-        const std::shared_ptr<Texture>& depthTexture,
-        uint32_t width,
-        uint32_t height);
-    void AtrousPass(
+    void RecordAtrous(
         CommandList& commandList,
         const std::shared_ptr<Texture>& input,
         const std::shared_ptr<Texture>& output,
+        const std::shared_ptr<Texture>& variance,
         const std::shared_ptr<Texture>& gBufferNormal,
         const std::shared_ptr<Texture>& gBufferPosition,
         const std::shared_ptr<Texture>& depthTexture,
@@ -106,7 +124,7 @@ private:
         uint32_t height,
         uint32_t stepSize,
         uint32_t direction);
-    void Composite(
+    void RecordComposite(
         CommandList& commandList,
         const std::shared_ptr<Texture>& input,
         const std::shared_ptr<Texture>& depthTexture,
@@ -118,20 +136,12 @@ private:
     std::unique_ptr<ComputeShader> m_AtrousShader;
     std::unique_ptr<ComputeShader> m_CompositeShader;
     FrameworkDeviceContext& m_DeviceContext;
-
     Settings m_Settings = {};
     bool m_Enabled = false;
     bool m_HistoryValid = false;
     uint32_t m_Width = 0;
     uint32_t m_Height = 0;
-    uint32_t m_HistoryIndex = 0;
-
     std::shared_ptr<Texture> m_HistoryColor[2];
     std::shared_ptr<Texture> m_HistoryMoments[2];
-    std::shared_ptr<Texture> m_TemporalColor;
-    std::shared_ptr<Texture> m_TemporalMoments;
-    std::shared_ptr<Texture> m_Variance;
-    std::shared_ptr<Texture> m_AtrousPing;
-    std::shared_ptr<Texture> m_AtrousPong;
 };
 //Modify End

@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-20 by Hui
+//Modify Begin:2026-08-24 by Hui
 #pragma once
 
 #include <Denoising/DenoiserController.h>
@@ -188,8 +188,11 @@ struct RaytracingDemoFrameState
     int MaxBounces = 1;
     bool DenoiserEnabled = false;
     DenoiserController::Algorithm DenoiserAlgorithm = DenoiserController::Algorithm::Off;
+    NRD::DenoiserMode NRDDenoiserMode = NRD::DenoiserMode::ReblurDiffuse;
+    uint32_t SVGFAtrousIterations = 1;
     bool BloomEnabled = false;
     CudaBloomPass::Backend BloomBackend = CudaBloomPass::Backend::Cuda;
+    int BloomPyramidLevels = 1;
     uint32_t Width = 1;
     uint32_t Height = 1;
     uint32_t DisplayWidth = 1;

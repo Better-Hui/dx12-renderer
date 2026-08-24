@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-08-24 by Hui
 #include "RenderGraphCompiler.h"
 
 #include "RenderMetadata.h"
@@ -225,6 +225,16 @@ namespace
             std::ranges::any_of(tokens, matches);
     }
 
+    bool HasMatchingImportedAccess(const RenderPass& pass, const ResourceId resourceId)
+    {
+        return std::ranges::any_of(
+            pass.GetExternalResourceAccesses(),
+            [resourceId](const ExternalResourceAccess& access)
+            {
+                return access.Id == resourceId && access.Imported.IsValid();
+            });
+    }
+
     bool IsLiveGpuResource(
         const ResourceId resourceId,
         std::span<RenderPass* const> renderPasses,
@@ -368,7 +378,10 @@ namespace
                     earlierPass->GetExternalResourceAccesses(),
                     [&access](const ExternalResourceAccess& earlierAccess)
                     {
-                        return earlierAccess.Resource == access.Resource &&
+                        const bool sameResource = access.Id != 0u && earlierAccess.Id != 0u
+                            ? earlierAccess.Id == access.Id
+                            : &earlierAccess.Resolve() == &access.Resolve();
+                        return sameResource &&
                             (earlierAccess.Mode == ExternalResourceAccessMode::Write ||
                                 earlierAccess.StateAfter != access.StateAfter);
                     });
@@ -454,11 +467,17 @@ void RenderGraph::RenderGraphCompiler::ValidateDefinition(
         }
         for (const Input& input : renderPass->GetInputs())
         {
-            Assert(IsResourceDefined(input.m_Id, textures, buffers, tokens), "Input undefined.");
+            Assert(
+                IsResourceDefined(input.m_Id, textures, buffers, tokens) ||
+                    (input.m_Type == InputType::ExternalAccess && HasMatchingImportedAccess(*renderPass, input.m_Id)),
+                "Input undefined.");
         }
         for (const Output& output : renderPass->GetOutputs())
         {
-            Assert(IsResourceDefined(output.m_Id, textures, buffers, tokens), "Output undefined.");
+            Assert(
+                IsResourceDefined(output.m_Id, textures, buffers, tokens) ||
+                    (output.m_Type == OutputType::ExternalAccess && HasMatchingImportedAccess(*renderPass, output.m_Id)),
+                "Output undefined.");
         }
     }
 }
@@ -519,6 +538,10 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
         PassResourceStatePlan resourceStatePlan;
         for (const Input& input : renderPass->GetInputs())
         {
+            if (input.m_Type == InputType::ExternalAccess && HasMatchingImportedAccess(*renderPass, input.m_Id))
+            {
+                continue;
+            }
             D3D12_RESOURCE_STATES stateAfter = D3D12_RESOURCE_STATE_COMMON;
             bool insertUavBarrier = false;
             if (TryGetInputTransition(
@@ -532,17 +555,17 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
         }
         for (const ExternalResourceAccess& access : renderPass->GetExternalResourceAccesses())
         {
-            Assert(access.Resource != nullptr && access.Resource->IsValid(),
-                "Render pass external resource access must reference an initialized resource.");
+            static_cast<void>(access.Resolve());
             resourceStatePlan.ExternalResourceTransitions.push_back({
-                access.Resource,
+                &access,
                 access.StateAfter,
                 access.InsertUavBarrier
             });
         }
         for (const Output& output : renderPass->GetOutputs())
         {
-            if (output.m_Type == OutputType::Token)
+            if (output.m_Type == OutputType::Token ||
+                (output.m_Type == OutputType::ExternalAccess && HasMatchingImportedAccess(*renderPass, output.m_Id)))
             {
                 continue;
             }

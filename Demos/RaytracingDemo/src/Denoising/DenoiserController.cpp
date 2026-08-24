@@ -1,12 +1,12 @@
 //Modify Begin:2026-07-27 by Hui
 #include <Denoising/DenoiserController.h>
 
-#include <DX12Library/Texture.h>
-
+#include <DX12Library/Helpers.h>
 #include <imgui.h>
 #include <Framework/UI/NumericWidgets.h>
 
 #include <cstring>
+#include <utility>
 
 void DenoiserController::Initialize(FrameworkDeviceContext& deviceContext)
 {
@@ -60,6 +60,16 @@ void DenoiserController::ResetHistory()
     {
         m_SVGF->ResetHistory();
     }
+}
+
+NRD::DenoiserMode DenoiserController::GetNRDMode() const
+{
+    return m_NRD != nullptr ? m_NRD->GetSettings().Mode : NRD::DenoiserMode::ReblurDiffuse;
+}
+
+uint32_t DenoiserController::GetSVGFAtrousIterations() const
+{
+    return m_SVGF != nullptr ? m_SVGF->GetSettings().AtrousIterations : 1u;
 }
 
 void DenoiserController::FillCameraConstants(
@@ -193,76 +203,20 @@ bool DenoiserController::DrawImGui()
     return changed;
 }
 
-void DenoiserController::Execute(
-    CommandList& commandList,
-    const NRD::FrameMatrices& frameMatrices,
-    const RaytracingDemoRenderGraph::FrameGBufferResources& gbuffer,
-    const RaytracingDemoRenderGraph::LightingResources& lighting,
-    const RaytracingDemoRenderGraph::NRDResources& nrdResources,
-    const uint32_t width,
-    const uint32_t height)
+void DenoiserController::AddNRDPasses(
+    RenderGraph::RenderGraphBuilder& builder,
+    NRD::GraphInputs inputs)
 {
-    if (!IsEnabled())
-    {
-        return;
-    }
+    Assert(IsNRDEnabled() && m_NRD != nullptr, "NRD graph registration requires the NRD selection.");
+    m_NRD->AddPasses(builder, std::move(inputs));
+}
 
-    if (IsNRDEnabled())
-    {
-        if (m_NRD == nullptr)
-        {
-            return;
-        }
-
-        m_NRD->PrepareDenoiserInputs(
-            commandList,
-            frameMatrices,
-            gbuffer.SpecularSmoothness,
-            gbuffer.Normal,
-            gbuffer.Position,
-            gbuffer.Depth,
-            gbuffer.MotionVector,
-            nrdResources.NormalRoughness,
-            nrdResources.ViewZ,
-            nrdResources.Motion,
-            width,
-            height);
-
-        m_NRD->Execute(
-            commandList,
-            frameMatrices,
-            lighting.NRDNoisyRadiance,
-            gbuffer.AlbedoOcclusion,
-            gbuffer.EmissionMetallic,
-            gbuffer.Depth,
-            nrdResources.NormalRoughness,
-            nrdResources.ViewZ,
-            nrdResources.Motion,
-            nrdResources.DenoisedRadiance,
-            lighting.SceneColor,
-            width,
-            height);
-        return;
-    }
-
-    if (IsSVGFEnabled())
-    {
-        if (m_SVGF == nullptr)
-        {
-            return;
-        }
-
-        m_SVGF->Execute(
-            commandList,
-            lighting.NoisyRadiance,
-            gbuffer.Normal,
-            gbuffer.Position,
-            gbuffer.MotionVector,
-            gbuffer.Depth,
-            lighting.SceneColor,
-            width,
-            height);
-    }
+void DenoiserController::AddSVGFPasses(
+    RenderGraph::RenderGraphBuilder& builder,
+    SVGF::GraphInputs inputs)
+{
+    Assert(IsSVGFEnabled() && m_SVGF != nullptr, "SVGF graph registration requires the SVGF selection.");
+    m_SVGF->AddPasses(builder, std::move(inputs));
 }
 
 void DenoiserController::ApplySelection()

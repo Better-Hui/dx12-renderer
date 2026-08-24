@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-20 by Hui
+//Modify Begin:2026-08-24 by Hui
 #include <RenderGraph/RaytracingDemoRenderGraphBuilder.h>
 
 #include <RenderGraph/RaytracingDemoGraphResources.h>
@@ -157,7 +157,7 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
         {
             RaytracingDemoPasses::Builder::AddCudaBloomPass(renderGraphBuilder, resources, sceneReadyToken);
         }
-        sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::CudaBloomFinishedToken;
+        sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::BloomFinishedToken;
     }
 
     RenderGraph::ResourceId displayColor = useFrameworkRasterBloom
@@ -199,6 +199,31 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
         externalOutputs.emplace_back(RaytracingDemoRenderGraph::ResourceIds::MotionVector);
     }
 
+    std::vector<RenderGraph::TokenDescription> tokenDescriptions =
+        RaytracingDemoRenderGraph::CreateTokenDescriptions(
+            frameState.DLSSEnabled,
+            frameState.FrameGenerationEnabled,
+            useCompactedRayTracedPixels);
+    std::vector<RenderGraph::TokenDescription> frameworkTokenDescriptions =
+        renderGraphBuilder.ReleaseTokenDescriptions();
+    tokenDescriptions.insert(
+        tokenDescriptions.end(),
+        std::make_move_iterator(frameworkTokenDescriptions.begin()),
+        std::make_move_iterator(frameworkTokenDescriptions.end()));
+
+    std::vector<RenderGraph::TextureDescription> textureDescriptions =
+        RaytracingDemoRenderGraph::CreateTextureDescriptions(
+            frameState.DLSSEnabled,
+            frameState.FrameGenerationEnabled,
+            frameState.DLSSEnabled && frameState.RayReconstructionEnabled,
+            useFrameworkRasterBloom);
+    std::vector<RenderGraph::TextureDescription> frameworkTextureDescriptions =
+        renderGraphBuilder.ReleaseTextureDescriptions();
+    textureDescriptions.insert(
+        textureDescriptions.end(),
+        std::make_move_iterator(frameworkTextureDescriptions.begin()),
+        std::make_move_iterator(frameworkTextureDescriptions.end()));
+
     return std::make_unique<RenderGraph::RenderGraphRoot>(
         resources.DeviceContext,
         resources.Device,
@@ -206,16 +231,9 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
         resources.AsyncComputeQueue,
         resources.CopyQueue,
         renderGraphBuilder.ReleasePasses(),
-        RaytracingDemoRenderGraph::CreateTextureDescriptions(
-            frameState.DLSSEnabled,
-            frameState.FrameGenerationEnabled,
-            frameState.DLSSEnabled && frameState.RayReconstructionEnabled,
-            useFrameworkRasterBloom),
+        std::move(textureDescriptions),
         RaytracingDemoRenderGraph::CreateBufferDescriptions(useCompactedRayTracedPixels),
-        RaytracingDemoRenderGraph::CreateTokenDescriptions(
-            frameState.DLSSEnabled,
-            frameState.FrameGenerationEnabled,
-            useCompactedRayTracedPixels),
+        std::move(tokenDescriptions),
         RenderGraph::RenderGraphOutputResources{
             .Presentation = displayColor,
             .External = std::move(externalOutputs),

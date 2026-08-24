@@ -1,8 +1,7 @@
-//Modify Begin:2026-08-12 by Hui
+//Modify Begin:2026-08-24 by Hui
 #include <Framework/Rendering/Denoising/NRD.h>
 
 #include <DX12Library/CommandList.h>
-#include <DX12Library/CommandListInternalAccess.h>
 #include <DX12Library/CommandQueue.h>
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Texture.h>
@@ -14,6 +13,8 @@
 #include <Framework/Rendering/Pipeline/ShaderBlob.h>
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <Framework/Rendering/Texture/UnorderedAccessView.h>
+#include <RenderGraph/RenderContext.h>
+#include <RenderGraph/RenderGraphBuilder.h>
 
 #include <NRD.h>
 #include <NRDDescs.h>
@@ -23,6 +24,7 @@
 #include <Extensions/NRIWrapperD3D12.h>
 
 #include <cstring>
+#include <utility>
 #include <string>
 #include <vector>
 
@@ -185,6 +187,24 @@ namespace
             ComputePipelineDescBuilder::ReflectedDefault(shader).Build());
     }
 
+    struct NrdPreparePassData
+    {
+        NRD* Feature = nullptr;
+        std::shared_ptr<const NRD::GraphInputs> Inputs;
+    };
+
+    struct NrdDenoisePassData
+    {
+        NRD* Feature = nullptr;
+        std::shared_ptr<const NRD::GraphInputs> Inputs;
+    };
+
+    struct NrdCompositePassData
+    {
+        NRD* Feature = nullptr;
+        std::shared_ptr<const NRD::GraphInputs> Inputs;
+    };
+
 }
 
 NRD::NRD(FrameworkDeviceContext& deviceContext)
@@ -201,6 +221,136 @@ void NRD::ResetHistory()
 {
     m_FrameIndex = 0;
     m_HasPreviousFrame = false;
+}
+
+void NRD::AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs inputs)
+{
+    Assert(m_Enabled, "NRD graph passes require the feature to be enabled.");
+    Assert(
+        inputs.GBufferSpecularSmoothness != 0u &&
+        inputs.GBufferNormal != 0u &&
+        inputs.GBufferPosition != 0u &&
+        inputs.Depth != 0u &&
+        inputs.MotionVector != 0u &&
+        inputs.NoisyRadiance != 0u &&
+        inputs.GBufferAlbedoOcclusion != 0u &&
+        inputs.GBufferEmissionMetallic != 0u &&
+        inputs.NormalRoughness != 0u &&
+        inputs.ViewZ != 0u &&
+        inputs.Motion != 0u &&
+        inputs.DenoisedRadiance != 0u &&
+        inputs.Output != 0u,
+        "NRD graph resources are invalid.");
+    Assert(inputs.InputToken != 0u && inputs.OutputToken != 0u, "NRD graph tokens are invalid.");
+    Assert(inputs.Width > 0u && inputs.Height > 0u, "NRD graph dimensions are invalid.");
+    Assert(static_cast<bool>(inputs.ResolveFrameMatrices), "NRD requires a frame-matrix resolver.");
+    Assert(!inputs.DiagnosticNamePrefix.empty(), "NRD requires a diagnostic-name prefix.");
+
+    EnsureCreated(inputs.Width, inputs.Height);
+    ResetHistory();
+    const auto sharedInputs = std::make_shared<const GraphInputs>(std::move(inputs));
+    const std::wstring prepareTokenName = sharedInputs->DiagnosticNamePrefix + L".PrepareFinished";
+    const std::wstring denoiseTokenName = sharedInputs->DiagnosticNamePrefix + L".DenoiseFinished";
+    const RenderGraph::ResourceId prepareToken = builder.CreateToken(prepareTokenName.c_str());
+    const RenderGraph::ResourceId denoiseToken = builder.CreateToken(denoiseTokenName.c_str());
+
+    builder.AddPass<NrdPreparePassData>(
+        L"NRD Prepare Inputs",
+        [this, sharedInputs, prepareToken](
+            RenderGraph::RenderGraphPassBuilder& passBuilder,
+            NrdPreparePassData& passData)
+        {
+            passData.Feature = this;
+            passData.Inputs = sharedInputs;
+            passBuilder.ReadToken(sharedInputs->InputToken);
+            passBuilder.ReadBuffer(sharedInputs->GBufferSpecularSmoothness);
+            passBuilder.ReadBuffer(sharedInputs->GBufferNormal);
+            passBuilder.ReadBuffer(sharedInputs->GBufferPosition);
+            passBuilder.ReadBuffer(sharedInputs->Depth);
+            passBuilder.ReadBuffer(sharedInputs->MotionVector);
+            passBuilder.WriteUav(sharedInputs->NormalRoughness);
+            passBuilder.WriteUav(sharedInputs->ViewZ);
+            passBuilder.WriteUav(sharedInputs->Motion);
+            passBuilder.WriteToken(prepareToken);
+        },
+        [](const NrdPreparePassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
+        {
+            const NRD::GraphInputs& inputs = *passData.Inputs;
+            passData.Feature->PrepareInputs(
+                commandList,
+                inputs.ResolveFrameMatrices(),
+                context.GetTexture(inputs.GBufferSpecularSmoothness),
+                context.GetTexture(inputs.GBufferNormal),
+                context.GetTexture(inputs.GBufferPosition),
+                context.GetTexture(inputs.Depth),
+                context.GetTexture(inputs.MotionVector),
+                context.GetTexture(inputs.NormalRoughness),
+                context.GetTexture(inputs.ViewZ),
+                context.GetTexture(inputs.Motion),
+                context.GetMetadata().m_ScreenWidth,
+                context.GetMetadata().m_ScreenHeight);
+        });
+
+    builder.AddPass<NrdDenoisePassData>(
+        L"NRD Native Denoise",
+        [this, sharedInputs, prepareToken, denoiseToken](
+            RenderGraph::RenderGraphPassBuilder& passBuilder,
+            NrdDenoisePassData& passData)
+        {
+            passData.Feature = this;
+            passData.Inputs = sharedInputs;
+            passBuilder.ReadToken(prepareToken);
+            passBuilder.ReadBuffer(sharedInputs->NoisyRadiance);
+            passBuilder.ReadBuffer(sharedInputs->NormalRoughness);
+            passBuilder.ReadBuffer(sharedInputs->ViewZ);
+            passBuilder.ReadBuffer(sharedInputs->Motion);
+            passBuilder.WriteUav(sharedInputs->DenoisedRadiance);
+            passBuilder.WriteToken(denoiseToken);
+        },
+        [](const NrdDenoisePassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
+        {
+            const NRD::GraphInputs& inputs = *passData.Inputs;
+            passData.Feature->Denoise(
+                commandList,
+                inputs.ResolveFrameMatrices(),
+                context.GetTexture(inputs.NoisyRadiance),
+                context.GetTexture(inputs.NormalRoughness),
+                context.GetTexture(inputs.ViewZ),
+                context.GetTexture(inputs.Motion),
+                context.GetTexture(inputs.DenoisedRadiance),
+                context.GetMetadata().m_ScreenWidth,
+                context.GetMetadata().m_ScreenHeight);
+        });
+
+    builder.AddPass<NrdCompositePassData>(
+        L"NRD Composite",
+        [this, sharedInputs, denoiseToken](
+            RenderGraph::RenderGraphPassBuilder& passBuilder,
+            NrdCompositePassData& passData)
+        {
+            passData.Feature = this;
+            passData.Inputs = sharedInputs;
+            passBuilder.ReadToken(denoiseToken);
+            passBuilder.ReadBuffer(sharedInputs->DenoisedRadiance);
+            passBuilder.ReadBuffer(sharedInputs->Depth);
+            passBuilder.ReadBuffer(sharedInputs->GBufferAlbedoOcclusion);
+            passBuilder.ReadBuffer(sharedInputs->GBufferEmissionMetallic);
+            passBuilder.WriteUav(sharedInputs->Output);
+            passBuilder.WriteToken(sharedInputs->OutputToken);
+        },
+        [](const NrdCompositePassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
+        {
+            const NRD::GraphInputs& inputs = *passData.Inputs;
+            passData.Feature->Composite(
+                commandList,
+                context.GetTexture(inputs.DenoisedRadiance),
+                context.GetTexture(inputs.Depth),
+                context.GetTexture(inputs.GBufferAlbedoOcclusion),
+                context.GetTexture(inputs.GBufferEmissionMetallic),
+                context.GetTexture(inputs.Output),
+                context.GetMetadata().m_ScreenWidth,
+                context.GetMetadata().m_ScreenHeight);
+        });
 }
 
 bool NRD::EnsureCreated(const uint32_t width, const uint32_t height)
@@ -288,28 +438,6 @@ void NRD::PrepareInputs(
     commandContext.BindPipeline(*m_PrepareShader);
     commandContext.BindDescriptorSet(m_PrepareShader->GetDescriptorSet());
     commandContext.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
-}
-
-void NRD::PrepareDenoiserInputs(
-    CommandList& commandList,
-    const FrameMatrices& frameMatrices,
-    const std::shared_ptr<Texture>& gBufferSpecularSmoothness,
-    const std::shared_ptr<Texture>& gBufferNormal,
-    const std::shared_ptr<Texture>& gBufferPosition,
-    const std::shared_ptr<Texture>& depthTexture,
-    const std::shared_ptr<Texture>& motionVector,
-    const std::shared_ptr<Texture>& nrdNormalRoughness,
-    const std::shared_ptr<Texture>& nrdViewZ,
-    const std::shared_ptr<Texture>& nrdMotion,
-    const uint32_t width,
-    const uint32_t height)
-{
-    if (!IsEnabled() || !EnsureCreated(width, height))
-    {
-        return;
-    }
-
-    PrepareInputs(commandList, frameMatrices, gBufferSpecularSmoothness, gBufferNormal, gBufferPosition, depthTexture, motionVector, nrdNormalRoughness, nrdViewZ, nrdMotion, width, height);
 }
 
 void NRD::Denoise(
@@ -407,12 +535,6 @@ void NRD::Denoise(
 
     nrd::ResourceSnapshot snapshot = {};
     snapshot.restoreInitialState = true;
-    commandList.TransitionBarrier(*noisyRadiance, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    commandList.TransitionBarrier(*nrdNormalRoughness, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    commandList.TransitionBarrier(*nrdViewZ, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    commandList.TransitionBarrier(*nrdMotion, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    commandList.TransitionBarrier(*denoisedRadiance, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    CommandListInternalAccess::FlushResourceBarriers(commandList);
 
     nri::Texture* noisyTexture = m_Impl->GetWrappedTexture(noisyRadiance, FrameworkNRD::RadianceFormat);
     nri::Texture* normalRoughnessTexture = m_Impl->GetWrappedTexture(nrdNormalRoughness, FrameworkNRD::NormalRoughnessFormat);
@@ -476,27 +598,4 @@ void NRD::Composite(
     commandContext.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
 }
 
-void NRD::Execute(
-    CommandList& commandList,
-    const FrameMatrices& frameMatrices,
-    const std::shared_ptr<Texture>& noisyRadiance,
-    const std::shared_ptr<Texture>& gBufferAlbedoOcclusion,
-    const std::shared_ptr<Texture>& gBufferEmissionMetallic,
-    const std::shared_ptr<Texture>& depthTexture,
-    const std::shared_ptr<Texture>& nrdNormalRoughness,
-    const std::shared_ptr<Texture>& nrdViewZ,
-    const std::shared_ptr<Texture>& nrdMotion,
-    const std::shared_ptr<Texture>& denoisedRadiance,
-    const std::shared_ptr<Texture>& output,
-    const uint32_t width,
-    const uint32_t height)
-{
-    if (!IsEnabled() || !EnsureCreated(width, height))
-    {
-        return;
-    }
-
-    Denoise(commandList, frameMatrices, noisyRadiance, nrdNormalRoughness, nrdViewZ, nrdMotion, denoisedRadiance, width, height);
-    Composite(commandList, denoisedRadiance, depthTexture, gBufferAlbedoOcclusion, gBufferEmissionMetallic, output, width, height);
-}
 //Modify End

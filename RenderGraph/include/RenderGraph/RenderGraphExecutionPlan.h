@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-08-24 by Hui
 #pragma once
 
 #include <d3d12.h>
@@ -28,7 +28,7 @@ namespace RenderGraph
 
     struct PassExternalResourceTransition
     {
-        const Resource* Resource = nullptr;
+        const ExternalResourceAccess* Access = nullptr;
         D3D12_RESOURCE_STATES StateAfter = D3D12_RESOURCE_STATE_COMMON;
         bool InsertUavBarrier = false;
     };

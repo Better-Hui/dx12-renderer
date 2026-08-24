@@ -3,6 +3,7 @@
 #include <d3dx12/d3dx12.h>
 
 #include <DX12Library/Helpers.h>
+#include <DX12Library/CommandListInternalAccess.h>
 //Modify Begin:2026-08-19 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
 //Modify End
@@ -23,13 +24,23 @@ void SharedUploadBuffer::Upload(CommandList& commandList, const Resource& destin
     uint8_t* pUploadPtr = SuballocateFromBuffer(bufferInfo, sizeInBytes, alignment);
     memcpy(pUploadPtr, pData, sizeInBytes);
 
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-24 by Hui
+    CommandListInternalAccess::TransitionBarrier(
+        commandList,
+        destination,
+        D3D12_RESOURCE_STATE_COPY_DEST,
+        D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+        true);
     commandList.CopyBufferRegion(
         destination,
         destinationOffset,
         bufferInfo.m_Buffer.Get(),
         pUploadPtr - bufferInfo.m_DataBegin,
         sizeInBytes);
+    CommandListInternalAccess::TransitionBarrier(
+        commandList,
+        destination,
+        D3D12_RESOURCE_STATE_GENERIC_READ);
     //Modify End
 }
 //Modify End

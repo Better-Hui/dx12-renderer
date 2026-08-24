@@ -4,11 +4,49 @@
 
 #include <utility>
 
-//Modify Begin:2026-08-17 by Hui
+//Modify Begin:2026-08-24 by Hui
 // This bridge is reserved for renderer infrastructure, not demo-level pass code.
 class CommandListInternalAccess
 {
 public:
+    static void TransitionBarrier(
+        CommandList& commandList,
+        const Resource& resource,
+        D3D12_RESOURCE_STATES stateAfter,
+        UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+        bool flushBarriers = false);
+
+    static void TransitionBarrier(
+        CommandList& commandList,
+        Microsoft::WRL::ComPtr<ID3D12Resource> resource,
+        D3D12_RESOURCE_STATES stateAfter,
+        UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+        bool flushBarriers = false);
+
+    static void UavBarrier(
+        CommandList& commandList,
+        const Resource& resource,
+        bool flushBarriers = false);
+
+    static void UavBarrier(
+        CommandList& commandList,
+        ID3D12Resource* resource,
+        bool flushBarriers = false);
+
+    static void AliasingBarrier(
+        CommandList& commandList,
+        const Resource& beforeResource,
+        const Resource& afterResource,
+        bool flushBarriers = false);
+
+    static void AliasingBarrier(
+        CommandList& commandList,
+        Microsoft::WRL::ComPtr<ID3D12Resource> beforeResource,
+        Microsoft::WRL::ComPtr<ID3D12Resource> afterResource,
+        bool flushBarriers = false);
+
+    static void AliasingBarrierBeforeFirstUse(CommandList& commandList, const Resource& resourceAfter);
+
     static UploadBuffer::Allocation AllocateTransientUpload(
         CommandList& commandList,
         const size_t sizeInBytes,

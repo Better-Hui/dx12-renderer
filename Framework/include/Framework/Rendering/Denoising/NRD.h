@@ -1,8 +1,12 @@
 //Modify Begin:2026-07-30 by Hui
 #pragma once
 
+#include <RenderGraph/ResourceId.h>
+
 #include <cstdint>
+#include <functional>
 #include <memory>
+#include <string>
 
 #include <DirectXMath.h>
 #include <d3d12.h>
@@ -12,6 +16,11 @@ class ComputeShader;
 class FrameworkDeviceContext;
 class Resource;
 class Texture;
+
+namespace RenderGraph
+{
+    class RenderGraphBuilder;
+}
 
 class NRD
 {
@@ -71,6 +80,29 @@ public:
         bool ReblurEnableAntiFirefly = true;
     };
 
+    struct GraphInputs
+    {
+        RenderGraph::ResourceId GBufferSpecularSmoothness = 0;
+        RenderGraph::ResourceId GBufferNormal = 0;
+        RenderGraph::ResourceId GBufferPosition = 0;
+        RenderGraph::ResourceId Depth = 0;
+        RenderGraph::ResourceId MotionVector = 0;
+        RenderGraph::ResourceId NoisyRadiance = 0;
+        RenderGraph::ResourceId GBufferAlbedoOcclusion = 0;
+        RenderGraph::ResourceId GBufferEmissionMetallic = 0;
+        RenderGraph::ResourceId NormalRoughness = 0;
+        RenderGraph::ResourceId ViewZ = 0;
+        RenderGraph::ResourceId Motion = 0;
+        RenderGraph::ResourceId DenoisedRadiance = 0;
+        RenderGraph::ResourceId Output = 0;
+        RenderGraph::ResourceId InputToken = 0;
+        RenderGraph::ResourceId OutputToken = 0;
+        uint32_t Width = 1;
+        uint32_t Height = 1;
+        std::function<FrameMatrices()> ResolveFrameMatrices;
+        std::wstring DiagnosticNamePrefix = L"Framework.NRD";
+    };
+
     explicit NRD(FrameworkDeviceContext& deviceContext);
     ~NRD();
 
@@ -80,34 +112,7 @@ public:
     const Settings& GetSettings() const { return m_Settings; }
     void ResetHistory();
 
-    void PrepareDenoiserInputs(
-        CommandList& commandList,
-        const FrameMatrices& frameMatrices,
-        const std::shared_ptr<Texture>& gBufferSpecularSmoothness,
-        const std::shared_ptr<Texture>& gBufferNormal,
-        const std::shared_ptr<Texture>& gBufferPosition,
-        const std::shared_ptr<Texture>& depthTexture,
-        const std::shared_ptr<Texture>& motionVector,
-        const std::shared_ptr<Texture>& nrdNormalRoughness,
-        const std::shared_ptr<Texture>& nrdViewZ,
-        const std::shared_ptr<Texture>& nrdMotion,
-        uint32_t width,
-        uint32_t height);
-
-    void Execute(
-        CommandList& commandList,
-        const FrameMatrices& frameMatrices,
-        const std::shared_ptr<Texture>& noisyRadiance,
-        const std::shared_ptr<Texture>& gBufferAlbedoOcclusion,
-        const std::shared_ptr<Texture>& gBufferEmissionMetallic,
-        const std::shared_ptr<Texture>& depthTexture,
-        const std::shared_ptr<Texture>& nrdNormalRoughness,
-        const std::shared_ptr<Texture>& nrdViewZ,
-        const std::shared_ptr<Texture>& nrdMotion,
-        const std::shared_ptr<Texture>& denoisedRadiance,
-        const std::shared_ptr<Texture>& output,
-        uint32_t width,
-        uint32_t height);
+    void AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs inputs);
 
 private:
     struct PrepareConstants

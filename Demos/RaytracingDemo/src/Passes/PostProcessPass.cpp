@@ -1,9 +1,10 @@
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-08-24 by Hui
 #include <RaytracingDemo.h>
 
 #include <DX12Library/CommandList.h>
 #include <DX12Library/CommandQueue.h>
 #include <Framework/Rendering/Pipeline/CommandContext.h>
+#include <Framework/Rendering/PostProcess/Bloom.h>
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <Passes/RaytracingDemoPasses.h>
 #include <RenderGraph/RaytracingDemoGraphResources.h>
@@ -12,25 +13,16 @@
 #include <RenderGraph/RenderGraphBuilder.h>
 #include <RenderGraph/RenderMetadata.h>
 
+#include <algorithm>
 #include <array>
 #include <span>
+#include <utility>
 
 namespace
 {
     struct CudaBloomPassData
     {
         RaytracingDemoPassResourcesSnapshot Resources;
-    };
-
-    struct FrameworkBloomPassData
-    {
-        RaytracingDemoPassResourcesSnapshot Resources;
-    };
-
-    struct AutoExposurePassData
-    {
-        RaytracingDemoPassResourcesSnapshot Resources;
-        RenderGraph::ResourceId InputColor = 0;
     };
 
     struct FrameGenerationHudLessPassData
@@ -94,7 +86,7 @@ void RaytracingDemoPasses::Builder::AddCudaBloomPass(
             passData.Resources.emplace(resources);
             passBuilder.ReadToken(sceneReadyToken);
             passBuilder.WriteExternal(DemoResourceIds::SceneColor);
-            passBuilder.WriteToken(DemoResourceIds::CudaBloomFinishedToken);
+            passBuilder.WriteToken(DemoResourceIds::BloomFinishedToken);
         },
         [](const CudaBloomPassData& passData, const RenderGraph::RenderContext& context)
         {
@@ -115,28 +107,26 @@ void RaytracingDemoPasses::Builder::AddFrameworkBloomPass(
 {
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
 
-    renderGraphBuilder.AddPass<FrameworkBloomPassData>(
-        L"Built-in Raster Bloom",
-        [&resources, sceneReadyToken](RenderGraph::RenderGraphPassBuilder& passBuilder, FrameworkBloomPassData& passData)
-        {
-            passData.Resources.emplace(resources);
-            passBuilder.ReadToken(sceneReadyToken);
-            passBuilder.ReadTexture(DemoResourceIds::SceneColor);
-            passBuilder.WriteTexture(DemoResourceIds::BloomOutput);
-            passBuilder.WriteToken(DemoResourceIds::CudaBloomFinishedToken);
-        },
-        [](const FrameworkBloomPassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
-        {
-            const RaytracingDemoPassResources& resources = passData.Resources.value();
-            const auto& sceneColor = context.GetTexture(DemoResourceIds::SceneColor);
-            const auto& bloomOutput = context.GetTexture(DemoResourceIds::BloomOutput);
-            resources.CudaBloom.ExecuteFrameworkBloom(
-                sceneColor,
-                bloomOutput,
-                commandList,
-                context.GetMetadata().m_ScreenWidth,
-                context.GetMetadata().m_ScreenHeight);
-        });
+    Bloom::GraphInputs inputs;
+    inputs.Source = DemoResourceIds::SceneColor;
+    inputs.Output = DemoResourceIds::BloomOutput;
+    inputs.InputToken = sceneReadyToken;
+    inputs.OutputToken = DemoResourceIds::BloomFinishedToken;
+    inputs.WidthExpression = [](const RenderGraph::RenderMetadata& metadata) { return metadata.m_ScreenWidth; };
+    inputs.HeightExpression = [](const RenderGraph::RenderMetadata& metadata) { return metadata.m_ScreenHeight; };
+    inputs.ResolveParameters = [bloomController = &resources.CudaBloom]()
+    {
+        const CudaBloomPass::Settings settings = bloomController->GetSettings();
+        BloomParameters parameters{};
+        parameters.Intensity = settings.Intensity;
+        parameters.Threshold = settings.Threshold;
+        parameters.SoftThreshold = settings.SoftThreshold;
+        return parameters;
+    };
+    inputs.DiagnosticNamePrefix = L"Framework.Bloom.RaytracingDemo";
+    inputs.Format = RaytracingDemoRenderGraph::SCENE_COLOR_FORMAT;
+    inputs.PyramidLevels = static_cast<size_t>((std::max)(1, resources.CudaBloom.GetPyramidLevels()));
+    resources.CudaBloom.GetFrameworkBloom().AddPasses(renderGraphBuilder, std::move(inputs));
 }
 
 void RaytracingDemoPasses::Builder::AddFrameGenerationHudLessPass(
@@ -181,34 +171,28 @@ void RaytracingDemoPasses::Builder::AddAutoExposurePass(
     using namespace RenderGraph;
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
 
-    renderGraphBuilder.AddPass<AutoExposurePassData>(
-        L"Auto Exposure",
-        [&resources, inputColor, sceneReadyToken](RenderGraphPassBuilder& passBuilder, AutoExposurePassData& passData)
-        {
-            passData.Resources.emplace(resources);
-            passData.InputColor = inputColor;
-            passBuilder.ReadToken(sceneReadyToken);
-            passBuilder.ReadBuffer(inputColor);
-            passBuilder.WriteUav(DemoResourceIds::AutoExposureOutput);
-            passBuilder.WriteToken(DemoResourceIds::AutoExposureFinishedToken);
-        },
-        [](const AutoExposurePassData& passData, const RenderContext& context, CommandList& commandList)
-        {
-            const RaytracingDemoPassResources& resources = passData.Resources.value();
-            const std::shared_ptr<Texture>& input = context.GetTexture(passData.InputColor);
-            const std::shared_ptr<Texture>& output = context.GetTexture(RaytracingDemoRenderGraph::ResourceIds::AutoExposureOutput);
-            const D3D12_RESOURCE_DESC inputDesc = input->GetD3D12ResourceDesc();
-            const D3D12_RESOURCE_DESC outputDesc = output->GetD3D12ResourceDesc();
-            resources.Exposure.Execute(
-                commandList,
-                input,
-                output,
-                static_cast<uint32_t>(inputDesc.Width),
-                inputDesc.Height,
-                static_cast<uint32_t>(outputDesc.Width),
-                outputDesc.Height,
-                context.GetMetadata().m_DeltaTime);
-        });
+    AutoExposure::GraphInputs inputs;
+    inputs.Source = inputColor;
+    inputs.Output = DemoResourceIds::AutoExposureOutput;
+    inputs.InputToken = sceneReadyToken;
+    inputs.OutputToken = DemoResourceIds::AutoExposureFinishedToken;
+    inputs.OutputWidth = 1u;
+    inputs.OutputHeight = 1u;
+    inputs.ResolveFrameInputs = [inputColor](const RenderContext& context)
+    {
+        AutoExposure::FrameInputs frameInputs;
+        frameInputs.Source = context.GetTexture(inputColor);
+        frameInputs.Output = context.GetTexture(DemoResourceIds::AutoExposureOutput);
+        const D3D12_RESOURCE_DESC inputDesc = frameInputs.Source->GetD3D12ResourceDesc();
+        const D3D12_RESOURCE_DESC outputDesc = frameInputs.Output->GetD3D12ResourceDesc();
+        frameInputs.InputWidth = static_cast<uint32_t>(inputDesc.Width);
+        frameInputs.InputHeight = inputDesc.Height;
+        frameInputs.OutputWidth = static_cast<uint32_t>(outputDesc.Width);
+        frameInputs.OutputHeight = outputDesc.Height;
+        frameInputs.DeltaTime = context.GetMetadata().m_DeltaTime;
+        return frameInputs;
+    };
+    resources.Exposure.AddPasses(renderGraphBuilder, std::move(inputs));
 }
 
 void RaytracingDemo::PresentDisplayOutput()

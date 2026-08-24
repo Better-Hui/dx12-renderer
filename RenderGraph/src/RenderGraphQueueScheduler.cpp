@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-08-24 by Hui
 #include "RenderGraphQueueScheduler.h"
 
 #include <algorithm>
@@ -216,41 +216,50 @@ namespace RenderGraph
 
         for (const Input& input : pass.GetInputs())
         {
-            inspectResource(input.m_Id);
+            if (input.m_Type != InputType::ExternalAccess)
+            {
+                inspectResource(input.m_Id);
+            }
         }
         for (const Output& output : pass.GetOutputs())
         {
-            inspectResource(output.m_Id);
+            if (output.m_Type != OutputType::ExternalAccess)
+            {
+                inspectResource(output.m_Id);
+            }
         }
 
         for (const ExternalResourceAccess& access : pass.GetExternalResourceAccesses())
         {
-            Assert(access.Resource != nullptr, "External resource access must reference a resource.");
-            const auto usageIt = m_ExternalResourceUsages.find(access.Resource);
-            if (usageIt == m_ExternalResourceUsages.end())
-            {
-                continue;
-            }
-
-            const ExternalResourceUsage& usage = usageIt->second;
-            if (usage.HasWriter)
-            {
-                inspectFence(usage.LastWriterQueue, usage.LastWriterFenceValue);
-            }
-            if (access.Mode == ExternalResourceAccessMode::Write)
-            {
-                for (const RenderPassQueue readerQueue : {
-                    RenderPassQueue::Direct,
-                    RenderPassQueue::AsyncCompute,
-                    RenderPassQueue::Copy })
+            access.Resolve().ForEachResourceRecursive(
+                [this, &access, &inspectFence](const Resource& resource)
                 {
-                    const size_t readerIndex = QueueIndex(readerQueue);
-                    if (usage.HasReader[readerIndex])
+                    const auto usageIt = m_ExternalResourceUsages.find(&resource);
+                    if (usageIt == m_ExternalResourceUsages.end())
                     {
-                        inspectFence(readerQueue, usage.ReaderFenceValues[readerIndex]);
+                        return;
                     }
-                }
-            }
+
+                    const ExternalResourceUsage& usage = usageIt->second;
+                    if (usage.HasWriter)
+                    {
+                        inspectFence(usage.LastWriterQueue, usage.LastWriterFenceValue);
+                    }
+                    if (access.Mode == ExternalResourceAccessMode::Write)
+                    {
+                        for (const RenderPassQueue readerQueue : {
+                            RenderPassQueue::Direct,
+                            RenderPassQueue::AsyncCompute,
+                            RenderPassQueue::Copy })
+                        {
+                            const size_t readerIndex = QueueIndex(readerQueue);
+                            if (usage.HasReader[readerIndex])
+                            {
+                                inspectFence(readerQueue, usage.ReaderFenceValues[readerIndex]);
+                            }
+                        }
+                    }
+                });
         }
         return dependencies;
     }
@@ -345,13 +354,19 @@ namespace RenderGraph
 
         for (const Input& input : pass.GetInputs())
         {
-            trackResource(input.m_Id);
+            if (input.m_Type != InputType::ExternalAccess)
+            {
+                trackResource(input.m_Id);
+            }
         }
         for (const Output& output : pass.GetOutputs())
         {
-            trackResource(output.m_Id);
-            m_LastWriterQueues[output.m_Id] = pass.GetQueue();
-            m_LastWriterFenceValues[output.m_Id] = fenceValue;
+            if (output.m_Type != OutputType::ExternalAccess)
+            {
+                trackResource(output.m_Id);
+                m_LastWriterQueues[output.m_Id] = pass.GetQueue();
+                m_LastWriterFenceValues[output.m_Id] = fenceValue;
+            }
         }
         for (const ExternalResourceAccess& access : pass.GetExternalResourceAccesses())
         {
@@ -400,21 +415,24 @@ namespace RenderGraph
         const RenderPassQueue queue,
         const uint64_t fenceValue)
     {
-        Assert(access.Resource != nullptr, "External resource access must reference a resource.");
-        ExternalResourceUsage& usage = m_ExternalResourceUsages[access.Resource];
-        if (access.Mode == ExternalResourceAccessMode::Write)
-        {
-            usage.LastWriterQueue = queue;
-            usage.LastWriterFenceValue = fenceValue;
-            usage.HasWriter = true;
-            usage.ReaderFenceValues = {};
-            usage.HasReader = {};
-            return;
-        }
+        access.Resolve().ForEachResourceRecursive(
+            [this, &access, queue, fenceValue](const Resource& resource)
+            {
+                ExternalResourceUsage& usage = m_ExternalResourceUsages[&resource];
+                if (access.Mode == ExternalResourceAccessMode::Write)
+                {
+                    usage.LastWriterQueue = queue;
+                    usage.LastWriterFenceValue = fenceValue;
+                    usage.HasWriter = true;
+                    usage.ReaderFenceValues = {};
+                    usage.HasReader = {};
+                    return;
+                }
 
-        const size_t queueIndex = QueueIndex(queue);
-        usage.ReaderFenceValues[queueIndex] = fenceValue;
-        usage.HasReader[queueIndex] = true;
+                const size_t queueIndex = QueueIndex(queue);
+                usage.ReaderFenceValues[queueIndex] = fenceValue;
+                usage.HasReader[queueIndex] = true;
+            });
     }
 
     void RenderGraphQueueScheduler::TrackExternalResource(

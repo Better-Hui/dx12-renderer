@@ -9,7 +9,7 @@
 #include <DX12Library/Window.h>
 
 #include "RenderPass.h"
-//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-08-24 by Hui
 #include "ExternalFrameProcessor.h"
 //Modify End
 //Modify Begin:2026-08-07 by Hui
@@ -79,7 +79,7 @@ namespace RenderGraph
         void SetParallelDirectCommandRecording(bool enabled) { m_ParallelDirectCommandRecording = enabled; }
 //Modify End
         void Present(const std::shared_ptr<Window>& pWindow, ResourceId resourceId = ResourceIds::GRAPH_OUTPUT);
-//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-08-24 by Hui
         void PresentWithOverlay(const std::shared_ptr<Window>& pWindow, ResourceId resourceId, const std::function<void(CommandList&)>& drawCallback);
         void PresentWithOverlayBlit(
             const std::shared_ptr<Window>& pWindow,
@@ -92,8 +92,13 @@ namespace RenderGraph
             ExternalFrameProcessor& processor,
             const std::function<void(CommandList&)>& overlayCallback);
         void CopyTexture(const RenderMetadata& renderMetadata, ResourceId sourceId, ResourceId destinationId, bool waitForCompletion = false);
+        void CopyTextureToReadback(
+            const RenderMetadata& renderMetadata,
+            ResourceId sourceId,
+            Microsoft::WRL::ComPtr<ID3D12Resource> destination,
+            const D3D12_PLACED_SUBRESOURCE_FOOTPRINT& destinationFootprint,
+            bool waitForCompletion = true);
         void DrawToTexture(const RenderMetadata& renderMetadata, ResourceId resourceId, const std::function<void(CommandList&)>& drawCallback);
-        void TransitionTexture(const RenderMetadata& renderMetadata, ResourceId resourceId, D3D12_RESOURCE_STATES stateAfter, bool waitForCompletion = false);
 //Modify End
         void DrawToGraphOutput(const RenderMetadata& renderMetadata, const std::function<void(CommandList&)>& drawCallback);
 //Modify Begin:2026-07-27 by Hui

@@ -74,7 +74,7 @@ bool TransientResourceAllocator::ResourceLifecycle::CanAlias(
 }
 //Modify End
 
-//Modify Begin:2026-07-28 by Hui
+//Modify Begin:2026-08-24 by Hui
 std::map<ResourceId, TransientResourceAllocator::ResourceLifecycle> TransientResourceAllocator::GetResourceLifecycles(
     const std::vector<RenderPass*>& renderPasses,
     const std::map<ResourceId, ResourceDescription>& resourceDescriptions,
@@ -92,12 +92,24 @@ std::map<ResourceId, TransientResourceAllocator::ResourceLifecycle> TransientRes
 
         for (const auto& output : pass.GetOutputs())
         {
+//Modify Begin:2026-08-24 by Hui
+            if (output.m_Type == OutputType::ExternalAccess)
+            {
+                continue;
+            }
+//Modify End
             auto& lifecycle = GetOrAdd(lifecycles, output.m_Id, passIndex, queueMask);
             lifecycle.m_EndPassIndex = passIndex;
         }
 
         for (const auto& input : pass.GetInputs())
         {
+//Modify Begin:2026-08-24 by Hui
+            if (input.m_Type == InputType::ExternalAccess)
+            {
+                continue;
+            }
+//Modify End
             auto& lifecycle = GetOrAdd(lifecycles, input.m_Id, passIndex, queueMask);
             const auto resourceDescription = resourceDescriptions.find(input.m_Id);
             const bool isPersistentHistory = resourceDescription != resourceDescriptions.end() &&

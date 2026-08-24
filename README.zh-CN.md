@@ -23,7 +23,7 @@
 - **Meshlet 实验路径**：包含 Meshlet 构建、GPU 资源、task shader / compute-indirect 两种 GBuffer 后端，以及只更新实例数据的增量路径。
 - **ReSTIR DI 直接光**：提供 RIS、时域/Boiling/空域复用、各阶段的可见性与 bias correction 配置，以及最终着色。
 - **ReSTIR GI 间接光**：基于 Inline Ray Query，提供初始 BSDF 采样、时域复用、空域复用、Jacobian correction 和最终可见性/着色。
-- **CUDA Bloom**：演示 D3D12 shared resource、shared fence 与 CUDA external semaphore 的互操作流程。
+- **Bloom**：Raster 版本由 Framework 注册为 RenderGraph 子图；CUDA 版本继续演示 D3D12 shared resource、shared fence 与 CUDA external semaphore 的互操作流程。
 - **实验性帧特性**：接入 Native NGX DLSS SR/DLAA，以及 Framework 管理的 Streamline Ray Reconstruction 和 Frame Generation。DX12Library 只暴露通用的设备创建前/后 runtime 生命周期；queue 与 swap chain 仍走普通 D3D12/DXGI 创建路径，由链接的 Streamline interposer 完成拦截。这些路径尚未完成可交付验证。
 - **调试与分析工具**：除 PIX event、RenderGraph timing history/CSV 和运行时调试 UI 外，Framework 还提供可选的机器可读 Diagnostics session、无桌面输入自动化、结构化 invariant、关联查询、baseline diff 与复现工具。
 
@@ -47,12 +47,16 @@ commands.Dispatch(groupCountX, groupCountY, 1);
 RenderGraph pass 通过输入、输出和 queue 类型描述工作：
 
 ```cpp
-auto pass = RenderGraph::RenderPass::Create(
+builder.AddPass<PassData>(
     L"Example Compute",
-    { { inputId, RenderGraph::InputType::NonPixelShaderResource } },
-    { { outputId, RenderGraph::OutputType::UnorderedAccess } },
-    execute,
-    RenderGraph::RenderPassQueue::AsyncCompute);
+    [=](RenderGraph::RenderGraphPassBuilder& pass, PassData&) {
+        pass.ReadTexture(inputId);
+        pass.WriteUav(outputId);
+        pass.UseAsyncComputeWhenSupported();
+    },
+    [](const PassData&, const RenderGraph::RenderContext& context, CommandList& commandList) {
+        // Record through Framework and resolve resources from the context.
+    });
 ```
 
 输入/输出声明会参与依赖分析与资源状态安排。`AsyncCompute` 表示“这个 pass 明确请求 compute queue”，不是自动性能优化开关：RenderGraph 会处理必要的 GPU fence 等待，但不会自动判断哪个 pass 最适合异步、拆分 pass，或保证一定产生 direct/compute overlap。
@@ -60,6 +64,12 @@ auto pass = RenderGraph::RenderPass::Create(
 当前 queue 提交、last-writer 和跨 queue fence 由 `RenderGraphQueueScheduler` 管理。Compiler 为每个 pass 生成不可变的 transition/aliasing 计划，Executor 把它录入所属的 command list；`CommandList` 在最终提交顺序中通过共享 `ResourceStateRegistry` 解析每条 list 的初始状态。因此 CPU 录制先后不会改变 GPU 的资源状态与执行顺序。
 
 `RenderGraphRoot` 的 device 和 queue 由应用组合根显式注入。执行路径已经拆为 `RenderGraphCommandExecutor`（pass 录制与提交）和 `RenderGraphProfiler`（可选的 Direct/Async Compute GPU timing）。`RaytracingDemo` 也遵循同一边界：`RaytracingDemoPassResources` 提供 pass 所需对象，`RaytracingDemoPassConfig` 提供显式运行时配置，因此 pass lambda 不再捕获整个 Demo，也不依赖 `friend` 访问私有成员。
+
+可复用 Framework 功能通过 `AddPasses(RenderGraphBuilder&, Inputs)` 注册一组子 pass。Auto Exposure、ReSTIR DI/GI、Raster Bloom、NRD、SVGF 和 TAA 都使用该模式；Builder 只在构图调用期间存在，Framework 不保存它。Framework-owned persistent resource（包括 SVGF/TAA ping-pong history）通过不同的 imported logical read/write ID 接入图；物理双缓冲按帧解析，但图拓扑保持稳定。构图期 scratch texture 使用 `RenderGraphBuilder::CreateTexture()` 与 `Discard`。`CommandList` 与 `CommandContext` 不再暴露手写 barrier API，构建期 ownership 检查会扫描 DX12Library、RenderGraph、Framework 与 Demos 的一方源码，阻止普通算法绕开 RG。
+
+NRD 在图中展开为 `Prepare Inputs`、`Native Denoise` 和 `Composite`。native NRI/NRD recording 允许管理 SDK 内部临时状态，但图资源进入和离开 native 段时保持 RG 声明的 SRV/UAV 状态，NRD 不在 barrier 白名单中。SVGF 展开为 imported 奇偶 temporal history、逐次水平/垂直 A-Trous 与 Composite；TAA 围绕 imported ping-pong history 展开为 Resolve 和 History Copy，同一次图执行期间固定物理读写映射，只在 rendered-frame 边界推进。UAV clear 本身不再偷偷追加 barrier；clear 后继续写同一 UAV 时必须拆 pass 或显式形成 WAW 图依赖。
+
+Raster Bloom 在图中展开为 `Bloom Prefilter`、逐级 `Bloom Downsample`、逐级 `Bloom Upsample` 和 `Bloom Composite`。金字塔纹理由 RG 管理，但当前强制使用 dedicated resource：让这条链参与 transient heap aliasing 会在反复重建 RenderGraph 后稳定触发 device hang，因此 alias activation/state ordering 需要作为独立的底层问题继续修复。
 
 ## 你可以从 sample 中看到的功能
 
@@ -72,7 +82,8 @@ auto pass = RenderGraph::RenderPass::Create(
 | 材质着色 | Framework 统一的 GGX 金属度/粗糙度 PBR，以及 sample 可选的 `Stylized Comic` 风格化 PBR-NPR 变体。 |
 | 光照 | direct lighting 与 indirect lighting 分离后再 composite；直接光可选 ReSTIR DI，Inline Ray Query 间接光可选 ReSTIR GI。 |
 | 软阴影 | 平行光和点光源使用预编译 Hard/Soft Shader 变体；面积光继续采样真实发光面。 |
-| 降噪 | NRD 与 SVGF 两条可选路径；NRD 的 native 状态变化会回写 RenderGraph。 |
+| 降噪 | NRD 与 SVGF 两条可选路径；两者都由 Framework 注册多阶段 RenderGraph 子图。 |
+| Raster Bloom | Framework 注册的 RenderGraph 子图，显式包含 prefilter、downsample、upsample 和 composite 阶段。 |
 | DLSS 与 Streamline | 实验性的 NGX DLSS SR/DLAA 与 Streamline RR/FG 资源准备路径；是否可用由启动配置和运行时 capability query 决定。 |
 | Meshlet | task shader 和 compute-indirect 后端，以及 cluster 调试显示。 |
 | CUDA 互操作 | 基于 shared resource / shared fence 的 Bloom 后处理。 |
@@ -239,6 +250,7 @@ CMake 生成的工程会保持各 target 的真实源码目录。`DX12Library`�
 - Compiler 会把 queue 相同且资源交接兼容的连续 Async Compute/Copy pass 合并为 non-direct recording/submission batch；遇到 aliasing 或需要中途 Direct preamble 的资源关系时仍会拆开。
 - `RenderGraphRoot::Execute()` 现在只是图执行入口；pass 录制/提交由 `RenderGraphCommandExecutor` 负责，Direct/Async Compute/Copy 的可选 timestamp 生命周期由 `RenderGraphProfiler` 负责。Root 仍负责图构建和拓扑编排。
 - transient resource 会按本帧实际记录的 Direct/Async Compute/Copy fence 做延迟退休。aliasing 仍采取保守策略：不同 queue 使用的资源不会互相 alias，后续再设计更一般的多 queue allocator。
+- Raster Bloom 的 scratch texture 还会强制使用 dedicated resource，直到 transient alias activation/state ordering 在反复 RG 重建下的 device hang 被修复。
 - 当前 Framework 和 RenderGraph 的执行路径由应用组合根显式注入 device、queue 和 descriptor 分配器。独立运行时的 application/window 生命周期，以及少量 legacy resource-wrapper 兼容路径，仍保留 `Application` 依赖。
 - `RaytracingDemoSceneResources` 内部已拆成 texture/material、geometry、meshlet、RTAS 四个 builder；facade 仍是 sample 层入口。
 - Compacted Indirect 的 `ActivePixelCount` 是有效像素数，不是光线数量。Finalize 对 Inline compute 写入 `{ ceil(activeCount / 64), 1, 1 }`；因此 UI 同时显示 dispatch groups、实际启动线程数和 DXR ray-generation invocation 数。最后一个 compute group 的 padding threads 会由 count guard 早退，收益主要来自移除天空/空区域的完整 lighting 与 ray-query 工作，而不是依靠 padding 线程早退。

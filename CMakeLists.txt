@@ -93,8 +93,8 @@ include(${CMAKE_SOURCE_DIR}/CMakeIncludes/ImGui.cmake)
 # Libraries
 add_subdirectory(DX12Library)
 # Ray tracing framework code is built through Framework instead of a standalone DXR target.
-add_subdirectory(Framework)
 add_subdirectory(RenderGraph)
+add_subdirectory(Framework)
 
 # Demo
 add_subdirectory(Demos/RaytracingDemo)

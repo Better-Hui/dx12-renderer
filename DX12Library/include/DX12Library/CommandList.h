@@ -117,52 +117,18 @@ public:
     }
 //Modify End
 
-    /**
-     * Transition a resource to a particular state.
-     *
-     * @param resource The resource to transition.
-     * @param stateAfter The state to transition the resource to. The before state is resolved by the resource state tracker.
-     * @param subresource The subresource to transition. By default, this is D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES which indicates that all subresources are transitioned to the same state.
-     * @param flushBarriers Force flush any barriers. Resource barriers need to be flushed before a command (draw, dispatch, or copy) that expects the resource to be in a particular state can run.
-     */
-    void TransitionBarrier(const Resource& resource, D3D12_RESOURCE_STATES stateAfter,
-        UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, bool flushBarriers = false);
-    void TransitionBarrier(Microsoft::WRL::ComPtr<ID3D12Resource> resource, D3D12_RESOURCE_STATES stateAfter,
-        UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, bool flushBarriers = false);
-
-    /**
-     * Add a UAV barrier to ensure that any writes to a resource have completed
-     * before reading from the resource.
-     *
-     * @param resource The resource to add a UAV barrier for.
-     * @param flushBarriers Force flush any barriers. Resource barriers need to be
-     * flushed before a command (draw, dispatch, or copy) that expects the resource
-     * to be in a particular state can run.
-     */
-    void UavBarrier(const Resource& resource, bool flushBarriers = false);
-//Modify Begin:2026-07-30 by Hui
-    void UavBarrier(ID3D12Resource* resource, bool flushBarriers = false);
-//Modify End
-
-    /**
-     * Add an aliasing barrier to indicate a transition between usages of two
-     * different resources that occupy the same space in a heap.
-     *
-     * @param beforeResource The resource that currently occupies the heap.
-     * @param afterResource The resource that will occupy the space in the heap.
-     */
-    void AliasingBarrier(const Resource& beforeResource, const Resource& afterResource, bool flushBarriers = false);
-    void AliasingBarrier(Microsoft::WRL::ComPtr<ID3D12Resource> beforeResource,
-        Microsoft::WRL::ComPtr<ID3D12Resource> afterResource, bool flushBarriers = false);
-//Modify Begin:2026-08-10 by Hui
-    void AliasingBarrierBeforeFirstUse(const Resource& resourceAfter);
+//Modify Begin:2026-08-24 by Hui
+    // Resource barriers are intentionally absent from the public command-recording API.
+    // RenderGraph and explicitly approved renderer infrastructure own barrier encoding.
 //Modify End
 
     /**
      * Copy resources.
      */
     void CopyResource(const Resource& dstRes, const Resource& srcRes);
-    void CopyResource(Microsoft::WRL::ComPtr<ID3D12Resource> dstRes, Microsoft::WRL::ComPtr<ID3D12Resource> srcRes, bool dstAutoBarriers = true, bool srcAutoBarriers = true);
+    void CopyResource(
+        Microsoft::WRL::ComPtr<ID3D12Resource> dstRes,
+        Microsoft::WRL::ComPtr<ID3D12Resource> srcRes);
 //Modify Begin:2026-08-19 by Hui
     void CopyBufferRegion(
         const Resource& destination,
@@ -319,34 +285,8 @@ public:
     void SetGraphicsAndComputeRootSignature(const RootSignature& rootSignature);
 
     /**
-     * Set the SRV on the graphics pipeline.
-     */
-    void SetShaderResourceView(
-        uint32_t rootParameterIndex,
-        uint32_t descriptorOffset,
-        const Resource& resource,
-        D3D12_RESOURCE_STATES stateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE |
-        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-        UINT firstSubresource = 0,
-        UINT numSubresources = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
-        const D3D12_SHADER_RESOURCE_VIEW_DESC* srv = nullptr
-    );
-
-    /**
-     * Set the UAV on the graphics pipeline.
-     */
-    void SetUnorderedAccessView(
-        uint32_t rootParameterIndex,
-        uint32_t descriptorOffset,
-        const Resource& resource,
-        D3D12_RESOURCE_STATES stateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-        UINT firstSubresource = 0,
-        UINT numSubresources = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
-        const D3D12_UNORDERED_ACCESS_VIEW_DESC* uavDesc = nullptr
-    );
-
-    /**
-     * Set the SRV on the graphics pipeline.
+     * Stage an SRV descriptor. Resource state is owned by RenderGraph or an
+     * explicitly approved infrastructure boundary.
      */
     void SetShaderResourceView(
         uint32_t rootParameterIndex,
@@ -484,7 +424,7 @@ public:
 //Modify End
 
     /**
-     * Set the UAV on the graphics pipeline.
+     * Stage a UAV descriptor without changing resource state.
      */
     void SetUnorderedAccessView(
         uint32_t rootParameterIndex,
@@ -608,7 +548,7 @@ public:
     void SetShadingRate(const D3D12_SHADING_RATE& shadingRate, const D3D12_SHADING_RATE_COMBINER* combiners);
 
 private:
-//Modify Begin:2026-08-17 by Hui
+//Modify Begin:2026-08-24 by Hui
     friend class CommandListInternalAccess;
 
     UploadBuffer::Allocation AllocateInUploadBuffer(size_t bufferSize, size_t alignment);

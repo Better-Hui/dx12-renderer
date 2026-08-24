@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-12 by Hui
+//Modify Begin:2026-08-24 by Hui
 #include <Framework/Rendering/RayTracing/RayTracingAccelerationStructure.h>
 
 #include <DX12Library/CommandList.h>
@@ -342,8 +342,8 @@ RayTracingAccelerationStructure::BottomLevelAccelerationStructure RayTracingAcce
     const VertexBuffer& vertexBuffer = mesh->GetVertexBuffer();
     const IndexBuffer& indexBuffer = mesh->GetIndexBuffer();
 
-    commandList.TransitionBarrier(vertexBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    commandList.TransitionBarrier(indexBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    CommandListInternalAccess::TransitionBarrier(commandList, vertexBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    CommandListInternalAccess::TransitionBarrier(commandList, indexBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
     D3D12_RAYTRACING_GEOMETRY_DESC geometryDesc = {};
     geometryDesc.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
@@ -381,8 +381,8 @@ RayTracingAccelerationStructure::BottomLevelAccelerationStructure RayTracingAcce
     buildDesc.DestAccelerationStructureData = result.Resource->GetGPUVirtualAddress();
 
     commandList.BuildRaytracingAccelerationStructure(buildDesc);
-    commandList.UavBarrier(result.Resource.Get());
-    commandList.UavBarrier(scratch.Resource.Get());
+    CommandListInternalAccess::UavBarrier(commandList, result.Resource.Get());
+    CommandListInternalAccess::UavBarrier(commandList, scratch.Resource.Get());
     CommandListInternalAccess::TrackResourceState(commandList, result.Resource, result.StateRegistration);
 
     return { mesh, result };
@@ -521,7 +521,10 @@ void RayTracingAccelerationStructure::BuildTopLevelAccelerationStructure(
         D3D12_RESOURCE_STATE_COMMON,
         update ? L"Ray Tracing TLAS Update Scratch" : L"Ray Tracing TLAS Scratch");
 
-    commandList.TransitionBarrier(scratch.Resource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    CommandListInternalAccess::TransitionBarrier(
+        commandList,
+        scratch.Resource,
+        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
     D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
     buildDesc.Inputs = inputs;
@@ -531,7 +534,7 @@ void RayTracingAccelerationStructure::BuildTopLevelAccelerationStructure(
         update ? m_TopLevelAccelerationStructure.Resource->GetGPUVirtualAddress() : 0;
 
     commandList.BuildRaytracingAccelerationStructure(buildDesc);
-    commandList.UavBarrier(m_TopLevelAccelerationStructure.Resource.Get());
+    CommandListInternalAccess::UavBarrier(commandList, m_TopLevelAccelerationStructure.Resource.Get());
     CommandListInternalAccess::TrackResourceState(commandList, scratch.Resource, scratch.StateRegistration);
     CommandListInternalAccess::TrackResourceState(
         commandList,

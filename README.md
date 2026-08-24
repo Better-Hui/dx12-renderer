@@ -24,7 +24,7 @@ The upstream renderer remains the foundation. This fork adds framework and sampl
 | ReSTIR DI | Inline ray-query direct-lighting sample with RIS, temporal/boiling/spatial resampling, stage-specific visibility and bias-correction settings, and final shading. |
 | ReSTIR GI | Inline ray-query one-bounce indirect-lighting sample with initial BSDF sampling, temporal reuse, spatial reuse, Jacobian correction, and final visibility/shading. |
 | Meshlets | Meshlet generation/GPU resources, task-shader and compute-indirect GBuffer backends, and incremental instance-buffer updates. |
-| Denoising and interop | NRD/SVGF sample paths, RenderGraph-aware NRD resource-state handoff, and CUDA Bloom using D3D12 shared resources with external fence/semaphore synchronization. |
+| Post process and interop | Framework-owned NRD/SVGF/TAA and raster-Bloom RenderGraph subgraphs, plus CUDA Bloom using D3D12 shared resources with external fence/semaphore synchronization. |
 | Experimental frame features | Native NGX DLSS SR/DLAA plus Framework-owned Streamline Ray Reconstruction and Frame Generation integration. DX12Library exposes only a generic pre-device/post-device runtime lifecycle; queue and swap-chain creation remain ordinary D3D12/DXGI code while the linked Streamline interposer performs interception. These paths are experimental and not validated for delivery. |
 | Diagnostics | PIX scopes, RenderGraph timing history/CSV, runtime UI controls, and an optional Framework-owned machine-readable capture/automation/query/diff/reproduction loop for developers and coding agents. |
 
@@ -60,12 +60,16 @@ The same style is used for raster, compute, mesh-shader, and DXR paths through `
 ### RenderGraph and explicit async compute
 
 ```cpp
-auto pass = RenderGraph::RenderPass::Create(
+builder.AddPass<PassData>(
     L"Example Compute",
-    { { inputId, RenderGraph::InputType::NonPixelShaderResource } },
-    { { outputId, RenderGraph::OutputType::UnorderedAccess } },
-    execute,
-    RenderGraph::RenderPassQueue::AsyncCompute);
+    [=](RenderGraph::RenderGraphPassBuilder& pass, PassData&) {
+        pass.ReadTexture(inputId);
+        pass.WriteUav(outputId);
+        pass.UseAsyncComputeWhenSupported();
+    },
+    [](const PassData&, const RenderGraph::RenderContext& context, CommandList& commandList) {
+        // Record commands through Framework using resources resolved from context.
+    });
 ```
 
 Pass input/output declarations drive ordering, resource states, and cross-queue waits. The graph currently supports explicit `Direct` and `AsyncCompute` assignment, tracks each resource's producer queue and submitted fence value, and inserts GPU-side waits for dependent consumers. Inline-ray-query `Indirect Lighting` is the current async-compute sample path.
@@ -73,6 +77,12 @@ Pass input/output declarations drive ordering, resource states, and cross-queue 
 Queue submission and last-writer fence tracking live in `RenderGraphQueueScheduler`. The compiler emits immutable per-pass transition/aliasing plans; the executor records them into the owning command list. `CommandList` resolves each list's initial state against the shared `ResourceStateRegistry` in final submission order, so CPU recording order never changes GPU resource ordering.
 
 `RenderGraphRoot` receives its device and queues from the application composition root. Its execution path is split into `RenderGraphCommandExecutor` for pass recording/submission and `RenderGraphProfiler` for optional per-queue GPU timestamps. `RaytracingDemo` follows the same boundary: `RaytracingDemoPassResources` supplies object references and `RaytracingDemoPassConfig` supplies explicit runtime configuration, so pass lambdas do not capture the whole demo or use friend access.
+
+Reusable Framework features register subgraphs through `AddPasses(RenderGraphBuilder&, Inputs)`. Auto Exposure, ReSTIR DI/GI, raster Bloom, NRD, SVGF, and TAA all use this model; the builder exists only during graph construction and is never stored by Framework. Framework-owned persistent resources, including the SVGF/TAA ping-pong histories, are imported with distinct logical read/write graph IDs; their physical buffer resolves per frame while graph topology remains stable. Construction-scoped scratch textures use `RenderGraphBuilder::CreateTexture()` and `Discard`. `CommandList` and `CommandContext` expose no manual barrier API. The build-time ownership check scans first-party DX12Library, RenderGraph, Framework, and Demo sources and rejects ordinary-feature bypasses.
+
+NRD is visible to the graph as `Prepare Inputs`, `Native Denoise`, and `Composite`. Native NRI/NRD recording may manage SDK-internal temporary states, but graph resources enter and leave that segment in the declared SRV/UAV states; NRD is not a barrier allowlist exception. SVGF registers imported parity-aware temporal history, horizontal/vertical A-Trous passes, and Composite. TAA registers Resolve and History Copy around imported ping-pong history; its physical read/write selection stays fixed for the complete graph execution and advances only at the rendered-frame boundary. A UAV clear no longer appends a hidden barrier; a later write to the same UAV must be represented by another pass or an explicit graph WAW dependency.
+
+Raster Bloom is visible to RenderGraph as `Bloom Prefilter`, per-level `Bloom Downsample`, per-level `Bloom Upsample`, and `Bloom Composite`. Its graph-owned pyramid currently uses dedicated resources: enabling transient-heap aliasing for this chain reproducibly caused a device hang after repeated graph rebuilds, so alias activation/state ordering remains separate allocator work rather than being hidden inside the feature.
 
 ### Rendering features
 
@@ -86,6 +96,7 @@ Queue submission and last-writer fence tracking live in `RenderGraphQueueSchedul
 | Lighting | Separate direct and indirect lighting producers followed by composition, including ReSTIR DI for direct lighting and ReSTIR GI for inline-ray-query indirect lighting. |
 | Soft shadows | Precompiled hard/soft shader variants for directional and point lights; area lights retain their sampled emitter surface. |
 | Denoising | Optional NRD or SVGF integration. |
+| Raster Bloom | Framework-owned RenderGraph subgraph with explicit prefilter, downsample, upsample, and composite stages. |
 | DLSS and Streamline | Experimental NGX DLSS SR/DLAA plus Streamline RR/FG resource preparation. Capability queries and startup configuration decide whether a path is available. |
 | Meshlets | Task-shader and compute-indirect GBuffer backends with cluster debugging. |
 | CUDA Bloom | External D3D12/CUDA post process with shared-resource and shared-fence synchronization. |
@@ -231,6 +242,7 @@ The startup compiler currently covers the shaders directly owned by `RaytracingD
 - The compiler merges consecutive same-queue Async Compute/Copy passes into a non-direct recording/submission batch when their resource handoffs are compatible. Aliasing or a required intermediate Direct preamble still splits the batch.
 - `RenderGraphRoot::Execute` is now a thin graph entry point; `RenderGraphCommandExecutor` owns pass recording/submission and `RenderGraphProfiler` owns optional Direct/Async Compute/Copy timestamp lifetimes. Graph build/topology orchestration remains in `RenderGraphRoot`.
 - Transient resources are retired using the actual Direct/Async Compute/Copy fence values recorded for the frame. Aliasing is deliberately conservative: resources used by different queues are not aliased until a more general multi-queue allocator is designed.
+- Raster Bloom scratch textures are additionally forced to dedicated resources until repeated-rebuild device hangs in transient alias activation/state ordering are fixed.
 - Device and queue state is injected through the application composition root for the current Framework and RenderGraph execution paths. Standalone application/window lifecycle code and a small set of legacy resource-wrapper compatibility paths still retain `Application` dependencies.
 - `RaytracingDemoSceneResources` exposes four internal builders for texture/material, geometry, meshlet, and RTAS resources. The facade remains sample-facing.
 - `ActivePixelCount` is the number of valid geometry pixels, not the number of rays. Inline compacted compute finalizes `{ ceil(activeCount / 64), 1, 1 }`; the UI separately reports launched compute threads and shader-table DXR ray-generation invocations. Padding threads are guarded out; the useful work reduction comes from removing full lighting/ray-query invocations for inactive pixels.

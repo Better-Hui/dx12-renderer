@@ -10,8 +10,13 @@ RaytracingDemoRenderPipelineConfiguration RaytracingDemoRenderPipelineController
         .Topology = {
             .DenoiserEnabled = frameState.DenoiserEnabled,
             .DenoiserAlgorithm = frameState.DenoiserAlgorithm,
+            .NRDDenoiserMode = frameState.NRDDenoiserMode,
+            .SVGFAtrousIterations = frameState.SVGFAtrousIterations,
             .BloomEnabled = frameState.BloomEnabled,
             .BloomBackend = frameState.BloomBackend,
+            .BloomPyramidLevels = frameState.BloomBackend == CudaBloomPass::Backend::FrameworkRaster
+                ? frameState.BloomPyramidLevels
+                : 0,
             .DLSSEnabled = frameState.DLSSEnabled,
             .RayReconstructionEnabled = frameState.RayReconstructionEnabled,
             .FrameGenerationEnabled = frameState.FrameGenerationEnabled,

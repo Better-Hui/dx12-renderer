@@ -16,7 +16,7 @@
 #include <cstring>
 #include <stdexcept>
 
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-08-24 by Hui
 ResourceUploader::ResourceUploader(std::shared_ptr<D3D12DeviceContext> deviceContext)
     : m_DeviceContext(std::move(deviceContext))
 {
@@ -105,10 +105,12 @@ void ResourceUploader::UploadTextureSubresources(
     const Microsoft::WRL::ComPtr<ID3D12Resource> destination = texture.GetD3D12Resource();
     Assert(destination != nullptr, "Texture upload destination has not been created.");
 
-    if (texture.AreAutoBarriersEnabled())
-    {
-        commandList.TransitionBarrier(texture, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, true);
-    }
+    CommandListInternalAccess::TransitionBarrier(
+        commandList,
+        texture,
+        D3D12_RESOURCE_STATE_COPY_DEST,
+        D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+        true);
 
     const UINT64 requiredSize = GetRequiredIntermediateSize(destination.Get(), firstSubresource, subresourceCount);
     const UploadBuffer::Allocation uploadAllocation = CommandListInternalAccess::AllocateTransientUpload(
@@ -124,6 +126,10 @@ void ResourceUploader::UploadTextureSubresources(
         firstSubresource,
         subresourceCount,
         subresources);
+    CommandListInternalAccess::TransitionBarrier(
+        commandList,
+        texture,
+        D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
     CommandListInternalAccess::TrackObjectLifetime(commandList, uploadAllocation.Resource);
     CommandListInternalAccess::TrackResourceLifetime(commandList, texture);
 }
@@ -170,7 +176,6 @@ void ResourceUploader::UploadBuffer(
         currentDesc.Width < bufferSize || currentDesc.Flags != flags;
     if (recreate)
     {
-        Assert(buffer.AreAutoBarriersEnabled(), "Cannot recreate a resource with automatic barriers disabled.");
         const auto heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
         const auto resourceDesc = CD3DX12_RESOURCE_DESC::Buffer(bufferSize, flags);
         Microsoft::WRL::ComPtr<ID3D12Resource> resource;
@@ -194,15 +199,29 @@ void ResourceUploader::UploadBuffer(
             bufferSize,
             16u);
         std::memcpy(uploadAllocation.Cpu, data, bufferSize);
+        CommandListInternalAccess::TransitionBarrier(
+            commandList,
+            buffer,
+            D3D12_RESOURCE_STATE_COPY_DEST,
+            D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+            true);
         commandList.CopyBufferRegion(
             buffer,
             0u,
             uploadAllocation.Resource,
             uploadAllocation.Offset,
             bufferSize);
+        CommandListInternalAccess::TransitionBarrier(
+            commandList,
+            buffer,
+            D3D12_RESOURCE_STATE_GENERIC_READ);
     }
     else
     {
+        CommandListInternalAccess::TransitionBarrier(
+            commandList,
+            buffer,
+            D3D12_RESOURCE_STATE_GENERIC_READ);
         CommandListInternalAccess::TrackResourceLifetime(commandList, buffer);
     }
 

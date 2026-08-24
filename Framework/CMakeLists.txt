@@ -16,6 +16,7 @@ set(DX12_RENDERER_IDE_ONLY_FILES
         "tools/RendererDiagnosticsRun.cpp"
         "tools/RendererDiagnosticsSelfTest.cpp"
         "tools/UnitySceneDump.cpp"
+        "tools/VerifyRenderGraphOwnership.cmake"
         )
 set_source_files_properties(${DX12_RENDERER_IDE_ONLY_FILES} PROPERTIES HEADER_FILE_ONLY TRUE)
 
@@ -113,6 +114,12 @@ add_library(${TARGET_NAME} STATIC
         ${SHADERS_HEADER_FILES}
         ${DX12_RENDERER_IDE_ONLY_FILES})
 
+add_custom_command(TARGET ${TARGET_NAME} PRE_BUILD
+        COMMAND ${CMAKE_COMMAND}
+                -DREPOSITORY_ROOT=${CMAKE_SOURCE_DIR}
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tools/VerifyRenderGraphOwnership.cmake
+        VERBATIM)
+
 # Dear ImGui is compiled into Framework so every ImGui::Slider* call shares the same double-click input behavior.
 set(DX12_RENDERER_IMGUI_SOURCES
         ${DX12_RENDERER_IMGUI_COMPILED_SOURCES}
@@ -158,6 +165,7 @@ target_include_directories(${TARGET_NAME}
 
 target_link_libraries(${TARGET_NAME}
         PUBLIC DX12Library
+        PUBLIC RenderGraph
         PUBLIC "${DX12_RENDERER_CUDA_DRIVER_LIBRARY}"
         PUBLIC NRD
         PUBLIC NRDIntegration

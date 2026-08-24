@@ -4,6 +4,7 @@
 #include "GpuReadbackBuffer.h"
 
 #include "CommandList.h"
+#include "CommandListInternalAccess.h"
 #include "CommandQueue.h"
 #include "Helpers.h"
 #include "Resource.h"
@@ -79,6 +80,12 @@ bool GpuReadbackBuffer::RecordCopy(
 
     Assert(!m_ActiveCopyRecorded, "GPU readback buffer copy was recorded more than once.");
     Assert(sourceOffset + m_SizeInBytes <= source.GetD3D12ResourceDesc().Width, "GPU readback source range is out of bounds.");
+    CommandListInternalAccess::TransitionBarrier(
+        commandList,
+        source,
+        D3D12_RESOURCE_STATE_COPY_SOURCE,
+        D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+        true);
     commandList.CopyBufferToReadback(
         source,
         sourceOffset,

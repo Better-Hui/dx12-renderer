@@ -162,37 +162,31 @@ void ComputeShader::SetShaderResourceView(CommandList& commandList, const std::s
 {
     (void)commandList;
 //Modify Begin:2026-08-19 by Hui
-    m_DescriptorSet->SetShaderResourceView(
-        variableName,
-        arrayIndex,
-        shaderResourceView,
-        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    m_DescriptorSet->SetShaderResourceView(variableName, arrayIndex, shaderResourceView);
 //Modify End
 }
 
-void ComputeShader::SetShaderResourceView(CommandList& commandList, const std::string& variableName, UINT arrayIndex, const Resource& resource, D3D12_RESOURCE_STATES stateAfter) const
+void ComputeShader::SetShaderResourceView(
+    CommandList& commandList,
+    const std::string& variableName,
+    const UINT arrayIndex,
+    const Resource& resource) const
 {
     (void)commandList;
-    m_DescriptorSet->SetShaderResource(variableName, arrayIndex, resource, stateAfter);
+    m_DescriptorSet->SetShaderResource(variableName, arrayIndex, resource);
 }
 
 //Modify Begin:2026-08-19 by Hui
 void ComputeShader::SetShaderResourceViews(CommandList& commandList, const std::string& variableName, std::span<const ShaderResourceView> shaderResourceViews) const
 {
     (void)commandList;
-    m_DescriptorSet->SetShaderResourceViews(
-        variableName,
-        shaderResourceViews,
-        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    m_DescriptorSet->SetShaderResourceViews(variableName, shaderResourceViews);
 }
 
 void ComputeShader::SetStructuredBuffer(CommandList& commandList, const std::string& variableName, const StructuredBuffer& buffer) const
 {
     (void)commandList;
-    m_DescriptorSet->SetStructuredBuffer(
-        variableName,
-        buffer,
-        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    m_DescriptorSet->SetStructuredBuffer(variableName, buffer);
 }
 //Modify End
 

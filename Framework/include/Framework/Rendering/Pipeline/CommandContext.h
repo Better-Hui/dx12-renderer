@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-24 by Hui
 
 #include <d3d12.h>
 #include <wrl.h>
@@ -90,7 +90,7 @@ public:
     void SetShaderResourceView(Shader& shader, std::string_view name, const ShaderResourceView& shaderResourceView) const;
     void SetShaderResourceView(Shader& shader, std::string_view name, uint32_t arrayIndex, const ShaderResourceView& shaderResourceView) const;
     void SetShaderResourceViews(Shader& shader, std::string_view name, std::span<const ShaderResourceView> shaderResourceViews) const;
-    void SetShaderResource(Shader& shader, std::string_view name, const Resource& resource, D3D12_RESOURCE_STATES stateAfter = D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE) const;
+    void SetShaderResource(Shader& shader, std::string_view name, const Resource& resource) const;
     void SetStructuredBuffer(Shader& shader, std::string_view name, const StructuredBuffer& buffer) const;
     void SetTexture(Shader& shader, std::string_view name, const ShaderResourceView& shaderResourceView) const;
     void SetTexture(Shader& shader, std::string_view name, const std::shared_ptr<Resource>& texture) const;
@@ -106,7 +106,7 @@ public:
     void SetShaderResourceView(MeshShader& shader, std::string_view name, const ShaderResourceView& shaderResourceView) const;
     void SetShaderResourceView(MeshShader& shader, std::string_view name, uint32_t arrayIndex, const ShaderResourceView& shaderResourceView) const;
     void SetShaderResourceViews(MeshShader& shader, std::string_view name, std::span<const ShaderResourceView> shaderResourceViews) const;
-    void SetShaderResource(MeshShader& shader, std::string_view name, const Resource& resource, D3D12_RESOURCE_STATES stateAfter = D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE) const;
+    void SetShaderResource(MeshShader& shader, std::string_view name, const Resource& resource) const;
     void SetStructuredBuffer(MeshShader& shader, std::string_view name, const StructuredBuffer& buffer) const;
     void SetTexture(MeshShader& shader, std::string_view name, const ShaderResourceView& shaderResourceView) const;
     void SetTexture(MeshShader& shader, std::string_view name, const std::shared_ptr<Resource>& texture) const;
@@ -122,17 +122,12 @@ public:
 
     void SetShaderResourceView(const ComputeShader& shader, std::string_view name, const ShaderResourceView& shaderResourceView) const;
     void SetShaderResourceView(const ComputeShader& shader, std::string_view name, uint32_t arrayIndex, const ShaderResourceView& shaderResourceView) const;
-    void SetShaderResource(const ComputeShader& shader, std::string_view name, uint32_t arrayIndex, const Resource& resource, D3D12_RESOURCE_STATES stateAfter = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE) const;
+    void SetShaderResource(const ComputeShader& shader, std::string_view name, uint32_t arrayIndex, const Resource& resource) const;
     void SetShaderResourceViews(const ComputeShader& shader, std::string_view name, std::span<const ShaderResourceView> shaderResourceViews) const;
     void SetTexture(const ComputeShader& shader, std::string_view name, const ShaderResourceView& shaderResourceView) const;
     void SetTexture(const ComputeShader& shader, std::string_view name, const std::shared_ptr<Resource>& texture) const;
     void SetUnorderedAccessView(const ComputeShader& shader, std::string_view name, const UnorderedAccessView& unorderedAccessView) const;
     void SetAccelerationStructure(const ComputeShader& shader, std::string_view name, const RayTracingAccelerationStructure& accelerationStructure) const;
-    void InsertDescriptorSetOutputBarriers(const PipelineDescriptorSet& descriptorSet) const;
-
-    void TransitionShaderResource(const Resource& resource) const;
-    void TransitionUnorderedAccess(const Resource& resource) const;
-    void UavBarrier(const Resource& resource) const;
 
     void Draw(uint32_t vertexCount, uint32_t instanceCount = 1, uint32_t startVertex = 0, uint32_t startInstance = 0) const;
     void DrawIndexed(uint32_t indexCount, uint32_t instanceCount = 1, uint32_t startIndex = 0, int32_t baseVertex = 0, uint32_t startInstance = 0) const;
@@ -147,7 +142,6 @@ public:
     void Dispatch(uint32_t numGroupsX, uint32_t numGroupsY = 1, uint32_t numGroupsZ = 1) const;
     void BindDescriptorSet(const RayTracingBindingSet& bindingSet) const;
     void DispatchRays(const RayTracingDispatchDesc& dispatchDesc) const;
-    void InsertDescriptorSetOutputBarriers(const RayTracingBindingSet& bindingSet) const;
 
 private:
     void SetPipelineLayout(PipelineBindPoint bindPoint, const PipelineLayout& pipelineLayout) const;

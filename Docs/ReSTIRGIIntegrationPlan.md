@@ -29,13 +29,22 @@ The renderer now mirrors `ReSTIRDIPass`, not the Falcor pass API:
         std::function<void(CommandContext&, ComputeShader&)> BindSceneInputs;
     };
 
+    struct ReSTIRGIGraphInputs
+    {
+        RenderGraph::ResourceId IndirectLighting;
+        RenderGraph::ResourceId InputToken;
+        RenderGraph::ResourceId OutputToken;
+        std::function<void(RenderGraph::RenderGraphPassBuilder&)> DeclareSharedResources;
+        std::function<ReSTIRGIExecutionInputs(const RenderGraph::RenderContext&)> ResolveFrameInputs;
+    };
+
     class ReSTIRGIPass
     {
     public:
-        void Execute(CommandList&, const ReSTIRGIExecutionInputs&);
+        void AddPasses(RenderGraph::RenderGraphBuilder&, ReSTIRGIGraphInputs);
     };
 
-`ReSTIRGIPass` owns `Initial`, `Temporal`, and persistent `History` packed reservoir sets, plus hard/soft-shadow, environment-projection, material-shading, algorithm-setting, and compacted-dispatch shader variants. The demo provides the GBuffer, TLAS, bindless scene adapter, direct-light/emission/environment evaluation, optional `ActivePixelDispatch`, and output resource. The RenderGraph constructs exactly one indirect-lighting producer: PathTracing, ReSTIR GI, or a disabled producer; there are never two runtime-gated writers of the same output.
+`ReSTIRGIPass` owns `Initial`, `Temporal`, and persistent `History` packed reservoir sets, plus hard/soft-shadow, environment-projection, material-shading, algorithm-setting, and compacted-dispatch shader variants. `AddPasses` imports those persistent allocations and registers Initial/Temporal/Spatial/Shade as distinct graph stages; it never stores the builder. The demo provides the GBuffer, TLAS, bindless scene adapter, direct-light/emission/environment evaluation, optional `ActivePixelDispatch`, and output resource. The RenderGraph constructs exactly one indirect-lighting producer: PathTracing, ReSTIR GI, or a disabled producer; there are never two runtime-gated writers of the same output.
 
 ## Current boundaries
 

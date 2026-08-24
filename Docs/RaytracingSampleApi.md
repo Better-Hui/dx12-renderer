@@ -44,28 +44,39 @@ Base Resources
 -> Lighting Composite
 -> optional Denoise
 -> Skybox / post process
--> optional CUDA Bloom external pass
+-> optional Raster Bloom subgraph or CUDA Bloom external pass
 -> Display / Overlay
 -> Present
 ```
 
-When the Direct Lighting UI selects ReSTIR DI on the inline ray-query backend, the graph contains one framework-backed direct-light pass:
+When the Direct Lighting UI selects ReSTIR DI on the inline ray-query backend, Framework registers a direct-light subgraph:
 
 ```text
 Base Resources
--> ReSTIR DI
-   -> RIS
-   -> Temporal Reuse + Boiling Filter
-   -> Spatial Reuse
-   -> Final Visibility / Shade
+-> ReSTIR DI Initial Sampling
+-> ReSTIR DI Temporal Resampling
+-> ReSTIR DI Boiling Filter
+-> ReSTIR DI Spatial Resampling
+-> ReSTIR DI Shade
 -> Lighting Composite
 ```
 
-`ReSTIRDIPass` records the internal compute dispatches in the same command-list scope. RenderGraph therefore tracks the feature as one pass and reports one graph-level timing; its internal stages share the pass scope rather than becoming independently scheduled RenderGraph passes.
+`ReSTIRDIPass::AddPasses` registers these stages while the graph is being constructed. RenderGraph tracks and times every stage independently. Framework owns persistent reservoirs and shader variants but imports those allocations with logical IDs, allowing the compiler to plan barriers and hazards. The builder reference is never stored.
+
+Raster Bloom follows the same construction-scoped registration rule:
+
+```text
+Bloom Prefilter
+-> Bloom Downsample 1..N
+-> Bloom Upsample N-1..0
+-> Bloom Composite
+```
+
+`Bloom::AddPasses` declares its pyramid with `RenderGraphBuilder::CreateTexture()`, so the Demo only supplies the source/output IDs, tokens, resolution expressions, parameters, and pyramid depth. The graph owns those textures, their lifetime, and their barriers. They currently request dedicated allocations because transient aliasing of this chain reproducibly causes a device hang after repeated graph rebuilds; CUDA Bloom is unaffected and remains an explicit external queue/semaphore path.
 
 ### ReSTIR DI direct lighting
 
-`Framework/Rendering/Lighting/ReSTIRDI.h` owns renderer-neutral settings and frame constants. `Framework/Rendering/Lighting/ReSTIRDIPass.h` owns persistent reservoir/history resources, shader variants, and the RIS/temporal/spatial/final dispatch sequence. The sample creates one RenderGraph pass, supplies `DirectLighting` and motion vectors, and gives the framework pass a callback that binds the sample scene contract.
+`Framework/Rendering/Lighting/ReSTIRDI.h` owns renderer-neutral settings and frame constants. `Framework/Rendering/Lighting/ReSTIRDIPass.h` owns persistent reservoir/history resources, shader variants, and the graph-registration contract. The sample supplies `DirectLighting`, tokens, motion vectors, and callbacks that declare and resolve its scene contract.
 
 `ReSTIRDISettings` currently exposes:
 
@@ -83,19 +94,18 @@ This is still an experimental ReSTIR DI implementation. Its sampling policy, qua
 
 ### ReSTIR GI indirect lighting
 
-When `Indirect Lighting` selects `ReSTIR GI` on the inline ray-query backend, the graph contains one framework-backed indirect-light pass:
+When `Indirect Lighting` selects `ReSTIR GI` on the inline ray-query backend, Framework registers an indirect-light subgraph:
 
 ```text
 Base Resources
--> ReSTIR GI
-   -> Initial BSDF sample
-   -> Temporal reservoir reuse
-   -> Spatial reservoir reuse
-   -> Final visibility / Shade
+-> ReSTIR GI Initial Sampling
+-> ReSTIR GI Temporal Resampling
+-> ReSTIR GI Spatial Resampling
+-> ReSTIR GI Shade
 -> Lighting Composite
 ```
 
-`Framework/Rendering/Lighting/ReSTIRGI.h` owns renderer-neutral settings and frame constants. `Framework/Rendering/Lighting/ReSTIRGIPass.h` owns the packed reservoir textures, shader variants, and the four internal dispatches. The sample adds exactly one `ReSTIR GI` RenderGraph pass, supplies `IndirectLighting`, motion vectors, and a callback that binds its GBuffer/TLAS/bindless scene ABI.
+`Framework/Rendering/Lighting/ReSTIRGI.h` owns renderer-neutral settings and frame constants. `Framework/Rendering/Lighting/ReSTIRGIPass.h` owns packed reservoir textures, shader variants, and `AddPasses`. The sample supplies `IndirectLighting`, graph tokens, motion vectors, and callbacks that declare and resolve its GBuffer/TLAS/bindless scene ABI. Ping-pong history is resolved from the runtime frame index without rebuilding or retaining the builder.
 
 The implementation follows the ReSTIR GI data flow in [DQLin/ReSTIR_PT](https://github.com/DQLin/ReSTIR_PT): initial secondary-hit sampling, temporal reuse with surface validation, spatial reuse with Jacobian correction, and final visibility evaluation. Each selected secondary vertex stores emitted radiance plus direct and bounded continuation-path radiance using the same estimator as ordinary indirect path tracing. The reservoir itself still represents one resampled secondary vertex, and the feature is Inline Ray Query only. The feature stores three `R32G32B32A32_UINT` textures per reservoir set for creation surface, secondary hit, and radiance/state; `Initial`, `Temporal`, and persistent `History` sets consume roughly 144 bytes per pixel before allocator overhead.
 
@@ -119,18 +129,11 @@ Current behavior:
 - Async inputs are limited to read-only classes; async outputs are tokens, UAVs, or copy destinations. Render targets, depth, and external passes remain Direct-only.
 - Inline-ray-query `Indirect Lighting` is the sample's current Async Compute example.
 
-### Native resource-state handoff
+### Imported resources and native recording
 
-Native integrations that record barriers inside a normal RenderGraph pass must report the resulting state through `RenderContext`:
+Framework-owned persistent resources enter normal graph scheduling through `RenderGraphBuilder::ImportResource`. They receive logical IDs and participate in dependency, culling, state, UAV, and cross-queue hazard planning, but remain outside the transient resource pool.
 
-```cpp
-const ResourceStateTransition transitions[] = {
-    { texture.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE },
-};
-context.TransitionResources(commandList, transitions);
-```
-
-NRD uses this path to batch its adapter/input/output transitions. Without a RenderGraph callback, the NRD wrapper retains a raw D3D12 fallback for standalone use. External passes such as CUDA Bloom remain explicit queue-boundary operations with their own shared-fence protocol.
+Native integrations such as NRD and RTAS construction remain audited renderer-infrastructure boundaries. NRD declares its RG-visible inputs/outputs and restores the native snapshot state around SDK recording; CUDA Bloom and Streamline remain explicit external queue/semaphore boundaries. Demo pass code cannot call transition/UAV/aliasing barriers, and `CommandList`/`CommandContext` expose no such API.
 
 This is an explicit queue API, not an automatic multi-queue scheduler. It does not decide queue placement, split or batch passes, optimize overlap, or schedule a Copy queue. A pass may become slower when dependencies expose its compute tail or when graphics and compute contend for GPU execution/cache/bandwidth.
 
@@ -187,6 +190,7 @@ The current soft variant uses four shadow samples. This is a sample-quality fixe
 - **Root descriptors:** D3D12 root descriptors write a buffer GPU virtual address directly into a root-signature slot and are useful for buffer CBV/SRV/UAV bindings, but they are not the texture binding path and were used only as a diagnostic A/B during the compact-dispatch investigation.
 - **Meshlets:** task-shader and compute-indirect GBuffer backends plus cluster debugging. This is not yet a production visibility, streaming, residency, or LOD system.
 - **Surface emitters:** rectangular area lights and emissive meshes are represented by reusable geometry-level triangle CDF data plus per-instance data, then uploaded with the other light buffers.
+- **Raster Bloom:** Framework registers explicit prefilter, per-level downsample, per-level upsample, and composite graph passes. Its graph-owned scratch pyramid is temporarily dedicated pending a fix for repeated-rebuild transient alias activation/state ordering.
 - **CUDA Bloom:** imports shared D3D12 resources/fences once and uses timeline values for D3D12-to-CUDA and CUDA-to-D3D12 ordering. It must not overwrite history or overlay resources.
 - **Denoising:** NRD and SVGF are selectable sample integrations. NRD reports native D3D12 state changes back to RenderGraph; history must reset after incompatible resolution, layout, or backend changes.
 
@@ -199,6 +203,7 @@ The current soft variant uses four shadow samples. This is a sample-quality fixe
 - RenderGraph supports explicit Direct/Async Compute/Copy queue placement but no automatic queue selection; the main sample does not yet contain a Copy-queue pass.
 - `RenderGraphRoot::Execute` is now a graph entry point. `RenderGraphCommandExecutor` owns pass recording/submission, while `RenderGraphProfiler` owns optional per-queue timestamp lifetime and markers.
 - Transient resources are retired from actual Direct/Async Compute fence values. Aliasing is conservative and only combines lifetimes that are proven to use the same queue; cross-queue aliasing is intentionally disabled.
+- Raster Bloom scratch is excluded from transient aliasing until the repeatable device hang in alias activation/state ordering is fixed.
 - Pass construction uses explicit `RaytracingDemoPassResources` and `RaytracingDemoPassConfig` rather than capturing `RaytracingDemo&` or using friend access.
 - Scene-to-GPU conversion is organized by four builders: texture/material, geometry, meshlet, and RTAS. `RaytracingDemoSceneResources` remains the sample-facing facade.
 - Scene loading uses the static `SceneImporter::ImportFromFile()` dispatcher for `.unity`, project `.json`, and `.fbx`. FBX nodes, transforms, material factors/maps, external/embedded textures, cameras, and directional/point/spot/area lights are normalized into `Scene`; `SceneMeshReference::SubmeshIndex` is preferred over mesh-name matching when the demo selects a prototype.

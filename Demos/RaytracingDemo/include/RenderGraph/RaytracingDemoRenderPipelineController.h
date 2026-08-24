@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-08-24 by Hui
 #include <Denoising/DenoiserController.h>
 #include <Passes/RaytracingDemoPassResources.h>
 #include <RenderGraph/RenderGraphRoot.h>
@@ -13,8 +13,11 @@ struct RaytracingDemoRenderGraphTopology
 {
     bool DenoiserEnabled = false;
     DenoiserController::Algorithm DenoiserAlgorithm = DenoiserController::Algorithm::Off;
+    NRD::DenoiserMode NRDDenoiserMode = NRD::DenoiserMode::ReblurDiffuse;
+    uint32_t SVGFAtrousIterations = 1;
     bool BloomEnabled = false;
     CudaBloomPass::Backend BloomBackend = CudaBloomPass::Backend::Cuda;
+    int BloomPyramidLevels = 1;
     bool DLSSEnabled = false;
     bool RayReconstructionEnabled = false;
     bool FrameGenerationEnabled = false;

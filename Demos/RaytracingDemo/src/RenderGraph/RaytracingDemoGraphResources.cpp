@@ -162,7 +162,7 @@ namespace RaytracingDemoRenderGraph
             { ResourceIds::IndirectLightingFinishedToken },
             { ResourceIds::RayTracingFinishedToken },
             { ResourceIds::DenoiseFinishedToken },
-            { ResourceIds::CudaBloomFinishedToken },
+            { ResourceIds::BloomFinishedToken },
 //Modify Begin:2026-08-23 by Hui
             { ResourceIds::AutoExposureFinishedToken },
 //Modify End

@@ -714,7 +714,7 @@ RaytracingDemo::RaytracingDemo(
 
 }
 
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-08-24 by Hui
 void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::filesystem::path& scenePath)
 {
 //Modify Begin:2026-08-23 by Hui
@@ -1525,7 +1525,7 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
     }
 }
 
-void RaytracingDemo::CapturePendingAutomationScreenshot()
+void RaytracingDemo::CapturePendingAutomationScreenshot(const RenderGraph::RenderMetadata& renderMetadata)
 {
     if (!m_PendingAutomationScreenshot.has_value())
     {
@@ -1553,8 +1553,6 @@ void RaytracingDemo::CapturePendingAutomationScreenshot()
     RenderGraph::RenderGraphRoot& renderGraph = m_RenderPipeline.GetRenderGraph();
     const std::shared_ptr<Texture>& presentationTexture =
         renderGraph.GetTexture(renderGraph.GetPresentationResourceId());
-    const auto directQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
-
     const Microsoft::WRL::ComPtr<ID3D12Device2> device = m_FrameworkDeviceContext.GetDevice();
     const Microsoft::WRL::ComPtr<ID3D12Resource> sourceResource = presentationTexture->GetD3D12Resource();
     const D3D12_RESOURCE_DESC sourceDescription = sourceResource->GetDesc();
@@ -1589,24 +1587,12 @@ void RaytracingDemo::CapturePendingAutomationScreenshot()
         nullptr,
         IID_PPV_ARGS(&readbackResource)));
 
-    const std::shared_ptr<CommandList> captureCommandList = directQueue->GetCommandList();
-    captureCommandList->TransitionBarrier(*presentationTexture, D3D12_RESOURCE_STATE_COPY_SOURCE, 0u, true);
-    const CD3DX12_TEXTURE_COPY_LOCATION sourceLocation(sourceResource.Get(), 0u);
-    const CD3DX12_TEXTURE_COPY_LOCATION destinationLocation(readbackResource.Get(), footprint);
-    captureCommandList->GetGraphicsCommandList()->CopyTextureRegion(
-        &destinationLocation,
-        0u,
-        0u,
-        0u,
-        &sourceLocation,
-        nullptr);
-    captureCommandList->TransitionBarrier(
-        *presentationTexture,
-        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
-        0u,
+    renderGraph.CopyTextureToReadback(
+        renderMetadata,
+        renderGraph.GetPresentationResourceId(),
+        readbackResource,
+        footprint,
         true);
-    const uint64_t captureFenceValue = directQueue->ExecuteCommandList(captureCommandList);
-    directQueue->WaitForFenceValue(captureFenceValue);
 
     DirectX::ScratchImage capturedImage;
     ThrowIfFailed(capturedImage.Initialize2D(
@@ -2096,6 +2082,7 @@ try
     accelerationStructureSettings.AllowUpdate = true;
     m_SceneResources.BuildRayTracingAccelerationStructure(*commandList, accelerationStructureSettings);
     m_Lights.InitializeGpuBuffers(*commandList);
+    m_CudaBloom.InitializeFrameworkBloom(*commandList);
 //Modify Begin:2026-08-19 by Hui
     EnsureRayTracingPipelines();
 //Modify End
@@ -2221,6 +2208,7 @@ void RaytracingDemo::RenderStartupLoadingScreen()
     const auto commandList = commandQueue->GetCommandList();
     const RenderTarget& backBufferRenderTarget = PWindow->GetRenderTarget();
     constexpr float ClearColor[] = { 0.025f, 0.030f, 0.045f, 1.0f };
+    PWindow->PrepareBackBufferForRenderTarget(*commandList);
     commandList->SetRenderTarget(backBufferRenderTarget);
     commandList->SetAutomaticViewportAndScissorRect(backBufferRenderTarget);
     commandList->ClearRenderTarget(backBufferRenderTarget, ClearColor, static_cast<D3D12_CLEAR_FLAGS>(0));
@@ -2680,8 +2668,11 @@ void RaytracingDemo::UpdateRenderGraphFrameState()
     state.DenoiserAlgorithm = state.DenoiserEnabled
         ? m_Denoisers.GetAlgorithm()
         : DenoiserController::Algorithm::Off;
+    state.NRDDenoiserMode = m_Denoisers.GetNRDMode();
+    state.SVGFAtrousIterations = m_Denoisers.GetSVGFAtrousIterations();
     state.BloomEnabled = m_CudaBloom.IsEnabled();
     state.BloomBackend = m_CudaBloom.GetBackend();
+    state.BloomPyramidLevels = (std::max)(1, m_CudaBloom.GetPyramidLevels());
     const uint32_t displayWidth = static_cast<uint32_t>((std::max)(m_Width, 1));
     const uint32_t displayHeight = static_cast<uint32_t>((std::max)(m_Height, 1));
     const DLSSOptimalSettings dlssSettings = m_DLSS.GetOptimalSettings(displayWidth, displayHeight);
@@ -2745,7 +2736,7 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     }
 //Modify End
 
-//Modify Begin:2026-08-20 by Hui
+//Modify Begin:2026-08-24 by Hui
     const auto directCommandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
     const auto asyncComputeCommandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE);
     const auto copyCommandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COPY);
@@ -2952,7 +2943,7 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     try
     {
         PresentDisplayOutput();
-        CapturePendingAutomationScreenshot();
+        CapturePendingAutomationScreenshot(metadata);
     }
     catch (const std::exception& exception)
     {

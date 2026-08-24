@@ -60,7 +60,6 @@ namespace
             RenderGraph::ResourceIds::GetResourceName(desc.m_TextureDescription.m_Id),
             deviceContext
         );
-        texture->SetAutoBarriersEnabled(false);
         return texture;
     }
 
@@ -80,7 +79,6 @@ namespace
             RenderGraph::ResourceIds::GetResourceName(desc.m_TextureDescription.m_Id),
             deviceContext
         );
-        texture->SetAutoBarriersEnabled(false);
         return texture;
     }
 //Modify End
@@ -114,11 +112,8 @@ namespace
                 RenderGraph::ResourceIds::GetResourceName(desc.m_BufferDescription.m_Id),
                 deviceContext
             );
-            pStructuredBuffer->GetCounterBuffer().SetAutoBarriersEnabled(false);
             pBuffer = pStructuredBuffer;
         }
-
-        pBuffer->SetAutoBarriersEnabled(false);
 
         return pBuffer;
     }

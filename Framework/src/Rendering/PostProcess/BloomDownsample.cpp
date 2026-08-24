@@ -1,3 +1,4 @@
+//Modify Begin:2026-08-24 by Hui
 #include <Framework/Rendering/PostProcess/BloomDownsample.h>
 #include <Framework/Blit_VS.h>
 #include <Framework/Bloom_Downsample_PS.h>
@@ -20,12 +21,9 @@ namespace
 	}
 }
 
-//Modify Begin:2026-08-19 by Hui
 BloomDownsample::BloomDownsample(FrameworkDeviceContext& deviceContext, CommandList& commandList)
-//Modify End
 	: m_BlitMesh(Mesh::CreateBlitTriangle(commandList))
 {
-//Modify Begin:2026-08-19 by Hui
 	auto shader = std::make_shared<Shader>(
 		deviceContext,
 		ShaderBlob(ShaderBytecode_Blit_VS, sizeof ShaderBytecode_Blit_VS),
@@ -34,9 +32,8 @@ BloomDownsample::BloomDownsample(FrameworkDeviceContext& deviceContext, CommandL
             .StaticSamplerContracts = { PipelineStaticSamplers::LinearClamp(3u) },
             .MaxDescriptorCount = 4096u,
             .ShaderStages = PipelineShaderStageFlags::AllGraphics
-        }
+		}
 		);
-//Modify End
 	m_Material = Material::Create(shader);
 }
 
@@ -57,9 +54,7 @@ void BloomDownsample::Execute(CommandList& commandList, const BloomParameters& p
 	parametersCb.TexelSize = { 1 / fSourceWidth , 1 / fSourceHeight };
 	m_Material->SetAllVariables(parametersCb);
 
-//Modify Begin:2026-08-19 by Hui
 	m_Material->Bind(commandList);
-	//Modify End
 	m_BlitMesh->Draw(commandList);
 }
 //Modify End

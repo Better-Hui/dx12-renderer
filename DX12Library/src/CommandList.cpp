@@ -55,7 +55,7 @@ CommandList::CommandList(
 
 CommandList::~CommandList() = default;
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-24 by Hui
 void CommandList::ExecuteExternalCommandRecording(
     const std::function<void(ID3D12GraphicsCommandList2&)>& recordCommands)
 {
@@ -75,83 +75,12 @@ void CommandList::ExecuteExternalCommandRecording(
 
     InvalidateCachedNativeState();
 }
-//Modify End
-
-void CommandList::TransitionBarrier(const Resource& resource, const D3D12_RESOURCE_STATES stateAfter,
-    const UINT subresource,
-    const bool flushBarriers)
-{
-    TransitionBarrier(resource.GetD3D12Resource(), stateAfter, subresource, flushBarriers);
-}
-
-void CommandList::TransitionBarrier(const ComPtr<ID3D12Resource> resource, const D3D12_RESOURCE_STATES stateAfter,
-    const UINT subresource,
-    const bool flushBarriers)
-{
-//Modify Begin:2026-08-12 by Hui
-    Assert(resource != nullptr, "Cannot transition a null D3D12 resource.");
-    const auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(resource.Get(), D3D12_RESOURCE_STATE_COMMON,
-        stateAfter, subresource);
-    m_PResourceStateTracker->ResourceBarrier(barrier);
-//Modify End
-
-    if (flushBarriers)
-    {
-        FlushResourceBarriers();
-    }
-}
-
-void CommandList::UavBarrier(const Resource& resource, const bool flushBarriers)
-{
-    UavBarrier(resource.GetD3D12Resource().Get(), flushBarriers);
-}
-
-//Modify Begin:2026-07-30 by Hui
-void CommandList::UavBarrier(ID3D12Resource* resource, const bool flushBarriers)
-{
-    Assert(resource != nullptr, "Cannot add a UAV barrier for a null D3D12 resource.");
-    const auto barrier = CD3DX12_RESOURCE_BARRIER::UAV(resource);
-
-    m_PResourceStateTracker->ResourceBarrier(barrier);
-
-    if (flushBarriers)
-    {
-        FlushResourceBarriers();
-    }
-}
-//Modify End
-
-void CommandList::AliasingBarrier(const Resource& beforeResource, const Resource& afterResource,
-    const bool flushBarriers)
-{
-    AliasingBarrier(beforeResource.GetD3D12Resource(), afterResource.GetD3D12Resource(), flushBarriers);
-}
-
-void CommandList::AliasingBarrier(const ComPtr<ID3D12Resource> beforeResource,
-    const ComPtr<ID3D12Resource> afterResource,
-    const bool flushBarriers)
-{
-    const auto barrier = CD3DX12_RESOURCE_BARRIER::Aliasing(beforeResource.Get(), afterResource.Get());
-
-    m_PResourceStateTracker->ResourceBarrier(barrier);
-
-    if (flushBarriers)
-    {
-        FlushResourceBarriers();
-    }
-}
-
-//Modify Begin:2026-08-10 by Hui
-void CommandList::AliasingBarrierBeforeFirstUse(const Resource& resourceAfter)
-{
-    m_PResourceStateTracker->QueueAliasingBarrier(nullptr, &resourceAfter);
-}
-//Modify End
 
 void CommandList::FlushResourceBarriers()
 {
     m_PResourceStateTracker->FlushResourceBarriers(*this);
 }
+//Modify End
 
 //Modify Begin:2026-07-30 by Hui
 void CommandList::NotifyResourceState(
@@ -218,23 +147,18 @@ void CommandList::CommitStagedDescriptorsForDispatch()
 }
 //Modify End
 
+//Modify Begin:2026-08-24 by Hui
 void CommandList::CopyResource(const Resource& dstRes, const Resource& srcRes)
 {
-    CopyResource(dstRes.GetD3D12Resource(), srcRes.GetD3D12Resource(), dstRes.AreAutoBarriersEnabled(), srcRes.AreAutoBarriersEnabled());
+    CopyResource(dstRes.GetD3D12Resource(), srcRes.GetD3D12Resource());
 }
 
-void CommandList::CopyResource(const ComPtr<ID3D12Resource> dstRes, const ComPtr<ID3D12Resource> srcRes, bool dstAutoBarriers, bool srcAutoBarriers)
+void CommandList::CopyResource(
+    const ComPtr<ID3D12Resource> dstRes,
+    const ComPtr<ID3D12Resource> srcRes)
 {
-    if (dstAutoBarriers)
-    {
-        TransitionBarrier(dstRes, D3D12_RESOURCE_STATE_COPY_DEST);
-    }
-
-    if (srcAutoBarriers)
-    {
-        TransitionBarrier(srcRes, D3D12_RESOURCE_STATE_COPY_SOURCE);
-    }
-
+    Assert(dstRes != nullptr, "Copy destination resource must not be null.");
+    Assert(srcRes != nullptr, "Copy source resource must not be null.");
     FlushResourceBarriers();
 
     m_D3d12CommandList->CopyResource(dstRes.Get(), srcRes.Get());
@@ -242,8 +166,9 @@ void CommandList::CopyResource(const ComPtr<ID3D12Resource> dstRes, const ComPtr
     TrackObject(dstRes);
     TrackObject(srcRes);
 }
+//Modify End
 
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-24 by Hui
 void CommandList::CopyBufferRegion(
     const Resource& destination,
     const uint64_t destinationOffset,
@@ -254,10 +179,6 @@ void CommandList::CopyBufferRegion(
     Assert(source != nullptr, "Copy source buffer must not be null.");
     Assert(destination.GetD3D12Resource() != nullptr, "Copy destination buffer must not be null.");
 
-    if (destination.AreAutoBarriersEnabled())
-    {
-        TransitionBarrier(destination, D3D12_RESOURCE_STATE_COPY_DEST);
-    }
     FlushResourceBarriers();
 
     m_D3d12CommandList->CopyBufferRegion(
@@ -280,10 +201,6 @@ void CommandList::CopyBufferToReadback(
     Assert(source.GetD3D12Resource() != nullptr, "Copy source buffer must not be null.");
     Assert(destination != nullptr, "Readback destination buffer must not be null.");
 
-    if (source.AreAutoBarriersEnabled())
-    {
-        TransitionBarrier(source, D3D12_RESOURCE_STATE_COPY_SOURCE);
-    }
     FlushResourceBarriers();
 
     m_D3d12CommandList->CopyBufferRegion(
@@ -297,19 +214,10 @@ void CommandList::CopyBufferToReadback(
 }
 //Modify End
 
+//Modify Begin:2026-08-24 by Hui
 void CommandList::ResolveSubresource(const Resource& dstRes, const Resource& srcRes, const uint32_t dstSubresource,
     const uint32_t srcSubresource)
 {
-    if (dstRes.AreAutoBarriersEnabled())
-    {
-        TransitionBarrier(dstRes, D3D12_RESOURCE_STATE_RESOLVE_DEST, dstSubresource);
-    }
-
-    if (srcRes.AreAutoBarriersEnabled())
-    {
-        TransitionBarrier(srcRes, D3D12_RESOURCE_STATE_RESOLVE_SOURCE, srcSubresource);
-    }
-
     FlushResourceBarriers();
 
     m_D3d12CommandList->ResolveSubresource(dstRes.GetD3D12Resource().Get(), dstSubresource,
@@ -319,16 +227,17 @@ void CommandList::ResolveSubresource(const Resource& dstRes, const Resource& src
     TrackResource(srcRes);
     TrackResource(dstRes);
 }
+//Modify End
 
+//Modify Begin:2026-08-24 by Hui
 void CommandList::SetShadingRateImage(const Resource& resource)
 {
-    TransitionBarrier(resource, D3D12_RESOURCE_STATE_SHADING_RATE_SOURCE);
-
     const auto d3d12Resource = resource.GetD3D12Resource();
     TrackObject(d3d12Resource);
 
     m_D3d12CommandList5->RSSetShadingRateImage(d3d12Resource.Get());
 }
+//Modify End
 
 void CommandList::ResetShadingRateImage()
 {
@@ -350,35 +259,29 @@ void CommandList::SetPrimitiveTopology(const D3D_PRIMITIVE_TOPOLOGY primitiveTop
     m_D3d12CommandList->IASetPrimitiveTopology(primitiveTopology);
 }
 
+//Modify Begin:2026-08-24 by Hui
 void CommandList::ClearTexture(const Texture& texture, const float clearColor[4])
 {
-    if (texture.AreAutoBarriersEnabled())
-    {
-        TransitionBarrier(texture, D3D12_RESOURCE_STATE_RENDER_TARGET);
-    }
-
     m_D3d12CommandList->ClearRenderTargetView(texture.GetRenderTargetView(), clearColor, 0, nullptr);
 
     TrackResource(texture);
 }
+//Modify End
 
 void CommandList::ClearTexture(const Texture& texture, const ClearValue& clearValue)
 {
     ClearTexture(texture, clearValue.GetColor());
 }
 
+//Modify Begin:2026-08-24 by Hui
 void CommandList::ClearDepthStencilTexture(const Texture& texture, const D3D12_CLEAR_FLAGS clearFlags,
     const float depth, const uint8_t stencil)
 {
-    if (texture.AreAutoBarriersEnabled())
-    {
-        TransitionBarrier(texture, D3D12_RESOURCE_STATE_DEPTH_WRITE);
-    }
-
     m_D3d12CommandList->ClearDepthStencilView(texture.GetDepthStencilView(), clearFlags, depth, stencil, 0, nullptr);
 
     TrackResource(texture);
 }
+//Modify End
 
 void CommandList::SetGraphicsDynamicConstantBuffer(const uint32_t rootParameterIndex, const size_t sizeInBytes,
     const void* bufferData) const
@@ -409,13 +312,9 @@ void CommandList::SetCompute32BitConstants(const uint32_t rootParameterIndex, co
     m_D3d12CommandList->SetComputeRoot32BitConstants(rootParameterIndex, numConstants, constants, 0);
 }
 
+//Modify Begin:2026-08-24 by Hui
 void CommandList::SetVertexBuffer(const uint32_t slot, const VertexBuffer& vertexBuffer)
 {
-    if (vertexBuffer.AreAutoBarriersEnabled())
-    {
-        TransitionBarrier(vertexBuffer, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
-    }
-
     const auto vertexBufferView = vertexBuffer.GetVertexBufferView();
 
     m_D3d12CommandList->IASetVertexBuffers(slot, 1, &vertexBufferView);
@@ -425,17 +324,13 @@ void CommandList::SetVertexBuffer(const uint32_t slot, const VertexBuffer& verte
 
 void CommandList::SetIndexBuffer(const IndexBuffer& indexBuffer)
 {
-    if (indexBuffer.AreAutoBarriersEnabled())
-    {
-        TransitionBarrier(indexBuffer, D3D12_RESOURCE_STATE_INDEX_BUFFER);
-    }
-
     const auto indexBufferView = indexBuffer.GetIndexBufferView();
 
     m_D3d12CommandList->IASetIndexBuffer(&indexBufferView);
 
     TrackResource(indexBuffer);
 }
+//Modify End
 
 void CommandList::SetGraphicsDynamicStructuredBuffer(const uint32_t slot, const size_t numElements,
     const size_t elementSize,
@@ -546,119 +441,31 @@ void CommandList::SetGraphicsAndComputeRootSignature(const RootSignature& rootSi
 }
 //Modify End
 
-void CommandList::SetShaderResourceView(const uint32_t rootParameterIndex, const uint32_t descriptorOffset,
-    const Resource& resource, const D3D12_RESOURCE_STATES stateAfter,
-    const UINT firstSubresource, const UINT numSubresources,
-    const D3D12_SHADER_RESOURCE_VIEW_DESC* srv)
-{
-    Assert(resource.AreAutoBarriersEnabled(), "Auto barriers are disabled.");
-
-    if (numSubresources < D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
-    {
-        for (uint32_t i = 0; i < numSubresources; ++i)
-        {
-            TransitionBarrier(resource, stateAfter, firstSubresource + i);
-        }
-    }
-    else
-    {
-        TransitionBarrier(resource, stateAfter);
-    }
-
-    m_DynamicDescriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->StageDescriptors(
-        rootParameterIndex, descriptorOffset, 1, resource.GetShaderResourceView(srv));
-    TrackResource(resource);
-}
-
-void CommandList::SetUnorderedAccessView(const uint32_t rootParameterIndex, const uint32_t descriptorOffset,
-    const Resource& resource, const D3D12_RESOURCE_STATES stateAfter,
-    const UINT firstSubresource, const UINT numSubresources,
-    const D3D12_UNORDERED_ACCESS_VIEW_DESC* uavDesc)
-{
-//Modify Begin:2026-08-07 by Hui
-    Assert(resource.SupportsUnorderedAccess(), "Cannot bind a resource without unordered-access usage as a UAV.");
-//Modify End
-    Assert(resource.AreAutoBarriersEnabled(), "Auto barriers are disabled.");
-
-    if (numSubresources < D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
-    {
-        for (uint32_t i = 0; i < numSubresources; ++i)
-        {
-            TransitionBarrier(resource, stateAfter, firstSubresource + i);
-        }
-    }
-    else
-    {
-        TransitionBarrier(resource, stateAfter);
-    }
-
-    const auto uav = resource.GetUnorderedAccessView(uavDesc);
-    m_DynamicDescriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->StageDescriptors(
-        rootParameterIndex, descriptorOffset, 1, uav);
-    TrackResource(resource);
-}
-
+//Modify Begin:2026-08-24 by Hui
 void CommandList::SetShaderResourceView(const uint32_t rootParameterIndex, const uint32_t descriptorOffset,
     const Resource& resource,
     const UINT firstSubresource, const UINT numSubresources,
     const D3D12_SHADER_RESOURCE_VIEW_DESC* srv)
 {
-    if (resource.AreAutoBarriersEnabled())
-    {
-//Modify Begin:2026-08-03 by Hui
-        const D3D12_RESOURCE_STATES stateAfter =
-            m_D3d12CommandListType == D3D12_COMMAND_LIST_TYPE_COMPUTE
-            ? D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE
-            : D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE;
-//Modify End
-        if (numSubresources < D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
-        {
-            for (uint32_t i = 0; i < numSubresources; ++i)
-            {
-                TransitionBarrier(resource, stateAfter, firstSubresource + i);
-            }
-        }
-        else
-        {
-            TransitionBarrier(resource, stateAfter);
-        }
-    }
-
     m_DynamicDescriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->StageDescriptors(
         rootParameterIndex, descriptorOffset, 1, resource.GetShaderResourceView(srv));
     TrackResource(resource);
 }
+//Modify End
 
+//Modify Begin:2026-08-24 by Hui
 void CommandList::SetUnorderedAccessView(const uint32_t rootParameterIndex, const uint32_t descriptorOffset,
     const Resource& resource,
     const UINT firstSubresource, const UINT numSubresources,
     const D3D12_UNORDERED_ACCESS_VIEW_DESC* uavDesc)
 {
-//Modify Begin:2026-08-07 by Hui
     Assert(resource.SupportsUnorderedAccess(), "Cannot bind a resource without unordered-access usage as a UAV.");
-//Modify End
-    if (resource.AreAutoBarriersEnabled())
-    {
-        constexpr auto stateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-        if (numSubresources < D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
-        {
-            for (uint32_t i = 0; i < numSubresources; ++i)
-            {
-                TransitionBarrier(resource, stateAfter, firstSubresource + i);
-            }
-        }
-        else
-        {
-            TransitionBarrier(resource, stateAfter);
-        }
-    }
-
-
     const auto uav = resource.GetUnorderedAccessView(uavDesc);
     m_DynamicDescriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->StageDescriptors(
         rootParameterIndex, descriptorOffset, 1, uav);
     TrackResource(resource);
 }
+//Modify End
 
 //Modify Begin:2026-07-21 by Hui
 void CommandList::SetGlobalTexture(
@@ -673,7 +480,6 @@ void CommandList::SetGlobalTexture(
         rootParameterIndex,
         descriptorOffset,
         texture,
-        D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE,
         firstSubresource,
         numSubresources,
         srv);
@@ -716,6 +522,7 @@ void CommandList::SetStencilRef(UINT8 stencilRef)
     m_D3d12CommandList->OMSetStencilRef(stencilRef);
 }
 
+//Modify Begin:2026-08-24 by Hui
 void CommandList::SetRenderTarget(const RenderTarget& renderTarget, UINT texArrayIndex /*= -1*/, UINT mipLevel /*= 0*/, bool useDepth /*= true*/, bool readonlyDepth)
 {
     std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> renderTargetDescriptors;
@@ -731,12 +538,6 @@ void CommandList::SetRenderTarget(const RenderTarget& renderTarget, UINT texArra
 
         if (texture->IsValid())
         {
-            const UINT subresource = isArrayItem ? texture->GetRenderTargetSubresourceIndex(texArrayIndex, mipLevel) : D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-            if (texture->AreAutoBarriersEnabled())
-            {
-                TransitionBarrier(*texture, D3D12_RESOURCE_STATE_RENDER_TARGET, subresource);
-            }
-
             renderTargetDescriptors.push_back(isArrayItem
                                                   ? texture->GetRenderTargetViewArray(texArrayIndex, mipLevel)
                                                   : texture->GetRenderTargetView());
@@ -750,13 +551,6 @@ void CommandList::SetRenderTarget(const RenderTarget& renderTarget, UINT texArra
     CD3DX12_CPU_DESCRIPTOR_HANDLE depthStencilDescriptor(D3D12_DEFAULT);
     if (useDepth && depthTexture->GetD3D12Resource())
     {
-        const UINT subresource = isArrayItem ? depthTexture->GetDepthStencilSubresourceIndex(texArrayIndex) : D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-
-        if (depthTexture->AreAutoBarriersEnabled())
-        {
-            TransitionBarrier(*depthTexture, readonlyDepth ? D3D12_RESOURCE_STATE_DEPTH_READ : D3D12_RESOURCE_STATE_DEPTH_WRITE, subresource);
-        }
-
         depthStencilDescriptor = isArrayItem
                                      ? depthTexture->GetDepthStencilViewArray(texArrayIndex, mipLevel)
                                      : depthTexture->GetDepthStencilView();
@@ -770,6 +564,7 @@ void CommandList::SetRenderTarget(const RenderTarget& renderTarget, UINT texArra
 
     m_LastRenderTargetState = RenderTargetState(renderTarget);
 }
+//Modify End
 
 void CommandList::ClearRenderTarget(const RenderTarget& renderTarget, const float* clearColor, D3D12_CLEAR_FLAGS clearFlags)
 {
@@ -822,7 +617,7 @@ void CommandList::DrawIndexed(const uint32_t indexCount, const uint32_t instance
 
     m_D3d12CommandList->DrawIndexedInstanced(indexCount, instanceCount, startIndex, baseVertex, startInstance);
 }
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-24 by Hui
 void CommandList::ExecuteIndirect(
     const ComPtr<ID3D12CommandSignature>& pCommandSignature,
     const D3D12_INDIRECT_ARGUMENT_TYPE executionArgumentType,
@@ -885,7 +680,6 @@ void CommandList::ClearUnorderedAccessUint(const Resource& resource, const UINT 
         values,
         0u,
         nullptr);
-    UavBarrier(resource);
     TrackResource(resource);
 }
 //Modify End
@@ -1043,17 +837,14 @@ void CommandList::InvalidateCachedNativeState()
 }
 //Modify End
 
+//Modify Begin:2026-08-24 by Hui
 void CommandList::SetComputeRootUnorderedAccessView(UINT rootParameterIndex, const Resource& resource)
 {
     auto d3d12Resource = resource.GetD3D12Resource();
-    if (resource.AreAutoBarriersEnabled())
-    {
-        TransitionBarrier(resource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    }
-
     m_D3d12CommandList->SetComputeRootUnorderedAccessView(rootParameterIndex, d3d12Resource->GetGPUVirtualAddress());
     TrackObject(d3d12Resource);
 }
+//Modify End
 
 void CommandList::SetComputeRootShaderResourceView(UINT rootParameterIndex, D3D12_GPU_VIRTUAL_ADDRESS gpuAddress)
 {

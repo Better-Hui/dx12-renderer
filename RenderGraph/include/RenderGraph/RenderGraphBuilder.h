@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-08-24 by Hui
 #include <functional>
 #include <memory>
 #include <string>
@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "RenderPass.h"
+#include "ResourceDescription.h"
 
 class Resource;
 
@@ -49,6 +50,18 @@ namespace RenderGraph
             const Resource& resource,
             D3D12_RESOURCE_STATES stateAfter,
             bool insertUavBarrier = false);
+        ResourceId ReadImported(
+            const ImportedResourceHandle& resource,
+            D3D12_RESOURCE_STATES stateAfter,
+            bool insertUavBarrier = false);
+        ResourceId WriteImported(
+            const ImportedResourceHandle& resource,
+            D3D12_RESOURCE_STATES stateAfter,
+            bool insertUavBarrier = false);
+        ResourceId ReadWriteImported(
+            const ImportedResourceHandle& resource,
+            D3D12_RESOURCE_STATES stateAfter,
+            bool insertUavBarrier = true);
 
         void UseAsyncComputeWhenSupported();
         void UseCopyQueue();
@@ -64,7 +77,8 @@ namespace RenderGraph
     private:
         struct PendingExternalAccess
         {
-            const Resource* Resource = nullptr;
+            ImportedResourceHandle Imported;
+            const Resource* StaticResource = nullptr;
             D3D12_RESOURCE_STATES StateAfter = D3D12_RESOURCE_STATE_COMMON;
             ExternalResourceAccessMode Mode = ExternalResourceAccessMode::Read;
             bool InsertUavBarrier = false;
@@ -74,6 +88,11 @@ namespace RenderGraph
         void AddOutput(ResourceId resourceId, OutputType type);
         void AddExternalAccess(
             const Resource& resource,
+            D3D12_RESOURCE_STATES stateAfter,
+            ExternalResourceAccessMode mode,
+            bool insertUavBarrier);
+        void AddImportedAccess(
+            const ImportedResourceHandle& resource,
             D3D12_RESOURCE_STATES stateAfter,
             ExternalResourceAccessMode mode,
             bool insertUavBarrier);
@@ -95,6 +114,20 @@ namespace RenderGraph
         explicit RenderGraphBuilder(RenderGraphBuildOptions options = {});
 
         void AddPass(std::unique_ptr<RenderPass> renderPass);
+        ImportedResourceHandle ImportResource(
+            const wchar_t* diagnosticName,
+            std::function<const Resource&()> resolver);
+        ResourceId CreateTexture(
+            const wchar_t* diagnosticName,
+            RenderMetadataExpression<uint32_t> widthExpression,
+            RenderMetadataExpression<uint32_t> heightExpression,
+            DXGI_FORMAT format,
+            const ClearValue::COLOR clearColor,
+            ResourceInitAction initAction,
+            D3D12_RESOURCE_FLAGS extraResourceFlags = D3D12_RESOURCE_FLAG_NONE,
+            D3D12_HEAP_FLAGS heapFlags = D3D12_HEAP_FLAG_NONE,
+            bool dedicatedResource = false);
+        ResourceId CreateToken(const wchar_t* diagnosticName);
 
         template <typename PassDataT, typename SetupFuncT, typename ExecuteFuncT>
         void AddPass(
@@ -136,10 +169,15 @@ namespace RenderGraph
         }
 
         std::vector<std::unique_ptr<RenderPass>> ReleasePasses();
+        std::vector<TextureDescription> ReleaseTextureDescriptions();
+        std::vector<TokenDescription> ReleaseTokenDescriptions();
 
     private:
         RenderGraphBuildOptions m_Options = {};
         std::vector<std::unique_ptr<RenderPass>> m_RenderPasses;
+        std::vector<std::shared_ptr<const ImportedResourceHandle::Definition>> m_ImportedResources;
+        std::vector<TextureDescription> m_TextureDescriptions;
+        std::vector<TokenDescription> m_TokenDescriptions;
     };
 }
 //Modify End

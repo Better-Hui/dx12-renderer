@@ -50,6 +50,7 @@
 class Game;
 class Texture;
 //Modify Begin:2026-08-12 by Hui
+class CommandList;
 class CommandQueue;
 class D3D12DeviceContext;
 //Modify End
@@ -132,6 +133,12 @@ public:
 	 * current back buffer.
 	 */
 	const RenderTarget& GetRenderTarget() const;
+
+//Modify Begin:2026-08-24 by Hui
+    void PrepareBackBufferForRenderTarget(CommandList& commandList) const;
+    void PrepareBackBufferForCopyDestination(CommandList& commandList) const;
+    void PrepareBackBufferForResolveDestination(CommandList& commandList) const;
+//Modify End
 
 	/**
 	 * Present the swapchain's back buffer to the screen.

@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-23 by Hui
+//Modify Begin:2026-08-24 by Hui
 #include <Framework/Rendering/PostProcess/AutoExposure.h>
 
 #include <DX12Library/ByteAddressBuffer.h>
@@ -14,6 +14,8 @@
 #include <Framework/Rendering/Texture/RenderTexture.h>
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <Framework/Rendering/Texture/UnorderedAccessView.h>
+#include <RenderGraph/RenderContext.h>
+#include <RenderGraph/RenderGraphBuilder.h>
 
 #include <algorithm>
 #include <array>
@@ -23,7 +25,6 @@ namespace
 {
     constexpr uint32_t HistogramBinCount = 256u;
     constexpr uint32_t HistogramBinStride = sizeof(uint32_t);
-//Modify Begin:2026-08-23 by Hui
     constexpr float DefaultMinLogLuminance = -10.0f;
     constexpr float DefaultMaxLogLuminance = 2.0f;
     constexpr float DefaultAdaptationTau = 1.1f;
@@ -32,7 +33,6 @@ namespace
     constexpr float MinLogLuminanceLimit = -16.0f;
     constexpr float MaxLogLuminanceLimit = 8.0f;
     constexpr float MinimumLogLuminanceRange = 0.01f;
-//Modify End
 
     struct AutoExposureConstants
     {
@@ -45,9 +45,7 @@ namespace
         float DeltaTime = 0.0f;
         float Tau = DefaultAdaptationTau;
         float ExposureScale = 1.0f;
-//Modify Begin:2026-08-23 by Hui
         uint32_t ExposureEnabled = 1u;
-//Modify End
     };
 
     std::unique_ptr<ComputeShader> CreateComputeShader(
@@ -61,9 +59,31 @@ namespace
             shader,
             ComputePipelineDescBuilder::ReflectedDefault(shader).Build());
     }
+
+    AutoExposureConstants BuildConstants(
+        const AutoExposure::FrameInputs& inputs,
+        const AutoExposure::Settings& settings)
+    {
+        AutoExposureConstants constants;
+        constants.InputWidth = inputs.InputWidth;
+        constants.InputHeight = inputs.InputHeight;
+        constants.OutputWidth = inputs.OutputWidth;
+        constants.OutputHeight = inputs.OutputHeight;
+        constants.DeltaTime = std::max(inputs.DeltaTime, 0.0f);
+        constants.MinLogLuminance = settings.MinLogLuminance;
+        constants.LogLuminanceRange = settings.MaxLogLuminance - settings.MinLogLuminance;
+        constants.Tau = settings.Tau;
+        constants.ExposureEnabled = settings.Enabled ? 1u : 0u;
+        return constants;
+    }
+
+    struct AutoExposurePassData
+    {
+        AutoExposure* Exposure = nullptr;
+        std::shared_ptr<const AutoExposure::GraphInputs> Inputs;
+    };
 }
 
-//Modify Begin:2026-08-23 by Hui
 void AutoExposure::SetSettings(const Settings& settings)
 {
     Settings sanitized = settings;
@@ -101,7 +121,6 @@ const AutoExposure::Settings& AutoExposure::GetSettings() const
 {
     return m_Settings;
 }
-//Modify End
 
 AutoExposure::AutoExposure(FrameworkDeviceContext& deviceContext)
     : m_DeviceContext(deviceContext)
@@ -138,7 +157,6 @@ void AutoExposure::EnsureResources(const uint32_t outputWidth, const uint32_t ou
             HistogramBinStride,
             L"Auto Exposure Histogram",
             m_DeviceContext.GetD3D12DeviceContext());
-        m_Histogram->SetAutoBarriersEnabled(false);
     }
 
     if (m_AdaptedLuminance == nullptr)
@@ -149,7 +167,6 @@ void AutoExposure::EnsureResources(const uint32_t outputWidth, const uint32_t ou
             1u,
             1u,
             L"Auto Exposure Adapted Luminance");
-        m_AdaptedLuminance->SetAutoBarriersEnabled(false);
     }
 
     if (m_OutputWidth != outputWidth || m_OutputHeight != outputHeight)
@@ -160,90 +177,178 @@ void AutoExposure::EnsureResources(const uint32_t outputWidth, const uint32_t ou
     }
 }
 
-void AutoExposure::Execute(
-    CommandList& commandList,
-    const std::shared_ptr<Texture>& source,
-    const std::shared_ptr<Texture>& output,
-    const uint32_t inputWidth,
-    const uint32_t inputHeight,
-    const uint32_t outputWidth,
-    const uint32_t outputHeight,
-    const float deltaTime)
+void AutoExposure::AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs inputs)
 {
-    Assert(source != nullptr && source->IsValid(), "Auto exposure source texture is invalid.");
-    Assert(output != nullptr && output->IsValid(), "Auto exposure output texture is invalid.");
-    Assert(inputWidth > 0u && inputHeight > 0u, "Auto exposure input dimensions must be positive.");
-    Assert(outputWidth > 0u && outputHeight > 0u, "Auto exposure output dimensions must be positive.");
+    Assert(inputs.Source != 0u && inputs.Output != 0u, "Auto exposure graph resources are invalid.");
+    Assert(inputs.InputToken != 0u && inputs.OutputToken != 0u, "Auto exposure graph tokens are invalid.");
+    Assert(inputs.OutputWidth > 0u && inputs.OutputHeight > 0u, "Auto exposure output dimensions must be positive.");
+    Assert(static_cast<bool>(inputs.ResolveFrameInputs), "Auto exposure requires a frame-input resolver.");
+    EnsureResources(inputs.OutputWidth, inputs.OutputHeight);
 
-    EnsureResources(outputWidth, outputHeight);
+    const auto sharedInputs = std::make_shared<const GraphInputs>(std::move(inputs));
+    const RenderGraph::ResourceId prepareFinished = builder.CreateToken(L"Framework.AutoExposure.PrepareFinished");
+    const RenderGraph::ResourceId histogramFinished = builder.CreateToken(L"Framework.AutoExposure.HistogramFinished");
+    const RenderGraph::ResourceId averageFinished = builder.CreateToken(L"Framework.AutoExposure.AverageFinished");
 
-    AutoExposureConstants constants;
-    constants.InputWidth = inputWidth;
-    constants.InputHeight = inputHeight;
-    constants.OutputWidth = outputWidth;
-    constants.OutputHeight = outputHeight;
-    constants.DeltaTime = std::max(deltaTime, 0.0f);
-//Modify Begin:2026-08-23 by Hui
-    constants.MinLogLuminance = m_Settings.MinLogLuminance;
-    constants.LogLuminanceRange = m_Settings.MaxLogLuminance - m_Settings.MinLogLuminance;
-    constants.Tau = m_Settings.Tau;
-    constants.ExposureEnabled = m_Settings.Enabled ? 1u : 0u;
-//Modify End
+    const auto histogramPrepare = builder.ImportResource(
+        L"Framework.AutoExposure.Histogram.Prepare",
+        [this]() -> const Resource& { return *m_Histogram; });
+    const auto adaptedPrepare = builder.ImportResource(
+        L"Framework.AutoExposure.AdaptedLuminance.Prepare",
+        [this]() -> const Resource& { return *m_AdaptedLuminance; });
+    const auto histogramBuild = builder.ImportResource(
+        L"Framework.AutoExposure.Histogram.Build",
+        [this]() -> const Resource& { return *m_Histogram; });
+    const auto histogramAverage = builder.ImportResource(
+        L"Framework.AutoExposure.Histogram.Average",
+        [this]() -> const Resource& { return *m_Histogram; });
+    const auto adaptedAverage = builder.ImportResource(
+        L"Framework.AutoExposure.AdaptedLuminance.Average",
+        [this]() -> const Resource& { return *m_AdaptedLuminance; });
+    const auto adaptedApply = builder.ImportResource(
+        L"Framework.AutoExposure.AdaptedLuminance.Apply",
+        [this]() -> const Resource& { return *m_AdaptedLuminance; });
 
+    builder.AddPass<AutoExposurePassData>(
+        L"Auto Exposure Prepare",
+        [this, sharedInputs, prepareFinished, histogramPrepare, adaptedPrepare](
+            RenderGraph::RenderGraphPassBuilder& passBuilder,
+            AutoExposurePassData& passData)
+        {
+            passData.Exposure = this;
+            passData.Inputs = sharedInputs;
+            passBuilder.ReadToken(sharedInputs->InputToken);
+            passBuilder.WriteImported(histogramPrepare, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            passBuilder.WriteImported(adaptedPrepare, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            passBuilder.WriteToken(prepareFinished);
+        },
+        [](const AutoExposurePassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
+        {
+            passData.Exposure->RecordPrepare(commandList, passData.Inputs->ResolveFrameInputs(context));
+        });
+
+    builder.AddPass<AutoExposurePassData>(
+        L"Auto Exposure Build Histogram",
+        [this, sharedInputs, prepareFinished, histogramFinished, histogramBuild](
+            RenderGraph::RenderGraphPassBuilder& passBuilder,
+            AutoExposurePassData& passData)
+        {
+            passData.Exposure = this;
+            passData.Inputs = sharedInputs;
+            passBuilder.ReadToken(prepareFinished);
+            passBuilder.ReadTexture(sharedInputs->Source);
+            passBuilder.WriteImported(histogramBuild, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
+            passBuilder.WriteToken(histogramFinished);
+        },
+        [](const AutoExposurePassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
+        {
+            passData.Exposure->RecordBuildHistogram(commandList, passData.Inputs->ResolveFrameInputs(context));
+        });
+
+    builder.AddPass<AutoExposurePassData>(
+        L"Auto Exposure Average Histogram",
+        [this, sharedInputs, histogramFinished, averageFinished, histogramAverage, adaptedAverage](
+            RenderGraph::RenderGraphPassBuilder& passBuilder,
+            AutoExposurePassData& passData)
+        {
+            passData.Exposure = this;
+            passData.Inputs = sharedInputs;
+            passBuilder.ReadToken(histogramFinished);
+            passBuilder.WriteImported(histogramAverage, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
+            passBuilder.WriteImported(adaptedAverage, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
+            passBuilder.WriteToken(averageFinished);
+        },
+        [](const AutoExposurePassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
+        {
+            passData.Exposure->RecordAverageHistogram(commandList, passData.Inputs->ResolveFrameInputs(context));
+        });
+
+    builder.AddPass<AutoExposurePassData>(
+        L"Auto Exposure Apply",
+        [this, sharedInputs, averageFinished, adaptedApply](
+            RenderGraph::RenderGraphPassBuilder& passBuilder,
+            AutoExposurePassData& passData)
+        {
+            passData.Exposure = this;
+            passData.Inputs = sharedInputs;
+            passBuilder.ReadToken(averageFinished);
+            passBuilder.ReadTexture(sharedInputs->Source);
+            passBuilder.ReadImported(adaptedApply, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            passBuilder.WriteUav(sharedInputs->Output);
+            passBuilder.WriteToken(sharedInputs->OutputToken);
+        },
+        [](const AutoExposurePassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
+        {
+            passData.Exposure->RecordApply(commandList, passData.Inputs->ResolveFrameInputs(context));
+        });
+}
+
+void AutoExposure::RecordPrepare(CommandList& commandList, const FrameInputs& inputs)
+{
+    Assert(inputs.Source != nullptr && inputs.Source->IsValid(), "Auto exposure source texture is invalid.");
+    Assert(inputs.Output != nullptr && inputs.Output->IsValid(), "Auto exposure output texture is invalid.");
+    Assert(inputs.InputWidth > 0u && inputs.InputHeight > 0u, "Auto exposure input dimensions must be positive.");
+    Assert(inputs.OutputWidth > 0u && inputs.OutputHeight > 0u, "Auto exposure output dimensions must be positive.");
+    EnsureResources(inputs.OutputWidth, inputs.OutputHeight);
     CommandContext commandContext(commandList);
-
-//Modify Begin:2026-08-23 by Hui
-    const bool historyWasInvalid = !m_HistoryValid;
-//Modify End
-    if (historyWasInvalid)
+    if (m_Settings.Enabled)
     {
-        commandList.TransitionBarrier(*m_AdaptedLuminance, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        commandContext.ClearUnorderedAccessUint(*m_Histogram, std::array<UINT, 4>{ 0u, 0u, 0u, 0u }.data());
+    }
+    if (!m_HistoryValid)
+    {
         commandContext.ClearUnorderedAccessUint(
             *m_AdaptedLuminance,
             std::array<UINT, 4>{ 0x3f800000u, 0u, 0u, 0u }.data());
         m_HistoryValid = true;
     }
+}
 
-    if (m_Settings.Enabled)
+void AutoExposure::RecordBuildHistogram(CommandList& commandList, const FrameInputs& inputs)
+{
+    if (!m_Settings.Enabled)
     {
-        commandList.TransitionBarrier(*m_Histogram, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        commandContext.ClearUnorderedAccessUint(*m_Histogram, std::array<UINT, 4>{ 0u, 0u, 0u, 0u }.data());
-        if (!historyWasInvalid)
-        {
-            commandList.TransitionBarrier(*m_AdaptedLuminance, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        }
-
-        commandContext.SetConstantBuffer(*m_BuildHistogramShader, "AutoExposureConstants", constants);
-        commandContext.SetTexture(*m_BuildHistogramShader, "SourceColor", ShaderResourceView(source));
-        commandContext.SetUnorderedAccessView(*m_BuildHistogramShader, "Histogram", UnorderedAccessView(m_Histogram));
-        commandContext.BindPipeline(*m_BuildHistogramShader);
-        commandContext.BindDescriptorSet(m_BuildHistogramShader->GetDescriptorSet());
-        commandContext.Dispatch((inputWidth + 15u) / 16u, (inputHeight + 15u) / 16u, 1u);
-        commandContext.UavBarrier(*m_Histogram);
-
-        commandContext.SetConstantBuffer(*m_AverageHistogramShader, "AutoExposureConstants", constants);
-        commandContext.SetUnorderedAccessView(*m_AverageHistogramShader, "Histogram", UnorderedAccessView(m_Histogram));
-        commandContext.SetUnorderedAccessView(
-            *m_AverageHistogramShader,
-            "AdaptedLuminance",
-            UnorderedAccessView(m_AdaptedLuminance));
-        commandContext.BindPipeline(*m_AverageHistogramShader);
-        commandContext.BindDescriptorSet(m_AverageHistogramShader->GetDescriptorSet());
-        commandContext.Dispatch(1u, 1u, 1u);
-        commandContext.UavBarrier(*m_AdaptedLuminance);
-        commandList.TransitionBarrier(*m_AdaptedLuminance, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        return;
     }
-    else if (historyWasInvalid)
+    const AutoExposureConstants constants = BuildConstants(inputs, m_Settings);
+    CommandContext commandContext(commandList);
+    commandContext.SetConstantBuffer(*m_BuildHistogramShader, "AutoExposureConstants", constants);
+    commandContext.SetTexture(*m_BuildHistogramShader, "SourceColor", ShaderResourceView(inputs.Source));
+    commandContext.SetUnorderedAccessView(*m_BuildHistogramShader, "Histogram", UnorderedAccessView(m_Histogram));
+    commandContext.BindPipeline(*m_BuildHistogramShader);
+    commandContext.BindDescriptorSet(m_BuildHistogramShader->GetDescriptorSet());
+    commandContext.Dispatch((inputs.InputWidth + 15u) / 16u, (inputs.InputHeight + 15u) / 16u, 1u);
+}
+
+void AutoExposure::RecordAverageHistogram(CommandList& commandList, const FrameInputs& inputs)
+{
+    if (!m_Settings.Enabled)
     {
-        commandList.TransitionBarrier(*m_AdaptedLuminance, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        return;
     }
+    const AutoExposureConstants constants = BuildConstants(inputs, m_Settings);
+    CommandContext commandContext(commandList);
+    commandContext.SetConstantBuffer(*m_AverageHistogramShader, "AutoExposureConstants", constants);
+    commandContext.SetUnorderedAccessView(*m_AverageHistogramShader, "Histogram", UnorderedAccessView(m_Histogram));
+    commandContext.SetUnorderedAccessView(
+        *m_AverageHistogramShader,
+        "AdaptedLuminance",
+        UnorderedAccessView(m_AdaptedLuminance));
+    commandContext.BindPipeline(*m_AverageHistogramShader);
+    commandContext.BindDescriptorSet(m_AverageHistogramShader->GetDescriptorSet());
+    commandContext.Dispatch(1u, 1u, 1u);
+}
 
+void AutoExposure::RecordApply(CommandList& commandList, const FrameInputs& inputs)
+{
+    const AutoExposureConstants constants = BuildConstants(inputs, m_Settings);
+    CommandContext commandContext(commandList);
     commandContext.SetConstantBuffer(*m_ApplyShader, "AutoExposureConstants", constants);
-    commandContext.SetTexture(*m_ApplyShader, "SourceColor", ShaderResourceView(source));
+    commandContext.SetTexture(*m_ApplyShader, "SourceColor", ShaderResourceView(inputs.Source));
     commandContext.SetTexture(*m_ApplyShader, "AdaptedLuminance", ShaderResourceView(m_AdaptedLuminance));
-    commandContext.SetUnorderedAccessView(*m_ApplyShader, "OutputColor", UnorderedAccessView(output));
+    commandContext.SetUnorderedAccessView(*m_ApplyShader, "OutputColor", UnorderedAccessView(inputs.Output));
     commandContext.BindPipeline(*m_ApplyShader);
     commandContext.BindDescriptorSet(m_ApplyShader->GetDescriptorSet());
-    commandContext.Dispatch((outputWidth + 7u) / 8u, (outputHeight + 7u) / 8u, 1u);
+    commandContext.Dispatch((inputs.OutputWidth + 7u) / 8u, (inputs.OutputHeight + 7u) / 8u, 1u);
 }
 //Modify End

@@ -18,7 +18,7 @@ class Bloom;
 class CudaBloomPass final
 {
 public:
-//Modify Begin:2026-08-17 by Hui
+//Modify Begin:2026-08-24 by Hui
     enum class Backend : uint32_t
     {
         Cuda = 0,
@@ -40,17 +40,13 @@ public:
 
     struct Settings
     {
-//Modify Begin:2026-08-23 by Hui
         bool Enabled = true;
         Backend SelectedBackend = Backend::FrameworkRaster;
-//Modify End
         CudaMethod Method = CudaMethod::ClassicPyramid;
         float Threshold = 0.55f;
         float SoftThreshold = 0.30f;
         float Intensity = 0.75f;
-//Modify Begin:2026-08-23 by Hui
         int PyramidLevels = 4;
-//Modify End
         float BoxFilterSigma = 1.0f;
         bool UseSharedMemoryDownsampling = false;
         ThreadBlockSize BlockSize = ThreadBlockSize::Size16x16;
@@ -72,14 +68,10 @@ public:
 //Modify End
     ~CudaBloomPass();
 
-//Modify Begin:2026-08-16 by Hui
+//Modify Begin:2026-08-24 by Hui
     bool ExecuteInPlace(Texture& postProcessColor, uint32_t width, uint32_t height, ID3D12CommandQueue* d3d12CommandQueue);
-    bool ExecuteFrameworkBloom(
-        const std::shared_ptr<Texture>& source,
-        const std::shared_ptr<Texture>& destination,
-        CommandList& commandList,
-        uint32_t width,
-        uint32_t height);
+    void InitializeFrameworkBloom(CommandList& commandList);
+    Bloom& GetFrameworkBloom();
     void ReleaseInteropResource();
 //Modify End
     void Shutdown();
@@ -92,6 +84,7 @@ public:
     void SetEnabled(bool enabled) { m_Enabled = enabled; }
     Backend GetBackend() const { return m_Backend; }
     bool IsFrameworkRaster() const { return m_Backend == Backend::FrameworkRaster; }
+    int GetPyramidLevels() const { return m_PyramidLevels; }
     const std::string& GetStatus() const { return m_Status; }
     Settings GetSettings() const;
     void SetSettings(const Settings& settings);
@@ -155,23 +148,14 @@ private:
     float m_Threshold = 0.55f;
     float m_SoftThreshold = 0.30f;
     float m_Intensity = 0.75f;
-//Modify Begin:2026-08-17 by Hui
-//Modify Begin:2026-08-23 by Hui
+//Modify Begin:2026-08-24 by Hui
     int m_PyramidLevels = 4;
-//Modify End
-//Modify End
-//Modify Begin:2026-08-17 by Hui
-//Modify Begin:2026-08-23 by Hui
     Backend m_Backend = Backend::FrameworkRaster;
-//Modify End
     CudaMethod m_CudaMethod = CudaMethod::ClassicPyramid;
     float m_BoxFilterSigma = 1.0f;
     bool m_UseSharedMemoryDownsampling = false;
     ThreadBlockSize m_ThreadBlockSize = ThreadBlockSize::Size16x16;
     std::unique_ptr<Bloom> m_FrameworkBloom;
-    uint32_t m_FrameworkBloomWidth = 0;
-    uint32_t m_FrameworkBloomHeight = 0;
-    int m_FrameworkBloomPyramidLevels = 0;
 //Modify End
     std::string m_Status = "CUDA bloom is not initialized.";
 

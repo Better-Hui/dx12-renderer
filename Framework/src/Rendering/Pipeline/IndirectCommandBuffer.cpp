@@ -29,7 +29,6 @@ IndirectCommandBuffer::IndirectCommandBuffer(
         static_cast<size_t>(m_CapacityInBytes),
         name,
         deviceContext.GetD3D12DeviceContext());
-    m_Buffer->SetAutoBarriersEnabled(false);
 }
 
 IndirectCommandBuffer::~IndirectCommandBuffer() = default;

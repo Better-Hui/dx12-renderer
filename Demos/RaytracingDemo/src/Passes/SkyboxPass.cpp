@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-08-24 by Hui
 #include <Passes/RaytracingDemoPasses.h>
 
 #include <PathTracing/PathTracingSceneBindings.h>
@@ -140,7 +140,6 @@ void RaytracingDemoPasses::Builder::AddSkyboxPass(
             commandContext.BindPipeline(skyboxShader);
             commandContext.BindDescriptorSet(skyboxShader.GetDescriptorSet());
             commandContext.Dispatch(Math::DivideByMultiple(camera.Width, 8u), Math::DivideByMultiple(camera.Height, 8u), 1u);
-            commandContext.InsertDescriptorSetOutputBarriers(skyboxShader.GetDescriptorSet());
         });
 }
 //Modify End

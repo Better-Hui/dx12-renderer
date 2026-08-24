@@ -10,6 +10,7 @@
 #include <d3d12.h>
 
 #include "DX12Library/ClearValue.h"
+#include "DX12Library/TextureUsageType.h"
 
 #include "RenderMetadata.h"
 #include "ResourceId.h"

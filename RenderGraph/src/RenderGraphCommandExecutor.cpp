@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-08-24 by Hui
 #include "RenderGraphCommandExecutor.h"
 
 #include "RenderGraphProfiler.h"
@@ -636,12 +636,13 @@ void RenderGraph::RenderGraphCommandExecutor::ApplyDirectQueuePreamble(
         const auto& resource = m_ResourcePool->GetResource(transition.Id);
         resource.ForEachResourceRecursive([&commandList, &transition](const Resource& nestedResource)
         {
-            commandList.TransitionBarrier(
+            CommandListInternalAccess::TransitionBarrier(
+                commandList,
                 nestedResource,
                 transition.StateAfter);
             if (transition.InsertUavBarrier)
             {
-                commandList.UavBarrier(nestedResource);
+                CommandListInternalAccess::UavBarrier(commandList, nestedResource);
             }
         });
     }
@@ -653,7 +654,7 @@ void RenderGraph::RenderGraphCommandExecutor::ApplyDirectQueuePreamble(
         const auto& resource = m_ResourcePool->GetResource(outputId);
         resource.ForEachResourceRecursive([&commandList](const Resource& nestedResource)
         {
-            commandList.AliasingBarrierBeforeFirstUse(nestedResource);
+            CommandListInternalAccess::AliasingBarrierBeforeFirstUse(commandList, nestedResource);
         });
     }
 
@@ -662,12 +663,13 @@ void RenderGraph::RenderGraphCommandExecutor::ApplyDirectQueuePreamble(
         const auto& resource = m_ResourcePool->GetResource(transition.Id);
         resource.ForEachResourceRecursive([&commandList, &transition](const Resource& nestedResource)
         {
-            commandList.TransitionBarrier(
+            CommandListInternalAccess::TransitionBarrier(
+                commandList,
                 nestedResource,
                 transition.StateAfter);
             if (transition.InsertUavBarrier)
             {
-                commandList.UavBarrier(nestedResource);
+                CommandListInternalAccess::UavBarrier(commandList, nestedResource);
             }
         });
     }
@@ -699,13 +701,17 @@ void RenderGraph::RenderGraphCommandExecutor::ApplyExternalResourceTransitions(
 {
     for (const PassExternalResourceTransition& transition : transitions)
     {
-        Assert(transition.Resource != nullptr && transition.Resource->IsValid(),
-            "Render pass external resource transition must reference an initialized resource.");
-        commandList.TransitionBarrier(*transition.Resource, transition.StateAfter);
-        if (transition.InsertUavBarrier)
+        Assert(transition.Access != nullptr,
+            "Render pass external resource transition must reference an access declaration.");
+        const Resource& resource = transition.Access->Resolve();
+        resource.ForEachResourceRecursive([&commandList, &transition](const Resource& nestedResource)
         {
-            commandList.UavBarrier(*transition.Resource);
-        }
+            CommandListInternalAccess::TransitionBarrier(commandList, nestedResource, transition.StateAfter);
+            if (transition.InsertUavBarrier)
+            {
+                CommandListInternalAccess::UavBarrier(commandList, nestedResource);
+            }
+        });
     }
 }
 
@@ -725,12 +731,13 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareResourcesForRenderPass(
         const auto& resource = m_ResourcePool->GetResource(transition.Id);
         resource.ForEachResourceRecursive([&commandList, &renderPass, &transition](const Resource& nestedResource)
         {
-            commandList.TransitionBarrier(
+            CommandListInternalAccess::TransitionBarrier(
+                commandList,
                 nestedResource,
                 transition.StateAfter);
             if (transition.InsertUavBarrier)
             {
-                commandList.UavBarrier(nestedResource);
+                CommandListInternalAccess::UavBarrier(commandList, nestedResource);
             }
         });
     }
@@ -742,7 +749,7 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareResourcesForRenderPass(
         const auto& resource = m_ResourcePool->GetResource(outputId);
         resource.ForEachResourceRecursive([&commandList](const Resource& nestedResource)
         {
-            commandList.AliasingBarrierBeforeFirstUse(nestedResource);
+            CommandListInternalAccess::AliasingBarrierBeforeFirstUse(commandList, nestedResource);
         });
     }
 
@@ -751,10 +758,10 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareResourcesForRenderPass(
         const auto& resource = m_ResourcePool->GetResource(transition.Id);
         resource.ForEachResourceRecursive([&commandList, &transition](const Resource& nestedResource)
         {
-            commandList.TransitionBarrier(nestedResource, transition.StateAfter);
+            CommandListInternalAccess::TransitionBarrier(commandList, nestedResource, transition.StateAfter);
             if (transition.InsertUavBarrier)
             {
-                commandList.UavBarrier(nestedResource);
+                CommandListInternalAccess::UavBarrier(commandList, nestedResource);
             }
         });
     }
@@ -770,14 +777,18 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareResourcesForRenderPass(
         {
             if (textures[textureIndex] != nullptr && textures[textureIndex]->IsValid())
             {
-                commandList.TransitionBarrier(*textures[textureIndex], D3D12_RESOURCE_STATE_RENDER_TARGET);
+                CommandListInternalAccess::TransitionBarrier(
+                    commandList,
+                    *textures[textureIndex],
+                    D3D12_RESOURCE_STATE_RENDER_TARGET);
             }
         }
 
         const auto& depthStencil = renderTarget->GetTexture(DepthStencil);
         if (depthStencil != nullptr && depthStencil->IsValid())
         {
-            commandList.TransitionBarrier(
+            CommandListInternalAccess::TransitionBarrier(
+                commandList,
                 *depthStencil,
                 renderTargetInfo.m_ReadonlyDepth
                     ? D3D12_RESOURCE_STATE_DEPTH_READ

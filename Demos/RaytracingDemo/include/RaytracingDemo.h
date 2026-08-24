@@ -193,7 +193,7 @@ private:
     void DrawPostBloomOverlays(CommandList& cmd);
     void DrawLightBillboards(CommandList& cmd);
 //Modify End
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-24 by Hui
     void LoadSceneContent(CommandList& commandList, const std::filesystem::path& scenePath);
 //Modify Begin:2026-08-23 by Hui
     bool AdvanceStartupLoad();
@@ -209,7 +209,7 @@ private:
     void UpdateRuntimeAutomation(double totalTime);
     void ApplyRuntimeAutomationAction(uint32_t action, uint32_t value);
     void ApplyRuntimeAutomationMatrixCase(uint32_t caseIndex);
-    void CapturePendingAutomationScreenshot();
+    void CapturePendingAutomationScreenshot(const RenderGraph::RenderMetadata& renderMetadata);
     void SaveCurrentScene();
     void SaveCurrentCameraToUnityScene();
 //Modify End

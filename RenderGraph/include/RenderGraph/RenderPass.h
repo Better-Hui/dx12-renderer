@@ -15,6 +15,35 @@ class Resource;
 
 namespace RenderGraph
 {
+//Modify Begin:2026-08-24 by Hui
+    class ImportedResourceHandle final
+    {
+    public:
+        ImportedResourceHandle() = default;
+
+        [[nodiscard]] ResourceId GetId() const;
+        [[nodiscard]] const Resource& Resolve() const;
+        [[nodiscard]] bool IsValid() const noexcept { return m_Definition != nullptr; }
+
+    private:
+        struct Definition
+        {
+            ResourceId Id = 0;
+            std::function<const Resource&()> Resolver;
+        };
+
+        explicit ImportedResourceHandle(std::shared_ptr<const Definition> definition)
+            : m_Definition(std::move(definition))
+        {
+        }
+
+        friend class RenderGraphBuilder;
+        friend class RenderGraphPassBuilder;
+
+        std::shared_ptr<const Definition> m_Definition;
+    };
+//Modify End
+
 //Modify Begin:2026-08-18 by Hui
     enum class RenderPassQueue
     {
@@ -66,7 +95,7 @@ namespace RenderGraph
         OutputType m_Type = OutputType::Invalid;
     };
 
-//Modify Begin:2026-08-13 by Hui
+//Modify Begin:2026-08-24 by Hui
     enum class ExternalResourceAccessMode
     {
         Read,
@@ -75,10 +104,14 @@ namespace RenderGraph
 
     struct ExternalResourceAccess
     {
-        const Resource* Resource = nullptr;
+        ResourceId Id = 0;
+        ImportedResourceHandle Imported;
+        const Resource* StaticResource = nullptr;
         D3D12_RESOURCE_STATES StateAfter = D3D12_RESOURCE_STATE_COMMON;
         ExternalResourceAccessMode Mode = ExternalResourceAccessMode::Read;
         bool InsertUavBarrier = false;
+
+        [[nodiscard]] const Resource& Resolve() const;
     };
 //Modify End
 
@@ -117,12 +150,17 @@ namespace RenderGraph
         const std::vector<Input>& GetInputs() const { return m_Inputs; }
         const std::vector<Output>& GetOutputs() const { return m_Outputs; }
         const std::wstring& GetPassName() const { return m_PassName; }
-//Modify Begin:2026-08-13 by Hui
+//Modify Begin:2026-08-24 by Hui
         void AddExternalResourceAccess(
             const Resource& resource,
             D3D12_RESOURCE_STATES stateAfter,
             ExternalResourceAccessMode mode = ExternalResourceAccessMode::Read,
             bool insertUavBarrier = false);
+        void AddImportedResourceAccess(
+            const ImportedResourceHandle& resource,
+            D3D12_RESOURCE_STATES stateAfter,
+            ExternalResourceAccessMode mode,
+            bool insertUavBarrier);
         const std::vector<ExternalResourceAccess>& GetExternalResourceAccesses() const
         {
             return m_ExternalResourceAccesses;

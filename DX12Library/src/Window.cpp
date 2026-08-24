@@ -4,6 +4,9 @@
 
 #include "CommandQueue.h"
 #include "CommandList.h"
+//Modify Begin:2026-08-24 by Hui
+#include "CommandListInternalAccess.h"
+//Modify End
 //Modify Begin:2026-08-19 by Hui
 #include "D3D12DeviceContext.h"
 //Modify End
@@ -482,6 +485,38 @@ const RenderTarget& Window::GetRenderTarget() const
 	return MRenderTarget;
 }
 
+//Modify Begin:2026-08-24 by Hui
+void Window::PrepareBackBufferForRenderTarget(CommandList& commandList) const
+{
+    CommandListInternalAccess::TransitionBarrier(
+        commandList,
+        *BackBufferTextures[CurrentBackBufferIndex],
+        D3D12_RESOURCE_STATE_RENDER_TARGET,
+        D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+        true);
+}
+
+void Window::PrepareBackBufferForCopyDestination(CommandList& commandList) const
+{
+    CommandListInternalAccess::TransitionBarrier(
+        commandList,
+        *BackBufferTextures[CurrentBackBufferIndex],
+        D3D12_RESOURCE_STATE_COPY_DEST,
+        D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+        true);
+}
+
+void Window::PrepareBackBufferForResolveDestination(CommandList& commandList) const
+{
+    CommandListInternalAccess::TransitionBarrier(
+        commandList,
+        *BackBufferTextures[CurrentBackBufferIndex],
+        D3D12_RESOURCE_STATE_RESOLVE_DEST,
+        D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+        true);
+}
+//Modify End
+
 UINT Window::Present(const Texture& texture)
 {
 	auto commandQueue = m_D3d12Context.DirectCommandQueue;
@@ -497,15 +532,30 @@ UINT Window::Present(const Texture& texture)
 		{
 			if (texture.GetD3D12ResourceDesc().SampleDesc.Count > 1)
 			{
+				CommandListInternalAccess::TransitionBarrier(
+					*commandList,
+					texture,
+					D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
+				PrepareBackBufferForResolveDestination(*commandList);
 				commandList->ResolveSubresource(*backBuffer, texture);
 			}
 			else
 			{
+				CommandListInternalAccess::TransitionBarrier(
+					*commandList,
+					texture,
+					D3D12_RESOURCE_STATE_COPY_SOURCE);
+				PrepareBackBufferForCopyDestination(*commandList);
 				commandList->CopyResource(*backBuffer, texture);
 			}
 		}
 
-		commandList->TransitionBarrier(*backBuffer, D3D12_RESOURCE_STATE_PRESENT);
+//Modify Begin:2026-08-24 by Hui
+		CommandListInternalAccess::TransitionBarrier(
+			*commandList,
+			*backBuffer,
+			D3D12_RESOURCE_STATE_PRESENT);
+//Modify End
 	}
 
 	commandQueue->ExecuteCommandList(commandList);

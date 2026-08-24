@@ -1,3 +1,4 @@
+//Modify Begin:2026-08-24 by Hui
 #include <Framework/Rendering/Lighting/ReSTIRGIPass.h>
 
 #include <DX12Library/CommandList.h>
@@ -14,11 +15,12 @@
 #include <Framework/Rendering/Texture/RenderTexture.h>
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <Framework/Rendering/Texture/UnorderedAccessView.h>
+#include <RenderGraph/RenderContext.h>
+#include <RenderGraph/RenderGraphBuilder.h>
 
 #include <algorithm>
 #include <utility>
 
-//Modify Begin:2026-08-20 by Hui
 struct ReSTIRGIPass::PipelineSet
 {
     bool UseSoftShadowVariant = false;
@@ -61,17 +63,6 @@ namespace
         {
             inputs.WriteTimestamp(commandList, markerName);
         }
-    }
-
-    void InsertUavBarrier(
-        CommandList& commandList,
-        const std::shared_ptr<Texture>& creation,
-        const std::shared_ptr<Texture>& hit,
-        const std::shared_ptr<Texture>& light)
-    {
-        commandList.UavBarrier(*creation);
-        commandList.UavBarrier(*hit);
-        commandList.UavBarrier(*light);
     }
 
     void BindActivePixelList(
@@ -117,6 +108,26 @@ namespace
             Math::DivideByMultiple(frameState.Constants.Height, 8u),
             1u);
     }
+
+    struct ReSTIRGIGraphPassData
+    {
+        ReSTIRGIPass* Pass = nullptr;
+        std::shared_ptr<const ReSTIRGIGraphInputs> Inputs;
+    };
+
+    struct ReSTIRGIOutputClearPassData
+    {
+        RenderGraph::ResourceId Output = 0;
+    };
+
+    void DeclareReSTIRGISharedResources(
+        RenderGraph::RenderGraphPassBuilder& passBuilder,
+        const ReSTIRGIGraphInputs& inputs)
+    {
+        Assert(static_cast<bool>(inputs.DeclareSharedResources),
+            "ReSTIR GI requires shared graph-resource declarations.");
+        inputs.DeclareSharedResources(passBuilder);
+    }
 }
 
 ReSTIRGIPass::ReSTIRGIPass(
@@ -151,98 +162,277 @@ void ReSTIRGIPass::EnsurePipelines(
     static_cast<void>(GetStageShader(pipelines, ReSTIRGIStage::Shade, variantConfig, shadingModel, useCompactedDispatch));
 }
 
-void ReSTIRGIPass::Execute(
-    CommandList& commandList,
-    const ReSTIRGIExecutionInputs& inputs)
+void ReSTIRGIPass::AddPasses(
+    RenderGraph::RenderGraphBuilder& builder,
+    ReSTIRGIGraphInputs inputs)
 {
-    if (!inputs.FrameState.Enabled)
+    Assert(inputs.IndirectLighting != 0u && inputs.InputToken != 0u && inputs.OutputToken != 0u,
+        "ReSTIR GI graph outputs or tokens are invalid.");
+    Assert(inputs.Width > 0u && inputs.Height > 0u, "ReSTIR GI graph dimensions must be positive.");
+    Assert(static_cast<bool>(inputs.GetFrameIndex), "ReSTIR GI requires a frame-index resolver.");
+    Assert(static_cast<bool>(inputs.ResolveVariantConfig), "ReSTIR GI requires a variant resolver.");
+    Assert(static_cast<bool>(inputs.ResolveFrameInputs), "ReSTIR GI requires a frame-input resolver.");
+    EnsureResources(inputs.Width, inputs.Height);
+
+    const auto graphInputs = std::make_shared<const ReSTIRGIGraphInputs>(std::move(inputs));
+    const auto importTexture = [&builder](const wchar_t* name, const std::shared_ptr<Texture>& texture)
     {
-        return;
+        return builder.ImportResource(name, [texture]() -> const Resource& { return *texture; });
+    };
+    const auto importDynamicTexture = [&builder](const wchar_t* name, std::function<const Resource&()> resolver)
+    {
+        return builder.ImportResource(name, std::move(resolver));
+    };
+
+    const auto initialCreation = importTexture(L"Framework.ReSTIRGI.InitialCreation", m_Resources->Initial.Creation);
+    const auto initialHit = importTexture(L"Framework.ReSTIRGI.InitialHit", m_Resources->Initial.Hit);
+    const auto initialLight = importTexture(L"Framework.ReSTIRGI.InitialLight", m_Resources->Initial.Light);
+
+    const auto historyReadCreation = importDynamicTexture(
+        L"Framework.ReSTIRGI.HistoryReadCreation",
+        [this, graphInputs]() -> const Resource&
+        {
+            const uint32_t readIndex = graphInputs->GetFrameIndex() & 1u;
+            const InternalResources::ReservoirSet& history = graphInputs->ResolveVariantConfig().EnableSpatialResampling
+                ? m_Resources->History[readIndex].Spatial
+                : m_Resources->History[readIndex].Temporal;
+            return *history.Creation;
+        });
+    const auto historyReadHit = importDynamicTexture(
+        L"Framework.ReSTIRGI.HistoryReadHit",
+        [this, graphInputs]() -> const Resource&
+        {
+            const uint32_t readIndex = graphInputs->GetFrameIndex() & 1u;
+            const InternalResources::ReservoirSet& history = graphInputs->ResolveVariantConfig().EnableSpatialResampling
+                ? m_Resources->History[readIndex].Spatial
+                : m_Resources->History[readIndex].Temporal;
+            return *history.Hit;
+        });
+    const auto historyReadLight = importDynamicTexture(
+        L"Framework.ReSTIRGI.HistoryReadLight",
+        [this, graphInputs]() -> const Resource&
+        {
+            const uint32_t readIndex = graphInputs->GetFrameIndex() & 1u;
+            const InternalResources::ReservoirSet& history = graphInputs->ResolveVariantConfig().EnableSpatialResampling
+                ? m_Resources->History[readIndex].Spatial
+                : m_Resources->History[readIndex].Temporal;
+            return *history.Light;
+        });
+
+    const auto temporalWriteCreation = importDynamicTexture(
+        L"Framework.ReSTIRGI.TemporalWriteCreation",
+        [this, graphInputs]() -> const Resource&
+        {
+            return *m_Resources->History[1u - (graphInputs->GetFrameIndex() & 1u)].Temporal.Creation;
+        });
+    const auto temporalWriteHit = importDynamicTexture(
+        L"Framework.ReSTIRGI.TemporalWriteHit",
+        [this, graphInputs]() -> const Resource&
+        {
+            return *m_Resources->History[1u - (graphInputs->GetFrameIndex() & 1u)].Temporal.Hit;
+        });
+    const auto temporalWriteLight = importDynamicTexture(
+        L"Framework.ReSTIRGI.TemporalWriteLight",
+        [this, graphInputs]() -> const Resource&
+        {
+            return *m_Resources->History[1u - (graphInputs->GetFrameIndex() & 1u)].Temporal.Light;
+        });
+    const auto spatialWriteCreation = importDynamicTexture(
+        L"Framework.ReSTIRGI.SpatialWriteCreation",
+        [this, graphInputs]() -> const Resource&
+        {
+            return *m_Resources->History[1u - (graphInputs->GetFrameIndex() & 1u)].Spatial.Creation;
+        });
+    const auto spatialWriteHit = importDynamicTexture(
+        L"Framework.ReSTIRGI.SpatialWriteHit",
+        [this, graphInputs]() -> const Resource&
+        {
+            return *m_Resources->History[1u - (graphInputs->GetFrameIndex() & 1u)].Spatial.Hit;
+        });
+    const auto spatialWriteLight = importDynamicTexture(
+        L"Framework.ReSTIRGI.SpatialWriteLight",
+        [this, graphInputs]() -> const Resource&
+        {
+            return *m_Resources->History[1u - (graphInputs->GetFrameIndex() & 1u)].Spatial.Light;
+        });
+
+    const RenderGraph::ResourceId initialFinished = builder.CreateToken(L"Framework.ReSTIRGI.InitialFinished");
+    const RenderGraph::ResourceId temporalFinished = builder.CreateToken(L"Framework.ReSTIRGI.TemporalFinished");
+    const RenderGraph::ResourceId spatialFinished = builder.CreateToken(L"Framework.ReSTIRGI.SpatialFinished");
+
+    if (graphInputs->UseCompactedDispatch)
+    {
+        builder.AddPass<ReSTIRGIOutputClearPassData>(
+            L"ReSTIR GI Output Clear",
+            [graphInputs](
+                RenderGraph::RenderGraphPassBuilder& passBuilder,
+                ReSTIRGIOutputClearPassData& passData)
+            {
+                passData.Output = graphInputs->IndirectLighting;
+                passBuilder.WriteUav(graphInputs->IndirectLighting);
+            },
+            [](const ReSTIRGIOutputClearPassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
+            {
+                const UINT clearValues[4] = {};
+                commandList.ClearUnorderedAccessUint(context.GetResource(passData.Output), clearValues);
+            });
     }
 
-    Assert(static_cast<bool>(inputs.BindSceneInputs), "ReSTIR GI requires scene input bindings.");
-    Assert(inputs.IndirectLighting != nullptr, "ReSTIR GI requires an indirect lighting output.");
-    Assert(inputs.MotionVector != nullptr, "ReSTIR GI requires motion vectors.");
+    builder.AddPass<ReSTIRGIGraphPassData>(
+        L"ReSTIR GI Initial Sampling",
+        [this, graphInputs, initialFinished, initialCreation, initialHit, initialLight](
+            RenderGraph::RenderGraphPassBuilder& passBuilder,
+            ReSTIRGIGraphPassData& passData)
+        {
+            passData.Pass = this;
+            passData.Inputs = graphInputs;
+            DeclareReSTIRGISharedResources(passBuilder, *graphInputs);
+            passBuilder.WriteImported(initialCreation, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            passBuilder.WriteImported(initialHit, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            passBuilder.WriteImported(initialLight, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            passBuilder.WriteToken(initialFinished);
+        },
+        [](const ReSTIRGIGraphPassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
+        {
+            ReSTIRGIExecutionInputs inputs = passData.Inputs->ResolveFrameInputs(context);
+            inputs.FrameState.Constants.HistoryValid =
+                inputs.FrameState.Constants.HistoryValid != 0u && passData.Pass->m_HistoryValid ? 1u : 0u;
+            PipelineSet& pipelines = passData.Pass->GetPipelines(
+                inputs.FrameState.UseSoftShadowVariant,
+                inputs.FrameState.EnvironmentProjectionVariant);
+            CommandContext commandContext(commandList);
+            if (inputs.PrepareCommandContext)
+            {
+                inputs.PrepareCommandContext(commandContext);
+            }
+            WriteStageTimestamp(commandList, inputs, "ReSTIR GI.Begin");
+            passData.Pass->ExecuteInitialSampling(commandContext, inputs, pipelines);
+            WriteStageTimestamp(commandList, inputs, "ReSTIR GI.Initial");
+        });
 
-    PipelineSet& pipelines = GetPipelines(
-        inputs.FrameState.UseSoftShadowVariant,
-        inputs.FrameState.EnvironmentProjectionVariant);
-    const bool resourcesRecreated = EnsureResources(
-        inputs.FrameState.Constants.Width,
-        inputs.FrameState.Constants.Height);
-    ReSTIRGIExecutionInputs executionInputs = inputs;
-    executionInputs.FrameState.Constants.HistoryValid =
-        inputs.FrameState.Constants.HistoryValid != 0u && m_HistoryValid && !resourcesRecreated ? 1u : 0u;
+    builder.AddPass<ReSTIRGIGraphPassData>(
+        L"ReSTIR GI Temporal Resampling",
+        [this, graphInputs, initialFinished, temporalFinished, initialCreation, initialHit, initialLight,
+            historyReadCreation, historyReadHit, historyReadLight,
+            temporalWriteCreation, temporalWriteHit, temporalWriteLight](
+            RenderGraph::RenderGraphPassBuilder& passBuilder,
+            ReSTIRGIGraphPassData& passData)
+        {
+            passData.Pass = this;
+            passData.Inputs = graphInputs;
+            DeclareReSTIRGISharedResources(passBuilder, *graphInputs);
+            passBuilder.ReadToken(initialFinished);
+            passBuilder.ReadImported(initialCreation, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            passBuilder.ReadImported(initialHit, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            passBuilder.ReadImported(initialLight, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            passBuilder.ReadImported(historyReadCreation, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            passBuilder.ReadImported(historyReadHit, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            passBuilder.ReadImported(historyReadLight, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            passBuilder.WriteImported(temporalWriteCreation, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            passBuilder.WriteImported(temporalWriteHit, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            passBuilder.WriteImported(temporalWriteLight, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            passBuilder.WriteToken(temporalFinished);
+        },
+        [](const ReSTIRGIGraphPassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
+        {
+            ReSTIRGIExecutionInputs inputs = passData.Inputs->ResolveFrameInputs(context);
+            inputs.FrameState.Constants.HistoryValid =
+                inputs.FrameState.Constants.HistoryValid != 0u && passData.Pass->m_HistoryValid ? 1u : 0u;
+            PipelineSet& pipelines = passData.Pass->GetPipelines(
+                inputs.FrameState.UseSoftShadowVariant,
+                inputs.FrameState.EnvironmentProjectionVariant);
+            CommandContext commandContext(commandList);
+            if (inputs.PrepareCommandContext)
+            {
+                inputs.PrepareCommandContext(commandContext);
+            }
+            passData.Pass->ExecuteTemporalResampling(commandContext, inputs, pipelines);
+            WriteStageTimestamp(commandList, inputs, "ReSTIR GI.Temporal");
+        });
 
-    const uint32_t historyWriteIndex = 1u - m_HistoryReadIndex;
-    const ReSTIRGIVariantConfig& variantConfig = executionInputs.FrameState.VariantConfig;
-    const bool temporalResamplingEnabled = variantConfig.EnableTemporalResampling;
-    const bool spatialResamplingEnabled = variantConfig.EnableSpatialResampling;
+    builder.AddPass<ReSTIRGIGraphPassData>(
+        L"ReSTIR GI Spatial Resampling",
+        [this, graphInputs, temporalFinished, spatialFinished,
+            temporalWriteCreation, temporalWriteHit, temporalWriteLight,
+            spatialWriteCreation, spatialWriteHit, spatialWriteLight](
+            RenderGraph::RenderGraphPassBuilder& passBuilder,
+            ReSTIRGIGraphPassData& passData)
+        {
+            passData.Pass = this;
+            passData.Inputs = graphInputs;
+            DeclareReSTIRGISharedResources(passBuilder, *graphInputs);
+            passBuilder.ReadToken(temporalFinished);
+            passBuilder.ReadImported(temporalWriteCreation, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            passBuilder.ReadImported(temporalWriteHit, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            passBuilder.ReadImported(temporalWriteLight, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            passBuilder.WriteImported(spatialWriteCreation, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            passBuilder.WriteImported(spatialWriteHit, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            passBuilder.WriteImported(spatialWriteLight, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            passBuilder.WriteToken(spatialFinished);
+        },
+        [](const ReSTIRGIGraphPassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
+        {
+            ReSTIRGIExecutionInputs inputs = passData.Inputs->ResolveFrameInputs(context);
+            inputs.FrameState.Constants.HistoryValid =
+                inputs.FrameState.Constants.HistoryValid != 0u && passData.Pass->m_HistoryValid ? 1u : 0u;
+            PipelineSet& pipelines = passData.Pass->GetPipelines(
+                inputs.FrameState.UseSoftShadowVariant,
+                inputs.FrameState.EnvironmentProjectionVariant);
+            CommandContext commandContext(commandList);
+            if (inputs.PrepareCommandContext)
+            {
+                inputs.PrepareCommandContext(commandContext);
+            }
+            const uint32_t writeIndex = 1u - (inputs.FrameState.Constants.FrameIndex & 1u);
+            const InternalResources::ReservoirSet& temporal = passData.Pass->m_Resources->History[writeIndex].Temporal;
+            passData.Pass->ExecuteSpatialResampling(
+                commandContext, inputs, pipelines, temporal.Creation, temporal.Hit, temporal.Light);
+            WriteStageTimestamp(commandList, inputs, "ReSTIR GI.Spatial");
+        });
 
-    CommandContext commandContext(commandList);
-    if (executionInputs.CompactedDispatch.IsValid())
-    {
-        const UINT clearValues[4] = { 0u, 0u, 0u, 0u };
-        commandContext.ClearUnorderedAccessUint(*executionInputs.IndirectLighting, clearValues);
-    }
-    if (executionInputs.PrepareCommandContext)
-    {
-        executionInputs.PrepareCommandContext(commandContext);
-    }
-    WriteStageTimestamp(commandList, executionInputs, "ReSTIR GI.Begin");
-    ExecuteInitialSampling(commandContext, executionInputs, pipelines);
-    InsertUavBarrier(
-        commandList,
-        m_Resources->Initial.Creation,
-        m_Resources->Initial.Hit,
-        m_Resources->Initial.Light);
-    WriteStageTimestamp(commandList, executionInputs, "ReSTIR GI.Initial");
-
-    const InternalResources::ReservoirSet* finalReservoir = &m_Resources->Initial;
-    if (temporalResamplingEnabled)
-    {
-        ExecuteTemporalResampling(commandContext, executionInputs, pipelines);
-        InsertUavBarrier(
-            commandList,
-            m_Resources->History[historyWriteIndex].Temporal.Creation,
-            m_Resources->History[historyWriteIndex].Temporal.Hit,
-            m_Resources->History[historyWriteIndex].Temporal.Light);
-        WriteStageTimestamp(commandList, executionInputs, "ReSTIR GI.Temporal");
-        finalReservoir = &m_Resources->History[historyWriteIndex].Temporal;
-    }
-
-    if (spatialResamplingEnabled)
-    {
-        ExecuteSpatialResampling(
-            commandContext,
-            executionInputs,
-            pipelines,
-            finalReservoir->Creation,
-            finalReservoir->Hit,
-            finalReservoir->Light);
-        InsertUavBarrier(
-            commandList,
-            m_Resources->History[historyWriteIndex].Spatial.Creation,
-            m_Resources->History[historyWriteIndex].Spatial.Hit,
-            m_Resources->History[historyWriteIndex].Spatial.Light);
-        WriteStageTimestamp(commandList, executionInputs, "ReSTIR GI.Spatial");
-        finalReservoir = &m_Resources->History[historyWriteIndex].Spatial;
-    }
-
-    ExecuteFinalShading(
-        commandContext,
-        executionInputs,
-        pipelines,
-        finalReservoir->Creation,
-        finalReservoir->Hit,
-        finalReservoir->Light);
-    WriteStageTimestamp(commandList, executionInputs, "ReSTIR GI.Shade");
-    commandList.UavBarrier(*executionInputs.IndirectLighting);
-    if (temporalResamplingEnabled || spatialResamplingEnabled)
-    {
-        m_HistoryReadIndex = historyWriteIndex;
-    }
-    m_HistoryValid = temporalResamplingEnabled;
+    builder.AddPass<ReSTIRGIGraphPassData>(
+        L"ReSTIR GI Shade",
+        [this, graphInputs, spatialFinished, spatialWriteCreation, spatialWriteHit, spatialWriteLight](
+            RenderGraph::RenderGraphPassBuilder& passBuilder,
+            ReSTIRGIGraphPassData& passData)
+        {
+            passData.Pass = this;
+            passData.Inputs = graphInputs;
+            DeclareReSTIRGISharedResources(passBuilder, *graphInputs);
+            passBuilder.ReadToken(spatialFinished);
+            passBuilder.ReadImported(spatialWriteCreation, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            passBuilder.ReadImported(spatialWriteHit, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            passBuilder.ReadImported(spatialWriteLight, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            if (graphInputs->UseCompactedDispatch)
+            {
+                passBuilder.ReadWriteUav(graphInputs->IndirectLighting);
+            }
+            else
+            {
+                passBuilder.WriteUav(graphInputs->IndirectLighting);
+            }
+            passBuilder.WriteToken(graphInputs->OutputToken);
+        },
+        [](const ReSTIRGIGraphPassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
+        {
+            ReSTIRGIExecutionInputs inputs = passData.Inputs->ResolveFrameInputs(context);
+            inputs.FrameState.Constants.HistoryValid =
+                inputs.FrameState.Constants.HistoryValid != 0u && passData.Pass->m_HistoryValid ? 1u : 0u;
+            PipelineSet& pipelines = passData.Pass->GetPipelines(
+                inputs.FrameState.UseSoftShadowVariant,
+                inputs.FrameState.EnvironmentProjectionVariant);
+            CommandContext commandContext(commandList);
+            if (inputs.PrepareCommandContext)
+            {
+                inputs.PrepareCommandContext(commandContext);
+            }
+            const uint32_t writeIndex = 1u - (inputs.FrameState.Constants.FrameIndex & 1u);
+            const InternalResources::ReservoirSet& spatial = passData.Pass->m_Resources->History[writeIndex].Spatial;
+            passData.Pass->ExecuteFinalShading(
+                commandContext, inputs, pipelines, spatial.Creation, spatial.Hit, spatial.Light);
+            WriteStageTimestamp(commandList, inputs, "ReSTIR GI.Shade");
+            passData.Pass->m_HistoryValid = inputs.FrameState.VariantConfig.EnableTemporalResampling;
+        });
 }
 
 bool ReSTIRGIPass::EnsureResources(const uint32_t width, const uint32_t height)
@@ -285,7 +475,6 @@ bool ReSTIRGIPass::EnsureResources(const uint32_t width, const uint32_t height)
     m_Resources->History[1].Spatial = createReservoirSet(L"ReSTIR GI History 1 Spatial");
     m_ResourceWidth = width;
     m_ResourceHeight = height;
-    m_HistoryReadIndex = 0;
     m_HistoryValid = false;
     return true;
 }
@@ -331,15 +520,17 @@ void ReSTIRGIPass::ExecuteTemporalResampling(
     commandContext.SetShaderResourceView(shader, "ReSTIRGIInitialLight", ShaderResourceView(m_Resources->Initial.Light));
     if (inputs.FrameState.VariantConfig.EnableTemporalResampling)
     {
+        const uint32_t historyReadIndex = inputs.FrameState.Constants.FrameIndex & 1u;
         const InternalResources::ReservoirSet& historyRead =
             inputs.FrameState.VariantConfig.EnableSpatialResampling
-            ? m_Resources->History[m_HistoryReadIndex].Spatial
-            : m_Resources->History[m_HistoryReadIndex].Temporal;
+            ? m_Resources->History[historyReadIndex].Spatial
+            : m_Resources->History[historyReadIndex].Temporal;
         commandContext.SetShaderResourceView(shader, "ReSTIRGIHistoryCreation", ShaderResourceView(historyRead.Creation));
         commandContext.SetShaderResourceView(shader, "ReSTIRGIHistoryHit", ShaderResourceView(historyRead.Hit));
         commandContext.SetShaderResourceView(shader, "ReSTIRGIHistoryLight", ShaderResourceView(historyRead.Light));
     }
-    const InternalResources::ReservoirSet& historyWrite = m_Resources->History[1u - m_HistoryReadIndex].Temporal;
+    const uint32_t historyWriteIndex = 1u - (inputs.FrameState.Constants.FrameIndex & 1u);
+    const InternalResources::ReservoirSet& historyWrite = m_Resources->History[historyWriteIndex].Temporal;
     commandContext.SetUnorderedAccessView(shader, "ReSTIRGITemporalCreation", UnorderedAccessView(historyWrite.Creation));
     commandContext.SetUnorderedAccessView(shader, "ReSTIRGITemporalHit", UnorderedAccessView(historyWrite.Hit));
     commandContext.SetUnorderedAccessView(shader, "ReSTIRGITemporalLight", UnorderedAccessView(historyWrite.Light));
@@ -365,7 +556,8 @@ void ReSTIRGIPass::ExecuteSpatialResampling(
     inputs.BindSceneInputs(commandContext, shader);
     BindActivePixelList(commandContext, shader, inputs.CompactedDispatch);
     commandContext.SetConstantBuffer(shader, "ReSTIRGIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
-    const InternalResources::ReservoirSet& spatialOutput = m_Resources->History[1u - m_HistoryReadIndex].Spatial;
+    const uint32_t historyWriteIndex = 1u - (inputs.FrameState.Constants.FrameIndex & 1u);
+    const InternalResources::ReservoirSet& spatialOutput = m_Resources->History[historyWriteIndex].Spatial;
     commandContext.SetShaderResourceView(shader, "ReSTIRGITemporalCreation", ShaderResourceView(sourceCreation));
     commandContext.SetShaderResourceView(shader, "ReSTIRGITemporalHit", ShaderResourceView(sourceHit));
     commandContext.SetShaderResourceView(shader, "ReSTIRGITemporalLight", ShaderResourceView(sourceLight));

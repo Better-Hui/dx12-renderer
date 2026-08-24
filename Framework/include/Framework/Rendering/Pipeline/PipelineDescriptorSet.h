@@ -56,12 +56,10 @@ struct PipelineShaderResourceBinding
 {
     const Resource* Resource = nullptr;
     ID3D12Resource* ResourceIdentity = nullptr;
-    D3D12_RESOURCE_STATES StateAfter = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
     UINT FirstSubresource = 0;
     UINT NumSubresources = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
     bool HasDesc = false;
     D3D12_SHADER_RESOURCE_VIEW_DESC Desc = {};
-    bool AutoTransition = true;
 };
 
 struct PipelineBoundResource
@@ -89,20 +87,18 @@ public:
     const DescriptorBindingInfo& GetBinding(std::string_view name, DescriptorBindingKind expectedKind) const;
     void ValidateArrayIndex(std::string_view name, DescriptorBindingKind expectedKind, UINT arrayIndex) const;
 
-    UINT SetShaderResourceView(std::string_view name, UINT arrayIndex, const ShaderResourceView& shaderResourceView, D3D12_RESOURCE_STATES stateAfter = D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
-    UINT SetShaderResourceViews(std::string_view name, std::span<const ShaderResourceView> shaderResourceViews, D3D12_RESOURCE_STATES stateAfter = D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
-    UINT SetShaderResource(std::string_view name, UINT arrayIndex, const Resource& resource, D3D12_RESOURCE_STATES stateAfter);
+    UINT SetShaderResourceView(std::string_view name, UINT arrayIndex, const ShaderResourceView& shaderResourceView);
+    UINT SetShaderResourceViews(std::string_view name, std::span<const ShaderResourceView> shaderResourceViews);
+    UINT SetShaderResource(std::string_view name, UINT arrayIndex, const Resource& resource);
     UINT SetShaderResource(
         std::string_view name,
         UINT arrayIndex,
         const Resource& resource,
-        D3D12_RESOURCE_STATES stateAfter,
         const D3D12_SHADER_RESOURCE_VIEW_DESC& srvDesc);
     UINT SetUnorderedAccessView(std::string_view name, const UnorderedAccessView& unorderedAccessView);
     UINT SetStructuredBuffer(
         std::string_view name,
-        const StructuredBuffer& buffer,
-        D3D12_RESOURCE_STATES stateAfter = D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
+        const StructuredBuffer& buffer);
     UINT SetAccelerationStructure(std::string_view name, const RayTracingAccelerationStructure& accelerationStructure);
     UINT SetConstantBufferData(std::string_view name, const void* data, size_t size);
     void ClearShaderResourceViews(std::string_view name);

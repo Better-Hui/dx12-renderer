@@ -161,7 +161,32 @@ void RenderGraph::RenderPass::SetPassName(const std::wstring& passName)
     m_PassName = passName;
 }
 
-//Modify Begin:2026-08-13 by Hui
+//Modify Begin:2026-08-24 by Hui
+RenderGraph::ResourceId RenderGraph::ImportedResourceHandle::GetId() const
+{
+    Assert(m_Definition != nullptr, "Imported render-graph resource handle is invalid.");
+    return m_Definition->Id;
+}
+
+const Resource& RenderGraph::ImportedResourceHandle::Resolve() const
+{
+    Assert(m_Definition != nullptr && static_cast<bool>(m_Definition->Resolver),
+        "Imported render-graph resource resolver is invalid.");
+    const Resource& resource = m_Definition->Resolver();
+    Assert(resource.IsValid(), "Imported render-graph resource resolver returned an invalid resource.");
+    return resource;
+}
+
+const Resource& RenderGraph::ExternalResourceAccess::Resolve() const
+{
+    if (Imported.IsValid())
+    {
+        return Imported.Resolve();
+    }
+    Assert(StaticResource != nullptr && StaticResource->IsValid(), "External render-pass resource is invalid.");
+    return *StaticResource;
+}
+
 void RenderGraph::RenderPass::AddExternalResourceAccess(
     const Resource& resource,
     const D3D12_RESOURCE_STATES stateAfter,
@@ -176,7 +201,7 @@ void RenderGraph::RenderPass::AddExternalResourceAccess(
                 m_ExternalResourceAccesses,
                 [&nestedResource](const ExternalResourceAccess& access)
                 {
-                    return access.Resource == &nestedResource;
+                    return access.StaticResource == &nestedResource;
                 });
             Assert(
                 existingAccess == m_ExternalResourceAccesses.end() ||
@@ -186,8 +211,45 @@ void RenderGraph::RenderPass::AddExternalResourceAccess(
                 "A render pass cannot declare conflicting external resource states.");
             if (existingAccess == m_ExternalResourceAccesses.end())
             {
-                m_ExternalResourceAccesses.push_back({ &nestedResource, stateAfter, mode, insertUavBarrier });
+                m_ExternalResourceAccesses.push_back({
+                    .StaticResource = &nestedResource,
+                    .StateAfter = stateAfter,
+                    .Mode = mode,
+                    .InsertUavBarrier = insertUavBarrier,
+                });
             }
         });
+}
+
+void RenderGraph::RenderPass::AddImportedResourceAccess(
+    const ImportedResourceHandle& resource,
+    const D3D12_RESOURCE_STATES stateAfter,
+    const ExternalResourceAccessMode mode,
+    const bool insertUavBarrier)
+{
+    Assert(resource.IsValid(), "Imported render-pass resource handle is invalid.");
+    const ResourceId resourceId = resource.GetId();
+    const auto existingAccess = std::ranges::find_if(
+        m_ExternalResourceAccesses,
+        [resourceId](const ExternalResourceAccess& access)
+        {
+            return access.Id == resourceId;
+        });
+    Assert(
+        existingAccess == m_ExternalResourceAccesses.end() ||
+            (existingAccess->StateAfter == stateAfter &&
+             existingAccess->Mode == mode &&
+             existingAccess->InsertUavBarrier == insertUavBarrier),
+        "A render pass cannot declare conflicting imported resource states.");
+    if (existingAccess == m_ExternalResourceAccesses.end())
+    {
+        m_ExternalResourceAccesses.push_back({
+            .Id = resourceId,
+            .Imported = resource,
+            .StateAfter = stateAfter,
+            .Mode = mode,
+            .InsertUavBarrier = insertUavBarrier,
+        });
+    }
 }
 //Modify End
