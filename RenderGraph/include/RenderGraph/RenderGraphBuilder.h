@@ -24,7 +24,7 @@ namespace RenderGraph
     class RenderGraphPassBuilder final
     {
     public:
-        explicit RenderGraphPassBuilder(RenderGraphBuildOptions options = {});
+        explicit RenderGraphPassBuilder(RenderPassQueue queue);
 
         ResourceId ReadToken(ResourceId resourceId);
         ResourceId ReadTexture(ResourceId resourceId);
@@ -63,8 +63,6 @@ namespace RenderGraph
             D3D12_RESOURCE_STATES stateAfter,
             bool insertUavBarrier = true);
 
-        void UseAsyncComputeWhenSupported();
-        void UseCopyQueue();
         void SetParallelRecordingEligible(bool enabled = true);
 
         std::unique_ptr<RenderPass> Build(
@@ -99,7 +97,6 @@ namespace RenderGraph
         void ApplyExternalAccesses(RenderPass& renderPass) const;
         void ValidateCanBuild(bool external) const;
 
-        RenderGraphBuildOptions m_Options = {};
         std::vector<Input> m_Inputs;
         std::vector<Output> m_Outputs;
         std::vector<PendingExternalAccess> m_ExternalAccesses;
@@ -135,18 +132,41 @@ namespace RenderGraph
             SetupFuncT&& setupFunc,
             ExecuteFuncT&& executeFunc)
         {
-            auto passData = std::make_shared<PassDataT>();
-            RenderGraphPassBuilder passBuilder(m_Options);
-            std::invoke(std::forward<SetupFuncT>(setupFunc), passBuilder, *passData);
+            AddPassImpl<PassDataT>(
+                passName,
+                RenderPassQueue::Direct,
+                std::forward<SetupFuncT>(setupFunc),
+                std::forward<ExecuteFuncT>(executeFunc));
+        }
 
-            using ExecuteT = std::decay_t<ExecuteFuncT>;
-            auto execute = [passData, executeFunc = ExecuteT(std::forward<ExecuteFuncT>(executeFunc))](
-                const RenderContext& context,
-                CommandList& commandList) mutable
-            {
-                std::invoke(executeFunc, static_cast<const PassDataT&>(*passData), context, commandList);
-            };
-            AddPass(passBuilder.Build(passName, std::move(execute)));
+        template <typename PassDataT, typename SetupFuncT, typename ExecuteFuncT>
+        void AddComputePass(
+            const wchar_t* passName,
+            SetupFuncT&& setupFunc,
+            ExecuteFuncT&& executeFunc)
+        {
+            const RenderPassQueue queue = m_Options.AsyncComputeSupported
+                ? RenderPassQueue::AsyncCompute
+                : RenderPassQueue::Direct;
+            AddPassImpl<PassDataT>(
+                passName,
+                queue,
+                std::forward<SetupFuncT>(setupFunc),
+                std::forward<ExecuteFuncT>(executeFunc));
+        }
+
+        template <typename PassDataT, typename SetupFuncT, typename ExecuteFuncT>
+        void AddCopyPass(
+            const wchar_t* passName,
+            SetupFuncT&& setupFunc,
+            ExecuteFuncT&& executeFunc)
+        {
+            Assert(m_Options.CopyQueueSupported, "Render graph copy queue is not available.");
+            AddPassImpl<PassDataT>(
+                passName,
+                RenderPassQueue::Copy,
+                std::forward<SetupFuncT>(setupFunc),
+                std::forward<ExecuteFuncT>(executeFunc));
         }
 
         template <typename PassDataT, typename SetupFuncT, typename ExecuteFuncT>
@@ -156,7 +176,7 @@ namespace RenderGraph
             ExecuteFuncT&& executeFunc)
         {
             auto passData = std::make_shared<PassDataT>();
-            RenderGraphPassBuilder passBuilder(m_Options);
+            RenderGraphPassBuilder passBuilder(RenderPassQueue::Direct);
             std::invoke(std::forward<SetupFuncT>(setupFunc), passBuilder, *passData);
 
             using ExecuteT = std::decay_t<ExecuteFuncT>;
@@ -173,6 +193,27 @@ namespace RenderGraph
         std::vector<TokenDescription> ReleaseTokenDescriptions();
 
     private:
+        template <typename PassDataT, typename SetupFuncT, typename ExecuteFuncT>
+        void AddPassImpl(
+            const wchar_t* passName,
+            const RenderPassQueue queue,
+            SetupFuncT&& setupFunc,
+            ExecuteFuncT&& executeFunc)
+        {
+            auto passData = std::make_shared<PassDataT>();
+            RenderGraphPassBuilder passBuilder(queue);
+            std::invoke(std::forward<SetupFuncT>(setupFunc), passBuilder, *passData);
+
+            using ExecuteT = std::decay_t<ExecuteFuncT>;
+            auto execute = [passData, executeFunc = ExecuteT(std::forward<ExecuteFuncT>(executeFunc))](
+                const RenderContext& context,
+                CommandList& commandList) mutable
+            {
+                std::invoke(executeFunc, static_cast<const PassDataT&>(*passData), context, commandList);
+            };
+            AddPass(passBuilder.Build(passName, std::move(execute)));
+        }
+
         RenderGraphBuildOptions m_Options = {};
         std::vector<std::unique_ptr<RenderPass>> m_RenderPasses;
         std::vector<std::shared_ptr<const ImportedResourceHandle::Definition>> m_ImportedResources;

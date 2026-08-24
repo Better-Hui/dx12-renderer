@@ -8,8 +8,8 @@
 
 namespace RenderGraph
 {
-    RenderGraphPassBuilder::RenderGraphPassBuilder(const RenderGraphBuildOptions options)
-        : m_Options(options)
+    RenderGraphPassBuilder::RenderGraphPassBuilder(const RenderPassQueue queue)
+        : m_Queue(queue)
     {
     }
 
@@ -152,20 +152,6 @@ namespace RenderGraph
         AddOutput(resource.GetId(), OutputType::ExternalAccess);
         AddImportedAccess(resource, stateAfter, ExternalResourceAccessMode::Write, insertUavBarrier);
         return resource.GetId();
-    }
-
-    void RenderGraphPassBuilder::UseAsyncComputeWhenSupported()
-    {
-        if (m_Options.AsyncComputeSupported)
-        {
-            m_Queue = RenderPassQueue::AsyncCompute;
-        }
-    }
-
-    void RenderGraphPassBuilder::UseCopyQueue()
-    {
-        Assert(m_Options.CopyQueueSupported, "Render graph copy queue is not available.");
-        m_Queue = RenderPassQueue::Copy;
     }
 
     void RenderGraphPassBuilder::SetParallelRecordingEligible(const bool enabled)

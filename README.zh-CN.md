@@ -47,19 +47,18 @@ commands.Dispatch(groupCountX, groupCountY, 1);
 RenderGraph pass 通过输入、输出和 queue 类型描述工作：
 
 ```cpp
-builder.AddPass<PassData>(
+builder.AddComputePass<PassData>(
     L"Example Compute",
     [=](RenderGraph::RenderGraphPassBuilder& pass, PassData&) {
         pass.ReadTexture(inputId);
         pass.WriteUav(outputId);
-        pass.UseAsyncComputeWhenSupported();
     },
     [](const PassData&, const RenderGraph::RenderContext& context, CommandList& commandList) {
         // Record through Framework and resolve resources from the context.
     });
 ```
 
-输入/输出声明会参与依赖分析与资源状态安排。`AsyncCompute` 表示“这个 pass 明确请求 compute queue”，不是自动性能优化开关：RenderGraph 会处理必要的 GPU fence 等待，但不会自动判断哪个 pass 最适合异步、拆分 pass，或保证一定产生 direct/compute overlap。
+输入/输出声明会参与依赖分析与资源状态安排。`AddPass` 创建 Direct pass；`AddComputePass` 在可用时使用 Async Compute，否则回退到 Direct；`AddCopyPass` 要求 Copy queue 可用；`AddExternalPass` 固定使用 Direct。`AsyncCompute` 不是自动性能优化开关：RenderGraph 会处理必要的 GPU fence 等待，但不会自动判断哪个 pass 最适合异步、拆分 pass，或保证一定产生 direct/compute overlap。
 
 当前 queue 提交、last-writer 和跨 queue fence 由 `RenderGraphQueueScheduler` 管理。Compiler 为每个 pass 生成不可变的 transition/aliasing 计划，Executor 把它录入所属的 command list；`CommandList` 在最终提交顺序中通过共享 `ResourceStateRegistry` 解析每条 list 的初始状态。因此 CPU 录制先后不会改变 GPU 的资源状态与执行顺序。
 

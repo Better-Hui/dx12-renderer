@@ -92,11 +92,11 @@ RenderPass 声明
 
 ### Queue 与同步
 
-- pass 通过 `RenderPassQueue` 显式指定 `Direct`、`AsyncCompute` 或 `Copy`；系统不会自动推断 placement。
+- `AddPass`、`AddComputePass`、`AddCopyPass` 和 `AddExternalPass` 在创建 pass 时明确 queue 意图：分别为 Direct、Async Compute（不可用时回退 Direct）、Copy（必须可用）和 Direct external interop。
 - `RenderGraphQueueScheduler` 保存每个逻辑 resource 的 last producer queue 与 submitted fence value；有依赖的 consumer 提交前会收到 GPU-side wait。
 - `PassResourceStatePlan` 保存不可变的 per-pass transition、UAV、aliasing、初始化和 async handoff 工作。Executor 将该计划录入拥有该 pass 的 command list；各 list 在最终提交顺序中关闭时，`CommandList` 通过共享 `ResourceStateRegistry` 解析 transition 的初始状态。
 - `ClearUnorderedAccessUint` 只录制 clear，不隐式追加 UAV barrier。同一资源后续继续写入时，clear 与写入必须拆成不同 pass 或通过声明形成显式 WAW 依赖，由 Compiler 安排 UAV 顺序。
-- copy-compatible pass 可通过 `RenderGraphPassBuilder::UseCopyQueue()` 进入编译计划、Executor、QueueScheduler、Profiler 和 transient retirement 路径；当前主 sample 尚未声明 Copy-queue pass。
+- copy-compatible pass 可通过 `AddCopyPass()` 进入编译计划、Executor、QueueScheduler、Profiler 和 transient retirement 路径；当前主 sample 尚未声明 Copy-queue pass。
 - Compiler 会把 queue 相同且 direct preamble/aliasing 关系兼容的连续 Async Compute/Copy pass 合并为 non-direct batch；不兼容的资源交接会形成新的 batch。
 - transient resource 按本帧实际的 Direct/Compute/Copy fence 延迟退休。aliasing 目前是保守的：仅复用可证明在同一 queue 上的 lifetime，跨 queue aliasing 仍禁用。
 

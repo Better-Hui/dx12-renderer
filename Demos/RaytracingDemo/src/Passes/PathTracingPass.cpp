@@ -519,10 +519,10 @@ void RaytracingDemoPasses::Builder::AddIndirectLightingPass(
         AddClearUavPass(renderGraphBuilder, L"Indirect Lighting Clear", DemoResourceIds::IndirectLighting);
     }
 
-    renderGraphBuilder.AddPass<PathTracingLightingPassData>(
-        L"Indirect Lighting",
-        [&resources, config, backend, dispatchMode, useAsyncCompute](RenderGraphPassBuilder& passBuilder, PathTracingLightingPassData& passData)
-        {
+    const auto setupPass = [&resources, config, backend, dispatchMode, useAsyncCompute](
+        RenderGraphPassBuilder& passBuilder,
+        PathTracingLightingPassData& passData)
+    {
             passData.Resources.emplace(resources);
             passData.Config = config;
             passData.Backend = backend;
@@ -557,19 +557,18 @@ void RaytracingDemoPasses::Builder::AddIndirectLightingPass(
             readGBuffer(DemoResourceIds::DepthBuffer);
             passBuilder.WriteUav(DemoResourceIds::IndirectLighting);
             passBuilder.WriteToken(DemoResourceIds::IndirectLightingFinishedToken);
-            if (useAsyncCompute)
-            {
-                passBuilder.UseAsyncComputeWhenSupported();
-            }
             passBuilder.SetParallelRecordingEligible(
                 !useAsyncCompute && backend == PathTracingBackend::InlineRayQuery);
             RaytracingDemoPassBindings::DeclareRayTracingExternalResourceAccesses(
                 passBuilder,
                 resources,
                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-        },
-        [](const PathTracingLightingPassData& passData, const RenderContext& context, CommandList& cmd)
-        {
+    };
+    const auto executePass = [](
+        const PathTracingLightingPassData& passData,
+        const RenderContext& context,
+        CommandList& cmd)
+    {
             const RaytracingDemoPassResources& resources = passData.Resources.value();
             const RaytracingDemoPassConfig& config = passData.Config;
             const PathTracingBackend backend = passData.Backend;
@@ -650,7 +649,22 @@ void RaytracingDemoPasses::Builder::AddIndirectLightingPass(
                     commandContext.DispatchRays(RayTracingDispatchDesc{ "IndirectLightingRayGen", camera.Width, camera.Height, 1u });
                 }
             }
-        });
+    };
+
+    if (useAsyncCompute)
+    {
+        renderGraphBuilder.AddComputePass<PathTracingLightingPassData>(
+            L"Indirect Lighting",
+            setupPass,
+            executePass);
+    }
+    else
+    {
+        renderGraphBuilder.AddPass<PathTracingLightingPassData>(
+            L"Indirect Lighting",
+            setupPass,
+            executePass);
+    }
 }
 //Modify End
 

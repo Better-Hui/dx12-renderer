@@ -60,19 +60,18 @@ The same style is used for raster, compute, mesh-shader, and DXR paths through `
 ### RenderGraph and explicit async compute
 
 ```cpp
-builder.AddPass<PassData>(
+builder.AddComputePass<PassData>(
     L"Example Compute",
     [=](RenderGraph::RenderGraphPassBuilder& pass, PassData&) {
         pass.ReadTexture(inputId);
         pass.WriteUav(outputId);
-        pass.UseAsyncComputeWhenSupported();
     },
     [](const PassData&, const RenderGraph::RenderContext& context, CommandList& commandList) {
         // Record commands through Framework using resources resolved from context.
     });
 ```
 
-Pass input/output declarations drive ordering, resource states, and cross-queue waits. The graph currently supports explicit `Direct` and `AsyncCompute` assignment, tracks each resource's producer queue and submitted fence value, and inserts GPU-side waits for dependent consumers. Inline-ray-query `Indirect Lighting` is the current async-compute sample path.
+Pass input/output declarations drive ordering, resource states, and cross-queue waits. `AddPass` creates a Direct pass; `AddComputePass` selects Async Compute when available and otherwise falls back to Direct; `AddCopyPass` requires a Copy queue; `AddExternalPass` is always Direct. The graph tracks each resource's producer queue and submitted fence value, and inserts GPU-side waits for dependent consumers. Inline-ray-query `Indirect Lighting` is the current async-compute sample path.
 
 Queue submission and last-writer fence tracking live in `RenderGraphQueueScheduler`. The compiler emits immutable per-pass transition/aliasing plans; the executor records them into the owning command list. `CommandList` resolves each list's initial state against the shared `ResourceStateRegistry` in final submission order, so CPU recording order never changes GPU resource ordering.
 

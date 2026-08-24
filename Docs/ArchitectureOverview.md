@@ -92,11 +92,11 @@ The dependency direction is `DX12Library <- RenderGraph <- Framework <- Raytraci
 
 ### Queues and synchronization
 
-- A pass explicitly chooses `Direct`, `AsyncCompute`, or `Copy` with `RenderPassQueue`; queue placement is not inferred automatically.
+- `AddPass`, `AddComputePass`, `AddCopyPass`, and `AddExternalPass` make queue intent explicit at pass creation: Direct, Async Compute (with Direct fallback when unavailable), Copy (required), and Direct external interop respectively.
 - `RenderGraphQueueScheduler` tracks a logical resource's last producer queue and submitted fence value. A dependent consumer receives a GPU-side wait before its work is submitted.
 - `PassResourceStatePlan` stores immutable per-pass transition, UAV, aliasing, initialization, and async-handoff work. The executor records that plan in the command list that owns the pass; `CommandList` resolves initial transition states through the shared `ResourceStateRegistry` when lists are closed in final submission order.
 - `ClearUnorderedAccessUint` records only the clear and never appends a hidden UAV barrier. A later write to the same resource must be a separate pass or otherwise form an explicit graph WAW dependency so the compiler owns UAV ordering.
-- `RenderGraphPassBuilder::UseCopyQueue()` routes copy-compatible passes through the compiled plan, executor, queue scheduler, profiler, and transient retirement path. The maintained sample does not currently declare a Copy-queue pass.
+- `AddCopyPass()` routes copy-compatible passes through the compiled plan, executor, queue scheduler, profiler, and transient retirement path. The maintained sample does not currently declare a Copy-queue pass.
 - The compiler merges consecutive same-queue Async Compute/Copy passes into a non-direct batch when their Direct preambles and aliasing relationships are compatible; incompatible resource handoffs start a new batch.
 - Transient resources retire against the actual Direct/Compute/Copy fence values of the frame. Aliasing is intentionally conservative: only same-queue lifetimes are reused; cross-queue aliasing remains disabled.
 

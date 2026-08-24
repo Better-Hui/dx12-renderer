@@ -100,6 +100,10 @@ foreach(source_file IN LISTS POLICY_SOURCE_FILES)
         list(APPEND violations "${relative_file}: removed automatic-barrier mechanism was reintroduced")
     endif()
 
+    if (source_text MATCHES "(UseAsyncComputeWhenSupported|UseCopyQueue)")
+        list(APPEND violations "${relative_file}: legacy per-pass queue selection API was reintroduced")
+    endif()
+
     if ((relative_file MATCHES "^Framework/include/Framework/Rendering/Pipeline/(CommandContext|ComputeShader|PipelineDescriptorSet)" OR
          relative_file MATCHES "^Framework/src/Rendering/Pipeline/(CommandContext|ComputeShader|PipelineDescriptorSet)") AND
         source_text MATCHES "D3D12_RESOURCE_STATES")
