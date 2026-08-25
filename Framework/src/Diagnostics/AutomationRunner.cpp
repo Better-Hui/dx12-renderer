@@ -454,6 +454,18 @@ void FrameworkDiagnostics::AutomationRunner::Cancel(std::string reason)
     }
 }
 
+void FrameworkDiagnostics::AutomationRunner::FailNow(
+    const AutomationExitCode exitCode,
+    std::string message)
+{
+    if (!m_Running)
+    {
+        return;
+    }
+
+    Fail(exitCode, std::move(message));
+}
+
 void FrameworkDiagnostics::AutomationRunner::Log(std::string message) const
 {
     if (m_LogHandler)

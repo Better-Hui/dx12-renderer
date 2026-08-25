@@ -11,12 +11,13 @@
 
 #include <algorithm>
 #include <cfloat>
+#include <ranges>
 #include <stdexcept>
 #include <unordered_set>
 
 using namespace DirectX;
 
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-08-25 by Hui
 namespace
 {
     void CopyFloat3(XMFLOAT3& destination, const float source[3])
@@ -49,6 +50,31 @@ namespace
         const XMVECTOR halfSize = (max - min) * 0.5f;
         XMStoreFloat3(&bounds.AabbCenter, min + halfSize);
         XMStoreFloat3(&bounds.AabbHalfSize, halfSize);
+    }
+
+    void RecalculateMeshletBounds(
+        Meshlet& meshlet,
+        const std::vector<uint16_t>& indices,
+        const std::vector<VertexAttributes>& vertices)
+    {
+        XMVECTOR min = XMVectorReplicate(FLT_MAX);
+        XMVECTOR max = XMVectorReplicate(-FLT_MAX);
+        for (uint32_t indexNumber = 0; indexNumber < meshlet.IndexCount; ++indexNumber)
+        {
+            const uint32_t compactVertexIndex = indices[meshlet.IndexOffset + indexNumber];
+            Assert(compactVertexIndex < meshlet.VertexCount, "Meshlet compact vertex index is invalid.");
+            const VertexAttributes& vertex = vertices[meshlet.VertexOffset + compactVertexIndex];
+            const XMVECTOR position = XMVectorSet(vertex.Position.x, vertex.Position.y, vertex.Position.z, 0.0f);
+            min = XMVectorMin(position, min);
+            max = XMVectorMax(position, max);
+        }
+
+        const XMVECTOR halfSize = (max - min) * 0.5f;
+        const XMVECTOR center = min + halfSize;
+        XMStoreFloat3(&meshlet.Bounds.Center, center);
+        meshlet.Bounds.Radius = XMVectorGetX(XMVector3Length(halfSize));
+        XMStoreFloat3(&meshlet.Bounds.AabbCenter, center);
+        XMStoreFloat3(&meshlet.Bounds.AabbHalfSize, halfSize);
     }
 }
 
@@ -135,11 +161,12 @@ MeshletBuildResult MeshletBuilder::Build(const MeshPrototype& meshPrototype, con
     result.Mesh.m_Name = meshPrototype.m_Name;
     result.Mesh.m_SourceMeshIndex = meshPrototype.m_SourceMeshIndex;
     result.Meshlets = std::move(meshlets);
+    result.CompactToSourceVertexIndices.assign(vertices.begin(), vertices.end());
     return result;
 }
 //Modify End
 
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-08-25 by Hui
 MeshletGeometrySet::MeshletGeometrySet()
     : m_VertexBuffer(L"MeshletGeometrySet Vertices")
     , m_IndexBuffer(L"MeshletGeometrySet Indices")
@@ -161,10 +188,12 @@ void MeshletGeometrySet::Clear()
     m_Vertices.clear();
     m_Indices.clear();
     m_Meshlets.clear();
+    m_GeometryEntries.clear();
     m_Draws.clear();
     m_Transforms.clear();
     m_Instances.clear();
     m_GeometryDataDirty = true;
+    m_IndexDataDirty = true;
     m_InstanceDataDirty = true;
 }
 
@@ -198,7 +227,15 @@ std::pair<uint32_t, uint32_t> MeshletGeometrySet::AddGeometry(const MeshPrototyp
         m_Meshlets.push_back(meshlet);
     }
 
+    m_GeometryEntries.push_back({
+        meshletOffset,
+        static_cast<uint32_t>(buildResult.Meshlets.size()),
+        baseVertex,
+        std::move(buildResult.CompactToSourceVertexIndices)
+    });
+
     m_GeometryDataDirty = true;
+    m_IndexDataDirty = true;
     return { meshletOffset, static_cast<uint32_t>(buildResult.Meshlets.size()) };
 }
 
@@ -231,6 +268,52 @@ void MeshletGeometrySet::AddDraw(
     m_InstanceDataDirty = true;
 }
 
+bool MeshletGeometrySet::UpdateGeometryVertices(
+    const uint32_t meshletOffset,
+    const uint32_t meshletCount,
+    const std::span<const VertexAttributes> sourceVertices)
+{
+    const auto geometry = std::ranges::find_if(
+        m_GeometryEntries,
+        [meshletOffset, meshletCount](const GeometryEntry& entry)
+        {
+            return entry.MeshletOffset == meshletOffset && entry.MeshletCount == meshletCount;
+        });
+    if (geometry == m_GeometryEntries.end())
+    {
+        return false;
+    }
+
+    for (const uint32_t sourceVertexIndex : geometry->CompactToSourceVertexIndices)
+    {
+        if (sourceVertexIndex >= sourceVertices.size())
+        {
+            return false;
+        }
+    }
+
+    Assert(
+        geometry->VertexOffset + geometry->CompactToSourceVertexIndices.size() <= m_Vertices.size(),
+        "Meshlet compact vertex range is invalid.");
+    for (uint32_t compactVertexIndex = 0;
+        compactVertexIndex < geometry->CompactToSourceVertexIndices.size();
+        ++compactVertexIndex)
+    {
+        m_Vertices[geometry->VertexOffset + compactVertexIndex] =
+            sourceVertices[geometry->CompactToSourceVertexIndices[compactVertexIndex]];
+    }
+
+    Assert(
+        geometry->MeshletOffset + geometry->MeshletCount <= m_Meshlets.size(),
+        "Meshlet geometry range is invalid.");
+    for (uint32_t meshletIndex = 0; meshletIndex < geometry->MeshletCount; ++meshletIndex)
+    {
+        RecalculateMeshletBounds(m_Meshlets[geometry->MeshletOffset + meshletIndex], m_Indices, m_Vertices);
+    }
+    m_GeometryDataDirty = true;
+    return true;
+}
+
 void MeshletGeometrySet::Upload(CommandList& commandList)
 {
     if (m_Vertices.empty() || m_Indices.empty() || m_Meshlets.empty())
@@ -241,11 +324,36 @@ void MeshletGeometrySet::Upload(CommandList& commandList)
     ResourceUploader uploader(commandList.GetDeviceContext());
     if (m_GeometryDataDirty)
     {
-        uploader.UploadStructuredBuffer(commandList, m_VertexBuffer, m_Vertices);
+        const bool vertexBufferCanCopy =
+            m_VertexBuffer.GetD3D12Resource() != nullptr &&
+            m_VertexBuffer.GetD3D12ResourceDesc().Width >= m_Vertices.size() * sizeof(VertexAttributes);
+        if (vertexBufferCanCopy)
+        {
+            uploader.CopyStructuredBuffer(commandList, m_VertexBuffer, m_Vertices);
+        }
+        else
+        {
+            uploader.UploadStructuredBuffer(commandList, m_VertexBuffer, m_Vertices);
+        }
+        const bool meshletBufferCanCopy =
+            m_MeshletBuffer.GetD3D12Resource() != nullptr &&
+            m_MeshletBuffer.GetD3D12ResourceDesc().Width >= m_Meshlets.size() * sizeof(Meshlet);
+        if (meshletBufferCanCopy)
+        {
+            uploader.CopyStructuredBuffer(commandList, m_MeshletBuffer, m_Meshlets);
+        }
+        else
+        {
+            uploader.UploadStructuredBuffer(commandList, m_MeshletBuffer, m_Meshlets);
+        }
+        m_GeometryDataDirty = false;
+    }
+
+    if (m_IndexDataDirty)
+    {
         uploader.UploadByteAddressBuffer(
             commandList, m_IndexBuffer, m_Indices.size() * sizeof(uint16_t), m_Indices.data());
-        uploader.UploadStructuredBuffer(commandList, m_MeshletBuffer, m_Meshlets);
-        m_GeometryDataDirty = false;
+        m_IndexDataDirty = false;
     }
 
     if (!m_InstanceDataDirty)
@@ -260,8 +368,28 @@ void MeshletGeometrySet::Upload(CommandList& commandList)
         return;
     }
 
-    uploader.UploadStructuredBuffer(commandList, m_TransformBuffer, m_Transforms);
-    uploader.UploadStructuredBuffer(commandList, m_InstanceBuffer, m_Instances);
+    const bool transformBufferCanCopy =
+        m_TransformBuffer.GetD3D12Resource() != nullptr &&
+        m_TransformBuffer.GetD3D12ResourceDesc().Width >= m_Transforms.size() * sizeof(MeshletTransformData);
+    if (transformBufferCanCopy)
+    {
+        uploader.CopyStructuredBuffer(commandList, m_TransformBuffer, m_Transforms);
+    }
+    else
+    {
+        uploader.UploadStructuredBuffer(commandList, m_TransformBuffer, m_Transforms);
+    }
+    const bool instanceBufferCanCopy =
+        m_InstanceBuffer.GetD3D12Resource() != nullptr &&
+        m_InstanceBuffer.GetD3D12ResourceDesc().Width >= m_Instances.size() * sizeof(MeshletInstanceData);
+    if (instanceBufferCanCopy)
+    {
+        uploader.CopyStructuredBuffer(commandList, m_InstanceBuffer, m_Instances);
+    }
+    else
+    {
+        uploader.UploadStructuredBuffer(commandList, m_InstanceBuffer, m_Instances);
+    }
 
     const uint64_t requiredCommandBufferSize = sizeof(MeshletIndirectCommand) * m_Instances.size();
     const D3D12_RESOURCE_DESC currentCommandBufferDesc = m_IndirectCommandBuffer.GetD3D12ResourceDesc();
@@ -335,6 +463,7 @@ void MeshletSceneResources::Clear()
     m_Instances.clear();
     m_InstanceIndices.clear();
     m_NextInstanceHandle = 1;
+    m_UpdateStatistics = {};
     m_DrawsDirty = true;
 }
 
@@ -382,6 +511,48 @@ MeshletSceneInstanceHandle MeshletSceneResources::AddInstance(const MeshletScene
     m_InstanceIndices.emplace(handle, instanceIndex);
     m_DrawsDirty = true;
     return handle;
+}
+
+bool MeshletSceneResources::UpdateInstance(
+    const MeshletSceneInstanceHandle handle,
+    const MeshletSceneInstanceSource& instance)
+{
+    if (instance.GeometryIndex >= m_GeometryMeshletRanges.size())
+    {
+        return false;
+    }
+
+    const auto indexResult = m_InstanceIndices.find(handle);
+    if (indexResult == m_InstanceIndices.end())
+    {
+        return false;
+    }
+
+    m_Instances[indexResult->second].Source = instance;
+    m_DrawsDirty = true;
+    ++m_UpdateStatistics.InstanceUpdateCount;
+    return true;
+}
+
+bool MeshletSceneResources::UpdateGeometryVertices(
+    const uint32_t geometryIndex,
+    const uint32_t prototypeIndex,
+    const std::span<const VertexAttributes> sourceVertices)
+{
+    if (geometryIndex >= m_GeometryMeshletRanges.size() ||
+        prototypeIndex >= m_GeometryMeshletRanges[geometryIndex].size())
+    {
+        return false;
+    }
+
+    const auto [meshletOffset, meshletCount] = m_GeometryMeshletRanges[geometryIndex][prototypeIndex];
+    if (!m_GeometrySet.UpdateGeometryVertices(meshletOffset, meshletCount, sourceVertices))
+    {
+        return false;
+    }
+
+    ++m_UpdateStatistics.GeometryUpdateCount;
+    return true;
 }
 
 bool MeshletSceneResources::RemoveInstance(const MeshletSceneInstanceHandle handle)

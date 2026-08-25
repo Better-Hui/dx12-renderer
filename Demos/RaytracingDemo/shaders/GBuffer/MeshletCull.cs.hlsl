@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-25 by Hui
 #include <ShaderLibrary/Common/RootSignature.hlsli>
 #include <Meshlet/MeshletCommon.hlsli>
 
@@ -29,16 +29,16 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     const Meshlet meshlet = Meshlets[instance.MeshletIndex];
     const MeshletTransformData transform = MeshletTransforms[instance.TransformIndex];
 
-    const float3 centerWs = mul(transform.Model, float4(meshlet.Bounds.Center, 1.0f)).xyz;
+    const float3 centerWs = mul(float4(meshlet.Bounds.Center, 1.0f), transform.Model).xyz;
     const float radiusWs = meshlet.Bounds.Radius * MeshletGetMaxScale(transform.Model);
-    if (MeshletCull_DebugDisableCulling == 0u && !MeshletFrustumCullSphere(MeshletCull_FrustumPlanes, centerWs, radiusWs))
+    const bool visible = MeshletFrustumCullSphere(MeshletCull_FrustumPlanes, centerWs, radiusWs);
+    if (MeshletCull_DebugDisableCulling == 0u && !visible)
     {
         return;
     }
 
     uint commandIndex = 0;
     MeshletIndirectCount.InterlockedAdd(0, 1, commandIndex);
-
     MeshletIndirectCommand command;
     command.MeshletInstanceIndex = instanceIndex;
     command.Flags = 0u;

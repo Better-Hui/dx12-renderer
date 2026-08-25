@@ -1,5 +1,6 @@
 ﻿//Modify Begin:2026-08-21 by Hui
 #include <Scene/SceneResources.h>
+#include <Scene/SceneLightManager.h>
 #include <Scene/SceneStressTestFactory.h>
 
 #include <DX12Library/CommandList.h>
@@ -15,6 +16,8 @@
 #include <cctype>
 #include <cmath>
 #include <cstddef>
+#include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <ranges>
 #include <stdexcept>
@@ -86,6 +89,16 @@ namespace
         return Mesh::CreateCubePrototype(size);
     }
 
+    bool IsDynamicSceneAutomationEmitterEnabled()
+    {
+        char* automationMode = nullptr;
+        size_t automationModeLength = 0;
+        _dupenv_s(&automationMode, &automationModeLength, "RAYTRACING_DEMO_AUTOTEST");
+        const bool enabled = automationMode != nullptr && std::strcmp(automationMode, "dynamic-scene") == 0;
+        std::free(automationMode);
+        return enabled;
+    }
+
 }
 
 RaytracingDemoSceneResources::RaytracingDemoSceneResources(std::shared_ptr<D3D12DeviceContext> deviceContext)
@@ -104,7 +117,10 @@ void RaytracingDemoSceneResources::Clear()
     m_DynamicRayTracingRestorePending = false;
     m_DynamicRayTracingUpdatePending = false;
     m_DynamicRayTracingObjectIndex = (std::numeric_limits<size_t>::max)();
+    m_DynamicRayTracingGeometryIndex = (std::numeric_limits<uint32_t>::max)();
+    m_DynamicRayTracingPrototypeIndex = (std::numeric_limits<uint32_t>::max)();
     m_DynamicRayTracingMesh.reset();
+    m_DynamicRayTracingEmitterActive = false;
     m_DynamicRayTracingBaseVertices.clear();
     m_DynamicRayTracingVertices.clear();
     m_DynamicRayTracingUpdateStatistics = {};
@@ -464,6 +480,7 @@ void RaytracingDemoSceneResources::LoadDeferredLightingScene(CommandList& comman
         }
     }
 
+    AddDynamicSceneAutomationEmitter(commandList, whiteTexture);
     InitializeMeshletSceneResources();
     UploadMeshletBuffers(commandList);
 }
@@ -482,6 +499,7 @@ bool RaytracingDemoSceneResources::LoadScene(
     const std::vector<uint32_t> materialIndexMap = LoadSceneMaterials(commandList, scene, whiteTexture);
     const uint32_t defaultMaterial = AddDiffuseMaterial({ 0.85f, 0.85f, 0.85f, 1.0f }, { 1, 1, 0, 0 }, whiteTexture, 0.0f, 0.45f);
     LoadSceneObjects(commandList, scene, materialIndexMap, defaultMaterial);
+    AddDynamicSceneAutomationEmitter(commandList, whiteTexture);
     m_StressTestSpheresEnabled = enableStressTestSpheres;
     AddStressTestSpheres(commandList, whiteTexture);
     InitializeMeshletSceneResources();
@@ -671,6 +689,44 @@ void RaytracingDemoSceneResources::AddSceneObject(
     m_GeometryResources.AddObject(worldMatrix, geometryIndex, materialIndex);
 }
 
+void RaytracingDemoSceneResources::AddDynamicSceneAutomationEmitter(
+    CommandList& commandList,
+    const uint32_t whiteTextureIndex)
+{
+    if (!IsDynamicSceneAutomationEmitterEnabled())
+    {
+        return;
+    }
+
+    ModelLoader modelLoader;
+    const uint32_t materialIndex = AddPbrMaterial(
+        { 1.0f, 0.35f, 0.08f, 1.0f },
+        { 1.0f, 1.0f, 0.0f, 0.0f },
+        whiteTextureIndex,
+        whiteTextureIndex,
+        whiteTextureIndex,
+        whiteTextureIndex,
+        whiteTextureIndex,
+        0.0f,
+        0.45f,
+        true,
+        false,
+        false,
+        false,
+        false,
+        { 5.0f, 1.75f, 0.4f, 1.0f },
+        whiteTextureIndex,
+        false);
+    auto model = modelLoader.LoadExisting(Mesh::CreateCube(commandList));
+    const uint32_t geometryIndex = AddSceneGeometry(
+        model,
+        std::vector<MeshPrototype>{ CreateBuiltinCubePrototype(1.0f) });
+    AddSceneObject(
+        XMMatrixScaling(0.5f, 0.5f, 0.5f) * XMMatrixTranslation(0.0f, 3.0f, 18.0f),
+        geometryIndex,
+        materialIndex);
+}
+
 void RaytracingDemoSceneResources::InitializeMeshletSceneResources()
 {
     m_MeshletResources.Initialize(
@@ -829,10 +885,28 @@ bool RaytracingDemoSceneResources::BeginDynamicRayTracingGeometryUpdate(
     Assert(
         m_RayTracingResources.UpdateSceneObjectTransform(m_DynamicRayTracingObjectIndex, worldMatrix),
         "Dynamic ray tracing acceleration-structure instance update failed.");
+    Assert(
+        m_MeshletResources.UpdateSceneObjectTransform(m_DynamicRayTracingObjectIndex, worldMatrix),
+        "Dynamic meshlet scene instance update failed.");
+    Assert(
+        m_GeometryResources.UpdateGeometryPrototypeVertices(
+            m_DynamicRayTracingGeometryIndex,
+            m_DynamicRayTracingPrototypeIndex,
+            m_DynamicRayTracingVertices),
+        "Dynamic ray tracing mesh prototype update failed.");
+    Assert(
+        m_MeshletResources.UpdateSceneGeometryVertices(
+            m_DynamicRayTracingGeometryIndex,
+            m_DynamicRayTracingPrototypeIndex,
+            m_DynamicRayTracingVertices),
+        "Dynamic meshlet geometry update failed.");
     m_DynamicRayTracingMesh->CopyVertexAttributes(commandList, m_DynamicRayTracingVertices);
+    m_MeshletResources.Upload(commandList);
     m_DynamicRayTracingUpdatePending = true;
     m_DynamicRayTracingUpdateStatistics.LastUpdateRestored = restoring;
     ++m_DynamicRayTracingUpdateStatistics.GeometryUploadCount;
+    ++m_DynamicRayTracingUpdateStatistics.MeshletTransformUpdateCount;
+    ++m_DynamicRayTracingUpdateStatistics.MeshletGeometryUpdateCount;
     return true;
 }
 
@@ -856,12 +930,27 @@ bool RaytracingDemoSceneResources::FinishDynamicRayTracingUpdate(CommandList& co
     return true;
 }
 
+bool RaytracingDemoSceneResources::RefreshDynamicEmissiveMeshSurfaceEmitters(SceneLightManager& lights)
+{
+    if (!m_DynamicRayTracingEmitterActive)
+    {
+        return false;
+    }
+
+    lights.SetEmissiveMeshSurfaceEmitters(CollectEmissiveMeshSurfaceEmitters());
+    ++m_DynamicRayTracingUpdateStatistics.EmissiveMeshRefreshCount;
+    return true;
+}
+
 void RaytracingDemoSceneResources::InitializeDynamicRayTracingUpdateTarget()
 {
     m_DynamicRayTracingRestorePending = false;
     m_DynamicRayTracingUpdatePending = false;
     m_DynamicRayTracingObjectIndex = (std::numeric_limits<size_t>::max)();
+    m_DynamicRayTracingGeometryIndex = (std::numeric_limits<uint32_t>::max)();
+    m_DynamicRayTracingPrototypeIndex = (std::numeric_limits<uint32_t>::max)();
     m_DynamicRayTracingMesh.reset();
+    m_DynamicRayTracingEmitterActive = false;
     m_DynamicRayTracingBaseVertices.clear();
     m_DynamicRayTracingVertices.clear();
 
@@ -870,27 +959,59 @@ void RaytracingDemoSceneResources::InitializeDynamicRayTracingUpdateTarget()
     const size_t nonStressObjectCount = m_StressTestSphereObjects.empty()
         ? objects.size()
         : (std::min)(m_StressTestSphereObjectStart, objects.size());
-    for (size_t objectIndex = 0; objectIndex < nonStressObjectCount; ++objectIndex)
+    const auto isEmissiveObject = [this](const RaytracingDemoSceneObject& object)
     {
-        const RaytracingDemoSceneObject& object = objects[objectIndex];
-        Assert(object.GeometryIndex < geometries.size(), "Dynamic ray tracing scene object geometry index is invalid.");
-        const RaytracingDemoSceneGeometry& geometry = geometries[object.GeometryIndex];
-        const std::vector<std::shared_ptr<Mesh>>& meshes = geometry.Model->GetMeshes();
-        const size_t meshCount = (std::min)(meshes.size(), geometry.MeshPrototypes.size());
-        for (size_t meshIndex = 0; meshIndex < meshCount; ++meshIndex)
+        if (object.MaterialIndex >= m_TextureMaterialResources.GetMaterials().size())
         {
-            if (meshes[meshIndex] == nullptr || geometry.MeshPrototypes[meshIndex].m_Vertices.empty())
+            return false;
+        }
+
+        const RaytracingDemoMaterialData& material =
+            m_TextureMaterialResources.GetMaterials()[object.MaterialIndex];
+        return material.HasEmissionMap != 0u ||
+            std::fmax(material.Emission.x, std::fmax(material.Emission.y, material.Emission.z)) > 1.0e-4f;
+    };
+    const auto selectTarget = [this, &geometries, &objects, nonStressObjectCount, &isEmissiveObject](const bool emissiveOnly)
+    {
+        for (size_t objectIndex = 0; objectIndex < nonStressObjectCount; ++objectIndex)
+        {
+            const RaytracingDemoSceneObject& object = objects[objectIndex];
+            const bool emitter = isEmissiveObject(object);
+            if (emissiveOnly && !emitter)
             {
                 continue;
             }
 
-            m_DynamicRayTracingObjectIndex = objectIndex;
-            m_DynamicRayTracingMesh = meshes[meshIndex];
-            m_DynamicRayTracingBaseWorldMatrix = object.WorldMatrix;
-            m_DynamicRayTracingBaseVertices = geometry.MeshPrototypes[meshIndex].m_Vertices;
-            m_DynamicRayTracingVertices = m_DynamicRayTracingBaseVertices;
-            return;
+            Assert(object.GeometryIndex < geometries.size(), "Dynamic ray tracing scene object geometry index is invalid.");
+            const RaytracingDemoSceneGeometry& geometry = geometries[object.GeometryIndex];
+            const std::vector<std::shared_ptr<Mesh>>& meshes = geometry.Model->GetMeshes();
+            const size_t meshCount = (std::min)(meshes.size(), geometry.MeshPrototypes.size());
+            for (size_t meshIndex = 0; meshIndex < meshCount; ++meshIndex)
+            {
+                const MeshPrototype& prototype = geometry.MeshPrototypes[meshIndex];
+                if (meshes[meshIndex] == nullptr ||
+                    prototype.m_Vertices.empty() ||
+                    !prototype.m_SkinningVertexAttributes.empty())
+                {
+                    continue;
+                }
+
+                m_DynamicRayTracingObjectIndex = objectIndex;
+                m_DynamicRayTracingGeometryIndex = object.GeometryIndex;
+                m_DynamicRayTracingPrototypeIndex = static_cast<uint32_t>(meshIndex);
+                m_DynamicRayTracingMesh = meshes[meshIndex];
+                m_DynamicRayTracingBaseWorldMatrix = object.WorldMatrix;
+                m_DynamicRayTracingBaseVertices = prototype.m_Vertices;
+                m_DynamicRayTracingVertices = m_DynamicRayTracingBaseVertices;
+                m_DynamicRayTracingEmitterActive = emitter;
+                return true;
+            }
         }
+        return false;
+    };
+    if (!selectTarget(true))
+    {
+        selectTarget(false);
     }
 }
 //Modify End

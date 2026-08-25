@@ -20,7 +20,7 @@
 - **显式异步计算**：pass 可以指定使用 `Direct` 或 `AsyncCompute` queue；RenderGraph 负责跨 queue 的 GPU fence 等待与资源交接。
 - **光线追踪与降噪**：同一场景可在 inline ray query 和 shader-table DXR 之间切换，并可使用 NRD 或 SVGF；Compacted Indirect 会先生成有效像素列表，再驱动后续光追/ReSTIR 阶段。
 - **材质着色模型**：默认 GGX 金属度/粗糙度 PBR 评估已归入 Framework；sample UI 可选择实验性的 `Stylized Comic` 风格化 PBR-NPR 变体。
-- **Meshlet 实验路径**：包含 Meshlet 构建、GPU 资源、task shader / compute-indirect 两种 GBuffer 后端，以及只更新实例数据的增量路径。
+- **Meshlet 实验路径**：包含 Meshlet 构建、GPU 资源、task shader / compute-indirect 两种 GBuffer 后端，以及通过图声明的动态 transform/geometry 同步。
 - **ReSTIR DI 直接光**：提供 RIS、时域/Boiling/空域复用、各阶段的可见性与 bias correction 配置，以及最终着色。
 - **ReSTIR GI 间接光**：基于 Inline Ray Query，提供初始 BSDF 采样、时域复用、空域复用、Jacobian correction 和最终可见性/着色。
 - **Bloom**：Raster 版本由 Framework 注册为 RenderGraph 子图；CUDA 版本继续演示 D3D12 shared resource、shared fence 与 CUDA external semaphore 的互操作流程。
@@ -252,7 +252,8 @@ CMake 生成的工程会保持各 target 的真实源码目录。`DX12Library`�
 - Raster Bloom 的 scratch texture 已重新使用 transient aliasing：alias barrier 在真实首次使用、首个 transition 之前写入，新 placed resource 从 `COMMON` 开始；无桌面输入的反复重建压力测试覆盖此顺序。
 - 当前 Framework 和 RenderGraph 的执行路径由应用组合根显式注入 device、queue 和 descriptor 分配器。独立运行时的 application/window 生命周期，以及少量 legacy resource-wrapper 兼容路径，仍保留 `Application` 依赖。
 - `RaytracingDemoSceneResources` 内部已拆成 texture/material、geometry、meshlet、RTAS 四个 builder；facade 仍是 sample 层入口。
-- `rtas` 自动化场景会原地更新一个非 stress 场景 mesh：上传变化后的顶点，refit dirty BLAS，再原地更新 TLAS 并保持其 GPU virtual address；关闭后还会验证一帧 restore。此验证路径启用时会主动关闭 Meshlet GBuffer，因为 meshlet instance-transform buffer 目前没有对应的动态同步。
+- `rtas` 场景覆盖基础动态 RTAS 路径；更严格的无人值守 `dynamic-scene` 矩阵会保持 Meshlet GBuffer 开启，并依次覆盖 task shader 与 compute-indirect：它上传普通 vertex 和 compacted Meshlet vertex、重算保守 Meshlet bounds、更新 transform/instance buffer、refit dirty BLAS、原地更新 TLAS，并验证 restore frame。目标为自发光 mesh 时还会刷新 emissive-mesh surface-emitter 数据。runtime skinning output 尚未实现；动态 skinned mesh 会明确报告为不支持，不能静默退回到过期 Meshlet/RTAS 数据。
+- `meshlet-indirect` 是 Compute Indirect 的最小无人值守回归：在 Meshlet GBuffer + indirect backend、关闭 direct/indirect lighting 和 denoiser 的条件下切换 stress instance。其关键 cull 路径在绑定 descriptor set 前先绑定场景 bindless descriptor heap，确保 stress 扩容后更新的 Meshlet transform SRV 不会经由过期 heap/table 解析。
 - Compacted Indirect 的 `ActivePixelCount` 是有效像素数，不是光线数量。Finalize 对 Inline compute 写入 `{ ceil(activeCount / 64), 1, 1 }`；因此 UI 同时显示 dispatch groups、实际启动线程数和 DXR ray-generation invocation 数。最后一个 compute group 的 padding threads 会由 count guard 早退，收益主要来自移除天空/空区域的完整 lighting 与 ray-query 工作，而不是依靠 padding 线程早退。
 - 手动把 backend 切到 Shader-table DXR 时，若当前选择了只支持 Inline 的 lighting stage，UI 会弹出兼容性提示并持续显示红色警告；自动化切换不会打开模态框，以免阻塞无人值守测试。
 - RenderGraph timing 分别记录每条 queue 上的 pass 时长；判断跨 queue overlap、wait 和 GPU bubble 时，请使用 PIX Timing Capture。
@@ -262,7 +263,7 @@ CMake 生成的工程会保持各 target 的真实源码目录。`DX12Library`�
 - ReSTIR GI 是实验性的 inline ray-query 间接光 sample，参考 [DQLin/ReSTIR_PT](https://github.com/DQLin/ReSTIR_PT) 中 ReSTIR GI 的数据流实现。当前目标是 one-bounce transport，使用持久化 packed reservoir；现阶段只有构建与自动化覆盖，画质、时域稳定性、显存占用和性能仍需要在目标硬件上验收。
 - Active Pixel Compaction 已实现并覆盖 PT Direct/Indirect、ReSTIR DI/GI 的 compacted 消费路径；它仍需在不同 active-pixel 密度和目标硬件上完成收益边界验证。
 - 软阴影当前使用固定 4 次采样的变体：平行光读取 angular radius，点光源读取 source radius；自适应采样和质量档位尚未实现。
-- Shader 变体只在启动期或创建 pipeline 时编译；运行期源码热更新、后台编译和项目级 variant manifest 还没有实现。
+- `RaytracingDemoShaderPipelineController` 负责 shader/pipeline bootstrap 与 reset；拓扑变化的 feature state、运行时参数和无人值守 automation 分别留在各自 controller。运行期源码热更新、后台编译和项目级 variant manifest 还没有实现。
 - **DLSS、Ray Reconstruction 和 Frame Generation 均为实验性功能，尚未完成可交付验证。** sample 已接入 Native NGX SR/DLAA，并在评估 Streamline RR/FG。RR/FG 需要带 `--streamline-interposer` 重启程序；这是有意的启动期 opt-in，默认 D3D12 device、queue 和 swapchain 不会经过 Streamline proxy。当前只有 build、startup 与自动化安全覆盖，尚未在支持 RR/FG 的硬件上完成功能正确性、画质、稳定性、timing 和性能验证，仍可能存在未知问题。最终是否可用以运行时 capability query 为准：当前 RTX 2060 开发机不支持 FG，且当前 adapter 上 RR 报告不可用。不要把仓库中的任意 DLSS 模式视为保证可用或可直接交付的功能。
 
 ## 进一步阅读与许可证

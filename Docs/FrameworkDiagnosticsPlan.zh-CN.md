@@ -1,6 +1,6 @@
 # Framework 诊断、自动化与 Profiler
 
-> 状态：基础能力已落地并通过真实 Demo 自动化验证；受维护的 Copy queue 与动态 RTAS 场景已经覆盖真实跨 queue 同步、retirement 和原地 acceleration-structure update。GPU readback/image assertion、DRED attachment、后台写盘和 retention policy 仍待实现。
+> 状态：基础能力已落地并通过真实 Demo 自动化验证；受维护的 Copy queue、`meshlet-indirect` 与 `dynamic-scene` 场景已经覆盖真实跨 queue 同步、descriptor 敏感的 Meshlet cull、retirement 和原地 acceleration-structure update。GPU readback/image assertion、DRED attachment、后台写盘和 retention policy 仍待实现。
 
 ## 目标
 
@@ -58,6 +58,8 @@ Developer tool 仅在 `DX12_RENDERER_BUILD_DEVELOPER_TOOLS=ON` 时生成：
 RendererDiagnostics run --exe RaytracingDemo.exe --scenario stress --output Saved/Diagnostics/run-001
 RendererDiagnostics run --exe RaytracingDemo.exe --scenario copy --output Saved/Diagnostics/copy-001
 RendererDiagnostics run --exe RaytracingDemo.exe --scenario rtas --output Saved/Diagnostics/rtas-001
+RendererDiagnostics run --exe RaytracingDemo.exe --scenario dynamic-scene --output Saved/Diagnostics/dynamic-scene-001 --set RAYTRACING_DEMO_AUTOTEST_STEP_MS=50 --set RAYTRACING_DEMO_DIRECT_LIGHTING=none --set RAYTRACING_DEMO_INDIRECT_LIGHTING=none --set RAYTRACING_DEMO_DENOISER=off
+RendererDiagnostics run --exe RaytracingDemo.exe --scenario meshlet-indirect --output Saved/Diagnostics/meshlet-indirect-001 --set RAYTRACING_DEMO_AUTOTEST_STEP_MS=50 --set RAYTRACING_DEMO_MESHLET_GBUFFER=1 --set RAYTRACING_DEMO_MESHLET_BACKEND=indirect --set RAYTRACING_DEMO_DIRECT_LIGHTING=none --set RAYTRACING_DEMO_INDIRECT_LIGHTING=none --set RAYTRACING_DEMO_DENOISER=off
 RendererDiagnostics inspect Saved/Diagnostics/run-001
 RendererDiagnostics query Saved/Diagnostics/run-001 --frame 42 --category command_queue --limit 100
 RendererDiagnostics diff baseline current
@@ -65,7 +67,7 @@ RendererDiagnostics reproduce Saved/Diagnostics/run-001 --execute
 RendererDiagnostics selftest
 ```
 
-`Framework/tools/` 在两种配置下都会继续显示在 `Framework` 工程中；开关只控制 developer-tool target 是否生成。`core` 是通用渲染 smoke test，不再执行只适用于 compacted dispatch 的 active-pixel readback assertion。专用 `rtas` 场景会启用动态顶点/变换更新，验证原地 BLAS/TLAS refit 与 retirement，再验证 restore frame。验证 active-pixel 数量和间接派发参数时，应使用 `RAYTRACING_DEMO_RAY_TRACING_DISPATCH=compacted` 运行 `visual` 场景。
+`Framework/tools/` 在两种配置下都会继续显示在 `Framework` 工程中；开关只控制 developer-tool target 是否生成。`core` 是通用渲染 smoke test，不再执行只适用于 compacted dispatch 的 active-pixel readback assertion。专用 `rtas` 场景会启用动态顶点/变换更新，验证原地 BLAS/TLAS refit 与 retirement，再验证 restore frame。`dynamic-scene` 额外覆盖 task shader 与 compute-indirect Meshlet GBuffer、自发光刷新和显式拒绝 skinned update；`meshlet-indirect` 是 descriptor 扩容回归用例。为保留完整的有界 capture，应使用上例的 `50 ms` 间隔。验证 active-pixel 数量和间接派发参数时，应使用 `RAYTRACING_DEMO_RAY_TRACING_DISPATCH=compacted` 运行 `visual` 场景。
 
 所有命令输出 JSON 或 JSONL；`inspect` 会给出 verdict、capture 完整性、疑似问题域、假设、相关证据窗口和下一条查询建议。`query` 支持 frame/category/name/correlation/severity/field 过滤，并明确报告截断。`diff` 比较 graph pass、首次出现的失败 assertion 以及 CPU/GPU mean/P95，并携带样本数。runner 始终保持非交互，不合成鼠标或键盘输入。
 
@@ -78,7 +80,7 @@ RendererDiagnostics selftest
 - 已记录 descriptor allocation、descriptor-set revision 与资源身份；
 - 已检查 compacted active count 与 finalized indirect arguments/dispatch 的一致性；
 - 已通过 Direct -> Copy -> Async Compute -> Direct 验证 producer fence、GPU wait、state plan、batch 和 retirement；
-- 已通过动态 RTAS 验证顶点上传、dirty BLAS refit、原地 TLAS update、资源 retirement counter 和 restore frame；
+- 已通过动态 RTAS 验证普通/Meshlet 顶点上传、Meshlet bounds 与 instance 更新、自发光 mesh refresh、dirty BLAS refit、原地 TLAS update、资源 retirement counter、restore frame，以及显式拒绝 skinned update 的 capability；
 - 自动化 control、observation、timeout 和 assertion failure 使用稳定退出码 `20`–`24`。
 
 仍待补齐：

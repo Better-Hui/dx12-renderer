@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-31 by Hui
+//Modify Begin:2026-08-25 by Hui
 #include <ShaderLibrary/Common/RootSignature.hlsli>
 #include <Meshlet/MeshletCommon.hlsli>
 
@@ -60,11 +60,11 @@ void main(
     {
         const MeshletVertexAttributes input = MeshletVertices[meshlet.VertexOffset + groupThreadId];
         MeshletVertexOutput output;
-        const float4 positionWs = mul(transform.Model, float4(input.Position.xyz, 1.0f));
+        const float4 positionWs = mul(float4(input.Position.xyz, 1.0f), transform.Model);
         output.PositionWs = positionWs.xyz;
-        output.NormalWs = normalize(mul((float3x3)transform.InverseTransposeModel, input.Normal.xyz));
-        output.TangentWs = normalize(mul((float3x3)transform.Model, input.Tangent.xyz));
-        output.BitangentWs = normalize(mul((float3x3)transform.Model, input.Bitangent.xyz));
+        output.NormalWs = normalize(mul(input.Normal.xyz, (float3x3)transform.InverseTransposeModel));
+        output.TangentWs = normalize(mul(input.Tangent.xyz, (float3x3)transform.Model));
+        output.BitangentWs = normalize(mul(input.Bitangent.xyz, (float3x3)transform.Model));
         output.Uv = input.Uv.xy;
         output.PositionCs = mul(g_Pipeline_ViewProjection, positionWs);
         output.CurrentPositionCs = output.PositionCs;

@@ -81,6 +81,7 @@ public:
 	bool IsFenceComplete(uint64_t fenceValue);
 	void WaitForFenceValue(uint64_t fenceValue);
 	void Flush();
+	[[nodiscard]] bool FlushWithTimeout(uint32_t timeoutMilliseconds);
 
 	// Wait for another command queue to finish.
 	void Wait(const CommandQueue& other);
@@ -96,6 +97,9 @@ private:
 	void InitializeFenceAndWorker();
 	void EmitTelemetry(DiagnosticTelemetryEvent event) const noexcept;
 	[[nodiscard]] bool HasDiagnosticTelemetrySink() const noexcept;
+	[[nodiscard]] bool HasFailure() const noexcept;
+	void ThrowIfQueueFailed() const;
+	void SetFailure(std::string message) noexcept;
 //Modify End
 	// Free any command lists that are finished processing on the command queue.
 	void ProcessInFlightCommandLists();
@@ -110,6 +114,8 @@ private:
 	std::shared_ptr<D3D12DeviceContext> m_DeviceContext;
 	CommandQueueFailureHandler m_FatalErrorHandler;
 	std::atomic<DiagnosticTelemetrySink*> m_DiagnosticTelemetrySink = nullptr;
+	mutable std::mutex m_FailureMutex;
+	std::string m_FailureMessage;
 	//Modify End
 	Microsoft::WRL::ComPtr<ID3D12CommandQueue> m_D3d12CommandQueue;
 	Microsoft::WRL::ComPtr<ID3D12Fence> m_D3d12Fence;

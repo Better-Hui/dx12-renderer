@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-07-31 by Hui
+//Modify Begin:2026-08-25 by Hui
 
 #include <DX12Library/ByteAddressBuffer.h>
 #include <DX12Library/StructuredBuffer.h>
@@ -53,6 +53,7 @@ struct MeshletBuildResult
 {
     MeshPrototype Mesh;
     std::vector<Meshlet> Meshlets;
+    std::vector<uint32_t> CompactToSourceVertexIndices;
 };
 
 class MeshletBuilder
@@ -127,11 +128,23 @@ public:
     std::pair<uint32_t, uint32_t> AddGeometry(const MeshPrototype& prototype);
     void AddDraw(const MeshPrototype& prototype, const DirectX::XMMATRIX& worldMatrix, uint32_t materialIndex);
     void AddDraw(uint32_t meshletOffset, uint32_t meshletCount, const DirectX::XMMATRIX& worldMatrix, uint32_t materialIndex);
+    bool UpdateGeometryVertices(
+        uint32_t meshletOffset,
+        uint32_t meshletCount,
+        std::span<const VertexAttributes> sourceVertices);
     void Upload(CommandList& commandList);
 
     MeshletGpuResources GetGpuResources();
 
 private:
+    struct GeometryEntry
+    {
+        uint32_t MeshletOffset = 0;
+        uint32_t MeshletCount = 0;
+        uint32_t VertexOffset = 0;
+        std::vector<uint32_t> CompactToSourceVertexIndices;
+    };
+
     void BuildInstances();
 
     StructuredBuffer m_VertexBuffer;
@@ -144,10 +157,12 @@ private:
     std::vector<VertexAttributes> m_Vertices;
     std::vector<uint16_t> m_Indices;
     std::vector<Meshlet> m_Meshlets;
+    std::vector<GeometryEntry> m_GeometryEntries;
     std::vector<MeshletDraw> m_Draws;
     std::vector<MeshletTransformData> m_Transforms;
     std::vector<MeshletInstanceData> m_Instances;
     bool m_GeometryDataDirty = true;
+    bool m_IndexDataDirty = true;
     bool m_InstanceDataDirty = true;
 };
 
@@ -165,6 +180,12 @@ struct MeshletSceneInstanceSource
 
 using MeshletSceneInstanceHandle = uint64_t;
 
+struct MeshletSceneUpdateStatistics
+{
+    uint64_t InstanceUpdateCount = 0;
+    uint64_t GeometryUpdateCount = 0;
+};
+
 class MeshletSceneResources final
 {
 public:
@@ -174,11 +195,17 @@ public:
         const std::vector<MeshletSceneGeometrySource>& geometries,
         const std::vector<MeshletSceneInstanceSource>& instances);
     MeshletSceneInstanceHandle AddInstance(const MeshletSceneInstanceSource& instance);
+    bool UpdateInstance(MeshletSceneInstanceHandle handle, const MeshletSceneInstanceSource& instance);
+    bool UpdateGeometryVertices(
+        uint32_t geometryIndex,
+        uint32_t prototypeIndex,
+        std::span<const VertexAttributes> sourceVertices);
     bool RemoveInstance(MeshletSceneInstanceHandle handle);
     void RemoveInstances(std::span<const MeshletSceneInstanceHandle> handles);
     void Upload(CommandList& commandList);
 
     MeshletGpuResources GetGpuResources();
+    const MeshletSceneUpdateStatistics& GetUpdateStatistics() const { return m_UpdateStatistics; }
 
 private:
     struct InstanceEntry
@@ -194,6 +221,7 @@ private:
     std::vector<InstanceEntry> m_Instances;
     std::unordered_map<MeshletSceneInstanceHandle, uint32_t> m_InstanceIndices;
     MeshletSceneInstanceHandle m_NextInstanceHandle = 1;
+    MeshletSceneUpdateStatistics m_UpdateStatistics;
     bool m_DrawsDirty = true;
 };
 

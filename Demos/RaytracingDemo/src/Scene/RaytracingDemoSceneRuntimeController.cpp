@@ -36,7 +36,7 @@ bool RaytracingDemoSceneRuntimeController::ApplyPendingChanges(
     FrameworkDeviceContext& deviceContext,
     RaytracingDemoSceneResources& sceneResources,
     SceneLightManager& lights,
-    const DemoAutomation::RuntimeAutomationController& automation)
+    DemoAutomation::RuntimeAutomationController& automation)
 {
     if (!m_StressTestSpheresStateDirty)
     {
@@ -50,7 +50,22 @@ bool RaytracingDemoSceneRuntimeController::ApplyPendingChanges(
     }
 
     automation.AppendDiagnosticLog("Stress transition: flush queues.");
-    deviceContext.Flush();
+    if (automation.IsRunning())
+    {
+        constexpr uint32_t automationFlushTimeoutMilliseconds = 10000u;
+        if (!deviceContext.FlushWithTimeout(automationFlushTimeoutMilliseconds))
+        {
+            automation.AppendDiagnosticLog("Stress transition: queue flush timed out.");
+            automation.FailNow(
+                FrameworkDiagnostics::AutomationExitCode::Timeout,
+                "Stress transition queue flush timed out after 10000 ms.");
+            return false;
+        }
+    }
+    else
+    {
+        deviceContext.Flush();
+    }
 
     const std::shared_ptr<CommandQueue> commandQueue =
         deviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);

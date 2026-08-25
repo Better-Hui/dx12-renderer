@@ -12,7 +12,8 @@ using namespace DirectX;
 //Modify Begin:2026-08-06 by Hui
 void RaytracingDemo::DrawLightBillboards(CommandList& cmd)
 {
-    if (m_LightBillboardShader == nullptr || m_LightBillboardMesh == nullptr)
+    const std::shared_ptr<Shader>& shader = m_ShaderPipelineBootstrap.GetLightBillboardShader();
+    if (shader == nullptr || m_LightBillboardMesh == nullptr)
     {
         return;
     }
@@ -26,8 +27,8 @@ void RaytracingDemo::DrawLightBillboards(CommandList& cmd)
     XMStoreFloat4(&cameraUpFloat, XMVectorSetW(cameraUp, 0.0f));
 
     CommandContext commandContext(cmd);
-    commandContext.BindPipeline(*m_LightBillboardShader);
-    commandContext.SetConstantBuffer(*m_LightBillboardShader, "PipelineCBuffer", BuildPipelineConstants());
+    commandContext.BindPipeline(*shader);
+    commandContext.SetConstantBuffer(*shader, "PipelineCBuffer", BuildPipelineConstants());
 
     XMFLOAT3 cameraPosition{};
     XMStoreFloat3(&cameraPosition, GetSceneCamera().GetTranslation());
@@ -54,8 +55,8 @@ void RaytracingDemo::DrawLightBillboards(CommandList& cmd)
         constants.CameraUp = cameraUpFloat;
         constants.TypeAndParams = { 2.0f, 0.0f, 0.0f, 0.0f };
 
-        commandContext.SetConstantBuffer(*m_LightBillboardShader, "MaterialCBuffer", constants);
-        commandContext.BindDescriptorSet(m_LightBillboardShader->GetDescriptorSet());
+        commandContext.SetConstantBuffer(*shader, "MaterialCBuffer", constants);
+        commandContext.BindDescriptorSet(shader->GetDescriptorSet());
         m_LightBillboardMesh->Draw(cmd);
     }
 
@@ -78,8 +79,8 @@ void RaytracingDemo::DrawLightBillboards(CommandList& cmd)
         constants.CameraUp = cameraUpFloat;
         constants.TypeAndParams = { 0.0f, 0.0f, 0.0f, 0.0f };
 
-        commandContext.SetConstantBuffer(*m_LightBillboardShader, "MaterialCBuffer", constants);
-        commandContext.BindDescriptorSet(m_LightBillboardShader->GetDescriptorSet());
+        commandContext.SetConstantBuffer(*shader, "MaterialCBuffer", constants);
+        commandContext.BindDescriptorSet(shader->GetDescriptorSet());
         m_LightBillboardMesh->Draw(cmd);
     }
 
@@ -102,8 +103,8 @@ void RaytracingDemo::DrawLightBillboards(CommandList& cmd)
         constants.CameraUp = cameraUpFloat;
         constants.TypeAndParams = { 1.0f, 0.0f, 0.0f, 0.0f };
 
-        commandContext.SetConstantBuffer(*m_LightBillboardShader, "MaterialCBuffer", constants);
-        commandContext.BindDescriptorSet(m_LightBillboardShader->GetDescriptorSet());
+        commandContext.SetConstantBuffer(*shader, "MaterialCBuffer", constants);
+        commandContext.BindDescriptorSet(shader->GetDescriptorSet());
         m_LightBillboardMesh->Draw(cmd);
     }
 }

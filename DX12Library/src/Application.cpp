@@ -308,7 +308,14 @@ Application::~Application()
 //Modify Begin:2026-08-18 by Hui
     if (m_RenderContext.IsValid())
     {
-        Flush();
+        try
+        {
+            Flush();
+        }
+        catch (const std::exception& exception)
+        {
+            WriteDiagnostic("ApplicationShutdownException", exception.what());
+        }
     }
     m_RenderContext.Reset();
     if (m_RuntimeLifecycle != nullptr)

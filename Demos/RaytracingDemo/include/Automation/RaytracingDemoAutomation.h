@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-08-25 by Hui
 #include <Automation/RuntimeAutomationController.h>
 #include <Passes/RaytracingDemoPassResources.h>
 #include <PathTracing/PathTracingPipelineController.h>
@@ -41,12 +41,11 @@ namespace RaytracingDemoAutomation
         MaxBounces,
         Wait,
         VerifyActiveRayTracedPixelCount,
-//Modify Begin:2026-08-25 by Hui
         CopyQueueValidation,
         VerifyCopyQueueValidation,
         DynamicRayTracingUpdate,
         VerifyDynamicRayTracingUpdate,
-//Modify End
+        VerifyDynamicSkinnedMeshCapability,
         CaptureScreenshot,
         MatrixCase,
     };

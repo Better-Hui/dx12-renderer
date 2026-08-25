@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-08-25 by Hui
 #include <Framework/Diagnostics/AutomationRunner.h>
 
 #include <cstddef>
@@ -25,8 +25,10 @@ namespace DemoAutomation
     {
         std::vector<Step> Core;
         std::vector<Step> Stress;
+        std::vector<Step> MeshletIndirect;
         std::vector<Step> CopyQueue;
         std::vector<Step> Rtas;
+        std::vector<Step> DynamicScene;
         std::vector<Step> Matrix;
         std::vector<Step> ReSTIRGIProfile;
         std::vector<Step> ReSTIRGIVariants;
@@ -47,6 +49,8 @@ namespace DemoAutomation
             const CompletionHandler& completionHandler);
         void Update(uint64_t frameIndex, double totalTime);
         void AppendDiagnosticLog(const std::string& message) const;
+        bool FailNow(FrameworkDiagnostics::AutomationExitCode exitCode, std::string message);
+        [[nodiscard]] bool IsRunning() const { return m_Runner.IsRunning(); }
 
     private:
         void AppendLog(const std::string& message) const;

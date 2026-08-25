@@ -13,7 +13,7 @@
 
 using namespace DirectX;
 
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-25 by Hui
 namespace
 {
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
@@ -239,6 +239,7 @@ namespace
     {
         constexpr uint32_t meshletCullThreadCount = 64u;
         CommandContext commandContext(commandList);
+        commandContext.BindBindlessDescriptorHeap(resources.Scene.GetBindlessDescriptorHeap());
         ComputeShader& shader = *resources.MeshletCullShader;
         commandContext.BindPipeline(shader);
         commandContext.SetStructuredBuffer(shader, "Meshlets", *meshletResources.Meshlets);

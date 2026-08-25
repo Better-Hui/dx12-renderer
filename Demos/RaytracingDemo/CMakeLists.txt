@@ -9,6 +9,7 @@ set(HEADER_FILES
         include/Profiling/ProfilerDisplayController.h
         include/Profiling/RenderGraphTimingHistory.h
         include/RaytracingDemo.h
+        include/Rendering/RaytracingDemoShaderPipelineController.h
         include/RenderGraph/RaytracingDemoRenderGraphBuilder.h
         include/PathTracing/PathTracingSceneBindings.h
         include/PathTracing/PathTracingPipelineController.h
@@ -37,6 +38,7 @@ set(SOURCE_FILES
         src/RaytracingDemoCamera.cpp
         src/RaytracingDemo.cpp
         src/RaytracingDemoUI.cpp
+        src/Rendering/RaytracingDemoShaderPipelineController.cpp
         src/UI/DemoLightEditor.cpp
         src/RenderGraph/RaytracingDemoRenderGraphBuilder.cpp
         src/RenderGraph/RaytracingDemoRenderPipelineController.cpp

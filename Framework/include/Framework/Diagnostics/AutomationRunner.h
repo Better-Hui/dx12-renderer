@@ -91,6 +91,7 @@ namespace FrameworkDiagnostics
             LogHandler logHandler = {});
         void Tick(uint64_t frameIndex, double totalSeconds);
         void Cancel(std::string reason);
+        void FailNow(AutomationExitCode exitCode, std::string message);
 
         [[nodiscard]] bool IsRunning() const { return m_Running; }
         [[nodiscard]] bool IsCompleted() const { return m_Completed; }

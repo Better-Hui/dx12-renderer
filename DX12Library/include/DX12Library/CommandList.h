@@ -33,6 +33,7 @@
  *  DirectX 12 applications easier.
  */
 
+#include <atomic>
 #include <cassert>
 
 #include <d3d12.h>
@@ -49,6 +50,7 @@
 #include "UploadBuffer.h"
 
 class CommandListInternalAccess;
+class CommandQueue;
 class ConstantBuffer;
 //Modify Begin:2026-08-12 by Hui
 class D3D12DeviceContext;
@@ -62,6 +64,17 @@ class RootSignature;
 class Texture;
 class UploadBuffer;
 class VertexBuffer;
+
+//Modify Begin:2026-08-25 by Hui
+enum class CommandListLifecycle : uint8_t
+{
+    Available,
+    Recording,
+    Submitted,
+    InFlight,
+    Retiring,
+};
+//Modify End
 
 class CommandList
 {
@@ -80,6 +93,10 @@ public:
     {
         return m_D3d12CommandListType;
     }
+
+//Modify Begin:2026-08-25 by Hui
+    [[nodiscard]] uint64_t GetStableId() const noexcept { return m_StableId; }
+//Modify End
 
     /**
      * Get direct access to the ID3D12GraphicsCommandList2 interface.
@@ -550,6 +567,7 @@ public:
 private:
 //Modify Begin:2026-08-24 by Hui
     friend class CommandListInternalAccess;
+    friend class CommandQueue;
 
     UploadBuffer::Allocation AllocateInUploadBuffer(size_t bufferSize, size_t alignment);
     void TrackObject(const Microsoft::WRL::ComPtr<ID3D12Object>& object);
@@ -566,6 +584,12 @@ private:
     void RetireResource(Resource& resource);
     void CommitStagedDescriptors();
 //Modify End
+//Modify Begin:2026-08-25 by Hui
+    [[nodiscard]] bool TransitionLifecycle(
+        CommandListLifecycle expected,
+        CommandListLifecycle desired) noexcept;
+    [[nodiscard]] CommandListLifecycle GetLifecycle() const noexcept;
+//Modify End
 //Modify Begin:2026-07-30 by Hui
     void InvalidateCachedNativeState();
 //Modify End
@@ -580,6 +604,10 @@ private:
     using TrackedObjectsType = std::vector<Microsoft::WRL::ComPtr<ID3D12Object>>;
 
     D3D12_COMMAND_LIST_TYPE m_D3d12CommandListType;
+//Modify Begin:2026-08-25 by Hui
+    uint64_t m_StableId = 0;
+    std::atomic<CommandListLifecycle> m_Lifecycle = CommandListLifecycle::Available;
+//Modify End
 //Modify Begin:2026-08-12 by Hui
     std::shared_ptr<D3D12DeviceContext> m_DeviceContext;
     Microsoft::WRL::ComPtr<ID3D12Device2> m_Device;

@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-08-25 by Hui
 #pragma once
 
 #include <Scene/SceneResourceTypes.h>
@@ -93,6 +93,10 @@ public:
     void AppendObjects(std::span<const RaytracingDemoSceneObject> objects);
     void ResizeObjects(size_t count);
     bool UpdateObjectWorldMatrix(size_t objectIndex, const DirectX::XMMATRIX& worldMatrix);
+    bool UpdateGeometryPrototypeVertices(
+        uint32_t geometryIndex,
+        uint32_t prototypeIndex,
+        std::span<const VertexAttributes> vertices);
 
     const std::vector<RaytracingDemoSceneGeometry>& GetGeometries() const { return m_Geometries; }
     const std::vector<RaytracingDemoSceneObject>& GetObjects() const { return m_Objects; }
@@ -114,11 +118,19 @@ public:
         bool stressObjectsEnabled);
     void AddStressInstances(std::span<const RaytracingDemoSceneObject> objects);
     void RemoveStressInstances();
+    bool UpdateSceneObjectTransform(size_t objectIndex, const DirectX::XMMATRIX& worldMatrix);
+    bool UpdateSceneGeometryVertices(
+        uint32_t geometryIndex,
+        uint32_t prototypeIndex,
+        std::span<const VertexAttributes> vertices);
     void Upload(CommandList& commandList);
     MeshletGpuResources GetGpuResources() { return m_Resources.GetGpuResources(); }
+    const MeshletSceneUpdateStatistics& GetUpdateStatistics() const { return m_Resources.GetUpdateStatistics(); }
 
 private:
     MeshletSceneResources m_Resources;
+    std::vector<MeshletSceneInstanceHandle> m_SceneInstanceHandles;
+    std::vector<MeshletSceneInstanceSource> m_SceneInstanceSources;
     std::vector<MeshletSceneInstanceHandle> m_StressInstanceHandles;
 };
 

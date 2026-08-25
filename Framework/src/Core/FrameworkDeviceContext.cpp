@@ -38,4 +38,11 @@ void FrameworkDeviceContext::Flush() const
     m_Desc.ComputeQueue->Flush();
     m_Desc.CopyQueue->Flush();
 }
+
+bool FrameworkDeviceContext::FlushWithTimeout(const uint32_t timeoutMilliseconds) const
+{
+    return m_Desc.DirectQueue->FlushWithTimeout(timeoutMilliseconds) &&
+        m_Desc.ComputeQueue->FlushWithTimeout(timeoutMilliseconds) &&
+        m_Desc.CopyQueue->FlushWithTimeout(timeoutMilliseconds);
+}
 //Modify End

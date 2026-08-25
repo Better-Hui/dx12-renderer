@@ -10,6 +10,8 @@
 //Modify Begin:2026-08-21 by Hui
 #include <fstream>
 #include <chrono>
+#include <sstream>
+#include <unordered_set>
 
 namespace
 {
@@ -20,6 +22,19 @@ namespace
 		case D3D12_COMMAND_LIST_TYPE_DIRECT: return "Direct";
 		case D3D12_COMMAND_LIST_TYPE_COMPUTE: return "Compute";
 		case D3D12_COMMAND_LIST_TYPE_COPY: return "Copy";
+		default: return "Unknown";
+		}
+	}
+
+	const char* GetCommandListLifecycleName(const CommandListLifecycle lifecycle)
+	{
+		switch (lifecycle)
+		{
+		case CommandListLifecycle::Available: return "Available";
+		case CommandListLifecycle::Recording: return "Recording";
+		case CommandListLifecycle::Submitted: return "Submitted";
+		case CommandListLifecycle::InFlight: return "InFlight";
+		case CommandListLifecycle::Retiring: return "Retiring";
 		default: return "Unknown";
 		}
 	}
@@ -107,6 +122,40 @@ bool CommandQueue::HasDiagnosticTelemetrySink() const noexcept
 	return m_DiagnosticTelemetrySink.load(std::memory_order_acquire) != nullptr;
 }
 
+bool CommandQueue::HasFailure() const noexcept
+{
+	std::scoped_lock lock(m_FailureMutex);
+	return !m_FailureMessage.empty();
+}
+
+void CommandQueue::ThrowIfQueueFailed() const
+{
+	std::string message;
+	{
+		std::scoped_lock lock(m_FailureMutex);
+		message = m_FailureMessage;
+	}
+	if (!message.empty())
+	{
+		throw std::runtime_error("Command queue is unavailable: " + message);
+	}
+}
+
+void CommandQueue::SetFailure(std::string message) noexcept
+{
+	try
+	{
+		std::scoped_lock lock(m_FailureMutex);
+		if (m_FailureMessage.empty())
+		{
+			m_FailureMessage = std::move(message);
+		}
+	}
+	catch (...)
+	{
+	}
+}
+
 CommandQueue::~CommandQueue()
 {
 	m_IsProcessingInFlightCommandLists = false;
@@ -139,6 +188,7 @@ bool CommandQueue::IsFenceComplete(uint64_t fenceValue)
 
 void CommandQueue::WaitForFenceValue(uint64_t fenceValue)
 {
+	ThrowIfQueueFailed();
 	if (!IsFenceComplete(fenceValue))
 	{
 		const bool captureTelemetry = HasDiagnosticTelemetrySink();
@@ -146,9 +196,54 @@ void CommandQueue::WaitForFenceValue(uint64_t fenceValue)
 		auto event = ::CreateEvent(nullptr, FALSE, FALSE, nullptr);
 		assert(event && "Failed to create fence event handle.");
 
-		// Is this function thread safe?
-		m_D3d12Fence->SetEventOnCompletion(fenceValue, event);
-		WaitForSingleObject(event, DWORD_MAX);
+		ThrowIfFailed(m_D3d12Fence->SetEventOnCompletion(fenceValue, event));
+		for (;;)
+		{
+			if (!m_IsProcessingInFlightCommandLists)
+			{
+				CloseHandle(event);
+				ThrowIfQueueFailed();
+				throw std::runtime_error("Fence wait was cancelled while the command queue was stopping.");
+			}
+			const DWORD waitResult = WaitForSingleObject(event, 100u);
+			if (waitResult == WAIT_OBJECT_0)
+			{
+				break;
+			}
+			if (waitResult == WAIT_FAILED)
+			{
+				const DWORD waitError = GetLastError();
+				CloseHandle(event);
+				throw std::runtime_error("Fence wait failed with Win32 error " + std::to_string(waitError) + ".");
+			}
+
+			const HRESULT removedReason = m_DeviceContext->GetDevice()->GetDeviceRemovedReason();
+			if (FAILED(removedReason))
+			{
+				const uint64_t completedFence = m_D3d12Fence->GetCompletedValue();
+				if (captureTelemetry)
+				{
+					EmitTelemetry({
+					.Category = "command_queue.device_removed",
+					.Name = "fence_wait",
+					.Severity = DiagnosticTelemetrySeverity::Error,
+					.CorrelationId = MakeDiagnosticQueueFenceCorrelationId(GetQueueTypeName(m_CommandListType), fenceValue),
+					.Fields = {
+						{ "queue", std::string(GetQueueTypeName(m_CommandListType)) },
+						{ "fence", fenceValue },
+						{ "completed_fence", completedFence },
+						{ "device_removed_reason", static_cast<int64_t>(removedReason) },
+					},
+					});
+				}
+				CloseHandle(event);
+				std::ostringstream message;
+				message << "Fence " << fenceValue << " on " << GetQueueTypeName(m_CommandListType)
+					<< " queue did not complete because the D3D12 device was removed (0x"
+					<< std::hex << static_cast<uint32_t>(removedReason) << ").";
+				throw std::runtime_error(message.str());
+			}
+		}
 
 		CloseHandle(event);
 		if (captureTelemetry)
@@ -172,7 +267,12 @@ void CommandQueue::WaitForFenceValue(uint64_t fenceValue)
 void CommandQueue::Flush()
 {
 	std::unique_lock<std::mutex> lock(m_ProcessInFlightCommandListsThreadMutex);
-	m_ProcessInFlightCommandListsThreadCv.wait(lock, [this] { return m_InFlightCommandLists.Empty(); });
+	m_ProcessInFlightCommandListsThreadCv.wait(lock, [this]
+	{
+		return m_InFlightCommandLists.Empty() || HasFailure();
+	});
+	lock.unlock();
+	ThrowIfQueueFailed();
 
 	// In case the command queue was signaled directly 
 	// using the CommandQueue::Signal method then the 
@@ -181,8 +281,55 @@ void CommandQueue::Flush()
 	WaitForFenceValue(m_FenceValue);
 }
 
+bool CommandQueue::FlushWithTimeout(const uint32_t timeoutMilliseconds)
+{
+	ThrowIfQueueFailed();
+	std::unique_lock<std::mutex> lock(m_ProcessInFlightCommandListsThreadMutex);
+	const bool retired = m_ProcessInFlightCommandListsThreadCv.wait_for(
+		lock,
+		std::chrono::milliseconds(timeoutMilliseconds),
+		[this]
+		{
+			return m_InFlightCommandLists.Empty() || HasFailure();
+		});
+	lock.unlock();
+	if (retired)
+	{
+		ThrowIfQueueFailed();
+		WaitForFenceValue(m_FenceValue);
+		return true;
+	}
+
+	const uint64_t requestedFence = m_FenceValue.load();
+	const uint64_t completedFence = m_D3d12Fence->GetCompletedValue();
+	const HRESULT removedReason = m_DeviceContext->GetDevice()->GetDeviceRemovedReason();
+	std::ostringstream message;
+	message << "Timed out after " << timeoutMilliseconds << " ms while retiring "
+		<< GetQueueTypeName(m_CommandListType) << " queue work for fence " << requestedFence
+		<< " (completed fence " << completedFence << ", device removed reason 0x"
+		<< std::hex << static_cast<uint32_t>(removedReason) << ").";
+	SetFailure(message.str());
+	m_IsProcessingInFlightCommandLists = false;
+	m_ProcessInFlightCommandListsThreadCv.notify_all();
+	EmitTelemetry({
+		.Category = "command_queue.timeout",
+		.Name = "flush",
+		.Severity = DiagnosticTelemetrySeverity::Error,
+		.CorrelationId = MakeDiagnosticQueueFenceCorrelationId(GetQueueTypeName(m_CommandListType), requestedFence),
+		.Fields = {
+			{ "queue", std::string(GetQueueTypeName(m_CommandListType)) },
+			{ "fence", requestedFence },
+			{ "completed_fence", completedFence },
+			{ "timeout_ms", static_cast<uint64_t>(timeoutMilliseconds) },
+			{ "device_removed_reason", static_cast<int64_t>(removedReason) },
+		},
+	});
+	return false;
+}
+
 std::shared_ptr<CommandList> CommandQueue::GetCommandList()
 {
+	ThrowIfQueueFailed();
 	std::shared_ptr<CommandList> commandList;
 
 	// TryPop is the atomic availability check. Empty followed by TryPop is racy
@@ -197,6 +344,25 @@ std::shared_ptr<CommandList> CommandQueue::GetCommandList()
 		commandList = std::make_shared<CommandList>(m_CommandListType, m_DeviceContext);
 	}
 
+	if (!commandList->TransitionLifecycle(CommandListLifecycle::Available, CommandListLifecycle::Recording))
+	{
+		const CommandListLifecycle lifecycle = commandList->GetLifecycle();
+		EmitTelemetry({
+			.Category = "assertion",
+			.Name = "command_list_lease",
+			.Severity = DiagnosticTelemetrySeverity::Error,
+			.Fields = {
+				{ "result", std::string("fail") },
+				{ "queue", std::string(GetQueueTypeName(m_CommandListType)) },
+				{ "command_list_id", commandList->GetStableId() },
+				{ "lifecycle", std::string(GetCommandListLifecycleName(lifecycle)) },
+			},
+		});
+		throw std::logic_error(
+			"Command list #" + std::to_string(commandList->GetStableId()) +
+			" was leased while it was " + GetCommandListLifecycleName(lifecycle) + ".");
+	}
+
 	return commandList;
 }
 
@@ -209,10 +375,13 @@ uint64_t CommandQueue::ExecuteCommandList(std::shared_ptr<CommandList> commandLi
 
 uint64_t CommandQueue::ExecuteCommandLists(const std::vector<std::shared_ptr<CommandList>>& commandLists)
 {
+	ThrowIfQueueFailed();
 	if (commandLists.empty())
 	{
 		throw std::invalid_argument("Cannot submit an empty command-list collection.");
 	}
+	std::unordered_set<const CommandList*> uniqueCommandLists;
+	uniqueCommandLists.reserve(commandLists.size());
 	for (const std::shared_ptr<CommandList>& commandList : commandLists)
 	{
 		if (commandList == nullptr || commandList->GetCommandListType() != m_CommandListType)
@@ -232,6 +401,20 @@ uint64_t CommandQueue::ExecuteCommandLists(const std::vector<std::shared_ptr<Com
 			});
 			throw std::invalid_argument("Submitted command-list type does not match the command queue.");
 		}
+		if (!uniqueCommandLists.insert(commandList.get()).second)
+		{
+			EmitTelemetry({
+				.Category = "assertion",
+				.Name = "command_list_submission_unique",
+				.Severity = DiagnosticTelemetrySeverity::Error,
+				.Fields = {
+					{ "result", std::string("fail") },
+					{ "queue", std::string(GetQueueTypeName(m_CommandListType)) },
+					{ "command_list_id", commandList->GetStableId() },
+				},
+			});
+			throw std::invalid_argument("The same command list cannot be submitted more than once in one submission.");
+		}
 	}
 
 	auto submissionScope = m_DeviceContext->GetResourceStateRegistry()->AcquireSubmissionScope();
@@ -250,6 +433,11 @@ uint64_t CommandQueue::ExecuteCommandLists(const std::vector<std::shared_ptr<Com
 		auto pendingCommandList = GetCommandList();
 		bool hasPendingBarriers = commandList->Close(*pendingCommandList, submissionScope);
 		pendingCommandList->Close();
+		if (!commandList->TransitionLifecycle(CommandListLifecycle::Recording, CommandListLifecycle::Submitted) ||
+			!pendingCommandList->TransitionLifecycle(CommandListLifecycle::Recording, CommandListLifecycle::Submitted))
+		{
+			throw std::logic_error("Command-list lifecycle changed while closing a queue submission.");
+		}
 		// If there are no pending barriers on the pending command list, there is no reason to 
 		// execute an empty command list on the command queue.
 		if (hasPendingBarriers)
@@ -266,6 +454,13 @@ uint64_t CommandQueue::ExecuteCommandLists(const std::vector<std::shared_ptr<Com
 	UINT numCommandLists = static_cast<UINT>(d3d12CommandLists.size());
 	m_D3d12CommandQueue->ExecuteCommandLists(numCommandLists, d3d12CommandLists.data());
 	uint64_t fenceValue = Signal();
+	for (const std::shared_ptr<CommandList>& commandList : toBeQueued)
+	{
+		if (!commandList->TransitionLifecycle(CommandListLifecycle::Submitted, CommandListLifecycle::InFlight))
+		{
+			throw std::logic_error("Command-list lifecycle changed before its submission fence was recorded.");
+		}
+	}
 	if (HasDiagnosticTelemetrySink())
 	{
 		EmitTelemetry({
@@ -280,6 +475,19 @@ uint64_t CommandQueue::ExecuteCommandLists(const std::vector<std::shared_ptr<Com
 			{ "pending_barrier_command_list_count", pendingBarrierCommandListCount },
 		},
 		});
+		for (const std::shared_ptr<CommandList>& commandList : toBeQueued)
+		{
+			EmitTelemetry({
+				.Category = "command_queue.command_list",
+				.Name = "submitted",
+				.CorrelationId = MakeDiagnosticQueueFenceCorrelationId(GetQueueTypeName(m_CommandListType), fenceValue),
+				.Fields = {
+					{ "queue", std::string(GetQueueTypeName(m_CommandListType)) },
+					{ "command_list_id", commandList->GetStableId() },
+					{ "fence", fenceValue },
+				},
+			});
+		}
 	}
 
 	// Queue command lists for reuse.
@@ -355,6 +563,12 @@ void CommandQueue::ProcessInFlightCommandLists()
 
 		const auto fenceValue = std::get<0>(commandListEntry);
 		const auto commandList = std::get<1>(commandListEntry);
+		if (!commandList->TransitionLifecycle(CommandListLifecycle::InFlight, CommandListLifecycle::Retiring))
+		{
+			throw std::logic_error(
+				"Command list #" + std::to_string(commandList->GetStableId()) +
+				" entered retirement while it was " + GetCommandListLifecycleName(commandList->GetLifecycle()) + ".");
+		}
 
 		stage = "wait for submitted fence";
 		try
@@ -377,12 +591,19 @@ void CommandQueue::ProcessInFlightCommandLists()
 		}
 
 		stage = "return command list to available queue";
+		if (!commandList->TransitionLifecycle(CommandListLifecycle::Retiring, CommandListLifecycle::Available))
+		{
+			throw std::logic_error("Command-list lifecycle changed while returning a retired command list to the queue.");
+		}
 		m_AvailableCommandLists.Push(commandList);
 		m_ProcessInFlightCommandListsThreadCv.notify_one();
 	}
 	}
 	catch (const std::exception& exception)
 	{
+		SetFailure(std::string(stage) + ": " + exception.what());
+		m_IsProcessingInFlightCommandLists = false;
+		m_ProcessInFlightCommandListsThreadCv.notify_all();
 		EmitTelemetry({
 			.Category = "command_queue.failure",
 			.Name = "worker_failure",

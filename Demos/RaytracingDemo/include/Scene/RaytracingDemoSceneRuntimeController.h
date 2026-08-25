@@ -21,7 +21,7 @@ public:
         FrameworkDeviceContext& deviceContext,
         RaytracingDemoSceneResources& sceneResources,
         SceneLightManager& lights,
-        const DemoAutomation::RuntimeAutomationController& automation);
+        DemoAutomation::RuntimeAutomationController& automation);
 
 private:
     bool m_StressTestSpheresEnabled = false;

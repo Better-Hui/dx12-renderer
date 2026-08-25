@@ -15,13 +15,9 @@
 #include <Framework/Core/GraphicsSettings.h>
 #include <Framework/Geometry/Mesh.h>
 #include <Framework/Geometry/ModelLoader.h>
-#include <Framework/Rendering/Pipeline/RasterPipelineStateBuilder.h>
-#include <Framework/Rendering/Pipeline/ShaderBlob.h>
+#include <Framework/Rendering/Pipeline/PipelineLayout.h>
 //Modify Begin:2026-08-19 by Hui
 #include <Framework/Rendering/Texture/TextureLoader.h>
-//Modify End
-//Modify Begin:2026-08-19 by Hui
-#include <Framework/Rendering/Pipeline/ShaderTargetProfile.h>
 //Modify End
 //Modify Begin:2026-08-19 by Hui
 #include <Framework/Scene/SceneImporter.h>
@@ -476,6 +472,7 @@ RaytracingDemo::RaytracingDemo(
     , m_Width(width)
     , m_Height(height)
     , m_FrameworkDeviceContext(CreateFrameworkDeviceContext(application, std::move(frameFeatureServices)))
+    , m_ShaderPipelineBootstrap(m_FrameworkDeviceContext)
     , m_DLSS(m_FrameworkDeviceContext)
     , m_PathTracingPipelines(m_FrameworkDeviceContext)
     , m_ActivePixels(m_FrameworkDeviceContext)
@@ -717,7 +714,6 @@ RaytracingDemo::RaytracingDemo(
 //Modify Begin:2026-08-24 by Hui
 void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::filesystem::path& scenePath)
 {
-//Modify Begin:2026-08-23 by Hui
     SceneImportOptions importOptions;
     importOptions.GenerateFallbackCamera = true;
     SceneImportResult sceneImport;
@@ -733,7 +729,6 @@ void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::files
     {
         sceneImport = SceneImporter::ImportFromFile(scenePath, importOptions);
     }
-//Modify End
     m_Scene = sceneImport.SceneData;
     std::filesystem::path runtimeStatePath = scenePath;
     runtimeStatePath += ".runtime.json";
@@ -1200,6 +1195,8 @@ void RaytracingDemo::InitializeDiagnostics()
         "RAYTRACING_DEMO_UNITY_SCENE",
         "RAYTRACING_DEMO_MODE",
         "RAYTRACING_DEMO_RAY_TRACING_DISPATCH",
+        "RAYTRACING_DEMO_DIRECT_LIGHTING",
+        "RAYTRACING_DEMO_INDIRECT_LIGHTING",
         "RAYTRACING_DEMO_BOUNCES",
         "RAYTRACING_DEMO_MATERIAL_SHADING",
         "RAYTRACING_DEMO_SOFT_SHADOWS",
@@ -1415,7 +1412,6 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
             std::to_string(diagnostics->DispatchZ) + ").");
         break;
     }
-//Modify Begin:2026-08-25 by Hui
     case RuntimeAutomationAction::CopyQueueValidation:
         m_CopyQueueValidationEnabled = enabled;
         ResetAccumulation();
@@ -1513,11 +1509,6 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
     }
     case RuntimeAutomationAction::DynamicRayTracingUpdate:
         m_SceneResources.SetDynamicRayTracingUpdatesEnabled(enabled);
-        if (enabled)
-        {
-            m_UseMeshletGBuffer = false;
-            m_DebugMeshletClusters = false;
-        }
         ResetAccumulation();
         break;
     case RuntimeAutomationAction::VerifyDynamicRayTracingUpdate:
@@ -1539,15 +1530,24 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         const RayTracingAccelerationStructureUpdateStatistics& accelerationStats =
             m_SceneResources.GetRayTracingAccelerationStructure().GetUpdateStatistics();
         const bool verifyRestore = value != 0u;
+        const bool dynamicEmitterActive = m_SceneResources.HasActiveDynamicRayTracingEmitter();
+        const uint64_t minimumUpdateCount = verifyRestore ? 4u : 3u;
         const bool passed =
-            sceneStats.GeometryUploadCount >= (verifyRestore ? 4u : 3u) &&
-            sceneStats.RefitCount >= (verifyRestore ? 4u : 3u) &&
-            accelerationStats.BottomLevelUpdateCount >= (verifyRestore ? 4u : 3u) &&
-            accelerationStats.TopLevelUpdateCount >= (verifyRestore ? 4u : 3u) &&
-            accelerationStats.RetiredResourceCount >= (verifyRestore ? 4u : 3u) &&
+            sceneStats.GeometryUploadCount >= minimumUpdateCount &&
+            sceneStats.MeshletTransformUpdateCount >= minimumUpdateCount &&
+            sceneStats.MeshletGeometryUpdateCount >= minimumUpdateCount &&
+            (!dynamicEmitterActive || sceneStats.EmissiveMeshRefreshCount >= minimumUpdateCount) &&
+            sceneStats.RefitCount >= minimumUpdateCount &&
+            accelerationStats.BottomLevelUpdateCount >= minimumUpdateCount &&
+            accelerationStats.TopLevelUpdateCount >= minimumUpdateCount &&
+            accelerationStats.RetiredResourceCount >= minimumUpdateCount &&
             (!verifyRestore || (sceneStats.RestoreCount >= 1u && sceneStats.LastUpdateRestored));
         const std::string message =
             "Dynamic RTAS update: geometry_uploads=" + std::to_string(sceneStats.GeometryUploadCount) +
+            ", meshlet_transform_updates=" + std::to_string(sceneStats.MeshletTransformUpdateCount) +
+            ", meshlet_geometry_updates=" + std::to_string(sceneStats.MeshletGeometryUpdateCount) +
+            ", emissive_mesh_refreshes=" + std::to_string(sceneStats.EmissiveMeshRefreshCount) +
+            ", dynamic_emitter_active=" + std::to_string(dynamicEmitterActive) +
             ", refits=" + std::to_string(sceneStats.RefitCount) +
             ", blas_updates=" + std::to_string(accelerationStats.BottomLevelUpdateCount) +
             ", tlas_updates=" + std::to_string(accelerationStats.TopLevelUpdateCount) +
@@ -1566,6 +1566,9 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
                 message,
                 {
                     { "geometry_upload_count", sceneStats.GeometryUploadCount },
+                    { "meshlet_transform_update_count", sceneStats.MeshletTransformUpdateCount },
+                    { "meshlet_geometry_update_count", sceneStats.MeshletGeometryUpdateCount },
+                    { "emissive_mesh_refresh_count", sceneStats.EmissiveMeshRefreshCount },
                     { "refit_count", sceneStats.RefitCount },
                     { "restore_count", sceneStats.RestoreCount },
                     { "blas_update_count", accelerationStats.BottomLevelUpdateCount },
@@ -1578,7 +1581,38 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         m_RuntimeAutomation.AppendDiagnosticLog(message);
         break;
     }
-//Modify End
+    case RuntimeAutomationAction::VerifyDynamicSkinnedMeshCapability:
+    {
+        const RaytracingDemoDynamicSceneCapabilities& capabilities =
+            m_SceneResources.GetDynamicSceneCapabilities();
+        const bool passed =
+            capabilities.SupportsMeshletTransformUpdates &&
+            capabilities.SupportsMeshletGeometryUpdates &&
+            capabilities.SupportsDynamicEmissiveMeshUpdates &&
+            !capabilities.SupportsSkinnedMeshUpdates;
+        const std::string message =
+            "Dynamic scene capability: meshlet_transform=enabled, meshlet_geometry=enabled, "
+            "dynamic_emissive_mesh=enabled, skinned_mesh=explicitly_unsupported.";
+        if (m_Diagnostics.IsEnabled())
+        {
+            m_Diagnostics.RecordAssertion(
+                "dynamic_skinned_mesh_capability",
+                passed ? FrameworkDiagnostics::AssertionResult::Passed : FrameworkDiagnostics::AssertionResult::Failed,
+                message,
+                {
+                    { "meshlet_transform_updates", capabilities.SupportsMeshletTransformUpdates },
+                    { "meshlet_geometry_updates", capabilities.SupportsMeshletGeometryUpdates },
+                    { "dynamic_emissive_mesh_updates", capabilities.SupportsDynamicEmissiveMeshUpdates },
+                    { "skinned_mesh_updates", capabilities.SupportsSkinnedMeshUpdates },
+                });
+        }
+        if (!passed)
+        {
+            throw std::runtime_error(message);
+        }
+        m_RuntimeAutomation.AppendDiagnosticLog(message);
+        break;
+    }
     case RuntimeAutomationAction::AsyncCompute:
         if (m_PathTracingBackend == PathTracingBackend::InlineRayQuery)
         {
@@ -1867,20 +1901,6 @@ void RaytracingDemo::CapturePendingAutomationScreenshot(const RenderGraph::Rende
     m_PendingAutomationScreenshot.reset();
 }
 
-std::shared_ptr<ShaderBlob> RaytracingDemo::LoadShaderVariant(
-    std::wstring compiledFileName,
-    std::wstring sourceFileName,
-    std::string targetProfile,
-    std::vector<ShaderVariantDefine> defines)
-{
-    ShaderVariantDesc desc;
-    desc.CompiledFileName = std::move(compiledFileName);
-    desc.SourceFileName = std::move(sourceFileName);
-    desc.TargetProfile = std::move(targetProfile);
-    desc.Defines = std::move(defines);
-    desc.DebugName = "RaytracingDemo";
-    return m_ShaderVariants.GetOrCompile(desc);
-}
 //Modify End
 
 //Modify Begin:2026-08-23 by Hui
@@ -1926,10 +1946,8 @@ try
         }
         if (m_StartupSceneImport.wait_for(std::chrono::seconds::zero()) != std::future_status::ready)
         {
-//Modify Begin:2026-08-23 by Hui
             // Prevent the loading loop from monopolizing a CPU core while the importer runs.
             std::this_thread::sleep_for(std::chrono::milliseconds(16));
-//Modify End
             return true;
         }
 
@@ -1968,283 +1986,26 @@ try
     }
 //Modify End
 
-//Modify Begin:2026-08-19 by Hui
-    const auto withShaderCreateContext = [](const char* name, const auto& createShader)
-    {
-        try
-        {
-            createShader();
-        }
-        catch (const std::exception& exception)
-        {
-            throw std::runtime_error(std::string("Failed to create shader pipeline '") + name + "': " + exception.what());
-        }
-    };
-
-//Modify Begin:2026-08-23 by Hui
+//Modify Begin:2026-08-25 by Hui
     if (m_StartupLoadStage == StartupLoadStage::CreateGeometryPipelines)
     {
-//Modify End
-    withShaderCreateContext("GBuffer", [&]()
-    {
-//Modify End
-    const auto vertexShader = LoadShaderVariant(
-        L"GBuffer.vs.cso",
-        L"Demos/RaytracingDemo/shaders/GBuffer/GBuffer.vs.hlsl",
-        ShaderTargetProfile::Vertex());
-    const auto pixelShader = LoadShaderVariant(
-        L"GBuffer.ps.cso",
-        L"Demos/RaytracingDemo/shaders/GBuffer/GBuffer.ps.hlsl",
-        ShaderTargetProfile::Pixel());
-    PipelineLayoutReflectionOptions gBufferLayoutOptions;
-    gBufferLayoutOptions.MaxDescriptorCount = 4096u;
-    gBufferLayoutOptions.ShaderStages = PipelineShaderStageFlags::AllGraphics;
-    gBufferLayoutOptions.UsesBindlessResourceHeap = true;
-    gBufferLayoutOptions.StaticSamplerContracts = {
-        PipelineStaticSamplers::PointWrap(0u),
-        PipelineStaticSamplers::LinearWrap(1u),
-        PipelineStaticSamplers::PointClamp(2u),
-        PipelineStaticSamplers::LinearClamp(3u),
-        PipelineStaticSamplers::ShadowCompareClamp(4u)
-    };
-    m_GBufferShader = std::make_shared<Shader>(
-        m_FrameworkDeviceContext,
-        *vertexShader,
-        *pixelShader,
-        std::move(gBufferLayoutOptions),
-        [](RasterPipelineStateBuilder& builder)
-        {
-            builder.WithNoCull();
-        });
-//Modify Begin:2026-08-19 by Hui
-    });
-//Modify End
-
-//Modify Begin:2026-08-19 by Hui
-    withShaderCreateContext("GBufferTaskMeshShader", [&]()
-    {
-    const auto amplificationShader = LoadShaderVariant(
-        L"GBuffer.task.as.cso",
-        L"Demos/RaytracingDemo/shaders/GBuffer/GBuffer.task.as.hlsl",
-        ShaderTargetProfile::Amplification());
-    const auto meshShader = LoadShaderVariant(
-        L"GBuffer.task.ms.cso",
-        L"Demos/RaytracingDemo/shaders/GBuffer/GBuffer.task.ms.hlsl",
-        ShaderTargetProfile::Mesh());
-    const auto pixelShader = LoadShaderVariant(
-        L"GBuffer.meshletindirect.ps.cso",
-        L"Demos/RaytracingDemo/shaders/GBuffer/GBuffer.meshletindirect.ps.hlsl",
-        ShaderTargetProfile::Pixel());
-    PipelineLayoutReflectionOptions taskMeshLayoutOptions;
-    taskMeshLayoutOptions.MaxDescriptorCount = 4096u;
-    taskMeshLayoutOptions.ShaderStages = PipelineShaderStageFlags::AllGraphics;
-    taskMeshLayoutOptions.UsesBindlessResourceHeap = true;
-    taskMeshLayoutOptions.StaticSamplerContracts = {
-        PipelineStaticSamplers::PointWrap(0u),
-        PipelineStaticSamplers::LinearWrap(1u),
-        PipelineStaticSamplers::PointClamp(2u),
-        PipelineStaticSamplers::LinearClamp(3u),
-        PipelineStaticSamplers::ShadowCompareClamp(4u)
-    };
-    m_GBufferTaskMeshShader = std::make_shared<MeshShader>(
-        m_FrameworkDeviceContext,
-        *amplificationShader,
-        *meshShader,
-        *pixelShader,
-        std::move(taskMeshLayoutOptions),
-        [](RasterPipelineStateBuilder& builder)
-        {
-            builder.WithNoCull();
-        });
-    });
-//Modify End
-
-    withShaderCreateContext("GBufferMeshletIndirect", [&]()
-    {
-    const auto vertexShader = LoadShaderVariant(
-        L"GBuffer.meshletindirect.vs.cso",
-        L"Demos/RaytracingDemo/shaders/GBuffer/GBuffer.meshletindirect.vs.hlsl",
-        ShaderTargetProfile::Vertex());
-    const auto pixelShader = LoadShaderVariant(
-        L"GBuffer.meshletindirect.ps.cso",
-        L"Demos/RaytracingDemo/shaders/GBuffer/GBuffer.meshletindirect.ps.hlsl",
-        ShaderTargetProfile::Pixel());
-    PipelineLayoutReflectionOptions meshletIndirectLayoutOptions;
-    meshletIndirectLayoutOptions.MaxDescriptorCount = 4096u;
-    meshletIndirectLayoutOptions.ShaderStages = PipelineShaderStageFlags::AllGraphics;
-    meshletIndirectLayoutOptions.UsesBindlessResourceHeap = true;
-    meshletIndirectLayoutOptions.RootConstantBufferNames.push_back("MeshletDrawCBuffer");
-    meshletIndirectLayoutOptions.StaticSamplerContracts = {
-        PipelineStaticSamplers::PointWrap(0u),
-        PipelineStaticSamplers::LinearWrap(1u),
-        PipelineStaticSamplers::PointClamp(2u),
-        PipelineStaticSamplers::LinearClamp(3u),
-        PipelineStaticSamplers::ShadowCompareClamp(4u)
-    };
-    m_GBufferMeshletIndirectShader = std::make_shared<Shader>(
-        m_FrameworkDeviceContext,
-        *vertexShader,
-        *pixelShader,
-        meshletIndirectLayoutOptions,
-        [](RasterPipelineStateBuilder& builder)
-        {
-            builder.WithNoCull();
-        });
-    });
-
-    withShaderCreateContext("MeshletCull", [&]()
-    {
-    const auto meshletCullShaderBlob = LoadShaderVariant(
-        L"MeshletCull.cs.cso",
-        L"Demos/RaytracingDemo/shaders/GBuffer/MeshletCull.cs.hlsl",
-        ShaderTargetProfile::Compute());
-    m_MeshletCullShader = std::make_shared<ComputeShader>(
-        m_FrameworkDeviceContext,
-        *meshletCullShaderBlob,
-        ComputePipelineDescBuilder::ReflectedDefault(*meshletCullShaderBlob).Build());
-    m_MeshletDrawCommandSignature = m_GBufferMeshletIndirectShader->CreateIndirectDrawCommandSignature(
-        "MeshletDrawCBuffer",
-        sizeof(MeshletIndirectCommand));
-    });
-
-//Modify Begin:2026-08-23 by Hui
+        m_ShaderPipelineBootstrap.CreateGeometryPipelines();
         SetStartupLoadStage(StartupLoadStage::CreatePostProcessPipelines, "Creating post-processing pipelines", 0.66f);
         return true;
     }
 
-//Modify Begin:2026-08-23 by Hui
     if (m_StartupLoadStage == StartupLoadStage::CreatePostProcessPipelines)
-{
-//Modify End
-
-//Modify Begin:2026-08-19 by Hui
-    withShaderCreateContext("DisplayComposite", [&]()
     {
-    const auto vertexShader = LoadShaderVariant(
-        L"DisplayComposite.vs.cso",
-        L"Demos/RaytracingDemo/shaders/PostProcessing/DisplayComposite.vs.hlsl",
-        ShaderTargetProfile::Vertex());
-    const auto pixelShader = LoadShaderVariant(
-        L"DisplayComposite.ps.cso",
-        L"Demos/RaytracingDemo/shaders/PostProcessing/DisplayComposite.ps.hlsl",
-        ShaderTargetProfile::Pixel());
-    PipelineLayoutReflectionOptions displayCompositeLayoutOptions;
-    displayCompositeLayoutOptions.MaxDescriptorCount = 4096u;
-    displayCompositeLayoutOptions.ShaderStages = PipelineShaderStageFlags::AllGraphics;
-    displayCompositeLayoutOptions.StaticSamplerContracts = { PipelineStaticSamplers::LinearClamp(3u) };
-    m_DisplayCompositeShader = std::make_shared<Shader>(
-        m_FrameworkDeviceContext,
-        *vertexShader,
-        *pixelShader,
-        std::move(displayCompositeLayoutOptions),
-        [](RasterPipelineStateBuilder&) {});
-    });
-//Modify End
-
-//Modify Begin:2026-08-19 by Hui
-    withShaderCreateContext("SkyboxCompute", [&]()
-    {
-    const auto skyboxComputeShader = LoadShaderVariant(
-        L"Skybox.cs.cso",
-        L"Demos/RaytracingDemo/shaders/Skybox/Skybox.cs.hlsl",
-        ShaderTargetProfile::Compute());
-    m_SkyboxComputeShader = std::make_shared<ComputeShader>(
-        m_FrameworkDeviceContext,
-        *skyboxComputeShader,
-        ComputePipelineDescBuilder::ReflectedDefault(*skyboxComputeShader)
-            .WithCommonRootSignatureStaticSamplers()
-            .Build());
-
-    const auto equirectangularSkyboxComputeShader = LoadShaderVariant(
-        L"SkyboxEquirectangular.cs.cso",
-        L"Demos/RaytracingDemo/shaders/Skybox/SkyboxEquirectangular.cs.hlsl",
-        ShaderTargetProfile::Compute());
-    m_SkyboxEquirectangularComputeShader = std::make_shared<ComputeShader>(
-        m_FrameworkDeviceContext,
-        *equirectangularSkyboxComputeShader,
-        ComputePipelineDescBuilder::ReflectedDefault(*equirectangularSkyboxComputeShader)
-            .WithCommonRootSignatureStaticSamplers()
-            .Build());
-
-    const auto cubemapStripSkyboxComputeShader = LoadShaderVariant(
-        L"SkyboxCubemapStrip.cs.cso",
-        L"Demos/RaytracingDemo/shaders/Skybox/SkyboxCubemapStrip.cs.hlsl",
-        ShaderTargetProfile::Compute());
-    m_SkyboxCubemapStripComputeShader = std::make_shared<ComputeShader>(
-        m_FrameworkDeviceContext,
-        *cubemapStripSkyboxComputeShader,
-        ComputePipelineDescBuilder::ReflectedDefault(*cubemapStripSkyboxComputeShader)
-            .WithCommonRootSignatureStaticSamplers()
-            .Build());
-    });
-//Modify End
-
-//Modify Begin:2026-08-19 by Hui
-    withShaderCreateContext("DLSSRayReconstructionPrepare", [&]()
-    {
-        const auto rayReconstructionPrepareShader = LoadShaderVariant(
-            L"DLSSRayReconstructionPrepare.cs.cso",
-            L"Demos/RaytracingDemo/shaders/Upscaling/DLSSRayReconstructionPrepare.cs.hlsl",
-            ShaderTargetProfile::Compute());
-    m_DLSSRayReconstructionPrepareShader = std::make_shared<ComputeShader>(
-            m_FrameworkDeviceContext,
-            *rayReconstructionPrepareShader,
-            ComputePipelineDescBuilder::ReflectedDefault(*rayReconstructionPrepareShader).Build());
-    });
-//Modify End
-
-//Modify Begin:2026-08-25 by Hui
-    withShaderCreateContext("CopyQueueValidation", [&]()
-    {
-        const auto copyQueueValidationShader = LoadShaderVariant(
-            L"CopyQueueValidation.cs.cso",
-            L"Demos/RaytracingDemo/shaders/Diagnostics/CopyQueueValidation.cs.hlsl",
-            ShaderTargetProfile::Compute());
-        m_CopyQueueValidationShader = std::make_shared<ComputeShader>(
-            m_FrameworkDeviceContext,
-            *copyQueueValidationShader,
-            ComputePipelineDescBuilder::ReflectedDefault(*copyQueueValidationShader).Build());
-    });
-//Modify End
-
-//Modify Begin:2026-08-23 by Hui
-    SetStartupLoadStage(StartupLoadStage::CreateLightingPipeline, "Creating lighting pipeline", 0.80f);
-    return true;
-
-//Modify Begin:2026-08-23 by Hui
+        m_ShaderPipelineBootstrap.CreatePostProcessPipelines();
+        SetStartupLoadStage(StartupLoadStage::CreateLightingPipeline, "Creating lighting pipeline", 0.80f);
+        return true;
     }
-//Modify End
 
-//Modify Begin:2026-08-23 by Hui
     if (m_StartupLoadStage == StartupLoadStage::CreateLightingPipeline)
     {
-//Modify End
-
-    withShaderCreateContext("LightBillboard", [&]()
-    {
-    const auto vertexShader = LoadShaderVariant(
-        L"LightBillboard.vs.cso",
-        L"Demos/RaytracingDemo/shaders/LightBillboard/LightBillboard.vs.hlsl",
-        ShaderTargetProfile::Vertex());
-    const auto pixelShader = LoadShaderVariant(
-        L"LightBillboard.ps.cso",
-        L"Demos/RaytracingDemo/shaders/LightBillboard/LightBillboard.ps.hlsl",
-        ShaderTargetProfile::Pixel());
-    m_LightBillboardShader = std::make_shared<Shader>(
-        m_FrameworkDeviceContext,
-        *vertexShader,
-        *pixelShader,
-        [](RasterPipelineStateBuilder& builder)
-        {
-            builder.WithAlphaBlend().WithDepthTestNoWrite().WithNoCull();
-        });
-    });
-
-//Modify Begin:2026-08-23 by Hui
-    SetStartupLoadStage(StartupLoadStage::FinalizeRendering, "Building ray-tracing resources", 0.90f);
-    return true;
-
-//Modify Begin:2026-08-23 by Hui
+        m_ShaderPipelineBootstrap.CreateLightingPipelines();
+        SetStartupLoadStage(StartupLoadStage::FinalizeRendering, "Building ray-tracing resources", 0.90f);
+        return true;
     }
 //Modify End
 
@@ -2412,21 +2173,9 @@ void RaytracingDemo::UnloadContent()
     m_CudaBloom.ReleaseInteropResource();
 //Modify End
     m_RenderPipeline.Reset();
-    m_LightBillboardShader.reset();
-//Modify Begin:2026-08-19 by Hui
-    m_SkyboxComputeShader.reset();
-    m_SkyboxEquirectangularComputeShader.reset();
-    m_SkyboxCubemapStripComputeShader.reset();
-    m_DLSSRayReconstructionPrepareShader.reset();
-    m_DisplayCompositeShader.reset();
+//Modify Begin:2026-08-25 by Hui
+    m_ShaderPipelineBootstrap.Reset();
 //Modify End
-//Modify Begin:2026-08-19 by Hui
-    m_GBufferTaskMeshShader.reset();
-    m_GBufferMeshletIndirectShader.reset();
-    m_MeshletCullShader.reset();
-    m_MeshletDrawCommandSignature.reset();
-//Modify End
-    m_GBufferShader.reset();
     m_LightBillboardMesh.reset();
 //Modify Begin:2026-08-19 by Hui
     m_DisplayBlitMesh.reset();
@@ -2792,20 +2541,20 @@ RaytracingDemoPassResources RaytracingDemo::CreatePassResources()
         m_IndirectLightingReSTIRGI,
         m_IndirectLightingReSTIRGIPass,
         m_DLSS,
-        m_DLSSRayReconstructionPrepareShader,
-        m_CopyQueueValidationShader,
+        m_ShaderPipelineBootstrap.GetDLSSRayReconstructionPrepareShader(),
+        m_ShaderPipelineBootstrap.GetCopyQueueValidationShader(),
         m_Denoisers,
         m_CudaBloom,
         m_AutoExposure,
-        m_GBufferShader,
-        m_GBufferMeshletIndirectShader,
-        m_GBufferTaskMeshShader,
-        m_MeshletCullShader,
-        m_MeshletDrawCommandSignature.get(),
-        m_DisplayCompositeShader,
-        m_SkyboxComputeShader,
-        m_SkyboxEquirectangularComputeShader,
-        m_SkyboxCubemapStripComputeShader,
+        m_ShaderPipelineBootstrap.GetGBufferShader(),
+        m_ShaderPipelineBootstrap.GetMeshletIndirectGBufferShader(),
+        m_ShaderPipelineBootstrap.GetTaskMeshGBufferShader(),
+        m_ShaderPipelineBootstrap.GetMeshletCullShader(),
+        m_ShaderPipelineBootstrap.GetMeshletDrawCommandSignature(),
+        m_ShaderPipelineBootstrap.GetDisplayCompositeShader(),
+        m_ShaderPipelineBootstrap.GetSkyboxComputeShader(),
+        m_ShaderPipelineBootstrap.GetSkyboxEquirectangularComputeShader(),
+        m_ShaderPipelineBootstrap.GetSkyboxCubemapStripComputeShader(),
         m_SkyboxTexture,
         m_DisplayBlitMesh,
         GetSceneCamera(),
@@ -2837,10 +2586,8 @@ void RaytracingDemo::UpdateRenderGraphFrameState()
     state.DirectLightingTechnique = m_DirectLightingTechnique;
     state.IndirectLightingTechnique = m_IndirectLightingTechnique;
     state.AsyncComputeEnabled = m_AsyncComputeEnabled;
-//Modify Begin:2026-08-25 by Hui
     state.CopyQueueValidationEnabled = m_CopyQueueValidationEnabled;
     state.DynamicRayTracingUpdateEnabled = m_SceneResources.RequiresDynamicRayTracingUpdatePass();
-//Modify End
     state.UseMeshletGBuffer = m_UseMeshletGBuffer;
     state.UseTaskShaderMeshlets = m_UseTaskShaderMeshlets;
     state.DebugMeshletClusters = m_DebugMeshletClusters;
@@ -2998,17 +2745,31 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
         m_ImGui->Render();
     }
 
-    if (m_SceneRuntime.ApplyPendingChanges(
-        m_FrameworkDeviceContext,
-        m_SceneResources,
-        m_Lights,
-        m_RuntimeAutomation))
+    try
     {
-        m_RuntimeAutomation.AppendDiagnosticLog("Stress transition: rebuild render graph.");
-        RebuildRenderGraph();
-        m_RenderGraphTimingHistory.Clear();
-        ResetAccumulation();
-        m_RuntimeAutomation.AppendDiagnosticLog("Stress transition: complete.");
+        if (m_SceneRuntime.ApplyPendingChanges(
+            m_FrameworkDeviceContext,
+            m_SceneResources,
+            m_Lights,
+            m_RuntimeAutomation))
+        {
+            m_RuntimeAutomation.AppendDiagnosticLog("Stress transition: rebuild render graph.");
+            RebuildRenderGraph();
+            m_RenderGraphTimingHistory.Clear();
+            ResetAccumulation();
+            m_RuntimeAutomation.AppendDiagnosticLog("Stress transition: complete.");
+        }
+    }
+    catch (const std::exception& exception)
+    {
+        if (m_RuntimeAutomation.FailNow(
+            FrameworkDiagnostics::AutomationExitCode::ControlFailure,
+            "Scene runtime update failed: " + std::string(exception.what())))
+        {
+            return;
+        }
+        RecordDiagnosticsFailure("scene_runtime", exception);
+        throw;
     }
 
     if (m_DLSS.IsFrameGenerationEnabled())
@@ -3024,9 +2785,7 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     metadata.m_DisplayHeight = m_RenderGraphFrameState->DisplayHeight;
     metadata.m_FrameIndex = m_FrameIndex;
     metadata.m_Time = e.TotalTime;
-//Modify Begin:2026-08-23 by Hui
     metadata.m_DeltaTime = m_DeltaTime;
-//Modify End
 
     EnsureRenderGraphTopology();
     RenderGraph::RenderGraphRoot& renderGraph = m_RenderPipeline.GetRenderGraph();

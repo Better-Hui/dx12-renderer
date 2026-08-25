@@ -147,7 +147,7 @@ FBX 外部纹理在成功解析后保留文件路径；嵌入纹理复制到拥�
 - GBuffer：普通 raster、task/mesh shader，或 compute cull + `ExecuteIndirect`。
 - 直接光：`None`、path tracing 或 inline ray-query ReSTIR DI；间接光：`None`、path tracing 或 inline ray-query ReSTIR GI。
 - shader-table DXR 与 inline ray query 共用同一份 scene geometry、material、bindless texture、light buffer 和 acceleration structure。
-- 无人值守的 `rtas` 场景通过图声明的访问更新一个非 stress mesh 的 vertex buffer 与 transform，refit 其 dirty BLAS，再更新既有 TLAS；关闭后验证 restore frame。动态 meshlet-instance 同步尚未实现，因此这条路径会关闭 Meshlet GBuffer。
+- 无人值守的 `rtas` 场景覆盖基础动态 RTAS 路径；`dynamic-scene` 是当前完整矩阵：task shader 和 compute-indirect Meshlet GBuffer 均会通过图声明更新普通 vertex、compacted Meshlet vertex 与 bounds、transform/instance buffer、dirty BLAS 和既有 TLAS，随后验证 restore frame。自发光目标还会刷新 mesh surface-emitter 数据。runtime skinning output 当前明确不支持，绝不以过期数据静默 fallback。
 - 平行光、点光、矩形面积光与自发光 surface emitter 都通过 GPU buffer 上传。平行光和点光的软阴影使用预编译 shader variant；矩形面积光直接采样发光面。
 - 可选 NRD/SVGF、TAA、skybox、Framework Raster Bloom、CUDA Bloom、Native DLSS SR/DLAA，以及实验性 Streamline RR/FG 围绕核心光照输出组合。
 
@@ -176,7 +176,7 @@ shader-table DXR 与 Inline 共用 scene/resource model，但当前 ReSTIR DI/GI
 - 平台是 Windows/x64/D3D12，Shader Model 6.8 为基线。
 - Async Compute 只有依赖和硬件允许 overlap 时才可能降低 GPU wall time；额外 fence、cache 与带宽竞争也可能令它变慢。
 - Meshlet 是实验性的 GBuffer backend，不是完整的 visibility、streaming、residency 或 LOD 系统。
-- FBX 场景导入已经进入 Framework `SceneImporter` 契约，但当前只选择一个活动相机并支持实用的 PBR 子集。Spot Light 会保留在 `Scene` 中，而 sample 当前 GPU 光照路径通过点光 fallback 显示；透明、clearcoat、transmission、动画播放和动态蒙皮场景更新仍需要单独契约。
+- FBX 场景导入已经进入 Framework `SceneImporter` 契约，但当前只选择一个活动相机并支持实用的 PBR 子集。Spot Light 会保留在 `Scene` 中，而 sample 当前 GPU 光照路径通过点光 fallback 显示；透明、clearcoat、transmission、动画播放和 runtime skinning output 仍需要单独契约。在 skinned 输出能同时驱动 raster、Meshlet 和 BLAS 前，dynamic-scene capability 会明确报告 skinned update 不支持。
 - Diagnostics 当前尚未通用化 GPU texture/buffer readback、图像 assertion、DRED attachment、后台写盘、压缩和 retention policy；高事件量 capture 可能很大，应使用 `--max-events` 和 `dropped_event_count` 判断证据完整性。
 - ReSTIR DI/GI、CUDA Bloom、DLSS SR/DLAA、Streamline RR/FG、Unity interop 都是工程实验；用于交付前必须逐硬件完成正确性、画质、稳定性、显存和性能验证。
 

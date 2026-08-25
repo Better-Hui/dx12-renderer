@@ -40,6 +40,13 @@ public:
         size_t vertexStride,
         const void* vertexData) const;
 
+    void CopyStructuredBuffer(
+        CommandList& commandList,
+        StructuredBuffer& structuredBuffer,
+        size_t elementCount,
+        size_t elementSize,
+        const void* data) const;
+
     template <typename T>
     void UploadVertexBuffer(
         CommandList& commandList,
@@ -96,6 +103,15 @@ public:
         const std::vector<T>& data) const
     {
         UploadStructuredBuffer(commandList, structuredBuffer, data.size(), sizeof(T), data.data());
+    }
+
+    template <typename T>
+    void CopyStructuredBuffer(
+        CommandList& commandList,
+        StructuredBuffer& structuredBuffer,
+        const std::vector<T>& data) const
+    {
+        CopyStructuredBuffer(commandList, structuredBuffer, data.size(), sizeof(T), data.data());
     }
 
     void UploadTextureSubresources(

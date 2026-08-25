@@ -15,11 +15,17 @@
 
 #include <d3d12.h>
 
-//Modify Begin:2026-08-12 by Hui
+//Modify Begin:2026-08-25 by Hui
+namespace
+{
+    std::atomic_uint64_t g_NextCommandListStableId = 1u;
+}
+
 CommandList::CommandList(
     const D3D12_COMMAND_LIST_TYPE type,
     std::shared_ptr<D3D12DeviceContext> deviceContext)
     : m_D3d12CommandListType(type)
+    , m_StableId(g_NextCommandListStableId.fetch_add(1u, std::memory_order_relaxed))
     , m_DeviceContext(std::move(deviceContext))
     , m_Device(m_DeviceContext != nullptr ? m_DeviceContext->GetDevice() : nullptr)
     , m_ResourceStateRegistry(m_DeviceContext != nullptr ? m_DeviceContext->GetResourceStateRegistry() : nullptr)
@@ -35,6 +41,11 @@ CommandList::CommandList(
 
     ThrowIfFailed(m_D3d12CommandList.As(&m_D3d12CommandList5));
     ThrowIfFailed(m_D3d12CommandList.As(&m_D3d12CommandList6));
+
+    const std::wstring commandListName = L"CommandList #" + std::to_wstring(m_StableId);
+    const std::wstring allocatorName = commandListName + L" Allocator";
+    ThrowIfFailed(m_D3d12CommandList->SetName(commandListName.c_str()));
+    ThrowIfFailed(m_D3d12CommandAllocator->SetName(allocatorName.c_str()));
 
     m_PUploadBuffer = std::make_unique<UploadBuffer>(m_Device);
 
@@ -797,6 +808,25 @@ void CommandList::Reset()
     m_DescriptorTableRootSignature = nullptr;
 //Modify End
 }
+
+//Modify Begin:2026-08-25 by Hui
+bool CommandList::TransitionLifecycle(
+    const CommandListLifecycle expected,
+    const CommandListLifecycle desired) noexcept
+{
+    CommandListLifecycle current = expected;
+    return m_Lifecycle.compare_exchange_strong(
+        current,
+        desired,
+        std::memory_order_acq_rel,
+        std::memory_order_acquire);
+}
+
+CommandListLifecycle CommandList::GetLifecycle() const noexcept
+{
+    return m_Lifecycle.load(std::memory_order_acquire);
+}
+//Modify End
 
 void CommandList::TrackObject(const ComPtr<ID3D12Object>& object)
 {

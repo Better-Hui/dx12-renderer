@@ -49,6 +49,7 @@ public:
         m_Desc.DeviceContext->RecordDiagnosticTelemetry(std::move(event));
     }
     void Flush() const;
+    [[nodiscard]] bool FlushWithTimeout(uint32_t timeoutMilliseconds) const;
 
 private:
     FrameworkDeviceContextDesc m_Desc;

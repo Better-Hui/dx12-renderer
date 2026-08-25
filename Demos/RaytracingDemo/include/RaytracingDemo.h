@@ -11,6 +11,7 @@
 #include <Automation/RuntimeAutomationController.h>
 #include <Profiling/ProfilerDisplayController.h>
 #include <Profiling/RenderGraphTimingHistory.h>
+#include <Rendering/RaytracingDemoShaderPipelineController.h>
 //Modify End
 //Modify Begin:2026-08-19 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
@@ -18,11 +19,6 @@
 //Modify End
 #include <Framework/UI/ImGuiImpl.h>
 #include <Framework/Geometry/Model.h>
-#include <Framework/Rendering/Pipeline/ComputeShader.h>
-//Modify Begin:2026-08-19 by Hui
-#include <Framework/Rendering/Pipeline/IndirectCommandSignature.h>
-#include <Framework/Rendering/Pipeline/MeshShader.h>
-//Modify End
 #include <Framework/Rendering/RayTracing/RayTracingShader.h>
 #include <Framework/Rendering/Lighting/ReSTIRDIPass.h>
 #include <Framework/Rendering/Lighting/ActivePixelListController.h>
@@ -36,10 +32,6 @@
 #include <Framework/Scene/Scene.h>
 //Modify Begin:2026-08-23 by Hui
 #include <Framework/Scene/SceneImporter.h>
-//Modify End
-#include <Framework/Rendering/Pipeline/Shader.h>
-//Modify Begin:2026-08-19 by Hui
-#include <Framework/Rendering/Pipeline/ShaderVariant.h>
 //Modify End
 
 #include <RenderGraph/RaytracingDemoRenderPipelineController.h>
@@ -163,13 +155,6 @@ private:
     void PrewarmRuntimeShadowVariants();
 //Modify End
     void BindRayTracingShaderResources();
-//Modify Begin:2026-08-19 by Hui
-    std::shared_ptr<ShaderBlob> LoadShaderVariant(
-        std::wstring compiledFileName,
-        std::wstring sourceFileName,
-        std::string targetProfile,
-        std::vector<ShaderVariantDefine> defines = {});
-//Modify End
     PipelineConstants BuildPipelineConstants() const;
 //Modify Begin:2026-08-19 by Hui
     void RebuildRenderGraph();
@@ -195,12 +180,10 @@ private:
 //Modify End
 //Modify Begin:2026-08-24 by Hui
     void LoadSceneContent(CommandList& commandList, const std::filesystem::path& scenePath);
-//Modify Begin:2026-08-23 by Hui
     bool AdvanceStartupLoad();
     void RenderStartupLoadingScreen();
     void SetStartupLoadStage(StartupLoadStage stage, std::string status, float progress);
     bool IsStartupLoadComplete() const { return m_StartupLoadStage == StartupLoadStage::Complete; }
-//Modify End
     void ResetCameraToInitialSceneState();
     void LoadStartupConfiguration();
     void InitializeDiagnostics();
@@ -220,16 +203,12 @@ private:
     //Modify End
     std::shared_ptr<RaytracingDemoFrameState> m_RenderGraphFrameState = std::make_shared<RaytracingDemoFrameState>();
     int m_DebugTextureTarget = 0;
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-25 by Hui
     FrameworkDeviceContext m_FrameworkDeviceContext;
+    RaytracingDemoShaderPipelineController m_ShaderPipelineBootstrap;
     FrameworkDiagnostics::DiagnosticsSession m_Diagnostics;
     DLSS m_DLSS;
     DLSSFrameGenerationInputs m_FrameGenerationInputs;
-    std::shared_ptr<ComputeShader> m_DLSSRayReconstructionPrepareShader;
-//Modify Begin:2026-08-25 by Hui
-    std::shared_ptr<ComputeShader> m_CopyQueueValidationShader;
-//Modify End
-    ShaderVariantManager m_ShaderVariants;
     PathTracingPipelineController m_PathTracingPipelines;
     ActivePixelListController m_ActivePixels;
     ReSTIRDIPass m_DirectLightingReSTIRDIPass;
@@ -261,22 +240,6 @@ private:
 //Modify Begin:2026-08-19 by Hui
     std::shared_ptr<Mesh> m_DisplayBlitMesh;
 //Modify End
-    std::shared_ptr<Shader> m_GBufferShader;
-//Modify Begin:2026-08-19 by Hui
-    std::shared_ptr<Shader> m_GBufferMeshletIndirectShader;
-    std::shared_ptr<ComputeShader> m_MeshletCullShader;
-    std::unique_ptr<IndirectCommandSignature> m_MeshletDrawCommandSignature;
-    std::shared_ptr<MeshShader> m_GBufferTaskMeshShader;
-//Modify End
-//Modify Begin:2026-08-19 by Hui
-    std::shared_ptr<Shader> m_DisplayCompositeShader;
-//Modify End
-//Modify Begin:2026-08-19 by Hui
-    std::shared_ptr<ComputeShader> m_SkyboxComputeShader;
-    std::shared_ptr<ComputeShader> m_SkyboxEquirectangularComputeShader;
-    std::shared_ptr<ComputeShader> m_SkyboxCubemapStripComputeShader;
-//Modify End
-    std::shared_ptr<Shader> m_LightBillboardShader;
     std::shared_ptr<Texture> m_SkyboxTexture;
 
     float m_DeltaTime = 0.0f;
@@ -302,9 +265,7 @@ private:
 //Modify End
 //Modify Begin:2026-08-20 by Hui
     bool m_AsyncComputeEnabled = false;
-//Modify Begin:2026-08-25 by Hui
     bool m_CopyQueueValidationEnabled = false;
-//Modify End
     bool m_DebugSerializeAsyncCompute = false;
     bool m_ParallelDirectCommandRecordingEnabled = true;
     int m_DebugLightingTextureTarget = 0;
@@ -344,7 +305,6 @@ private:
     std::string m_CameraSaveStatus;
     std::string m_StartupConfigurationStatus;
 
-//Modify Begin:2026-08-23 by Hui
     StartupLoadStage m_StartupLoadStage = StartupLoadStage::Bootstrap;
     std::filesystem::path m_StartupScenePath;
     std::future<SceneImportResult> m_StartupSceneImport;
@@ -352,7 +312,6 @@ private:
     float m_StartupLoadProgress = 0.0f;
     std::string m_StartupLoadStatus = "Preparing renderer";
     std::chrono::steady_clock::time_point m_StartupLoadStartTime;
-//Modify End
 
     struct
     {

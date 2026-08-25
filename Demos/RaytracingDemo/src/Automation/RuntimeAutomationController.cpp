@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-08-25 by Hui
 #include <Automation/RuntimeAutomationController.h>
 
 #include <Framework/Diagnostics/DiagnosticsSession.h>
@@ -88,6 +88,21 @@ void DemoAutomation::RuntimeAutomationController::Initialize(
     {
         steps = testSuites.Stress;
     }
+    else if (mode == "meshlet-indirect")
+    {
+        steps = testSuites.MeshletIndirect;
+        if (GetEnvironmentVariable("RAYTRACING_DEMO_MESHLET_GBUFFER") == "0" ||
+            GetEnvironmentVariable("RAYTRACING_DEMO_MESHLET_BACKEND") != "indirect" ||
+            GetEnvironmentVariable("RAYTRACING_DEMO_DIRECT_LIGHTING") != "none" ||
+            GetEnvironmentVariable("RAYTRACING_DEMO_INDIRECT_LIGHTING") != "none" ||
+            GetEnvironmentVariable("RAYTRACING_DEMO_DENOISER") != "off")
+        {
+            throw std::runtime_error(
+                "meshlet-indirect automation requires RAYTRACING_DEMO_MESHLET_GBUFFER=1 and "
+                "RAYTRACING_DEMO_MESHLET_BACKEND=indirect, RAYTRACING_DEMO_DIRECT_LIGHTING=none, "
+                "RAYTRACING_DEMO_INDIRECT_LIGHTING=none, and RAYTRACING_DEMO_DENOISER=off at startup.");
+        }
+    }
     else if (mode == "copy")
     {
         steps = testSuites.CopyQueue;
@@ -95,6 +110,10 @@ void DemoAutomation::RuntimeAutomationController::Initialize(
     else if (mode == "rtas")
     {
         steps = testSuites.Rtas;
+    }
+    else if (mode == "dynamic-scene")
+    {
+        steps = testSuites.DynamicScene;
     }
     else if (mode == "matrix")
     {
@@ -153,7 +172,7 @@ void DemoAutomation::RuntimeAutomationController::Initialize(
     else
     {
         throw std::runtime_error(
-            "RAYTRACING_DEMO_AUTOTEST must be 'core', 'stress', 'copy', 'rtas', 'matrix', 'restirgi-profile', 'restirgi-variants', 'restirdi-variants', or 'visual'.");
+            "RAYTRACING_DEMO_AUTOTEST must be 'core', 'stress', 'meshlet-indirect', 'copy', 'rtas', 'dynamic-scene', 'matrix', 'restirgi-profile', 'restirgi-variants', 'restirdi-variants', or 'visual'.");
     }
 
     AppendLog("Mode=" + mode + ", step interval=" + std::to_string(m_StepIntervalSeconds) + " seconds.");
@@ -248,6 +267,19 @@ void DemoAutomation::RuntimeAutomationController::AppendDiagnosticLog(const std:
             { { "message", message } });
     }
     AppendLog(message);
+}
+
+bool DemoAutomation::RuntimeAutomationController::FailNow(
+    const FrameworkDiagnostics::AutomationExitCode exitCode,
+    std::string message)
+{
+    if (!m_Runner.IsRunning())
+    {
+        return false;
+    }
+
+    m_Runner.FailNow(exitCode, std::move(message));
+    return true;
 }
 
 void DemoAutomation::RuntimeAutomationController::AppendLog(const std::string& message) const

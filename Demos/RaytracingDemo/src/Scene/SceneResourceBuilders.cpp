@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-08-25 by Hui
 #include <Scene/SceneResourceBuilders.h>
 
 #include <DX12Library/CommandList.h>
@@ -275,9 +275,32 @@ bool SceneGeometryResources::UpdateObjectWorldMatrix(
     return true;
 }
 
+bool SceneGeometryResources::UpdateGeometryPrototypeVertices(
+    const uint32_t geometryIndex,
+    const uint32_t prototypeIndex,
+    const std::span<const VertexAttributes> vertices)
+{
+    if (geometryIndex >= m_Geometries.size() ||
+        prototypeIndex >= m_Geometries[geometryIndex].MeshPrototypes.size())
+    {
+        return false;
+    }
+
+    MeshPrototype& prototype = m_Geometries[geometryIndex].MeshPrototypes[prototypeIndex];
+    if (prototype.m_Vertices.size() != vertices.size())
+    {
+        return false;
+    }
+
+    std::copy(vertices.begin(), vertices.end(), prototype.m_Vertices.begin());
+    return true;
+}
+
 void SceneMeshletResources::Clear()
 {
     m_Resources.Clear();
+    m_SceneInstanceHandles.clear();
+    m_SceneInstanceSources.clear();
     m_StressInstanceHandles.clear();
 }
 
@@ -297,12 +320,22 @@ void SceneMeshletResources::Initialize(
 
     m_Resources.Clear();
     m_Resources.InitializeGeometries(meshletGeometries);
+    m_SceneInstanceHandles.clear();
+    m_SceneInstanceHandles.reserve(objects.size());
+    m_SceneInstanceSources.clear();
+    m_SceneInstanceSources.reserve(objects.size());
     m_StressInstanceHandles.clear();
     for (size_t objectIndex = 0; objectIndex < objects.size(); ++objectIndex)
     {
         const RaytracingDemoSceneObject& object = objects[objectIndex];
-        const MeshletSceneInstanceHandle handle = m_Resources.AddInstance(
-            { object.WorldMatrix, object.GeometryIndex, object.MaterialIndex });
+        const MeshletSceneInstanceSource instanceSource = {
+            object.WorldMatrix,
+            object.GeometryIndex,
+            object.MaterialIndex
+        };
+        const MeshletSceneInstanceHandle handle = m_Resources.AddInstance(instanceSource);
+        m_SceneInstanceHandles.push_back(handle);
+        m_SceneInstanceSources.push_back(instanceSource);
         if (stressObjectsEnabled && stressObjectCount > 0 && objectIndex >= stressObjectStart)
         {
             m_StressInstanceHandles.push_back(handle);
@@ -323,6 +356,28 @@ void SceneMeshletResources::RemoveStressInstances()
 {
     m_Resources.RemoveInstances(m_StressInstanceHandles);
     m_StressInstanceHandles.clear();
+}
+
+bool SceneMeshletResources::UpdateSceneObjectTransform(
+    const size_t objectIndex,
+    const DirectX::XMMATRIX& worldMatrix)
+{
+    if (objectIndex >= m_SceneInstanceHandles.size())
+    {
+        return false;
+    }
+
+    MeshletSceneInstanceSource& instanceSource = m_SceneInstanceSources[objectIndex];
+    instanceSource.WorldMatrix = worldMatrix;
+    return m_Resources.UpdateInstance(m_SceneInstanceHandles[objectIndex], instanceSource);
+}
+
+bool SceneMeshletResources::UpdateSceneGeometryVertices(
+    const uint32_t geometryIndex,
+    const uint32_t prototypeIndex,
+    const std::span<const VertexAttributes> vertices)
+{
+    return m_Resources.UpdateGeometryVertices(geometryIndex, prototypeIndex, vertices);
 }
 
 void SceneMeshletResources::Upload(CommandList& commandList)

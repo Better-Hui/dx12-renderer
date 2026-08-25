@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-08-25 by Hui
 #include <Automation/RaytracingDemoAutomation.h>
 
 #include <utility>
@@ -88,12 +88,11 @@ const char* RaytracingDemoAutomation::GetActionControlName(const Action action)
     case Action::MaxBounces: return "raytracing.max_bounces";
     case Action::Wait: return "automation.wait";
     case Action::VerifyActiveRayTracedPixelCount: return "assert.active_pixel_dispatch";
-//Modify Begin:2026-08-25 by Hui
     case Action::CopyQueueValidation: return "render_graph.copy_queue_validation";
     case Action::VerifyCopyQueueValidation: return "assert.copy_queue_validation";
     case Action::DynamicRayTracingUpdate: return "raytracing.dynamic_rtas_update";
     case Action::VerifyDynamicRayTracingUpdate: return "assert.dynamic_rtas_update";
-//Modify End
+    case Action::VerifyDynamicSkinnedMeshCapability: return "assert.dynamic_skinned_mesh_capability";
     case Action::CaptureScreenshot: return "capture.screenshot";
     case Action::MatrixCase: return "scenario.matrix_case";
     default: return "unknown";
@@ -250,7 +249,6 @@ DemoAutomation::TestSuites RaytracingDemoAutomation::CreateTestSuites()
     testSuites.Core = {
         makeStep(Action::GpuTiming, 1u, "timing=1"),
         makeStep(Action::TimingCapture, 1u, "timingcapture=1"),
-//Modify Begin:2026-08-25 by Hui
         makeStep(Action::CopyQueueValidation, 1u, "copyqueue=1"),
         makeStep(Action::Wait, 0u, "copyqueue-warmup"),
         makeStep(Action::VerifyCopyQueueValidation, 0u, "copyqueue-verify"),
@@ -263,7 +261,6 @@ DemoAutomation::TestSuites RaytracingDemoAutomation::CreateTestSuites()
         makeStep(Action::DynamicRayTracingUpdate, 0u, "rtas-update=0"),
         makeStep(Action::Wait, 0u, "rtas-update-restore"),
         makeStep(Action::VerifyDynamicRayTracingUpdate, 1u, "rtas-update-restore-verify"),
-//Modify End
         makeStep(Action::SoftShadows, 0u, "soft=0"),
         makeStep(Action::SoftShadows, 1u, "soft=1"),
         makeStep(Action::StressSpheres, 1u, "stress=1"),
@@ -315,7 +312,13 @@ DemoAutomation::TestSuites RaytracingDemoAutomation::CreateTestSuites()
         makeStep(Action::StressSpheres, 1u, "stress=1"),
         makeStep(Action::StressSpheres, 0u, "stress=0"),
     };
-//Modify Begin:2026-08-25 by Hui
+    testSuites.MeshletIndirect = {
+        makeStep(Action::Wait, 0u, "meshlet-indirect-warmup"),
+        makeStep(Action::StressSpheres, 1u, "meshlet-indirect-stress=1"),
+        makeStep(Action::Wait, 0u, "meshlet-indirect-stress-warmup"),
+        makeStep(Action::StressSpheres, 0u, "meshlet-indirect-stress=0"),
+        makeStep(Action::Wait, 0u, "meshlet-indirect-restore-warmup"),
+    };
     testSuites.CopyQueue = {
         makeStep(Action::CopyQueueValidation, 1u, "copyqueue=1"),
         makeStep(Action::Wait, 0u, "copyqueue-warmup"),
@@ -332,7 +335,28 @@ DemoAutomation::TestSuites RaytracingDemoAutomation::CreateTestSuites()
         makeStep(Action::Wait, 0u, "rtas-update-restore"),
         makeStep(Action::VerifyDynamicRayTracingUpdate, 1u, "rtas-update-restore-verify"),
     };
-//Modify End
+    testSuites.DynamicScene = {
+        makeStep(Action::MeshletGBuffer, 1u, "dynamic-scene-meshlet=1"),
+        makeStep(Action::MeshletTaskShader, 1u, "dynamic-scene-backend=task"),
+        makeStep(Action::DynamicRayTracingUpdate, 1u, "dynamic-scene-task-update=1"),
+        makeStep(Action::Wait, 0u, "dynamic-scene-task-warmup=1"),
+        makeStep(Action::Wait, 0u, "dynamic-scene-task-warmup=2"),
+        makeStep(Action::Wait, 0u, "dynamic-scene-task-warmup=3"),
+        makeStep(Action::VerifyDynamicRayTracingUpdate, 0u, "dynamic-scene-task-verify"),
+        makeStep(Action::DynamicRayTracingUpdate, 0u, "dynamic-scene-task-update=0"),
+        makeStep(Action::Wait, 0u, "dynamic-scene-task-restore"),
+        makeStep(Action::VerifyDynamicRayTracingUpdate, 1u, "dynamic-scene-task-restore-verify"),
+        makeStep(Action::MeshletTaskShader, 0u, "dynamic-scene-backend=indirect"),
+        makeStep(Action::DynamicRayTracingUpdate, 1u, "dynamic-scene-indirect-update=1"),
+        makeStep(Action::Wait, 0u, "dynamic-scene-indirect-warmup=1"),
+        makeStep(Action::Wait, 0u, "dynamic-scene-indirect-warmup=2"),
+        makeStep(Action::Wait, 0u, "dynamic-scene-indirect-warmup=3"),
+        makeStep(Action::VerifyDynamicRayTracingUpdate, 0u, "dynamic-scene-indirect-verify"),
+        makeStep(Action::DynamicRayTracingUpdate, 0u, "dynamic-scene-indirect-update=0"),
+        makeStep(Action::Wait, 0u, "dynamic-scene-indirect-restore"),
+        makeStep(Action::VerifyDynamicRayTracingUpdate, 1u, "dynamic-scene-indirect-restore-verify"),
+        makeStep(Action::VerifyDynamicSkinnedMeshCapability, 0u, "dynamic-scene-skinned-explicit-reject"),
+    };
     testSuites.Visual = {
         makeStep(Action::DLSS, static_cast<uint32_t>(DLSSMode::Disabled), "visual-dlss=off"),
         makeStep(Action::MaterialShading, static_cast<uint32_t>(MaterialShadingModel::Pbr), "visual-shading=pbr"),

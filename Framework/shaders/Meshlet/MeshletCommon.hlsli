@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-31 by Hui
+//Modify Begin:2026-08-25 by Hui
 #ifndef FRAMEWORK_MESHLET_COMMON_HLSLI
 #define FRAMEWORK_MESHLET_COMMON_HLSLI
 
@@ -46,8 +46,8 @@ struct Meshlet
 
 struct MeshletTransformData
 {
-    matrix Model;
-    matrix InverseTransposeModel;
+    row_major float4x4 Model;
+    row_major float4x4 InverseTransposeModel;
 };
 
 struct MeshletInstanceData
@@ -102,7 +102,7 @@ bool MeshletFrustumCullSphere(float4 frustumPlanes[6], float3 center, float radi
     return true;
 }
 
-float MeshletGetMaxScale(matrix model)
+float MeshletGetMaxScale(row_major float4x4 model)
 {
     const float3 axisX = float3(model._11, model._12, model._13);
     const float3 axisY = float3(model._21, model._22, model._23);
