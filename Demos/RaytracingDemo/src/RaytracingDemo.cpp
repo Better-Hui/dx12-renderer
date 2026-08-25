@@ -1415,6 +1415,170 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
             std::to_string(diagnostics->DispatchZ) + ").");
         break;
     }
+//Modify Begin:2026-08-25 by Hui
+    case RuntimeAutomationAction::CopyQueueValidation:
+        m_CopyQueueValidationEnabled = enabled;
+        ResetAccumulation();
+        break;
+    case RuntimeAutomationAction::VerifyCopyQueueValidation:
+    {
+        const auto failCopyQueueAssertion = [this](std::string message)
+        {
+            if (m_Diagnostics.IsEnabled())
+            {
+                m_Diagnostics.RecordAssertion(
+                    "copy_queue_validation",
+                    FrameworkDiagnostics::AssertionResult::Failed,
+                    message);
+            }
+            throw std::runtime_error(std::move(message));
+        };
+
+        if (!m_CopyQueueValidationEnabled)
+        {
+            failCopyQueueAssertion("Copy queue validation was disabled before verification.");
+        }
+
+        const RenderGraph::RenderGraphRoot& renderGraph = m_RenderPipeline.GetRenderGraph();
+        const RenderGraph::RenderGraphCrossQueuePlanValidation& plan =
+            renderGraph.GetCrossQueuePlanValidation();
+        const RenderGraph::RenderGraphQueueSynchronizationStats& synchronization =
+            renderGraph.GetFrameSynchronizationStats();
+        const RenderGraph::RenderGraphQueueFenceValues frameFences =
+            renderGraph.GetFrameSubmissionFences();
+        const RenderGraph::RenderGraphQueueFenceValues copiedColorRetirement =
+            renderGraph.GetResourceRetirement(
+                RaytracingDemoRenderGraph::ResourceIds::CopyQueueValidationColor);
+        const RenderGraph::RenderGraphQueueFenceValues computeColorRetirement =
+            renderGraph.GetResourceRetirement(
+                RaytracingDemoRenderGraph::ResourceIds::CopyQueueValidationComputeColor);
+
+        const bool passed =
+            plan.IsValid() &&
+            plan.CopyPassCount >= 1u &&
+            plan.DirectToCopyTransferCount >= 1u &&
+            plan.CopyToConsumerTransferCount >= 1u &&
+            frameFences.Copy != 0u &&
+            frameFences.AsyncCompute != 0u &&
+            synchronization.GetSubmissionCount(RenderGraph::RenderPassQueue::Copy) >= 1u &&
+            synchronization.GetSubmissionCount(RenderGraph::RenderPassQueue::AsyncCompute) >= 1u &&
+            synchronization.GetWaitCount(
+                RenderGraph::RenderPassQueue::Direct,
+                RenderGraph::RenderPassQueue::Copy) >= 1u &&
+            synchronization.GetWaitCount(
+                RenderGraph::RenderPassQueue::Copy,
+                RenderGraph::RenderPassQueue::Direct) >= 1u &&
+            synchronization.GetWaitCount(
+                RenderGraph::RenderPassQueue::Direct,
+                RenderGraph::RenderPassQueue::AsyncCompute) >= 1u &&
+            synchronization.GetWaitCount(
+                RenderGraph::RenderPassQueue::AsyncCompute,
+                RenderGraph::RenderPassQueue::Direct) >= 1u &&
+            copiedColorRetirement.Copy != 0u &&
+            copiedColorRetirement.AsyncCompute != 0u &&
+            computeColorRetirement.AsyncCompute != 0u &&
+            computeColorRetirement.Direct != 0u;
+        const std::string message =
+            "Copy queue handoff: cross_queue_transfers=" +
+            std::to_string(plan.CrossQueueResourceTransferCount) +
+            ", missing_state_transitions=" + std::to_string(plan.MissingStatePlanTransitionCount) +
+            ", incorrect_state_transitions=" + std::to_string(plan.IncorrectStatePlanTransitionCount) +
+            ", copy_fence=" + std::to_string(frameFences.Copy) +
+            ", async_fence=" + std::to_string(frameFences.AsyncCompute) + ".";
+        if (!passed)
+        {
+            failCopyQueueAssertion(message);
+        }
+
+        if (m_Diagnostics.IsEnabled())
+        {
+            m_Diagnostics.RecordAssertion(
+                "copy_queue_validation",
+                FrameworkDiagnostics::AssertionResult::Passed,
+                message,
+                {
+                    { "cross_queue_transfer_count", plan.CrossQueueResourceTransferCount },
+                    { "copy_pass_count", plan.CopyPassCount },
+                    { "direct_to_copy_transfer_count", plan.DirectToCopyTransferCount },
+                    { "copy_to_consumer_transfer_count", plan.CopyToConsumerTransferCount },
+                    { "copy_submission_count", synchronization.GetSubmissionCount(RenderGraph::RenderPassQueue::Copy) },
+                    { "async_submission_count", synchronization.GetSubmissionCount(RenderGraph::RenderPassQueue::AsyncCompute) },
+                    { "copy_retirement_fence", copiedColorRetirement.Copy },
+                    { "async_retirement_fence", copiedColorRetirement.AsyncCompute },
+                    { "direct_consumer_retirement_fence", computeColorRetirement.Direct },
+                });
+        }
+        m_RuntimeAutomation.AppendDiagnosticLog(message);
+        break;
+    }
+    case RuntimeAutomationAction::DynamicRayTracingUpdate:
+        m_SceneResources.SetDynamicRayTracingUpdatesEnabled(enabled);
+        if (enabled)
+        {
+            m_UseMeshletGBuffer = false;
+            m_DebugMeshletClusters = false;
+        }
+        ResetAccumulation();
+        break;
+    case RuntimeAutomationAction::VerifyDynamicRayTracingUpdate:
+    {
+        const auto failDynamicRtasAssertion = [this](std::string message)
+        {
+            if (m_Diagnostics.IsEnabled())
+            {
+                m_Diagnostics.RecordAssertion(
+                    "dynamic_rtas_update",
+                    FrameworkDiagnostics::AssertionResult::Failed,
+                    message);
+            }
+            throw std::runtime_error(std::move(message));
+        };
+
+        const RaytracingDemoDynamicRtasUpdateStatistics& sceneStats =
+            m_SceneResources.GetDynamicRayTracingUpdateStatistics();
+        const RayTracingAccelerationStructureUpdateStatistics& accelerationStats =
+            m_SceneResources.GetRayTracingAccelerationStructure().GetUpdateStatistics();
+        const bool verifyRestore = value != 0u;
+        const bool passed =
+            sceneStats.GeometryUploadCount >= (verifyRestore ? 4u : 3u) &&
+            sceneStats.RefitCount >= (verifyRestore ? 4u : 3u) &&
+            accelerationStats.BottomLevelUpdateCount >= (verifyRestore ? 4u : 3u) &&
+            accelerationStats.TopLevelUpdateCount >= (verifyRestore ? 4u : 3u) &&
+            accelerationStats.RetiredResourceCount >= (verifyRestore ? 4u : 3u) &&
+            (!verifyRestore || (sceneStats.RestoreCount >= 1u && sceneStats.LastUpdateRestored));
+        const std::string message =
+            "Dynamic RTAS update: geometry_uploads=" + std::to_string(sceneStats.GeometryUploadCount) +
+            ", refits=" + std::to_string(sceneStats.RefitCount) +
+            ", blas_updates=" + std::to_string(accelerationStats.BottomLevelUpdateCount) +
+            ", tlas_updates=" + std::to_string(accelerationStats.TopLevelUpdateCount) +
+            ", retired_resources=" + std::to_string(accelerationStats.RetiredResourceCount) +
+            ", restores=" + std::to_string(sceneStats.RestoreCount) + ".";
+        if (!passed)
+        {
+            failDynamicRtasAssertion(message);
+        }
+
+        if (m_Diagnostics.IsEnabled())
+        {
+            m_Diagnostics.RecordAssertion(
+                "dynamic_rtas_update",
+                FrameworkDiagnostics::AssertionResult::Passed,
+                message,
+                {
+                    { "geometry_upload_count", sceneStats.GeometryUploadCount },
+                    { "refit_count", sceneStats.RefitCount },
+                    { "restore_count", sceneStats.RestoreCount },
+                    { "blas_update_count", accelerationStats.BottomLevelUpdateCount },
+                    { "tlas_update_count", accelerationStats.TopLevelUpdateCount },
+                    { "tlas_build_count", accelerationStats.TopLevelBuildCount },
+                    { "retired_resource_count", accelerationStats.RetiredResourceCount },
+                    { "verified_restore", verifyRestore },
+                });
+        }
+        m_RuntimeAutomation.AppendDiagnosticLog(message);
+        break;
+    }
+//Modify End
     case RuntimeAutomationAction::AsyncCompute:
         if (m_PathTracingBackend == PathTracingBackend::InlineRayQuery)
         {
@@ -2029,6 +2193,20 @@ try
     });
 //Modify End
 
+//Modify Begin:2026-08-25 by Hui
+    withShaderCreateContext("CopyQueueValidation", [&]()
+    {
+        const auto copyQueueValidationShader = LoadShaderVariant(
+            L"CopyQueueValidation.cs.cso",
+            L"Demos/RaytracingDemo/shaders/Diagnostics/CopyQueueValidation.cs.hlsl",
+            ShaderTargetProfile::Compute());
+        m_CopyQueueValidationShader = std::make_shared<ComputeShader>(
+            m_FrameworkDeviceContext,
+            *copyQueueValidationShader,
+            ComputePipelineDescBuilder::ReflectedDefault(*copyQueueValidationShader).Build());
+    });
+//Modify End
+
 //Modify Begin:2026-08-23 by Hui
     SetStartupLoadStage(StartupLoadStage::CreateLightingPipeline, "Creating lighting pipeline", 0.80f);
     return true;
@@ -2615,6 +2793,7 @@ RaytracingDemoPassResources RaytracingDemo::CreatePassResources()
         m_IndirectLightingReSTIRGIPass,
         m_DLSS,
         m_DLSSRayReconstructionPrepareShader,
+        m_CopyQueueValidationShader,
         m_Denoisers,
         m_CudaBloom,
         m_AutoExposure,
@@ -2635,7 +2814,8 @@ RaytracingDemoPassResources RaytracingDemo::CreatePassResources()
         m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT),
         m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE),
         m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COPY),
-        &m_GpuTimestampProfiler
+        &m_GpuTimestampProfiler,
+        m_Diagnostics.IsEnabled() ? &m_Diagnostics : nullptr
     };
 }
 
@@ -2657,6 +2837,10 @@ void RaytracingDemo::UpdateRenderGraphFrameState()
     state.DirectLightingTechnique = m_DirectLightingTechnique;
     state.IndirectLightingTechnique = m_IndirectLightingTechnique;
     state.AsyncComputeEnabled = m_AsyncComputeEnabled;
+//Modify Begin:2026-08-25 by Hui
+    state.CopyQueueValidationEnabled = m_CopyQueueValidationEnabled;
+    state.DynamicRayTracingUpdateEnabled = m_SceneResources.RequiresDynamicRayTracingUpdatePass();
+//Modify End
     state.UseMeshletGBuffer = m_UseMeshletGBuffer;
     state.UseTaskShaderMeshlets = m_UseTaskShaderMeshlets;
     state.DebugMeshletClusters = m_DebugMeshletClusters;

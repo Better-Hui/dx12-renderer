@@ -515,6 +515,27 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
             m_ResourcePool->RegisterTexture(texture, compiledGraph.m_RenderPasses, renderMetadata, m_Device);
         }
     }
+
+    const auto findPlannedInputTransition = [](
+        const PassResourceStatePlan& statePlan,
+        const ResourceId resourceId) -> const PassResourceTransition*
+    {
+        const auto findTransition = [resourceId](const std::span<const PassResourceTransition> transitions)
+        {
+            const auto transition = std::ranges::find_if(transitions, [resourceId](const PassResourceTransition& candidate)
+            {
+                return candidate.Id == resourceId;
+            });
+            return transition != transitions.end() ? &*transition : nullptr;
+        };
+        if (const PassResourceTransition* transition = findTransition(statePlan.InputTransitions))
+        {
+            return transition;
+        }
+        return statePlan.DirectPreamble.has_value()
+            ? findTransition(statePlan.DirectPreamble->CrossQueueInputTransitions)
+            : nullptr;
+    };
     for (const BufferDescription& buffer : buffers)
     {
         if (IsLiveGpuResource(buffer.m_Id, compiledGraph.m_RenderPasses, externalOutputIds))
@@ -628,6 +649,60 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
             }
             resourceStatePlan.OutputTransitions.clear();
             resourceStatePlan.DirectPreamble = std::move(directPreamble);
+        }
+
+        if (renderPass->GetQueue() == RenderPassQueue::Copy)
+        {
+            ++compiledGraph.m_CrossQueuePlanValidation.CopyPassCount;
+        }
+        for (const Input& input : renderPass->GetInputs())
+        {
+            if (input.m_Type == InputType::Token || input.m_Type == InputType::ExternalAccess)
+            {
+                continue;
+            }
+            const auto lastWriter = lastWriterQueues.find(input.m_Id);
+            if (lastWriter == lastWriterQueues.end() ||
+                lastWriter->second == renderPass->GetQueue())
+            {
+                continue;
+            }
+
+            RenderGraphCrossQueuePlanValidation& validation = compiledGraph.m_CrossQueuePlanValidation;
+            ++validation.CrossQueueResourceTransferCount;
+            if (lastWriter->second == RenderPassQueue::Direct &&
+                renderPass->GetQueue() == RenderPassQueue::Copy)
+            {
+                ++validation.DirectToCopyTransferCount;
+            }
+            if (lastWriter->second == RenderPassQueue::Copy &&
+                (renderPass->GetQueue() == RenderPassQueue::Direct ||
+                    renderPass->GetQueue() == RenderPassQueue::AsyncCompute))
+            {
+                ++validation.CopyToConsumerTransferCount;
+            }
+            D3D12_RESOURCE_STATES expectedState = D3D12_RESOURCE_STATE_COMMON;
+            bool expectedUavBarrier = false;
+            const bool expectsTransition = TryGetInputTransition(
+                input.m_Type,
+                renderPass->GetQueue(),
+                expectedState,
+                expectedUavBarrier);
+            const PassResourceTransition* plannedTransition =
+                findPlannedInputTransition(resourceStatePlan, input.m_Id);
+            if (!expectsTransition || plannedTransition == nullptr)
+            {
+                ++validation.MissingStatePlanTransitionCount;
+            }
+            else if (plannedTransition->StateAfter == expectedState &&
+                plannedTransition->InsertUavBarrier == expectedUavBarrier)
+            {
+                ++validation.StatePlanTransitionCount;
+            }
+            else
+            {
+                ++validation.IncorrectStatePlanTransitionCount;
+            }
         }
         compiledGraph.m_ResourceStatePlans.emplace(renderPass, std::move(resourceStatePlan));
 

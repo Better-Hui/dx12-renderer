@@ -88,6 +88,12 @@ const char* RaytracingDemoAutomation::GetActionControlName(const Action action)
     case Action::MaxBounces: return "raytracing.max_bounces";
     case Action::Wait: return "automation.wait";
     case Action::VerifyActiveRayTracedPixelCount: return "assert.active_pixel_dispatch";
+//Modify Begin:2026-08-25 by Hui
+    case Action::CopyQueueValidation: return "render_graph.copy_queue_validation";
+    case Action::VerifyCopyQueueValidation: return "assert.copy_queue_validation";
+    case Action::DynamicRayTracingUpdate: return "raytracing.dynamic_rtas_update";
+    case Action::VerifyDynamicRayTracingUpdate: return "assert.dynamic_rtas_update";
+//Modify End
     case Action::CaptureScreenshot: return "capture.screenshot";
     case Action::MatrixCase: return "scenario.matrix_case";
     default: return "unknown";
@@ -244,6 +250,20 @@ DemoAutomation::TestSuites RaytracingDemoAutomation::CreateTestSuites()
     testSuites.Core = {
         makeStep(Action::GpuTiming, 1u, "timing=1"),
         makeStep(Action::TimingCapture, 1u, "timingcapture=1"),
+//Modify Begin:2026-08-25 by Hui
+        makeStep(Action::CopyQueueValidation, 1u, "copyqueue=1"),
+        makeStep(Action::Wait, 0u, "copyqueue-warmup"),
+        makeStep(Action::VerifyCopyQueueValidation, 0u, "copyqueue-verify"),
+        makeStep(Action::CopyQueueValidation, 0u, "copyqueue=0"),
+        makeStep(Action::DynamicRayTracingUpdate, 1u, "rtas-update=1"),
+        makeStep(Action::Wait, 0u, "rtas-update-warmup=1"),
+        makeStep(Action::Wait, 0u, "rtas-update-warmup=2"),
+        makeStep(Action::Wait, 0u, "rtas-update-warmup=3"),
+        makeStep(Action::VerifyDynamicRayTracingUpdate, 0u, "rtas-update-verify"),
+        makeStep(Action::DynamicRayTracingUpdate, 0u, "rtas-update=0"),
+        makeStep(Action::Wait, 0u, "rtas-update-restore"),
+        makeStep(Action::VerifyDynamicRayTracingUpdate, 1u, "rtas-update-restore-verify"),
+//Modify End
         makeStep(Action::SoftShadows, 0u, "soft=0"),
         makeStep(Action::SoftShadows, 1u, "soft=1"),
         makeStep(Action::StressSpheres, 1u, "stress=1"),
@@ -295,6 +315,24 @@ DemoAutomation::TestSuites RaytracingDemoAutomation::CreateTestSuites()
         makeStep(Action::StressSpheres, 1u, "stress=1"),
         makeStep(Action::StressSpheres, 0u, "stress=0"),
     };
+//Modify Begin:2026-08-25 by Hui
+    testSuites.CopyQueue = {
+        makeStep(Action::CopyQueueValidation, 1u, "copyqueue=1"),
+        makeStep(Action::Wait, 0u, "copyqueue-warmup"),
+        makeStep(Action::VerifyCopyQueueValidation, 0u, "copyqueue-verify"),
+        makeStep(Action::CopyQueueValidation, 0u, "copyqueue=0"),
+    };
+    testSuites.Rtas = {
+        makeStep(Action::DynamicRayTracingUpdate, 1u, "rtas-update=1"),
+        makeStep(Action::Wait, 0u, "rtas-update-warmup=1"),
+        makeStep(Action::Wait, 0u, "rtas-update-warmup=2"),
+        makeStep(Action::Wait, 0u, "rtas-update-warmup=3"),
+        makeStep(Action::VerifyDynamicRayTracingUpdate, 0u, "rtas-update-verify"),
+        makeStep(Action::DynamicRayTracingUpdate, 0u, "rtas-update=0"),
+        makeStep(Action::Wait, 0u, "rtas-update-restore"),
+        makeStep(Action::VerifyDynamicRayTracingUpdate, 1u, "rtas-update-restore-verify"),
+    };
+//Modify End
     testSuites.Visual = {
         makeStep(Action::DLSS, static_cast<uint32_t>(DLSSMode::Disabled), "visual-dlss=off"),
         makeStep(Action::MaterialShading, static_cast<uint32_t>(MaterialShadingModel::Pbr), "visual-shading=pbr"),

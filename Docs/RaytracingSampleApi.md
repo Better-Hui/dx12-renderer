@@ -72,7 +72,7 @@ Bloom Prefilter
 -> Bloom Composite
 ```
 
-`Bloom::AddPasses` declares its pyramid with `RenderGraphBuilder::CreateTexture()`, so the Demo only supplies the source/output IDs, tokens, resolution expressions, parameters, and pyramid depth. The graph owns those textures, their lifetime, and their barriers. They currently request dedicated allocations because transient aliasing of this chain reproducibly causes a device hang after repeated graph rebuilds; CUDA Bloom is unaffected and remains an explicit external queue/semaphore path.
+`Bloom::AddPasses` declares its pyramid with `RenderGraphBuilder::CreateTexture()`, so the Demo only supplies the source/output IDs, tokens, resolution expressions, parameters, and pyramid depth. The graph owns those textures, their lifetime, and their barriers. They participate in transient aliasing: the allocator writes the alias barrier at the new placed resource's first actual use and initializes its planned state as `COMMON`; CUDA Bloom is unaffected and remains an explicit external queue/semaphore path.
 
 ### ReSTIR DI direct lighting
 
@@ -133,7 +133,7 @@ Current behavior:
 
 Framework-owned persistent resources enter normal graph scheduling through `RenderGraphBuilder::ImportResource`. They receive logical IDs and participate in dependency, culling, state, UAV, and cross-queue hazard planning, but remain outside the transient resource pool.
 
-Native integrations such as NRD and RTAS construction remain audited renderer-infrastructure boundaries. NRD declares its RG-visible inputs/outputs and restores the native snapshot state around SDK recording; CUDA Bloom and Streamline remain explicit external queue/semaphore boundaries. Demo pass code cannot call transition/UAV/aliasing barriers, and `CommandList`/`CommandContext` expose no such API.
+Native integrations such as NRD and RTAS construction remain audited renderer-infrastructure boundaries. NRD declares its RG-visible inputs/outputs and restores the native snapshot state around SDK recording; CUDA Bloom and Streamline remain explicit external queue/semaphore boundaries. The dynamic RTAS pass declares its vertex/index accesses to RenderGraph (`COPY_DEST` then `NON_PIXEL_SHADER_RESOURCE`); the RTAS implementation only owns its backing/scratch state. Demo pass code cannot call transition/UAV/aliasing barriers, and `CommandList`/`CommandContext` expose no such API.
 
 This is an explicit queue API, not an automatic multi-queue scheduler. It does not decide queue placement, split or batch passes, optimize overlap, or schedule a Copy queue. A pass may become slower when dependencies expose its compute tail or when graphics and compute contend for GPU execution/cache/bandwidth.
 
@@ -190,7 +190,7 @@ The current soft variant uses four shadow samples. This is a sample-quality fixe
 - **Root descriptors:** D3D12 root descriptors write a buffer GPU virtual address directly into a root-signature slot and are useful for buffer CBV/SRV/UAV bindings, but they are not the texture binding path and were used only as a diagnostic A/B during the compact-dispatch investigation.
 - **Meshlets:** task-shader and compute-indirect GBuffer backends plus cluster debugging. This is not yet a production visibility, streaming, residency, or LOD system.
 - **Surface emitters:** rectangular area lights and emissive meshes are represented by reusable geometry-level triangle CDF data plus per-instance data, then uploaded with the other light buffers.
-- **Raster Bloom:** Framework registers explicit prefilter, per-level downsample, per-level upsample, and composite graph passes. Its graph-owned scratch pyramid is temporarily dedicated pending a fix for repeated-rebuild transient alias activation/state ordering.
+- **Raster Bloom:** Framework registers explicit prefilter, per-level downsample, per-level upsample, and composite graph passes. Its graph-owned scratch pyramid uses transient aliasing; its alias barrier is emitted at first use and the new placed resource starts from `COMMON`.
 - **CUDA Bloom:** imports shared D3D12 resources/fences once and uses timeline values for D3D12-to-CUDA and CUDA-to-D3D12 ordering. It must not overwrite history or overlay resources.
 - **Denoising:** NRD and SVGF are selectable sample integrations. NRD reports native D3D12 state changes back to RenderGraph; history must reset after incompatible resolution, layout, or backend changes.
 
@@ -200,10 +200,10 @@ The current soft variant uses four shadow samples. This is a sample-quality fixe
 - Sampler reflection/binding and root constants/root descriptors are not fully unified.
 - Pipeline cache keys do not yet represent every raster, compute, and DXR state dimension.
 - Soft-shadow quality is currently fixed at four samples; no runtime quality presets or adaptive sampling are available.
-- RenderGraph supports explicit Direct/Async Compute/Copy queue placement but no automatic queue selection; the main sample does not yet contain a Copy-queue pass.
+- RenderGraph supports explicit Direct/Async Compute/Copy queue placement but no automatic queue selection. The maintained `Copy Queue Validation` path covers Direct HDR -> Copy -> Async Compute -> Direct and validates the required producer fences, GPU waits, state plan, batches, and retirement fences.
 - `RenderGraphRoot::Execute` is now a graph entry point. `RenderGraphCommandExecutor` owns pass recording/submission, while `RenderGraphProfiler` owns optional per-queue timestamp lifetime and markers.
 - Transient resources are retired from actual Direct/Async Compute fence values. Aliasing is conservative and only combines lifetimes that are proven to use the same queue; cross-queue aliasing is intentionally disabled.
-- Raster Bloom scratch is excluded from transient aliasing until the repeatable device hang in alias activation/state ordering is fixed.
+- Raster Bloom scratch participates in transient aliasing. Repeated headless rebuild stress validates the first-use alias activation/state ordering.
 - Pass construction uses explicit `RaytracingDemoPassResources` and `RaytracingDemoPassConfig` rather than capturing `RaytracingDemo&` or using friend access.
 - Scene-to-GPU conversion is organized by four builders: texture/material, geometry, meshlet, and RTAS. `RaytracingDemoSceneResources` remains the sample-facing facade.
 - Scene loading uses the static `SceneImporter::ImportFromFile()` dispatcher for `.unity`, project `.json`, and `.fbx`. FBX nodes, transforms, material factors/maps, external/embedded textures, cameras, and directional/point/spot/area lights are normalized into `Scene`; `SceneMeshReference::SubmeshIndex` is preferred over mesh-name matching when the demo selects a prototype.

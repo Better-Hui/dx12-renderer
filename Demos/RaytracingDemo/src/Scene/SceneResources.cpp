@@ -100,6 +100,14 @@ void RaytracingDemoSceneResources::Clear()
     m_GeometryResources.Clear();
     m_MeshletResources.Clear();
     m_RayTracingResources.Clear();
+    m_DynamicRayTracingUpdatesEnabled = false;
+    m_DynamicRayTracingRestorePending = false;
+    m_DynamicRayTracingUpdatePending = false;
+    m_DynamicRayTracingObjectIndex = (std::numeric_limits<size_t>::max)();
+    m_DynamicRayTracingMesh.reset();
+    m_DynamicRayTracingBaseVertices.clear();
+    m_DynamicRayTracingVertices.clear();
+    m_DynamicRayTracingUpdateStatistics = {};
     m_StressTestSphereObjects.clear();
     m_StressTestSphereObjectStart = 0;
     m_StressTestSphereMaterialIndex = (std::numeric_limits<uint32_t>::max)();
@@ -743,5 +751,146 @@ void RaytracingDemoSceneResources::BuildRayTracingAccelerationStructure(
         m_StressTestSpheresEnabled,
         m_TextureMaterialResources.GetBindlessDescriptorHeap(),
         settings);
+    InitializeDynamicRayTracingUpdateTarget();
+}
+
+void RaytracingDemoSceneResources::SetDynamicRayTracingUpdatesEnabled(const bool enabled)
+{
+    if (m_DynamicRayTracingUpdatesEnabled == enabled)
+    {
+        return;
+    }
+
+    m_DynamicRayTracingUpdatesEnabled = enabled;
+    if (enabled)
+    {
+        m_DynamicRayTracingRestorePending = false;
+    }
+    else if (m_DynamicRayTracingMesh != nullptr)
+    {
+        m_DynamicRayTracingRestorePending = true;
+    }
+}
+
+bool RaytracingDemoSceneResources::RequiresDynamicRayTracingUpdatePass() const
+{
+    return m_DynamicRayTracingMesh != nullptr &&
+        (m_DynamicRayTracingUpdatesEnabled || m_DynamicRayTracingRestorePending);
+}
+
+const VertexBuffer& RaytracingDemoSceneResources::GetDynamicRayTracingVertexBuffer() const
+{
+    Assert(
+        RequiresDynamicRayTracingUpdatePass(),
+        "Dynamic ray tracing update pass requires an initialized scene mesh.");
+    return m_DynamicRayTracingMesh->GetVertexBuffer();
+}
+
+const IndexBuffer& RaytracingDemoSceneResources::GetDynamicRayTracingIndexBuffer() const
+{
+    Assert(
+        RequiresDynamicRayTracingUpdatePass(),
+        "Dynamic ray tracing update pass requires an initialized scene mesh.");
+    return m_DynamicRayTracingMesh->GetIndexBuffer();
+}
+
+bool RaytracingDemoSceneResources::BeginDynamicRayTracingGeometryUpdate(
+    CommandList& commandList,
+    const float timeSeconds)
+{
+    if (!RequiresDynamicRayTracingUpdatePass())
+    {
+        return false;
+    }
+
+    Assert(!m_DynamicRayTracingUpdatePending, "Dynamic ray tracing update cannot begin twice in one frame.");
+    const bool restoring = !m_DynamicRayTracingUpdatesEnabled;
+    m_DynamicRayTracingVertices = m_DynamicRayTracingBaseVertices;
+    XMMATRIX worldMatrix = m_DynamicRayTracingBaseWorldMatrix;
+    if (!restoring)
+    {
+        const float phase = timeSeconds * 3.0f;
+        worldMatrix = XMMatrixTranslation(
+            std::sin(phase) * 0.15f,
+            0.0f,
+            std::cos(phase * 0.7f) * 0.15f) *
+            m_DynamicRayTracingBaseWorldMatrix;
+        for (size_t vertexIndex = 0; vertexIndex < m_DynamicRayTracingVertices.size(); ++vertexIndex)
+        {
+            VertexAttributes& vertex = m_DynamicRayTracingVertices[vertexIndex];
+            vertex.Position.y += std::sin(
+                phase + static_cast<float>(vertexIndex % 29u) * 0.37f) * 0.015f;
+        }
+    }
+
+    Assert(
+        m_GeometryResources.UpdateObjectWorldMatrix(m_DynamicRayTracingObjectIndex, worldMatrix),
+        "Dynamic ray tracing object index is invalid.");
+    Assert(
+        m_RayTracingResources.UpdateSceneObjectTransform(m_DynamicRayTracingObjectIndex, worldMatrix),
+        "Dynamic ray tracing acceleration-structure instance update failed.");
+    m_DynamicRayTracingMesh->CopyVertexAttributes(commandList, m_DynamicRayTracingVertices);
+    m_DynamicRayTracingUpdatePending = true;
+    m_DynamicRayTracingUpdateStatistics.LastUpdateRestored = restoring;
+    ++m_DynamicRayTracingUpdateStatistics.GeometryUploadCount;
+    return true;
+}
+
+bool RaytracingDemoSceneResources::FinishDynamicRayTracingUpdate(CommandList& commandList)
+{
+    if (!m_DynamicRayTracingUpdatePending)
+    {
+        return false;
+    }
+
+    m_RayTracingResources.GetAccelerationStructure().MarkBottomLevelGeometryDirty(
+        std::span<const std::shared_ptr<Mesh>>(&m_DynamicRayTracingMesh, 1u));
+    m_RayTracingResources.RefitDirtyGeometry(commandList);
+    m_DynamicRayTracingUpdatePending = false;
+    ++m_DynamicRayTracingUpdateStatistics.RefitCount;
+    if (m_DynamicRayTracingUpdateStatistics.LastUpdateRestored)
+    {
+        m_DynamicRayTracingRestorePending = false;
+        ++m_DynamicRayTracingUpdateStatistics.RestoreCount;
+    }
+    return true;
+}
+
+void RaytracingDemoSceneResources::InitializeDynamicRayTracingUpdateTarget()
+{
+    m_DynamicRayTracingRestorePending = false;
+    m_DynamicRayTracingUpdatePending = false;
+    m_DynamicRayTracingObjectIndex = (std::numeric_limits<size_t>::max)();
+    m_DynamicRayTracingMesh.reset();
+    m_DynamicRayTracingBaseVertices.clear();
+    m_DynamicRayTracingVertices.clear();
+
+    const std::vector<RaytracingDemoSceneObject>& objects = m_GeometryResources.GetObjects();
+    const std::vector<RaytracingDemoSceneGeometry>& geometries = m_GeometryResources.GetGeometries();
+    const size_t nonStressObjectCount = m_StressTestSphereObjects.empty()
+        ? objects.size()
+        : (std::min)(m_StressTestSphereObjectStart, objects.size());
+    for (size_t objectIndex = 0; objectIndex < nonStressObjectCount; ++objectIndex)
+    {
+        const RaytracingDemoSceneObject& object = objects[objectIndex];
+        Assert(object.GeometryIndex < geometries.size(), "Dynamic ray tracing scene object geometry index is invalid.");
+        const RaytracingDemoSceneGeometry& geometry = geometries[object.GeometryIndex];
+        const std::vector<std::shared_ptr<Mesh>>& meshes = geometry.Model->GetMeshes();
+        const size_t meshCount = (std::min)(meshes.size(), geometry.MeshPrototypes.size());
+        for (size_t meshIndex = 0; meshIndex < meshCount; ++meshIndex)
+        {
+            if (meshes[meshIndex] == nullptr || geometry.MeshPrototypes[meshIndex].m_Vertices.empty())
+            {
+                continue;
+            }
+
+            m_DynamicRayTracingObjectIndex = objectIndex;
+            m_DynamicRayTracingMesh = meshes[meshIndex];
+            m_DynamicRayTracingBaseWorldMatrix = object.WorldMatrix;
+            m_DynamicRayTracingBaseVertices = geometry.MeshPrototypes[meshIndex].m_Vertices;
+            m_DynamicRayTracingVertices = m_DynamicRayTracingBaseVertices;
+            return;
+        }
+    }
 }
 //Modify End

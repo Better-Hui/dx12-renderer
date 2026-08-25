@@ -226,6 +226,9 @@ private:
     DLSS m_DLSS;
     DLSSFrameGenerationInputs m_FrameGenerationInputs;
     std::shared_ptr<ComputeShader> m_DLSSRayReconstructionPrepareShader;
+//Modify Begin:2026-08-25 by Hui
+    std::shared_ptr<ComputeShader> m_CopyQueueValidationShader;
+//Modify End
     ShaderVariantManager m_ShaderVariants;
     PathTracingPipelineController m_PathTracingPipelines;
     ActivePixelListController m_ActivePixels;
@@ -299,6 +302,9 @@ private:
 //Modify End
 //Modify Begin:2026-08-20 by Hui
     bool m_AsyncComputeEnabled = false;
+//Modify Begin:2026-08-25 by Hui
+    bool m_CopyQueueValidationEnabled = false;
+//Modify End
     bool m_DebugSerializeAsyncCompute = false;
     bool m_ParallelDirectCommandRecordingEnabled = true;
     int m_DebugLightingTextureTarget = 0;

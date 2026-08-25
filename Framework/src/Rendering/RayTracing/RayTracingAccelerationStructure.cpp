@@ -49,6 +49,16 @@ bool RayTracingAccelerationStructure::UpdateInstance(const RayTracingInstanceHan
     return true;
 }
 
+void RayTracingAccelerationStructure::MarkBottomLevelGeometryDirty(
+    const std::span<const std::shared_ptr<Mesh>> meshes)
+{
+    for (const std::shared_ptr<Mesh>& mesh : meshes)
+    {
+        Assert(mesh != nullptr, "Ray tracing dirty BLAS mesh must not be null.");
+        m_DirtyBottomLevelMeshes.emplace(mesh.get());
+    }
+}
+
 bool RayTracingAccelerationStructure::RemoveInstance(const RayTracingInstanceHandle handle)
 {
     const auto indexResult = m_InstanceIndices.find(handle);
@@ -126,6 +136,7 @@ void RayTracingAccelerationStructure::Build(CommandList& commandList, RayTracing
 {
     Assert(!m_Instances.empty(), "Ray tracing acceleration structure requires at least one instance.");
 
+    ++m_UpdateStatistics.FullBuildCount;
     m_LastBuildSettings = settings;
     if (settings.AllowUpdate)
     {
@@ -136,21 +147,22 @@ void RayTracingAccelerationStructure::Build(CommandList& commandList, RayTracing
 
     for (const BottomLevelAccelerationStructure& bottomLevel : m_BottomLevelAccelerationStructures)
     {
-        CommandListInternalAccess::RetireResourceState(commandList, bottomLevel.Resource.Resource);
+        RetireResourceState(commandList, bottomLevel.Resource.Resource);
     }
     if (m_TopLevelAccelerationStructure)
     {
-        CommandListInternalAccess::RetireResourceState(commandList, m_TopLevelAccelerationStructure.Resource);
+        RetireResourceState(commandList, m_TopLevelAccelerationStructure.Resource);
     }
     if (m_InstanceDescUpload)
     {
-        CommandListInternalAccess::RetireResourceState(commandList, m_InstanceDescUpload.Resource);
+        RetireResourceState(commandList, m_InstanceDescUpload.Resource);
     }
     m_BottomLevelAccelerationStructures.clear();
     m_TopLevelAccelerationStructure = {};
     m_InstanceDescUpload = {};
     m_Meshes.clear();
     m_GeometryData.clear();
+    m_DirtyBottomLevelMeshes.clear();
 
     const std::map<const Mesh*, uint32_t> meshToBlasIndex = BuildBottomLevelAccelerationStructures(commandList);
     BuildTopLevelAccelerationStructure(commandList, meshToBlasIndex, false);
@@ -184,18 +196,19 @@ void RayTracingAccelerationStructure::Update(CommandList& commandList)
     Assert(!m_Instances.empty(), "Ray tracing acceleration structure requires at least one instance.");
     if (m_InstanceDescUpload)
     {
-        CommandListInternalAccess::RetireResourceState(commandList, m_InstanceDescUpload.Resource);
+        RetireResourceState(commandList, m_InstanceDescUpload.Resource);
     }
     m_InstanceDescUpload = {};
     m_GeometryData.clear();
     const size_t previousBottomLevelCount = m_BottomLevelAccelerationStructures.size();
     const std::map<const Mesh*, uint32_t> meshToBlasIndex = BuildBottomLevelAccelerationStructures(commandList);
+    UpdateDirtyBottomLevelAccelerationStructures(commandList);
     const bool instanceCountChanged = m_BuiltInstanceCount != m_Instances.size();
     const bool bottomLevelSetChanged = previousBottomLevelCount != m_BottomLevelAccelerationStructures.size();
     const bool canPerformUpdate = !instanceCountChanged && !bottomLevelSetChanged && !m_InstanceMeshChanged;
     if (!canPerformUpdate)
     {
-        CommandListInternalAccess::RetireResourceState(commandList, m_TopLevelAccelerationStructure.Resource);
+        RetireResourceState(commandList, m_TopLevelAccelerationStructure.Resource);
         m_TopLevelAccelerationStructure = {};
     }
 
@@ -337,7 +350,7 @@ RayTracingAccelerationStructure::BottomLevelAccelerationStructure RayTracingAcce
     CommandList& commandList,
     const std::shared_ptr<Mesh>& mesh,
     const D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags,
-    const ManagedRayTracingResource& scratch) const
+    const ManagedRayTracingResource& scratch)
 {
     const VertexBuffer& vertexBuffer = mesh->GetVertexBuffer();
     const IndexBuffer& indexBuffer = mesh->GetIndexBuffer();
@@ -385,6 +398,7 @@ RayTracingAccelerationStructure::BottomLevelAccelerationStructure RayTracingAcce
     CommandListInternalAccess::UavBarrier(commandList, scratch.Resource.Get());
     CommandListInternalAccess::TrackResourceState(commandList, result.Resource, result.StateRegistration);
 
+    ++m_UpdateStatistics.BottomLevelBuildCount;
     return { mesh, result };
 }
 
@@ -434,6 +448,87 @@ std::map<const Mesh*, uint32_t> RayTracingAccelerationStructure::BuildBottomLeve
     return meshToBlasIndex;
 }
 
+void RayTracingAccelerationStructure::UpdateDirtyBottomLevelAccelerationStructures(CommandList& commandList)
+{
+    if (m_DirtyBottomLevelMeshes.empty())
+    {
+        return;
+    }
+
+    std::unordered_set<const Mesh*> knownMeshes;
+    uint64_t scratchBufferSize = 0;
+    for (const BottomLevelAccelerationStructure& bottomLevel : m_BottomLevelAccelerationStructures)
+    {
+        const Mesh* mesh = bottomLevel.Mesh.get();
+        knownMeshes.emplace(mesh);
+        if (!m_DirtyBottomLevelMeshes.contains(mesh))
+        {
+            continue;
+        }
+
+        scratchBufferSize = (std::max)(
+            scratchBufferSize,
+            GetBottomLevelPrebuildInfo(
+                *bottomLevel.Mesh,
+                m_LastBuildSettings.BottomLevelFlags |
+                    D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE)
+                .ScratchDataSizeInBytes);
+    }
+
+    for (const Mesh* mesh : m_DirtyBottomLevelMeshes)
+    {
+        Assert(knownMeshes.contains(mesh), "Ray tracing dirty BLAS mesh is not part of the current acceleration structure.");
+    }
+
+    Assert(scratchBufferSize > 0, "Ray tracing BLAS update requires non-zero scratch storage.");
+    const ManagedRayTracingResource scratch = CreateAccelerationStructureBuffer(
+        scratchBufferSize,
+        D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+        L"Ray Tracing BLAS Update Scratch");
+    CommandListInternalAccess::TrackResourceState(commandList, scratch.Resource, scratch.StateRegistration);
+
+    for (BottomLevelAccelerationStructure& bottomLevel : m_BottomLevelAccelerationStructures)
+    {
+        if (!m_DirtyBottomLevelMeshes.contains(bottomLevel.Mesh.get()))
+        {
+            continue;
+        }
+
+        const VertexBuffer& vertexBuffer = bottomLevel.Mesh->GetVertexBuffer();
+        const IndexBuffer& indexBuffer = bottomLevel.Mesh->GetIndexBuffer();
+        D3D12_RAYTRACING_GEOMETRY_DESC geometryDesc = {};
+        geometryDesc.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
+        geometryDesc.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
+        geometryDesc.Triangles.VertexBuffer.StartAddress = vertexBuffer.GetD3D12Resource()->GetGPUVirtualAddress();
+        geometryDesc.Triangles.VertexBuffer.StrideInBytes = vertexBuffer.GetVertexStride();
+        geometryDesc.Triangles.VertexCount = static_cast<UINT>(vertexBuffer.GetNumVertices());
+        geometryDesc.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
+        geometryDesc.Triangles.IndexBuffer = indexBuffer.GetD3D12Resource()->GetGPUVirtualAddress();
+        geometryDesc.Triangles.IndexCount = static_cast<UINT>(indexBuffer.GetNumIndices());
+        geometryDesc.Triangles.IndexFormat = indexBuffer.GetIndexFormat();
+
+        D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
+        inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
+        inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+        inputs.Flags = m_LastBuildSettings.BottomLevelFlags |
+            D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE;
+        inputs.NumDescs = 1;
+        inputs.pGeometryDescs = &geometryDesc;
+
+        D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
+        buildDesc.Inputs = inputs;
+        buildDesc.ScratchAccelerationStructureData = scratch.Resource->GetGPUVirtualAddress();
+        buildDesc.SourceAccelerationStructureData = bottomLevel.Resource.Resource->GetGPUVirtualAddress();
+        buildDesc.DestAccelerationStructureData = bottomLevel.Resource.Resource->GetGPUVirtualAddress();
+        commandList.BuildRaytracingAccelerationStructure(buildDesc);
+        CommandListInternalAccess::UavBarrier(commandList, bottomLevel.Resource.Resource.Get());
+        CommandListInternalAccess::UavBarrier(commandList, scratch.Resource.Get());
+        ++m_UpdateStatistics.BottomLevelUpdateCount;
+    }
+
+    m_DirtyBottomLevelMeshes.clear();
+}
+
 std::map<const Mesh*, uint32_t> RayTracingAccelerationStructure::CreateMeshToBlasIndex() const
 {
     std::map<const Mesh*, uint32_t> meshToBlasIndex;
@@ -481,7 +576,7 @@ void RayTracingAccelerationStructure::BuildTopLevelAccelerationStructure(
 
     if (m_InstanceDescUpload)
     {
-        CommandListInternalAccess::RetireResourceState(commandList, m_InstanceDescUpload.Resource);
+        RetireResourceState(commandList, m_InstanceDescUpload.Resource);
     }
     m_InstanceDescUpload = CreateUploadBuffer(
         instanceDescs.data(),
@@ -508,7 +603,7 @@ void RayTracingAccelerationStructure::BuildTopLevelAccelerationStructure(
     {
         if (m_TopLevelAccelerationStructure)
         {
-            CommandListInternalAccess::RetireResourceState(commandList, m_TopLevelAccelerationStructure.Resource);
+            RetireResourceState(commandList, m_TopLevelAccelerationStructure.Resource);
         }
         m_TopLevelAccelerationStructure = CreateAccelerationStructureBuffer(
             prebuildInfo.ResultDataMaxSizeInBytes,
@@ -544,5 +639,21 @@ void RayTracingAccelerationStructure::BuildTopLevelAccelerationStructure(
         commandList,
         m_TopLevelAccelerationStructure.Resource,
         m_TopLevelAccelerationStructure.StateRegistration);
+    if (update)
+    {
+        ++m_UpdateStatistics.TopLevelUpdateCount;
+    }
+    else
+    {
+        ++m_UpdateStatistics.TopLevelBuildCount;
+    }
+}
+
+void RayTracingAccelerationStructure::RetireResourceState(
+    CommandList& commandList,
+    const ComPtr<ID3D12Resource>& resource)
+{
+    CommandListInternalAccess::RetireResourceState(commandList, resource);
+    ++m_UpdateStatistics.RetiredResourceCount;
 }
 //Modify End

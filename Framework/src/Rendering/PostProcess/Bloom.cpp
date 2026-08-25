@@ -13,8 +13,7 @@
 namespace
 {
     constexpr FLOAT BloomClearColor[] = { 0.0f, 0.0f, 0.0f, 0.0f };
-    // Keep the graph-owned pyramid out of heap aliasing until alias activation is ordered at pass granularity.
-    constexpr bool BloomScratchUsesDedicatedResources = true;
+    constexpr bool BloomScratchUsesDedicatedResources = false;
 
     struct BloomPrefilterPassData
     {

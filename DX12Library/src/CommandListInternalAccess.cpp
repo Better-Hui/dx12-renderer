@@ -93,6 +93,9 @@ void CommandListInternalAccess::AliasingBarrierBeforeFirstUse(
     CommandList& commandList,
     const Resource& resourceAfter)
 {
-    commandList.m_PResourceStateTracker->QueueAliasingBarrier(nullptr, &resourceAfter);
+    commandList.m_PResourceStateTracker->AliasBarrier(nullptr, &resourceAfter);
+    commandList.m_PResourceStateTracker->NotifyResourceState(
+        resourceAfter.GetD3D12Resource().Get(),
+        D3D12_RESOURCE_STATE_COMMON);
 }
 //Modify End

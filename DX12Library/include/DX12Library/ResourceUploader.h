@@ -33,6 +33,12 @@ public:
         size_t vertexCount,
         size_t vertexStride,
         const void* vertexData) const;
+    void CopyVertexBuffer(
+        CommandList& commandList,
+        VertexBuffer& vertexBuffer,
+        size_t vertexCount,
+        size_t vertexStride,
+        const void* vertexData) const;
 
     template <typename T>
     void UploadVertexBuffer(

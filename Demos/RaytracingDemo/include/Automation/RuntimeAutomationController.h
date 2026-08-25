@@ -25,6 +25,8 @@ namespace DemoAutomation
     {
         std::vector<Step> Core;
         std::vector<Step> Stress;
+        std::vector<Step> CopyQueue;
+        std::vector<Step> Rtas;
         std::vector<Step> Matrix;
         std::vector<Step> ReSTIRGIProfile;
         std::vector<Step> ReSTIRGIVariants;

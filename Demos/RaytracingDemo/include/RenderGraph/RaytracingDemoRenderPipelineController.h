@@ -22,6 +22,10 @@ struct RaytracingDemoRenderGraphTopology
     bool RayReconstructionEnabled = false;
     bool FrameGenerationEnabled = false;
     bool AsyncComputeEnabled = false;
+//Modify Begin:2026-08-25 by Hui
+    bool CopyQueueValidationEnabled = false;
+    bool DynamicRayTracingUpdateEnabled = false;
+//Modify End
     PathTracingBackend PathTracingBackendType = PathTracingBackend::InlineRayQuery;
     PathTracingDispatchMode PathTracingDispatchModeType = PathTracingDispatchMode::FullResolution;
     RaytracingDemoLightingTechnique DirectLightingTechnique = RaytracingDemoLightingTechnique::None;

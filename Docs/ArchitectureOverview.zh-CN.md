@@ -66,7 +66,7 @@ DX12Library
 
 - `AutoExposure`、`ReSTIRDIPass`、`ReSTIRGIPass`、Raster `Bloom`、`NRD`、`SVGF` 和 `TAA` 通过 `AddPasses(RenderGraphBuilder&, Inputs)` 直接注册逻辑阶段；Builder 只在构图调用期间传入，Framework 不保存它。
 - ReSTIR 的 persistent reservoir/history 与 Auto Exposure 的 histogram/adaptation 资源以 logical imported resource 接入图。Framework 继续拥有物理 allocation，RenderGraph 负责拓扑、状态计划、UAV 顺序和跨 queue hazard。
-- 构图期 feature scratch texture 通过 `RenderGraphBuilder::CreateTexture()` 声明，再由组合根合并进 graph texture description。Raster Bloom 的 downsample/upsample 金字塔使用该机制；纹理由 RG 管理，但当前为 dedicated resource，因为让这条链参与 transient aliasing 会在反复重建图后稳定触发 device hang。
+- 构图期 feature scratch texture 通过 `RenderGraphBuilder::CreateTexture()` 声明，再由组合根合并进 graph texture description。Raster Bloom 的 downsample/upsample 金字塔使用该机制；纹理由 RG 管理并参与 transient aliasing。allocator 会在 placed resource 真正首次使用的位置写入 alias barrier，并在图的首次 transition 前将该资源登记为 `COMMON`。
 - `NRD` 注册 Prepare、native Denoise 和 Composite；SDK 可管理 native 段内部的临时状态，但图资源在段边界保持 RG 声明状态，NRD 不手写图资源 barrier。`SVGF` 注册 imported 奇偶 temporal history、水平/垂直 A-Trous 和 Composite；`TAA` 围绕 imported ping-pong history 注册 Resolve 与 History Copy。不同的 logical read/write ID 让图保持无环，物理 history 映射只在 rendered-frame 之间推进。
 - `DLSS` 管理 Native NGX DLSS SR/DLAA 评估与实验性 Streamline RR/FG frame-feature 路径。`RaytracingDemo` 将 `DLSS.cpp` 与 `StreamlineRuntime.cpp` 作为隐藏的外部源直接编译，因此普通 `Framework` 使用者不会继承厂商 SDK include 路径，也不会链接 `sl.interposer.lib`，同时 CMake 不会生成额外的 `FrameworkNvidiaFeatures` 工程。Framework 的 `StreamlineRuntime` 在创建 D3D12 设备前执行 `slInit`，设备创建后执行 `slSetD3DDevice`，并负责 capability query 与 Frame Generation 所需的通用 presentation 重建请求；queue/swap-chain 拦截完全交给自动 interposer。DX12Library 不再引用 Streamline，也不再定义 Frame Generation/Ray Reconstruction 能力接口。RR/FG 尚未完成支持硬件上的完整验证。
 - CUDA interop 封装 shared D3D12 resource 与 external fence/semaphore 同步；当前 CUDA Bloom 使用此路径。
@@ -96,7 +96,7 @@ RenderPass 声明
 - `RenderGraphQueueScheduler` 保存每个逻辑 resource 的 last producer queue 与 submitted fence value；有依赖的 consumer 提交前会收到 GPU-side wait。
 - `PassResourceStatePlan` 保存不可变的 per-pass transition、UAV、aliasing、初始化和 async handoff 工作。Executor 将该计划录入拥有该 pass 的 command list；各 list 在最终提交顺序中关闭时，`CommandList` 通过共享 `ResourceStateRegistry` 解析 transition 的初始状态。
 - `ClearUnorderedAccessUint` 只录制 clear，不隐式追加 UAV barrier。同一资源后续继续写入时，clear 与写入必须拆成不同 pass 或通过声明形成显式 WAW 依赖，由 Compiler 安排 UAV 顺序。
-- copy-compatible pass 可通过 `AddCopyPass()` 进入编译计划、Executor、QueueScheduler、Profiler 和 transient retirement 路径；当前主 sample 尚未声明 Copy-queue pass。
+- copy-compatible pass 可通过 `AddCopyPass()` 进入编译计划、Executor、QueueScheduler、Profiler 和 transient retirement 路径；受维护的 `Copy Queue Validation` 路径为 Direct HDR producer -> Copy queue -> Async Compute consumer -> Direct consumer，并通过 Diagnostics 断言 planned state、producer fence/wait、submission 和 retirement fence。
 - Compiler 会把 queue 相同且 direct preamble/aliasing 关系兼容的连续 Async Compute/Copy pass 合并为 non-direct batch；不兼容的资源交接会形成新的 batch。
 - transient resource 按本帧实际的 Direct/Compute/Copy fence 延迟退休。aliasing 目前是保守的：仅复用可证明在同一 queue 上的 lifetime，跨 queue aliasing 仍禁用。
 
@@ -147,6 +147,7 @@ FBX 外部纹理在成功解析后保留文件路径；嵌入纹理复制到拥�
 - GBuffer：普通 raster、task/mesh shader，或 compute cull + `ExecuteIndirect`。
 - 直接光：`None`、path tracing 或 inline ray-query ReSTIR DI；间接光：`None`、path tracing 或 inline ray-query ReSTIR GI。
 - shader-table DXR 与 inline ray query 共用同一份 scene geometry、material、bindless texture、light buffer 和 acceleration structure。
+- 无人值守的 `rtas` 场景通过图声明的访问更新一个非 stress mesh 的 vertex buffer 与 transform，refit 其 dirty BLAS，再更新既有 TLAS；关闭后验证 restore frame。动态 meshlet-instance 同步尚未实现，因此这条路径会关闭 Meshlet GBuffer。
 - 平行光、点光、矩形面积光与自发光 surface emitter 都通过 GPU buffer 上传。平行光和点光的软阴影使用预编译 shader variant；矩形面积光直接采样发光面。
 - 可选 NRD/SVGF、TAA、skybox、Framework Raster Bloom、CUDA Bloom、Native DLSS SR/DLAA，以及实验性 Streamline RR/FG 围绕核心光照输出组合。
 

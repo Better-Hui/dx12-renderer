@@ -3,6 +3,7 @@
 
 #include <Scene/SceneResourceBuilders.h>
 #include <Scene/SceneLighting.h>
+#include <Framework/Geometry/Mesh.h>
 #include <Framework/Scene/Scene.h>
 #include <Framework/Rendering/Lighting/SurfaceEmitter.h>
 
@@ -21,6 +22,16 @@
 class CommandList;
 class D3D12DeviceContext;
 class Resource;
+class VertexBuffer;
+
+struct RaytracingDemoDynamicRtasUpdateStatistics
+{
+    uint64_t GeometryUploadCount = 0;
+    uint64_t RefitCount = 0;
+    uint64_t RestoreCount = 0;
+    bool LastUpdateRestored = false;
+};
+
 class RaytracingDemoSceneResources final
 {
 public:
@@ -31,6 +42,17 @@ public:
     bool LoadScene(CommandList& commandList, const Scene& scene, bool enableStressTestSpheres = true);
     bool SetStressTestSpheresEnabled(CommandList& commandList, bool enabled);
     bool AreStressTestSpheresEnabled() const { return m_StressTestSpheresEnabled; }
+    void SetDynamicRayTracingUpdatesEnabled(bool enabled);
+    bool AreDynamicRayTracingUpdatesEnabled() const { return m_DynamicRayTracingUpdatesEnabled; }
+    bool RequiresDynamicRayTracingUpdatePass() const;
+    const VertexBuffer& GetDynamicRayTracingVertexBuffer() const;
+    const IndexBuffer& GetDynamicRayTracingIndexBuffer() const;
+    bool BeginDynamicRayTracingGeometryUpdate(CommandList& commandList, float timeSeconds);
+    bool FinishDynamicRayTracingUpdate(CommandList& commandList);
+    const RaytracingDemoDynamicRtasUpdateStatistics& GetDynamicRayTracingUpdateStatistics() const
+    {
+        return m_DynamicRayTracingUpdateStatistics;
+    }
     void BuildRayTracingAccelerationStructure(
         CommandList& commandList,
         RayTracingAccelerationStructureBuildSettings settings = {});
@@ -91,6 +113,7 @@ private:
     void InitializeMeshletSceneResources();
     void AddStressTestSpheres(CommandList& commandList, uint32_t whiteTextureIndex);
     void UploadMeshletBuffers(CommandList& commandList);
+    void InitializeDynamicRayTracingUpdateTarget();
     SceneTextureMaterialResources m_TextureMaterialResources;
     SceneGeometryResources m_GeometryResources;
     SceneMeshletResources m_MeshletResources;
@@ -99,5 +122,14 @@ private:
     size_t m_StressTestSphereObjectStart = 0;
     uint32_t m_StressTestSphereMaterialIndex = (std::numeric_limits<uint32_t>::max)();
     bool m_StressTestSpheresEnabled = true;
+    bool m_DynamicRayTracingUpdatesEnabled = false;
+    bool m_DynamicRayTracingRestorePending = false;
+    bool m_DynamicRayTracingUpdatePending = false;
+    size_t m_DynamicRayTracingObjectIndex = (std::numeric_limits<size_t>::max)();
+    std::shared_ptr<Mesh> m_DynamicRayTracingMesh;
+    DirectX::XMMATRIX m_DynamicRayTracingBaseWorldMatrix = DirectX::XMMatrixIdentity();
+    VertexCollectionType m_DynamicRayTracingBaseVertices;
+    VertexCollectionType m_DynamicRayTracingVertices;
+    RaytracingDemoDynamicRtasUpdateStatistics m_DynamicRayTracingUpdateStatistics;
 };
 //Modify End

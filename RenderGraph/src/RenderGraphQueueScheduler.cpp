@@ -26,6 +26,44 @@ namespace RenderGraph
         }
     }
 
+    size_t RenderGraphQueueSynchronizationStats::GetQueueIndex(const RenderPassQueue queue)
+    {
+        switch (queue)
+        {
+        case RenderPassQueue::Direct: return 0u;
+        case RenderPassQueue::AsyncCompute: return 1u;
+        case RenderPassQueue::Copy: return 2u;
+        default:
+            Assert(false, "Unknown render-pass queue.");
+            return 0u;
+        }
+    }
+
+    void RenderGraphQueueSynchronizationStats::RecordSubmission(const RenderPassQueue queue)
+    {
+        ++SubmissionCounts[GetQueueIndex(queue)];
+    }
+
+    void RenderGraphQueueSynchronizationStats::RecordWait(
+        const RenderPassQueue producerQueue,
+        const RenderPassQueue consumerQueue)
+    {
+        ++WaitCounts[GetQueueIndex(producerQueue)][GetQueueIndex(consumerQueue)];
+    }
+
+    uint64_t RenderGraphQueueSynchronizationStats::GetSubmissionCount(
+        const RenderPassQueue queue) const
+    {
+        return SubmissionCounts[GetQueueIndex(queue)];
+    }
+
+    uint64_t RenderGraphQueueSynchronizationStats::GetWaitCount(
+        const RenderPassQueue producerQueue,
+        const RenderPassQueue consumerQueue) const
+    {
+        return WaitCounts[GetQueueIndex(producerQueue)][GetQueueIndex(consumerQueue)];
+    }
+
     RenderGraphQueueScheduler::RenderGraphQueueScheduler(
         std::shared_ptr<CommandQueue> directCommandQueue,
         std::shared_ptr<CommandQueue> asyncComputeCommandQueue,
@@ -68,6 +106,7 @@ namespace RenderGraph
         m_ExternalResourceUsages.clear();
         m_ResourceRetirements.clear();
         m_FrameSubmissionFences = {};
+        m_FrameSynchronizationStats = {};
         m_PendingDirectResources.clear();
         m_LastAsyncComputeFenceValue = 0;
         m_LastCopyFenceValue = 0;
@@ -82,6 +121,7 @@ namespace RenderGraph
 
         const uint64_t fenceValue = m_DirectCommandQueue->ExecuteCommandList(commandList);
         FinalizeDirectSubmission(fenceValue);
+        m_FrameSynchronizationStats.RecordSubmission(RenderPassQueue::Direct);
         if (HasDiagnosticTelemetrySink())
         {
             EmitTelemetry({
@@ -109,6 +149,7 @@ namespace RenderGraph
 
         const uint64_t fenceValue = m_DirectCommandQueue->ExecuteCommandLists(commandLists);
         FinalizeDirectSubmission(fenceValue);
+        m_FrameSynchronizationStats.RecordSubmission(RenderPassQueue::Direct);
         if (HasDiagnosticTelemetrySink())
         {
             EmitTelemetry({
@@ -152,6 +193,7 @@ namespace RenderGraph
         QueueFence(m_FrameSubmissionFences, queue) = (std::max)(
             QueueFence(m_FrameSubmissionFences, queue),
             fenceValue);
+        m_FrameSynchronizationStats.RecordSubmission(queue);
         commandList.reset();
 
         if (HasDiagnosticTelemetrySink())
@@ -282,6 +324,7 @@ namespace RenderGraph
             if (fenceValue != 0)
             {
                 consumer.Wait(GetCommandQueue(producerQueue), fenceValue);
+                m_FrameSynchronizationStats.RecordWait(producerQueue, waitingQueue);
                 if (HasDiagnosticTelemetrySink())
                 {
                     EmitTelemetry({
@@ -319,6 +362,7 @@ namespace RenderGraph
         if (fenceValue != 0)
         {
             GetCommandQueue(waitingQueue).Wait(*m_DirectCommandQueue, fenceValue);
+            m_FrameSynchronizationStats.RecordWait(RenderPassQueue::Direct, waitingQueue);
             if (HasDiagnosticTelemetrySink())
             {
                 EmitTelemetry({
@@ -452,9 +496,24 @@ namespace RenderGraph
         return m_ResourceRetirements;
     }
 
+    RenderGraphQueueFenceValues RenderGraphQueueScheduler::GetResourceRetirement(
+        const ResourceId resourceId) const
+    {
+        const auto retirement = m_ResourceRetirements.find(resourceId);
+        return retirement != m_ResourceRetirements.end()
+            ? retirement->second
+            : RenderGraphQueueFenceValues{};
+    }
+
     const RenderGraphQueueFenceValues& RenderGraphQueueScheduler::GetFrameSubmissionFences() const
     {
         return m_FrameSubmissionFences;
+    }
+
+    const RenderGraphQueueSynchronizationStats&
+    RenderGraphQueueScheduler::GetFrameSynchronizationStats() const
+    {
+        return m_FrameSynchronizationStats;
     }
 
     size_t RenderGraphQueueScheduler::QueueIndex(const RenderPassQueue queue)

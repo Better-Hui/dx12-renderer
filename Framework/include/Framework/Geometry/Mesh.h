@@ -160,6 +160,7 @@ public:
     void Bind(CommandList& commandList) const;
 
     UINT GetIndexCount() const;
+    VertexBuffer& GetVertexBuffer();
     const VertexBuffer& GetVertexBuffer() const;
     const IndexBuffer& GetIndexBuffer() const;
 
@@ -194,6 +195,9 @@ public:
     const Aabb& GetAabb() const;
 
     void SetSkinningVertexAttributes(CommandList& commandList, const SkinningVertexCollectionType& vertexAttributes);
+    void CopyVertexAttributes(
+        CommandList& commandList,
+        const VertexCollectionType& vertexAttributes);
 
     const Armature& GetArmature() const;
     Armature& GetArmature();

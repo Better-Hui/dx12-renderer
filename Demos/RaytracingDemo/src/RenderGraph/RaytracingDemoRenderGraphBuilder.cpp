@@ -18,6 +18,10 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
         .AsyncComputeSupported = resources.AsyncComputeQueue != nullptr,
         .CopyQueueSupported = resources.CopyQueue != nullptr,
     });
+    if (frameState.DynamicRayTracingUpdateEnabled)
+    {
+        RaytracingDemoPasses::Builder::AddDynamicRayTracingUpdatePasses(renderGraphBuilder, resources);
+    }
     RaytracingDemoPasses::Builder::AddBaseResourcesPass(renderGraphBuilder, resources, config);
     const bool usePathTracingDirectLighting =
         frameState.UsesDirectLighting() &&
@@ -163,6 +167,18 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
     RenderGraph::ResourceId displayColor = useFrameworkRasterBloom
         ? RaytracingDemoRenderGraph::ResourceIds::BloomOutput
         : RaytracingDemoRenderGraph::ResourceIds::SceneColor;
+//Modify Begin:2026-08-25 by Hui
+    if (frameState.CopyQueueValidationEnabled)
+    {
+        RaytracingDemoPasses::Builder::AddCopyQueueValidationPass(
+            renderGraphBuilder,
+            resources,
+            displayColor,
+            sceneReadyToken);
+        displayColor = RaytracingDemoRenderGraph::ResourceIds::CopyQueueValidationComputeColor;
+        sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::CopyQueueValidationComputeFinishedToken;
+    }
+//Modify End
     if (frameState.DLSSEnabled)
     {
         if (frameState.RayReconstructionEnabled)
@@ -203,7 +219,9 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
         RaytracingDemoRenderGraph::CreateTokenDescriptions(
             frameState.DLSSEnabled,
             frameState.FrameGenerationEnabled,
-            useCompactedRayTracedPixels);
+            useCompactedRayTracedPixels,
+            frameState.CopyQueueValidationEnabled,
+            frameState.DynamicRayTracingUpdateEnabled);
     std::vector<RenderGraph::TokenDescription> frameworkTokenDescriptions =
         renderGraphBuilder.ReleaseTokenDescriptions();
     tokenDescriptions.insert(
@@ -216,7 +234,8 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
             frameState.DLSSEnabled,
             frameState.FrameGenerationEnabled,
             frameState.DLSSEnabled && frameState.RayReconstructionEnabled,
-            useFrameworkRasterBloom);
+            useFrameworkRasterBloom,
+            frameState.CopyQueueValidationEnabled);
     std::vector<RenderGraph::TextureDescription> frameworkTextureDescriptions =
         renderGraphBuilder.ReleaseTextureDescriptions();
     textureDescriptions.insert(

@@ -8,7 +8,8 @@ namespace RaytracingDemoRenderGraph
         const bool includeDLSS,
         const bool includeFrameGeneration,
         const bool includeRayReconstruction,
-        const bool includeFrameworkBloom)
+        const bool includeFrameworkBloom,
+        const bool includeCopyQueueValidation)
     {
         const RenderGraph::RenderMetadataExpression<uint32_t> renderWidthExpression = [](const RenderGraph::RenderMetadata& metadata) { return metadata.m_ScreenWidth; };
         const RenderGraph::RenderMetadataExpression<uint32_t> renderHeightExpression = [](const RenderGraph::RenderMetadata& metadata) { return metadata.m_ScreenHeight; };
@@ -51,6 +52,26 @@ namespace RaytracingDemoRenderGraph
                 D3D12_HEAP_FLAG_NONE,
                 true);
         }
+//Modify Begin:2026-08-25 by Hui
+        if (includeCopyQueueValidation)
+        {
+            textureDescriptions.emplace_back(
+                ResourceIds::CopyQueueValidationColor,
+                displayWidthExpression,
+                displayHeightExpression,
+                SCENE_COLOR_FORMAT,
+                OUTPUT_CLEAR_COLOR,
+                RenderGraph::ResourceInitAction::CopyDestination);
+            textureDescriptions.emplace_back(
+                ResourceIds::CopyQueueValidationComputeColor,
+                displayWidthExpression,
+                displayHeightExpression,
+                SCENE_COLOR_FORMAT,
+                OUTPUT_CLEAR_COLOR,
+                RenderGraph::ResourceInitAction::Discard,
+                D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+        }
+//Modify End
 //Modify Begin:2026-08-23 by Hui
         textureDescriptions.emplace_back(
             ResourceIds::AutoExposureOutput,
@@ -149,7 +170,9 @@ namespace RaytracingDemoRenderGraph
     std::vector<RenderGraph::TokenDescription> CreateTokenDescriptions(
         const bool includeDLSS,
         const bool includeFrameGeneration,
-        const bool includeCompactedPathTracing)
+        const bool includeCompactedPathTracing,
+        const bool includeCopyQueueValidation,
+        const bool includeDynamicRayTracingUpdate)
     {
 //Modify Begin:2026-08-20 by Hui
         std::vector<RenderGraph::TokenDescription> tokenDescriptions = {
@@ -186,6 +209,18 @@ namespace RaytracingDemoRenderGraph
         {
             tokenDescriptions.emplace_back(ResourceIds::FrameGenerationHudLessFinishedToken);
         }
+//Modify Begin:2026-08-25 by Hui
+        if (includeCopyQueueValidation)
+        {
+            tokenDescriptions.emplace_back(ResourceIds::CopyQueueValidationFinishedToken);
+            tokenDescriptions.emplace_back(ResourceIds::CopyQueueValidationComputeFinishedToken);
+        }
+        if (includeDynamicRayTracingUpdate)
+        {
+            tokenDescriptions.emplace_back(ResourceIds::DynamicRayTracingGeometryUploadedToken);
+            tokenDescriptions.emplace_back(ResourceIds::DynamicRayTracingUpdatedToken);
+        }
+//Modify End
         return tokenDescriptions;
 //Modify End
     }

@@ -41,6 +41,7 @@ set(SOURCE_FILES
         src/RenderGraph/RaytracingDemoRenderGraphBuilder.cpp
         src/RenderGraph/RaytracingDemoRenderPipelineController.cpp
         src/Passes/BaseResourcesPass.cpp
+        src/Passes/DynamicRayTracingUpdatePass.cpp
         src/Passes/DebugPass.cpp
         src/Passes/DenoisePass.cpp
         src/Overlay/RaytracingDemoOverlay.cpp
@@ -52,6 +53,7 @@ set(SOURCE_FILES
         src/Passes/DLSSPass.cpp
         src/Passes/DLSSRayReconstructionPreparationPass.cpp
         src/Passes/CudaBloomPass.cpp
+        src/Passes/CopyQueueValidationPass.cpp
         src/Passes/RaytracingDemoPassResources.cpp
         src/Passes/PostProcessPass.cpp
         src/RenderGraph/RaytracingDemoGraphResources.cpp
@@ -157,6 +159,7 @@ set(SHADER_FILES_COMPUTE
         shaders/PathTracing/IndirectLighting.softshadow.cs.hlsl
         shaders/PathTracing/LightingComposite.cs.hlsl
         shaders/Upscaling/DLSSRayReconstructionPrepare.cs.hlsl
+        shaders/Diagnostics/CopyQueueValidation.cs.hlsl
         shaders/Skybox/Skybox.cs.hlsl
         shaders/Skybox/SkyboxEquirectangular.cs.hlsl
         shaders/Skybox/SkyboxCubemapStrip.cs.hlsl

@@ -92,6 +92,7 @@ public:
     void AddObject(const DirectX::XMMATRIX& worldMatrix, uint32_t geometryIndex, uint32_t materialIndex);
     void AppendObjects(std::span<const RaytracingDemoSceneObject> objects);
     void ResizeObjects(size_t count);
+    bool UpdateObjectWorldMatrix(size_t objectIndex, const DirectX::XMMATRIX& worldMatrix);
 
     const std::vector<RaytracingDemoSceneGeometry>& GetGeometries() const { return m_Geometries; }
     const std::vector<RaytracingDemoSceneObject>& GetObjects() const { return m_Objects; }
@@ -141,6 +142,8 @@ public:
         std::span<const RaytracingDemoSceneObject> objects);
     void RemoveStressInstances();
     void Update(CommandList& commandList, BindlessDescriptorHeap& bindlessDescriptorHeap);
+    bool UpdateSceneObjectTransform(size_t objectIndex, const DirectX::XMMATRIX& worldMatrix);
+    void RefitDirtyGeometry(CommandList& commandList);
     void ForEachShaderResource(const std::function<void(const Resource&)>& action) const;
 
     const StructuredBuffer& GetGeometryBuffer() const { return m_GeometryBuffer; }
@@ -151,11 +154,14 @@ private:
     void AddObjectInstances(
         const std::vector<RaytracingDemoSceneGeometry>& geometries,
         const RaytracingDemoSceneObject& object,
-        std::vector<RayTracingInstanceHandle>* instanceHandles = nullptr);
+        std::vector<RayTracingInstanceHandle>* instanceHandles = nullptr,
+        std::vector<RayTracingInstanceDesc>* instanceDescs = nullptr);
     void UploadGeometryBuffer(CommandList& commandList, BindlessDescriptorHeap& bindlessDescriptorHeap);
 
     StructuredBuffer m_GeometryBuffer;
     RayTracingAccelerationStructure m_AccelerationStructure;
     std::vector<RayTracingInstanceHandle> m_StressInstanceHandles;
+    std::vector<std::vector<RayTracingInstanceHandle>> m_SceneInstanceHandles;
+    std::vector<std::vector<RayTracingInstanceDesc>> m_SceneInstanceDescs;
 };
 //Modify End

@@ -679,6 +679,18 @@ void RaytracingDemo::OnImGui()
         m_SceneRuntime.SetStressTestSpheresEnabled(stressTestSpheresEnabled);
     }
     ImGui::TextDisabled("Adds or removes instances; BLAS and static meshlet geometry stay resident.");
+    bool dynamicRayTracingUpdatesEnabled = m_SceneResources.AreDynamicRayTracingUpdatesEnabled();
+    if (ImGui::Checkbox("Enable Dynamic RTAS Refit", &dynamicRayTracingUpdatesEnabled))
+    {
+        m_SceneResources.SetDynamicRayTracingUpdatesEnabled(dynamicRayTracingUpdatesEnabled);
+        if (dynamicRayTracingUpdatesEnabled)
+        {
+            m_UseMeshletGBuffer = false;
+            m_DebugMeshletClusters = false;
+        }
+        ResetAccumulation();
+    }
+    ImGui::TextDisabled("Animates one scene mesh and refits its BLAS/TLAS every frame. Meshlet GBuffer is disabled while this validation path is active.");
     if (m_PathTracingBackend == PathTracingBackend::InlineRayQuery)
     {
         if (ImGui::Checkbox("Use Async Compute for Indirect Lighting", &m_AsyncComputeEnabled))
@@ -692,6 +704,13 @@ void RaytracingDemo::OnImGui()
     {
         ImGui::TextDisabled("Async Compute: Inline Ray Query only");
     }
+//Modify Begin:2026-08-25 by Hui
+    if (ImGui::Checkbox("Debug: Validate Copy Queue Handoff", &m_CopyQueueValidationEnabled))
+    {
+        ResetAccumulation();
+    }
+    ImGui::TextDisabled("Routes HDR color through Direct -> Copy -> Async Compute -> Direct.");
+//Modify End
     ImGui::Checkbox("Enable Parallel Direct Command Recording", &m_ParallelDirectCommandRecordingEnabled);
     ImGui::TextDisabled("Current batch: Inline Ray Query direct and indirect lighting. GPU execution remains ordered.");
     const char* lightingDebugTargetNames[] = {

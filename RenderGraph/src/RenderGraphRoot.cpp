@@ -487,6 +487,25 @@ const RenderGraph::RenderGraphQueueFenceValues& RenderGraph::RenderGraphRoot::Ge
 {
     return m_QueueScheduler.GetFrameSubmissionFences();
 }
+
+const RenderGraph::RenderGraphQueueSynchronizationStats&
+RenderGraph::RenderGraphRoot::GetFrameSynchronizationStats() const
+{
+    return m_QueueScheduler.GetFrameSynchronizationStats();
+}
+
+RenderGraph::RenderGraphQueueFenceValues RenderGraph::RenderGraphRoot::GetResourceRetirement(
+    const ResourceId resourceId) const
+{
+    return m_QueueScheduler.GetResourceRetirement(resourceId);
+}
+
+const RenderGraph::RenderGraphCrossQueuePlanValidation&
+RenderGraph::RenderGraphRoot::GetCrossQueuePlanValidation() const
+{
+    Assert(m_CompiledGraph != nullptr, "Render graph has not been compiled.");
+    return m_CompiledGraph->GetCrossQueuePlanValidation();
+}
 //Modify End
 
 void RenderGraph::RenderGraphRoot::MarkDirty()
@@ -521,6 +540,27 @@ void RenderGraph::RenderGraphRoot::EmitCompiledGraphSnapshot(const RenderMetadat
                 { "screen_height", static_cast<uint64_t>(renderMetadata.m_ScreenHeight) },
                 { "display_width", static_cast<uint64_t>(renderMetadata.m_DisplayWidth) },
                 { "display_height", static_cast<uint64_t>(renderMetadata.m_DisplayHeight) },
+            },
+        });
+        const RenderGraphCrossQueuePlanValidation& crossQueuePlanValidation =
+            m_CompiledGraph->GetCrossQueuePlanValidation();
+        emit({
+            .Category = "assertion",
+            .Name = "render_graph_cross_queue_state_plan",
+            .Severity = crossQueuePlanValidation.IsValid()
+                ? DiagnosticTelemetrySeverity::Info
+                : DiagnosticTelemetrySeverity::Error,
+            .FrameIndex = renderMetadata.m_FrameIndex,
+            .CorrelationId = snapshotIndex,
+            .Fields = {
+                { "result", std::string(crossQueuePlanValidation.IsValid() ? "pass" : "fail") },
+                { "cross_queue_transfer_count", crossQueuePlanValidation.CrossQueueResourceTransferCount },
+                { "planned_transition_count", crossQueuePlanValidation.StatePlanTransitionCount },
+                { "missing_transition_count", crossQueuePlanValidation.MissingStatePlanTransitionCount },
+                { "incorrect_transition_count", crossQueuePlanValidation.IncorrectStatePlanTransitionCount },
+                { "copy_pass_count", crossQueuePlanValidation.CopyPassCount },
+                { "direct_to_copy_transfer_count", crossQueuePlanValidation.DirectToCopyTransferCount },
+                { "copy_to_consumer_transfer_count", crossQueuePlanValidation.CopyToConsumerTransferCount },
             },
         });
 

@@ -385,6 +385,10 @@ void RaytracingDemoPasses::Builder::AddBaseResourcesPass(
             passData.Resources.emplace(resources);
             passData.Config = config;
             passData.UsesComputeMeshletIndirect = useComputeMeshletIndirect;
+            if (config.FrameState->DynamicRayTracingUpdateEnabled)
+            {
+                passBuilder.ReadToken(DemoResourceIds::DynamicRayTracingUpdatedToken);
+            }
             if (useComputeMeshletIndirect)
             {
                 passBuilder.WriteToken(DemoResourceIds::SceneResourcesReadyToken);

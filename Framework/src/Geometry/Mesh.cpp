@@ -162,6 +162,24 @@ void Mesh::SetSkinningVertexAttributes(CommandList& commandList, const SkinningV
 //Modify End
 }
 
+void Mesh::CopyVertexAttributes(
+    CommandList& commandList,
+    const VertexCollectionType& vertexAttributes)
+{
+    if (vertexAttributes.size() != m_VertexBuffer.GetNumVertices())
+    {
+        throw std::invalid_argument("Vertex update must preserve the existing vertex count.");
+    }
+
+    ResourceUploader(commandList.GetDeviceContext()).CopyVertexBuffer(
+        commandList,
+        m_VertexBuffer,
+        vertexAttributes.size(),
+        sizeof(VertexAttributes),
+        vertexAttributes.data());
+    CalculateAabb(vertexAttributes);
+}
+
 const Armature& Mesh::GetArmature() const
 {
     return m_Armature;
@@ -247,6 +265,11 @@ void Mesh::Bind(CommandList& commandList) const
 UINT Mesh::GetIndexCount() const
 {
     return m_IndexCount;
+}
+
+VertexBuffer& Mesh::GetVertexBuffer()
+{
+    return m_VertexBuffer;
 }
 
 const VertexBuffer& Mesh::GetVertexBuffer() const

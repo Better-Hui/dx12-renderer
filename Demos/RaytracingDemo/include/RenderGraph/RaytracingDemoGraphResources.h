@@ -53,6 +53,10 @@ namespace RaytracingDemoRenderGraph
 //Modify Begin:2026-08-17 by Hui
         static inline const RenderGraph::ResourceId BloomOutput = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.BloomOutput");
 //Modify End
+//Modify Begin:2026-08-25 by Hui
+        static inline const RenderGraph::ResourceId CopyQueueValidationColor = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.CopyQueueValidationColor");
+        static inline const RenderGraph::ResourceId CopyQueueValidationComputeColor = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.CopyQueueValidationComputeColor");
+//Modify End
 //Modify Begin:2026-08-23 by Hui
         static inline const RenderGraph::ResourceId AutoExposureOutput = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.AutoExposureOutput");
 //Modify End
@@ -90,6 +94,12 @@ namespace RaytracingDemoRenderGraph
         static inline const RenderGraph::ResourceId DenoiseFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DenoiseFinished");
 //Modify Begin:2026-08-24 by Hui
         static inline const RenderGraph::ResourceId BloomFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.BloomFinished");
+//Modify End
+//Modify Begin:2026-08-25 by Hui
+        static inline const RenderGraph::ResourceId CopyQueueValidationFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.CopyQueueValidationFinished");
+        static inline const RenderGraph::ResourceId CopyQueueValidationComputeFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.CopyQueueValidationComputeFinished");
+        static inline const RenderGraph::ResourceId DynamicRayTracingGeometryUploadedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DynamicRayTracingGeometryUploaded");
+        static inline const RenderGraph::ResourceId DynamicRayTracingUpdatedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DynamicRayTracingUpdated");
 //Modify End
 //Modify Begin:2026-08-23 by Hui
         static inline const RenderGraph::ResourceId AutoExposureFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.AutoExposureFinished");
@@ -138,13 +148,16 @@ namespace RaytracingDemoRenderGraph
         bool includeDLSS,
         bool includeFrameGeneration,
         bool includeRayReconstruction,
-        bool includeFrameworkBloom);
+        bool includeFrameworkBloom,
+        bool includeCopyQueueValidation);
 //Modify End
     std::vector<RenderGraph::BufferDescription> CreateBufferDescriptions(bool includeCompactedPathTracing);
 //Modify Begin:2026-08-07 by Hui
     std::vector<RenderGraph::TokenDescription> CreateTokenDescriptions(
         bool includeDLSS,
         bool includeFrameGeneration,
-        bool includeCompactedPathTracing);
+        bool includeCompactedPathTracing,
+        bool includeCopyQueueValidation,
+        bool includeDynamicRayTracingUpdate);
 //Modify End
 }

@@ -33,6 +33,37 @@ void ResourceUploader::UploadVertexBuffer(
     UploadBuffer(commandList, vertexBuffer, vertexCount, vertexStride, vertexData, D3D12_RESOURCE_FLAG_NONE);
 }
 
+void ResourceUploader::CopyVertexBuffer(
+    CommandList& commandList,
+    VertexBuffer& vertexBuffer,
+    const size_t vertexCount,
+    const size_t vertexStride,
+    const void* vertexData) const
+{
+    ValidateCommandList(commandList);
+    Assert(vertexData != nullptr, "Vertex buffer copy data must not be null.");
+    const size_t bufferSize = vertexCount * vertexStride;
+    Assert(bufferSize > 0u, "Vertex buffer copy size must be non-zero.");
+    Assert(vertexBuffer.GetD3D12Resource() != nullptr, "Vertex buffer copy destination has not been created.");
+    Assert(
+        vertexBuffer.GetD3D12ResourceDesc().Width >= bufferSize,
+        "Vertex buffer copy exceeds the existing GPU allocation.");
+
+    const UploadBuffer::Allocation uploadAllocation = CommandListInternalAccess::AllocateTransientUpload(
+        commandList,
+        bufferSize,
+        16u);
+    std::memcpy(uploadAllocation.Cpu, vertexData, bufferSize);
+    commandList.CopyBufferRegion(
+        vertexBuffer,
+        0u,
+        uploadAllocation.Resource,
+        uploadAllocation.Offset,
+        bufferSize);
+    CommandListInternalAccess::TrackObjectLifetime(commandList, uploadAllocation.Resource);
+    CommandListInternalAccess::TrackResourceLifetime(commandList, vertexBuffer);
+}
+
 void ResourceUploader::UploadIndexBuffer(
     CommandList& commandList,
     IndexBuffer& indexBuffer,

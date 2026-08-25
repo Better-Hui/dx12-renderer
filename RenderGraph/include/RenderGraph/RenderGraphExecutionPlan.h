@@ -59,6 +59,23 @@ namespace RenderGraph
         bool RecordInParallel = false;
     };
 
+    struct RenderGraphCrossQueuePlanValidation
+    {
+        uint64_t CrossQueueResourceTransferCount = 0;
+        uint64_t StatePlanTransitionCount = 0;
+        uint64_t MissingStatePlanTransitionCount = 0;
+        uint64_t IncorrectStatePlanTransitionCount = 0;
+        uint64_t CopyPassCount = 0;
+        uint64_t DirectToCopyTransferCount = 0;
+        uint64_t CopyToConsumerTransferCount = 0;
+
+        [[nodiscard]] bool IsValid() const
+        {
+            return MissingStatePlanTransitionCount == 0 &&
+                IncorrectStatePlanTransitionCount == 0;
+        }
+    };
+
     class CompiledRenderGraph final
     {
     public:
@@ -66,6 +83,7 @@ namespace RenderGraph
         const std::vector<RenderGraphRecordingBatch>& GetRecordingBatches() const { return m_RecordingBatches; }
         const std::map<const RenderPass*, RenderTargetInfo>& GetRenderTargets() const { return m_RenderTargets; }
         const std::map<const RenderPass*, PassResourceStatePlan>& GetResourceStatePlans() const { return m_ResourceStatePlans; }
+        const RenderGraphCrossQueuePlanValidation& GetCrossQueuePlanValidation() const { return m_CrossQueuePlanValidation; }
 
     private:
         friend class RenderGraphCompiler;
@@ -74,6 +92,7 @@ namespace RenderGraph
         std::vector<RenderGraphRecordingBatch> m_RecordingBatches;
         std::map<const RenderPass*, RenderTargetInfo> m_RenderTargets;
         std::map<const RenderPass*, PassResourceStatePlan> m_ResourceStatePlans;
+        RenderGraphCrossQueuePlanValidation m_CrossQueuePlanValidation;
     };
 }
 //Modify End

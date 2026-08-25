@@ -262,6 +262,19 @@ void SceneGeometryResources::ResizeObjects(const size_t count)
     m_Objects.resize(count);
 }
 
+bool SceneGeometryResources::UpdateObjectWorldMatrix(
+    const size_t objectIndex,
+    const DirectX::XMMATRIX& worldMatrix)
+{
+    if (objectIndex >= m_Objects.size())
+    {
+        return false;
+    }
+
+    m_Objects[objectIndex].WorldMatrix = worldMatrix;
+    return true;
+}
+
 void SceneMeshletResources::Clear()
 {
     m_Resources.Clear();
@@ -328,6 +341,8 @@ void SceneRayTracingResources::Clear()
     m_GeometryBuffer = StructuredBuffer(L"Ray Tracing Geometry Data");
     m_AccelerationStructure.ClearInstances();
     m_StressInstanceHandles.clear();
+    m_SceneInstanceHandles.clear();
+    m_SceneInstanceDescs.clear();
 }
 
 void SceneRayTracingResources::Build(
@@ -342,13 +357,28 @@ void SceneRayTracingResources::Build(
 {
     m_AccelerationStructure.ClearInstances();
     m_StressInstanceHandles.clear();
+    m_SceneInstanceHandles.clear();
+    m_SceneInstanceDescs.clear();
+    m_SceneInstanceHandles.reserve(objects.size());
+    m_SceneInstanceDescs.reserve(objects.size());
     for (size_t objectIndex = 0; objectIndex < objects.size(); ++objectIndex)
     {
-        std::vector<RayTracingInstanceHandle>* instanceHandles =
-            stressObjectsEnabled && stressObjectCount > 0 && objectIndex >= stressObjectStart
-            ? &m_StressInstanceHandles
-            : nullptr;
-        AddObjectInstances(geometries, objects[objectIndex], instanceHandles);
+        std::vector<RayTracingInstanceHandle> sceneInstanceHandles;
+        std::vector<RayTracingInstanceDesc> sceneInstanceDescs;
+        AddObjectInstances(
+            geometries,
+            objects[objectIndex],
+            &sceneInstanceHandles,
+            &sceneInstanceDescs);
+        if (stressObjectsEnabled && stressObjectCount > 0 && objectIndex >= stressObjectStart)
+        {
+            m_StressInstanceHandles.insert(
+                m_StressInstanceHandles.end(),
+                sceneInstanceHandles.begin(),
+                sceneInstanceHandles.end());
+        }
+        m_SceneInstanceHandles.push_back(std::move(sceneInstanceHandles));
+        m_SceneInstanceDescs.push_back(std::move(sceneInstanceDescs));
     }
 
     m_AccelerationStructure.Build(commandList, settings);
@@ -379,6 +409,33 @@ void SceneRayTracingResources::Update(
     UploadGeometryBuffer(commandList, bindlessDescriptorHeap);
 }
 
+bool SceneRayTracingResources::UpdateSceneObjectTransform(
+    const size_t objectIndex,
+    const DirectX::XMMATRIX& worldMatrix)
+{
+    if (objectIndex >= m_SceneInstanceHandles.size())
+    {
+        return false;
+    }
+
+    std::vector<RayTracingInstanceHandle>& handles = m_SceneInstanceHandles[objectIndex];
+    std::vector<RayTracingInstanceDesc>& instanceDescs = m_SceneInstanceDescs[objectIndex];
+    Assert(handles.size() == instanceDescs.size(), "Ray tracing scene instance handle/description counts must match.");
+    for (size_t instanceIndex = 0; instanceIndex < handles.size(); ++instanceIndex)
+    {
+        instanceDescs[instanceIndex].Transform = worldMatrix;
+        Assert(
+            m_AccelerationStructure.UpdateInstance(handles[instanceIndex], instanceDescs[instanceIndex]),
+            "Ray tracing scene instance transform update uses an invalid handle.");
+    }
+    return !handles.empty();
+}
+
+void SceneRayTracingResources::RefitDirtyGeometry(CommandList& commandList)
+{
+    m_AccelerationStructure.Update(commandList);
+}
+
 void SceneRayTracingResources::ForEachShaderResource(
     const std::function<void(const Resource&)>& action) const
 {
@@ -393,20 +450,26 @@ void SceneRayTracingResources::ForEachShaderResource(
 void SceneRayTracingResources::AddObjectInstances(
     const std::vector<RaytracingDemoSceneGeometry>& geometries,
     const RaytracingDemoSceneObject& object,
-    std::vector<RayTracingInstanceHandle>* instanceHandles)
+    std::vector<RayTracingInstanceHandle>* instanceHandles,
+    std::vector<RayTracingInstanceDesc>* instanceDescs)
 {
     Assert(object.GeometryIndex < geometries.size(), "Scene object geometry index is invalid.");
     const RaytracingDemoSceneGeometry& geometry = geometries[object.GeometryIndex];
     for (const std::shared_ptr<Mesh>& mesh : geometry.Model->GetMeshes())
     {
-        const RayTracingInstanceHandle handle = m_AccelerationStructure.AddInstance({
+        const RayTracingInstanceDesc instanceDesc = {
             mesh,
             object.WorldMatrix,
             object.MaterialIndex
-        });
+        };
+        const RayTracingInstanceHandle handle = m_AccelerationStructure.AddInstance(instanceDesc);
         if (instanceHandles != nullptr)
         {
             instanceHandles->push_back(handle);
+        }
+        if (instanceDescs != nullptr)
+        {
+            instanceDescs->push_back(instanceDesc);
         }
     }
 }

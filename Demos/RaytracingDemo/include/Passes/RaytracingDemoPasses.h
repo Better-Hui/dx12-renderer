@@ -21,6 +21,9 @@ namespace RaytracingDemoPasses
             RenderGraph::RenderGraphBuilder& renderGraphBuilder,
             const RaytracingDemoPassResources& resources,
             const RaytracingDemoPassConfig& config);
+        static void AddDynamicRayTracingUpdatePasses(
+            RenderGraph::RenderGraphBuilder& renderGraphBuilder,
+            const RaytracingDemoPassResources& resources);
         static void AddSkyboxPass(
             RenderGraph::RenderGraphBuilder& renderGraphBuilder,
             const RaytracingDemoPassResources& resources,
@@ -70,6 +73,13 @@ namespace RaytracingDemoPasses
             RenderGraph::RenderGraphBuilder& renderGraphBuilder,
             const RaytracingDemoPassResources& resources,
             RenderGraph::ResourceId sceneReadyToken);
+//Modify Begin:2026-08-25 by Hui
+        static void AddCopyQueueValidationPass(
+            RenderGraph::RenderGraphBuilder& renderGraphBuilder,
+            const RaytracingDemoPassResources& resources,
+            RenderGraph::ResourceId sourceColor,
+            RenderGraph::ResourceId sceneReadyToken);
+//Modify End
         static void AddAutoExposurePass(
             RenderGraph::RenderGraphBuilder& renderGraphBuilder,
             const RaytracingDemoPassResources& resources,

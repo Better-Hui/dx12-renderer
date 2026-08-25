@@ -1,6 +1,6 @@
 # Framework 诊断、自动化与 Profiler
 
-> 状态：基础能力已落地并通过真实 Demo 自动化验证；GPU readback/image assertion、DRED attachment、后台写盘和 retention policy 仍待实现。
+> 状态：基础能力已落地并通过真实 Demo 自动化验证；受维护的 Copy queue 与动态 RTAS 场景已经覆盖真实跨 queue 同步、retirement 和原地 acceleration-structure update。GPU readback/image assertion、DRED attachment、后台写盘和 retention policy 仍待实现。
 
 ## 目标
 
@@ -56,6 +56,8 @@ Developer tool 仅在 `DX12_RENDERER_BUILD_DEVELOPER_TOOLS=ON` 时生成：
 
 ```text
 RendererDiagnostics run --exe RaytracingDemo.exe --scenario stress --output Saved/Diagnostics/run-001
+RendererDiagnostics run --exe RaytracingDemo.exe --scenario copy --output Saved/Diagnostics/copy-001
+RendererDiagnostics run --exe RaytracingDemo.exe --scenario rtas --output Saved/Diagnostics/rtas-001
 RendererDiagnostics inspect Saved/Diagnostics/run-001
 RendererDiagnostics query Saved/Diagnostics/run-001 --frame 42 --category command_queue --limit 100
 RendererDiagnostics diff baseline current
@@ -63,7 +65,7 @@ RendererDiagnostics reproduce Saved/Diagnostics/run-001 --execute
 RendererDiagnostics selftest
 ```
 
-`Framework/tools/` 在两种配置下都会继续显示在 `Framework` 工程中；开关只控制 developer-tool target 是否生成。`core` 是通用渲染 smoke test，不再执行只适用于 compacted dispatch 的 active-pixel readback assertion。验证 active-pixel 数量和间接派发参数时，应使用 `RAYTRACING_DEMO_RAY_TRACING_DISPATCH=compacted` 运行 `visual` 场景。
+`Framework/tools/` 在两种配置下都会继续显示在 `Framework` 工程中；开关只控制 developer-tool target 是否生成。`core` 是通用渲染 smoke test，不再执行只适用于 compacted dispatch 的 active-pixel readback assertion。专用 `rtas` 场景会启用动态顶点/变换更新，验证原地 BLAS/TLAS refit 与 retirement，再验证 restore frame。验证 active-pixel 数量和间接派发参数时，应使用 `RAYTRACING_DEMO_RAY_TRACING_DISPATCH=compacted` 运行 `visual` 场景。
 
 所有命令输出 JSON 或 JSONL；`inspect` 会给出 verdict、capture 完整性、疑似问题域、假设、相关证据窗口和下一条查询建议。`query` 支持 frame/category/name/correlation/severity/field 过滤，并明确报告截断。`diff` 比较 graph pass、首次出现的失败 assertion 以及 CPU/GPU mean/P95，并携带样本数。runner 始终保持非交互，不合成鼠标或键盘输入。
 
@@ -75,13 +77,14 @@ RendererDiagnostics selftest
 - 已记录 RenderGraph pass/batch/resource/state-plan/lifecycle；
 - 已记录 descriptor allocation、descriptor-set revision 与资源身份；
 - 已检查 compacted active count 与 finalized indirect arguments/dispatch 的一致性；
+- 已通过 Direct -> Copy -> Async Compute -> Direct 验证 producer fence、GPU wait、state plan、batch 和 retirement；
+- 已通过动态 RTAS 验证顶点上传、dirty BLAS refit、原地 TLAS update、资源 retirement counter 和 restore frame；
 - 自动化 control、observation、timeout 和 assertion failure 使用稳定退出码 `20`–`24`。
 
 仍待补齐：
 
-- 对 cross-queue producer/consumer wait 做离线或在线闭环验证；
 - 验证 RenderGraph 实际访问完全符合声明 usage/state plan；
-- 验证 transient/replaced resource 的多 queue retirement；
+- 在受维护的 Copy 验证拓扑之外，继续扩大 cross-queue wait 与多 queue retirement 的通用覆盖；
 - 通用 texture/buffer readback、图像容差与 capture attachment；
 - device removal 时自动附加 DRED；
 - backend capability 与实际调度 pass 的通用 Framework invariant。

@@ -1,6 +1,6 @@
 # Framework Diagnostics, Automation, and Profiling
 
-> Status: the baseline is implemented and validated with real Demo automation. Generic GPU readback/image assertions, DRED attachments, background writing, and retention policy remain future work.
+> Status: the baseline is implemented and validated with real Demo automation. The maintained Copy-queue and dynamic-RTAS scenarios cover real cross-queue synchronization, retirement, and in-place acceleration-structure updates. Generic GPU readback/image assertions, DRED attachments, background writing, and retention policy remain future work.
 
 ## Goal
 
@@ -56,6 +56,8 @@ The developer tool is generated only with `DX12_RENDERER_BUILD_DEVELOPER_TOOLS=O
 
 ```text
 RendererDiagnostics run --exe RaytracingDemo.exe --scenario stress --output Saved/Diagnostics/run-001
+RendererDiagnostics run --exe RaytracingDemo.exe --scenario copy --output Saved/Diagnostics/copy-001
+RendererDiagnostics run --exe RaytracingDemo.exe --scenario rtas --output Saved/Diagnostics/rtas-001
 RendererDiagnostics inspect Saved/Diagnostics/run-001
 RendererDiagnostics query Saved/Diagnostics/run-001 --frame 42 --category command_queue --limit 100
 RendererDiagnostics diff baseline current
@@ -63,7 +65,7 @@ RendererDiagnostics reproduce Saved/Diagnostics/run-001 --execute
 RendererDiagnostics selftest
 ```
 
-`Framework/tools/` remains visible in the `Framework` project in both configurations; the option controls only whether the developer-tool targets are generated. The `core` scenario is a general rendering smoke test and does not assert compacted-only active-pixel readback. Run the `visual` scenario with `RAYTRACING_DEMO_RAY_TRACING_DISPATCH=compacted` when validating active-pixel count and indirect-dispatch arguments.
+`Framework/tools/` remains visible in the `Framework` project in both configurations; the option controls only whether the developer-tool targets are generated. The `core` scenario is a general rendering smoke test and does not assert compacted-only active-pixel readback. The focused `rtas` scenario enables dynamic vertex/transform updates, verifies in-place BLAS/TLAS refits and retirement, then verifies the restore frame. Run the `visual` scenario with `RAYTRACING_DEMO_RAY_TRACING_DISPATCH=compacted` when validating active-pixel count and indirect-dispatch arguments.
 
 Commands emit JSON or JSONL. `inspect` reports a verdict, capture completeness, suspected problem domain, hypothesis, relevance-sorted evidence, and suggested next query. `query` filters frame/category/name/correlation/severity/field and reports truncation. `diff` compares graph passes, newly failed assertions, and CPU/GPU mean/P95 with sample counts. The runner remains non-interactive and never synthesizes mouse or keyboard input.
 
@@ -77,13 +79,14 @@ Implemented:
 - RenderGraph pass, batch, resource, state-plan, and lifetime telemetry;
 - descriptor allocation, descriptor-set revision, and resource-identity telemetry;
 - compacted active-count/finalized indirect-dispatch consistency;
+- Direct -> Copy -> Async Compute -> Direct validation with producer-fence, GPU-wait, state-plan, batch, and retirement assertions;
+- dynamic RTAS validation with vertex uploads, dirty-BLAS refits, in-place TLAS updates, resource-retirement counters, and restore-frame assertions;
 - stable automation exit codes `20`-`24` for controls, observations, timeouts, and assertions.
 
 Still required:
 
-- closed-loop validation of cross-queue producer/consumer waits;
 - complete validation of actual RenderGraph access against declared usage and state plans;
-- multi-queue retirement validation for transient/replaced resources;
+- generic coverage of cross-queue waits and multi-queue retirement beyond the maintained Copy validation topology;
 - generic texture/buffer readback, image tolerance, and capture attachments;
 - automatic DRED attachment on device removal;
 - a generic Framework invariant for backend capability versus scheduled passes.

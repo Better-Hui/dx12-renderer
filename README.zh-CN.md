@@ -58,7 +58,7 @@ builder.AddComputePass<PassData>(
     });
 ```
 
-输入/输出声明会参与依赖分析与资源状态安排。`AddPass` 创建 Direct pass；`AddComputePass` 在可用时使用 Async Compute，否则回退到 Direct；`AddCopyPass` 要求 Copy queue 可用；`AddExternalPass` 固定使用 Direct。`AsyncCompute` 不是自动性能优化开关：RenderGraph 会处理必要的 GPU fence 等待，但不会自动判断哪个 pass 最适合异步、拆分 pass，或保证一定产生 direct/compute overlap。
+输入/输出声明会参与依赖分析与资源状态安排。`AddPass` 创建 Direct pass；`AddComputePass` 在可用时使用 Async Compute，否则回退到 Direct；`AddCopyPass` 要求 Copy queue 可用；`AddExternalPass` 固定使用 Direct。无人值守的 `Copy Queue Validation` 走 `Direct HDR -> Copy -> Async Compute -> Direct`，并断言 producer fence、GPU wait、state plan、submission batch 和资源 retirement fence。`AsyncCompute` 不是自动性能优化开关：RenderGraph 会处理必要的 GPU fence 等待，但不会自动判断哪个 pass 最适合异步、拆分 pass，或保证一定产生 direct/compute overlap。
 
 当前 queue 提交、last-writer 和跨 queue fence 由 `RenderGraphQueueScheduler` 管理。Compiler 为每个 pass 生成不可变的 transition/aliasing 计划，Executor 把它录入所属的 command list；`CommandList` 在最终提交顺序中通过共享 `ResourceStateRegistry` 解析每条 list 的初始状态。因此 CPU 录制先后不会改变 GPU 的资源状态与执行顺序。
 
@@ -68,7 +68,7 @@ builder.AddComputePass<PassData>(
 
 NRD 在图中展开为 `Prepare Inputs`、`Native Denoise` 和 `Composite`。native NRI/NRD recording 允许管理 SDK 内部临时状态，但图资源进入和离开 native 段时保持 RG 声明的 SRV/UAV 状态，NRD 不在 barrier 白名单中。SVGF 展开为 imported 奇偶 temporal history、逐次水平/垂直 A-Trous 与 Composite；TAA 围绕 imported ping-pong history 展开为 Resolve 和 History Copy，同一次图执行期间固定物理读写映射，只在 rendered-frame 边界推进。UAV clear 本身不再偷偷追加 barrier；clear 后继续写同一 UAV 时必须拆 pass 或显式形成 WAW 图依赖。
 
-Raster Bloom 在图中展开为 `Bloom Prefilter`、逐级 `Bloom Downsample`、逐级 `Bloom Upsample` 和 `Bloom Composite`。金字塔纹理由 RG 管理，但当前强制使用 dedicated resource：让这条链参与 transient heap aliasing 会在反复重建 RenderGraph 后稳定触发 device hang，因此 alias activation/state ordering 需要作为独立的底层问题继续修复。
+Raster Bloom 在图中展开为 `Bloom Prefilter`、逐级 `Bloom Downsample`、逐级 `Bloom Upsample` 和 `Bloom Composite`。金字塔纹理由 RG 管理并参与 transient heap aliasing；allocator 在物理资源真正首次使用的位置写入 alias barrier，并将新 placed resource 登记为 `COMMON`，已消除反复重建图时的 device hang，不再使用 dedicated resource 规避。
 
 ## 你可以从 sample 中看到的功能
 
@@ -245,13 +245,14 @@ CMake 生成的工程会保持各 target 的真实源码目录。`DX12Library`�
 - 仅支持 Windows / x64 / D3D12。
 - `RaytracingDemo` 是集成 sample，不是 production renderer，也不承诺稳定的公开 API 兼容性。
 - CUDA 在运行时可以关闭，但仍是当前构建流程的硬依赖；将它做成真正可选的模块仍需调整 build system。
-- Direct、Async Compute 和 Copy queue 都由 pass **显式指定**。RenderGraph 不会自动选择 queue、拆分 pass 或优化 overlap；Copy queue 已具备底层调度能力，但当前主 sample 还没有对应 pass。
+- Direct、Async Compute 和 Copy queue 都由 pass **显式指定**。RenderGraph 不会自动选择 queue、拆分 pass 或优化 overlap；`Copy Queue Validation` 是受维护的 Diagnostics sample 路径，不代表自动 queue placement 策略。
 - Compiler 会把 queue 相同且资源交接兼容的连续 Async Compute/Copy pass 合并为 non-direct recording/submission batch；遇到 aliasing 或需要中途 Direct preamble 的资源关系时仍会拆开。
 - `RenderGraphRoot::Execute()` 现在只是图执行入口；pass 录制/提交由 `RenderGraphCommandExecutor` 负责，Direct/Async Compute/Copy 的可选 timestamp 生命周期由 `RenderGraphProfiler` 负责。Root 仍负责图构建和拓扑编排。
 - transient resource 会按本帧实际记录的 Direct/Async Compute/Copy fence 做延迟退休。aliasing 仍采取保守策略：不同 queue 使用的资源不会互相 alias，后续再设计更一般的多 queue allocator。
-- Raster Bloom 的 scratch texture 还会强制使用 dedicated resource，直到 transient alias activation/state ordering 在反复 RG 重建下的 device hang 被修复。
+- Raster Bloom 的 scratch texture 已重新使用 transient aliasing：alias barrier 在真实首次使用、首个 transition 之前写入，新 placed resource 从 `COMMON` 开始；无桌面输入的反复重建压力测试覆盖此顺序。
 - 当前 Framework 和 RenderGraph 的执行路径由应用组合根显式注入 device、queue 和 descriptor 分配器。独立运行时的 application/window 生命周期，以及少量 legacy resource-wrapper 兼容路径，仍保留 `Application` 依赖。
 - `RaytracingDemoSceneResources` 内部已拆成 texture/material、geometry、meshlet、RTAS 四个 builder；facade 仍是 sample 层入口。
+- `rtas` 自动化场景会原地更新一个非 stress 场景 mesh：上传变化后的顶点，refit dirty BLAS，再原地更新 TLAS 并保持其 GPU virtual address；关闭后还会验证一帧 restore。此验证路径启用时会主动关闭 Meshlet GBuffer，因为 meshlet instance-transform buffer 目前没有对应的动态同步。
 - Compacted Indirect 的 `ActivePixelCount` 是有效像素数，不是光线数量。Finalize 对 Inline compute 写入 `{ ceil(activeCount / 64), 1, 1 }`；因此 UI 同时显示 dispatch groups、实际启动线程数和 DXR ray-generation invocation 数。最后一个 compute group 的 padding threads 会由 count guard 早退，收益主要来自移除天空/空区域的完整 lighting 与 ray-query 工作，而不是依靠 padding 线程早退。
 - 手动把 backend 切到 Shader-table DXR 时，若当前选择了只支持 Inline 的 lighting stage，UI 会弹出兼容性提示并持续显示红色警告；自动化切换不会打开模态框，以免阻塞无人值守测试。
 - RenderGraph timing 分别记录每条 queue 上的 pass 时长；判断跨 queue overlap、wait 和 GPU bubble 时，请使用 PIX Timing Capture。

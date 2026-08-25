@@ -40,6 +40,11 @@ namespace RenderGraph
     class FrameContext;
 }
 
+namespace FrameworkDiagnostics
+{
+    class DiagnosticsSession;
+}
+
 struct RaytracingDemoCameraConstants
 {
     DirectX::XMMATRIX InverseView = DirectX::XMMatrixIdentity();
@@ -134,6 +139,9 @@ struct RaytracingDemoPassResources
     ReSTIRGIPass& IndirectLightingReSTIRGIPass;
     DLSS& Dlss;
     std::shared_ptr<ComputeShader> DLSSRayReconstructionPrepareShader;
+//Modify Begin:2026-08-25 by Hui
+    std::shared_ptr<ComputeShader> CopyQueueValidationShader;
+//Modify End
     DenoiserController& Denoisers;
     CudaBloomPass& CudaBloom;
     AutoExposure& Exposure;
@@ -155,6 +163,7 @@ struct RaytracingDemoPassResources
     std::shared_ptr<CommandQueue> AsyncComputeQueue;
     std::shared_ptr<CommandQueue> CopyQueue;
     GpuTimestampProfiler* DirectGpuTimestampProfiler = nullptr;
+    FrameworkDiagnostics::DiagnosticsSession* Diagnostics = nullptr;
 };
 
 using RaytracingDemoPassResourcesSnapshot = std::optional<RaytracingDemoPassResources>;
@@ -175,6 +184,10 @@ struct RaytracingDemoFrameState
     RaytracingDemoLightingTechnique DirectLightingTechnique = RaytracingDemoLightingTechnique::None;
     RaytracingDemoLightingTechnique IndirectLightingTechnique = RaytracingDemoLightingTechnique::None;
     bool AsyncComputeEnabled = false;
+//Modify Begin:2026-08-25 by Hui
+    bool CopyQueueValidationEnabled = false;
+    bool DynamicRayTracingUpdateEnabled = false;
+//Modify End
     bool UseMeshletGBuffer = false;
     bool UseTaskShaderMeshlets = false;
     bool DebugMeshletClusters = false;

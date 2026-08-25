@@ -41,6 +41,12 @@ namespace RaytracingDemoAutomation
         MaxBounces,
         Wait,
         VerifyActiveRayTracedPixelCount,
+//Modify Begin:2026-08-25 by Hui
+        CopyQueueValidation,
+        VerifyCopyQueueValidation,
+        DynamicRayTracingUpdate,
+        VerifyDynamicRayTracingUpdate,
+//Modify End
         CaptureScreenshot,
         MatrixCase,
     };

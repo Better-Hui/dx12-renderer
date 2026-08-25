@@ -21,6 +21,10 @@ RaytracingDemoRenderPipelineConfiguration RaytracingDemoRenderPipelineController
             .RayReconstructionEnabled = frameState.RayReconstructionEnabled,
             .FrameGenerationEnabled = frameState.FrameGenerationEnabled,
             .AsyncComputeEnabled = frameState.AsyncComputeEnabled,
+//Modify Begin:2026-08-25 by Hui
+            .CopyQueueValidationEnabled = frameState.CopyQueueValidationEnabled,
+            .DynamicRayTracingUpdateEnabled = frameState.DynamicRayTracingUpdateEnabled,
+//Modify End
             .PathTracingBackendType = frameState.Backend,
             .PathTracingDispatchModeType = frameState.DispatchMode,
             .DirectLightingTechnique = frameState.DirectLightingTechnique,
