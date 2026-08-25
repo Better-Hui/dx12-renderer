@@ -189,6 +189,10 @@ bool DenoiserController::DrawImGui()
 
     if (IsOIDNEnabled())
     {
+        ImGui::TextDisabled(
+            m_OIDN != nullptr && m_OIDN->IsUsingCuda()
+                ? "OIDN backend: CUDA, D3D12 shared GPU memory, Quality::Fast."
+                : "OIDN backend: CPU fallback, Quality::Fast.");
         ImGui::TextDisabled("OIDN automatically accumulates static samples and holds its denoised result until the scene changes.");
         int oidnStaticSpp = static_cast<int>(m_OIDNStaticSpp);
         if (FrameworkImGui::SliderInt("OIDN Static SPP", &oidnStaticSpp, 1, 4096))

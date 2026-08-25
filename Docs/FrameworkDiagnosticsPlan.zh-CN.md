@@ -80,7 +80,7 @@ RendererDiagnostics selftest
 - 已记录 descriptor allocation、descriptor-set revision 与资源身份；
 - 已检查 compacted active count 与 finalized indirect arguments/dispatch 的一致性；
 - 已通过 Direct -> Copy -> Async Compute -> Direct 验证 producer fence、GPU wait、state plan、batch 和 retirement；
-- 已具备可复用、非阻塞的 `GpuReadbackBuffer` 与 `GpuReadbackTexture` ring-slot 基元；compacted active-pixel 验证和 OIDN 的 HDR readback → CPU filter → upload → composite 已实际使用，OIDN 自动化还验证了静止结果保持以及相机移动后的 generation 作废；
+- 已具备可复用、非阻塞的 `GpuReadbackBuffer` 与 `GpuReadbackTexture` ring-slot 基元；compacted active-pixel 验证实际使用它们。OIDN 在可用时走 D3D12 shared buffer/fence → CUDA `Quality::Fast` → D3D12 copy-back，CUDA 初始化或 external-memory import 失败时才使用 HDR readback → CPU `Fast` → upload fallback；OIDN 自动化记录 backend，并验证静止结果保持以及相机移动后的 generation 作废；
 - 已通过动态 RTAS 验证普通/Meshlet 顶点上传、Meshlet bounds 与 instance 更新、自发光 mesh refresh、dirty BLAS refit、原地 TLAS update、资源 retirement counter、restore frame，以及显式拒绝 skinned update 的 capability；
 - 自动化 control、observation、timeout 和 assertion failure 使用稳定退出码 `20`–`24`。
 

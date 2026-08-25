@@ -1637,7 +1637,7 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
             IsAccumulationActive() &&
             m_Denoisers.HasOIDNResult();
         const std::string message = passed
-            ? "OIDN holds the denoised result while static after asynchronous HDR readback, CPU denoise, upload, and RenderGraph composite."
+            ? "OIDN holds the denoised result while static after D3D12 shared-memory CUDA denoise and RenderGraph composite."
             : "OIDN did not produce an uploaded result before the automation verification deadline.";
         if (m_Diagnostics.IsEnabled())
         {
@@ -1649,6 +1649,7 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
                     { "denoiser_enabled", m_Denoisers.IsOIDNEnabled() },
                     { "manual_accumulation_enabled", m_AccumulationEnabled },
                     { "effective_accumulation_enabled", IsAccumulationActive() },
+                    { "backend", m_Denoisers.IsOIDNUsingCuda() ? "cuda" : "cpu_fallback" },
                     { "result_uploaded", m_Denoisers.HasOIDNResult() },
                 });
         }

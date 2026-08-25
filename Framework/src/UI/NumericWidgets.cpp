@@ -1,16 +1,11 @@
 #include <Framework/UI/NumericWidgets.h>
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
-#include <cstring>
 
 //Modify Begin:2026-08-18 by Hui
 namespace
 {
-    constexpr ImGuiID EditingStateSalt = 0x5a17c9e3u;
-    constexpr ImGuiID FocusRequestSalt = 0xb6e2431du;
-
     template<typename T>
     void ClampValues(T* values, const int componentCount, const T minValue, const T maxValue)
     {
@@ -45,6 +40,60 @@ namespace
         }
     }
 
+    const char* FindRenderedTextEnd(const char* text)
+    {
+        const char* textEnd = text;
+        while (textEnd[0] != '\0' && (textEnd[0] != '#' || textEnd[1] != '#'))
+        {
+            ++textEnd;
+        }
+        return textEnd;
+    }
+
+    void DisplayValue(const ImGuiDataType dataType, const void* value, const char* format)
+    {
+        if (dataType == ImGuiDataType_Float)
+        {
+            ImGui::Text(format, *static_cast<const float*>(value));
+        }
+        else if (dataType == ImGuiDataType_S32)
+        {
+            ImGui::Text(format, *static_cast<const int*>(value));
+        }
+    }
+
+    bool DrawNumericControl(
+        const ImGuiDataType dataType,
+        void* value,
+        const void* minValue,
+        const void* maxValue,
+        const char* format,
+        const ImGuiSliderFlags flags)
+    {
+        const ImGuiStyle& style = ImGui::GetStyle();
+        const char* inputFormat = format != nullptr
+            ? format
+            : (dataType == ImGuiDataType_Float ? "%.3f" : "%d");
+        const float totalWidth = ImGui::CalcItemWidth();
+        const float inputWidth = std::clamp(totalWidth * 0.35f, 72.0f, 128.0f);
+        const float sliderWidth = std::max(totalWidth - inputWidth - style.ItemInnerSpacing.x, 1.0f);
+
+        ImGui::SetNextItemWidth(sliderWidth);
+        bool changed = ImGui::SliderScalar(
+            "##range", dataType, value, minValue, maxValue, "", flags);
+        ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
+
+        if ((flags & ImGuiSliderFlags_NoInput) != 0)
+        {
+            DisplayValue(dataType, value, inputFormat);
+            return changed;
+        }
+
+        ImGui::SetNextItemWidth(inputWidth);
+        changed |= ImGui::InputScalar("##value", dataType, value, nullptr, nullptr, inputFormat);
+        return changed;
+    }
+
     bool SliderScalarWithInput(
         const char* label,
         const ImGuiDataType dataType,
@@ -56,53 +105,47 @@ namespace
         const char* format,
         const ImGuiSliderFlags flags)
     {
-        auto* storage = ImGui::GetStateStorage();
-        const ImGuiID itemId = ImGui::GetID(label);
-        const ImGuiID editingStateId = itemId ^ EditingStateSalt;
-        const ImGuiID focusRequestId = itemId ^ FocusRequestSalt;
+        static constexpr const char* componentLabels[] = { "X", "Y", "Z", "W" };
+        const char* labelEnd = FindRenderedTextEnd(label);
+        bool changed = false;
 
-        if (storage->GetBool(editingStateId))
+        ImGui::PushID(label);
+        if (componentCount == 1)
         {
-            if (storage->GetBool(focusRequestId))
+            if (label != labelEnd)
             {
-                ImGui::SetKeyboardFocusHere();
-                storage->SetBool(focusRequestId, false);
+                ImGui::TextUnformatted(label, labelEnd);
+                ImGui::SameLine();
             }
-
-            const bool changed = componentCount == 1
-                ? ImGui::InputScalar(label, dataType, values, nullptr, nullptr, format)
-                : ImGui::InputScalarN(label, dataType, values, componentCount, nullptr, nullptr, format);
-            if (changed && (flags & ImGuiSliderFlags_AlwaysClamp) != 0)
-            {
-                ClampInputValues(dataType, values, componentCount, minValue, maxValue);
-            }
-            if (ImGui::IsItemDeactivated())
-            {
-                storage->SetBool(editingStateId, false);
-            }
-            return changed;
+            changed = DrawNumericControl(dataType, values, minValue, maxValue, format, flags);
         }
-
-        std::array<std::byte, sizeof(float) * 4> originalValues{};
-        const size_t valueByteCount = componentSize * static_cast<size_t>(componentCount);
-        std::memcpy(originalValues.data(), values, valueByteCount);
-
-        const bool changed = componentCount == 1
-            ? ImGui::SliderScalar(label, dataType, values, minValue, maxValue, format, flags)
-            : ImGui::SliderScalarN(label, dataType, values, componentCount, minValue, maxValue, format, flags);
-        const bool requestTextInput =
-            (flags & ImGuiSliderFlags_NoInput) == 0 &&
-            ImGui::IsItemHovered() &&
-            ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
-        if (!requestTextInput)
+        else
         {
-            return changed;
-        }
+            if (label != labelEnd)
+            {
+                ImGui::TextUnformatted(label, labelEnd);
+            }
 
-        std::memcpy(values, originalValues.data(), valueByteCount);
-        storage->SetBool(editingStateId, true);
-        storage->SetBool(focusRequestId, true);
-        return false;
+            ImGui::Indent();
+            auto* componentValue = static_cast<std::byte*>(values);
+            for (int componentIndex = 0; componentIndex < componentCount; ++componentIndex)
+            {
+                ImGui::PushID(componentIndex);
+                ImGui::TextUnformatted(componentLabels[componentIndex]);
+                ImGui::SameLine();
+                changed |= DrawNumericControl(dataType, componentValue, minValue, maxValue, format, flags);
+                ImGui::PopID();
+                componentValue += componentSize;
+            }
+            ImGui::Unindent();
+        }
+        ImGui::PopID();
+
+        if (changed && (flags & ImGuiSliderFlags_AlwaysClamp) != 0)
+        {
+            ClampInputValues(dataType, values, componentCount, minValue, maxValue);
+        }
+        return changed;
     }
 }
 

@@ -82,7 +82,7 @@ Implemented:
 - descriptor allocation, descriptor-set revision, and resource-identity telemetry;
 - compacted active-count/finalized indirect-dispatch consistency;
 - Direct -> Copy -> Async Compute -> Direct validation with producer-fence, GPU-wait, state-plan, batch, and retirement assertions;
-- reusable non-blocking `GpuReadbackBuffer` and `GpuReadbackTexture` ring-slot primitives, exercised by compacted active-pixel validation and the OIDN HDR readback -> CPU filter -> upload -> composite path; the OIDN automation also verifies static-result holding and generation invalidation after camera motion;
+- reusable non-blocking `GpuReadbackBuffer` and `GpuReadbackTexture` ring-slot primitives, exercised by compacted active-pixel validation; OIDN uses D3D12 shared buffers/fences -> CUDA `Quality::Fast` -> D3D12 copy-back when available and retains readback -> CPU `Fast` -> upload as a fallback; OIDN automation records the selected backend and verifies static-result holding plus generation invalidation after camera motion;
 - dynamic RTAS validation with ordinary/Meshlet vertex uploads, Meshlet bounds and instance updates, emissive-mesh refresh, dirty-BLAS refits, in-place TLAS updates, resource-retirement counters, restore-frame assertions, and an explicit skinned-update capability rejection;
 - stable automation exit codes `20`-`24` for controls, observations, timeouts, and assertions.
 

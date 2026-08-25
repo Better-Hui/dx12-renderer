@@ -20,6 +20,9 @@
 #include <RenderGraph/RenderContext.h>
 #include <RenderGraph/RenderGraphBuilder.h>
 
+#include <Windows.h>
+#include <d3dx12/d3dx12.h>
+
 #include <algorithm>
 #include <cstddef>
 #include <cstring>
@@ -28,6 +31,98 @@
 
 namespace
 {
+    class OidnSharedBuffer final : public Resource
+    {
+    public:
+        OidnSharedBuffer(
+            const uint64_t sizeInBytes,
+            const std::wstring& name,
+            std::shared_ptr<D3D12DeviceContext> deviceContext)
+            : Resource(
+                CD3DX12_RESOURCE_DESC::Buffer(sizeInBytes),
+                D3D12_HEAP_FLAG_SHARED,
+                nullptr,
+                name,
+                std::move(deviceContext))
+        {
+        }
+
+        D3D12_CPU_DESCRIPTOR_HANDLE GetShaderResourceView(
+            const D3D12_SHADER_RESOURCE_VIEW_DESC*) const override
+        {
+            return {};
+        }
+
+        D3D12_CPU_DESCRIPTOR_HANDLE GetUnorderedAccessView(
+            const D3D12_UNORDERED_ACCESS_VIEW_DESC*) const override
+        {
+            return {};
+        }
+    };
+
+    void ThrowIfOidnError(oidn::DeviceRef& device, const char* operation)
+    {
+        const char* errorMessage = nullptr;
+        if (device.getError(errorMessage) != oidn::Error::None)
+        {
+            throw std::runtime_error(
+                std::string(operation) + ": " +
+                (errorMessage != nullptr ? errorMessage : "unknown OIDN error."));
+        }
+    }
+
+    oidn::BufferRef ImportOidnSharedBuffer(
+        oidn::DeviceRef& device,
+        ID3D12Device2& d3d12Device,
+        const Resource& resource,
+        const uint64_t allocationSize)
+    {
+        HANDLE sharedHandle = nullptr;
+        ThrowIfFailed(d3d12Device.CreateSharedHandle(
+            resource.GetD3D12Resource().Get(),
+            nullptr,
+            GENERIC_ALL,
+            nullptr,
+            &sharedHandle));
+        const oidn::BufferRef buffer = device.newBuffer(
+            oidn::ExternalMemoryTypeFlag::D3D12Resource | oidn::ExternalMemoryTypeFlag::Dedicated,
+            sharedHandle,
+            nullptr,
+            allocationSize);
+        CloseHandle(sharedHandle);
+        ThrowIfOidnError(device, "OIDN CUDA shared D3D12 buffer import failed");
+        if (!buffer)
+        {
+            throw std::runtime_error("OIDN CUDA shared D3D12 buffer import returned null.");
+        }
+        return buffer;
+    }
+
+    oidn::SemaphoreRef ImportOidnSharedFence(
+        oidn::DeviceRef& device,
+        ID3D12Device2& d3d12Device,
+        ID3D12Fence& fence)
+    {
+        HANDLE sharedHandle = nullptr;
+        ThrowIfFailed(d3d12Device.CreateSharedHandle(
+            &fence,
+            nullptr,
+            GENERIC_ALL,
+            nullptr,
+            &sharedHandle));
+        const oidn::SemaphoreRef semaphore = device.newSemaphore(
+            oidn::ExternalSemaphoreTypeFlag::D3D12Fence,
+            sharedHandle,
+            nullptr);
+        CloseHandle(sharedHandle);
+        ThrowIfOidnError(device, "OIDN CUDA shared D3D12 fence import failed");
+        if (!semaphore)
+        {
+            throw std::runtime_error("OIDN CUDA shared D3D12 fence import returned null.");
+        }
+        return semaphore;
+    }
+
     struct OidnReadbackPassData
     {
         OIDNDenoiser* Feature = nullptr;
@@ -54,6 +149,21 @@ namespace
             ComputePipelineDescBuilder::ReflectedDefault(shader).Build());
     }
 }
+
+struct OIDNDenoiser::CudaResources
+{
+    std::shared_ptr<OidnSharedBuffer> Input;
+    std::shared_ptr<OidnSharedBuffer> Output;
+    Microsoft::WRL::ComPtr<ID3D12Fence> Fence;
+    oidn::DeviceRef Device;
+    oidn::BufferRef InputBuffer;
+    oidn::BufferRef OutputBuffer;
+    oidn::SemaphoreRef FenceSemaphore;
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT Footprint = {};
+    uint32_t NumRows = 0u;
+    uint64_t AllocationSize = 0u;
+    uint64_t NextFenceValue = 0u;
+};
 
 OIDNDenoiser::OIDNDenoiser(FrameworkDeviceContext& deviceContext)
     : m_DeviceContext(deviceContext)
@@ -103,9 +213,13 @@ void OIDNDenoiser::OnResourcesRecreated(const uint32_t width, const uint32_t hei
         width,
         height,
         L"OIDN Denoised HDR Result");
-    m_Readback->Initialize(m_DeviceContext.GetDevice(), *m_Output, 1u);
     m_Width = width;
     m_Height = height;
+    m_UsingCuda = TryCreateCudaResources(width, height);
+    if (!m_UsingCuda)
+    {
+        m_Readback->Initialize(m_DeviceContext.GetDevice(), *m_Output, 1u);
+    }
 }
 
 void OIDNDenoiser::ResetHistory()
@@ -120,7 +234,7 @@ bool OIDNDenoiser::BeginReadback(
 {
     if (!m_Enabled ||
         m_Output == nullptr ||
-        !m_Readback->IsInitialized() ||
+        (!m_UsingCuda && !m_Readback->IsInitialized()) ||
         !accumulationEnabled ||
         accumulationFrameIndex < (std::max)(staticSpp, 1u) ||
         m_ReadbackQueued ||
@@ -138,7 +252,7 @@ bool OIDNDenoiser::BeginReadback(
         }
     }
 
-    m_ReadbackQueued = m_Readback->BeginCopy();
+    m_ReadbackQueued = m_UsingCuda || m_Readback->BeginCopy();
     m_ReadbackRecorded = false;
     if (m_ReadbackQueued)
     {
@@ -155,8 +269,166 @@ bool OIDNDenoiser::RecordReadback(CommandList& commandList, const std::shared_pt
         return false;
     }
 
-    m_ReadbackRecorded = m_Readback->RecordCopy(commandList, *source);
+    m_ReadbackRecorded = m_UsingCuda
+        ? RecordCudaInput(commandList, source)
+        : m_Readback->RecordCopy(commandList, *source);
     return m_ReadbackRecorded;
+}
+
+bool OIDNDenoiser::TryCreateCudaResources(const uint32_t width, const uint32_t height)
+{
+    static_assert(sizeof(::LUID) == OIDN_LUID_SIZE, "D3D12 and OIDN LUID sizes must match.");
+    Assert(m_Output != nullptr, "OIDN CUDA resources require a persistent output texture.");
+
+    try
+    {
+        auto resources = std::make_shared<CudaResources>();
+        const Microsoft::WRL::ComPtr<ID3D12Device2>& device = m_DeviceContext.GetDevice();
+        const D3D12_RESOURCE_DESC outputDesc = m_Output->GetD3D12ResourceDesc();
+        Assert(
+            outputDesc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE2D &&
+            outputDesc.Width == width &&
+            outputDesc.Height == height &&
+            outputDesc.Format == DXGI_FORMAT_R32G32B32A32_FLOAT &&
+            outputDesc.DepthOrArraySize == 1u &&
+            outputDesc.MipLevels == 1u &&
+            outputDesc.SampleDesc.Count == 1u,
+            "OIDN CUDA output must be a single-sample R32G32B32A32_FLOAT texture.");
+
+        UINT64 copySize = 0u;
+        device->GetCopyableFootprints(
+            &outputDesc,
+            0u,
+            1u,
+            0u,
+            &resources->Footprint,
+            &resources->NumRows,
+            nullptr,
+            &copySize);
+        Assert(
+            copySize != 0u &&
+            resources->NumRows == height &&
+            resources->Footprint.Footprint.Width == width &&
+            resources->Footprint.Footprint.RowPitch >= width * sizeof(float) * 4u,
+            "OIDN CUDA staging footprint is invalid.");
+
+        resources->Input = std::make_shared<OidnSharedBuffer>(
+            copySize,
+            L"OIDN CUDA Input Staging",
+            m_DeviceContext.GetD3D12DeviceContext());
+        resources->Output = std::make_shared<OidnSharedBuffer>(
+            copySize,
+            L"OIDN CUDA Output Staging",
+            m_DeviceContext.GetD3D12DeviceContext());
+        const D3D12_RESOURCE_DESC inputDesc = resources->Input->GetD3D12ResourceDesc();
+        resources->AllocationSize = device->GetResourceAllocationInfo(0u, 1u, &inputDesc).SizeInBytes;
+        Assert(resources->AllocationSize >= copySize, "OIDN CUDA shared staging allocation is too small.");
+
+        const ::LUID d3d12Luid = device->GetAdapterLuid();
+        oidn::LUID oidnLuid = {};
+        std::memcpy(oidnLuid.bytes, &d3d12Luid, sizeof(d3d12Luid));
+        resources->Device = oidn::newDevice(oidnLuid);
+        if (!resources->Device)
+        {
+            return false;
+        }
+        resources->Device.commit();
+        ThrowIfOidnError(resources->Device, "OIDN CUDA device initialization failed");
+        if (resources->Device.get<oidn::DeviceType>("type") != oidn::DeviceType::CUDA)
+        {
+            return false;
+        }
+
+        resources->InputBuffer = ImportOidnSharedBuffer(
+            resources->Device,
+            *device.Get(),
+            *resources->Input,
+            resources->AllocationSize);
+        resources->OutputBuffer = ImportOidnSharedBuffer(
+            resources->Device,
+            *device.Get(),
+            *resources->Output,
+            resources->AllocationSize);
+
+        ThrowIfFailed(device->CreateFence(
+            0u,
+            D3D12_FENCE_FLAG_SHARED,
+            IID_PPV_ARGS(&resources->Fence)));
+        resources->FenceSemaphore = ImportOidnSharedFence(
+            resources->Device,
+            *device.Get(),
+            *resources->Fence.Get());
+
+        m_CudaResources = std::move(resources);
+        return true;
+    }
+    catch (...)
+    {
+        m_CudaResources.reset();
+        return false;
+    }
+}
+
+bool OIDNDenoiser::RecordCudaInput(
+    CommandList& commandList,
+    const std::shared_ptr<Texture>& source)
+{
+    if (m_CudaResources == nullptr || source == nullptr)
+    {
+        return false;
+    }
+
+    const D3D12_RESOURCE_DESC sourceDesc = source->GetD3D12ResourceDesc();
+    const CudaResources& resources = *m_CudaResources;
+    if (sourceDesc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D ||
+        sourceDesc.Width != resources.Footprint.Footprint.Width ||
+        sourceDesc.Height != resources.NumRows ||
+        sourceDesc.Format != resources.Footprint.Footprint.Format ||
+        sourceDesc.SampleDesc.Count != 1u)
+    {
+        return false;
+    }
+
+    const Microsoft::WRL::ComPtr<ID3D12Resource> sourceResource = source->GetD3D12Resource();
+    const Microsoft::WRL::ComPtr<ID3D12Resource> destinationResource = resources.Input->GetD3D12Resource();
+    const D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = resources.Footprint;
+    commandList.ExecuteExternalCommandRecording(
+        [sourceResource, destinationResource, footprint](ID3D12GraphicsCommandList2& nativeCommandList)
+        {
+            D3D12_TEXTURE_COPY_LOCATION destination = {};
+            destination.pResource = destinationResource.Get();
+            destination.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+            destination.PlacedFootprint = footprint;
+
+            D3D12_TEXTURE_COPY_LOCATION source = {};
+            source.pResource = sourceResource.Get();
+            source.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+            source.SubresourceIndex = 0u;
+            nativeCommandList.CopyTextureRegion(&destination, 0u, 0u, 0u, &source, nullptr);
+        });
+    return true;
+}
+
+void OIDNDenoiser::RecordCudaOutput(CommandList& commandList, const Job& job)
+{
+    Assert(job.Cuda != nullptr && m_Output != nullptr, "OIDN CUDA output copy resources are invalid.");
+    const Microsoft::WRL::ComPtr<ID3D12Resource> sourceResource = job.Cuda->Output->GetD3D12Resource();
+    const Microsoft::WRL::ComPtr<ID3D12Resource> destinationResource = m_Output->GetD3D12Resource();
+    const D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = job.Cuda->Footprint;
+    commandList.ExecuteExternalCommandRecording(
+        [sourceResource, destinationResource, footprint](ID3D12GraphicsCommandList2& nativeCommandList)
+        {
+            D3D12_TEXTURE_COPY_LOCATION destination = {};
+            destination.pResource = destinationResource.Get();
+            destination.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+            destination.SubresourceIndex = 0u;
+
+            D3D12_TEXTURE_COPY_LOCATION source = {};
+            source.pResource = sourceResource.Get();
+            source.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+            source.PlacedFootprint = footprint;
+            nativeCommandList.CopyTextureRegion(&destination, 0u, 0u, 0u, &source, nullptr);
+        });
 }
 
 void OIDNDenoiser::EndReadback(const uint64_t submittedFenceValue)
@@ -166,7 +438,38 @@ void OIDNDenoiser::EndReadback(const uint64_t submittedFenceValue)
         return;
     }
 
-    if (m_ReadbackRecorded)
+    if (m_ReadbackRecorded && m_UsingCuda)
+    {
+        Assert(m_CudaResources != nullptr, "OIDN CUDA resources are not initialized.");
+        Assert(submittedFenceValue != 0u, "OIDN CUDA input copy requires a direct queue submission fence.");
+
+        Job job = {};
+        job.Generation = m_ReadbackGeneration;
+        job.Width = m_Width;
+        job.Height = m_Height;
+        job.Spp = m_ReadbackSpp;
+        job.Cuda = m_CudaResources;
+        job.CudaInputFenceValue = ++m_CudaResources->NextFenceValue;
+        job.CudaCompletionFenceValue = ++m_CudaResources->NextFenceValue;
+        const auto directQueue = m_DeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
+        Assert(directQueue != nullptr, "OIDN CUDA requires the direct command queue.");
+        ThrowIfFailed(directQueue->GetD3D12CommandQueue()->Signal(
+            m_CudaResources->Fence.Get(),
+            job.CudaInputFenceValue));
+
+        {
+            const std::lock_guard lock(m_WorkMutex);
+            Assert(
+                !m_WorkerBusy && !m_PendingJob.has_value() && !m_CompletedJob.has_value(),
+                "OIDN CUDA queued an overlapping denoise job.");
+            if (job.Generation == m_Generation)
+            {
+                m_PendingJob = std::move(job);
+            }
+        }
+        m_WorkCondition.notify_one();
+    }
+    else if (m_ReadbackRecorded)
     {
         m_Readback->EndCopy(submittedFenceValue);
         m_ReadbackPending = true;
@@ -181,7 +484,7 @@ void OIDNDenoiser::EndReadback(const uint64_t submittedFenceValue)
 
 void OIDNDenoiser::CancelReadback()
 {
-    if (m_ReadbackQueued)
+    if (m_ReadbackQueued && !m_UsingCuda)
     {
         m_Readback->CancelCopy();
     }
@@ -191,6 +494,38 @@ void OIDNDenoiser::CancelReadback()
 
 void OIDNDenoiser::Poll(CommandQueue& directQueue)
 {
+    if (m_UsingCuda)
+    {
+        std::optional<Job> completed;
+        {
+            const std::lock_guard lock(m_WorkMutex);
+            if (m_CompletedJob.has_value())
+            {
+                completed = std::move(m_CompletedJob);
+                m_CompletedJob.reset();
+            }
+        }
+
+        if (!completed.has_value() || !completed->UsesCuda() || !completed->Succeeded)
+        {
+            return;
+        }
+
+        const std::shared_ptr<CudaResources>& cuda = completed->Cuda;
+        ThrowIfFailed(directQueue.GetD3D12CommandQueue()->Wait(
+            cuda->Fence.Get(),
+            completed->CudaCompletionFenceValue));
+
+        if (completed->Generation == m_Generation &&
+            completed->Width == m_Width &&
+            completed->Height == m_Height &&
+            cuda == m_CudaResources)
+        {
+            m_CudaResultPendingUpload = std::move(completed);
+        }
+        return;
+    }
+
     if (!m_ReadbackPending || !m_Readback->IsInitialized())
     {
         return;
@@ -242,7 +577,7 @@ void OIDNDenoiser::Poll(CommandQueue& directQueue)
 void OIDNDenoiser::AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs inputs)
 {
     Assert(m_Enabled, "OIDN graph passes require the feature to be enabled.");
-    Assert(m_Output != nullptr && m_Readback->IsInitialized(),
+    Assert(m_Output != nullptr && (m_UsingCuda || m_Readback->IsInitialized()),
         "OIDN resources must be recreated before graph registration.");
     Assert(inputs.ReadbackSource != 0u && inputs.Output != 0u &&
             inputs.InputToken != 0u && inputs.OutputToken != 0u,
@@ -257,17 +592,36 @@ void OIDNDenoiser::AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInpu
     const RenderGraph::ImportedResourceHandle output = builder.ImportResource(
         outputName.c_str(),
         [this]() -> const Resource& { return *m_Output; });
+    RenderGraph::ImportedResourceHandle cudaInput;
+    RenderGraph::ImportedResourceHandle cudaOutput;
+    if (m_UsingCuda)
+    {
+        const std::shared_ptr<CudaResources> cuda = m_CudaResources;
+        Assert(cuda != nullptr, "OIDN CUDA graph registration requires shared staging resources.");
+        const std::wstring cudaInputName = sharedInputs->DiagnosticNamePrefix + L".CudaInput";
+        const std::wstring cudaOutputName = sharedInputs->DiagnosticNamePrefix + L".CudaOutput";
+        cudaInput = builder.ImportResource(
+            cudaInputName.c_str(),
+            [cuda]() -> const Resource& { return *cuda->Input; });
+        cudaOutput = builder.ImportResource(
+            cudaOutputName.c_str(),
+            [cuda]() -> const Resource& { return *cuda->Output; });
+    }
     const RenderGraph::ResourceId readbackFinished = builder.CreateToken(readbackTokenName.c_str());
     const RenderGraph::ResourceId uploadFinished = builder.CreateToken(uploadTokenName.c_str());
 
     builder.AddPass<OidnReadbackPassData>(
         L"OIDN HDR Readback",
-        [this, sharedInputs, readbackFinished](RenderGraph::RenderGraphPassBuilder& passBuilder, OidnReadbackPassData& passData)
+        [this, sharedInputs, cudaInput, readbackFinished](RenderGraph::RenderGraphPassBuilder& passBuilder, OidnReadbackPassData& passData)
         {
             passData.Feature = this;
             passData.Inputs = sharedInputs;
             passBuilder.ReadToken(sharedInputs->InputToken);
             passBuilder.ReadCopySource(sharedInputs->ReadbackSource);
+            if (cudaInput.IsValid())
+            {
+                passBuilder.WriteImported(cudaInput, D3D12_RESOURCE_STATE_COPY_DEST);
+            }
             passBuilder.WriteToken(readbackFinished);
         },
         [](const OidnReadbackPassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
@@ -277,9 +631,13 @@ void OIDNDenoiser::AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInpu
 
     builder.AddPass<OidnUploadPassData>(
         L"OIDN Result Upload",
-        [this, output, uploadFinished](RenderGraph::RenderGraphPassBuilder& passBuilder, OidnUploadPassData& passData)
+        [this, cudaOutput, output, uploadFinished](RenderGraph::RenderGraphPassBuilder& passBuilder, OidnUploadPassData& passData)
         {
             passData.Feature = this;
+            if (cudaOutput.IsValid())
+            {
+                passBuilder.ReadImported(cudaOutput, D3D12_RESOURCE_STATE_COPY_SOURCE);
+            }
             passBuilder.WriteImported(output, D3D12_RESOURCE_STATE_COPY_DEST);
             passBuilder.WriteToken(uploadFinished);
         },
@@ -331,11 +689,19 @@ void OIDNDenoiser::WorkerLoop(const std::stop_token stopToken)
 
         try
         {
-            ExecuteDenoise(job);
+            if (job.UsesCuda())
+            {
+                ExecuteCudaDenoise(job);
+            }
+            else
+            {
+                ExecuteCpuDenoise(job);
+            }
         }
         catch (...)
         {
             job.Pixels.clear();
+            job.Succeeded = false;
         }
 
         {
@@ -349,7 +715,7 @@ void OIDNDenoiser::WorkerLoop(const std::stop_token stopToken)
     }
 }
 
-void OIDNDenoiser::ExecuteDenoise(Job& job)
+void OIDNDenoiser::ExecuteCpuDenoise(Job& job)
 {
     Assert(job.Width > 0u && job.Height > 0u, "OIDN job dimensions are invalid.");
     Assert(job.Pixels.size() == static_cast<size_t>(job.Width) * job.Height * 4u,
@@ -364,15 +730,58 @@ void OIDNDenoiser::ExecuteDenoise(Job& job)
     filter.setImage("color", job.Pixels.data(), oidn::Format::Float3, job.Width, job.Height, 0u, pixelStride, rowStride);
     filter.setImage("output", output.data(), oidn::Format::Float3, job.Width, job.Height, 0u, pixelStride, rowStride);
     filter.set("hdr", true);
+    filter.set("quality", oidn::Quality::Fast);
     filter.commit();
     filter.execute();
-
-    const char* errorMessage = nullptr;
-    if (device.getError(errorMessage) != oidn::Error::None)
-    {
-        throw std::runtime_error(errorMessage != nullptr ? errorMessage : "OIDN CPU denoise failed.");
-    }
+    ThrowIfOidnError(device, "OIDN CPU denoise failed");
     job.Pixels = std::move(output);
+    job.Succeeded = true;
+}
+
+void OIDNDenoiser::ExecuteCudaDenoise(Job& job)
+{
+    Assert(job.Cuda != nullptr, "OIDN CUDA job has no shared resources.");
+    Assert(job.Width > 0u && job.Height > 0u, "OIDN CUDA job dimensions are invalid.");
+
+    CudaResources& cuda = *job.Cuda;
+    constexpr size_t pixelStride = sizeof(float) * 4u;
+    cuda.Device.waitSemaphoreAsync(cuda.FenceSemaphore, job.CudaInputFenceValue);
+    ThrowIfOidnError(cuda.Device, "OIDN CUDA input fence wait failed");
+
+    oidn::FilterRef filter = cuda.Device.newFilter("RT");
+    if (!filter)
+    {
+        throw std::runtime_error("OIDN CUDA RT filter creation returned null.");
+    }
+    filter.setImage(
+        "color",
+        cuda.InputBuffer,
+        oidn::Format::Float3,
+        job.Width,
+        job.Height,
+        0u,
+        pixelStride,
+        cuda.Footprint.Footprint.RowPitch);
+    filter.setImage(
+        "output",
+        cuda.OutputBuffer,
+        oidn::Format::Float3,
+        job.Width,
+        job.Height,
+        0u,
+        pixelStride,
+        cuda.Footprint.Footprint.RowPitch);
+    filter.set("hdr", true);
+    filter.set("quality", oidn::Quality::Fast);
+    filter.commit();
+    ThrowIfOidnError(cuda.Device, "OIDN CUDA filter commit failed");
+    filter.execute();
+    ThrowIfOidnError(cuda.Device, "OIDN CUDA denoise failed");
+
+    cuda.Device.signalSemaphoreAsync(cuda.FenceSemaphore, job.CudaCompletionFenceValue);
+    cuda.Device.sync();
+    ThrowIfOidnError(cuda.Device, "OIDN CUDA output fence signal failed");
+    job.Succeeded = true;
 }
 
 void OIDNDenoiser::InvalidateGeneration(const bool resetReadbackResources)
@@ -383,10 +792,13 @@ void OIDNDenoiser::InvalidateGeneration(const bool resetReadbackResources)
         m_PendingJob.reset();
         m_CompletedJob.reset();
     }
+    m_CudaResultPendingUpload.reset();
     m_HasUploadedResult.store(false, std::memory_order_release);
     if (resetReadbackResources)
     {
         m_Readback->Reset();
+        m_CudaResources.reset();
+        m_UsingCuda = false;
         m_ReadbackQueued = false;
         m_ReadbackRecorded = false;
         m_ReadbackPending = false;
@@ -397,6 +809,27 @@ void OIDNDenoiser::InvalidateGeneration(const bool resetReadbackResources)
 
 void OIDNDenoiser::RecordUpload(CommandList& commandList)
 {
+    if (m_UsingCuda)
+    {
+        std::optional<Job> completed = std::move(m_CudaResultPendingUpload);
+        m_CudaResultPendingUpload.reset();
+        if (!completed.has_value() ||
+            !completed->UsesCuda() ||
+            !completed->Succeeded ||
+            completed->Generation != m_Generation ||
+            completed->Width != m_Width ||
+            completed->Height != m_Height ||
+            completed->Cuda != m_CudaResources ||
+            m_Output == nullptr)
+        {
+            return;
+        }
+
+        RecordCudaOutput(commandList, *completed);
+        m_HasUploadedResult.store(true, std::memory_order_release);
+        return;
+    }
+
     std::optional<Job> completed;
     {
         const std::lock_guard lock(m_WorkMutex);
@@ -410,6 +843,7 @@ void OIDNDenoiser::RecordUpload(CommandList& commandList)
         completed->Generation != m_Generation ||
         completed->Width != m_Width ||
         completed->Height != m_Height ||
+        !completed->Succeeded ||
         completed->Pixels.empty() ||
         m_Output == nullptr)
     {

@@ -5,6 +5,7 @@
 //Modify Begin:2026-08-18 by Hui
 namespace FrameworkImGui
 {
+    // Renders a label, a range slider, and a separately clickable numeric input.
     bool SliderFloat(
         const char* label,
         float* value,

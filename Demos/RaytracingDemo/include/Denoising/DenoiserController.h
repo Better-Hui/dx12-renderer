@@ -52,6 +52,7 @@ public:
     void CancelOIDNReadback();
     void PollOIDN(CommandQueue& directQueue);
     bool HasOIDNResult() const { return m_OIDN != nullptr && m_OIDN->HasUploadedResult(); }
+    bool IsOIDNUsingCuda() const { return m_OIDN != nullptr && m_OIDN->IsUsingCuda(); }
     uint64_t GetOIDNGeneration() const { return m_OIDN != nullptr ? m_OIDN->GetGeneration() : 0u; }
     void FillCameraConstants(uint32_t& nrdDenoiserMode, DirectX::XMFLOAT4& nrdReblurHitDistanceParameters) const;
     bool DrawImGui();

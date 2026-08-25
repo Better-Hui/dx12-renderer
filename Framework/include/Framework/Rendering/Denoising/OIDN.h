@@ -58,10 +58,13 @@ public:
     void Poll(CommandQueue& directQueue);
     bool HasUploadedResult() const { return m_HasUploadedResult.load(std::memory_order_acquire); }
     uint64_t GetGeneration() const { return m_Generation; }
+    bool IsUsingCuda() const { return m_UsingCuda; }
 
     void AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs inputs);
 
 private:
+    struct CudaResources;
+
     struct Job
     {
         uint64_t Generation = 0u;
@@ -69,6 +72,12 @@ private:
         uint32_t Height = 0u;
         uint32_t Spp = 0u;
         std::vector<float> Pixels;
+        std::shared_ptr<CudaResources> Cuda;
+        uint64_t CudaInputFenceValue = 0u;
+        uint64_t CudaCompletionFenceValue = 0u;
+        bool Succeeded = false;
+
+        bool UsesCuda() const { return Cuda != nullptr; }
     };
 
     struct CompositeConstants
@@ -80,8 +89,12 @@ private:
     };
 
     void WorkerLoop(std::stop_token stopToken);
-    static void ExecuteDenoise(Job& job);
+    static void ExecuteCpuDenoise(Job& job);
+    static void ExecuteCudaDenoise(Job& job);
+    bool TryCreateCudaResources(uint32_t width, uint32_t height);
     void InvalidateGeneration(bool resetReadbackResources);
+    bool RecordCudaInput(CommandList& commandList, const std::shared_ptr<Texture>& source);
+    void RecordCudaOutput(CommandList& commandList, const Job& job);
     void RecordUpload(CommandList& commandList);
     void RecordComposite(CommandList& commandList, const std::shared_ptr<Texture>& output);
 
@@ -89,17 +102,20 @@ private:
     std::unique_ptr<ComputeShader> m_CompositeShader;
     std::unique_ptr<GpuReadbackTexture> m_Readback;
     std::shared_ptr<Texture> m_Output;
+    std::shared_ptr<CudaResources> m_CudaResources;
     std::jthread m_Worker;
     std::mutex m_WorkMutex;
     std::condition_variable m_WorkCondition;
     std::optional<Job> m_PendingJob;
     std::optional<Job> m_CompletedJob;
+    std::optional<Job> m_CudaResultPendingUpload;
     bool m_WorkerBusy = false;
     bool m_ShuttingDown = false;
     bool m_Enabled = false;
     bool m_ReadbackQueued = false;
     bool m_ReadbackRecorded = false;
     bool m_ReadbackPending = false;
+    bool m_UsingCuda = false;
     std::atomic_bool m_HasUploadedResult = false;
     uint64_t m_Generation = 1u;
     uint64_t m_ReadbackGeneration = 0u;
