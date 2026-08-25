@@ -82,6 +82,7 @@ Implemented:
 - descriptor allocation, descriptor-set revision, and resource-identity telemetry;
 - compacted active-count/finalized indirect-dispatch consistency;
 - Direct -> Copy -> Async Compute -> Direct validation with producer-fence, GPU-wait, state-plan, batch, and retirement assertions;
+- reusable non-blocking `GpuReadbackBuffer` and `GpuReadbackTexture` ring-slot primitives, exercised by compacted active-pixel validation and the OIDN HDR readback -> CPU filter -> upload -> composite path; the OIDN automation also verifies static-result holding and generation invalidation after camera motion;
 - dynamic RTAS validation with ordinary/Meshlet vertex uploads, Meshlet bounds and instance updates, emissive-mesh refresh, dirty-BLAS refits, in-place TLAS updates, resource-retirement counters, restore-frame assertions, and an explicit skinned-update capability rejection;
 - stable automation exit codes `20`-`24` for controls, observations, timeouts, and assertions.
 
@@ -89,7 +90,7 @@ Still required:
 
 - complete validation of actual RenderGraph access against declared usage and state plans;
 - generic coverage of cross-queue waits and multi-queue retirement beyond the maintained Copy validation topology;
-- generic texture/buffer readback, image tolerance, and capture attachments;
+- promote the existing texture/buffer readback primitives into Diagnostics-owned generic request APIs, image-tolerance assertions, and capture attachments;
 - automatic DRED attachment on device removal;
 - a generic Framework invariant for backend capability versus scheduled passes.
 

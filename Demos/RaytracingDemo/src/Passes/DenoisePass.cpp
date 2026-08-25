@@ -5,7 +5,7 @@
 
 #include <utility>
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-25 by Hui
 void RaytracingDemoPasses::Builder::AddDenoisePass(
     RenderGraph::RenderGraphBuilder& renderGraphBuilder,
     const RaytracingDemoPassResources& resources,
@@ -45,6 +45,22 @@ void RaytracingDemoPasses::Builder::AddDenoisePass(
         };
         inputs.DiagnosticNamePrefix = L"RaytracingDemo.NRD";
         resources.Denoisers.AddNRDPasses(renderGraphBuilder, std::move(inputs));
+        return;
+    }
+
+    if (algorithm == DenoiserController::Algorithm::OIDN)
+    {
+        OIDNDenoiser::GraphInputs inputs = {};
+        // OIDN consumes the preserved, converged HDR accumulation rather than
+        // SceneColor, which its final composite writes in the same graph.
+        inputs.ReadbackSource = DemoResourceIds::HistoryColor;
+        inputs.Output = DemoResourceIds::SceneColor;
+        inputs.InputToken = DemoResourceIds::RayTracingFinishedToken;
+        inputs.OutputToken = DemoResourceIds::DenoiseFinishedToken;
+        inputs.Width = config.FrameState->Width;
+        inputs.Height = config.FrameState->Height;
+        inputs.DiagnosticNamePrefix = L"RaytracingDemo.OIDN";
+        resources.Denoisers.AddOIDNPasses(renderGraphBuilder, std::move(inputs));
         return;
     }
 

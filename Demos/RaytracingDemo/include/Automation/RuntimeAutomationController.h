@@ -29,6 +29,7 @@ namespace DemoAutomation
         std::vector<Step> CopyQueue;
         std::vector<Step> Rtas;
         std::vector<Step> DynamicScene;
+        std::vector<Step> OIDN;
         std::vector<Step> Matrix;
         std::vector<Step> ReSTIRGIProfile;
         std::vector<Step> ReSTIRGIVariants;

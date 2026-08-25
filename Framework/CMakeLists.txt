@@ -45,6 +45,7 @@ set(SHADER_FILES_COMPUTE
         "shaders/SVGF/SVGFAtrous_CS.hlsl"
         "shaders/SVGF/SVGFComposite_CS.hlsl"
         "shaders/SVGF/SVGFTemporal_CS.hlsl"
+        "shaders/OIDN/OIDNComposite_CS.hlsl"
         )
 
 # ReSTIR shader implementations belong to Framework. They are listed here for
@@ -119,6 +120,7 @@ add_custom_command(TARGET ${TARGET_NAME} PRE_BUILD
                 -DREPOSITORY_ROOT=${CMAKE_SOURCE_DIR}
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/tools/VerifyRenderGraphOwnership.cmake
         VERBATIM)
+dx12_renderer_add_oidn_prebuild(${TARGET_NAME})
 
 # Dear ImGui is compiled into Framework so every ImGui::Slider* call shares the same double-click input behavior.
 set(DX12_RENDERER_IMGUI_SOURCES
@@ -170,6 +172,7 @@ target_link_libraries(${TARGET_NAME}
         PUBLIC NRD
         PUBLIC NRDIntegration
         PUBLIC NRI
+        PUBLIC OIDN
         )
 
 target_link_libraries(${TARGET_NAME} PRIVATE d3d12 dxgi dxguid imm32)

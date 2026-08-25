@@ -165,10 +165,14 @@ private:
     void PresentDisplayOutput();
 //Modify End
 //Modify Begin:2026-08-19 by Hui
-    void ResetAccumulation(bool resetDenoiserHistory = true, bool resetReSTIRHistory = true);
+    void ResetAccumulation(
+        bool resetDenoiserHistory = true,
+        bool resetReSTIRHistory = true,
+        bool resetOIDNHistory = true);
 //Modify End
-//Modify Begin:2026-08-19 by Hui
-    bool IsDenoiserEnabled() const { return m_Denoisers.IsEnabled() && !(m_DLSS.IsEnabled() && m_DLSS.IsRayReconstructionEnabled()); }
+//Modify Begin:2026-08-25 by Hui
+    bool IsDenoiserEnabled() const { return m_Denoisers.UsesRenderGraphPasses() && !(m_DLSS.IsEnabled() && m_DLSS.IsRayReconstructionEnabled()); }
+    bool IsAccumulationActive() const { return m_AccumulationEnabled || (IsDenoiserEnabled() && m_Denoisers.RequiresAccumulation()); }
 //Modify End
     Camera& GetSceneCamera() { return m_Scene.GetRuntimeCamera(); }
     const Camera& GetSceneCamera() const { return m_Scene.GetRuntimeCamera(); }
@@ -246,9 +250,11 @@ private:
     DirectX::XMMATRIX m_PreviousViewProjection = DirectX::XMMatrixIdentity();
     uint32_t m_FrameIndex = 0;
     uint32_t m_AccumulationFrameIndex = 0;
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-25 by Hui
     int m_MaxBounces = 3;
     bool m_AccumulationEnabled = false;
+    uint64_t m_OIDNGenerationBeforeCameraMotion = 0u;
+    uint64_t m_OIDNGenerationAfterCameraMotion = 0u;
 //Modify End
 //Modify Begin:2026-08-19 by Hui
     MaterialShadingModel m_MaterialShadingModel = MaterialShadingModel::Pbr;

@@ -64,9 +64,11 @@ builder.AddComputePass<PassData>(
 
 `RenderGraphRoot` 的 device 和 queue 由应用组合根显式注入。执行路径已经拆为 `RenderGraphCommandExecutor`（pass 录制与提交）和 `RenderGraphProfiler`（可选的 Direct/Async Compute GPU timing）。`RaytracingDemo` 也遵循同一边界：`RaytracingDemoPassResources` 提供 pass 所需对象，`RaytracingDemoPassConfig` 提供显式运行时配置，因此 pass lambda 不再捕获整个 Demo，也不依赖 `friend` 访问私有成员。
 
-可复用 Framework 功能通过 `AddPasses(RenderGraphBuilder&, Inputs)` 注册一组子 pass。Auto Exposure、ReSTIR DI/GI、Raster Bloom、NRD、SVGF 和 TAA 都使用该模式；Builder 只在构图调用期间存在，Framework 不保存它。Framework-owned persistent resource（包括 SVGF/TAA ping-pong history）通过不同的 imported logical read/write ID 接入图；物理双缓冲按帧解析，但图拓扑保持稳定。构图期 scratch texture 使用 `RenderGraphBuilder::CreateTexture()` 与 `Discard`。`CommandList` 与 `CommandContext` 不再暴露手写 barrier API，构建期 ownership 检查会扫描 DX12Library、RenderGraph、Framework 与 Demos 的一方源码，阻止普通算法绕开 RG。
+可复用 Framework 功能通过 `AddPasses(RenderGraphBuilder&, Inputs)` 注册一组子 pass。Auto Exposure、ReSTIR DI/GI、Raster Bloom、NRD、SVGF、OIDN 和 TAA 都使用该模式；Builder 只在构图调用期间存在，Framework 不保存它。Framework-owned persistent resource（包括 SVGF/TAA ping-pong history）通过不同的 imported logical read/write ID 接入图；物理双缓冲按帧解析，但图拓扑保持稳定。构图期 scratch texture 使用 `RenderGraphBuilder::CreateTexture()` 与 `Discard`。`CommandList` 与 `CommandContext` 不再暴露手写 barrier API，构建期 ownership 检查会扫描 DX12Library、RenderGraph、Framework 与 Demos 的一方源码，阻止普通算法绕开 RG。
 
 NRD 在图中展开为 `Prepare Inputs`、`Native Denoise` 和 `Composite`。native NRI/NRD recording 允许管理 SDK 内部临时状态，但图资源进入和离开 native 段时保持 RG 声明的 SRV/UAV 状态，NRD 不在 barrier 白名单中。SVGF 展开为 imported 奇偶 temporal history、逐次水平/垂直 A-Trous 与 Composite；TAA 围绕 imported ping-pong history 展开为 Resolve 和 History Copy，同一次图执行期间固定物理读写映射，只在 rendered-frame 边界推进。UAV clear 本身不再偷偷追加 barrier；clear 后继续写同一 UAV 时必须拆 pass 或显式形成 WAW 图依赖。
+
+OIDN 是 CPU-only 静止画面路径。选中 OIDN 后会自动启用有效的 accumulation，不要求额外打开普通的 `Accumulation` 复选框。累积样本达到 UI/INI 选择的静止 SPP 后，`OIDN HDR Readback` 在 RG 的 `COPY_SOURCE` state plan 下把保留的、已经收敛的 HDR `HistoryColor` 复制到 readback ring。帧线程只轮询 Direct fence，绝不等待；后台 `std::jthread` 执行 OIDN CPU filter。随后图中 `OIDN Result Upload` 把结果写入 persistent imported output，`OIDN Composite` 再写入 `SceneColor`。上传成功后结果会冻结并在后续静止帧复用，不会再被带噪的实时结果覆盖。相机移动、真正改变渲染输入的 reset、切换算法或重建资源会推进 generation，立即作废冻结结果并重新累计；旧 readback/job/result 会被丢弃。`RAYTRACING_DEMO_AUTOTEST=oidn` 会在不注入输入的情况下同时验证静止保持、相机移动即时作废和再次收敛。
 
 Raster Bloom 在图中展开为 `Bloom Prefilter`、逐级 `Bloom Downsample`、逐级 `Bloom Upsample` 和 `Bloom Composite`。金字塔纹理由 RG 管理并参与 transient heap aliasing；allocator 在物理资源真正首次使用的位置写入 alias barrier，并将新 placed resource 登记为 `COMMON`，已消除反复重建图时的 device hang，不再使用 dedicated resource 规避。
 
@@ -81,7 +83,7 @@ Raster Bloom 在图中展开为 `Bloom Prefilter`、逐级 `Bloom Downsample`、
 | 材质着色 | Framework 统一的 GGX 金属度/粗糙度 PBR，以及 sample 可选的 `Stylized Comic` 风格化 PBR-NPR 变体。 |
 | 光照 | direct lighting 与 indirect lighting 分离后再 composite；直接光可选 ReSTIR DI，Inline Ray Query 间接光可选 ReSTIR GI。 |
 | 软阴影 | 平行光和点光源使用预编译 Hard/Soft Shader 变体；面积光继续采样真实发光面。 |
-| 降噪 | NRD 与 SVGF 两条可选路径；两者都由 Framework 注册多阶段 RenderGraph 子图。 |
+| 降噪 | NRD、SVGF 的时域路径，以及针对收敛静止累积的异步 CPU OIDN。 |
 | Raster Bloom | Framework 注册的 RenderGraph 子图，显式包含 prefilter、downsample、upsample 和 composite 阶段。 |
 | DLSS 与 Streamline | 实验性的 NGX DLSS SR/DLAA 与 Streamline RR/FG 资源准备路径；是否可用由启动配置和运行时 capability query 决定。 |
 | Meshlet | task shader 和 compute-indirect 后端，以及 cluster 调试显示。 |
@@ -141,6 +143,7 @@ vcpkg install --triplet x64-windows assimp directxtex directxmesh meshoptimizer
 | WinPixEventRuntime | `WinPixEventRuntime/` | 向 PIX 写入 CPU/GPU event marker。 |
 | Dear ImGui | `External/ImGui/` Git submodule，固定为 `v1.91.9` | 运行时调试 UI；Framework 直接编译官方源码，项目特有的数值控件行为位于 `Framework/UI/NumericWidgets`。 |
 | NVIDIA NRD / NRI | `External/NRD/`、`External/NRI/` Git submodule | 降噪路径及其 API 层；CMake 会从固定的上游提交构建 D3D12 库。 |
+| [Intel Open Image Denoise（OIDN）](https://github.com/OpenImageDenoise/oidn) | `External/OIDN/` Git submodule，固定为 `v2.5.1` | CPU-only 静止画面降噪。CMake 在隔离 build tree 中构建，并私有地挂接到 `Framework` 的 pre-build；Demo 部署 OIDN CPU/runtime DLL，但不会新增 OIDN solution project。 |
 | NVIDIA DLSS SDK | `External/DLSS/` Git submodule | 实验性的 Native NGX SR/DLAA 集成；许可证和 notice 由该 submodule 自身提供。 |
 | NVIDIA Streamline | `External/Streamline/` | 实验性的 RR/FG 集成与 runtime interposer；需保留 `license.txt`、`nvngx_dlss.license.txt` 和 `3rd-party-licenses.md`。 |
 | Unity PluginAPI | `External/UnityPluginAPI/` | Unity-facing D3D12 互操作实验所需头文件。 |
@@ -150,7 +153,7 @@ vcpkg install --triplet x64-windows assimp directxtex directxmesh meshoptimizer
 
 ### 获取 Git submodule
 
-父仓库只保存第三方仓库的固定提交，不再把 Dear ImGui、DLSS、NRI、NRD 的源码或 SDK 文件复制进父仓库：
+父仓库只保存第三方仓库的固定提交，不再把 Dear ImGui、DLSS、NRI、NRD、OIDN 的源码或 SDK 文件复制进父仓库：
 
 ```powershell
 git clone --recurse-submodules https://github.com/best-Hui/dx12-renderer.git
@@ -158,7 +161,7 @@ cd dx12-renderer
 git submodule update --init --recursive
 ```
 
-当前固定版本为：Dear ImGui `v1.91.9`、DLSS `v310.7.0`、NRI `v180`、NRD `4.17.4`。Dear ImGui、NRI 和 NRD 会由 CMake 从源码构建；Dear ImGui 直接使用 `External/ImGui` 中的官方源码，不会复制或改写到 build 目录。NRI 和 NRD 的官方 CMake 在首次配置时可能把 D3D12 Memory Allocator、MathLib、ShaderMake 等仅用于构建的依赖下载到 build 目录；这些文件不会提交到本仓库。Streamline 暂时仍使用单独提供的 SDK 包，因为它的官方源码仓库不包含本 sample 所需的完整 runtime DLL 集合。
+当前固定版本为：Dear ImGui `v1.91.9`、DLSS `v310.7.0`、NRI `v180`、NRD `4.17.4`、[OIDN `v2.5.1`](https://github.com/OpenImageDenoise/oidn/tree/v2.5.1)。Dear ImGui、NRI、NRD 与 CPU-only OIDN 都会由 CMake 从源码构建。OIDN 保持在 `build/ThirdParty/OIDN` 隔离目录，需要 oneTBB（`vcpkg install tbb:x64-windows`）和已准备好的 ISPC executable；它由 `Framework` 的 pre-build command 触发，因此不会生成 solution project。Dear ImGui 直接使用 `External/ImGui` 中的官方源码，不会复制或改写到 build 目录。NRI 和 NRD 的官方 CMake 在首次配置时可能把 D3D12 Memory Allocator、MathLib、ShaderMake 等仅用于构建的依赖下载到 build 目录；这些文件不会提交到本仓库。Streamline 暂时仍使用单独提供的 SDK 包，因为它的官方源码仓库不包含本 sample 所需的完整 runtime DLL 集合。
 
 以下命令在仓库根目录执行，并将构建产物放到同级 `build` 目录：
 
@@ -237,7 +240,7 @@ CMake 生成的工程会保持各 target 的真实源码目录。`DX12Library`�
 | `Demos/Common/` | `RaytracingDemo` 使用的独立程序公共入口支持，不单独生成 target。 |
 | `Demos/RaytracingDemo/` | 当前维护的主 sample；优先从这里理解本项目 API。 |
 | `Assets/` | 场景、纹理和运行时资源。 |
-| `External/` | 第三方源码与 SDK；其中部分目录是固定提交的 Git submodule。 |
+| `External/` | 第三方源码与 SDK；其中 Dear ImGui、DLSS、NRI、NRD 与 [Intel Open Image Denoise（OIDN）](https://github.com/OpenImageDenoise/oidn) 是固定提交的 Git submodule。 |
 | `Docs/` | 更详细的架构与 API 说明。 |
 
 ## 当前边界与已知限制
@@ -273,4 +276,4 @@ CMake 生成的工程会保持各 target 的真实源码目录。`DX12Library`�
 - [Framework Diagnostics](Docs/FrameworkDiagnosticsPlan.zh-CN.md)：说明已落地的机器可读 capture、确定性自动化、AI 证据查询、约束检查、复现与 profiler 契约，以及仍待实现的 DRED/readback/retention 能力。
 - 使用或再分发本仓库前，请保留上游与第三方组件的声明，并审阅对应的许可证文件。
 - 本 README 不引入替代性的仓库级许可证。
-- `External/DLSS/`、`External/NRI/`、`External/NRD/` 以及 `External/Streamline/` 中的 NVIDIA 组件均保留上游条款；Git submodule 链接不会转移或替换这些条款。SDK 放在 `External/` 不代表它变成开源，也不代表本仓库向任何人授予 NVIDIA SDK 的再许可；请保留全部 notice 与 license，不要把本仓库当作可独立分发的 SDK 镜像。在公开源码、再分发二进制或包含这些组件的商业发布前，应单独完成法务/许可证审查。
+- `External/DLSS/`、`External/NRI/`、`External/NRD/` 以及 `External/Streamline/` 中的 NVIDIA 组件均保留上游条款；[OIDN](https://github.com/OpenImageDenoise/oidn) 的上游许可证是 Apache License 2.0，须保留 `External/OIDN/LICENSE.txt`。Git submodule 链接不会转移或替换这些条款。SDK 放在 `External/` 不代表它变成开源，也不代表本仓库向任何人授予 NVIDIA SDK 的再许可；请保留全部 notice 与 license，不要把本仓库当作可独立分发的 SDK 镜像。在公开源码、再分发二进制或包含这些组件的商业发布前，应单独完成法务/许可证审查。

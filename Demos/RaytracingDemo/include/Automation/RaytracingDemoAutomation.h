@@ -46,6 +46,11 @@ namespace RaytracingDemoAutomation
         DynamicRayTracingUpdate,
         VerifyDynamicRayTracingUpdate,
         VerifyDynamicSkinnedMeshCapability,
+        Denoiser,
+        OIDNStaticSpp,
+        VerifyOIDNResult,
+        OIDNCameraMotion,
+        VerifyOIDNInvalidated,
         CaptureScreenshot,
         MatrixCase,
     };

@@ -121,6 +121,13 @@ public:
         uint32_t subresourceCount,
         D3D12_SUBRESOURCE_DATA* subresources) const;
 
+    void CopyTextureSubresources(
+        CommandList& commandList,
+        Texture& texture,
+        uint32_t firstSubresource,
+        uint32_t subresourceCount,
+        const D3D12_SUBRESOURCE_DATA* subresources) const;
+
     void AssignTextureResource(
         CommandList& commandList,
         Texture& texture,

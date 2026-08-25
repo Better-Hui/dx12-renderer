@@ -30,6 +30,7 @@ set(HEADER_FILES
         include/DX12Library/GenerateMipsPso.h
         include/DX12Library/GpuTimestampProfiler.h
         include/DX12Library/GpuReadbackBuffer.h
+        include/DX12Library/GpuReadbackTexture.h
         include/DX12Library/Helpers.h
         include/DX12Library/HighResolutionClock.h
         include/DX12Library/IndexBuffer.h
@@ -80,6 +81,7 @@ set(SOURCE_FILES
         src/GenerateMipsPso.cpp
         src/GpuTimestampProfiler.cpp
         src/GpuReadbackBuffer.cpp
+        src/GpuReadbackTexture.cpp
         src/HighResolutionClock.cpp
         src/IndexBuffer.cpp
         src/MipGenerator.cpp

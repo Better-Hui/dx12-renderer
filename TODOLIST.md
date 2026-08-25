@@ -2,9 +2,9 @@
 
 > 本文只记录尚未完成的扩展或验收目标，不代表功能承诺或固定排期。实现前仍需先完成架构、画质和性能评估。
 
-- [ ] **Diagnostics 深化**：机器可读 capture、具名 control/observation、确定性 automation、RenderGraph/queue/resource/descriptor telemetry、结构化 invariant、CPU/GPU timing、查询/diff/复现工具已经落地。真实 Direct → Copy → Async Compute → Direct 路径已验证 producer fence、GPU wait、state plan、batch 与资源 retirement；后续补通用 GPU texture/buffer readback 与 image assertion、device removal 的 DRED attachment、实际 shader access 与声明的通用闭环，以及后台写盘、压缩和 retention policy。详见 `Docs/FrameworkDiagnosticsPlan.zh-CN.md`。
+- [ ] **Diagnostics 深化**：机器可读 capture、具名 control/observation、确定性 automation、RenderGraph/queue/resource/descriptor telemetry、结构化 invariant、CPU/GPU timing、查询/diff/复现工具已经落地。真实 Direct → Copy → Async Compute → Direct 路径已验证 producer fence、GPU wait、state plan、batch 与资源 retirement；`GpuReadbackBuffer`/非阻塞 `GpuReadbackTexture` 已由 active-pixel 与 OIDN 实际路径使用。后续把它们提升为 Diagnostics 自有的通用 request API 与 image assertion，并补齐 device removal 的 DRED attachment、实际 shader access 与声明的通用闭环，以及后台写盘、压缩和 retention policy。详见 `Docs/FrameworkDiagnosticsPlan.zh-CN.md`。
 - [ ] **间接光追扩展**：当前 sample 已有 Path Tracing 和 Framework `ReSTIRGIPass` 的 one-bounce 间接光路径；后续仍需把多 bounce、漫反射/镜面传输、环境与自发光贡献以及可独立接入的降噪契约收敛为更完整的 Framework light-domain 接口。
-- [ ] **OIDN 静止画面降噪**：在 `DenoiserController::Algorithm`、UI 与 INI 中加入 `oidn`。仅当相机 view/projection、分辨率、场景拓扑/实例 transform、光源/材质/自发光 revision 和曝光连续若干帧稳定，且累积样本达到阈值时才请求 OIDN；相机或场景一旦变化必须立即使结果失效。实现 GPU 输出的异步 readback、后台 OIDN、异步 upload 与 generation 校验，绝不能阻塞渲染帧；明确在结果尚未返回时继续显示实时时域降噪或累积结果。将请求、排队、完成、丢弃、延迟和 generation 写入 Diagnostics，并加入无人值守的静止收敛、运动取消、场景修改取消、连续切换及资源退休测试。
+- [ ] **OIDN 稳定性策略深化**：把相机 view/projection、分辨率、场景拓扑/instance transform、光源/材质/自发光 revision 与曝光稳定窗口收敛为显式的静止判定；将 request、排队、完成、丢弃、延迟、generation 写入专用 Diagnostics telemetry，并补充运动取消、场景修改取消、连续切换和资源退休的无人值守矩阵。
 - [ ] **动态自发光 Mesh 光源**：当前已有 `SurfaceEmitter` 的几何级 triangle CDF 和实例数据上传；后续完善网格发光体的动态几何/材质更新，并让 Direct/Indirect Lighting 共用稳定的更新与采样契约。
 - [ ] **跨 queue transient aliasing 收口**：Compiler 已能把兼容的连续 Async Compute/Copy pass 合并为同 queue non-direct batch，真实 Copy queue 路径与 Diagnostics 闭环已覆盖 Direct → Copy → Async Compute → Direct。Raster Bloom scratch 已恢复 transient aliasing，并在首次实际使用点编码 alias barrier 和 `COMMON` 初始状态；后续再设计可验证、可回收的跨 queue alias allocator。
 - [ ] **Shader 变体工程化**：当前 demo-owned shader 已具备启动期依赖扫描、fingerprint 和缓存；后续继续覆盖 Framework 生成式 shader、项目级 variant manifest、后台编译和更完整的缓存失效策略，避免排列组合膨胀。

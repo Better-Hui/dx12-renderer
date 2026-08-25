@@ -115,6 +115,10 @@ void DemoAutomation::RuntimeAutomationController::Initialize(
     {
         steps = testSuites.DynamicScene;
     }
+    else if (mode == "oidn")
+    {
+        steps = testSuites.OIDN;
+    }
     else if (mode == "matrix")
     {
         steps = testSuites.Matrix;
@@ -172,7 +176,7 @@ void DemoAutomation::RuntimeAutomationController::Initialize(
     else
     {
         throw std::runtime_error(
-            "RAYTRACING_DEMO_AUTOTEST must be 'core', 'stress', 'meshlet-indirect', 'copy', 'rtas', 'dynamic-scene', 'matrix', 'restirgi-profile', 'restirgi-variants', 'restirdi-variants', or 'visual'.");
+            "RAYTRACING_DEMO_AUTOTEST must be 'core', 'stress', 'meshlet-indirect', 'copy', 'rtas', 'dynamic-scene', 'oidn', 'matrix', 'restirgi-profile', 'restirgi-variants', 'restirdi-variants', or 'visual'.");
     }
 
     AppendLog("Mode=" + mode + ", step interval=" + std::to_string(m_StepIntervalSeconds) + " seconds.");

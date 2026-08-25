@@ -711,7 +711,7 @@ RaytracingDemo::RaytracingDemo(
 
 }
 
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-08-25 by Hui
 void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::filesystem::path& scenePath)
 {
     SceneImportOptions importOptions;
@@ -936,6 +936,10 @@ void RaytracingDemo::LoadStartupConfiguration()
     {
         stringValue = ToLower(stringValue);
         m_Denoisers.SetAlgorithmFromName(stringValue.c_str());
+    }
+    if (configuration.TryGetInt("Denoiser", "OIDNStaticSpp", intValue))
+    {
+        m_Denoisers.SetOIDNStaticSpp(static_cast<uint32_t>(std::max(intValue, 1)));
     }
 
     if (configuration.TryGetString("DLSS", "Mode", stringValue))
@@ -1613,6 +1617,110 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         m_RuntimeAutomation.AppendDiagnosticLog(message);
         break;
     }
+    case RuntimeAutomationAction::Denoiser:
+        if (value > static_cast<uint32_t>(DenoiserController::Algorithm::OIDN))
+        {
+            throw std::out_of_range("Runtime automation denoiser selection is out of range.");
+        }
+        m_Denoisers.SetAlgorithm(static_cast<DenoiserController::Algorithm>(value));
+        ResetAccumulation();
+        break;
+    case RuntimeAutomationAction::OIDNStaticSpp:
+        m_Denoisers.SetOIDNStaticSpp(value);
+        ResetAccumulation();
+        break;
+//Modify Begin:2026-08-25 by Hui
+    case RuntimeAutomationAction::VerifyOIDNResult:
+    {
+        const bool passed =
+            m_Denoisers.IsOIDNEnabled() &&
+            IsAccumulationActive() &&
+            m_Denoisers.HasOIDNResult();
+        const std::string message = passed
+            ? "OIDN holds the denoised result while static after asynchronous HDR readback, CPU denoise, upload, and RenderGraph composite."
+            : "OIDN did not produce an uploaded result before the automation verification deadline.";
+        if (m_Diagnostics.IsEnabled())
+        {
+            m_Diagnostics.RecordAssertion(
+                "oidn_async_pipeline",
+                passed ? FrameworkDiagnostics::AssertionResult::Passed : FrameworkDiagnostics::AssertionResult::Failed,
+                message,
+                {
+                    { "denoiser_enabled", m_Denoisers.IsOIDNEnabled() },
+                    { "manual_accumulation_enabled", m_AccumulationEnabled },
+                    { "effective_accumulation_enabled", IsAccumulationActive() },
+                    { "result_uploaded", m_Denoisers.HasOIDNResult() },
+                });
+        }
+        if (!passed)
+        {
+            throw std::runtime_error(message);
+        }
+        m_RuntimeAutomation.AppendDiagnosticLog(message);
+        break;
+    }
+    case RuntimeAutomationAction::OIDNCameraMotion:
+    {
+        m_OIDNGenerationBeforeCameraMotion = m_Denoisers.GetOIDNGeneration();
+        GetSceneCamera().Translate(DirectX::XMVectorSet(0.0f, 0.0f, 0.05f, 0.0f), Space::Local);
+        ResetAccumulation(false, false);
+        m_OIDNGenerationAfterCameraMotion = m_Denoisers.GetOIDNGeneration();
+        const bool passed =
+            m_OIDNGenerationAfterCameraMotion > m_OIDNGenerationBeforeCameraMotion &&
+            !m_Denoisers.HasOIDNResult();
+        const std::string message = passed
+            ? "OIDN immediately invalidated its held result after camera motion."
+            : "OIDN did not immediately invalidate its held result after camera motion.";
+        if (m_Diagnostics.IsEnabled())
+        {
+            m_Diagnostics.RecordAssertion(
+                "oidn_motion_reset_immediate",
+                passed ? FrameworkDiagnostics::AssertionResult::Passed : FrameworkDiagnostics::AssertionResult::Failed,
+                message,
+                {
+                    { "generation_before", m_OIDNGenerationBeforeCameraMotion },
+                    { "generation_after", m_OIDNGenerationAfterCameraMotion },
+                    { "result_uploaded", m_Denoisers.HasOIDNResult() },
+                });
+        }
+        if (!passed)
+        {
+            throw std::runtime_error(message);
+        }
+        m_RuntimeAutomation.AppendDiagnosticLog(message);
+        break;
+    }
+    case RuntimeAutomationAction::VerifyOIDNInvalidated:
+    {
+        const bool passed =
+            m_Denoisers.IsOIDNEnabled() &&
+            IsAccumulationActive() &&
+            m_OIDNGenerationAfterCameraMotion > m_OIDNGenerationBeforeCameraMotion;
+        const std::string message = passed
+            ? "OIDN invalidated the prior result after camera motion and restarted static accumulation."
+            : "OIDN did not advance its static-image generation after camera motion.";
+        if (m_Diagnostics.IsEnabled())
+        {
+            m_Diagnostics.RecordAssertion(
+                "oidn_motion_invalidation",
+                passed ? FrameworkDiagnostics::AssertionResult::Passed : FrameworkDiagnostics::AssertionResult::Failed,
+                message,
+                {
+                    { "denoiser_enabled", m_Denoisers.IsOIDNEnabled() },
+                    { "effective_accumulation_enabled", IsAccumulationActive() },
+                    { "generation_before", m_OIDNGenerationBeforeCameraMotion },
+                    { "generation_after", m_OIDNGenerationAfterCameraMotion },
+                    { "result_uploaded", m_Denoisers.HasOIDNResult() },
+                });
+        }
+        if (!passed)
+        {
+            throw std::runtime_error(message);
+        }
+        m_RuntimeAutomation.AppendDiagnosticLog(message);
+        break;
+    }
+//Modify End
     case RuntimeAutomationAction::AsyncCompute:
         if (m_PathTracingBackend == PathTracingBackend::InlineRayQuery)
         {
@@ -2418,6 +2526,13 @@ void RaytracingDemo::RebuildRenderGraph()
     UpdateRenderGraphFrameState();
     EnsureRayTracingPipelines();
 
+    if (!m_RenderPipeline.HasRenderGraph())
+    {
+        m_Denoisers.OnResourcesRecreated(
+            m_RenderGraphFrameState->Width,
+            m_RenderGraphFrameState->Height);
+    }
+
     const RaytracingDemoRenderPipelineConfiguration configuration =
         RaytracingDemoRenderPipelineController::BuildConfiguration(*m_RenderGraphFrameState);
     m_RenderPipeline.Rebuild(
@@ -2427,6 +2542,9 @@ void RaytracingDemo::RebuildRenderGraph()
             m_FrameworkDeviceContext.Flush();
             m_CudaBloom.ReleaseInteropResource();
             m_DLSS.OnResourcesRecreated();
+            m_Denoisers.OnResourcesRecreated(
+                m_RenderGraphFrameState->Width,
+                m_RenderGraphFrameState->Height);
         },
         [this]()
         {
@@ -2471,25 +2589,30 @@ void RaytracingDemo::EnsureRenderGraphTopology()
 
 //Modify End
 
-void RaytracingDemo::ResetAccumulation(bool resetDenoiserHistory, bool resetReSTIRHistory)
+//Modify Begin:2026-08-25 by Hui
+void RaytracingDemo::ResetAccumulation(
+    const bool resetDenoiserHistory,
+    const bool resetReSTIRHistory,
+    const bool resetOIDNHistory)
 {
     m_AccumulationFrameIndex = 0;
-//Modify Begin:2026-08-19 by Hui
     if (resetReSTIRHistory)
     {
         m_ReSTIRDIHistoryValid = false;
         m_ReSTIRGIHistoryValid = false;
     }
-//Modify End
     if (resetDenoiserHistory)
     {
         m_Denoisers.ResetHistory();
-//Modify Begin:2026-08-19 by Hui
         m_DLSS.InvalidateHistory();
         m_HasPreviousViewProjection = false;
-//Modify End
+    }
+    else if (resetOIDNHistory)
+    {
+        m_Denoisers.ResetOIDNHistory();
     }
 }
+//Modify End
 
 //Modify Begin:2026-08-19 by Hui
 void RaytracingDemo::SaveCurrentCameraToUnityScene()
@@ -2576,7 +2699,7 @@ RaytracingDemoPassConfig RaytracingDemo::CreatePassConfig() const
 }
 //Modify End
 
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-25 by Hui
 void RaytracingDemo::UpdateRenderGraphFrameState()
 {
     RaytracingDemoFrameState& state = *m_RenderGraphFrameState;
@@ -2625,7 +2748,7 @@ void RaytracingDemo::UpdateRenderGraphFrameState()
         state.Projection.r[2].m128_f32[1] -= 2.0f * state.DLSSJitterOffset.y / static_cast<float>(state.Height);
     }
     state.ViewProjection = state.View * state.Projection;
-    state.AccumulationEnabled = m_AccumulationEnabled;
+    state.AccumulationEnabled = IsAccumulationActive();
     state.FrameIndex = m_FrameIndex;
     state.AccumulationFrameIndex = m_AccumulationFrameIndex;
     state.ReSTIRDIHistoryValid = m_ReSTIRDIHistoryValid;
@@ -2667,7 +2790,7 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     }
 //Modify End
 
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-08-25 by Hui
     const auto directCommandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
     const auto asyncComputeCommandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE);
     const auto copyCommandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COPY);
@@ -2820,6 +2943,9 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
         m_RenderGraphFrameState->UsesCompactedRayTracedPixelDispatch();
     const bool activeRayCountReadbackQueued =
         readsCompactedRayTracedPixelCount && m_ActivePixels.BeginCountReadback();
+    const bool oidnReadbackQueued = m_Denoisers.BeginOIDNReadback(
+        m_RenderGraphFrameState->AccumulationEnabled,
+        m_RenderGraphFrameState->AccumulationFrameIndex);
     BindlessDescriptorHeap& bindlessDescriptorHeap = m_SceneResources.GetBindlessDescriptorHeap();
     bindlessDescriptorHeap.BeginFrame(*directCommandQueue, *asyncComputeCommandQueue);
     bool bindlessFrameEnded = false;
@@ -2845,11 +2971,23 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
         m_ActivePixels.EndCountReadback(renderGraph.GetFrameSubmissionFences().Direct);
         activeRayCountReadbackEnded = true;
     };
+    bool oidnReadbackEnded = false;
+    const auto endOidnReadback = [&renderGraph, &oidnReadbackEnded, oidnReadbackQueued, this]()
+    {
+        if (!oidnReadbackQueued || oidnReadbackEnded)
+        {
+            return;
+        }
+
+        m_Denoisers.EndOIDNReadback(renderGraph.GetFrameSubmissionFences().Direct);
+        oidnReadbackEnded = true;
+    };
     try
     {
         renderGraph.Execute(metadata);
         endBindlessFrame();
         endActiveRayCountReadback();
+        endOidnReadback();
     }
     catch (const std::exception& exception)
     {
@@ -2864,6 +3002,14 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
             {
                 m_ActivePixels.CancelCountReadback();
             }
+        }
+        if (oidnReadbackQueued && renderGraph.GetFrameSubmissionFences().Direct != 0u)
+        {
+            endOidnReadback();
+        }
+        else if (oidnReadbackQueued)
+        {
+            m_Denoisers.CancelOIDNReadback();
         }
         RecordDiagnosticsFailure("render_graph_execute", exception);
         throw std::runtime_error(std::string("RaytracingDemo::OnRender RenderGraph.Execute failed: ") + exception.what());
@@ -2901,7 +3047,7 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     }
 
     ++m_FrameIndex;
-    if (m_AccumulationEnabled)
+    if (m_RenderGraphFrameState->AccumulationEnabled)
     {
         ++m_AccumulationFrameIndex;
     }

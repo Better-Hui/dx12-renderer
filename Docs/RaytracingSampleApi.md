@@ -174,7 +174,9 @@ The Framework [Diagnostics contract](FrameworkDiagnosticsPlan.md) is now impleme
 - `RendererDiagnostics` runs scenarios without desktop input injection and exposes JSON/JSONL `inspect`, `query`, `diff`, and `reproduce` operations for a developer or coding agent.
 - A bounded capture that dropped events is explicitly `incomplete`; critical error/fatal/assertion records receive retention priority, but a partial capture cannot prove the absence of a problem.
 
-Generic GPU texture/buffer readback requests, image assertions, DRED attachments, background writing, compression, and retention policy are not yet part of this Framework contract. The existing Demo `visual` scenario remains a sample-specific image/readback test.
+`GpuReadbackBuffer` and non-blocking ring-slot `GpuReadbackTexture` are Framework primitives. The Demo uses them for compacted active-pixel validation and the OIDN HDR readback -> CPU filter -> upload -> composite pipeline. Generic Diagnostics-owned GPU readback request APIs, image assertions, DRED attachments, background writing, compression, and retention policy are not yet part of the Framework contract. The existing Demo `visual` scenario remains a sample-specific image/readback test.
+
+When the Demo selects OIDN, it automatically treats accumulation as active even if the manual accumulation option is off. It submits one converged HDR readback after the configured static SPP, runs the CPU filter asynchronously, uploads the result, and composites that persistent result on subsequent static frames. The noisy live result is not allowed to replace an uploaded result. Camera motion, a render-input reset, denoiser selection, or resource recreation advances the OIDN generation and invalidates the held image immediately; the next static interval builds a new result. The `oidn` automation scenario checks both the static hold and the motion-reset boundary.
 
 ## Soft-shadow variants
 

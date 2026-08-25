@@ -1,16 +1,18 @@
-//Modify Begin:2026-07-27 by Hui
+//Modify Begin:2026-08-25 by Hui
 #include <Denoising/DenoiserController.h>
 
 #include <DX12Library/Helpers.h>
 #include <imgui.h>
 #include <Framework/UI/NumericWidgets.h>
 
+#include <algorithm>
 #include <cstring>
 #include <utility>
 
 void DenoiserController::Initialize(FrameworkDeviceContext& deviceContext)
 {
     m_NRD = std::make_unique<NRD>(deviceContext);
+    m_OIDN = std::make_unique<OIDNDenoiser>(deviceContext);
     m_SVGF = std::make_unique<SVGF>(deviceContext);
     ApplySelection();
 }
@@ -18,6 +20,7 @@ void DenoiserController::Initialize(FrameworkDeviceContext& deviceContext)
 void DenoiserController::Shutdown()
 {
     m_SVGF.reset();
+    m_OIDN.reset();
     m_NRD.reset();
 }
 
@@ -46,6 +49,12 @@ void DenoiserController::SetAlgorithmFromName(const char* algorithmName)
         return;
     }
 
+    if (std::strcmp(algorithmName, "oidn") == 0)
+    {
+        SetAlgorithm(Algorithm::OIDN);
+        return;
+    }
+
     SetAlgorithm(Algorithm::Off);
 }
 
@@ -59,6 +68,80 @@ void DenoiserController::ResetHistory()
     if (m_SVGF != nullptr)
     {
         m_SVGF->ResetHistory();
+    }
+
+    if (m_OIDN != nullptr)
+    {
+        m_OIDN->ResetHistory();
+    }
+}
+
+void DenoiserController::ResetOIDNHistory()
+{
+    if (m_OIDN != nullptr)
+    {
+        m_OIDN->ResetHistory();
+    }
+}
+
+void DenoiserController::SetOIDNStaticSpp(const uint32_t spp)
+{
+    const uint32_t clampedSpp = std::clamp(spp, 1u, 4096u);
+    if (m_OIDNStaticSpp == clampedSpp)
+    {
+        return;
+    }
+    m_OIDNStaticSpp = clampedSpp;
+    if (m_OIDN != nullptr)
+    {
+        m_OIDN->ResetHistory();
+    }
+}
+
+void DenoiserController::OnResourcesRecreated(const uint32_t width, const uint32_t height)
+{
+    if (m_OIDN != nullptr)
+    {
+        m_OIDN->OnResourcesRecreated(width, height);
+    }
+}
+
+bool DenoiserController::BeginOIDNReadback(
+    const bool accumulationEnabled,
+    const uint32_t accumulationFrameIndex)
+{
+    return IsOIDNEnabled() && m_OIDN != nullptr &&
+        m_OIDN->BeginReadback(accumulationEnabled, accumulationFrameIndex, m_OIDNStaticSpp);
+}
+
+bool DenoiserController::RecordOIDNReadback(
+    CommandList& commandList,
+    const std::shared_ptr<Texture>& source)
+{
+    return IsOIDNEnabled() && m_OIDN != nullptr && m_OIDN->RecordReadback(commandList, source);
+}
+
+void DenoiserController::EndOIDNReadback(const uint64_t submittedFenceValue)
+{
+    if (m_OIDN != nullptr)
+    {
+        m_OIDN->EndReadback(submittedFenceValue);
+    }
+}
+
+void DenoiserController::CancelOIDNReadback()
+{
+    if (m_OIDN != nullptr)
+    {
+        m_OIDN->CancelReadback();
+    }
+}
+
+void DenoiserController::PollOIDN(CommandQueue& directQueue)
+{
+    if (m_OIDN != nullptr)
+    {
+        m_OIDN->Poll(directQueue);
     }
 }
 
@@ -76,7 +159,7 @@ void DenoiserController::FillCameraConstants(
     uint32_t& nrdDenoiserMode,
     DirectX::XMFLOAT4& nrdReblurHitDistanceParameters) const
 {
-    if (m_NRD == nullptr)
+    if (!IsNRDEnabled() || m_NRD == nullptr)
     {
         return;
     }
@@ -95,13 +178,23 @@ bool DenoiserController::DrawImGui()
 {
     bool changed = false;
 
-    const char* denoiserNames[] = { "Off", "NRD", "SVGF" };
+    const char* denoiserNames[] = { "Off", "NRD", "SVGF", "OIDN" };
     int selectedDenoiser = static_cast<int>(m_Algorithm);
-    if (ImGui::Combo("Denoiser##DenoiserAlgorithm", &selectedDenoiser, denoiserNames, 3))
+    if (ImGui::Combo("Denoiser##DenoiserAlgorithm", &selectedDenoiser, denoiserNames, 4))
     {
         SetAlgorithm(static_cast<Algorithm>(selectedDenoiser));
         ResetHistory();
         changed = true;
+    }
+
+    if (IsOIDNEnabled())
+    {
+        ImGui::TextDisabled("OIDN automatically accumulates static samples and holds its denoised result until the scene changes.");
+        int oidnStaticSpp = static_cast<int>(m_OIDNStaticSpp);
+        if (FrameworkImGui::SliderInt("OIDN Static SPP", &oidnStaticSpp, 1, 4096))
+        {
+            SetOIDNStaticSpp(static_cast<uint32_t>(oidnStaticSpp));
+        }
     }
 
     if (IsNRDEnabled() && m_NRD != nullptr && ImGui::CollapsingHeader("NRD Settings"))
@@ -219,6 +312,14 @@ void DenoiserController::AddSVGFPasses(
     m_SVGF->AddPasses(builder, std::move(inputs));
 }
 
+void DenoiserController::AddOIDNPasses(
+    RenderGraph::RenderGraphBuilder& builder,
+    OIDNDenoiser::GraphInputs inputs)
+{
+    Assert(IsOIDNEnabled() && m_OIDN != nullptr, "OIDN graph registration requires the OIDN selection.");
+    m_OIDN->AddPasses(builder, std::move(inputs));
+}
+
 void DenoiserController::ApplySelection()
 {
     if (m_NRD != nullptr)
@@ -229,6 +330,11 @@ void DenoiserController::ApplySelection()
     if (m_SVGF != nullptr)
     {
         m_SVGF->SetEnabled(IsSVGFEnabled());
+    }
+
+    if (m_OIDN != nullptr)
+    {
+        m_OIDN->SetEnabled(IsOIDNEnabled());
     }
 }
 //Modify End

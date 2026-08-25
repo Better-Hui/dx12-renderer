@@ -196,6 +196,39 @@ void ResourceUploader::UploadTextureSubresources(
     CommandListInternalAccess::TrackResourceLifetime(commandList, texture);
 }
 
+void ResourceUploader::CopyTextureSubresources(
+    CommandList& commandList,
+    Texture& texture,
+    const uint32_t firstSubresource,
+    const uint32_t subresourceCount,
+    const D3D12_SUBRESOURCE_DATA* subresources) const
+{
+    ValidateCommandList(commandList);
+    texture.AttachDeviceContext(m_DeviceContext);
+    Assert(subresourceCount > 0u, "Texture copy requires at least one subresource.");
+    Assert(subresources != nullptr, "Texture copy data is null.");
+
+    const Microsoft::WRL::ComPtr<ID3D12Resource> destination = texture.GetD3D12Resource();
+    Assert(destination != nullptr, "Texture copy destination has not been created.");
+
+    const UINT64 requiredSize = GetRequiredIntermediateSize(destination.Get(), firstSubresource, subresourceCount);
+    const UploadBuffer::Allocation uploadAllocation = CommandListInternalAccess::AllocateTransientUpload(
+        commandList,
+        static_cast<size_t>(requiredSize),
+        D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
+
+    UpdateSubresources(
+        commandList.GetGraphicsCommandList().Get(),
+        destination.Get(),
+        uploadAllocation.Resource.Get(),
+        uploadAllocation.Offset,
+        firstSubresource,
+        subresourceCount,
+        subresources);
+    CommandListInternalAccess::TrackObjectLifetime(commandList, uploadAllocation.Resource);
+    CommandListInternalAccess::TrackResourceLifetime(commandList, texture);
+}
+
 void ResourceUploader::AssignTextureResource(
     CommandList& commandList,
     Texture& texture,

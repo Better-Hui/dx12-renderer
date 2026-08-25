@@ -93,6 +93,13 @@ const char* RaytracingDemoAutomation::GetActionControlName(const Action action)
     case Action::DynamicRayTracingUpdate: return "raytracing.dynamic_rtas_update";
     case Action::VerifyDynamicRayTracingUpdate: return "assert.dynamic_rtas_update";
     case Action::VerifyDynamicSkinnedMeshCapability: return "assert.dynamic_skinned_mesh_capability";
+    case Action::Denoiser: return "denoiser.algorithm";
+    case Action::OIDNStaticSpp: return "denoiser.oidn_static_spp";
+    case Action::VerifyOIDNResult: return "assert.oidn_result";
+//Modify Begin:2026-08-25 by Hui
+    case Action::OIDNCameraMotion: return "camera.oidn_motion";
+    case Action::VerifyOIDNInvalidated: return "assert.oidn_motion_invalidation";
+//Modify End
     case Action::CaptureScreenshot: return "capture.screenshot";
     case Action::MatrixCase: return "scenario.matrix_case";
     default: return "unknown";
@@ -357,6 +364,37 @@ DemoAutomation::TestSuites RaytracingDemoAutomation::CreateTestSuites()
         makeStep(Action::VerifyDynamicRayTracingUpdate, 1u, "dynamic-scene-indirect-restore-verify"),
         makeStep(Action::VerifyDynamicSkinnedMeshCapability, 0u, "dynamic-scene-skinned-explicit-reject"),
     };
+//Modify Begin:2026-08-25 by Hui
+    testSuites.OIDN = {
+        makeStep(Action::Denoiser, static_cast<uint32_t>(DenoiserController::Algorithm::OIDN), "denoiser=oidn"),
+        makeStep(Action::Accumulation, 0u, "oidn-manual-accumulation=0"),
+        makeStep(Action::OIDNStaticSpp, 2u, "oidn-static-spp=2"),
+        makeStep(Action::Wait, 0u, "oidn-warmup=1"),
+        makeStep(Action::Wait, 0u, "oidn-warmup=2"),
+        makeStep(Action::Wait, 0u, "oidn-warmup=3"),
+        makeStep(Action::Wait, 0u, "oidn-warmup=4"),
+        makeStep(Action::Wait, 0u, "oidn-warmup=5"),
+        makeStep(Action::Wait, 0u, "oidn-warmup=6"),
+        makeStep(Action::Wait, 0u, "oidn-warmup=7"),
+        makeStep(Action::Wait, 0u, "oidn-warmup=8"),
+        makeStep(Action::VerifyOIDNResult, 0u, "oidn-result-verify"),
+        makeStep(Action::Wait, 0u, "oidn-result-held=1"),
+        makeStep(Action::Wait, 0u, "oidn-result-held=2"),
+        makeStep(Action::VerifyOIDNResult, 0u, "oidn-result-held-verify"),
+        makeStep(Action::OIDNCameraMotion, 0u, "oidn-camera-motion"),
+        makeStep(Action::VerifyOIDNInvalidated, 0u, "oidn-camera-motion-verify"),
+        makeStep(Action::Wait, 0u, "oidn-rebuild-warmup=1"),
+        makeStep(Action::Wait, 0u, "oidn-rebuild-warmup=2"),
+        makeStep(Action::Wait, 0u, "oidn-rebuild-warmup=3"),
+        makeStep(Action::Wait, 0u, "oidn-rebuild-warmup=4"),
+        makeStep(Action::Wait, 0u, "oidn-rebuild-warmup=5"),
+        makeStep(Action::Wait, 0u, "oidn-rebuild-warmup=6"),
+        makeStep(Action::Wait, 0u, "oidn-rebuild-warmup=7"),
+        makeStep(Action::Wait, 0u, "oidn-rebuild-warmup=8"),
+        makeStep(Action::VerifyOIDNResult, 0u, "oidn-rebuild-result-verify"),
+        makeStep(Action::Denoiser, static_cast<uint32_t>(DenoiserController::Algorithm::NRD), "denoiser=nrd"),
+    };
+//Modify End
     testSuites.Visual = {
         makeStep(Action::DLSS, static_cast<uint32_t>(DLSSMode::Disabled), "visual-dlss=off"),
         makeStep(Action::MaterialShading, static_cast<uint32_t>(MaterialShadingModel::Pbr), "visual-shading=pbr"),

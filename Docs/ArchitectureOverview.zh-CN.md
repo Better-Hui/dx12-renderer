@@ -177,7 +177,7 @@ shader-table DXR 与 Inline 共用 scene/resource model，但当前 ReSTIR DI/GI
 - Async Compute 只有依赖和硬件允许 overlap 时才可能降低 GPU wall time；额外 fence、cache 与带宽竞争也可能令它变慢。
 - Meshlet 是实验性的 GBuffer backend，不是完整的 visibility、streaming、residency 或 LOD 系统。
 - FBX 场景导入已经进入 Framework `SceneImporter` 契约，但当前只选择一个活动相机并支持实用的 PBR 子集。Spot Light 会保留在 `Scene` 中，而 sample 当前 GPU 光照路径通过点光 fallback 显示；透明、clearcoat、transmission、动画播放和 runtime skinning output 仍需要单独契约。在 skinned 输出能同时驱动 raster、Meshlet 和 BLAS 前，dynamic-scene capability 会明确报告 skinned update 不支持。
-- Diagnostics 当前尚未通用化 GPU texture/buffer readback、图像 assertion、DRED attachment、后台写盘、压缩和 retention policy；高事件量 capture 可能很大，应使用 `--max-events` 和 `dropped_event_count` 判断证据完整性。
+- Framework feature 已可使用 `GpuReadbackBuffer` 和非阻塞 ring-slot `GpuReadbackTexture`；compacted active-pixel 验证与 OIDN 已在实际 sample 路径中使用它们。选中 OIDN 后会自动累计，上传结果后保持静止画面；相机或渲染输入变化会推进 generation 并重新累计。Diagnostics 仍缺少其自有的通用 request API、图像 assertion、DRED attachment、后台写盘、压缩和 retention policy；高事件量 capture 可能很大，应使用 `--max-events` 和 `dropped_event_count` 判断证据完整性。
 - ReSTIR DI/GI、CUDA Bloom、DLSS SR/DLAA、Streamline RR/FG、Unity interop 都是工程实验；用于交付前必须逐硬件完成正确性、画质、稳定性、显存和性能验证。
 
 使用示例和更细的功能边界见 [RaytracingDemo API Guide](RaytracingSampleApi.md)。

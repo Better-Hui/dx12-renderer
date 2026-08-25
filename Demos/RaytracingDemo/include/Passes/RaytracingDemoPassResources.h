@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-08-25 by Hui
 #pragma once
 
 #include <Denoising/DenoiserController.h>
@@ -139,9 +139,7 @@ struct RaytracingDemoPassResources
     ReSTIRGIPass& IndirectLightingReSTIRGIPass;
     DLSS& Dlss;
     std::shared_ptr<ComputeShader> DLSSRayReconstructionPrepareShader;
-//Modify Begin:2026-08-25 by Hui
     std::shared_ptr<ComputeShader> CopyQueueValidationShader;
-//Modify End
     DenoiserController& Denoisers;
     CudaBloomPass& CudaBloom;
     AutoExposure& Exposure;
@@ -184,10 +182,8 @@ struct RaytracingDemoFrameState
     RaytracingDemoLightingTechnique DirectLightingTechnique = RaytracingDemoLightingTechnique::None;
     RaytracingDemoLightingTechnique IndirectLightingTechnique = RaytracingDemoLightingTechnique::None;
     bool AsyncComputeEnabled = false;
-//Modify Begin:2026-08-25 by Hui
     bool CopyQueueValidationEnabled = false;
     bool DynamicRayTracingUpdateEnabled = false;
-//Modify End
     bool UseMeshletGBuffer = false;
     bool UseTaskShaderMeshlets = false;
     bool DebugMeshletClusters = false;
@@ -284,11 +280,16 @@ struct RaytracingDemoFrameState
 
     PathTracingCompositeFeatures GetCompositeFeatures() const
     {
+        // OIDN reads the converged accumulation after this shader, so this
+        // shader only needs NRD/SVGF permutations that emit noisy radiance.
+        const bool writesInlineDenoiserInput = DenoiserEnabled &&
+            (DenoiserAlgorithm == DenoiserController::Algorithm::NRD ||
+             DenoiserAlgorithm == DenoiserController::Algorithm::SVGF);
         return {
             .DirectLightingEnabled = UsesDirectLighting(),
             .IndirectLightingEnabled = UsesIndirectLighting(),
             .AccumulationEnabled = AccumulationEnabled,
-            .DenoiserMode = DenoiserEnabled ? static_cast<uint32_t>(DenoiserAlgorithm) : 0u,
+            .DenoiserMode = writesInlineDenoiserInput ? static_cast<uint32_t>(DenoiserAlgorithm) : 0u,
             .UseNrdReblur = false,
         };
     }
