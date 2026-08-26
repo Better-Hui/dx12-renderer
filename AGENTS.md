@@ -159,6 +159,8 @@ Avoid adding new sample code that directly touches root signatures, raw descript
 
 ## Device Context Ownership
 
+`RenderGraphRoot` exposes terminal Present variants and `ReadbackTexture` only. Generic graph-to-graph copy/draw callbacks are intentionally absent, and `VerifyRenderGraphOwnership.cmake` rejects their reintroduction; all new graph-internal work must be registered as a pass.
+
 - `D3D12RenderContext` owns the per-device `D3D12DeviceContext`. It is the sole owner of the D3D12 device-facing `ResourceStateRegistry` and CPU-visible descriptor allocators; `Application` only forwards it for standalone composition.
 - `CommandQueue` receives `D3D12DeviceContext`, not independent device/registry copies. It creates each `CommandList` from that same context, so queue submission state merges and resource registration always address one explicit device scope.
 - `FrameworkDeviceContext` receives the same `D3D12DeviceContext` plus queues. It must not carry a descriptor-allocation callback that captures `Application`; use `FrameworkDeviceContext::AllocateDescriptors()` instead.
@@ -190,6 +192,8 @@ FBX scene import uses the same Assimp geometry flags in `SceneFbxImporter` and `
 D3D12 graphics and compute root signatures are independent command-list state. Keep `m_GraphicsRootSignature`, `m_ComputeRootSignature`, and `m_DescriptorTableRootSignature` separate. A depth resource that is both a DSV and float SRV uses `R32_TYPELESS` as the resource format, `D32_FLOAT` as the DSV format, and `R32_FLOAT` as the SRV format.
 
 ## DLSS / Streamline
+
+`BloomController` is the Demo-facing selector for the Framework raster Bloom subgraph and the Demo-owned CUDA external backend. The latter remains a CUDA interop path under `Demos/RaytracingDemo`; it must not move into Framework or corrupt history resources.
 
 - **Status: experimental integration, not a completed feature.** Native NGX SR/DLAA and the Streamline RR/FG paths have build, startup, and automation safety coverage only. They have not been accepted through image-quality, stability, timing, or performance validation on supported RR/FG hardware. Runtime capability query is the final gate: the current RTX 2060 development adapter cannot support FG and currently reports RR unavailable. Do not claim DLSS, RR, or FG is usable, production-ready, or validated without supported-hardware evidence.
 - `StreamlineRuntime` lives in Framework and implements the generic DX12Library `D3D12RuntimeLifecycle`: call `slInit` before the first D3D12/DXGI API, then `slSetD3DDevice` immediately after device creation. `RaytracingDemo` compiles `DLSS.cpp` and `StreamlineRuntime.cpp` as hidden external sources; the core `Framework` target must not link NGX or Streamline and no extra `FrameworkNvidiaFeatures` project may be created. The demo links `sl.interposer.lib`, so do not set `eUseManualHooking`, call `slUpgradeInterface`, or route device/queue/swap-chain creation through feature callbacks.

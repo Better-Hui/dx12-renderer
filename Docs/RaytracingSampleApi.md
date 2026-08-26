@@ -44,7 +44,7 @@ Base Resources
 -> Lighting Composite
 -> optional Denoise
 -> Skybox / post process
--> optional Raster Bloom subgraph or CUDA Bloom external pass
+-> optional `BloomController`: Raster Bloom subgraph or CUDA external pass
 -> Display / Overlay
 -> Present
 ```
@@ -72,7 +72,7 @@ Bloom Prefilter
 -> Bloom Composite
 ```
 
-`Bloom::AddPasses` declares its pyramid with `RenderGraphBuilder::CreateTexture()`, so the Demo only supplies the source/output IDs, tokens, resolution expressions, parameters, and pyramid depth. The graph owns those textures, their lifetime, and their barriers. They participate in transient aliasing: the allocator writes the alias barrier at the new placed resource's first actual use and initializes its planned state as `COMMON`; CUDA Bloom is unaffected and remains an explicit external queue/semaphore path.
+`BloomController` is the Demo-facing backend selector. Its raster backend delegates to `Bloom::AddPasses`, which declares its pyramid with `RenderGraphBuilder::CreateTexture()`, so the Demo only supplies the source/output IDs, tokens, resolution expressions, parameters, and pyramid depth. The graph owns those textures, their lifetime, and their barriers. They participate in transient aliasing: the allocator writes the alias barrier at the new placed resource's first actual use and initializes its planned state as `COMMON`; the CUDA backend is unaffected and remains an explicit external queue/semaphore path.
 
 ### ReSTIR DI direct lighting
 
@@ -133,7 +133,7 @@ Current behavior:
 
 Framework-owned persistent resources enter normal graph scheduling through `RenderGraphBuilder::ImportResource`. They receive logical IDs and participate in dependency, culling, state, UAV, and cross-queue hazard planning, but remain outside the transient resource pool.
 
-Native integrations such as NRD and RTAS construction remain audited renderer-infrastructure boundaries. NRD declares its RG-visible inputs/outputs and restores the native snapshot state around SDK recording; CUDA Bloom and Streamline remain explicit external queue/semaphore boundaries. The dynamic RTAS upload pass declares ordinary vertex/index plus Meshlet vertex, bounds, transform, and instance writes as `COPY_DEST`; later Meshlet culling and RTAS refit declare the corresponding reads. The RTAS implementation only owns its backing/scratch state. Demo pass code cannot call transition/UAV/aliasing barriers, and `CommandList`/`CommandContext` expose no such API.
+Native integrations such as NRD and RTAS construction remain audited renderer-infrastructure boundaries. NRD declares its RG-visible inputs/outputs and restores the native snapshot state around SDK recording; the CUDA Bloom backend and Streamline remain explicit external queue/semaphore boundaries. `RenderGraphRoot` exposes terminal Present variants and `ReadbackTexture` only; generic graph-to-graph copy or draw callbacks do not exist, so new graph work must be declared as a pass. The dynamic RTAS upload pass declares ordinary vertex/index plus Meshlet vertex, bounds, transform, and instance writes as `COPY_DEST`; later Meshlet culling and RTAS refit declare the corresponding reads. The RTAS implementation only owns its backing/scratch state. Demo pass code cannot call transition/UAV/aliasing barriers, and `CommandList`/`CommandContext` expose no such API.
 
 This is an explicit queue API, not an automatic multi-queue scheduler. It does not decide queue placement, split or batch passes, optimize overlap, or schedule a Copy queue. A pass may become slower when dependencies expose its compute tail or when graphics and compute contend for GPU execution/cache/bandwidth.
 

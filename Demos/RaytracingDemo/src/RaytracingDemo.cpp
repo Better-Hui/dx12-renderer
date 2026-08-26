@@ -498,7 +498,7 @@ RaytracingDemo::RaytracingDemo(
             "RAYTRACING_DEMO_ENVIRONMENT_PROJECTION",
             { PipelineStaticSamplers::LinearWrap(1u) },
         })
-    , m_CudaBloom(m_FrameworkDeviceContext)
+    , m_Bloom(m_FrameworkDeviceContext)
     , m_AutoExposure(m_FrameworkDeviceContext)
     , m_ProfilerDisplay(graphicsSettings.ProfilerDisplayRefreshIntervalSeconds)
     , m_SceneResources(m_FrameworkDeviceContext.GetD3D12DeviceContext())
@@ -665,14 +665,14 @@ RaytracingDemo::RaytracingDemo(
     }
     std::free(debugSerializeAsyncCompute);
 
-    char* cudaBloom = nullptr;
-    size_t cudaBloomLength = 0;
-    _dupenv_s(&cudaBloom, &cudaBloomLength, "RAYTRACING_DEMO_CUDA_BLOOM");
-    if (cudaBloom != nullptr)
+    char* bloom = nullptr;
+    size_t bloomLength = 0;
+    _dupenv_s(&bloom, &bloomLength, "RAYTRACING_DEMO_BLOOM");
+    if (bloom != nullptr)
     {
-        m_CudaBloom.SetEnabled(std::strcmp(cudaBloom, "0") != 0);
+        m_Bloom.SetEnabled(std::strcmp(bloom, "0") != 0);
     }
-    std::free(cudaBloom);
+    std::free(bloom);
 
 //Modify End
 
@@ -1090,72 +1090,72 @@ void RaytracingDemo::LoadStartupConfiguration()
     }
     m_IndirectLightingReSTIRGI.SetSettings(restirGISettings);
 
-    if (configuration.TryGetBoolean("CudaBloom", "Enabled", boolValue))
+    if (configuration.TryGetBoolean("Bloom", "Enabled", boolValue))
     {
-        m_CudaBloom.SetEnabled(boolValue);
+        m_Bloom.SetEnabled(boolValue);
     }
-    if (configuration.TryGetString("CudaBloom", "Backend", stringValue))
+    if (configuration.TryGetString("Bloom", "Backend", stringValue))
     {
         stringValue = ToLower(stringValue);
         if (stringValue == "builtin" || stringValue == "framework" || stringValue == "framework-raster" || stringValue == "raster")
         {
-            m_CudaBloom.SetBackend(CudaBloomPass::Backend::FrameworkRaster);
+            m_Bloom.SetBackend(BloomController::Backend::FrameworkRaster);
         }
         else if (stringValue == "cuda")
         {
-            m_CudaBloom.SetBackend(CudaBloomPass::Backend::Cuda);
+            m_Bloom.SetBackend(BloomController::Backend::Cuda);
         }
     }
-    if (configuration.TryGetString("CudaBloom", "CudaMethod", stringValue))
+    if (configuration.TryGetString("Bloom", "CudaMethod", stringValue))
     {
         stringValue = ToLower(stringValue);
         if (stringValue == "boxfilter" || stringValue == "box-filter" || stringValue == "box-filter-approximation")
         {
-            m_CudaBloom.SetCudaMethod(CudaBloomPass::CudaMethod::BoxFilterApproximation);
+            m_Bloom.SetCudaMethod(BloomController::CudaMethod::BoxFilterApproximation);
         }
         else if (stringValue == "boxfilter-original" || stringValue == "box-filter-original" || stringValue == "box-filter-original-paper")
         {
-            m_CudaBloom.SetCudaMethod(CudaBloomPass::CudaMethod::BoxFilterOriginalPaper);
+            m_Bloom.SetCudaMethod(BloomController::CudaMethod::BoxFilterOriginalPaper);
         }
         else if (stringValue == "classic" || stringValue == "classic-pyramid")
         {
-            m_CudaBloom.SetCudaMethod(CudaBloomPass::CudaMethod::ClassicPyramid);
+            m_Bloom.SetCudaMethod(BloomController::CudaMethod::ClassicPyramid);
         }
     }
-    if (configuration.TryGetFloat("CudaBloom", "Threshold", floatValue))
+    if (configuration.TryGetFloat("Bloom", "Threshold", floatValue))
     {
-        m_CudaBloom.SetThreshold(std::max(0.0f, floatValue));
+        m_Bloom.SetThreshold(std::max(0.0f, floatValue));
     }
-    if (configuration.TryGetFloat("CudaBloom", "SoftThreshold", floatValue))
+    if (configuration.TryGetFloat("Bloom", "SoftThreshold", floatValue))
     {
-        m_CudaBloom.SetSoftThreshold(std::max(0.0f, floatValue));
+        m_Bloom.SetSoftThreshold(std::max(0.0f, floatValue));
     }
-    if (configuration.TryGetFloat("CudaBloom", "Intensity", floatValue))
+    if (configuration.TryGetFloat("Bloom", "Intensity", floatValue))
     {
-        m_CudaBloom.SetIntensity(std::max(0.0f, floatValue));
+        m_Bloom.SetIntensity(std::max(0.0f, floatValue));
     }
-    if (configuration.TryGetInt("CudaBloom", "PyramidLevels", intValue))
+    if (configuration.TryGetInt("Bloom", "PyramidLevels", intValue))
     {
-        m_CudaBloom.SetPyramidLevels(std::clamp(
+        m_Bloom.SetPyramidLevels(std::clamp(
             intValue,
             1,
-            static_cast<int>(CudaBloomPass::ComputeMaxPyramidLevels(
+            static_cast<int>(BloomController::ComputeMaxPyramidLevels(
                 static_cast<uint32_t>((std::max)(m_Width, 1)),
                 static_cast<uint32_t>((std::max)(m_Height, 1))))));
     }
-    if (configuration.TryGetFloat("CudaBloom", "BoxFilterSigma", floatValue))
+    if (configuration.TryGetFloat("Bloom", "BoxFilterSigma", floatValue))
     {
-        m_CudaBloom.SetBoxFilterSigma(std::max(0.001f, floatValue));
+        m_Bloom.SetBoxFilterSigma(std::max(0.001f, floatValue));
     }
-    if (configuration.TryGetBoolean("CudaBloom", "SharedMemoryDownsampling", boolValue))
+    if (configuration.TryGetBoolean("Bloom", "SharedMemoryDownsampling", boolValue))
     {
-        m_CudaBloom.SetUseSharedMemoryDownsampling(boolValue);
+        m_Bloom.SetUseSharedMemoryDownsampling(boolValue);
     }
-    if (configuration.TryGetInt("CudaBloom", "ThreadBlockSize", intValue) && (intValue == 8 || intValue == 16))
+    if (configuration.TryGetInt("Bloom", "ThreadBlockSize", intValue) && (intValue == 8 || intValue == 16))
     {
-        m_CudaBloom.SetThreadBlockSize(intValue == 8
-            ? CudaBloomPass::ThreadBlockSize::Size8x8
-            : CudaBloomPass::ThreadBlockSize::Size16x16);
+        m_Bloom.SetThreadBlockSize(intValue == 8
+            ? BloomController::ThreadBlockSize::Size8x8
+            : BloomController::ThreadBlockSize::Size16x16);
     }
 
     if (configuration.TryGetBoolean("Debug", "GpuTiming", boolValue))
@@ -1211,7 +1211,7 @@ void RaytracingDemo::InitializeDiagnostics()
         "RAYTRACING_DEMO_DLSS_FRAME_GENERATION",
         "RAYTRACING_DEMO_ASYNC_COMPUTE",
         "RAYTRACING_DEMO_PARALLEL_DIRECT_RECORDING",
-        "RAYTRACING_DEMO_CUDA_BLOOM",
+        "RAYTRACING_DEMO_BLOOM",
         "RAYTRACING_DEMO_MESHLET_GBUFFER",
         "RAYTRACING_DEMO_MESHLET_DEBUG",
         "RAYTRACING_DEMO_MESHLET_BACKEND",
@@ -1894,7 +1894,7 @@ void RaytracingDemo::CapturePendingAutomationScreenshot(const RenderGraph::Rende
         nullptr,
         IID_PPV_ARGS(&readbackResource)));
 
-    renderGraph.CopyTextureToReadback(
+    renderGraph.ReadbackTexture(
         renderMetadata,
         renderGraph.GetPresentationResourceId(),
         readbackResource,
@@ -2130,7 +2130,7 @@ try
     accelerationStructureSettings.AllowUpdate = true;
     m_SceneResources.BuildRayTracingAccelerationStructure(*commandList, accelerationStructureSettings);
     m_Lights.InitializeGpuBuffers(*commandList);
-    m_CudaBloom.InitializeFrameworkBloom(*commandList);
+    m_Bloom.InitializeFrameworkBloom(*commandList);
 //Modify Begin:2026-08-19 by Hui
     EnsureRayTracingPipelines();
 //Modify End
@@ -2279,7 +2279,7 @@ void RaytracingDemo::UnloadContent()
     }
 //Modify End
 //Modify Begin:2026-08-19 by Hui
-    m_CudaBloom.ReleaseInteropResource();
+    m_Bloom.ReleaseInteropResource();
 //Modify End
     m_RenderPipeline.Reset();
 //Modify Begin:2026-08-25 by Hui
@@ -2292,7 +2292,7 @@ void RaytracingDemo::UnloadContent()
     m_ImGui.reset();
     m_Denoisers.Shutdown();
 //Modify Begin:2026-08-19 by Hui
-    m_CudaBloom.Shutdown();
+    m_Bloom.Shutdown();
 //Modify End
     m_SkyboxTexture.reset();
 //Modify Begin:2026-08-19 by Hui
@@ -2541,7 +2541,7 @@ void RaytracingDemo::RebuildRenderGraph()
         [this]()
         {
             m_FrameworkDeviceContext.Flush();
-            m_CudaBloom.ReleaseInteropResource();
+            m_Bloom.ReleaseInteropResource();
             m_DLSS.OnResourcesRecreated();
             m_Denoisers.OnResourcesRecreated(
                 m_RenderGraphFrameState->Width,
@@ -2668,7 +2668,7 @@ RaytracingDemoPassResources RaytracingDemo::CreatePassResources()
         m_ShaderPipelineBootstrap.GetDLSSRayReconstructionPrepareShader(),
         m_ShaderPipelineBootstrap.GetCopyQueueValidationShader(),
         m_Denoisers,
-        m_CudaBloom,
+        m_Bloom,
         m_AutoExposure,
         m_ShaderPipelineBootstrap.GetGBufferShader(),
         m_ShaderPipelineBootstrap.GetMeshletIndirectGBufferShader(),
@@ -2725,9 +2725,9 @@ void RaytracingDemo::UpdateRenderGraphFrameState()
         : DenoiserController::Algorithm::Off;
     state.NRDDenoiserMode = m_Denoisers.GetNRDMode();
     state.SVGFAtrousIterations = m_Denoisers.GetSVGFAtrousIterations();
-    state.BloomEnabled = m_CudaBloom.IsEnabled();
-    state.BloomBackend = m_CudaBloom.GetBackend();
-    state.BloomPyramidLevels = (std::max)(1, m_CudaBloom.GetPyramidLevels());
+    state.BloomEnabled = m_Bloom.IsEnabled();
+    state.BloomBackend = m_Bloom.GetBackend();
+    state.BloomPyramidLevels = (std::max)(1, m_Bloom.GetPyramidLevels());
     const uint32_t displayWidth = static_cast<uint32_t>((std::max)(m_Width, 1));
     const uint32_t displayHeight = static_cast<uint32_t>((std::max)(m_Height, 1));
     const DLSSOptimalSettings dlssSettings = m_DLSS.GetOptimalSettings(displayWidth, displayHeight);
@@ -2849,7 +2849,7 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
             "Copy");
     }
 
-    for (const CudaBloomPass::TimingStats& cudaTiming : m_CudaBloom.ConsumeCompletedTimingStats())
+    for (const BloomController::TimingStats& cudaTiming : m_Bloom.ConsumeCompletedTimingStats())
     {
         m_ProfilerDisplay.AccumulateCudaTiming({
             .D3DToCudaWaitMilliseconds = cudaTiming.D3DToCudaWaitMs,

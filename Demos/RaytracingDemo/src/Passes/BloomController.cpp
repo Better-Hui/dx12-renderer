@@ -1,5 +1,5 @@
 //Modify Begin:2026-07-30 by Hui
-#include <Passes/CudaBloomPass.h>
+#include <Passes/BloomController.h>
 //Modify End
 
 #include <DX12Library/Helpers.h>
@@ -24,7 +24,7 @@ namespace
 }
 
 //Modify Begin:2026-07-30 by Hui
-uint32_t CudaBloomPass::ComputeMaxPyramidLevels(const uint32_t width, const uint32_t height)
+uint32_t BloomController::ComputeMaxPyramidLevels(const uint32_t width, const uint32_t height)
 {
     uint32_t levelWidth = HalfSize(width);
     uint32_t levelHeight = HalfSize(height);
@@ -44,18 +44,18 @@ uint32_t CudaBloomPass::ComputeMaxPyramidLevels(const uint32_t width, const uint
 //Modify End
 
 //Modify Begin:2026-07-30 by Hui
-CudaBloomPass::CudaBloomPass(FrameworkDeviceContext& deviceContext)
+BloomController::BloomController(FrameworkDeviceContext& deviceContext)
     : m_DeviceContext(deviceContext)
 {
 }
 //Modify End
 
-CudaBloomPass::~CudaBloomPass()
+BloomController::~BloomController()
 {
     Shutdown();
 }
 
-void CudaBloomPass::Shutdown()
+void BloomController::Shutdown()
 {
 //Modify Begin:2026-08-24 by Hui
     m_FrameworkBloom.reset();
@@ -74,7 +74,7 @@ void CudaBloomPass::Shutdown()
     m_Status = "CUDA bloom is shut down.";
 }
 
-void CudaBloomPass::ReleaseInteropResource()
+void BloomController::ReleaseInteropResource()
 {
     m_InputTexture.Release(&m_CudaContext);
     m_TimelineSemaphore.Shutdown(&m_CudaContext);
@@ -84,7 +84,7 @@ void CudaBloomPass::ReleaseInteropResource()
 }
 
 //Modify Begin:2026-08-18 by Hui
-CudaBloomPass::Settings CudaBloomPass::GetSettings() const
+BloomController::Settings BloomController::GetSettings() const
 {
     return {
         .Enabled = m_Enabled,
@@ -100,7 +100,7 @@ CudaBloomPass::Settings CudaBloomPass::GetSettings() const
     };
 }
 
-void CudaBloomPass::SetSettings(const Settings& settings)
+void BloomController::SetSettings(const Settings& settings)
 {
     m_Enabled = settings.Enabled;
     m_Backend = settings.SelectedBackend;
@@ -114,7 +114,7 @@ void CudaBloomPass::SetSettings(const Settings& settings)
     m_ThreadBlockSize = settings.BlockSize;
 }
 
-std::vector<CudaBloomPass::TimingStats> CudaBloomPass::ConsumeCompletedTimingStats()
+std::vector<BloomController::TimingStats> BloomController::ConsumeCompletedTimingStats()
 {
     std::vector<TimingStats> completedSamples;
     completedSamples.swap(m_CompletedCudaTimingSamples);
@@ -124,7 +124,7 @@ std::vector<CudaBloomPass::TimingStats> CudaBloomPass::ConsumeCompletedTimingSta
 //Modify End
 
 //Modify Begin:2026-08-24 by Hui
-void CudaBloomPass::InitializeFrameworkBloom(CommandList& commandList)
+void BloomController::InitializeFrameworkBloom(CommandList& commandList)
 {
     if (m_FrameworkBloom == nullptr)
     {
@@ -132,7 +132,7 @@ void CudaBloomPass::InitializeFrameworkBloom(CommandList& commandList)
     }
 }
 
-Bloom& CudaBloomPass::GetFrameworkBloom()
+Bloom& BloomController::GetFrameworkBloom()
 {
     Assert(m_FrameworkBloom != nullptr, "Framework raster bloom has not been initialized.");
     m_Status = "Built-in raster bloom is active.";
@@ -140,7 +140,7 @@ Bloom& CudaBloomPass::GetFrameworkBloom()
 }
 //Modify End
 
-bool CudaBloomPass::InitializeCuda()
+bool BloomController::InitializeCuda()
 {
     if (m_AvailabilityChecked)
     {
@@ -185,7 +185,7 @@ bool CudaBloomPass::InitializeCuda()
     return true;
 }
 
-bool CudaBloomPass::EnsureD3D12InteropResource(Texture& postProcessColor, const uint32_t width, const uint32_t height)
+bool BloomController::EnsureD3D12InteropResource(Texture& postProcessColor, const uint32_t width, const uint32_t height)
 {
     const D3D12_RESOURCE_DESC sourceDesc = postProcessColor.GetD3D12ResourceDesc();
     if (sourceDesc.Format != DXGI_FORMAT_R32G32B32A32_FLOAT)
@@ -222,7 +222,7 @@ bool CudaBloomPass::EnsureD3D12InteropResource(Texture& postProcessColor, const 
     return true;
 }
 
-bool CudaBloomPass::EnsureD3D12CudaSemaphore()
+bool BloomController::EnsureD3D12CudaSemaphore()
 {
     if (!InitializeCuda())
     {
@@ -239,7 +239,7 @@ bool CudaBloomPass::EnsureD3D12CudaSemaphore()
     return true;
 }
 
-bool CudaBloomPass::SignalD3D12AndWaitInCuda(ID3D12CommandQueue* d3d12CommandQueue)
+bool BloomController::SignalD3D12AndWaitInCuda(ID3D12CommandQueue* d3d12CommandQueue)
 {
     if (!EnsureD3D12CudaSemaphore())
     {
@@ -263,7 +263,7 @@ bool CudaBloomPass::SignalD3D12AndWaitInCuda(ID3D12CommandQueue* d3d12CommandQue
     return true;
 }
 
-bool CudaBloomPass::SignalCudaAndWaitInD3D12(ID3D12CommandQueue* d3d12CommandQueue)
+bool BloomController::SignalCudaAndWaitInD3D12(ID3D12CommandQueue* d3d12CommandQueue)
 {
     if (!EnsureD3D12CudaSemaphore())
     {
@@ -290,7 +290,7 @@ bool CudaBloomPass::SignalCudaAndWaitInD3D12(ID3D12CommandQueue* d3d12CommandQue
     return true;
 }
 
-bool CudaBloomPass::EnsureCudaPyramidTextures(const uint32_t width, const uint32_t height, const uint32_t levelCount)
+bool BloomController::EnsureCudaPyramidTextures(const uint32_t width, const uint32_t height, const uint32_t levelCount)
 {
     if (!InitializeCuda())
     {
@@ -318,7 +318,7 @@ bool CudaBloomPass::EnsureCudaPyramidTextures(const uint32_t width, const uint32
     return true;
 }
 
-bool CudaBloomPass::EnsureCudaTimingFrames()
+bool BloomController::EnsureCudaTimingFrames()
 {
     if (!InitializeCuda())
     {
@@ -360,7 +360,7 @@ bool CudaBloomPass::EnsureCudaTimingFrames()
     return true;
 }
 
-void CudaBloomPass::BeginCudaTimingFrame()
+void BloomController::BeginCudaTimingFrame()
 {
     m_ActiveCudaTimingFrameIndex = -1;
     if (!EnsureCudaTimingFrames())
@@ -380,7 +380,7 @@ void CudaBloomPass::BeginCudaTimingFrame()
     m_CudaTimingFrameCursor = (m_CudaTimingFrameCursor + 1u) % CudaTimingFrameCount;
 }
 
-void CudaBloomPass::CollectCompletedCudaTimingFrames()
+void BloomController::CollectCompletedCudaTimingFrames()
 {
     for (CudaTimingFrame& timingFrame : m_CudaTimingFrames)
     {
@@ -413,7 +413,7 @@ void CudaBloomPass::CollectCompletedCudaTimingFrames()
     }
 }
 
-void CudaBloomPass::ReleaseCudaTimingFrames()
+void BloomController::ReleaseCudaTimingFrames()
 {
     if (m_CudaContext.IsInitialized())
     {
@@ -464,7 +464,7 @@ void CudaBloomPass::ReleaseCudaTimingFrames()
     m_ActiveCudaTimingFrameIndex = -1;
 }
 
-void CudaBloomPass::RecordCudaTimingEvent(CUevent cudaEvent)
+void BloomController::RecordCudaTimingEvent(CUevent cudaEvent)
 {
     if (cudaEvent == nullptr)
     {
@@ -478,7 +478,7 @@ void CudaBloomPass::RecordCudaTimingEvent(CUevent cudaEvent)
     }
 }
 
-bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
+bool BloomController::RunCudaBloom(const uint32_t width, const uint32_t height)
 {
     const uint32_t maxPyramidLevels = ComputeMaxPyramidLevels(width, height);
     m_PyramidLevels = std::clamp(m_PyramidLevels, 1, static_cast<int>(maxPyramidLevels));
@@ -883,7 +883,7 @@ bool CudaBloomPass::RunCudaBloom(const uint32_t width, const uint32_t height)
     return true;
 }
 
-bool CudaBloomPass::ExecuteInPlace(Texture& postProcessColor, const uint32_t width, const uint32_t height, ID3D12CommandQueue* d3d12CommandQueue)
+bool BloomController::ExecuteInPlace(Texture& postProcessColor, const uint32_t width, const uint32_t height, ID3D12CommandQueue* d3d12CommandQueue)
 {
     if (!m_Enabled)
     {

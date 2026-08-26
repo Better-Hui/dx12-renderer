@@ -129,7 +129,7 @@ RenderGraph::RenderGraphRoot::RenderGraphRoot(
     }
 //Modify End
 
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-08-26 by Hui
     m_CommandExecutor = std::make_unique<RenderGraphCommandExecutor>(
         m_DirectCommandQueue,
         m_AsyncComputeCommandQueue,
@@ -377,35 +377,7 @@ void RenderGraph::RenderGraphRoot::PresentWithOverlayBlit(
     pWindow->Present();
 }
 
-void RenderGraph::RenderGraphRoot::CopyTexture(
-    const RenderMetadata& renderMetadata,
-    const ResourceId sourceId,
-    const ResourceId destinationId,
-    const bool waitForCompletion)
-{
-    RebuildIfNecessary(renderMetadata);
-
-    auto pCommandList = m_DirectCommandQueue->GetCommandList();
-    auto& commandList = *pCommandList;
-    const auto& source = m_ResourcePool->GetTexture(sourceId);
-    const auto& destination = m_ResourcePool->GetTexture(destinationId);
-
-    CommandListInternalAccess::TransitionBarrier(commandList, *source, D3D12_RESOURCE_STATE_COPY_SOURCE);
-    CommandListInternalAccess::TransitionBarrier(commandList, *destination, D3D12_RESOURCE_STATE_COPY_DEST);
-    CommandListInternalAccess::FlushResourceBarriers(commandList);
-
-    commandList.CopyResource(*destination, *source);
-
-    m_QueueScheduler.TrackExternalResource(sourceId, RenderPassQueue::Direct);
-    m_QueueScheduler.TrackExternalResource(destinationId, RenderPassQueue::Direct);
-    const uint64_t fenceValue = m_QueueScheduler.SubmitDirect(pCommandList);
-    if (waitForCompletion)
-    {
-        m_DirectCommandQueue->WaitForFenceValue(fenceValue);
-    }
-}
-
-void RenderGraph::RenderGraphRoot::CopyTextureToReadback(
+void RenderGraph::RenderGraphRoot::ReadbackTexture(
     const RenderMetadata& renderMetadata,
     const ResourceId sourceId,
     Microsoft::WRL::ComPtr<ID3D12Resource> destination,
@@ -441,39 +413,7 @@ void RenderGraph::RenderGraphRoot::CopyTextureToReadback(
         m_DirectCommandQueue->WaitForFenceValue(fenceValue);
     }
 }
-
-void RenderGraph::RenderGraphRoot::DrawToTexture(
-    const RenderMetadata& renderMetadata,
-    const ResourceId resourceId,
-    const std::function<void(CommandList&)>& drawCallback)
-{
-    RebuildIfNecessary(renderMetadata);
-
-    auto pCommandList = m_DirectCommandQueue->GetCommandList();
-    auto& commandList = *pCommandList;
-    const auto& pTexture = m_ResourcePool->GetTexture(resourceId);
-
-    CommandListInternalAccess::TransitionBarrier(commandList, *pTexture, D3D12_RESOURCE_STATE_RENDER_TARGET);
-    CommandListInternalAccess::FlushResourceBarriers(commandList);
-
-    RenderTarget renderTarget;
-    renderTarget.AttachTexture(Color0, pTexture);
-    commandList.SetRenderTarget(renderTarget);
-    commandList.SetAutomaticViewportAndScissorRect(renderTarget);
-
-    drawCallback(commandList);
-
-    m_QueueScheduler.TrackExternalResource(resourceId, RenderPassQueue::Direct);
-    m_QueueScheduler.SubmitDirect(pCommandList);
-}
 //Modify End
-
-void RenderGraph::RenderGraphRoot::DrawToGraphOutput(const RenderMetadata& renderMetadata, const std::function<void(CommandList&)>& drawCallback)
-{
-//Modify Begin:2026-07-28 by Hui
-    DrawToTexture(renderMetadata, ResourceIds::GRAPH_OUTPUT, drawCallback);
-//Modify End
-}
 
 //Modify Begin:2026-07-27 by Hui
 const std::shared_ptr<Texture>& RenderGraph::RenderGraphRoot::GetTexture(const ResourceId resourceId) const

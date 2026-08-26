@@ -14,7 +14,7 @@ RaytracingDemoRenderPipelineConfiguration RaytracingDemoRenderPipelineController
             .SVGFAtrousIterations = frameState.SVGFAtrousIterations,
             .BloomEnabled = frameState.BloomEnabled,
             .BloomBackend = frameState.BloomBackend,
-            .BloomPyramidLevels = frameState.BloomBackend == CudaBloomPass::Backend::FrameworkRaster
+            .BloomPyramidLevels = frameState.BloomBackend == BloomController::Backend::FrameworkRaster
                 ? frameState.BloomPyramidLevels
                 : 0,
             .DLSSEnabled = frameState.DLSSEnabled,

@@ -126,6 +126,12 @@ foreach(allowlisted_file IN LISTS BARRIER_BRIDGE_ALLOWLIST LOW_LEVEL_BARRIER_ENC
     endif()
 endforeach()
 
+set(RENDER_GRAPH_ROOT_HEADER "${REPOSITORY_ROOT}/RenderGraph/include/RenderGraph/RenderGraphRoot.h")
+file(READ "${RENDER_GRAPH_ROOT_HEADER}" render_graph_root_api)
+if (render_graph_root_api MATCHES "(CopyTexture|DrawToTexture|DrawToGraphOutput)[ \\t\\r\\n]*\\(")
+    list(APPEND violations "RenderGraph/include/RenderGraph/RenderGraphRoot.h: graph-internal work must be declared as a pass, not exposed as an external root API")
+endif()
+
 if (violations)
     list(REMOVE_DUPLICATES violations)
     list(JOIN violations "\n  - " formatted_violations)

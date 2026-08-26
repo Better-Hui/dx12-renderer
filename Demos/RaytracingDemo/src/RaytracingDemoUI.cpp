@@ -90,29 +90,29 @@ namespace
         ImGui::PopStyleColor();
     }
 
-    bool DrawCudaBloomControls(
-        CudaBloomPass& cudaBloom,
+    bool DrawBloomControls(
+        BloomController& bloom,
         const DemoProfiling::ProfilerDisplayController::CudaTimingSample& timingStats,
         const double refreshIntervalSeconds,
         const uint32_t width,
         const uint32_t height)
     {
-        if (!ImGui::CollapsingHeader("CUDA Bloom"))
+        if (!ImGui::CollapsingHeader("Bloom"))
         {
             return false;
         }
 
-        CudaBloomPass::Settings settings = cudaBloom.GetSettings();
-        bool changed = ImGui::Checkbox("Enable CUDA Bloom", &settings.Enabled);
+        BloomController::Settings settings = bloom.GetSettings();
+        bool changed = ImGui::Checkbox("Enable Bloom", &settings.Enabled);
         const char* backendNames[] = { "CUDA", "Built-in Raster" };
         int backend = static_cast<int>(settings.SelectedBackend);
         if (ImGui::Combo("Bloom Backend", &backend, backendNames, IM_ARRAYSIZE(backendNames)))
         {
-            settings.SelectedBackend = static_cast<CudaBloomPass::Backend>(backend);
+            settings.SelectedBackend = static_cast<BloomController::Backend>(backend);
             changed = true;
         }
 
-        if (settings.SelectedBackend == CudaBloomPass::Backend::Cuda)
+        if (settings.SelectedBackend == BloomController::Backend::Cuda)
         {
             const char* methodNames[] = {
                 "Classic Pyramid",
@@ -122,17 +122,17 @@ namespace
             int method = static_cast<int>(settings.Method);
             if (ImGui::Combo("CUDA Method", &method, methodNames, IM_ARRAYSIZE(methodNames)))
             {
-                settings.Method = static_cast<CudaBloomPass::CudaMethod>(method);
+                settings.Method = static_cast<BloomController::CudaMethod>(method);
                 changed = true;
             }
             ImGui::TextDisabled("Fixed pyramid: 5-tap prefilter, 4-tap downsample, 4-tap upsample and composite.");
             const char* threadBlockNames[] = { "8 x 8", "16 x 16" };
-            int threadBlockIndex = settings.BlockSize == CudaBloomPass::ThreadBlockSize::Size8x8 ? 0 : 1;
+            int threadBlockIndex = settings.BlockSize == BloomController::ThreadBlockSize::Size8x8 ? 0 : 1;
             if (ImGui::Combo("CUDA Thread Block", &threadBlockIndex, threadBlockNames, IM_ARRAYSIZE(threadBlockNames)))
             {
                 settings.BlockSize = threadBlockIndex == 0
-                    ? CudaBloomPass::ThreadBlockSize::Size8x8
-                    : CudaBloomPass::ThreadBlockSize::Size16x16;
+                    ? BloomController::ThreadBlockSize::Size8x8
+                    : BloomController::ThreadBlockSize::Size16x16;
                 changed = true;
             }
             changed |= ImGui::Checkbox("Shared-Memory Downsampling", &settings.UseSharedMemoryDownsampling);
@@ -143,13 +143,13 @@ namespace
         changed |= FrameworkImGui::SliderFloat("Bloom Threshold", &settings.Threshold, 0.0f, 5.0f, "%.2f");
         changed |= FrameworkImGui::SliderFloat("Bloom Soft Knee", &settings.SoftThreshold, 0.0f, 2.0f, "%.2f");
         changed |= FrameworkImGui::SliderFloat("Bloom Intensity", &settings.Intensity, 0.0f, 5.0f, "%.2f");
-        const int maxPyramidLevels = static_cast<int>(CudaBloomPass::ComputeMaxPyramidLevels(width, height));
+        const int maxPyramidLevels = static_cast<int>(BloomController::ComputeMaxPyramidLevels(width, height));
         settings.PyramidLevels = std::clamp(settings.PyramidLevels, 1, maxPyramidLevels);
         changed |= FrameworkImGui::SliderInt("Bloom Pyramid Levels", &settings.PyramidLevels, 1, maxPyramidLevels);
 
-        if (settings.SelectedBackend == CudaBloomPass::Backend::Cuda &&
-            (settings.Method == CudaBloomPass::CudaMethod::BoxFilterApproximation ||
-                settings.Method == CudaBloomPass::CudaMethod::BoxFilterOriginalPaper))
+        if (settings.SelectedBackend == BloomController::Backend::Cuda &&
+            (settings.Method == BloomController::CudaMethod::BoxFilterApproximation ||
+                settings.Method == BloomController::CudaMethod::BoxFilterOriginalPaper))
         {
             changed |= FrameworkImGui::SliderFloat("Box Filter Sigma", &settings.BoxFilterSigma, 0.1f, 16.0f, "%.2f");
         }
@@ -165,11 +165,11 @@ namespace
                 timingStats.CudaSignalMilliseconds,
                 timingStats.TotalCudaStreamMilliseconds);
         }
-        ImGui::TextWrapped("%s", cudaBloom.GetStatus().c_str());
+        ImGui::TextWrapped("%s", bloom.GetStatus().c_str());
 
         if (changed)
         {
-            cudaBloom.SetSettings(settings);
+            bloom.SetSettings(settings);
         }
         return changed;
     }
@@ -846,8 +846,8 @@ void RaytracingDemo::OnImGui()
     {
         ResetAccumulation();
     }
-    if (DrawCudaBloomControls(
-        m_CudaBloom,
+    if (DrawBloomControls(
+        m_Bloom,
         m_ProfilerDisplay.GetCudaTiming(),
         m_ProfilerDisplay.GetRefreshIntervalSeconds(),
         static_cast<uint32_t>((std::max)(m_Width, 1)),

@@ -16,7 +16,7 @@ struct RaytracingDemoRenderGraphTopology
     NRD::DenoiserMode NRDDenoiserMode = NRD::DenoiserMode::ReblurDiffuse;
     uint32_t SVGFAtrousIterations = 1;
     bool BloomEnabled = false;
-    CudaBloomPass::Backend BloomBackend = CudaBloomPass::Backend::Cuda;
+    BloomController::Backend BloomBackend = BloomController::Backend::Cuda;
     int BloomPyramidLevels = 1;
     bool DLSSEnabled = false;
     bool RayReconstructionEnabled = false;

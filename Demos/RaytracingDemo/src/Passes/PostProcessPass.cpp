@@ -92,7 +92,7 @@ void RaytracingDemoPasses::Builder::AddCudaBloomPass(
         {
             const RaytracingDemoPassResources& resources = passData.Resources.value();
             const auto& sceneColor = context.GetTexture(DemoResourceIds::SceneColor);
-            resources.CudaBloom.ExecuteInPlace(
+            resources.Bloom.ExecuteInPlace(
                 *sceneColor,
                 context.GetMetadata().m_ScreenWidth,
                 context.GetMetadata().m_ScreenHeight,
@@ -114,9 +114,9 @@ void RaytracingDemoPasses::Builder::AddFrameworkBloomPass(
     inputs.OutputToken = DemoResourceIds::BloomFinishedToken;
     inputs.WidthExpression = [](const RenderGraph::RenderMetadata& metadata) { return metadata.m_ScreenWidth; };
     inputs.HeightExpression = [](const RenderGraph::RenderMetadata& metadata) { return metadata.m_ScreenHeight; };
-    inputs.ResolveParameters = [bloomController = &resources.CudaBloom]()
+    inputs.ResolveParameters = [bloomController = &resources.Bloom]()
     {
-        const CudaBloomPass::Settings settings = bloomController->GetSettings();
+        const BloomController::Settings settings = bloomController->GetSettings();
         BloomParameters parameters{};
         parameters.Intensity = settings.Intensity;
         parameters.Threshold = settings.Threshold;
@@ -125,8 +125,8 @@ void RaytracingDemoPasses::Builder::AddFrameworkBloomPass(
     };
     inputs.DiagnosticNamePrefix = L"Framework.Bloom.RaytracingDemo";
     inputs.Format = RaytracingDemoRenderGraph::SCENE_COLOR_FORMAT;
-    inputs.PyramidLevels = static_cast<size_t>((std::max)(1, resources.CudaBloom.GetPyramidLevels()));
-    resources.CudaBloom.GetFrameworkBloom().AddPasses(renderGraphBuilder, std::move(inputs));
+    inputs.PyramidLevels = static_cast<size_t>((std::max)(1, resources.Bloom.GetPyramidLevels()));
+    resources.Bloom.GetFrameworkBloom().AddPasses(renderGraphBuilder, std::move(inputs));
 }
 
 void RaytracingDemoPasses::Builder::AddFrameGenerationHudLessPass(

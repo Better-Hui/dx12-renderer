@@ -15,10 +15,12 @@ class FrameworkDeviceContext;
 class CommandList;
 class Bloom;
 
-class CudaBloomPass final
+//Modify Begin:2026-08-26 by Hui
+class BloomController final
+//Modify End
 {
 public:
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-08-26 by Hui
     enum class Backend : uint32_t
     {
         Cuda = 0,
@@ -64,9 +66,11 @@ public:
 
 //Modify End
 //Modify Begin:2026-07-30 by Hui
-    explicit CudaBloomPass(FrameworkDeviceContext& deviceContext);
+    explicit BloomController(FrameworkDeviceContext& deviceContext);
 //Modify End
-    ~CudaBloomPass();
+//Modify Begin:2026-08-26 by Hui
+    ~BloomController();
+//Modify End
 
 //Modify Begin:2026-08-24 by Hui
     bool ExecuteInPlace(Texture& postProcessColor, uint32_t width, uint32_t height, ID3D12CommandQueue* d3d12CommandQueue);

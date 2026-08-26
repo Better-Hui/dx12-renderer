@@ -16,7 +16,7 @@ set(HEADER_FILES
         include/RenderGraph/RaytracingDemoGraphResources.h
         include/RenderGraph/RaytracingDemoRenderPipelineController.h
         include/Passes/RaytracingDemoPasses.h
-        include/Passes/CudaBloomPass.h
+        include/Passes/BloomController.h
         include/Passes/RaytracingDemoPassResources.h
         include/Scene/SceneLightManager.h
         include/Scene/RaytracingDemoSceneRuntimeController.h
@@ -54,7 +54,7 @@ set(SOURCE_FILES
         src/Passes/ReSTIRGIPasses.cpp
         src/Passes/DLSSPass.cpp
         src/Passes/DLSSRayReconstructionPreparationPass.cpp
-        src/Passes/CudaBloomPass.cpp
+        src/Passes/BloomController.cpp
         src/Passes/CopyQueueValidationPass.cpp
         src/Passes/RaytracingDemoPassResources.cpp
         src/Passes/PostProcessPass.cpp

@@ -21,7 +21,7 @@
 
 #include <DX12Library/Camera.h>
 
-#include <Passes/CudaBloomPass.h>
+#include <Passes/BloomController.h>
 
 #include <DirectXMath.h>
 #include <wrl.h>
@@ -141,7 +141,7 @@ struct RaytracingDemoPassResources
     std::shared_ptr<ComputeShader> DLSSRayReconstructionPrepareShader;
     std::shared_ptr<ComputeShader> CopyQueueValidationShader;
     DenoiserController& Denoisers;
-    CudaBloomPass& CudaBloom;
+    BloomController& Bloom;
     AutoExposure& Exposure;
     std::shared_ptr<Shader> GBufferShader;
     std::shared_ptr<Shader> GBufferMeshletIndirectShader;
@@ -200,7 +200,7 @@ struct RaytracingDemoFrameState
     NRD::DenoiserMode NRDDenoiserMode = NRD::DenoiserMode::ReblurDiffuse;
     uint32_t SVGFAtrousIterations = 1;
     bool BloomEnabled = false;
-    CudaBloomPass::Backend BloomBackend = CudaBloomPass::Backend::Cuda;
+    BloomController::Backend BloomBackend = BloomController::Backend::Cuda;
     int BloomPyramidLevels = 1;
     uint32_t Width = 1;
     uint32_t Height = 1;

@@ -42,7 +42,7 @@
 #include <UI/DemoLightEditor.h>
 #include <PathTracing/PathTracingPipelineController.h>
 //Modify Begin:2026-08-19 by Hui
-#include <Passes/CudaBloomPass.h>
+#include <Passes/BloomController.h>
 #include <Passes/RaytracingDemoPassResources.h>
 //Modify End
 
@@ -220,7 +220,7 @@ private:
 //Modify End
     DenoiserController m_Denoisers;
 //Modify Begin:2026-08-19 by Hui
-    CudaBloomPass m_CudaBloom;
+    BloomController m_Bloom;
     AutoExposure m_AutoExposure;
 //Modify End
 //Modify Begin:2026-08-19 by Hui

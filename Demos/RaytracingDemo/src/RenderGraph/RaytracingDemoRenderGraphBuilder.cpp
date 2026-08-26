@@ -150,8 +150,8 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
         RaytracingDemoPasses::Builder::AddSkyboxPass(renderGraphBuilder, resources, config, sceneReadyToken);
         sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::SkyboxFinishedToken;
     }
-    const bool useFrameworkRasterBloom = resources.CudaBloom.IsEnabled() && resources.CudaBloom.IsFrameworkRaster();
-    if (resources.CudaBloom.IsEnabled())
+    const bool useFrameworkRasterBloom = resources.Bloom.IsEnabled() && resources.Bloom.IsFrameworkRaster();
+    if (resources.Bloom.IsEnabled())
     {
         if (useFrameworkRasterBloom)
         {

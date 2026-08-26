@@ -9,7 +9,7 @@
 #include <DX12Library/Window.h>
 
 #include "RenderPass.h"
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-08-26 by Hui
 #include "ExternalFrameProcessor.h"
 //Modify End
 //Modify Begin:2026-08-07 by Hui
@@ -91,16 +91,14 @@ namespace RenderGraph
             ResourceId displayResourceId,
             ExternalFrameProcessor& processor,
             const std::function<void(CommandList&)>& overlayCallback);
-        void CopyTexture(const RenderMetadata& renderMetadata, ResourceId sourceId, ResourceId destinationId, bool waitForCompletion = false);
-        void CopyTextureToReadback(
+        // Presentation and readback are terminal external interactions. All graph-internal work must use a declared pass.
+        void ReadbackTexture(
             const RenderMetadata& renderMetadata,
             ResourceId sourceId,
             Microsoft::WRL::ComPtr<ID3D12Resource> destination,
             const D3D12_PLACED_SUBRESOURCE_FOOTPRINT& destinationFootprint,
             bool waitForCompletion = true);
-        void DrawToTexture(const RenderMetadata& renderMetadata, ResourceId resourceId, const std::function<void(CommandList&)>& drawCallback);
 //Modify End
-        void DrawToGraphOutput(const RenderMetadata& renderMetadata, const std::function<void(CommandList&)>& drawCallback);
 //Modify Begin:2026-07-27 by Hui
         const std::shared_ptr<Texture>& GetTexture(ResourceId resourceId) const;
 //Modify End
