@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-08-26 by Hui
 #pragma once
 
 #include <Framework/Scene/Light.h>
@@ -47,6 +47,7 @@ public:
     void FillCameraConstants(
         uint32_t& directionalLightCount,
         uint32_t& pointLightCount,
+        uint32_t& spotLightCount,
         uint32_t& surfaceEmitterCount,
         SkyLightData& skyLight) const;
 
@@ -64,20 +65,25 @@ public:
     const std::vector<DirectionalLight>& GetDirectionalLights() const { return m_DirectionalLights; }
     size_t GetPointLightCount() const { return m_PointLights.size(); }
     const std::vector<PointLight>& GetPointLights() const { return m_PointLights; }
+    const std::vector<SpotLight>& GetSpotLights() const { return m_SpotLights; }
     const std::vector<AreaLightData>& GetAreaLights() const { return m_AreaLights; }
     DirectionalLight& EditDirectionalLight(size_t lightIndex);
     PointLight& EditPointLight(size_t lightIndex);
+    SpotLight& EditSpotLight(size_t lightIndex);
     AreaLightData& EditAreaLight(size_t lightIndex);
     PointLightAnimation GetPointLightAnimation(size_t lightIndex) const;
     void SetPointLightAnimation(size_t lightIndex, const PointLightAnimation& animation);
     void CommitDirectionalLightEdit(size_t lightIndex);
     void CommitPointLightEdit(size_t lightIndex);
+    void CommitSpotLightEdit(size_t lightIndex);
     void CommitAreaLightEdit(size_t lightIndex);
     void AddDirectionalLight(const DirectionalLight& light);
     void AddPointLight(const PointLight& light, const PointLightAnimation& animation = {});
+    void AddSpotLight(const SpotLight& light);
     void AddAreaLight(const AreaLightData& light);
     void RemoveDirectionalLight(size_t lightIndex);
     void RemovePointLight(size_t lightIndex);
+    void RemoveSpotLight(size_t lightIndex);
     void RemoveAreaLight(size_t lightIndex);
     size_t GetEmissiveMeshSurfaceEmitterCount() const;
 

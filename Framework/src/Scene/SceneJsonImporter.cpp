@@ -15,7 +15,7 @@
 #include <string_view>
 #include <variant>
 
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-08-26 by Hui
 namespace
 {
     struct JsonValue
@@ -730,6 +730,30 @@ void SceneImporter::ApplyJsonRuntimeState(
         scene.SetPointLights(std::move(lights));
     }
 
+    if (const JsonValue* lightsValue = Find(root, "spotLights"))
+    {
+        std::vector<SpotLight> lights;
+        for (const JsonValue& value : lightsValue->AsArray("spotLights"))
+        {
+            const JsonValue::Object& object = value.AsObject("spotLight");
+            SpotLight light{};
+            light.PositionWs = ReadFloat4(*Find(object, "positionAndRange"), "spotLight.positionAndRange");
+            light.DirectionWs = ReadFloat4(*Find(object, "direction"), "spotLight.direction");
+            light.Color = ReadFloat4(*Find(object, "color"), "spotLight.color");
+            light.Intensity = std::max(0.0f, ReadNumber(*Find(object, "intensity"), "spotLight.intensity"));
+            light.InnerConeAngle = std::max(0.0f, ReadNumber(*Find(object, "innerConeAngleRadians"), "spotLight.innerConeAngleRadians"));
+            light.OuterConeAngle = std::max(light.InnerConeAngle, ReadNumber(*Find(object, "outerConeAngleRadians"), "spotLight.outerConeAngleRadians"));
+            light.Range = std::max(0.1f, light.PositionWs.w);
+            const DirectX::XMFLOAT3 attenuation = ReadFloat3(*Find(object, "attenuation"), "spotLight.attenuation");
+            light.ConstantAttenuation = std::max(0.0f, attenuation.x);
+            light.LinearAttenuation = std::max(0.0f, attenuation.y);
+            light.QuadraticAttenuation = std::max(0.0f, attenuation.z);
+            light.SourceRadius = std::max(0.0f, ReadNumber(*Find(object, "sourceRadius"), "spotLight.sourceRadius"));
+            lights.push_back(light);
+        }
+        scene.SetSpotLights(std::move(lights));
+    }
+
     if (const JsonValue* lightsValue = Find(root, "areaLights"))
     {
         std::vector<AreaLight> lights;
@@ -817,6 +841,26 @@ void SceneImporter::WriteJsonRuntimeState(
         writeFloat4({ light.PositionWs.x, light.PositionWs.y, light.PositionWs.z, light.Range });
         output << ", \"colorAndIntensity\": ";
         writeFloat4(light.Color);
+        output << ", \"sourceRadius\": " << light.SourceRadius << " }";
+    }
+    output << "\n  ],\n";
+
+    writeArrayStart("spotLights");
+    for (size_t index = 0; index < scene.GetSpotLights().size(); ++index)
+    {
+        if (index != 0) output << ',';
+        const SpotLight& light = scene.GetSpotLights()[index];
+        output << "\n    { \"positionAndRange\": ";
+        writeFloat4({ light.PositionWs.x, light.PositionWs.y, light.PositionWs.z, light.Range });
+        output << ", \"direction\": ";
+        writeFloat4(light.DirectionWs);
+        output << ", \"color\": ";
+        writeFloat4(light.Color);
+        output << ", \"intensity\": " << light.Intensity
+            << ", \"innerConeAngleRadians\": " << light.InnerConeAngle
+            << ", \"outerConeAngleRadians\": " << light.OuterConeAngle
+            << ", \"attenuation\": ";
+        writeFloat3({ light.ConstantAttenuation, light.LinearAttenuation, light.QuadraticAttenuation });
         output << ", \"sourceRadius\": " << light.SourceRadius << " }";
     }
     output << "\n  ],\n";

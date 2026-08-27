@@ -1,6 +1,7 @@
 #pragma once
 
 #include <DX12Library/Camera.h>
+#include <DX12Library/Cubemap.h>
 #include <DX12Library/Game.h>
 //Modify Begin:2026-08-19 by Hui
 #include <DX12Library/GpuTimestampProfiler.h>
@@ -95,6 +96,9 @@ public:
     RaytracingDemoPassResources CreatePassResources();
     RaytracingDemoPassConfig CreatePassConfig() const;
     //Modify End
+//Modify Begin:2026-08-26 by Hui
+    const std::shared_ptr<Texture>& GetRayTracingEnvironmentTexture() const;
+//Modify End
 
 protected:
     void OnUpdate(UpdateEventArgs& e) override;
@@ -125,6 +129,9 @@ private:
         DirectX::XMFLOAT4 CameraUp = { 0.0f, 1.0f, 0.0f, 0.0f };
 //Modify Begin:2026-08-19 by Hui
         DirectX::XMFLOAT4 TypeAndParams = { 0.0f, 0.0f, 0.0f, 0.0f };
+//Modify End
+//Modify Begin:2026-08-26 by Hui
+        DirectX::XMFLOAT4 DirectionAndLength = { 0.0f, 0.0f, 1.0f, 1.0f };
 //Modify End
     };
 
@@ -241,10 +248,16 @@ private:
     DemoLightEditor m_LightEditor;
     std::unique_ptr<ImGuiImpl> m_ImGui;
     std::shared_ptr<Mesh> m_LightBillboardMesh;
+//Modify Begin:2026-08-26 by Hui
+    std::shared_ptr<Mesh> m_SpotLightGizmoMesh;
+//Modify End
 //Modify Begin:2026-08-19 by Hui
     std::shared_ptr<Mesh> m_DisplayBlitMesh;
 //Modify End
     std::shared_ptr<Texture> m_SkyboxTexture;
+//Modify Begin:2026-08-26 by Hui
+    std::unique_ptr<Cubemap> m_EnvironmentFallbackCubemap;
+//Modify End
 
     float m_DeltaTime = 0.0f;
     DirectX::XMMATRIX m_PreviousViewProjection = DirectX::XMMatrixIdentity();

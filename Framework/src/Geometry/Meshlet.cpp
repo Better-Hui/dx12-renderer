@@ -10,9 +10,13 @@
 #include <meshoptimizer.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cfloat>
+#include <exception>
+#include <mutex>
 #include <ranges>
 #include <stdexcept>
+#include <thread>
 #include <unordered_set>
 
 using namespace DirectX;
@@ -94,18 +98,37 @@ MeshletBuildResult MeshletBuilder::Build(const MeshPrototype& meshPrototype, con
     std::vector<unsigned int> vertices(maxMeshlets * options.MaxVertices);
     std::vector<unsigned char> indices(maxMeshlets * options.MaxTriangles * 3);
 
-    const size_t meshletCount = meshopt_buildMeshlets(
-        sourceMeshlets.data(),
-        vertices.data(),
-        indices.data(),
-        meshPrototype.m_Indices.data(),
-        meshPrototype.m_Indices.size(),
-        &meshPrototype.m_Vertices[0].Position.x,
-        meshPrototype.m_Vertices.size(),
-        sizeof(VertexAttributes),
-        options.MaxVertices,
-        options.MaxTriangles,
-        options.ConeWeight);
+    size_t meshletCount = 0;
+    switch (options.Method)
+    {
+    case MeshletBuildMethod::Scan:
+        meshletCount = meshopt_buildMeshletsScan(
+            sourceMeshlets.data(),
+            vertices.data(),
+            indices.data(),
+            meshPrototype.m_Indices.data(),
+            meshPrototype.m_Indices.size(),
+            meshPrototype.m_Vertices.size(),
+            options.MaxVertices,
+            options.MaxTriangles);
+        break;
+    case MeshletBuildMethod::Quality:
+        meshletCount = meshopt_buildMeshlets(
+            sourceMeshlets.data(),
+            vertices.data(),
+            indices.data(),
+            meshPrototype.m_Indices.data(),
+            meshPrototype.m_Indices.size(),
+            &meshPrototype.m_Vertices[0].Position.x,
+            meshPrototype.m_Vertices.size(),
+            sizeof(VertexAttributes),
+            options.MaxVertices,
+            options.MaxTriangles,
+            options.ConeWeight);
+        break;
+    default:
+        throw std::invalid_argument("Unsupported meshlet build method.");
+    }
 
     if (meshletCount == 0)
     {
@@ -157,9 +180,8 @@ MeshletBuildResult MeshletBuilder::Build(const MeshPrototype& meshPrototype, con
     }
 
     MeshletBuildResult result;
-    result.Mesh = MeshPrototype(std::move(compactVertices), std::move(compactIndices), true, false);
-    result.Mesh.m_Name = meshPrototype.m_Name;
-    result.Mesh.m_SourceMeshIndex = meshPrototype.m_SourceMeshIndex;
+    result.Vertices = std::move(compactVertices);
+    result.Indices = std::move(compactIndices);
     result.Meshlets = std::move(meshlets);
     result.CompactToSourceVertexIndices.assign(vertices.begin(), vertices.end());
     return result;
@@ -207,7 +229,11 @@ void MeshletGeometrySet::ClearDraws()
 
 std::pair<uint32_t, uint32_t> MeshletGeometrySet::AddGeometry(const MeshPrototype& prototype)
 {
-    MeshletBuildResult buildResult = MeshletBuilder::Build(prototype);
+    return AddGeometry(MeshletBuilder::Build(prototype));
+}
+
+std::pair<uint32_t, uint32_t> MeshletGeometrySet::AddGeometry(MeshletBuildResult&& buildResult)
+{
     if (buildResult.Meshlets.empty())
     {
         return { 0, 0 };
@@ -217,8 +243,8 @@ std::pair<uint32_t, uint32_t> MeshletGeometrySet::AddGeometry(const MeshPrototyp
     const uint32_t baseIndex = static_cast<uint32_t>(m_Indices.size());
     const uint32_t meshletOffset = static_cast<uint32_t>(m_Meshlets.size());
 
-    m_Vertices.insert(m_Vertices.end(), buildResult.Mesh.m_Vertices.begin(), buildResult.Mesh.m_Vertices.end());
-    m_Indices.insert(m_Indices.end(), buildResult.Mesh.m_Indices.begin(), buildResult.Mesh.m_Indices.end());
+    m_Vertices.insert(m_Vertices.end(), buildResult.Vertices.begin(), buildResult.Vertices.end());
+    m_Indices.insert(m_Indices.end(), buildResult.Indices.begin(), buildResult.Indices.end());
 
     for (Meshlet meshlet : buildResult.Meshlets)
     {
@@ -471,20 +497,94 @@ void MeshletSceneResources::InitializeGeometries(const std::vector<MeshletSceneG
 {
     Assert(m_Instances.empty(), "Meshlet scene geometries cannot change while instances are registered.");
 
+    struct MeshletBuildRequest
+    {
+        const MeshPrototype* Prototype = nullptr;
+        size_t GeometryIndex = 0;
+    };
+
+    std::vector<MeshletBuildRequest> buildRequests;
+    for (size_t geometryIndex = 0; geometryIndex < geometries.size(); ++geometryIndex)
+    {
+        const MeshletSceneGeometrySource& geometry = geometries[geometryIndex];
+        Assert(geometry.MeshPrototypes != nullptr, "Meshlet scene geometry prototypes must not be null.");
+        for (const MeshPrototype& prototype : *geometry.MeshPrototypes)
+        {
+            buildRequests.push_back({ &prototype, geometryIndex });
+        }
+    }
+
+    std::vector<MeshletBuildResult> buildResults(buildRequests.size());
+    if (!buildRequests.empty())
+    {
+        constexpr size_t maximumWorkerCount = 4;
+        const size_t hardwareConcurrency = (std::max)(
+            static_cast<size_t>(std::thread::hardware_concurrency()),
+            size_t{ 1 });
+        const size_t workerCount = (std::min)(
+            buildRequests.size(),
+            (std::min)(hardwareConcurrency, maximumWorkerCount));
+        std::atomic_size_t nextRequestIndex = 0;
+        std::atomic_bool buildFailed = false;
+        std::exception_ptr buildException;
+        std::mutex buildExceptionMutex;
+        const auto buildWorker = [&]()
+        {
+            while (!buildFailed.load(std::memory_order_relaxed))
+            {
+                const size_t requestIndex = nextRequestIndex.fetch_add(1, std::memory_order_relaxed);
+                if (requestIndex >= buildRequests.size())
+                {
+                    return;
+                }
+
+                try
+                {
+                    buildResults[requestIndex] = MeshletBuilder::Build(*buildRequests[requestIndex].Prototype);
+                }
+                catch (...)
+                {
+                    std::lock_guard lock(buildExceptionMutex);
+                    if (buildException == nullptr)
+                    {
+                        buildException = std::current_exception();
+                    }
+                    buildFailed.store(true, std::memory_order_relaxed);
+                    return;
+                }
+            }
+        };
+
+        std::vector<std::thread> workers;
+        workers.reserve(workerCount);
+        for (size_t workerIndex = 0; workerIndex < workerCount; ++workerIndex)
+        {
+            workers.emplace_back(buildWorker);
+        }
+        for (std::thread& worker : workers)
+        {
+            worker.join();
+        }
+        if (buildException != nullptr)
+        {
+            std::rethrow_exception(buildException);
+        }
+    }
+
     m_GeometrySet.Clear();
     m_GeometryMeshletRanges.clear();
     m_GeometryMeshletRanges.reserve(geometries.size());
     for (const MeshletSceneGeometrySource& geometry : geometries)
     {
-        Assert(geometry.MeshPrototypes != nullptr, "Meshlet scene geometry prototypes must not be null.");
-
         std::vector<std::pair<uint32_t, uint32_t>> meshletRanges;
         meshletRanges.reserve(geometry.MeshPrototypes->size());
-        for (const MeshPrototype& prototype : *geometry.MeshPrototypes)
-        {
-            meshletRanges.push_back(m_GeometrySet.AddGeometry(prototype));
-        }
         m_GeometryMeshletRanges.push_back(std::move(meshletRanges));
+    }
+    for (size_t requestIndex = 0; requestIndex < buildRequests.size(); ++requestIndex)
+    {
+        const MeshletBuildRequest& request = buildRequests[requestIndex];
+        m_GeometryMeshletRanges[request.GeometryIndex].push_back(
+            m_GeometrySet.AddGeometry(std::move(buildResults[requestIndex])));
     }
     m_DrawsDirty = true;
 }

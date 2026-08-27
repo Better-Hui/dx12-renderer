@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-06 by Hui
+//Modify Begin:2026-08-26 by Hui
 #include <ShaderLibrary/Common/RootSignature.hlsli>
 #include <Bindless/BindlessResources.hlsli>
 #include "../Scene/SceneGeometry.hlsli"
@@ -15,6 +15,7 @@ struct PixelShaderInput
     nointerpolation uint MeshletDebugId : TEXCOORD3;
     nointerpolation uint MaterialIndex : TEXCOORD4;
     nointerpolation uint DebugMeshletClusters : TEXCOORD5;
+    bool IsFrontFace : SV_IsFrontFace;
 };
 
 struct PixelShaderOutput
@@ -73,8 +74,10 @@ PixelShaderOutput main(PixelShaderInput IN)
     const float3 outputBaseColor = IN.DebugMeshletClusters != 0u ? HashClusterColor(IN.MeshletDebugId) : baseColor;
 
     float3 normalWs = normalize(IN.NormalWs);
-    // Meshlet GBuffer keeps authored vertex normals as shading normals. Front-face based flipping
-    // can invert generated meshlet topology and break shadow-ray offsets on closed meshes.
+    if (!IN.IsFrontFace)
+    {
+        normalWs = -normalWs;
+    }
     if (material.HasNormalMap != 0u)
     {
         normalWs = ApplyNormalMap(material, normalWs, IN.TangentWs, IN.BitangentWs, uv);

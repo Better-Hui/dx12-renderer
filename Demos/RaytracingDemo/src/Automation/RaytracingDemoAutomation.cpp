@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-25 by Hui
+//Modify Begin:2026-08-26 by Hui
 #include <Automation/RaytracingDemoAutomation.h>
 
 #include <utility>
@@ -437,6 +437,15 @@ DemoAutomation::TestSuites RaytracingDemoAutomation::CreateTestSuites()
         makeStep(Action::Wait, 0u, "visual-restirgi-warmup=3"),
         makeStep(Action::VerifyActiveRayTracedPixelCount, 0u, "visual-restirgi-active-pixels"),
         makeStep(Action::CaptureScreenshot, static_cast<uint32_t>(ScreenshotCapture::ReSTIRGI), "visual-capture=restirgi"),
+
+        makeStep(Action::DirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::ReSTIRDI), "visual-default-direct=restirdi"),
+        makeStep(Action::IndirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::ReSTIRGI), "visual-default-indirect=restirgi"),
+        makeStep(Action::MaxBounces, 3u, "visual-default-bounces=3"),
+        makeStep(Action::Wait, 0u, "visual-default-warmup=1"),
+        makeStep(Action::Wait, 0u, "visual-default-warmup=2"),
+        makeStep(Action::Wait, 0u, "visual-default-warmup=3"),
+        makeStep(Action::VerifyActiveRayTracedPixelCount, 0u, "visual-default-active-pixels"),
+        makeStep(Action::CaptureScreenshot, static_cast<uint32_t>(ScreenshotCapture::ReSTIRDIAndGI), "visual-capture=restirdi-restirgi"),
     };
     testSuites.ReSTIRGIProfile = {
         makeStep(Action::GpuTiming, 1u, "timing=1"),

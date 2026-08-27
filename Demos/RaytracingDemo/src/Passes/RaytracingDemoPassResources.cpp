@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-08-26 by Hui
 #include <Passes/RaytracingDemoPassResources.h>
 
 #include <RenderGraph/RenderContext.h>
@@ -26,6 +26,7 @@ RaytracingDemoCameraConstants BuildPassCameraConstants(
     resources.Lights.FillCameraConstants(
         camera.DirectionalLightCount,
         camera.PointLightCount,
+        camera.SpotLightCount,
         camera.SurfaceEmitterCount,
         camera.SkyLight);
     camera.FrameIndex = frameState.FrameIndex;
@@ -34,6 +35,7 @@ RaytracingDemoCameraConstants BuildPassCameraConstants(
     camera.AccumulationEnabled = accumulationEnabled ? 1u : 0u;
     resources.Denoisers.FillCameraConstants(camera.NRDDenoiserMode, camera.NRDReblurHitDistanceParameters);
     camera.ReSTIRDIHistoryValid = frameState.ReSTIRDIHistoryValid ? 1u : 0u;
+    camera.UseSolidSkyFallback = resources.UseSolidSkyFallback ? 1u : 0u;
     return camera;
 }
 

@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-06 by Hui
+//Modify Begin:2026-08-26 by Hui
 #include <UI/DemoLightEditor.h>
 
 #include <Scene/SceneLightManager.h>
@@ -76,6 +76,7 @@ bool DemoLightEditor::Draw(SceneLightManager& lightManager)
     {
         ImGui::Text("Directional: %zu", lightManager.GetDirectionalLights().size());
         ImGui::Text("Point: %zu", lightManager.GetPointLights().size());
+        ImGui::Text("Spot: %zu", lightManager.GetSpotLights().size());
         ImGui::Text("Area: %zu", lightManager.GetAreaLights().size());
         ImGui::Text("Mesh Surface Emitters: %zu", lightManager.GetEmissiveMeshSurfaceEmitterCount());
     }
@@ -182,7 +183,7 @@ bool DemoLightEditor::Draw(SceneLightManager& lightManager)
     if (ImGui::CollapsingHeader("Point Lights"))
     {
         bool pointLightsEnabled = lightManager.ArePointLightsEnabled();
-        if (ImGui::Checkbox("Enable Point Lights", &pointLightsEnabled))
+        if (ImGui::Checkbox("Enable Point / Spot Lights", &pointLightsEnabled))
         {
             lightManager.SetLightGroupSettings(
                 lightManager.AreDirectionalLightsEnabled(),
@@ -302,6 +303,93 @@ bool DemoLightEditor::Draw(SceneLightManager& lightManager)
                         std::max(3.0f, m_NewPointLightRange * rangeScaleDistribution(randomGenerator)),
                         m_NewPointLightSourceRadius),
                     animation);
+                changed = true;
+            }
+        }
+        ImGui::PopID();
+    }
+
+    if (ImGui::CollapsingHeader("Spot Lights"))
+    {
+        ImGui::TextUnformatted("Spot lights use the Point / Spot light group toggle.");
+        if (ImGui::CollapsingHeader("Spot Light List"))
+        {
+            const size_t spotLightCount = lightManager.GetSpotLights().size();
+            for (size_t index = 0; index < spotLightCount; ++index)
+            {
+                ImGui::PushID(static_cast<int>(index));
+                SpotLight& light = lightManager.EditSpotLight(index);
+                const bool open = ImGui::TreeNodeEx(
+                    "SpotLight",
+                    ImGuiTreeNodeFlags_None,
+                    "#%zu Pos(%.2f, %.2f, %.2f) Cone %.1f / %.1f Intensity %.2f",
+                    index,
+                    light.PositionWs.x,
+                    light.PositionWs.y,
+                    light.PositionWs.z,
+                    XMConvertToDegrees(light.InnerConeAngle),
+                    XMConvertToDegrees(light.OuterConeAngle),
+                    light.Intensity);
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Delete"))
+                {
+                    lightManager.RemoveSpotLight(index);
+                    changed = true;
+                    ImGui::PopID();
+                    break;
+                }
+                if (open)
+                {
+                    XMFLOAT3 position = { light.PositionWs.x, light.PositionWs.y, light.PositionWs.z };
+                    XMFLOAT3 direction = { light.DirectionWs.x, light.DirectionWs.y, light.DirectionWs.z };
+                    float innerAngleDegrees = XMConvertToDegrees(light.InnerConeAngle);
+                    float outerAngleDegrees = XMConvertToDegrees(light.OuterConeAngle);
+                    const bool lightChanged =
+                        FrameworkImGui::SliderFloat3("Position", &position.x, -500.0f, 500.0f, "%.3f") |
+                        FrameworkImGui::SliderFloat3("Direction", &direction.x, -1.0f, 1.0f, "%.4f") |
+                        FrameworkImGui::SliderFloat3("Color", &light.Color.x, 0.0f, 10.0f, "%.3f") |
+                        FrameworkImGui::SliderFloat("Intensity", &light.Intensity, 0.0f, 100.0f, "%.3f") |
+                        FrameworkImGui::SliderFloat("Range", &light.Range, 0.1f, 500.0f, "%.3f") |
+                        FrameworkImGui::SliderFloat("Inner Cone Angle", &innerAngleDegrees, 0.0f, 89.8f, "%.2f") |
+                        FrameworkImGui::SliderFloat("Outer Cone Angle", &outerAngleDegrees, 0.1f, 89.9f, "%.2f");
+                    if (lightChanged)
+                    {
+                        const XMFLOAT3 normalizedDirection = NormalizeVector(direction);
+                        light.PositionWs = { position.x, position.y, position.z, 1.0f };
+                        light.DirectionWs = { normalizedDirection.x, normalizedDirection.y, normalizedDirection.z, 0.0f };
+                        light.InnerConeAngle = XMConvertToRadians((std::min)(innerAngleDegrees, outerAngleDegrees));
+                        light.OuterConeAngle = XMConvertToRadians((std::max)(outerAngleDegrees, 0.1f));
+                        lightManager.CommitSpotLightEdit(index);
+                        changed = true;
+                    }
+                    ImGui::TreePop();
+                }
+                ImGui::PopID();
+            }
+        }
+
+        ImGui::PushID("NewSpotLight");
+        if (ImGui::CollapsingHeader("New Spot Light"))
+        {
+            FrameworkImGui::SliderFloat3("Position", &m_NewSpotLightPosition.x, -500.0f, 500.0f, "%.3f");
+            FrameworkImGui::SliderFloat3("Direction", &m_NewSpotLightDirection.x, -1.0f, 1.0f, "%.4f");
+            FrameworkImGui::SliderFloat3("Color", &m_NewSpotLightColor.x, 0.0f, 10.0f, "%.3f");
+            FrameworkImGui::SliderFloat("Intensity", &m_NewSpotLightIntensity, 0.0f, 100.0f, "%.3f");
+            FrameworkImGui::SliderFloat("Range", &m_NewSpotLightRange, 0.1f, 500.0f, "%.3f");
+            FrameworkImGui::SliderFloat("Inner Cone Angle", &m_NewSpotLightInnerAngleDegrees, 0.0f, 89.8f, "%.2f");
+            FrameworkImGui::SliderFloat("Outer Cone Angle", &m_NewSpotLightOuterAngleDegrees, 0.1f, 89.9f, "%.2f");
+            if (ImGui::Button("Add Spot Light"))
+            {
+                const XMFLOAT3 direction = NormalizeVector(m_NewSpotLightDirection);
+                SpotLight light{};
+                light.PositionWs = { m_NewSpotLightPosition.x, m_NewSpotLightPosition.y, m_NewSpotLightPosition.z, 1.0f };
+                light.DirectionWs = { direction.x, direction.y, direction.z, 0.0f };
+                light.Color = { m_NewSpotLightColor.x, m_NewSpotLightColor.y, m_NewSpotLightColor.z, 1.0f };
+                light.Intensity = m_NewSpotLightIntensity;
+                light.Range = m_NewSpotLightRange;
+                light.InnerConeAngle = XMConvertToRadians((std::min)(m_NewSpotLightInnerAngleDegrees, m_NewSpotLightOuterAngleDegrees));
+                light.OuterConeAngle = XMConvertToRadians((std::max)(m_NewSpotLightOuterAngleDegrees, 0.1f));
+                lightManager.AddSpotLight(light);
                 changed = true;
             }
         }

@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-13 by Hui
+//Modify Begin:2026-08-26 by Hui
 #include <Framework/Rendering/Lighting/LightingGpuResources.h>
 
 #include <DX12Library/CommandList.h>
@@ -123,6 +123,43 @@ namespace
         return triangle;
     }
 
+    SpotLightData CreateSpotLightData(const SpotLight& light)
+    {
+        XMVECTOR direction = XMLoadFloat4(&light.DirectionWs);
+        if (XMVectorGetX(XMVector3LengthSq(direction)) <= 1.0e-8f)
+        {
+            direction = XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
+        }
+        direction = XMVector3Normalize(direction);
+
+        const float outerConeAngle = std::clamp(light.OuterConeAngle, 0.001f, XM_PIDIV2 - 0.001f);
+        const float innerConeAngle = std::clamp(light.InnerConeAngle, 0.0f, outerConeAngle);
+        XMFLOAT3 normalizedDirection{};
+        XMStoreFloat3(&normalizedDirection, direction);
+
+        SpotLightData gpuLight{};
+        gpuLight.PositionAndRange = { light.PositionWs.x, light.PositionWs.y, light.PositionWs.z, std::max(0.1f, light.Range) };
+        gpuLight.DirectionAndCosOuter = {
+            normalizedDirection.x,
+            normalizedDirection.y,
+            normalizedDirection.z,
+            std::cos(outerConeAngle)
+        };
+        gpuLight.ColorAndIntensity = {
+            std::max(0.0f, light.Color.x),
+            std::max(0.0f, light.Color.y),
+            std::max(0.0f, light.Color.z),
+            std::max(0.0f, light.Intensity)
+        };
+        gpuLight.AttenuationAndCosInner = {
+            std::max(0.0f, light.ConstantAttenuation),
+            std::max(0.0f, light.LinearAttenuation),
+            std::max(0.0f, light.QuadraticAttenuation),
+            std::cos(innerConeAngle)
+        };
+        return gpuLight;
+    }
+
     SurfaceEmitterInstanceData CreateRectangleSurfaceEmitterInstance(const AreaLightData& light, const uint32_t geometryIndex)
     {
         SurfaceEmitterInstanceData instance{};
@@ -185,6 +222,7 @@ LightingGpuResources::LightingGpuResources(FrameworkDeviceContext& deviceContext
     : m_DeviceContext(deviceContext)
     , m_DirectionalLightBuffer(L"Ray Tracing Directional Lights")
     , m_PointLightBuffer(L"Ray Tracing Point Lights")
+    , m_SpotLightBuffer(L"Ray Tracing Spot Lights")
     , m_SurfaceEmitterGeometryBuffer(L"Surface Emitter Geometries")
     , m_SurfaceEmitterTriangleBuffer(L"Surface Emitter Triangles")
     , m_SurfaceEmitterTriangleCdfBuffer(L"Surface Emitter Triangle CDF")
@@ -202,7 +240,7 @@ void LightingGpuResources::Rebuild(const LightingGpuInput& input)
     m_DirectionalLightsEnabled = input.DirectionalLightsEnabled;
     m_PointLightsEnabled = input.PointLightsEnabled;
     m_AreaLightsEnabled = input.AreaLightsEnabled;
-    BuildGpuData(input.DirectionalLights, input.PointLights);
+    BuildGpuData(input.DirectionalLights, input.PointLights, input.SpotLights);
     MarkAllGpuDataDirty();
 }
 
@@ -265,6 +303,17 @@ void LightingGpuResources::UpdatePointLight(
     MarkPointLightsDirty(lightIndex, lightIndex + 1, updateSamplingDistribution);
 }
 
+void LightingGpuResources::UpdateSpotLight(const SpotLight& light, const size_t lightIndex)
+{
+    if (m_SpotLightGpuData.size() <= lightIndex)
+    {
+        m_SpotLightGpuData.resize(lightIndex + 1);
+    }
+
+    m_SpotLightGpuData[lightIndex] = CreateSpotLightData(light);
+    MarkSpotLightsDirty(lightIndex, lightIndex + 1, true);
+}
+
 void LightingGpuResources::UpdateAreaLight(const AreaLightData& light, const size_t lightIndex)
 {
     if (m_AreaLights.size() <= lightIndex)
@@ -282,6 +331,7 @@ void LightingGpuResources::Initialize(CommandList& commandList)
     m_UploadBuffer = std::make_unique<SharedUploadBuffer>(m_DeviceContext);
     m_DirectionalLightBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_DirectionalLightGpuData.size());
     m_PointLightBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_PointLightGpuData.size());
+    m_SpotLightBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_SpotLightGpuData.size());
     m_SurfaceEmitterGeometryBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_SurfaceEmitterGeometryGpuData.size());
     m_SurfaceEmitterTriangleBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_SurfaceEmitterTriangleGpuData.size());
     m_SurfaceEmitterTriangleCdfBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_SurfaceEmitterTriangleCdfGpuData.size());
@@ -289,6 +339,7 @@ void LightingGpuResources::Initialize(CommandList& commandList)
     m_DirectLightCdfBufferCapacity = std::max<size_t>(InitialLightBufferCapacity, m_DirectLightCdfGpuData.size());
     uploader.UploadStructuredBuffer(commandList, m_DirectionalLightBuffer, CreateBufferCapacityData<DirectionalLightData>(m_DirectionalLightBufferCapacity));
     uploader.UploadStructuredBuffer(commandList, m_PointLightBuffer, CreateBufferCapacityData<PointLightData>(m_PointLightBufferCapacity));
+    uploader.UploadStructuredBuffer(commandList, m_SpotLightBuffer, CreateBufferCapacityData<SpotLightData>(m_SpotLightBufferCapacity));
     uploader.UploadStructuredBuffer(commandList, m_SurfaceEmitterGeometryBuffer, CreateBufferCapacityData<SurfaceEmitterGeometryData>(m_SurfaceEmitterGeometryBufferCapacity));
     uploader.UploadStructuredBuffer(commandList, m_SurfaceEmitterTriangleBuffer, CreateBufferCapacityData<SurfaceEmitterTriangleData>(m_SurfaceEmitterTriangleBufferCapacity));
     uploader.UploadStructuredBuffer(commandList, m_SurfaceEmitterTriangleCdfBuffer, CreateBufferCapacityData<float>(m_SurfaceEmitterTriangleCdfBufferCapacity));
@@ -302,6 +353,7 @@ bool LightingGpuResources::Upload(CommandList& commandList, const uint64_t frame
 
     const bool directionalLightsRecreated = EnsureStructuredBufferCapacity(commandList, m_DirectionalLightBuffer, m_DirectionalLightBufferCapacity, m_DirectionalLightGpuData);
     const bool pointLightsRecreated = EnsureStructuredBufferCapacity(commandList, m_PointLightBuffer, m_PointLightBufferCapacity, m_PointLightGpuData);
+    const bool spotLightsRecreated = EnsureStructuredBufferCapacity(commandList, m_SpotLightBuffer, m_SpotLightBufferCapacity, m_SpotLightGpuData);
     const bool surfaceEmitterGeometriesRecreated = EnsureStructuredBufferCapacity(commandList, m_SurfaceEmitterGeometryBuffer, m_SurfaceEmitterGeometryBufferCapacity, m_SurfaceEmitterGeometryGpuData);
     const bool surfaceEmitterTrianglesRecreated = EnsureStructuredBufferCapacity(commandList, m_SurfaceEmitterTriangleBuffer, m_SurfaceEmitterTriangleBufferCapacity, m_SurfaceEmitterTriangleGpuData);
     const bool surfaceEmitterTriangleCdfRecreated = EnsureStructuredBufferCapacity(commandList, m_SurfaceEmitterTriangleCdfBuffer, m_SurfaceEmitterTriangleCdfBufferCapacity, m_SurfaceEmitterTriangleCdfGpuData);
@@ -317,6 +369,11 @@ bool LightingGpuResources::Upload(CommandList& commandList, const uint64_t frame
     {
         m_PointLightDirtyBegin = 0;
         m_PointLightDirtyEnd = 0;
+    }
+    if (spotLightsRecreated)
+    {
+        m_SpotLightDirtyBegin = 0;
+        m_SpotLightDirtyEnd = 0;
     }
     if (surfaceEmitterGeometriesRecreated)
     {
@@ -357,6 +414,12 @@ bool LightingGpuResources::Upload(CommandList& commandList, const uint64_t frame
         m_PointLightDirtyBegin = 0;
         m_PointLightDirtyEnd = 0;
     }
+    if (m_SpotLightDirtyBegin < m_SpotLightDirtyEnd)
+    {
+        UploadGpuLightRange(commandList, *m_UploadBuffer, m_SpotLightBuffer, m_SpotLightGpuData, m_SpotLightDirtyBegin, m_SpotLightDirtyEnd);
+        m_SpotLightDirtyBegin = 0;
+        m_SpotLightDirtyEnd = 0;
+    }
     if (m_SurfaceEmitterGeometryDirtyBegin < m_SurfaceEmitterGeometryDirtyEnd)
     {
         UploadGpuLightRange(commandList, *m_UploadBuffer, m_SurfaceEmitterGeometryBuffer, m_SurfaceEmitterGeometryGpuData, m_SurfaceEmitterGeometryDirtyBegin, m_SurfaceEmitterGeometryDirtyEnd);
@@ -388,7 +451,7 @@ bool LightingGpuResources::Upload(CommandList& commandList, const uint64_t frame
         m_DirectLightCdfDirtyEnd = 0;
     }
 
-    return directionalLightsRecreated || pointLightsRecreated ||
+    return directionalLightsRecreated || pointLightsRecreated || spotLightsRecreated ||
         surfaceEmitterGeometriesRecreated || surfaceEmitterTrianglesRecreated ||
         surfaceEmitterTriangleCdfRecreated || surfaceEmitterInstancesRecreated || directLightCdfRecreated;
 }
@@ -402,6 +465,10 @@ void LightingGpuResources::BindComputeResources(CommandContext& commandContext, 
     if (shader.HasShaderResourceView("PointLights"))
     {
         commandContext.SetShaderResource(shader, "PointLights", 0u, m_PointLightBuffer);
+    }
+    if (shader.HasShaderResourceView("SpotLights"))
+    {
+        commandContext.SetShaderResource(shader, "SpotLights", 0u, m_SpotLightBuffer);
     }
     if (shader.HasShaderResourceView("SurfaceEmitterGeometries"))
     {
@@ -430,6 +497,7 @@ void LightingGpuResources::ForEachShaderResource(
 {
     action(m_DirectionalLightBuffer);
     action(m_PointLightBuffer);
+    action(m_SpotLightBuffer);
     action(m_SurfaceEmitterGeometryBuffer);
     action(m_SurfaceEmitterInstanceBuffer);
     action(m_SurfaceEmitterTriangleBuffer);
@@ -446,6 +514,10 @@ void LightingGpuResources::BindRayTracingResources(RayTracingBindingSet& binding
     if (bindingSet.HasBinding("PointLights"))
     {
         bindingSet.SetBuffer("PointLights", m_PointLightBuffer);
+    }
+    if (bindingSet.HasBinding("SpotLights"))
+    {
+        bindingSet.SetBuffer("SpotLights", m_SpotLightBuffer);
     }
     if (bindingSet.HasBinding("SurfaceEmitterGeometries"))
     {
@@ -479,6 +551,11 @@ uint32_t LightingGpuResources::GetPointLightCount() const
     return static_cast<uint32_t>(m_PointLightGpuData.size());
 }
 
+uint32_t LightingGpuResources::GetSpotLightCount() const
+{
+    return static_cast<uint32_t>(m_SpotLightGpuData.size());
+}
+
 uint32_t LightingGpuResources::GetSurfaceEmitterCount() const
 {
     return static_cast<uint32_t>(m_SurfaceEmitterInstanceGpuData.size());
@@ -491,7 +568,8 @@ size_t LightingGpuResources::GetMeshSurfaceEmitterCount() const
 
 void LightingGpuResources::BuildGpuData(
     const std::vector<DirectionalLight>& directionalLights,
-    const std::vector<PointLight>& pointLights)
+    const std::vector<PointLight>& pointLights,
+    const std::vector<SpotLight>& spotLights)
 {
     m_DirectionalLightGpuData.clear();
     m_DirectionalLightGpuData.reserve(directionalLights.size());
@@ -512,6 +590,13 @@ void LightingGpuResources::BuildGpuData(
         gpuLight.ColorAndIntensity = light.Color;
         gpuLight.Attenuation = { light.ConstantAttenuation, light.LinearAttenuation, light.QuadraticAttenuation, light.SourceRadius };
         m_PointLightGpuData.push_back(gpuLight);
+    }
+
+    m_SpotLightGpuData.clear();
+    m_SpotLightGpuData.reserve(spotLights.size());
+    for (const SpotLight& light : spotLights)
+    {
+        m_SpotLightGpuData.push_back(CreateSpotLightData(light));
     }
 
     RebuildSurfaceEmitterGpuData();
@@ -592,6 +677,7 @@ void LightingGpuResources::RebuildDirectLightSamplingCdf()
     m_DirectLightCdfGpuData.reserve(
         m_DirectionalLightGpuData.size() +
         m_PointLightGpuData.size() +
+        m_SpotLightGpuData.size() +
         m_SurfaceEmitterInstanceGpuData.size());
 
     float totalWeight = 0.0f;
@@ -614,6 +700,15 @@ void LightingGpuResources::RebuildDirectLightSamplingCdf()
             m_DirectionalLightsEnabled);
     }
     for (const PointLightData& light : m_PointLightGpuData)
+    {
+        appendWeight(
+            (light.ColorAndIntensity.x * 0.2126f +
+             light.ColorAndIntensity.y * 0.7152f +
+             light.ColorAndIntensity.z * 0.0722f) *
+            light.ColorAndIntensity.w,
+            m_PointLightsEnabled);
+    }
+    for (const SpotLightData& light : m_SpotLightGpuData)
     {
         appendWeight(
             (light.ColorAndIntensity.x * 0.2126f +
@@ -651,6 +746,7 @@ void LightingGpuResources::MarkAllGpuDataDirty()
 {
     MarkDirtyRange(0, m_DirectionalLightGpuData.size(), m_DirectionalLightDirtyBegin, m_DirectionalLightDirtyEnd);
     MarkDirtyRange(0, m_PointLightGpuData.size(), m_PointLightDirtyBegin, m_PointLightDirtyEnd);
+    MarkDirtyRange(0, m_SpotLightGpuData.size(), m_SpotLightDirtyBegin, m_SpotLightDirtyEnd);
     MarkDirtyRange(0, m_SurfaceEmitterGeometryGpuData.size(), m_SurfaceEmitterGeometryDirtyBegin, m_SurfaceEmitterGeometryDirtyEnd);
     MarkDirtyRange(0, m_SurfaceEmitterTriangleGpuData.size(), m_SurfaceEmitterTriangleDirtyBegin, m_SurfaceEmitterTriangleDirtyEnd);
     MarkDirtyRange(0, m_SurfaceEmitterTriangleCdfGpuData.size(), m_SurfaceEmitterTriangleCdfDirtyBegin, m_SurfaceEmitterTriangleCdfDirtyEnd);
@@ -676,6 +772,18 @@ void LightingGpuResources::MarkPointLightsDirty(
     const bool updateSamplingDistribution)
 {
     MarkDirtyRange(beginIndex, endIndex, m_PointLightDirtyBegin, m_PointLightDirtyEnd);
+    if (updateSamplingDistribution)
+    {
+        MarkDirectLightSamplingDirty();
+    }
+}
+
+void LightingGpuResources::MarkSpotLightsDirty(
+    const size_t beginIndex,
+    const size_t endIndex,
+    const bool updateSamplingDistribution)
+{
+    MarkDirtyRange(beginIndex, endIndex, m_SpotLightDirtyBegin, m_SpotLightDirtyEnd);
     if (updateSamplingDistribution)
     {
         MarkDirectLightSamplingDirty();

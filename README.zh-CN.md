@@ -77,7 +77,7 @@ Raster Bloom 在图中展开为 `Bloom Prefilter`、逐级 `Bloom Downsample`、
 | 方向 | 具体内容 |
 | --- | --- |
 | GBuffer | 常规 raster GBuffer，以及实验性的 Meshlet GBuffer 路径。 |
-| 场景资产 | `SceneImporter::ImportFromFile()` 统一接受 `.unity`、项目 `.json` 和 `.fbx`；FBX 会导入节点层级、局部/世界变换、PBR 因子/纹理、外部或嵌入纹理、相机，以及平行光/点光/Spot/面积光。 |
+| 场景资产 | `SceneImporter::ImportFromFile()` 统一接受 `.unity`、项目 `.json`、`.fbx` 和受支持的 Mitsuba `.xml`；FBX 会导入节点层级、局部/世界变换、PBR 因子/纹理、外部或嵌入纹理、相机，以及平行光/点光/Spot/面积光；Mitsuba XML 导入 OBJ 几何、相机、矩形面积光、顶层 Spot emitter，以及受限的常量/bitmap 基础色 BSDF 数据到内置 PBR。 |
 | 光线追踪 | inline ray query compute shader 与 shader-table DXR，可在运行时切换；shader-table DXR 不支持当前仅有 Inline 实现的 ReSTIR DI/GI 阶段。 |
 | Compacted dispatch | 深度筛选有效像素并用原子追加建立 active-pixel list；Inline compute 使用 `ceil(activeCount / 64)` 个 thread groups，DXR 使用 `Width = activeCount`。 |
 | 材质着色 | Framework 统一的 GGX 金属度/粗糙度 PBR，以及 sample 可选的 `Stylized Comic` 风格化 PBR-NPR 变体。 |
@@ -100,15 +100,17 @@ options.GenerateFallbackCamera = true;
 const SceneImportResult result = SceneImporter::ImportFromFile(scenePath, options);
 ```
 
-`SceneImporter` 按不区分大小写的扩展名分发。Unity YAML 和项目 JSON 保留原有资产约定；FBX 通过 Assimp 作为完整场景导入。一个节点实例化多个 mesh 时，会为每个子网格生成一个 `SceneObject`，并在 `SceneMeshReference::SubmeshIndex` 保存原始 Assimp mesh index，因此不会依赖重复或空的 mesh 名称。FBX 嵌入纹理会从内存交给 `TextureLoader` 解码，并和文件纹理共用缓存。
+`SceneImporter` 按不区分大小写的扩展名分发。Unity YAML 和项目 JSON 保留原有资产约定；FBX 通过 Assimp 作为完整场景导入。一个节点实例化多个 mesh 时，会为每个子网格生成一个 `SceneObject`，并在 `SceneMeshReference::SubmeshIndex` 保存原始 Assimp mesh index，因此不会依赖重复或空的 mesh 名称。FBX 嵌入纹理会从内存交给 `TextureLoader` 解码，并和文件纹理共用缓存。受支持的 Mitsuba XML 会展开场景内 `<default>` 变量，并导入 perspective sensor、OBJ shape 及其 `to_world` matrix、rectangle area emitter，以及顶层 `spot` emitter 的 `intensity`、`cutoffAngle`、`beamWidth` 和可选有限 `range`；右手到左手的反射会先把 Mitsuba sensor 的局部 `+Z` 视线轴映射为渲染器局部 `-Z`，再构造左手相机，因而保留源场景的观察方向。其有意受限的材质转换会展开 `twosided`/`mask`/`bumpmap` 包装，按 diffuse/plastic/conductor/dielectric 映射金属度与粗糙度启发式，并导入常量 base color 与 `reflectance`、`diffuse_reflectance`、`base_color` 的 bitmap 绑定。它不复现完整 Mitsuba 的 transmission、alpha、bump/normal、spectral IOR 等高级 BSDF 语义。OBJ 与纹理路径必须限制在场景目录内。`Assets/Scenes/CountryKitchen/scene.xml` 是 Demo 的默认启动场景；其 295 个独立 OBJ 尚未使用 streaming 或 cooked geometry cache，因此属于较重的启动路径。
 
-Importer 会在 `Scene` 中保留 Spot Light 的语义。当前 sample 的 GPU 光照契约只有平行光、点光和面积光 producer，因此 `SceneLightManager` 暂时用点光回退显示 Spot Light，同时保留原始 Spot 数据以便场景回写。FBX 多相机只选择第一个相机；没有相机时，`GenerateFallbackCamera` 会根据导入后的世界空间包围盒生成观察相机。透明、clearcoat、transmission、动画播放等高级材质/动态场景能力仍不属于当前 sample 契约。
+Spot Light 会从 `Scene` 经 `LightingGpuResources` 进入相机常量与 Inline PT/ReSTIR DI/GI 的直接光采样，不再回退为点光。编辑器和 `.runtime.json` 场景状态可创建、编辑、删除并持久化 Spot Light。FBX 多相机只选择第一个相机；没有相机时，`GenerateFallbackCamera` 会根据导入后的世界空间包围盒生成观察相机。透明、clearcoat、transmission、动画播放等高级材质/动态场景能力仍不属于当前 sample 契约。
 
 不启动窗口即可检查解析结果。打开 developer tool 后运行：
 
 ```text
-UnitySceneDump <scene.unity|scene.json|scene.fbx> [--allow-missing-camera]
+UnitySceneDump <scene.unity|scene.json|scene.fbx|scene.xml> [--allow-missing-camera]
 ```
+
+输出含 `CameraPose` 及归一化后的运行时前向量，无需打开窗口即可自动检查导入相机方向。
 
 ## 环境与依赖
 

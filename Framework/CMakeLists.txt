@@ -175,7 +175,7 @@ target_link_libraries(${TARGET_NAME}
         PUBLIC OIDN
         )
 
-target_link_libraries(${TARGET_NAME} PRIVATE d3d12 dxgi dxguid imm32)
+target_link_libraries(${TARGET_NAME} PRIVATE d3d12 dxgi dxguid imm32 xmllite shlwapi)
 
 find_package(meshoptimizer CONFIG REQUIRED)
 target_link_libraries(${TARGET_NAME} PUBLIC meshoptimizer::meshoptimizer)

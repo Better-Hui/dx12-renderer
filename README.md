@@ -90,7 +90,7 @@ Raster Bloom is visible to RenderGraph as `Bloom Prefilter`, per-level `Bloom Do
 | Feature | Demonstrated usage |
 | --- | --- |
 | Base resources | GBuffer-style normal/depth/material data, motion/world-position data, history/display resources, and raster or meshlet GBuffer generation. |
-| Scene assets | `SceneImporter::ImportFromFile()` accepts `.unity`, project `.json`, and `.fbx`. FBX import preserves node hierarchy, local/world transforms, PBR factors/maps, external or embedded textures, cameras, and directional/point/spot/area lights. |
+| Scene assets | `SceneImporter::ImportFromFile()` accepts `.unity`, project `.json`, `.fbx`, and supported Mitsuba `.xml`. FBX preserves node hierarchy, local/world transforms, PBR factors/maps, external or embedded textures, cameras, and directional/point/spot/area lights; the bounded Mitsuba XML path imports OBJ geometry, camera, rectangle area emitters, top-level spot emitters, and supported constant/bitmap base-color BSDF data into internal PBR materials. |
 | Ray tracing | Inline ray-query compute shaders and shader-table DXR, with a compatibility popup/red warning when the selected DXR configuration skips Inline-only stages. |
 | Compacted dispatch | Active-pixel compaction, indirect compute/DXR dispatch finalization, and readback diagnostics for active count and dispatch arguments. |
 | Material shading | Framework-owned GGX metallic/roughness PBR, plus the sample-selectable `Stylized Comic` PBR-NPR variant. |
@@ -113,15 +113,17 @@ options.GenerateFallbackCamera = true;
 const SceneImportResult result = SceneImporter::ImportFromFile(scenePath, options);
 ```
 
-`SceneImporter` dispatches by case-insensitive extension. Unity YAML and project JSON keep their existing asset conventions; FBX is imported as a complete scene through Assimp. A node that instances several meshes creates one `SceneObject` per submesh and stores the original Assimp mesh index in `SceneMeshReference::SubmeshIndex`, so the demo does not depend on duplicate or missing mesh names. Embedded FBX textures are decoded from memory by `TextureLoader` and participate in the same cache as file textures.
+`SceneImporter` dispatches by case-insensitive extension. Unity YAML and project JSON keep their existing asset conventions; FBX is imported as a complete scene through Assimp. A node that instances several meshes creates one `SceneObject` per submesh and stores the original Assimp mesh index in `SceneMeshReference::SubmeshIndex`, so the demo does not depend on duplicate or missing mesh names. Embedded FBX textures are decoded from memory by `TextureLoader` and participate in the same cache as file textures. Supported Mitsuba XML expands scene-local `<default>` variables, imports a perspective sensor, OBJ shapes and their `to_world` matrices, rectangle area emitters, and top-level `spot` emitters with `intensity`, `cutoffAngle`, `beamWidth`, and optional finite `range`. The right-to-left-handed reflection maps the Mitsuba sensor's local `+Z` view axis to the renderer's local `-Z` axis before the left-handed camera is constructed, preserving the source view direction. Its intentionally bounded material conversion unwraps `twosided`/`mask`/`bumpmap`, maps diffuse/plastic/conductor/dielectric families into metallic/roughness heuristics, and imports constant base colors plus bitmap base-color bindings (`reflectance`, `diffuse_reflectance`, and `base_color`). It does not reproduce complete Mitsuba transmission, alpha, bump/normal, spectral-IOR, or other advanced BSDF semantics. Relative OBJ and texture paths may not escape the XML scene directory. `Assets/Scenes/CountryKitchen/scene.xml` is the Demo default scene; its 295 independent OBJ files are a heavy startup path without streaming or a cooked geometry cache.
 
-The importer preserves Spot Light data in `Scene`. The current sample lighting GPU contract has directional, point, and area producers only, so `SceneLightManager` temporarily adds a point-light fallback for a Spot Light while retaining the original spot data for scene round-tripping. Only the first active FBX camera is selected; `GenerateFallbackCamera` frames the imported world-space bounds when an asset has no camera. Transparency, clearcoat, transmission, animation playback, and other advanced material models remain outside this sample contract.
+Spot Light data flows from `Scene` through `LightingGpuResources` into the camera constants and the Inline PT/ReSTIR DI/GI direct-light sampling path; it is no longer converted into a point-light fallback. The editor and `.runtime.json` scene state can create, edit, remove, and persist spot lights. Only the first active FBX camera is selected; `GenerateFallbackCamera` frames the imported world-space bounds when an asset has no camera. Transparency, clearcoat, transmission, animation playback, and other advanced material models remain outside this sample contract.
 
 For a no-window parser check, enable the developer tool and run:
 
 ```text
-UnitySceneDump <scene.unity|scene.json|scene.fbx> [--allow-missing-camera]
+UnitySceneDump <scene.unity|scene.json|scene.fbx|scene.xml> [--allow-missing-camera]
 ```
+
+The dump includes `CameraPose` with the normalized runtime forward vector, so imported camera orientation is machine-checkable without opening a window.
 
 ## Requirements
 

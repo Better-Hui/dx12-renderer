@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-08-25 by Hui
+//Modify Begin:2026-08-26 by Hui
 #include <Automation/RuntimeAutomationController.h>
 #include <Passes/RaytracingDemoPassResources.h>
 #include <PathTracing/PathTracingPipelineController.h>
@@ -61,6 +61,7 @@ namespace RaytracingDemoAutomation
         PathTracingIndirect,
         ReSTIRDI,
         ReSTIRGI,
+        ReSTIRDIAndGI,
     };
 
     struct MatrixCase

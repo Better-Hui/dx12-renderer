@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-08-26 by Hui
 #pragma once
 
 #include <Framework/Scene/Scene.h>
@@ -28,7 +28,7 @@ struct SceneImportResult
 class SceneImporter final
 {
 public:
-    // Imports Unity YAML, Unity-style JSON, and FBX scenes into the shared Scene representation.
+    // Imports Unity YAML, Unity-style JSON, FBX, and supported Mitsuba XML scenes into the shared Scene representation.
     static SceneImportResult ImportFromFile(
         const std::filesystem::path& scenePath,
         const SceneImportOptions& options = {});
@@ -37,6 +37,9 @@ public:
         const std::filesystem::path& scenePath,
         const SceneImportOptions& options = {});
     static SceneImportResult ImportFbxFromFile(
+        const std::filesystem::path& scenePath,
+        const SceneImportOptions& options = {});
+    static SceneImportResult ImportMitsubaXmlFromFile(
         const std::filesystem::path& scenePath,
         const SceneImportOptions& options = {});
     static void ApplyJsonRuntimeState(

@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-08-26 by Hui
 #include <Scene/SceneLightManager.h>
 
 #include <DX12Library/CommandList.h>
@@ -192,22 +192,6 @@ void SceneLightManager::CreateFromScene(const Scene& scene)
     for (const SpotLight& spotLight : scene.GetSpotLights())
     {
         m_SpotLights.push_back(spotLight);
-        PointLight fallback(
-            spotLight.PositionWs,
-            std::max(0.1f, spotLight.Range));
-        fallback.Color = spotLight.Color;
-        fallback.Color.w *= spotLight.Intensity;
-        fallback.ConstantAttenuation = spotLight.ConstantAttenuation;
-        fallback.LinearAttenuation = spotLight.LinearAttenuation;
-        fallback.QuadraticAttenuation = spotLight.QuadraticAttenuation;
-        fallback.SourceRadius = spotLight.SourceRadius;
-        m_PointLights.push_back(fallback);
-        m_PointLightBaseY.push_back(fallback.PositionWs.y);
-        m_PointLightPhase.push_back(0.0f);
-        m_PointLightOrbitRadius.push_back(0.0f);
-        m_PointLightOrbitSpeed.push_back(0.0f);
-        m_PointLightOrbitCenter.push_back({ fallback.PositionWs.x, fallback.PositionWs.y, fallback.PositionWs.z });
-        m_PointLightAnimated.push_back(0);
     }
 
     for (const AreaLight& light : scene.GetAreaLights())
@@ -341,11 +325,13 @@ void SceneLightManager::BindRayTracingResources(RayTracingBindingSet& bindingSet
 void SceneLightManager::FillCameraConstants(
     uint32_t& directionalLightCount,
     uint32_t& pointLightCount,
+    uint32_t& spotLightCount,
     uint32_t& surfaceEmitterCount,
     SkyLightData& skyLight) const
 {
     directionalLightCount = m_GpuResources.GetDirectionalLightCount();
     pointLightCount = m_GpuResources.GetPointLightCount();
+    spotLightCount = m_GpuResources.GetSpotLightCount();
     surfaceEmitterCount = m_GpuResources.GetSurfaceEmitterCount();
     skyLight = m_SkyLight;
 }
@@ -360,6 +346,12 @@ PointLight& SceneLightManager::EditPointLight(const size_t lightIndex)
 {
     Assert(lightIndex < m_PointLights.size(), "Point light index is invalid.");
     return m_PointLights.at(lightIndex);
+}
+
+SpotLight& SceneLightManager::EditSpotLight(const size_t lightIndex)
+{
+    Assert(lightIndex < m_SpotLights.size(), "Spot light index is invalid.");
+    return m_SpotLights.at(lightIndex);
 }
 
 AreaLightData& SceneLightManager::EditAreaLight(const size_t lightIndex)
@@ -418,6 +410,28 @@ void SceneLightManager::CommitPointLightEdit(const size_t lightIndex)
     m_GpuResources.UpdatePointLight(light, lightIndex);
 }
 
+void SceneLightManager::CommitSpotLightEdit(const size_t lightIndex)
+{
+    SpotLight& light = EditSpotLight(lightIndex);
+    const XMFLOAT3 direction = NormalizeVector({ light.DirectionWs.x, light.DirectionWs.y, light.DirectionWs.z });
+    const float outerConeAngle = std::clamp(light.OuterConeAngle, 0.001f, XM_PIDIV2 - 0.001f);
+    const float innerConeAngle = std::clamp(light.InnerConeAngle, 0.0f, outerConeAngle);
+    light.PositionWs.w = 1.0f;
+    light.DirectionWs = { direction.x, direction.y, direction.z, 0.0f };
+    light.Color.x = std::max(0.0f, light.Color.x);
+    light.Color.y = std::max(0.0f, light.Color.y);
+    light.Color.z = std::max(0.0f, light.Color.z);
+    light.Intensity = std::max(0.0f, light.Intensity);
+    light.InnerConeAngle = innerConeAngle;
+    light.OuterConeAngle = outerConeAngle;
+    light.Range = std::max(0.1f, light.Range);
+    light.ConstantAttenuation = std::max(0.0f, light.ConstantAttenuation);
+    light.LinearAttenuation = std::max(0.0f, light.LinearAttenuation);
+    light.QuadraticAttenuation = std::max(0.0f, light.QuadraticAttenuation);
+    light.SourceRadius = std::max(0.0f, light.SourceRadius);
+    m_GpuResources.UpdateSpotLight(light, lightIndex);
+}
+
 void SceneLightManager::CommitAreaLightEdit(const size_t lightIndex)
 {
     AreaLightData& light = EditAreaLight(lightIndex);
@@ -452,6 +466,12 @@ void SceneLightManager::AddPointLight(const PointLight& light, const PointLightA
     m_PointLightOrbitCenter.push_back(animation.OrbitCenter);
     m_PointLightAnimated.push_back(animation.Enabled ? 1u : 0u);
     CommitPointLightEdit(m_PointLights.size() - 1);
+}
+
+void SceneLightManager::AddSpotLight(const SpotLight& light)
+{
+    m_SpotLights.push_back(light);
+    CommitSpotLightEdit(m_SpotLights.size() - 1);
 }
 
 void SceneLightManager::AddAreaLight(const AreaLightData& light)
@@ -489,6 +509,17 @@ void SceneLightManager::RemovePointLight(const size_t lightIndex)
     RebuildGpuResources();
 }
 
+void SceneLightManager::RemoveSpotLight(const size_t lightIndex)
+{
+    if (lightIndex >= m_SpotLights.size())
+    {
+        return;
+    }
+
+    EraseAt(m_SpotLights, lightIndex);
+    RebuildGpuResources();
+}
+
 void SceneLightManager::RemoveAreaLight(const size_t lightIndex)
 {
     if (lightIndex >= m_AreaLights.size())
@@ -505,6 +536,7 @@ void SceneLightManager::RebuildGpuResources()
     m_GpuResources.Rebuild({
         m_DirectionalLights,
         m_PointLights,
+        m_SpotLights,
         m_AreaLights,
         m_MeshSurfaceEmitterData,
         m_DirectionalLightsEnabled,

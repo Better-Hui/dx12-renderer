@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-25 by Hui
+//Modify Begin:2026-08-26 by Hui
 #include <Automation/RuntimeAutomationController.h>
 
 #include <Framework/Diagnostics/DiagnosticsSession.h>
@@ -53,6 +53,7 @@ void DemoAutomation::RuntimeAutomationController::Initialize(
     m_Diagnostics = diagnostics;
     m_LogPath.clear();
     m_StepIntervalSeconds = 1.0;
+    m_StepTimeoutSeconds = 30.0;
     m_QuitOnComplete = false;
 
     const std::string mode = GetEnvironmentVariable("RAYTRACING_DEMO_AUTOTEST");
@@ -103,6 +104,7 @@ void DemoAutomation::RuntimeAutomationController::Initialize(
                 "RAYTRACING_DEMO_INDIRECT_LIGHTING=none, and RAYTRACING_DEMO_DENOISER=off at startup.");
         }
     }
+
     else if (mode == "copy")
     {
         steps = testSuites.CopyQueue;
@@ -179,7 +181,19 @@ void DemoAutomation::RuntimeAutomationController::Initialize(
             "RAYTRACING_DEMO_AUTOTEST must be 'core', 'stress', 'meshlet-indirect', 'copy', 'rtas', 'dynamic-scene', 'oidn', 'matrix', 'restirgi-profile', 'restirgi-variants', 'restirdi-variants', or 'visual'.");
     }
 
-    AppendLog("Mode=" + mode + ", step interval=" + std::to_string(m_StepIntervalSeconds) + " seconds.");
+    const std::string stepTimeoutSeconds = GetEnvironmentVariable("RAYTRACING_DEMO_AUTOTEST_TIMEOUT_SECONDS");
+    if (!stepTimeoutSeconds.empty())
+    {
+        const double timeoutSeconds = std::strtod(stepTimeoutSeconds.c_str(), nullptr);
+        if (timeoutSeconds > 0.0)
+        {
+            m_StepTimeoutSeconds = timeoutSeconds;
+        }
+    }
+
+    AppendLog(
+        "Mode=" + mode + ", step interval=" + std::to_string(m_StepIntervalSeconds) +
+        " seconds, step timeout=" + std::to_string(m_StepTimeoutSeconds) + " seconds.");
 
     std::map<std::string, uint32_t, std::less<>> registeredActions;
     for (const Step& step : steps)
@@ -223,6 +237,8 @@ void DemoAutomation::RuntimeAutomationController::Initialize(
         runnerStep.Target = step.Control;
         runnerStep.Value = static_cast<uint64_t>(step.Value);
         runnerStep.FrameCount = 1;
+        runnerStep.TimeoutFrames = 0;
+        runnerStep.TimeoutSeconds = m_StepTimeoutSeconds;
         runnerStep.MinimumSeconds = step.Kind == FrameworkDiagnostics::AutomationStepKind::WaitFrames
             ? m_StepIntervalSeconds
             : 0.0;

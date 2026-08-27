@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-25 by Hui
+//Modify Begin:2026-08-26 by Hui
 #pragma once
 
 #include <Denoising/DenoiserController.h>
@@ -55,6 +55,7 @@ struct RaytracingDemoCameraConstants
     uint32_t SamplesPerPixel = 1;
     uint32_t DirectionalLightCount = 0;
     uint32_t PointLightCount = 0;
+    uint32_t SpotLightCount = 0;
     uint32_t SurfaceEmitterCount = 0;
     uint32_t FrameIndex = 0;
     uint32_t AccumulationFrameIndex = 0;
@@ -64,7 +65,7 @@ struct RaytracingDemoCameraConstants
     uint32_t PaddingBeforeNrdParameters1 = 0;
     DirectX::XMFLOAT4 NRDReblurHitDistanceParameters = { 3.0f, 0.1f, 20.0f, 0.0f };
     uint32_t ReSTIRDIHistoryValid = 0;
-    uint32_t Padding0 = 0;
+    uint32_t UseSolidSkyFallback = 0;
     uint32_t Padding1 = 0;
     uint32_t Padding2 = 0;
     SkyLightData SkyLight = {};
@@ -153,6 +154,7 @@ struct RaytracingDemoPassResources
     std::shared_ptr<ComputeShader> SkyboxEquirectangularComputeShader;
     std::shared_ptr<ComputeShader> SkyboxCubemapStripComputeShader;
     std::shared_ptr<Texture> SkyboxTexture;
+    bool UseSolidSkyFallback = false;
     std::shared_ptr<Mesh> DisplayBlitMesh;
     Camera& SceneCamera;
     Microsoft::WRL::ComPtr<ID3D12Device2> Device;

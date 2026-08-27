@@ -31,6 +31,8 @@ list(REMOVE_DUPLICATES POLICY_SOURCE_FILES)
 
 set(BARRIER_BRIDGE_ALLOWLIST
     "DX12Library/src/CommandListInternalAccess.cpp"
+    # Initializes Cubemap-owned render targets before they enter a RenderGraph.
+    "DX12Library/src/Cubemap.cpp"
     "DX12Library/src/GpuReadbackBuffer.cpp"
     "DX12Library/src/GpuReadbackTexture.cpp"
     "DX12Library/src/MipGenerator.cpp"

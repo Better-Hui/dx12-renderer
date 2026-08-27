@@ -100,6 +100,9 @@ void RaytracingDemoPasses::Builder::AddSkyboxPass(
             passData.Config = config;
             passBuilder.ReadToken(sceneReadyToken);
             passBuilder.ReadTexture(DemoResourceIds::DepthBuffer);
+            passBuilder.ReadExternal(
+                *resources.SkyboxTexture,
+                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
             passBuilder.WriteUav(DemoResourceIds::SceneColor);
             passBuilder.WriteToken(DemoResourceIds::SkyboxFinishedToken);
         },

@@ -42,16 +42,24 @@ struct Meshlet
     uint32_t IndexBufferIndex = 0;
 };
 
+enum class MeshletBuildMethod : uint8_t
+{
+    Scan,
+    Quality,
+};
+
 struct MeshletBuildOptions
 {
     size_t MaxVertices = 64;
     size_t MaxTriangles = 124;
     float ConeWeight = 0.5f;
+    MeshletBuildMethod Method = MeshletBuildMethod::Scan;
 };
 
 struct MeshletBuildResult
 {
-    MeshPrototype Mesh;
+    VertexCollectionType Vertices;
+    IndexCollectionType Indices;
     std::vector<Meshlet> Meshlets;
     std::vector<uint32_t> CompactToSourceVertexIndices;
 };
@@ -126,6 +134,7 @@ public:
     void Clear();
     void ClearDraws();
     std::pair<uint32_t, uint32_t> AddGeometry(const MeshPrototype& prototype);
+    std::pair<uint32_t, uint32_t> AddGeometry(MeshletBuildResult&& buildResult);
     void AddDraw(const MeshPrototype& prototype, const DirectX::XMMATRIX& worldMatrix, uint32_t materialIndex);
     void AddDraw(uint32_t meshletOffset, uint32_t meshletCount, const DirectX::XMMATRIX& worldMatrix, uint32_t materialIndex);
     bool UpdateGeometryVertices(

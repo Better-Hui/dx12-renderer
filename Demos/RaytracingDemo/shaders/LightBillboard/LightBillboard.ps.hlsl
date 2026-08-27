@@ -35,6 +35,11 @@ float4 main(PixelShaderInput IN) : SV_TARGET
         innerAlpha = sunCore;
         shapeAlpha = saturate(max(sunCore, max(axialRays, diagonalRays) * 0.82f));
     }
+    else if (lightType == 3u)
+    {
+        // The spot-light mesh is a world-space cone, so UV masking would incorrectly turn it back into a billboard.
+        shapeAlpha = 1.0f;
+    }
     else
     {
         const float outerAlpha = 1.0f - smoothstep(0.78f, 1.0f, distanceToCenter);

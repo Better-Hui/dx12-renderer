@@ -13,6 +13,9 @@ cbuffer CameraConstants : register(b0, space0)
     uint Camera_SamplesPerPixel;
     uint Camera_DirectionalLightCount;
     uint Camera_PointLightCount;
+//Modify Begin:2026-08-26 by Hui
+    uint Camera_SpotLightCount;
+//Modify End
     uint Camera_SurfaceEmitterCount;
     uint Camera_FrameIndex;
     uint Camera_AccumulationFrameIndex;
@@ -26,7 +29,7 @@ cbuffer CameraConstants : register(b0, space0)
 //Modify Begin:2026-08-05 by Hui
     uint Camera_ReSTIRDIHistoryValid;
 //Modify End
-    uint Camera_Padding0;
+    uint Camera_UseSolidSkyFallback;
     uint Camera_Padding1;
     uint Camera_Padding2;
     SkyLightData Camera_SkyLight;

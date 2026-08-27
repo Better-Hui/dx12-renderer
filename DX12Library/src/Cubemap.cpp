@@ -4,6 +4,7 @@
 #include <d3dx12/d3dx12.h>
 
 #include "CommandList.h"
+#include "CommandListInternalAccess.h"
 
 Cubemap::Cubemap(uint32_t size, DirectX::XMVECTOR position, CommandList& commandList, DXGI_FORMAT backBufferFormat, DXGI_FORMAT depthBufferFormat, D3D12_CLEAR_VALUE clearColor)
     : m_Size(size)
@@ -76,6 +77,21 @@ Cubemap::Cubemap(uint32_t size, DirectX::XMVECTOR position, CommandList& command
 
 void Cubemap::Clear(CommandList& commandList)
 {
+//Modify Begin:2026-08-26 by Hui
+    CommandListInternalAccess::TransitionBarrier(
+        commandList,
+        *m_RenderedCubemap.GetTexture(Color0),
+        D3D12_RESOURCE_STATE_RENDER_TARGET);
+    CommandListInternalAccess::TransitionBarrier(
+        commandList,
+        *m_RenderedCubemap.GetTexture(DepthStencil),
+        D3D12_RESOURCE_STATE_DEPTH_WRITE);
+    CommandListInternalAccess::TransitionBarrier(
+        commandList,
+        *m_FallbackCubemap,
+        D3D12_RESOURCE_STATE_RENDER_TARGET);
+    CommandListInternalAccess::FlushResourceBarriers(commandList);
+//Modify End
     commandList.ClearTexture(*m_RenderedCubemap.GetTexture(Color0), m_ClearColor.Color);
     commandList.ClearDepthStencilTexture(*m_RenderedCubemap.GetTexture(DepthStencil), D3D12_CLEAR_FLAG_DEPTH);
     commandList.ClearTexture(*m_FallbackCubemap, m_ClearColor.Color);

@@ -580,10 +580,34 @@ int Application::Run(std::shared_ptr<Game> pGame)
             continue;
         }
 //Modify End
-        if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
+        while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
         {
             TranslateMessage(&msg);
             DispatchMessage(&msg);
+            if (msg.message == WM_QUIT)
+            {
+                break;
+            }
+        }
+        if (msg.message == WM_QUIT)
+        {
+            break;
+        }
+
+        ++s_FrameCount;
+        for (const auto& windowEntry : gs_Windows)
+        {
+            const WindowPtr& window = windowEntry.second;
+            if (window == nullptr)
+            {
+                continue;
+            }
+
+            window->BeginFrame(s_FrameCount);
+            UpdateEventArgs updateEventArgs(0.0f, 0.0f, s_FrameCount);
+            window->OnUpdate(updateEventArgs);
+            RenderEventArgs renderEventArgs(0.0f, 0.0f, s_FrameCount);
+            window->OnRender(renderEventArgs);
         }
     }
 
@@ -833,15 +857,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
         {
         case WM_PAINT:
             {
-                ++Application::s_FrameCount;
-                pWindow->BeginFrame(Application::s_FrameCount);
-
-                // Delta time will be filled in by the Window.
-                UpdateEventArgs updateEventArgs(0.0f, 0.0f, Application::s_FrameCount);
-                pWindow->OnUpdate(updateEventArgs);
-                RenderEventArgs renderEventArgs(0.0f, 0.0f, Application::s_FrameCount);
-                // Delta time will be filled in by the Window.
-                pWindow->OnRender(renderEventArgs);
+                PAINTSTRUCT paint = {};
+                BeginPaint(hwnd, &paint);
+                EndPaint(hwnd, &paint);
             }
             break;
         case WM_SYSKEYDOWN:

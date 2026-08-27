@@ -35,7 +35,10 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     }
 
     const float3 directionWs = BuildSkyboxDirection(pixel);
-    const float3 skyColor = SkyboxTexture.SampleLevel(g_Common_LinearClampSampler, directionWs, 0.0f).rgb *
+    const float3 environmentRadiance = Camera_UseSolidSkyFallback != 0u
+        ? float3(1.0f, 1.0f, 1.0f)
+        : SkyboxTexture.SampleLevel(g_Common_LinearClampSampler, directionWs, 0.0f).rgb;
+    const float3 skyColor = environmentRadiance *
         Camera_SkyLight.ColorAndIntensity.rgb *
         Camera_SkyLight.ColorAndIntensity.w;
 //Modify Begin:2026-08-23 by Hui

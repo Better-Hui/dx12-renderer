@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-08-25 by Hui
+//Modify Begin:2026-08-26 by Hui
 #include <Framework/Diagnostics/AutomationRunner.h>
 
 #include <cstddef>
@@ -60,6 +60,7 @@ namespace DemoAutomation
         FrameworkDiagnostics::DiagnosticsSession* m_Diagnostics = nullptr;
         std::filesystem::path m_LogPath;
         double m_StepIntervalSeconds = 1.0;
+        double m_StepTimeoutSeconds = 30.0;
         bool m_QuitOnComplete = false;
     };
 }

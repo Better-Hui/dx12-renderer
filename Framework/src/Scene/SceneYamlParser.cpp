@@ -1054,7 +1054,7 @@ void SceneYamlParser::WriteCameraToFile(
 }
 //Modify End
 
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-08-26 by Hui
 #include <Framework/Scene/SceneImporter.h>
 
 #include <DirectXMath.h>
@@ -1870,11 +1870,15 @@ SceneImportResult SceneImporter::ImportFromFile(
     {
         return ImportFbxFromFile(scenePath, options);
     }
+    if (extension == ".xml")
+    {
+        return ImportMitsubaXmlFromFile(scenePath, options);
+    }
     if (extension != ".unity")
     {
         throw std::invalid_argument(
             "Unsupported scene format '" + scenePath.extension().string() +
-            "'. Supported formats are .unity, .json, and .fbx.");
+            "'. Supported formats are .unity, .json, .fbx, and Mitsuba .xml.");
     }
     if (!std::filesystem::exists(scenePath))
     {
@@ -1913,6 +1917,11 @@ void SceneImporter::WriteCameraToSourceFile(
     const std::filesystem::path& scenePath,
     const SceneCamera& camera)
 {
+    if (ToLower(scenePath.extension().string()) != ".unity")
+    {
+        throw std::invalid_argument(
+            "Writing a camera back to source is supported only for Unity .unity scenes. Use Save Scene to write runtime state for other formats.");
+    }
     UnityCameraWriteInfo cameraWriteInfo;
     cameraWriteInfo.GameObjectId = camera.SourceBinding.ObjectId;
     cameraWriteInfo.TransformFileId = camera.SourceBinding.TransformId;

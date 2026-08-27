@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-08-13 by Hui
+//Modify Begin:2026-08-26 by Hui
 #include <DX12Library/StructuredBuffer.h>
 
 #include <Framework/Rendering/Lighting/LightingData.h>
@@ -25,6 +25,7 @@ struct LightingGpuInput
 {
     const std::vector<DirectionalLight>& DirectionalLights;
     const std::vector<PointLight>& PointLights;
+    const std::vector<SpotLight>& SpotLights;
     const std::vector<AreaLightData>& AreaLights;
     const SurfaceEmitterSceneData& MeshSurfaceEmitters;
     bool DirectionalLightsEnabled = true;
@@ -46,6 +47,7 @@ public:
     void SetLightGroupSettings(bool directionalLightsEnabled, bool pointLightsEnabled, bool areaLightsEnabled);
     void UpdateDirectionalLight(const DirectionalLight& light, size_t lightIndex);
     void UpdatePointLight(const PointLight& light, size_t lightIndex, bool updateSamplingDistribution = true);
+    void UpdateSpotLight(const SpotLight& light, size_t lightIndex);
     void UpdateAreaLight(const AreaLightData& light, size_t lightIndex);
 
     void Initialize(CommandList& commandList);
@@ -56,11 +58,15 @@ public:
 
     uint32_t GetDirectionalLightCount() const;
     uint32_t GetPointLightCount() const;
+    uint32_t GetSpotLightCount() const;
     uint32_t GetSurfaceEmitterCount() const;
     size_t GetMeshSurfaceEmitterCount() const;
 
 private:
-    void BuildGpuData(const std::vector<DirectionalLight>& directionalLights, const std::vector<PointLight>& pointLights);
+    void BuildGpuData(
+        const std::vector<DirectionalLight>& directionalLights,
+        const std::vector<PointLight>& pointLights,
+        const std::vector<SpotLight>& spotLights);
     void RebuildSurfaceEmitterGpuData();
     void UpdateAreaLightSurfaceEmitter(size_t lightIndex);
     void RebuildDirectLightSamplingCdf();
@@ -68,12 +74,14 @@ private:
     void MarkAllGpuDataDirty();
     void MarkDirectionalLightsDirty(size_t beginIndex, size_t endIndex, bool updateSamplingDistribution);
     void MarkPointLightsDirty(size_t beginIndex, size_t endIndex, bool updateSamplingDistribution);
+    void MarkSpotLightsDirty(size_t beginIndex, size_t endIndex, bool updateSamplingDistribution);
 
     FrameworkDeviceContext& m_DeviceContext;
     std::vector<AreaLightData> m_AreaLights;
     SurfaceEmitterSceneData m_MeshSurfaceEmitterData;
     std::vector<DirectionalLightData> m_DirectionalLightGpuData;
     std::vector<PointLightData> m_PointLightGpuData;
+    std::vector<SpotLightData> m_SpotLightGpuData;
     std::vector<SurfaceEmitterGeometryData> m_SurfaceEmitterGeometryGpuData;
     std::vector<SurfaceEmitterTriangleData> m_SurfaceEmitterTriangleGpuData;
     std::vector<float> m_SurfaceEmitterTriangleCdfGpuData;
@@ -82,6 +90,7 @@ private:
 
     StructuredBuffer m_DirectionalLightBuffer;
     StructuredBuffer m_PointLightBuffer;
+    StructuredBuffer m_SpotLightBuffer;
     StructuredBuffer m_SurfaceEmitterGeometryBuffer;
     StructuredBuffer m_SurfaceEmitterTriangleBuffer;
     StructuredBuffer m_SurfaceEmitterTriangleCdfBuffer;
@@ -91,6 +100,7 @@ private:
 
     size_t m_DirectionalLightBufferCapacity = 0;
     size_t m_PointLightBufferCapacity = 0;
+    size_t m_SpotLightBufferCapacity = 0;
     size_t m_SurfaceEmitterGeometryBufferCapacity = 0;
     size_t m_SurfaceEmitterTriangleBufferCapacity = 0;
     size_t m_SurfaceEmitterTriangleCdfBufferCapacity = 0;
@@ -101,6 +111,8 @@ private:
     size_t m_DirectionalLightDirtyEnd = 0;
     size_t m_PointLightDirtyBegin = 0;
     size_t m_PointLightDirtyEnd = 0;
+    size_t m_SpotLightDirtyBegin = 0;
+    size_t m_SpotLightDirtyEnd = 0;
     size_t m_SurfaceEmitterGeometryDirtyBegin = 0;
     size_t m_SurfaceEmitterGeometryDirtyEnd = 0;
     size_t m_SurfaceEmitterTriangleDirtyBegin = 0;

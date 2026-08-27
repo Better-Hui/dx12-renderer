@@ -130,7 +130,7 @@ Scene
 
 ### SceneImporter 契约
 
-Demo 使用格式无关的静态入口 `SceneImporter::ImportFromFile()`：`.unity` 进入 Unity YAML parser，`.json` 进入项目场景 parser，`.fbx` 进入 Assimp FBX scene importer。三种格式最终都生成同一份 `Scene`：
+Demo 使用格式无关的静态入口 `SceneImporter::ImportFromFile()`：`.unity` 进入 Unity YAML parser，`.json` 进入项目场景 parser，`.fbx` 进入 Assimp FBX scene importer，受支持的 `.xml` 进入 Mitsuba XML importer。所有格式最终都生成同一份 `Scene`：
 
 ```text
 Scene
@@ -142,13 +142,15 @@ Scene
 
 FBX 外部纹理在成功解析后保留文件路径；嵌入纹理复制到拥有所有权的 `SceneEmbeddedTexture`。Demo resource builder 通过 `TextureLoader` 对两种来源使用同一套 GPU 上传和缓存流程，因此不需要先把 FBX 转成 Unity 场景或项目 JSON。mesh 导入启用 Assimp 的结构校验、三角化、非法数据过滤、四骨骼权重限制和 16 位索引安全的大 mesh 拆分；非法面、索引和骨骼引用在运行时明确报错，而不是依赖只在 Debug 生效的 assert。
 
+Mitsuba XML importer 是有意保持紧凑的兼容路径：会展开场景内 `<default>` 变量，支持 perspective sensor、OBJ shape 及其 `to_world` matrix、rectangle area emitter，以及顶层 `spot` emitter 的 `intensity`、`cutoffAngle`、`beamWidth` 和可选有限 `range`。它会转换到 DirectX 运行时的坐标约定：该反射会先把 Mitsuba sensor 的局部 `+Z` 视线轴映射为渲染器局部 `-Z`，再构造左手相机，以保留原始世界空间观察方向。其有意受限的 PBR 转换会展开 `twosided`、`mask`、`bumpmap`，按 diffuse/plastic/conductor/dielectric 映射金属度和粗糙度启发式，并导入常量 base color 与 `reflectance`、`diffuse_reflectance`、`base_color` 的 bitmap 绑定。它不复现完整 Mitsuba 的 transmission、alpha、bump/normal、spectral IOR 等高级 BSDF 语义。相对 OBJ 与纹理引用均限制在 XML 场景目录内。`Assets/Scenes/CountryKitchen/scene.xml` 是 Demo 的默认启动场景，并覆盖此路径；在 streaming 或 cooked geometry 落地前，其 295 个独立 OBJ 属于较重的启动路径。
+
 ### 已演示的渲染路径
 
 - GBuffer：普通 raster、task/mesh shader，或 compute cull + `ExecuteIndirect`。
 - 直接光：`None`、path tracing 或 inline ray-query ReSTIR DI；间接光：`None`、path tracing 或 inline ray-query ReSTIR GI。
 - shader-table DXR 与 inline ray query 共用同一份 scene geometry、material、bindless texture、light buffer 和 acceleration structure。
 - 无人值守的 `rtas` 场景覆盖基础动态 RTAS 路径；`dynamic-scene` 是当前完整矩阵：task shader 和 compute-indirect Meshlet GBuffer 均会通过图声明更新普通 vertex、compacted Meshlet vertex 与 bounds、transform/instance buffer、dirty BLAS 和既有 TLAS，随后验证 restore frame。自发光目标还会刷新 mesh surface-emitter 数据。runtime skinning output 当前明确不支持，绝不以过期数据静默 fallback。
-- 平行光、点光、矩形面积光与自发光 surface emitter 都通过 GPU buffer 上传。平行光和点光的软阴影使用预编译 shader variant；矩形面积光直接采样发光面。
+- 平行光、点光、Spot Light、矩形面积光与自发光 surface emitter 都通过 GPU buffer 上传。平行光和点光的软阴影使用预编译 shader variant；Spot Light 在直接光采样中计算锥形衰减，矩形面积光直接采样发光面。
 - 可选 NRD/SVGF、TAA、skybox、Framework Raster Bloom、CUDA Bloom、Native DLSS SR/DLAA，以及实验性 Streamline RR/FG 围绕核心光照输出组合。
 
 ReSTIR DI 由 Demo 调用 Framework 的 `ReSTIRDIPass::AddPasses`。Framework 分别注册 `Initial Sampling`、`Temporal Resampling`、`Boiling Filter`、`Spatial Resampling` 和 `Shade`，用 token 与 imported reservoir/history 连接。Demo 只提供 logical scene input 和运行时 resolver，不再调度内部阶段或编码 barrier。
@@ -176,7 +178,7 @@ shader-table DXR 与 Inline 共用 scene/resource model，但当前 ReSTIR DI/GI
 - 平台是 Windows/x64/D3D12，Shader Model 6.8 为基线。
 - Async Compute 只有依赖和硬件允许 overlap 时才可能降低 GPU wall time；额外 fence、cache 与带宽竞争也可能令它变慢。
 - Meshlet 是实验性的 GBuffer backend，不是完整的 visibility、streaming、residency 或 LOD 系统。
-- FBX 场景导入已经进入 Framework `SceneImporter` 契约，但当前只选择一个活动相机并支持实用的 PBR 子集。Spot Light 会保留在 `Scene` 中，而 sample 当前 GPU 光照路径通过点光 fallback 显示；透明、clearcoat、transmission、动画播放和 runtime skinning output 仍需要单独契约。在 skinned 输出能同时驱动 raster、Meshlet 和 BLAS 前，dynamic-scene capability 会明确报告 skinned update 不支持。
+- FBX 场景导入已经进入 Framework `SceneImporter` 契约，但当前只选择一个活动相机并支持实用的 PBR 子集。Spot Light 会经 `Scene`、`LightingGpuResources`、相机计数进入 Inline PT/ReSTIR DI/GI 的直接光采样，不再走点光 fallback；透明、clearcoat、transmission、动画播放和 runtime skinning output 仍需要单独契约。在 skinned 输出能同时驱动 raster、Meshlet 和 BLAS 前，dynamic-scene capability 会明确报告 skinned update 不支持。
 - Framework feature 已可使用 `GpuReadbackBuffer` 和非阻塞 ring-slot `GpuReadbackTexture`；compacted active-pixel 验证仍使用它们。OIDN 在匹配 NVIDIA adapter 上改用 D3D12 shared buffer/fence 与 CUDA `Quality::Fast`，不再把 HDR 图像读回 CPU；仅在 CUDA 初始化或 external-memory import 失败时退回 readback/CPU `Fast`。选中 OIDN 后会自动累计，上传结果后保持静止画面；相机或渲染输入变化会推进 generation 并重新累计。Diagnostics 仍缺少其自有的通用 request API、图像 assertion、DRED attachment、后台写盘、压缩和 retention policy；高事件量 capture 可能很大，应使用 `--max-events` 和 `dropped_event_count` 判断证据完整性。
 - ReSTIR DI/GI、CUDA Bloom、DLSS SR/DLAA、Streamline RR/FG、Unity interop 都是工程实验；用于交付前必须逐硬件完成正确性、画质、稳定性、显存和性能验证。
 

@@ -21,6 +21,14 @@ struct PointLightData
     DirectX::XMFLOAT4 Attenuation = { 1.0f, 0.0f, 0.0f, 0.0f };
 };
 
+struct SpotLightData
+{
+    DirectX::XMFLOAT4 PositionAndRange = { 0.0f, 0.0f, 0.0f, 1.0f };
+    DirectX::XMFLOAT4 DirectionAndCosOuter = { 0.0f, 0.0f, 1.0f, 0.0f };
+    DirectX::XMFLOAT4 ColorAndIntensity = { 1.0f, 1.0f, 1.0f, 1.0f };
+    DirectX::XMFLOAT4 AttenuationAndCosInner = { 1.0f, 0.0f, 0.0f, 1.0f };
+};
+
 struct AreaLightData
 {
     DirectX::XMFLOAT4 PositionAndRange = { 0.0f, 0.0f, 0.0f, 1.0f };

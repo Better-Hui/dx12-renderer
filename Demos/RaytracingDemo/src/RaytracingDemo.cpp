@@ -73,7 +73,7 @@ using RuntimeAutomationMatrixCase = RaytracingDemoAutomation::MatrixCase;
 
 namespace
 {
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-08-26 by Hui
     FrameworkDeviceContext CreateFrameworkDeviceContext(
         Application& application,
         FrameFeatureServices frameFeatureServices)
@@ -405,12 +405,12 @@ namespace
         }
         std::free(scenePath);
 
-        constexpr const char* DefaultSponzaRelativePath =
-            "Assets/Scenes/Sponza.unity";
+        constexpr const char* DefaultCountryKitchenRelativePath =
+            "Assets/Scenes/CountryKitchen/scene.xml";
         std::filesystem::path searchDirectory = std::filesystem::current_path();
         while (!searchDirectory.empty())
         {
-            const std::filesystem::path defaultScene = searchDirectory / DefaultSponzaRelativePath;
+            const std::filesystem::path defaultScene = searchDirectory / DefaultCountryKitchenRelativePath;
             if (std::filesystem::exists(defaultScene))
             {
                 return defaultScene;
@@ -424,7 +424,7 @@ namespace
             searchDirectory = parentDirectory;
         }
 
-        throw std::runtime_error("Default Sponza scene file does not exist. Set RAYTRACING_DEMO_SCENE to a .json, .unity, or .fbx file.");
+        throw std::runtime_error("Default CountryKitchen scene file does not exist. Set RAYTRACING_DEMO_SCENE to a .json, .unity, .fbx, or Mitsuba .xml file.");
     }
 //Modify End
 
@@ -711,9 +711,29 @@ RaytracingDemo::RaytracingDemo(
 
 }
 
-//Modify Begin:2026-08-25 by Hui
+//Modify Begin:2026-08-26 by Hui
 void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::filesystem::path& scenePath)
 {
+    const auto recordStartupCheckpoint = [this](const char* checkpoint)
+    {
+        if (!m_Diagnostics.IsEnabled())
+        {
+            return;
+        }
+
+        const double elapsedMilliseconds = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - m_StartupLoadStartTime).count();
+        m_Diagnostics.Record(
+            "application.startup",
+            "checkpoint",
+            DiagnosticTelemetrySeverity::Info,
+            {
+                { "checkpoint", std::string(checkpoint) },
+                { "elapsed_milliseconds", elapsedMilliseconds },
+            });
+        m_Diagnostics.Flush();
+    };
+
     SceneImportOptions importOptions;
     importOptions.GenerateFallbackCamera = true;
     SceneImportResult sceneImport;
@@ -730,6 +750,7 @@ void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::files
         sceneImport = SceneImporter::ImportFromFile(scenePath, importOptions);
     }
     m_Scene = sceneImport.SceneData;
+    recordStartupCheckpoint("scene_imported");
     std::filesystem::path runtimeStatePath = scenePath;
     runtimeStatePath += ".runtime.json";
     if (std::filesystem::exists(runtimeStatePath))
@@ -742,25 +763,39 @@ void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::files
     {
         throw std::runtime_error("Scene has no supported renderable objects.");
     }
+    recordStartupCheckpoint("scene_resources_loaded");
 
     SceneSkybox sceneSkybox = m_Scene.GetSkybox();
     std::filesystem::path skyboxTexturePath = sceneSkybox.Texture.AssetPath;
-    if (skyboxTexturePath.empty())
+    const bool hasSceneSkyboxTexture =
+        !skyboxTexturePath.empty() && std::filesystem::exists(skyboxTexturePath);
+    const bool hasExplicitSkyRadiance =
+        sceneSkybox.AmbientColorAndIntensity.x > 0.0f ||
+        sceneSkybox.AmbientColorAndIntensity.y > 0.0f ||
+        sceneSkybox.AmbientColorAndIntensity.z > 0.0f;
+    if (!hasExplicitSkyRadiance)
     {
-        skyboxTexturePath = L"Assets/Textures/skybox/skybox.dds";
-        sceneSkybox.Texture.AssetPath = skyboxTexturePath;
-    }
-    if (sceneSkybox.AmbientColorAndIntensity.x <= 0.0f &&
-        sceneSkybox.AmbientColorAndIntensity.y <= 0.0f &&
-        sceneSkybox.AmbientColorAndIntensity.z <= 0.0f)
-    {
-        sceneSkybox.AmbientColorAndIntensity = { 1.0f, 1.0f, 1.0f, std::max(0.001f, sceneSkybox.AmbientColorAndIntensity.w) };
+        if (hasSceneSkyboxTexture)
+        {
+            sceneSkybox.AmbientColorAndIntensity = {
+                1.0f,
+                1.0f,
+                1.0f,
+                std::max(0.001f, sceneSkybox.AmbientColorAndIntensity.w)
+            };
+        }
+        else
+        {
+            // Mitsuba packages often provide area emitters but no environment map. Keep their data intact
+            // while giving the Demo a neutral daylight fallback instead of black environment radiance.
+            sceneSkybox.AmbientColorAndIntensity = { 0.78f, 0.84f, 1.0f, 0.75f };
+        }
     }
     m_Scene.SetSkybox(sceneSkybox);
 
     m_Lights.CreateFromScene(m_Scene);
     bool directionalLightsEnabled = m_Lights.AreDirectionalLightsEnabled();
-    bool pointLightsEnabled = false;
+    bool pointLightsEnabled = m_Lights.ArePointLightsEnabled();
     bool areaLightsEnabled = m_Lights.AreAreaLightsEnabled();
     TryGetEnvironmentBoolean("RAYTRACING_DEMO_DIRECTIONAL_LIGHTS", directionalLightsEnabled);
     TryGetEnvironmentBoolean("RAYTRACING_DEMO_POINT_LIGHTS", pointLightsEnabled);
@@ -775,7 +810,8 @@ void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::files
         m_Lights.SetSkyLight(skyLight);
     }
     m_Lights.SetEmissiveMeshSurfaceEmitters(m_SceneResources.CollectEmissiveMeshSurfaceEmitters());
-    m_SkyboxEnabled = !skyboxTexturePath.empty() && std::filesystem::exists(skyboxTexturePath);
+    recordStartupCheckpoint("scene_lighting_initialized");
+    m_SkyboxEnabled = true;
     m_HasSceneCamera = m_Scene.HasCamera();
 
     ApplySceneCamera(GetSceneCamera(), sceneCamera, m_Width, m_Height);
@@ -794,7 +830,8 @@ void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::files
     m_HasInitialSceneCameraState = true;
 
     m_SkyboxTexture.reset();
-    if (m_SkyboxEnabled)
+    m_EnvironmentFallbackCubemap.reset();
+    if (m_SkyboxEnabled && hasSceneSkyboxTexture)
     {
         m_SkyboxTexture = std::make_shared<Texture>(
             TextureUsageType::Other,
@@ -803,7 +840,42 @@ void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::files
         TextureLoader(commandList.GetDeviceContext()).Load(
             commandList, *m_SkyboxTexture, skyboxTexturePath, TextureUsageType::Albedo);
     }
+    else
+    {
+        D3D12_CLEAR_VALUE clearValue = {};
+        clearValue.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+        clearValue.Color[0] = 1.0f;
+        clearValue.Color[1] = 1.0f;
+        clearValue.Color[2] = 1.0f;
+        clearValue.Color[3] = 1.0f;
+        m_EnvironmentFallbackCubemap = std::make_unique<Cubemap>(
+            1u,
+            XMVectorZero(),
+            commandList,
+            clearValue.Format,
+            DXGI_FORMAT_D32_FLOAT,
+            clearValue);
+    }
+    recordStartupCheckpoint("scene_skybox_loaded");
 }
+//Modify End
+
+//Modify Begin:2026-08-26 by Hui
+const std::shared_ptr<Texture>& RaytracingDemo::GetRayTracingEnvironmentTexture() const
+{
+    if (m_SkyboxTexture != nullptr)
+    {
+        return m_SkyboxTexture;
+    }
+
+    if (m_EnvironmentFallbackCubemap == nullptr)
+    {
+        throw std::logic_error("Ray-tracing environment texture has not been initialized.");
+    }
+
+    return m_EnvironmentFallbackCubemap->GetFallbackTexture();
+}
+//Modify End
 
 void RaytracingDemo::ResetCameraToInitialSceneState()
 {
@@ -1190,11 +1262,13 @@ void RaytracingDemo::InitializeDiagnostics()
     m_Diagnostics.AddMetadata("initial_height", std::to_string(m_Height));
     m_Diagnostics.AddMetadata("executable_path", GetExecutablePath());
     m_Diagnostics.AddMetadata("command_line", GetCommandLineA() != nullptr ? GetCommandLineA() : "");
+//Modify Begin:2026-08-26 by Hui
     constexpr const char* reproductionEnvironment[] = {
         "RAYTRACING_DEMO_AUTOTEST",
         "RAYTRACING_DEMO_AUTOTEST_START_CASE",
         "RAYTRACING_DEMO_AUTOTEST_MAX_CASES",
         "RAYTRACING_DEMO_AUTOTEST_STEP_MS",
+        "RAYTRACING_DEMO_AUTOTEST_TIMEOUT_SECONDS",
         "RAYTRACING_DEMO_SCENE",
         "RAYTRACING_DEMO_UNITY_SCENE",
         "RAYTRACING_DEMO_MODE",
@@ -1216,6 +1290,7 @@ void RaytracingDemo::InitializeDiagnostics()
         "RAYTRACING_DEMO_MESHLET_DEBUG",
         "RAYTRACING_DEMO_MESHLET_BACKEND",
     };
+//Modify End
     for (const char* variableName : reproductionEnvironment)
     {
         const std::string value = GetEnvironmentValue(variableName);
@@ -1819,13 +1894,15 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         ResetAccumulation(false, true);
         break;
     }
+//Modify Begin:2026-08-26 by Hui
     case RuntimeAutomationAction::CaptureScreenshot:
-        if (value > static_cast<uint32_t>(RaytracingDemoAutomation::ScreenshotCapture::ReSTIRGI))
+        if (value > static_cast<uint32_t>(RaytracingDemoAutomation::ScreenshotCapture::ReSTIRDIAndGI))
         {
             throw std::out_of_range("Runtime automation screenshot capture index is out of range.");
         }
         m_PendingAutomationScreenshot = value;
         break;
+//Modify End
     case RuntimeAutomationAction::MatrixCase:
         ApplyRuntimeAutomationMatrixCase(value);
         break;
@@ -1844,18 +1921,22 @@ void RaytracingDemo::CapturePendingAutomationScreenshot(const RenderGraph::Rende
     }
 
     const uint32_t captureIndex = m_PendingAutomationScreenshot.value();
-    const std::array<std::wstring, 4> fileNames = {
+//Modify Begin:2026-08-26 by Hui
+    const std::array<std::wstring, 5> fileNames = {
         L"pt-direct.png",
         L"pt-indirect.png",
         L"restir-di.png",
         L"restir-gi.png",
+        L"restir-di-gi.png",
     };
-    const std::array<std::string, 4> captureNames = {
+    const std::array<std::string, 5> captureNames = {
         "PT Direct",
         "PT Indirect",
         "ReSTIR DI",
         "ReSTIR GI",
+        "ReSTIR DI + GI",
     };
+//Modify End
 
     RenderGraph::RenderGraphRoot& renderGraph = m_RenderPipeline.GetRenderGraph();
     const std::shared_ptr<Texture>& presentationTexture =
@@ -2010,8 +2091,6 @@ void RaytracingDemo::CapturePendingAutomationScreenshot(const RenderGraph::Rende
     m_PendingAutomationScreenshot.reset();
 }
 
-//Modify End
-
 //Modify Begin:2026-08-23 by Hui
 bool RaytracingDemo::AdvanceStartupLoad()
 //Modify End
@@ -2030,6 +2109,9 @@ try
         const auto commandList = commandQueue->GetCommandList();
         m_ImGui = std::make_unique<ImGuiImpl>(m_FrameworkDeviceContext, *commandList, *PWindow);
         m_LightBillboardMesh = Mesh::CreateVerticalQuad(*commandList);
+//Modify Begin:2026-08-26 by Hui
+        m_SpotLightGizmoMesh = Mesh::CreateCone(*commandList, 1.0f, 1.0f, 32);
+//Modify End
         m_DisplayBlitMesh = Mesh::CreateBlitTriangle(*commandList);
         commandQueue->ExecuteCommandList(commandList);
 
@@ -2214,6 +2296,7 @@ void RaytracingDemo::SetStartupLoadStage(
                 { "progress", static_cast<double>(m_StartupLoadProgress) },
                 { "elapsed_milliseconds", elapsedMilliseconds },
             });
+        m_Diagnostics.Flush();
     }
 }
 
@@ -2286,6 +2369,9 @@ void RaytracingDemo::UnloadContent()
     m_ShaderPipelineBootstrap.Reset();
 //Modify End
     m_LightBillboardMesh.reset();
+//Modify Begin:2026-08-26 by Hui
+    m_SpotLightGizmoMesh.reset();
+//Modify End
 //Modify Begin:2026-08-19 by Hui
     m_DisplayBlitMesh.reset();
 //Modify End
@@ -2295,6 +2381,9 @@ void RaytracingDemo::UnloadContent()
     m_Bloom.Shutdown();
 //Modify End
     m_SkyboxTexture.reset();
+//Modify Begin:2026-08-26 by Hui
+    m_EnvironmentFallbackCubemap.reset();
+//Modify End
 //Modify Begin:2026-08-19 by Hui
     m_PathTracingPipelines.Reset();
     m_ActivePixels.Reset();
@@ -2498,7 +2587,7 @@ void RaytracingDemo::BindRayTracingShaderResources()
         m_SceneResources.GetRayTracingAccelerationStructure(),
         m_SceneResources,
         m_Lights,
-        m_SkyboxTexture);
+        GetRayTracingEnvironmentTexture());
 //Modify End
 }
 
@@ -2652,7 +2741,7 @@ void RaytracingDemo::SaveCurrentScene()
 }
 //Modify End
 
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-26 by Hui
 RaytracingDemoPassResources RaytracingDemo::CreatePassResources()
 {
     return {
@@ -2679,7 +2768,8 @@ RaytracingDemoPassResources RaytracingDemo::CreatePassResources()
         m_ShaderPipelineBootstrap.GetSkyboxComputeShader(),
         m_ShaderPipelineBootstrap.GetSkyboxEquirectangularComputeShader(),
         m_ShaderPipelineBootstrap.GetSkyboxCubemapStripComputeShader(),
-        m_SkyboxTexture,
+        GetRayTracingEnvironmentTexture(),
+        m_SkyboxTexture == nullptr,
         m_DisplayBlitMesh,
         GetSceneCamera(),
         m_FrameworkDeviceContext.GetDevice(),

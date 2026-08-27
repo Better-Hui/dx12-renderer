@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-08-26 by Hui
 #include <Framework/Scene/SceneImporter.h>
 #include <Framework/Geometry/Mesh.h>
 #include <Framework/Geometry/ModelLoader.h>
@@ -30,13 +30,18 @@ namespace
     {
         std::cout << value.x << ", " << value.y << ", " << value.z << ", " << value.w;
     }
+
+    void PrintFloat3(const DirectX::XMFLOAT3& value)
+    {
+        std::cout << value.x << ", " << value.y << ", " << value.z;
+    }
 }
 
 int main(int argc, char** argv)
 {
     if (argc < 2)
     {
-        std::cerr << "Usage: UnitySceneDump <scene.{unity,json,fbx}> [--allow-missing-camera]\n";
+        std::cerr << "Usage: UnitySceneDump <scene.{unity,json,fbx,xml}> [--allow-missing-camera]\n";
         return 1;
     }
 
@@ -61,6 +66,23 @@ int main(int argc, char** argv)
             << " near=" << scene.GetCamera().NearClipPlane
             << " far=" << scene.GetCamera().FarClipPlane
             << " node=" << scene.GetCamera().SourceBinding.NodeIndex << "\n";
+        if (scene.HasCamera() && scene.GetCamera().RuntimeCamera != nullptr)
+        {
+            const std::shared_ptr<Camera>& camera = scene.GetCamera().RuntimeCamera;
+            DirectX::XMFLOAT3 position{};
+            DirectX::XMFLOAT3 forward{};
+            DirectX::XMStoreFloat3(&position, camera->GetTranslation());
+            DirectX::XMStoreFloat3(
+                &forward,
+                DirectX::XMVector3Normalize(DirectX::XMVector3Rotate(
+                    DirectX::XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f),
+                    camera->GetRotation())));
+            std::cout << "CameraPose: position=(";
+            PrintFloat3(position);
+            std::cout << ") forward=(";
+            PrintFloat3(forward);
+            std::cout << ")\n";
+        }
 
         std::cout << "Nodes: " << scene.GetNodes().size() << "\n";
         for (size_t nodeIndex = 0; nodeIndex < scene.GetNodes().size(); ++nodeIndex)

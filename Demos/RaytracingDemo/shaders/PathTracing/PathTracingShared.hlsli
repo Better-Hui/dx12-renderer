@@ -345,6 +345,52 @@ float3 EvaluatePointLight(
     return EvaluateMaterialLighting(surface, viewDirectionWs, lightDirection, radiance);
 #endif
 }
+
+float EvaluateSpotLightConeAttenuation(const SpotLightData light, const float3 surfaceToLightDirection)
+{
+    const float coneCosine = dot(-surfaceToLightDirection, normalize(light.DirectionAndCosOuter.xyz));
+    const float transition = saturate((coneCosine - light.DirectionAndCosOuter.w) /
+        max(1.0e-4f, light.AttenuationAndCosInner.w - light.DirectionAndCosOuter.w));
+    return transition * transition * (3.0f - 2.0f * transition);
+}
+
+float3 EvaluateSpotLight(
+    SpotLightData light,
+    SurfaceData surface,
+    float3 viewDirectionWs,
+    inout uint rngState,
+    out float hitDistance)
+{
+    hitDistance = 0.0f;
+    const float3 toLight = light.PositionAndRange.xyz - surface.PositionWs;
+    const float distanceToLight = length(toLight);
+    if (distanceToLight <= 0.001f || distanceToLight > light.PositionAndRange.w)
+    {
+        return 0.0f;
+    }
+
+    const float3 lightDirection = toLight / distanceToLight;
+    const float coneAttenuation = EvaluateSpotLightConeAttenuation(light, lightDirection);
+    const float nDotL = saturate(dot(surface.NormalWs, lightDirection));
+    if (coneAttenuation <= 0.0f || nDotL <= 0.0f)
+    {
+        return 0.0f;
+    }
+
+    const float3 rayOrigin = OffsetRayOrigin(surface.PositionWs, surface.PositionError, surface.NormalWs, lightDirection);
+    if (!IsVisibleAlongRay(rayOrigin, lightDirection, distanceToLight))
+    {
+        return 0.0f;
+    }
+
+    hitDistance = distanceToLight;
+    const float3 attenuationTerms = light.AttenuationAndCosInner.xyz;
+    const float attenuation = rcp(max(
+        0.001f,
+        attenuationTerms.x + attenuationTerms.y * distanceToLight + attenuationTerms.z * distanceToLight * distanceToLight));
+    const float3 radiance = light.ColorAndIntensity.rgb * light.ColorAndIntensity.w * attenuation * coneAttenuation;
+    return EvaluateMaterialLighting(surface, viewDirectionWs, lightDirection, radiance);
+}
 //Modify End
 
 //Modify Begin:2026-08-06 by Hui
@@ -514,6 +560,7 @@ bool SampleDirectLightIndex(
     const uint totalLightCount =
         Camera_DirectionalLightCount +
         Camera_PointLightCount +
+        Camera_SpotLightCount +
         Camera_SurfaceEmitterCount;
     if (totalLightCount == 0u || DirectLightCdf[totalLightCount - 1u] <= 0.0f)
     {
@@ -584,6 +631,17 @@ float3 EvaluateDirectLighting(
     }
 
     lightIndex -= Camera_PointLightCount;
+    if (lightIndex < Camera_SpotLightCount)
+    {
+        return EvaluateSpotLight(
+            SpotLights[lightIndex],
+            surface,
+            viewDirectionWs,
+            rngState,
+            nrdDirectHitDistance) * inverseSourcePdf;
+    }
+
+    lightIndex -= Camera_SpotLightCount;
     return EvaluateSurfaceEmitter(
         lightIndex,
         surface,
@@ -615,7 +673,7 @@ struct PathTracingDirectLightSample
 
 uint GetReSTIRDILightCount()
 {
-    return Camera_DirectionalLightCount + Camera_PointLightCount + Camera_SurfaceEmitterCount;
+    return Camera_DirectionalLightCount + Camera_PointLightCount + Camera_SpotLightCount + Camera_SurfaceEmitterCount;
 }
 
 bool SamplePathTracingDirectLightIndex(
@@ -709,6 +767,36 @@ PathTracingDirectLightSample SamplePathTracingDirectLight(
     }
 
     index -= Camera_PointLightCount;
+    if (index < Camera_SpotLightCount)
+    {
+        const SpotLightData light = SpotLights[index];
+        const float3 toLight = light.PositionAndRange.xyz - surface.PositionWs;
+        const float distanceToLight = length(toLight);
+        if (distanceToLight <= 0.001f || distanceToLight > light.PositionAndRange.w)
+        {
+            return sample;
+        }
+
+        sample.DirectionWs = toLight / distanceToLight;
+        const float coneAttenuation = EvaluateSpotLightConeAttenuation(light, sample.DirectionWs);
+        if (coneAttenuation <= 0.0f)
+        {
+            return sample;
+        }
+
+        sample.Distance = distanceToLight;
+        const float3 attenuationTerms = light.AttenuationAndCosInner.xyz;
+        const float attenuation = rcp(max(
+            0.001f,
+            attenuationTerms.x + attenuationTerms.y * distanceToLight + attenuationTerms.z * distanceToLight * distanceToLight));
+        sample.Radiance = light.ColorAndIntensity.rgb * light.ColorAndIntensity.w * attenuation * coneAttenuation;
+        sample.UnshadowedContribution = EvaluateMaterialLighting(surface, sample.DirectionWs, sample.Radiance);
+        sample.TransportValid = MaxComponent(sample.Radiance) > 0.0f;
+        sample.Valid = MaxComponent(sample.UnshadowedContribution) > 0.0f;
+        return sample;
+    }
+
+    index -= Camera_SpotLightCount;
     if (index >= Camera_SurfaceEmitterCount)
     {
         return sample;
