@@ -511,6 +511,7 @@ RaytracingDemo::RaytracingDemo(
     m_CameraController.Pitch = XMConvertToDegrees(std::asin(std::clamp(XMVectorGetY(initialForward), -1.0f, 1.0f)));
     GetSceneCamera().SetProjection(m_CameraFov, static_cast<float>(m_Width) / static_cast<float>(m_Height), 0.1f, 1000.0f);
 
+    m_Hdr10OutputRequested = graphicsSettings.Hdr10Output;
     m_DLSS.SetMode(DLSSMode::Quality);
     LoadStartupConfiguration();
 
@@ -574,6 +575,7 @@ RaytracingDemo::RaytracingDemo(
     TryGetEnvironmentLightingTechnique("RAYTRACING_DEMO_DIRECT_LIGHTING", m_DirectLightingTechnique);
     TryGetEnvironmentLightingTechnique("RAYTRACING_DEMO_INDIRECT_LIGHTING", m_IndirectLightingTechnique);
     TryGetEnvironmentBoolean("RAYTRACING_DEMO_ACCUMULATION", m_AccumulationEnabled);
+    TryGetEnvironmentBoolean("RAYTRACING_DEMO_HDR10", m_Hdr10OutputRequested);
 
     ReSTIRGISettings restirGISettings = m_IndirectLightingReSTIRGI.GetSettings();
     bool restirGISettingsOverridden = false;
@@ -1001,6 +1003,12 @@ void RaytracingDemo::LoadStartupConfiguration()
         stringValue = ToLower(stringValue);
         m_MaterialShadingModel = ParseMaterialShadingModel(stringValue.c_str());
     }
+//Modify Begin:2026-08-28 by Hui
+    if (configuration.TryGetBoolean("Display", "HDR10", boolValue))
+    {
+        m_Hdr10OutputRequested = boolValue;
+    }
+//Modify End
 
     if (configuration.TryGetString("Denoiser", "Algorithm", stringValue))
     {
@@ -1260,7 +1268,22 @@ void RaytracingDemo::InitializeDiagnostics()
     m_Diagnostics.AddMetadata("initial_height", std::to_string(m_Height));
     m_Diagnostics.AddMetadata("executable_path", GetExecutablePath());
     m_Diagnostics.AddMetadata("command_line", GetCommandLineA() != nullptr ? GetCommandLineA() : "");
-//Modify Begin:2026-08-26 by Hui
+//Modify Begin:2026-08-28 by Hui
+    const Hdr10OutputCapabilities& hdr10Capabilities = PWindow->GetHdr10OutputCapabilities();
+    m_Diagnostics.AddMetadata("presentation.hdr10_active", m_Hdr10OutputEnabled ? "true" : "false");
+    m_Diagnostics.AddMetadata("presentation.hdr10_supported", hdr10Capabilities.IsSupported ? "true" : "false");
+    m_Diagnostics.RecordAssertion(
+        "presentation_hdr10_output",
+        FrameworkDiagnostics::AssertionResult::Passed,
+        m_Hdr10PresentationStatus,
+        {
+            { "requested", static_cast<uint64_t>(m_Hdr10OutputRequested) },
+            { "active", static_cast<uint64_t>(m_Hdr10OutputEnabled) },
+            { "supported", static_cast<uint64_t>(hdr10Capabilities.IsSupported) },
+            { "peak_nits", static_cast<double>(m_Hdr10PeakNits) },
+        });
+//Modify End
+//Modify Begin:2026-08-28 by Hui
     constexpr const char* reproductionEnvironment[] = {
         "RAYTRACING_DEMO_AUTOTEST",
         "RAYTRACING_DEMO_AUTOTEST_START_CASE",
@@ -1281,6 +1304,7 @@ void RaytracingDemo::InitializeDiagnostics()
         "RAYTRACING_DEMO_DLSS",
         "RAYTRACING_DEMO_DLSS_RR",
         "RAYTRACING_DEMO_DLSS_FRAME_GENERATION",
+        "RAYTRACING_DEMO_HDR10",
         "RAYTRACING_DEMO_ASYNC_COMPUTE",
         "RAYTRACING_DEMO_PARALLEL_DIRECT_RECORDING",
         "RAYTRACING_DEMO_BLOOM",
@@ -2119,6 +2143,10 @@ catch (...)
 //Modify Begin:2026-08-23 by Hui
 bool RaytracingDemo::LoadContent()
 {
+    if (m_StartupLoadStage == StartupLoadStage::Bootstrap)
+    {
+        ApplyHdr10Output(m_Hdr10OutputRequested);
+    }
     return AdvanceStartupLoad();
 }
 
@@ -2465,6 +2493,73 @@ RaytracingDemo::PipelineConstants RaytracingDemo::BuildPipelineConstants() const
     return pipeline;
 }
 
+//Modify Begin:2026-08-28 by Hui
+bool RaytracingDemo::ApplyHdr10Output(const bool enabled)
+{
+    if (PWindow == nullptr)
+    {
+        m_Hdr10OutputRequested = false;
+        m_Hdr10OutputEnabled = false;
+        m_Hdr10PresentationStatus = "HDR10 presentation requires an initialized window.";
+        return false;
+    }
+    if (enabled && m_DLSS.IsFrameGenerationEnabled())
+    {
+        m_Hdr10OutputRequested = false;
+        m_Hdr10PresentationStatus =
+            "HDR10 is unavailable while DLSS Frame Generation owns the presentation path.";
+        return false;
+    }
+
+    const bool configured = GetApplication().SetHdr10Output(*PWindow, enabled);
+    m_Hdr10OutputEnabled = configured && PWindow->IsHdr10OutputEnabled();
+    m_Hdr10OutputRequested = enabled;
+    const Hdr10OutputCapabilities& capabilities = PWindow->GetHdr10OutputCapabilities();
+    m_Hdr10PeakNits = m_Hdr10OutputEnabled
+        ? std::clamp(capabilities.MaxLuminanceNits, 200.0f, 10000.0f)
+        : 1000.0f;
+    m_Hdr10PresentationStatus = m_Hdr10OutputEnabled
+        ? "HDR10/PQ active."
+        : enabled
+            ? "HDR10 unavailable on the current output; SDR fallback remains active."
+            : "SDR output active.";
+
+    AutoExposure::Settings exposureSettings = m_AutoExposure.GetSettings();
+    exposureSettings.Output = m_Hdr10OutputEnabled
+        ? AutoExposure::OutputMode::HDR10
+        : AutoExposure::OutputMode::SDR;
+    m_AutoExposure.SetSettings(exposureSettings);
+
+    m_RenderPipeline.Reset();
+    m_RenderGraphTimingHistory.Clear();
+    ResetAccumulation();
+
+    if (m_ImGui != nullptr)
+    {
+        m_ImGui.reset();
+        const auto directQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
+        const auto commandList = directQueue->GetCommandList();
+        m_ImGui = std::make_unique<ImGuiImpl>(m_FrameworkDeviceContext, *commandList, *PWindow);
+        directQueue->ExecuteCommandList(commandList);
+    }
+
+    if (m_Diagnostics.IsEnabled())
+    {
+        m_Diagnostics.Record(
+            "presentation",
+            "hdr10_output",
+            DiagnosticTelemetrySeverity::Info,
+            {
+                { "requested", static_cast<uint64_t>(enabled) },
+                { "active", static_cast<uint64_t>(m_Hdr10OutputEnabled) },
+                { "supported", static_cast<uint64_t>(capabilities.IsSupported) },
+                { "peak_nits", static_cast<double>(m_Hdr10PeakNits) },
+            });
+    }
+    return m_Hdr10OutputEnabled == enabled;
+}
+//Modify End
+
 //Modify Begin:2026-08-19 by Hui
 void RaytracingDemo::RebuildRenderGraph()
 {
@@ -2646,7 +2741,7 @@ RaytracingDemoPassConfig RaytracingDemo::CreatePassConfig() const
 }
 //Modify End
 
-//Modify Begin:2026-08-25 by Hui
+//Modify Begin:2026-08-28 by Hui
 void RaytracingDemo::UpdateRenderGraphFrameState()
 {
     RaytracingDemoFrameState& state = *m_RenderGraphFrameState;
@@ -2679,7 +2774,8 @@ void RaytracingDemo::UpdateRenderGraphFrameState()
     const DLSSOptimalSettings dlssSettings = m_DLSS.GetOptimalSettings(displayWidth, displayHeight);
     state.DLSSEnabled = m_DLSS.IsEnabled();
     state.RayReconstructionEnabled = state.DLSSEnabled && m_DLSS.IsRayReconstructionEnabled();
-    state.FrameGenerationEnabled = m_DLSS.IsFrameGenerationEnabled();
+    state.FrameGenerationEnabled = !m_Hdr10OutputEnabled && m_DLSS.IsFrameGenerationEnabled();
+    state.Hdr10OutputEnabled = m_Hdr10OutputEnabled;
     state.DlssMode = m_DLSS.GetMode();
     state.Width = dlssSettings.RenderWidth;
     state.Height = dlssSettings.RenderHeight;
@@ -2738,6 +2834,13 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
 //Modify End
 
 //Modify Begin:2026-08-28 by Hui
+    if (m_PendingHdr10OutputRequest.has_value())
+    {
+        const bool requestedHdr10Output = m_PendingHdr10OutputRequest.value();
+        m_PendingHdr10OutputRequest.reset();
+        ApplyHdr10Output(requestedHdr10Output);
+    }
+
     const auto directCommandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
     const auto asyncComputeCommandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE);
     const auto copyCommandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COPY);
@@ -2842,7 +2945,7 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
         throw;
     }
 
-    if (m_DLSS.IsFrameGenerationEnabled())
+    if (!m_Hdr10OutputEnabled && m_DLSS.IsFrameGenerationEnabled())
     {
         m_DLSS.BeginFrameGeneration(m_FrameIndex);
     }

@@ -772,7 +772,7 @@ void RaytracingDemo::OnImGui()
     }
 //Modify End
 
-//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-08-28 by Hui
     if (ImGui::CollapsingHeader("Upscaling"))
     {
         const char* dlssModeNames[] = { "Off", "DLAA", "Quality", "Balanced", "Performance", "Ultra Performance" };
@@ -806,7 +806,7 @@ void RaytracingDemo::OnImGui()
                         : "DLSS Ray Reconstruction requires restart with --streamline-interposer.");
             }
 
-            if (m_DLSS.IsFrameGenerationSupported())
+            if (m_DLSS.IsFrameGenerationSupported() && !m_Hdr10OutputEnabled)
             {
                 bool frameGenerationEnabled = m_DLSS.IsFrameGenerationEnabled();
                 if (ImGui::Checkbox("DLSS Frame Generation", &frameGenerationEnabled))
@@ -814,6 +814,11 @@ void RaytracingDemo::OnImGui()
                     m_DLSS.SetFrameGenerationEnabled(frameGenerationEnabled);
                     ResetAccumulation();
                 }
+            }
+            else if (m_Hdr10OutputEnabled)
+            {
+                ImGui::TextDisabled(
+                    "DLSS Frame Generation is disabled while the native HDR10 presentation path is active.");
             }
             else
             {
@@ -839,7 +844,7 @@ void RaytracingDemo::OnImGui()
     }
 //Modify End
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-08-28 by Hui
     if (ImGui::CollapsingHeader("Post-Processing"))
     {
     if (m_Denoisers.DrawImGui())
@@ -859,6 +864,29 @@ void RaytracingDemo::OnImGui()
 //Modify Begin:2026-08-23 by Hui
     DrawAutoExposureControls(m_AutoExposure);
 //Modify End
+    if (PWindow != nullptr)
+    {
+        const Hdr10OutputCapabilities& capabilities = PWindow->GetHdr10OutputCapabilities();
+        const bool frameGenerationBlocksHdr10 = m_DLSS.IsFrameGenerationEnabled();
+        bool requestedHdr10Output = m_Hdr10OutputEnabled;
+        ImGui::SeparatorText("Display Output");
+        ImGui::Text(
+            "HDR10 capability: %s (peak %.0f nits, full frame %.0f nits)",
+            capabilities.IsSupported ? "available" : "unavailable",
+            capabilities.MaxLuminanceNits,
+            capabilities.MaxFullFrameLuminanceNits);
+        ImGui::BeginDisabled(!capabilities.IsSupported || frameGenerationBlocksHdr10);
+        if (ImGui::Checkbox("Use HDR10 / ST.2084 (PQ)", &requestedHdr10Output))
+        {
+            m_PendingHdr10OutputRequest = requestedHdr10Output;
+        }
+        ImGui::EndDisabled();
+        if (frameGenerationBlocksHdr10)
+        {
+            ImGui::TextDisabled("Disable DLSS Frame Generation before enabling HDR10.");
+        }
+        ImGui::TextDisabled("%s", m_Hdr10PresentationStatus.c_str());
+    }
     }
 //Modify End
 

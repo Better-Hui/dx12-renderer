@@ -29,6 +29,9 @@ namespace RaytracingDemoRenderGraph
     constexpr DXGI_FORMAT SCENE_COLOR_FORMAT = DXGI_FORMAT_R32G32B32A32_FLOAT;
 //Modify End
     constexpr DXGI_FORMAT OUTPUT_FORMAT = DXGI_FORMAT_R8G8B8A8_UNORM;
+//Modify Begin:2026-08-28 by Hui
+    constexpr DXGI_FORMAT HDR10_LINEAR_OUTPUT_FORMAT = DXGI_FORMAT_R16G16B16A16_FLOAT;
+//Modify End
 //Modify Begin:2026-08-07 by Hui
     constexpr DXGI_FORMAT DLSS_NORMAL_ROUGHNESS_FORMAT = DXGI_FORMAT_R16G16B16A16_FLOAT;
 //Modify End
@@ -149,7 +152,8 @@ namespace RaytracingDemoRenderGraph
         bool includeFrameGeneration,
         bool includeRayReconstruction,
         bool includeFrameworkBloom,
-        bool includeCopyQueueValidation);
+        bool includeCopyQueueValidation,
+        bool hdr10Output);
 //Modify End
     std::vector<RenderGraph::BufferDescription> CreateBufferDescriptions(bool includeCompactedPathTracing);
 //Modify Begin:2026-08-07 by Hui

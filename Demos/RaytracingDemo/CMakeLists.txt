@@ -122,6 +122,7 @@ set(SHADER_FILES_PIXEL
         shaders/GBuffer/GBuffer.ps.hlsl
         shaders/GBuffer/GBuffer.meshletindirect.ps.hlsl
         shaders/PostProcessing/DisplayComposite.ps.hlsl
+        shaders/PostProcessing/Hdr10Presentation.ps.hlsl
         shaders/LightBillboard/LightBillboard.ps.hlsl
         shaders/Skybox/Skybox.ps.hlsl
         )

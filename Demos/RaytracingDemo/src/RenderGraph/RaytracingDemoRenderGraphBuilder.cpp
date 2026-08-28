@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-08-28 by Hui
 #include <RenderGraph/RaytracingDemoRenderGraphBuilder.h>
 
 #include <RenderGraph/RaytracingDemoGraphResources.h>
@@ -235,7 +235,8 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
             frameState.FrameGenerationEnabled,
             frameState.DLSSEnabled && frameState.RayReconstructionEnabled,
             useFrameworkRasterBloom,
-            frameState.CopyQueueValidationEnabled);
+            frameState.CopyQueueValidationEnabled,
+            frameState.Hdr10OutputEnabled);
     std::vector<RenderGraph::TextureDescription> frameworkTextureDescriptions =
         renderGraphBuilder.ReleaseTextureDescriptions();
     textureDescriptions.insert(

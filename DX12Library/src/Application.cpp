@@ -726,6 +726,35 @@ bool Application::ReconfigurePresentation(const std::function<bool()>& configure
     }
 }
 
+//Modify Begin:2026-08-28 by Hui
+bool Application::SetHdr10Output(Window& window, const bool enabled)
+{
+    if (window.IsHdr10OutputEnabled() == enabled)
+    {
+        return true;
+    }
+    if (!window.PrepareHdr10Output(enabled))
+    {
+        return false;
+    }
+
+    Flush();
+    window.ReleaseSwapChainResources();
+    try
+    {
+        window.RecreateSwapChain();
+    }
+    catch (...)
+    {
+        window.PrepareHdr10Output(false);
+        window.RecreateSwapChain();
+        return false;
+    }
+
+    return window.IsHdr10OutputEnabled() == enabled;
+}
+//Modify End
+
 //Modify Begin:2026-07-28 by Hui
 bool Application::UsesExternalDevice() const
 {

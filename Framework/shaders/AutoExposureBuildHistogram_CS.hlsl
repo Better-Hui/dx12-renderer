@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-23 by Hui
+//Modify Begin:2026-08-28 by Hui
 Texture2D<float4> SourceColor;
 RWByteAddressBuffer Histogram;
 
@@ -14,6 +14,8 @@ cbuffer AutoExposureConstants
     float Tau;
     float ExposureScale;
     uint ExposureEnabled;
+    uint OutputMode;
+    uint Padding;
 };
 
 static const uint HistogramBinCount = 256u;

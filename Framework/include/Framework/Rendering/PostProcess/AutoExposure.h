@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-08-28 by Hui
 #pragma once
 
 #include <cstdint>
@@ -23,12 +23,19 @@ namespace RenderGraph
 class AutoExposure final
 {
 public:
+    enum class OutputMode : uint32_t
+    {
+        SDR = 0u,
+        HDR10 = 1u,
+    };
+
     struct Settings
     {
         bool Enabled = true;
         float Tau = 1.1f;
         float MinLogLuminance = -10.0f;
         float MaxLogLuminance = 2.0f;
+        OutputMode Output = OutputMode::SDR;
     };
 
     explicit AutoExposure(FrameworkDeviceContext& deviceContext);

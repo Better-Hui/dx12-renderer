@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-08-28 by Hui
 #include <RenderGraph/RaytracingDemoRenderPipelineController.h>
 
 #include <DX12Library/Helpers.h>
@@ -20,6 +20,7 @@ RaytracingDemoRenderPipelineConfiguration RaytracingDemoRenderPipelineController
             .DLSSEnabled = frameState.DLSSEnabled,
             .RayReconstructionEnabled = frameState.RayReconstructionEnabled,
             .FrameGenerationEnabled = frameState.FrameGenerationEnabled,
+            .Hdr10OutputEnabled = frameState.Hdr10OutputEnabled,
             .AsyncComputeEnabled = frameState.AsyncComputeEnabled,
 //Modify Begin:2026-08-25 by Hui
             .CopyQueueValidationEnabled = frameState.CopyQueueValidationEnabled,

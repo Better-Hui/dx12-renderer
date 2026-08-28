@@ -173,6 +173,9 @@ public:
     void SetDiagnosticTelemetrySink(DiagnosticTelemetrySink* sink) noexcept;
 //Modify End
     bool ReconfigurePresentation(const std::function<bool()>& configureRuntime) override;
+//Modify Begin:2026-08-28 by Hui
+    bool SetHdr10Output(Window& window, bool enabled);
+//Modify End
 
     /**
      * Flush all command queues.

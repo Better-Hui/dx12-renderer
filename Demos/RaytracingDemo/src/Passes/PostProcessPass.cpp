@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-08-28 by Hui
 #include <RaytracingDemo.h>
 
 #include <DX12Library/CommandList.h>
@@ -199,6 +199,40 @@ void RaytracingDemo::PresentDisplayOutput()
 {
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
     RenderGraph::RenderGraphRoot& renderGraph = m_RenderPipeline.GetRenderGraph();
+    if (m_Hdr10OutputEnabled)
+    {
+        const std::shared_ptr<Shader>& hdr10PresentationShader =
+            m_ShaderPipelineBootstrap.GetHdr10PresentationShader();
+        Assert(hdr10PresentationShader != nullptr, "HDR10 presentation shader is not initialized.");
+        const Hdr10PresentationConstants constants = {
+            .PeakNits = m_Hdr10PeakNits,
+        };
+        renderGraph.PresentWithOverlayBlit(
+            PWindow,
+            renderGraph.GetPresentationResourceId(),
+            [this, hdr10PresentationShader, constants](
+                CommandList& commandList,
+                const std::shared_ptr<Texture>& source)
+            {
+                CommandContext commandContext(commandList);
+                commandContext.SetTexture(
+                    *hdr10PresentationShader,
+                    "SceneColor",
+                    ShaderResourceView(source));
+                commandContext.SetConstantBuffer(
+                    *hdr10PresentationShader,
+                    "HDR10PresentationConstants",
+                    constants);
+                commandContext.BindPipeline(*hdr10PresentationShader);
+                commandContext.BindDescriptorSet(hdr10PresentationShader->GetDescriptorSet());
+                m_DisplayBlitMesh->Draw(commandList);
+            },
+            [this](CommandList& commandList)
+            {
+                DrawPostBloomOverlays(commandList);
+            });
+        return;
+    }
     if (m_RenderGraphFrameState->FrameGenerationEnabled)
     {
         DLSSFrameGenerationProcessor frameProcessor(m_DLSS, m_FrameGenerationInputs);

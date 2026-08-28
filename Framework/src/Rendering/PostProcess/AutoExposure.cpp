@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-08-28 by Hui
 #include <Framework/Rendering/PostProcess/AutoExposure.h>
 
 #include <DX12Library/ByteAddressBuffer.h>
@@ -46,6 +46,8 @@ namespace
         float Tau = DefaultAdaptationTau;
         float ExposureScale = 1.0f;
         uint32_t ExposureEnabled = 1u;
+        uint32_t OutputMode = static_cast<uint32_t>(AutoExposure::OutputMode::SDR);
+        uint32_t Padding = 0u;
     };
 
     std::unique_ptr<ComputeShader> CreateComputeShader(
@@ -74,6 +76,7 @@ namespace
         constants.LogLuminanceRange = settings.MaxLogLuminance - settings.MinLogLuminance;
         constants.Tau = settings.Tau;
         constants.ExposureEnabled = settings.Enabled ? 1u : 0u;
+        constants.OutputMode = static_cast<uint32_t>(settings.Output);
         return constants;
     }
 
@@ -106,11 +109,11 @@ void AutoExposure::SetSettings(const Settings& settings)
             sanitized.MinLogLuminance = sanitized.MaxLogLuminance - MinimumLogLuminanceRange;
         }
     }
-
     if (sanitized.Enabled != m_Settings.Enabled ||
         sanitized.Tau != m_Settings.Tau ||
         sanitized.MinLogLuminance != m_Settings.MinLogLuminance ||
-        sanitized.MaxLogLuminance != m_Settings.MaxLogLuminance)
+        sanitized.MaxLogLuminance != m_Settings.MaxLogLuminance ||
+        sanitized.Output != m_Settings.Output)
     {
         m_Settings = sanitized;
         m_HistoryValid = false;

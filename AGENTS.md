@@ -193,6 +193,14 @@ The supported Mitsuba XML path is deliberately limited: it expands scene-local `
 
 D3D12 graphics and compute root signatures are independent command-list state. Keep `m_GraphicsRootSignature`, `m_ComputeRootSignature`, and `m_DescriptorTableRootSignature` separate. A depth resource that is both a DSV and float SRV uses `R32_TYPELESS` as the resource format, `D32_FLOAT` as the DSV format, and `R32_FLOAT` as the SRV format.
 
+## HDR10 / PQ Presentation
+
+- Native HDR10 presentation is owned by `DX12Library::Application` and `Window`, because swapchain destruction/recreation, color space, and metadata are external presentation concerns. RenderGraph must not gain a generic swapchain mutation entry point for it.
+- `Window` detects the current `IDXGIOutput6` capability, and HDR mode uses `R10G10B10A2_UNORM`, `DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020`, plus `DXGI_HDR_METADATA_HDR10`. A failed HDR recreation must restore a usable SDR swapchain instead of terminating the Demo.
+- Auto Exposure keeps its output linear `R16G16B16A16_FLOAT` in HDR mode. `Hdr10Presentation.ps.hlsl` is the sole HDR terminal encoder: tone map -> Rec.709 to Rec.2020 -> ST.2084/PQ. Do not copy an HDR intermediate directly into a 10-bit swapchain or PQ-encode intermediate post-process resources.
+- Runtime controls are `[Display] HDR10`, `RAYTRACING_DEMO_HDR10=0|1`, `--hdr10`, and the Display Output UI. Report capability/activation via `presentation_hdr10_output`; lack of Windows HDR or a compatible active output is an SDR fallback, not a renderer failure.
+- HDR10 and experimental Streamline Frame Generation are mutually exclusive until the proxied HDR swapchain path has supported-hardware validation. HDR output does not by itself validate lighting calibration, exposure, local adaptation, or HDR image quality.
+
 ## DLSS / Streamline
 
 `BloomController` is the Demo-facing selector for the Framework raster Bloom subgraph and the Demo-owned CUDA external backend. The latter remains a CUDA interop path under `Demos/RaytracingDemo`; it must not move into Framework or corrupt history resources.

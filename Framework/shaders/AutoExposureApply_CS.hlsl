@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-23 by Hui
+//Modify Begin:2026-08-28 by Hui
 Texture2D<float4> SourceColor;
 Texture2D<float> AdaptedLuminance;
 RWTexture2D<float4> OutputColor;
@@ -15,6 +15,8 @@ cbuffer AutoExposureConstants
     float Tau;
     float ExposureScale;
     uint ExposureEnabled;
+    uint OutputMode;
+    uint Padding;
 };
 
 float3 ToneMap(float3 color)
@@ -45,6 +47,9 @@ void main(uint2 dispatchThreadId : SV_DispatchThreadID)
     const float exposure = ExposureEnabled != 0u
         ? ExposureScale / (9.6f * adaptedLuminance + 0.0001f)
         : 1.0f;
-    OutputColor[dispatchThreadId] = float4(ToneMap(sourceColor.rgb * exposure), sourceColor.a);
+    const float3 exposedColor = max(sourceColor.rgb * exposure, 0.0f);
+    OutputColor[dispatchThreadId] = OutputMode == 1u
+        ? float4(exposedColor, sourceColor.a)
+        : float4(ToneMap(exposedColor), sourceColor.a);
 }
 //Modify End

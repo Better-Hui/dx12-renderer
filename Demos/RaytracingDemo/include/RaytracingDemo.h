@@ -136,6 +136,14 @@ private:
 //Modify End
     };
 
+//Modify Begin:2026-08-28 by Hui
+    struct Hdr10PresentationConstants
+    {
+        float PeakNits = 1000.0f;
+        float Padding[3] = {};
+    };
+//Modify End
+
 //Modify Begin:2026-08-23 by Hui
     enum class StartupLoadStage : uint8_t
     {
@@ -198,6 +206,7 @@ private:
     bool IsStartupLoadComplete() const { return m_StartupLoadStage == StartupLoadStage::Complete; }
     void ResetCameraToInitialSceneState();
     void LoadStartupConfiguration();
+    bool ApplyHdr10Output(bool enabled);
     void InitializeDiagnostics();
     void RecordDiagnosticsFailure(std::string stage, const std::exception& exception);
     void InitializeRuntimeAutomation();
@@ -284,7 +293,7 @@ private:
     ReSTIRGI m_IndirectLightingReSTIRGI;
     bool m_ReSTIRGIHistoryValid = false;
 //Modify End
-//Modify Begin:2026-08-20 by Hui
+//Modify Begin:2026-08-28 by Hui
     bool m_AsyncComputeEnabled = false;
     bool m_CopyQueueValidationEnabled = false;
     bool m_DebugSerializeAsyncCompute = false;
@@ -308,6 +317,11 @@ private:
     bool m_DebugMeshletClusters = false;
     bool m_UseTaskShaderMeshlets = true;
     bool m_SkyboxEnabled = false;
+    bool m_Hdr10OutputRequested = false;
+    bool m_Hdr10OutputEnabled = false;
+    float m_Hdr10PeakNits = 1000.0f;
+    std::optional<bool> m_PendingHdr10OutputRequest;
+    std::string m_Hdr10PresentationStatus;
     bool m_HasPreviousViewProjection = false;
     float m_CameraFov = 45.0f;
     float m_CameraNearClipPlane = 0.1f;

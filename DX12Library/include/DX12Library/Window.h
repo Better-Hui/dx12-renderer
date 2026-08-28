@@ -35,7 +35,7 @@
 
 #include <wrl.h>
 #include <d3d12.h>
-#include <dxgi1_5.h>
+#include <dxgi1_6.h>
 
 #include "Events.h"
 //Modify Begin:2026-07-28 by Hui
@@ -45,6 +45,7 @@
 #include "RenderTarget.h"
 #include "Texture.h"
 
+#include <cstdint>
 #include <memory>
 
 class Game;
@@ -63,6 +64,15 @@ struct WindowD3D12Context
     std::shared_ptr<CommandQueue> ComputeCommandQueue;
     std::shared_ptr<CommandQueue> CopyCommandQueue;
     bool IsTearingSupported = false;
+};
+//Modify End
+
+//Modify Begin:2026-08-28 by Hui
+struct Hdr10OutputCapabilities
+{
+    bool IsSupported = false;
+    float MaxLuminanceNits = 0.0f;
+    float MaxFullFrameLuminanceNits = 0.0f;
 };
 //Modify End
 
@@ -134,6 +144,15 @@ public:
 	 */
 	const RenderTarget& GetRenderTarget() const;
 
+//Modify Begin:2026-08-28 by Hui
+    [[nodiscard]] const Hdr10OutputCapabilities& GetHdr10OutputCapabilities() const { return m_Hdr10OutputCapabilities; }
+    [[nodiscard]] bool IsHdr10OutputEnabled() const { return m_Hdr10OutputEnabled; }
+    [[nodiscard]] DXGI_FORMAT GetBackBufferFormat() const
+    {
+        return m_Hdr10OutputEnabled ? DXGI_FORMAT_R10G10B10A2_UNORM : BUFFER_FORMAT;
+    }
+//Modify End
+
 //Modify Begin:2026-08-24 by Hui
     void PrepareBackBufferForRenderTarget(CommandList& commandList) const;
     void PrepareBackBufferForCopyDestination(CommandList& commandList) const;
@@ -201,6 +220,10 @@ protected:
 	Microsoft::WRL::ComPtr<IDXGISwapChain4> CreateSwapChain();
 	void ReleaseSwapChainResources();
 	void RecreateSwapChain();
+//Modify Begin:2026-08-28 by Hui
+    bool PrepareHdr10Output(bool enabled);
+    void RefreshHdr10OutputCapabilities();
+//Modify End
 
 	// Update the render target views for the swapchain back buffers.
 	void UpdateRenderTargetViews();
@@ -243,6 +266,11 @@ private:
 	std::weak_ptr<Game> PGame;
 
 	Microsoft::WRL::ComPtr<IDXGISwapChain4> DxgiSwapChain;
+//Modify Begin:2026-08-28 by Hui
+    Hdr10OutputCapabilities m_Hdr10OutputCapabilities;
+    bool m_Hdr10OutputRequested = false;
+    bool m_Hdr10OutputEnabled = false;
+//Modify End
 	std::shared_ptr<Texture> BackBufferTextures[BUFFER_COUNT];
 	// Marked mutable to allow modification in a const function.
 	mutable RenderTarget MRenderTarget;

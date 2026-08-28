@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-26 by Hui
+//Modify Begin:2026-08-28 by Hui
 #pragma once
 
 #include <Denoising/DenoiserController.h>
@@ -193,6 +193,7 @@ struct RaytracingDemoFrameState
     bool DLSSEnabled = false;
     bool RayReconstructionEnabled = false;
     bool FrameGenerationEnabled = false;
+    bool Hdr10OutputEnabled = false;
     DLSSMode DlssMode = DLSSMode::Disabled;
     int DebugLightingTextureTarget = 0;
     int DebugTextureTarget = 0;

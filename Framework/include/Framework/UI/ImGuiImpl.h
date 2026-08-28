@@ -1,7 +1,7 @@
 #pragma once
 
 #include <memory>
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-28 by Hui
 #include <vector>
 //Modify End
 
@@ -52,6 +52,10 @@ private:
     UINT m_SrvDescriptorSize = 0;
     std::vector<bool> m_FreeSrvDescriptors;
     //Modify End
+//Modify Begin:2026-08-28 by Hui
+    bool m_Hdr10Output = false;
+    float m_Hdr10UiWhiteNits = 200.0f;
+//Modify End
 
     Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> m_SrvDescHeap;
     std::shared_ptr<Shader> m_CombineShader;

@@ -49,6 +49,8 @@ Base Resources
 -> Present
 ```
 
+With HDR10 enabled, `Auto Exposure` produces exposure-adjusted linear `R16G16B16A16_FLOAT` display input instead of SDR gamma output. `PresentWithOverlayBlit()` then invokes the terminal HDR10 shader, which tone maps, converts Rec.709 primaries to Rec.2020, and ST.2084/PQ encodes into the `R10G10B10A2_UNORM` swapchain. The swapchain color space and HDR10 metadata are configured only after `IDXGIOutput6` reports an HDR10/PQ-capable active output. The runtime controls are `[Display] HDR10`, `RAYTRACING_DEMO_HDR10=0|1`, `--hdr10`, and the `Display Output` UI; unsupported output safely retains SDR and reports `presentation_hdr10_output` to Diagnostics. Native HDR10 presentation and experimental DLSS Frame Generation are currently mutually exclusive.
+
 When the Direct Lighting UI selects ReSTIR DI on the inline ray-query backend, Framework registers a direct-light subgraph:
 
 ```text
@@ -201,6 +203,7 @@ The current soft variant uses four shadow samples. This is a sample-quality fixe
 - Descriptor sets are not a full NRI-style persistent GPU descriptor-set lifetime model; GPU-visible tables are still staged by the project descriptor-heap machinery.
 - Sampler reflection/binding and root constants/root descriptors are not fully unified.
 - Pipeline cache keys do not yet represent every raster, compute, and DXR state dimension.
+- HDR10 presentation is a display-output capability, not a complete HDR image-quality solution. It requires Windows HDR plus a compatible current output; display calibration, local adaptation, wide-gamut asset workflow, and HDR visual acceptance are not yet complete.
 - Soft-shadow quality is currently fixed at four samples; no runtime quality presets or adaptive sampling are available.
 - RenderGraph supports explicit Direct/Async Compute/Copy queue placement but no automatic queue selection. The maintained `Copy Queue Validation` path covers Direct HDR -> Copy -> Async Compute -> Direct and validates the required producer fences, GPU waits, state plan, batches, and retirement fences.
 - `RenderGraphRoot::Execute` is now a graph entry point. `RenderGraphCommandExecutor` owns pass recording/submission, while `RenderGraphProfiler` owns optional per-queue timestamp lifetime and markers.

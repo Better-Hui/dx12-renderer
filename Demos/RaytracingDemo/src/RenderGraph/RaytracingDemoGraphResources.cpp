@@ -9,7 +9,8 @@ namespace RaytracingDemoRenderGraph
         const bool includeFrameGeneration,
         const bool includeRayReconstruction,
         const bool includeFrameworkBloom,
-        const bool includeCopyQueueValidation)
+        const bool includeCopyQueueValidation,
+        const bool hdr10Output)
     {
         const RenderGraph::RenderMetadataExpression<uint32_t> renderWidthExpression = [](const RenderGraph::RenderMetadata& metadata) { return metadata.m_ScreenWidth; };
         const RenderGraph::RenderMetadataExpression<uint32_t> renderHeightExpression = [](const RenderGraph::RenderMetadata& metadata) { return metadata.m_ScreenHeight; };
@@ -72,12 +73,15 @@ namespace RaytracingDemoRenderGraph
                 D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
         }
 //Modify End
-//Modify Begin:2026-08-23 by Hui
+//Modify Begin:2026-08-28 by Hui
+        const DXGI_FORMAT displayOutputFormat = hdr10Output
+            ? HDR10_LINEAR_OUTPUT_FORMAT
+            : OUTPUT_FORMAT;
         textureDescriptions.emplace_back(
             ResourceIds::AutoExposureOutput,
             displayWidthExpression,
             displayHeightExpression,
-            OUTPUT_FORMAT,
+            displayOutputFormat,
             OUTPUT_CLEAR_COLOR,
             RenderGraph::ResourceInitAction::Discard,
             D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,

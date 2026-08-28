@@ -12,8 +12,9 @@ struct GraphicsSettings
 	};
 
 	bool VSync = false;
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-08-28 by Hui
 	float ProfilerDisplayRefreshIntervalSeconds = 1.0f;
+    bool Hdr10Output = false;
 //Modify End
 
 	ShadowsSettings DirectionalLightShadows{ 2048, 1.0f, 0.002f, 750.0f };

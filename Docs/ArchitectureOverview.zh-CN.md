@@ -151,7 +151,7 @@ Mitsuba XML importer 是有意保持紧凑的兼容路径：会展开场景内 `
 - shader-table DXR 与 inline ray query 共用同一份 scene geometry、material、bindless texture、light buffer 和 acceleration structure。
 - 无人值守的 `rtas` 场景覆盖基础动态 RTAS 路径；`dynamic-scene` 是当前完整矩阵：task shader 和 compute-indirect Meshlet GBuffer 均会通过图声明更新普通 vertex、compacted Meshlet vertex 与 bounds、transform/instance buffer、dirty BLAS 和既有 TLAS，随后验证 restore frame。自发光目标还会刷新 mesh surface-emitter 数据。runtime skinning output 当前明确不支持，绝不以过期数据静默 fallback。
 - 平行光、点光、Spot Light、矩形面积光与自发光 surface emitter 都通过 GPU buffer 上传。平行光和点光的软阴影使用预编译 shader variant；Spot Light 在直接光采样中计算锥形衰减，矩形面积光直接采样发光面。
-- 可选 NRD/SVGF、TAA、skybox、Framework Raster Bloom、CUDA Bloom、Native DLSS SR/DLAA，以及实验性 Streamline RR/FG 围绕核心光照输出组合。
+- 可选 NRD/SVGF、TAA、skybox、Framework Raster Bloom、CUDA Bloom、Native DLSS SR/DLAA、HDR10/PQ 呈现，以及实验性 Streamline RR/FG 围绕核心光照输出组合。
 
 ReSTIR DI 由 Demo 调用 Framework 的 `ReSTIRDIPass::AddPasses`。Framework 分别注册 `Initial Sampling`、`Temporal Resampling`、`Boiling Filter`、`Spatial Resampling` 和 `Shade`，用 token 与 imported reservoir/history 连接。Demo 只提供 logical scene input 和运行时 resolver，不再调度内部阶段或编码 barrier。
 
@@ -164,6 +164,12 @@ NRD 由 `NRD::AddPasses` 注册 `NRD Prepare Inputs`、`NRD Native Denoise` 和 
 SVGF 由 `SVGF::AddPasses` 注册 parity-aware Temporal、每次迭代的 Horizontal/Vertical A-Trous 以及 Composite。奇偶 history color/moments 是 Framework-owned imported ping-pong texture；A-Trous 迭代数属于 Demo topology key，修改 UI 配置会重建图而不是只改变一个失效的运行时值。TAA 同样由 `TAA::AddPasses` 在 Framework-owned imported ping-pong history 上注册 Resolve 与 History Copy，首帧 history 无效时把 history 权重强制为 0，并只在 `OnRenderedFrame()` 中推进物理 history index，保证 imported resolver 在整次执行中稳定。
 
 shader-table DXR 与 Inline 共用 scene/resource model，但当前 ReSTIR DI/GI 仅由 Inline 实现。手动切换到 DXR 时，若选择会跳过这些阶段，UI 会显示一次兼容性弹窗并持续显示红色警告；自动化切换不打开模态框。
+
+### HDR10/PQ 呈现
+
+HDR10 是可选的原生呈现路径，通过当前 `IDXGIOutput6` 输出检测能力。可用时 swapchain 使用 `R10G10B10A2_UNORM`、`DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020`，并写入由显示器能力派生的 HDR10 metadata。RenderGraph 让 Auto Exposure 的输出保持为 `R16G16B16A16_FLOAT` 线性场景色；只有最终 presentation shader 会进行面向显示器的 tone map、Rec.709 到 Rec.2020 转换以及 ST.2084/PQ 编码，再写入 swapchain。这样既不会发生格式不匹配的直接 copy，也不会让中间图像处理 pass 承担 HDR 编码。
+
+可由 `[Display] HDR10`、`RAYTRACING_DEMO_HDR10=0|1`、`--hdr10` 或 `Display Output` UI 请求。显示器没有开启 Windows HDR/PQ 或不支持时，渲染器保持既有 SDR swapchain，并通过 Diagnostics 的 `presentation_hdr10_output` 报告 fallback。由于当前没有验证 Streamline-proxied HDR swapchain，DLSS Frame Generation 与这条原生 HDR10 路径互斥。HDR 只扩展显示能力，不会自动修正场景光照单位、曝光行为或刻意保持简单的 tone mapper。
 
 ### 调试和自动化
 
@@ -178,6 +184,7 @@ shader-table DXR 与 Inline 共用 scene/resource model，但当前 ReSTIR DI/GI
 - 平台是 Windows/x64/D3D12，Shader Model 6.8 为基线。
 - Async Compute 只有依赖和硬件允许 overlap 时才可能降低 GPU wall time；额外 fence、cache 与带宽竞争也可能令它变慢。
 - Meshlet 是实验性的 GBuffer backend，不是完整的 visibility、streaming、residency 或 LOD 系统。
+- HDR10 同时要求 Windows HDR 已开启、HDR 显示器存在且当前输出兼容；SDR 始终是安全 fallback。初版 HDR 映射刻意保守（Reinhard 后进入 PQ）；显示器校准、局部适应、wide-gamut 资产管理与 HDR 画质验收仍是后续工作。
 - FBX 场景导入已经进入 Framework `SceneImporter` 契约，但当前只选择一个活动相机并支持实用的 PBR 子集。Spot Light 会经 `Scene`、`LightingGpuResources`、相机计数进入 Inline PT/ReSTIR DI/GI 的直接光采样，不再走点光 fallback；透明、clearcoat、transmission、动画播放和 runtime skinning output 仍需要单独契约。在 skinned 输出能同时驱动 raster、Meshlet 和 BLAS 前，dynamic-scene capability 会明确报告 skinned update 不支持。
 - Framework feature 已可使用 `GpuReadbackBuffer` 和非阻塞 ring-slot `GpuReadbackTexture`；compacted active-pixel 验证仍使用它们。`DiagnosticsImageCapture` 以独立 Direct copy、跨帧 fence `Poll()`、RGBA8 统计和最多两个后台 PNG writer 形成通用 texture request/image assertion/attachment 闭环；terminal finalize 在 shutdown `Drain()` 后执行，避免最后一帧异步图像缺失。device removal 会附加包含 HRESULT、breadcrumb 和 page-fault allocation 的 `dred.txt`。OIDN 在匹配 NVIDIA adapter 上改用 D3D12 shared buffer/fence 与 CUDA `Quality::Fast`，不再把 HDR 图像读回 CPU；仅在 CUDA 初始化或 external-memory import 失败时退回 readback/CPU `Fast`。高事件量 capture 可能很大，应使用 `--max-events` 和 `dropped_event_count` 判断证据完整性；剩余 Diagnostics 工作是实际 shader access 对图声明校验、更多 cross-queue/lifetime invariant，以及完整 session 的后台归档、压缩和 retention policy。
 - ReSTIR DI/GI、CUDA Bloom、DLSS SR/DLAA、Streamline RR/FG、Unity interop 都是工程实验；用于交付前必须逐硬件完成正确性、画质、稳定性、显存和性能验证。

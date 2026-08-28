@@ -3,6 +3,11 @@
 #include <imgui_impl_dx12.h>
 #include <imgui_impl_win32.h>
 
+//Modify Begin:2026-08-28 by Hui
+#include <algorithm>
+#include <cmath>
+//Modify End
+
 //Modify Begin:2026-08-19 by Hui
 #include <DX12Library/Application.h>
 //Modify End
@@ -26,6 +31,49 @@ namespace
     {
         ImGui::GetIO().AddInputCharacter(static_cast<unsigned short>(c));
     }
+
+//Modify Begin:2026-08-28 by Hui
+    float SrgbToLinear(const float value)
+    {
+        return value <= 0.04045f
+            ? value / 12.92f
+            : std::pow((value + 0.055f) / 1.055f, 2.4f);
+    }
+
+    float EncodePq(const float luminanceNits)
+    {
+        constexpr float M1 = 2610.0f / 16384.0f;
+        constexpr float M2 = 2523.0f / 32.0f;
+        constexpr float C1 = 3424.0f / 4096.0f;
+        constexpr float C2 = 2413.0f / 128.0f;
+        constexpr float C3 = 2392.0f / 128.0f;
+        const float normalized = std::clamp(luminanceNits / 10000.0f, 0.0f, 1.0f);
+        const float powered = std::pow(normalized, M1);
+        return std::pow((C1 + C2 * powered) / (1.0f + C3 * powered), M2);
+    }
+
+    void EncodeImGuiVerticesForHdr10(const float whiteNits)
+    {
+        ImDrawData* drawData = ImGui::GetDrawData();
+        if (drawData == nullptr)
+        {
+            return;
+        }
+
+        for (int listIndex = 0; listIndex < drawData->CmdListsCount; ++listIndex)
+        {
+            ImDrawList* drawList = drawData->CmdLists[listIndex];
+            for (ImDrawVert& vertex : drawList->VtxBuffer)
+            {
+                ImVec4 color = ImGui::ColorConvertU32ToFloat4(vertex.col);
+                color.x = EncodePq(SrgbToLinear(color.x) * whiteNits);
+                color.y = EncodePq(SrgbToLinear(color.y) * whiteNits);
+                color.z = EncodePq(SrgbToLinear(color.z) * whiteNits);
+                vertex.col = ImGui::ColorConvertFloat4ToU32(color);
+            }
+        }
+    }
+//Modify End
 }
 
 //Modify Begin:2026-08-19 by Hui
@@ -79,6 +127,9 @@ ImGuiImpl::ImGuiImpl(FrameworkDeviceContext& deviceContext, CommandList& command
     : m_DeviceContext(deviceContext)
     , m_FreeSrvDescriptors(ImGuiSrvDescriptorCount, true)
     //Modify End
+//Modify Begin:2026-08-28 by Hui
+    , m_Hdr10Output(window.IsHdr10OutputEnabled())
+//Modify End
 {
     m_CombineShader = std::make_shared<Shader>(
         m_DeviceContext,
@@ -143,7 +194,9 @@ ImGuiImpl::ImGuiImpl(FrameworkDeviceContext& deviceContext, CommandList& command
     initInfo.Device = pDevice.Get();
     initInfo.CommandQueue = commandQueue.Get();
     initInfo.NumFramesInFlight = Window::BUFFER_COUNT;
-    initInfo.RTVFormat = BUFFER_FORMAT;
+//Modify Begin:2026-08-28 by Hui
+    initInfo.RTVFormat = window.GetBackBufferFormat();
+//Modify End
     initInfo.DSVFormat = DXGI_FORMAT_UNKNOWN;
     initInfo.UserData = this;
     initInfo.SrvDescriptorHeap = m_SrvDescHeap.Get();
@@ -189,6 +242,12 @@ void ImGuiImpl::Render() const
 
 void ImGuiImpl::DrawToRenderTarget(CommandList& commandList)
 {
+//Modify Begin:2026-08-28 by Hui
+    if (m_Hdr10Output)
+    {
+        EncodeImGuiVerticesForHdr10(m_Hdr10UiWhiteNits);
+    }
+//Modify End
     commandList.ExecuteExternalCommandRecording(
         [this](ID3D12GraphicsCommandList2& nativeCommandList)
         {

@@ -21,6 +21,47 @@
 #include <algorithm>
 #include <utility>
 //Modify End
+//Modify Begin:2026-08-28 by Hui
+#include <cmath>
+#include <stdexcept>
+//Modify End
+
+//Modify Begin:2026-08-28 by Hui
+namespace
+{
+    constexpr DXGI_COLOR_SPACE_TYPE Hdr10ColorSpace = DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
+
+    uint16_t ToChromaticity(const float value)
+    {
+        return static_cast<uint16_t>(std::lround(std::clamp(value, 0.0f, 1.0f) * 50000.0f));
+    }
+
+    DXGI_HDR_METADATA_HDR10 BuildHdr10Metadata(const Hdr10OutputCapabilities& capabilities)
+    {
+        const float maxLuminance = std::clamp(capabilities.MaxLuminanceNits, 200.0f, 10000.0f);
+        const float fullFrameLuminance = std::clamp(
+            capabilities.MaxFullFrameLuminanceNits > 0.0f
+                ? capabilities.MaxFullFrameLuminanceNits
+                : maxLuminance,
+            50.0f,
+            maxLuminance);
+        DXGI_HDR_METADATA_HDR10 metadata{};
+        metadata.RedPrimary[0] = ToChromaticity(0.708f);
+        metadata.RedPrimary[1] = ToChromaticity(0.292f);
+        metadata.GreenPrimary[0] = ToChromaticity(0.170f);
+        metadata.GreenPrimary[1] = ToChromaticity(0.797f);
+        metadata.BluePrimary[0] = ToChromaticity(0.131f);
+        metadata.BluePrimary[1] = ToChromaticity(0.046f);
+        metadata.WhitePoint[0] = ToChromaticity(0.3127f);
+        metadata.WhitePoint[1] = ToChromaticity(0.3290f);
+        metadata.MaxMasteringLuminance = static_cast<UINT>(std::lround(maxLuminance));
+        metadata.MinMasteringLuminance = 1u;
+        metadata.MaxContentLightLevel = static_cast<UINT16>(std::lround(maxLuminance));
+        metadata.MaxFrameAverageLightLevel = static_cast<UINT16>(std::lround(fullFrameLuminance));
+        return metadata;
+    }
+}
+//Modify End
 
 //Modify Begin:2026-08-19 by Hui
 Window::Window(
@@ -59,6 +100,9 @@ Window::Window(
 	}
 
 	DxgiSwapChain = CreateSwapChain();
+//Modify Begin:2026-08-28 by Hui
+    RefreshHdr10OutputCapabilities();
+//Modify End
 //Modify Begin:2026-08-19 by Hui
 	FrameResources.Reset(BUFFER_COUNT);
 	FrameResources.SetCurrentIndex(CurrentBackBufferIndex);
@@ -416,6 +460,9 @@ void Window::ReleaseSwapChainResources()
 void Window::RecreateSwapChain()
 {
 	DxgiSwapChain = CreateSwapChain();
+//Modify Begin:2026-08-28 by Hui
+    RefreshHdr10OutputCapabilities();
+//Modify End
 	FrameResources.Reset(BUFFER_COUNT);
 	FrameResources.SetCurrentIndex(CurrentBackBufferIndex);
 	UpdateRenderTargetViews();
@@ -423,6 +470,7 @@ void Window::RecreateSwapChain()
 
 ComPtr<IDXGISwapChain4> Window::CreateSwapChain()
 {
+//Modify Begin:2026-08-28 by Hui
 	ComPtr<IDXGISwapChain4> dxgiSwapChain4;
 	ComPtr<IDXGIFactory4> dxgiFactory4;
 	UINT createFactoryFlags = 0;
@@ -435,7 +483,8 @@ ComPtr<IDXGISwapChain4> Window::CreateSwapChain()
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
 	swapChainDesc.Width = ClientWidth;
 	swapChainDesc.Height = ClientHeight;
-	swapChainDesc.Format = BUFFER_FORMAT;
+    const bool useHdr10 = m_Hdr10OutputRequested && m_Hdr10OutputCapabilities.IsSupported;
+	swapChainDesc.Format = useHdr10 ? DXGI_FORMAT_R10G10B10A2_UNORM : BUFFER_FORMAT;
 	swapChainDesc.Stereo = FALSE;
 	swapChainDesc.SampleDesc = { 1, 0 };
 	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
@@ -462,10 +511,76 @@ ComPtr<IDXGISwapChain4> Window::CreateSwapChain()
 
 	ThrowIfFailed(swapChain1.As(&dxgiSwapChain4));
 
+    if (useHdr10)
+    {
+        UINT colorSpaceSupport = 0u;
+        ThrowIfFailed(dxgiSwapChain4->CheckColorSpaceSupport(Hdr10ColorSpace, &colorSpaceSupport));
+        if ((colorSpaceSupport & DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT) == 0u)
+        {
+            throw std::runtime_error("The current output rejected the HDR10/PQ swapchain color space.");
+        }
+
+        ThrowIfFailed(dxgiSwapChain4->SetColorSpace1(Hdr10ColorSpace));
+        DXGI_HDR_METADATA_HDR10 metadata = BuildHdr10Metadata(m_Hdr10OutputCapabilities);
+        ThrowIfFailed(dxgiSwapChain4->SetHDRMetaData(
+            DXGI_HDR_METADATA_TYPE_HDR10,
+            sizeof(metadata),
+            &metadata));
+    }
+    m_Hdr10OutputEnabled = useHdr10;
 	CurrentBackBufferIndex = dxgiSwapChain4->GetCurrentBackBufferIndex();
 
 	return dxgiSwapChain4;
+//Modify End
 }
+
+//Modify Begin:2026-08-28 by Hui
+bool Window::PrepareHdr10Output(const bool enabled)
+{
+    RefreshHdr10OutputCapabilities();
+    if (enabled && !m_Hdr10OutputCapabilities.IsSupported)
+    {
+        return false;
+    }
+
+    m_Hdr10OutputRequested = enabled;
+    return true;
+}
+
+void Window::RefreshHdr10OutputCapabilities()
+{
+    m_Hdr10OutputCapabilities = {};
+    if (DxgiSwapChain == nullptr)
+    {
+        return;
+    }
+
+    ComPtr<IDXGIOutput> output;
+    if (FAILED(DxgiSwapChain->GetContainingOutput(&output)) || output == nullptr)
+    {
+        return;
+    }
+
+    ComPtr<IDXGIOutput6> output6;
+    if (FAILED(output.As(&output6)) || output6 == nullptr)
+    {
+        return;
+    }
+
+    DXGI_OUTPUT_DESC1 outputDesc{};
+    if (FAILED(output6->GetDesc1(&outputDesc)))
+    {
+        return;
+    }
+
+    m_Hdr10OutputCapabilities.MaxLuminanceNits = outputDesc.MaxLuminance;
+    m_Hdr10OutputCapabilities.MaxFullFrameLuminanceNits = outputDesc.MaxFullFrameLuminance;
+    m_Hdr10OutputCapabilities.IsSupported =
+        outputDesc.BitsPerColor >= 10u &&
+        outputDesc.ColorSpace == Hdr10ColorSpace &&
+        outputDesc.MaxLuminance > 0.0f;
+}
+//Modify End
 
 void Window::UpdateRenderTargetViews()
 {

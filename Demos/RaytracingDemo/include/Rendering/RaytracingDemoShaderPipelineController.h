@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-08-25 by Hui
+//Modify Begin:2026-08-28 by Hui
 #include <Framework/Geometry/Mesh.h>
 #include <Framework/Geometry/Meshlet.h>
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
@@ -31,6 +31,7 @@ public:
     [[nodiscard]] IndirectCommandSignature* GetMeshletDrawCommandSignature() { return m_MeshletDrawCommandSignature.get(); }
     [[nodiscard]] const std::shared_ptr<MeshShader>& GetTaskMeshGBufferShader() const { return m_GBufferTaskMeshShader; }
     [[nodiscard]] const std::shared_ptr<Shader>& GetDisplayCompositeShader() const { return m_DisplayCompositeShader; }
+    [[nodiscard]] const std::shared_ptr<Shader>& GetHdr10PresentationShader() const { return m_Hdr10PresentationShader; }
     [[nodiscard]] const std::shared_ptr<ComputeShader>& GetSkyboxComputeShader() const { return m_SkyboxComputeShader; }
     [[nodiscard]] const std::shared_ptr<ComputeShader>& GetSkyboxEquirectangularComputeShader() const { return m_SkyboxEquirectangularComputeShader; }
     [[nodiscard]] const std::shared_ptr<ComputeShader>& GetSkyboxCubemapStripComputeShader() const { return m_SkyboxCubemapStripComputeShader; }
@@ -53,6 +54,7 @@ private:
     std::unique_ptr<IndirectCommandSignature> m_MeshletDrawCommandSignature;
     std::shared_ptr<MeshShader> m_GBufferTaskMeshShader;
     std::shared_ptr<Shader> m_DisplayCompositeShader;
+    std::shared_ptr<Shader> m_Hdr10PresentationShader;
     std::shared_ptr<ComputeShader> m_SkyboxComputeShader;
     std::shared_ptr<ComputeShader> m_SkyboxEquirectangularComputeShader;
     std::shared_ptr<ComputeShader> m_SkyboxCubemapStripComputeShader;

@@ -88,6 +88,12 @@ void ParseCommandLineArguments(Parameters& parameters)
 			parameters.m_EnableStreamlineInterposer = true;
 		}
 		//Modify End
+		//Modify Begin:2026-08-28 by Hui
+		if (wcscmp(argv[i], L"--hdr10") == 0)
+		{
+			parameters.m_GraphicsSettings.Hdr10Output = true;
+		}
+		//Modify End
 	}
 
 	LocalFree(argv);

@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-25 by Hui
+//Modify Begin:2026-08-28 by Hui
 #include <Rendering/RaytracingDemoShaderPipelineController.h>
 
 #include <Framework/Core/FrameworkDeviceContext.h>
@@ -186,6 +186,28 @@ void RaytracingDemoShaderPipelineController::CreatePostProcessPipelines()
             [](RasterPipelineStateBuilder&) {});
     });
 
+    CreatePipeline("Hdr10Presentation", [this]()
+    {
+        const auto vertexShader = LoadShaderVariant(
+            L"Hdr10Presentation.vs.cso",
+            L"Demos/RaytracingDemo/shaders/PostProcessing/DisplayComposite.vs.hlsl",
+            ShaderTargetProfile::Vertex());
+        const auto pixelShader = LoadShaderVariant(
+            L"Hdr10Presentation.ps.cso",
+            L"Demos/RaytracingDemo/shaders/PostProcessing/Hdr10Presentation.ps.hlsl",
+            ShaderTargetProfile::Pixel());
+        PipelineLayoutReflectionOptions layoutOptions;
+        layoutOptions.MaxDescriptorCount = 4096u;
+        layoutOptions.ShaderStages = PipelineShaderStageFlags::AllGraphics;
+        layoutOptions.StaticSamplerContracts = { PipelineStaticSamplers::LinearClamp(3u) };
+        m_Hdr10PresentationShader = std::make_shared<Shader>(
+            m_DeviceContext,
+            *vertexShader,
+            *pixelShader,
+            std::move(layoutOptions),
+            [](RasterPipelineStateBuilder&) {});
+    });
+
     CreatePipeline("SkyboxCompute", [this]()
     {
         const auto skyboxShader = LoadShaderVariant(
@@ -283,6 +305,7 @@ void RaytracingDemoShaderPipelineController::Reset()
     m_SkyboxCubemapStripComputeShader.reset();
     m_SkyboxEquirectangularComputeShader.reset();
     m_SkyboxComputeShader.reset();
+    m_Hdr10PresentationShader.reset();
     m_DisplayCompositeShader.reset();
     m_GBufferTaskMeshShader.reset();
     m_MeshletDrawCommandSignature.reset();
