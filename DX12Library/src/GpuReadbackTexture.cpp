@@ -1,9 +1,10 @@
-//Modify Begin:2026-08-25 by Hui
+//Modify Begin:2026-08-28 by Hui
 #include "DX12LibPCH.h"
 
 #include "GpuReadbackTexture.h"
 
 #include "CommandList.h"
+#include "CommandListInternalAccess.h"
 #include "CommandQueue.h"
 #include "Helpers.h"
 #include "Texture.h"
@@ -114,6 +115,13 @@ bool GpuReadbackTexture::RecordCopy(CommandList& commandList, const Texture& sou
         sourceDesc.Format == m_Footprint.Footprint.Format &&
         sourceDesc.SampleDesc.Count == 1u,
         "GPU readback texture source no longer matches its initialized footprint.");
+
+    CommandListInternalAccess::TransitionBarrier(
+        commandList,
+        source,
+        D3D12_RESOURCE_STATE_COPY_SOURCE,
+        D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+        true);
 
     const Microsoft::WRL::ComPtr<ID3D12Resource> sourceResource = source.GetD3D12Resource();
     const Microsoft::WRL::ComPtr<ID3D12Resource> destinationResource = m_Slots[m_ActiveSlotIndex].Buffer;

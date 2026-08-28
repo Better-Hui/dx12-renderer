@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-08-26 by Hui
+//Modify Begin:2026-08-28 by Hui
 #include <Framework/Diagnostics/AutomationRunner.h>
 
 #include <cstddef>
@@ -52,6 +52,9 @@ namespace DemoAutomation
         void AppendDiagnosticLog(const std::string& message) const;
         bool FailNow(FrameworkDiagnostics::AutomationExitCode exitCode, std::string message);
         [[nodiscard]] bool IsRunning() const { return m_Runner.IsRunning(); }
+        [[nodiscard]] bool IsCompleted() const { return m_Runner.IsCompleted(); }
+        [[nodiscard]] bool HasFailed() const { return m_Runner.HasFailed(); }
+        [[nodiscard]] const std::string& GetFailureMessage() const { return m_Runner.GetFailureMessage(); }
 
     private:
         void AppendLog(const std::string& message) const;

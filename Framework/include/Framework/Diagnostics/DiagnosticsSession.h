@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-08-28 by Hui
 #pragma once
 
 #include <DX12Library/DiagnosticTelemetry.h>
@@ -16,6 +16,8 @@
 #include <string>
 #include <string_view>
 #include <vector>
+
+struct ID3D12Device2;
 
 namespace FrameworkDiagnostics
 {
@@ -51,7 +53,7 @@ namespace FrameworkDiagnostics
         DiagnosticTelemetryEvent Event;
     };
 
-    class DiagnosticsSession final : public DiagnosticTelemetrySink
+class DiagnosticsSession final : public DiagnosticTelemetrySink
     {
     public:
         DiagnosticsSession() = default;
@@ -67,6 +69,8 @@ namespace FrameworkDiagnostics
 
         void SetFrameIndex(uint64_t frameIndex) noexcept;
         void AddMetadata(std::string key, std::string value);
+        bool RegisterAttachment(std::filesystem::path relativePath, std::string mediaType = {});
+        void AttachDeviceRemovalDred(ID3D12Device2& device, std::string stage = {}) noexcept;
         void Record(
             std::string category,
             std::string name,
@@ -99,6 +103,7 @@ namespace FrameworkDiagnostics
         DiagnosticsSessionOptions m_Options;
         std::filesystem::path m_OutputDirectory;
         std::map<std::string, std::string> m_Metadata;
+        std::map<std::filesystem::path, std::string> m_Attachments;
         std::deque<RecordedDiagnosticEvent> m_Events;
         std::chrono::steady_clock::time_point m_StartTime = {};
         std::string m_StartUtc;

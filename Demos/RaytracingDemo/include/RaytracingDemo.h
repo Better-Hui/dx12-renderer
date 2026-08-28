@@ -14,8 +14,9 @@
 #include <Profiling/RenderGraphTimingHistory.h>
 #include <Rendering/RaytracingDemoShaderPipelineController.h>
 //Modify End
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-28 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
+#include <Framework/Diagnostics/DiagnosticsImageCapture.h>
 #include <Framework/Diagnostics/DiagnosticsSession.h>
 //Modify End
 #include <Framework/UI/ImGuiImpl.h>
@@ -189,7 +190,7 @@ private:
     void DrawPostBloomOverlays(CommandList& cmd);
     void DrawLightBillboards(CommandList& cmd);
 //Modify End
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-08-28 by Hui
     void LoadSceneContent(CommandList& commandList, const std::filesystem::path& scenePath);
     bool AdvanceStartupLoad();
     void RenderStartupLoadingScreen();
@@ -203,7 +204,7 @@ private:
     void UpdateRuntimeAutomation(double totalTime);
     void ApplyRuntimeAutomationAction(uint32_t action, uint32_t value);
     void ApplyRuntimeAutomationMatrixCase(uint32_t caseIndex);
-    void CapturePendingAutomationScreenshot(const RenderGraph::RenderMetadata& renderMetadata);
+    void CapturePendingAutomationScreenshot();
     void SaveCurrentScene();
     void SaveCurrentCameraToUnityScene();
 //Modify End
@@ -214,10 +215,11 @@ private:
     //Modify End
     std::shared_ptr<RaytracingDemoFrameState> m_RenderGraphFrameState = std::make_shared<RaytracingDemoFrameState>();
     int m_DebugTextureTarget = 0;
-//Modify Begin:2026-08-25 by Hui
+//Modify Begin:2026-08-28 by Hui
     FrameworkDeviceContext m_FrameworkDeviceContext;
     RaytracingDemoShaderPipelineController m_ShaderPipelineBootstrap;
     FrameworkDiagnostics::DiagnosticsSession m_Diagnostics;
+    FrameworkDiagnostics::DiagnosticsImageCapture m_DiagnosticsImageCapture;
     DLSS m_DLSS;
     DLSSFrameGenerationInputs m_FrameGenerationInputs;
     PathTracingPipelineController m_PathTracingPipelines;

@@ -1,9 +1,13 @@
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-08-28 by Hui
 #include <Framework/Diagnostics/DiagnosticsSession.h>
 
 #include <Windows.h>
 
+#include <d3d12.h>
+#include <wrl.h>
+
 #include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <fstream>
 #include <functional>
@@ -294,6 +298,100 @@ namespace
         output += '"';
         return output;
     }
+
+    std::string WideToUtf8(const wchar_t* value)
+    {
+        if (value == nullptr || *value == L'\0')
+        {
+            return {};
+        }
+        const int size = WideCharToMultiByte(CP_UTF8, 0, value, -1, nullptr, 0, nullptr, nullptr);
+        if (size <= 1)
+        {
+            return {};
+        }
+        std::string result(static_cast<size_t>(size), '\0');
+        WideCharToMultiByte(CP_UTF8, 0, value, -1, result.data(), size, nullptr, nullptr);
+        result.pop_back();
+        return result;
+    }
+
+    std::string GetDredName(const char* nameA, const wchar_t* nameW)
+    {
+        if (nameA != nullptr && *nameA != '\0')
+        {
+            return nameA;
+        }
+        const std::string name = WideToUtf8(nameW);
+        return name.empty() ? "<unnamed>" : name;
+    }
+
+    void WriteDredAllocations(
+        std::ostream& output,
+        const char* heading,
+        const D3D12_DRED_ALLOCATION_NODE1* allocation)
+    {
+        output << heading << ":\n";
+        uint32_t count = 0u;
+        for (; allocation != nullptr && count < 128u; allocation = allocation->pNext, ++count)
+        {
+            output << "  [" << count << "] type=" << static_cast<uint32_t>(allocation->AllocationType)
+                   << " name=" << GetDredName(allocation->ObjectNameA, allocation->ObjectNameW) << '\n';
+        }
+        if (allocation != nullptr)
+        {
+            output << "  <truncated after 128 allocations>\n";
+        }
+    }
+
+    std::string BuildDredReport(ID3D12Device2& device, const std::string_view stage)
+    {
+        std::ostringstream output;
+        const HRESULT removedReason = device.GetDeviceRemovedReason();
+        output << "Stage=" << stage << '\n'
+               << "DeviceRemovedReason=0x" << std::hex << static_cast<uint32_t>(removedReason) << std::dec << '\n';
+
+        Microsoft::WRL::ComPtr<ID3D12DeviceRemovedExtendedData1> dred;
+        const HRESULT interfaceResult = device.QueryInterface(IID_PPV_ARGS(&dred));
+        output << "DredInterface=0x" << std::hex << static_cast<uint32_t>(interfaceResult) << std::dec << '\n';
+        if (FAILED(interfaceResult))
+        {
+            return output.str();
+        }
+
+        D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT1 breadcrumbs = {};
+        const HRESULT breadcrumbsResult = dred->GetAutoBreadcrumbsOutput1(&breadcrumbs);
+        output << "AutoBreadcrumbs=0x" << std::hex << static_cast<uint32_t>(breadcrumbsResult) << std::dec << '\n';
+        if (SUCCEEDED(breadcrumbsResult))
+        {
+            uint32_t count = 0u;
+            for (const D3D12_AUTO_BREADCRUMB_NODE1* node = breadcrumbs.pHeadAutoBreadcrumbNode;
+                node != nullptr && count < 128u;
+                node = node->pNext, ++count)
+            {
+                output << "Breadcrumb[" << count << "] queue="
+                       << GetDredName(node->pCommandQueueDebugNameA, node->pCommandQueueDebugNameW)
+                       << " command_list=" << GetDredName(node->pCommandListDebugNameA, node->pCommandListDebugNameW)
+                       << " completed=" << (node->pLastBreadcrumbValue != nullptr ? *node->pLastBreadcrumbValue : 0u)
+                       << " count=" << node->BreadcrumbCount << '\n';
+            }
+            if (count == 128u)
+            {
+                output << "Breadcrumbs=<truncated after 128 nodes>\n";
+            }
+        }
+
+        D3D12_DRED_PAGE_FAULT_OUTPUT1 pageFault = {};
+        const HRESULT pageFaultResult = dred->GetPageFaultAllocationOutput1(&pageFault);
+        output << "PageFault=0x" << std::hex << static_cast<uint32_t>(pageFaultResult) << std::dec << '\n';
+        if (SUCCEEDED(pageFaultResult))
+        {
+            output << "PageFaultVA=0x" << std::hex << pageFault.PageFaultVA << std::dec << '\n';
+            WriteDredAllocations(output, "ExistingAllocations", pageFault.pHeadExistingAllocationNode);
+            WriteDredAllocations(output, "RecentlyFreedAllocations", pageFault.pHeadRecentFreedAllocationNode);
+        }
+        return output.str();
+    }
 }
 
 FrameworkDiagnostics::DiagnosticsSession::~DiagnosticsSession()
@@ -320,6 +418,7 @@ bool FrameworkDiagnostics::DiagnosticsSession::Begin(DiagnosticsSessionOptions o
             m_Options = std::move(options);
             m_OutputDirectory = outputDirectory;
             m_Metadata.clear();
+            m_Attachments.clear();
             m_Events.clear();
             m_LastError.clear();
             m_FinalMessage.clear();
@@ -386,6 +485,61 @@ void FrameworkDiagnostics::DiagnosticsSession::AddMetadata(std::string key, std:
     }
     std::scoped_lock lock(m_Mutex);
     m_Metadata[std::move(key)] = std::move(value);
+}
+
+bool FrameworkDiagnostics::DiagnosticsSession::RegisterAttachment(
+    std::filesystem::path relativePath,
+    std::string mediaType)
+{
+    if (!IsEnabled())
+    {
+        return false;
+    }
+    relativePath = relativePath.lexically_normal();
+    if (relativePath.empty() || relativePath.is_absolute() ||
+        relativePath.begin() == relativePath.end() || *relativePath.begin() == "..")
+    {
+        return false;
+    }
+    std::scoped_lock lock(m_Mutex);
+    m_Attachments.insert_or_assign(std::move(relativePath), std::move(mediaType));
+    return true;
+}
+
+void FrameworkDiagnostics::DiagnosticsSession::AttachDeviceRemovalDred(
+    ID3D12Device2& device,
+    std::string stage) noexcept
+{
+    if (!IsEnabled())
+    {
+        return;
+    }
+    try
+    {
+        const std::filesystem::path attachmentPath = "dred.txt";
+        const std::filesystem::path outputPath = GetOutputDirectory() / attachmentPath;
+        WriteAtomically(outputPath, [&device, &stage](std::ostream& output)
+        {
+            output << BuildDredReport(device, stage);
+        });
+        if (!RegisterAttachment(attachmentPath, "text/plain"))
+        {
+            throw std::runtime_error("Diagnostics DRED attachment path was rejected.");
+        }
+        Record(
+            "device.removal",
+            "dred_attached",
+            DiagnosticTelemetrySeverity::Error,
+            { { "attachment", attachmentPath.generic_string() }, { "stage", std::move(stage) } });
+    }
+    catch (const std::exception& exception)
+    {
+        Record(
+            "device.removal",
+            "dred_attachment_failed",
+            DiagnosticTelemetrySeverity::Error,
+            { { "message", std::string(exception.what()) }, { "stage", std::move(stage) } });
+    }
 }
 
 void FrameworkDiagnostics::DiagnosticsSession::Record(
@@ -476,9 +630,8 @@ void FrameworkDiagnostics::DiagnosticsSession::RecordTelemetry(DiagnosticTelemet
         {
             const auto removable = std::ranges::find_if(m_Events, [](const RecordedDiagnosticEvent& candidate)
             {
-                const bool unresolvedAssertion = candidate.Event.Category == "assertion" &&
-                    FieldToString(candidate, "result") != "pass";
-                return !unresolvedAssertion && candidate.Event.Severity < DiagnosticTelemetrySeverity::Error;
+                return candidate.Event.Category != "assertion" &&
+                    candidate.Event.Severity < DiagnosticTelemetrySeverity::Error;
             });
             if (removable != m_Events.end())
             {
@@ -596,6 +749,7 @@ bool FrameworkDiagnostics::DiagnosticsSession::ExportSnapshot(
     {
         std::vector<RecordedDiagnosticEvent> events;
         std::map<std::string, std::string> metadata;
+        std::map<std::filesystem::path, std::string> attachments;
         DiagnosticsSessionOptions options;
         std::filesystem::path outputDirectory;
         std::string startUtc;
@@ -604,6 +758,7 @@ bool FrameworkDiagnostics::DiagnosticsSession::ExportSnapshot(
             std::scoped_lock lock(m_Mutex);
             events.assign(m_Events.begin(), m_Events.end());
             metadata = m_Metadata;
+            attachments = m_Attachments;
             options = m_Options;
             outputDirectory = m_OutputDirectory;
             startUtc = m_StartUtc;
@@ -797,10 +952,31 @@ bool FrameworkDiagnostics::DiagnosticsSession::ExportSnapshot(
                 first = false;
                 output << '"' << EscapeJson(key) << "\":\"" << EscapeJson(value) << '"';
             }
-            output << "},\"artifacts\":["
-                   << "\"summary.txt\",\"events.jsonl\",\"render_graph.json\","
-                   << "\"queue_submissions.json\",\"resources.json\",\"descriptors.json\","
-                   << "\"timings.csv\",\"assertions.json\",\"reproduction.json\"]}\n";
+            const std::array<std::string_view, 9u> standardArtifacts = {
+                "summary.txt", "events.jsonl", "render_graph.json", "queue_submissions.json",
+                "resources.json", "descriptors.json", "timings.csv", "assertions.json", "reproduction.json",
+            };
+            output << "},\"artifacts\":[";
+            bool firstArtifact = true;
+            const auto writeArtifact = [&output, &firstArtifact](const std::string_view artifact)
+            {
+                if (!firstArtifact)
+                {
+                    output << ',';
+                }
+                firstArtifact = false;
+                output << '\"' << EscapeJson(artifact) << '\"';
+            };
+            for (const std::string_view artifact : standardArtifacts)
+            {
+                writeArtifact(artifact);
+            }
+            for (const auto& [attachmentPath, mediaType] : attachments)
+            {
+                (void)mediaType;
+                writeArtifact(attachmentPath.generic_string());
+            }
+            output << "]}\n";
         });
         return true;
     }

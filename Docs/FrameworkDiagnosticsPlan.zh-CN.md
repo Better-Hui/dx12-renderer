@@ -1,6 +1,6 @@
 # Framework 诊断、自动化与 Profiler
 
-> 状态：基础能力已落地并通过真实 Demo 自动化验证；受维护的 Copy queue、`meshlet-indirect` 与 `dynamic-scene` 场景已经覆盖真实跨 queue 同步、descriptor 敏感的 Meshlet cull、retirement 和原地 acceleration-structure update。GPU readback/image assertion、DRED attachment、后台写盘和 retention policy 仍待实现。
+> 状态：基础能力已落地并通过真实 Demo 自动化验证；受维护的 Copy queue、`meshlet-indirect` 与 `dynamic-scene` 场景已经覆盖真实跨 queue 同步、descriptor 敏感的 Meshlet cull、retirement 和原地 acceleration-structure update。`DiagnosticsImageCapture` 已提供非阻塞 GPU texture readback、image assertion、capture attachment 与后台 PNG 写盘；device removal 会附加 DRED 文本。尚未完成的是实际 shader access 与图声明的闭环、更多跨 queue/lifetime invariant，以及完整 session 的后台归档、压缩与 retention policy。
 
 ## 目标
 
@@ -36,9 +36,11 @@ descriptors.json       allocation、descriptor-set revision 与绑定资源身�
 timings.csv            关联后的 CPU scope 与各 queue GPU timestamp
 assertions.json        结构化 pass/fail/unknown 结果
 reproduction.json      scenario、环境与实际 control 变更序列
+images/*.png           异步采集的图像附件；manifest 列出相对路径
+dred.txt               device removal 时的 DRED breadcrumb/page-fault 附件
 ```
 
-默认不导出大型 GPU resource。内存事件缓冲有明确上限，普通事件和已通过 assertion 在压力下可以被淘汰，但 error/fatal/failed/unknown assertion 会优先保留；manifest 记录 `dropped_event_count`。`RendererDiagnostics inspect` 对丢事件、非终态 capture 或 unknown assertion 返回 `incomplete` 和退出码 `12`，不会把证据缺失或未决约束误判为通过。命令行自动化默认上限为 262,144 条事件，可用 `--max-events` 调整。
+默认不导出大型 GPU resource。内存事件缓冲有明确上限；普通事件可在压力下淘汰，但所有 assertion（包括通过结果）以及 error/fatal 会优先保留，确保 `assertions.json` 始终保留已执行约束的结论。manifest 记录 `dropped_event_count`。`RendererDiagnostics inspect` 对丢事件、非终态 capture 或 unknown assertion 返回 `incomplete` 和退出码 `12`，不会把证据缺失或未决约束误判为通过。命令行自动化默认上限为 262,144 条事件；长的 `visual` capture 应显式使用 `--max-events 524288` 或基于 `inspect` 的结果继续增大。
 
 ## 自动化契约
 
@@ -60,6 +62,7 @@ RendererDiagnostics run --exe RaytracingDemo.exe --scenario copy --output Saved/
 RendererDiagnostics run --exe RaytracingDemo.exe --scenario rtas --output Saved/Diagnostics/rtas-001
 RendererDiagnostics run --exe RaytracingDemo.exe --scenario dynamic-scene --output Saved/Diagnostics/dynamic-scene-001 --set RAYTRACING_DEMO_AUTOTEST_STEP_MS=50 --set RAYTRACING_DEMO_DIRECT_LIGHTING=none --set RAYTRACING_DEMO_INDIRECT_LIGHTING=none --set RAYTRACING_DEMO_DENOISER=off
 RendererDiagnostics run --exe RaytracingDemo.exe --scenario meshlet-indirect --output Saved/Diagnostics/meshlet-indirect-001 --set RAYTRACING_DEMO_AUTOTEST_STEP_MS=50 --set RAYTRACING_DEMO_MESHLET_GBUFFER=1 --set RAYTRACING_DEMO_MESHLET_BACKEND=indirect --set RAYTRACING_DEMO_DIRECT_LIGHTING=none --set RAYTRACING_DEMO_INDIRECT_LIGHTING=none --set RAYTRACING_DEMO_DENOISER=off
+RendererDiagnostics run --exe RaytracingDemo.exe --scenario visual --max-events 524288 --set RAYTRACING_DEMO_AUTOTEST_STEP_MS=700 --set RAYTRACING_DEMO_RAY_TRACING_DISPATCH=compacted
 RendererDiagnostics inspect Saved/Diagnostics/run-001
 RendererDiagnostics query Saved/Diagnostics/run-001 --frame 42 --category command_queue --limit 100
 RendererDiagnostics diff baseline current
@@ -80,7 +83,8 @@ RendererDiagnostics selftest
 - 已记录 descriptor allocation、descriptor-set revision 与资源身份；
 - 已检查 compacted active count 与 finalized indirect arguments/dispatch 的一致性；
 - 已通过 Direct -> Copy -> Async Compute -> Direct 验证 producer fence、GPU wait、state plan、batch 和 retirement；
-- 已具备可复用、非阻塞的 `GpuReadbackBuffer` 与 `GpuReadbackTexture` ring-slot 基元；compacted active-pixel 验证实际使用它们。OIDN 在可用时走 D3D12 shared buffer/fence → CUDA `Quality::Fast` → D3D12 copy-back，CUDA 初始化或 external-memory import 失败时才使用 HDR readback → CPU `Fast` → upload fallback；OIDN 自动化记录 backend，并验证静止结果保持以及相机移动后的 generation 作废；
+- 已具备可复用、非阻塞的 `GpuReadbackBuffer` 与 `GpuReadbackTexture` ring-slot 基元；compacted active-pixel 验证实际使用它们。`DiagnosticsImageCapture::Request()` 在 Direct queue 单独提交 copy，`Poll()` 在后续帧确认 fence、转换 RGBA8、计算均值/非黑像素比并记录 `image.<name>` assertion；PNG 最多两个后台 writer 并行写入。自动化 terminal finalize 延后至 shutdown 的 `Drain()`，确保最后一个异步图像结论和附件先写入 capture。OIDN 在可用时走 D3D12 shared buffer/fence → CUDA `Quality::Fast` → D3D12 copy-back，CUDA 初始化或 external-memory import 失败时才使用 HDR readback → CPU `Fast` → upload fallback；OIDN 自动化记录 backend，并验证静止结果保持以及相机移动后的 generation 作废；
+- device removal 失败路径通过 `DiagnosticsSession::AttachDeviceRemovalDred()` 写入 `dred.txt`，包含 removal HRESULT、最多 128 个 auto-breadcrumb 和 page-fault allocation；该附件由 manifest 声明；
 - 已通过动态 RTAS 验证普通/Meshlet 顶点上传、Meshlet bounds 与 instance 更新、自发光 mesh refresh、dirty BLAS refit、原地 TLAS update、资源 retirement counter、restore frame，以及显式拒绝 skinned update 的 capability；
 - 自动化 control、observation、timeout 和 assertion failure 使用稳定退出码 `20`–`24`。
 
@@ -88,9 +92,8 @@ RendererDiagnostics selftest
 
 - 验证 RenderGraph 实际访问完全符合声明 usage/state plan；
 - 在受维护的 Copy 验证拓扑之外，继续扩大 cross-queue wait 与多 queue retirement 的通用覆盖；
-- 将既有 texture/buffer readback 基元提升为 Diagnostics 自有的通用 request API、图像容差 assertion 与 capture attachment；
-- device removal 时自动附加 DRED；
 - backend capability 与实际调度 pass 的通用 Framework invariant。
+- 完整 capture session 的后台归档、压缩与 retention policy；当前仅图像 PNG 附件后台写入。
 
 最初规划的完整约束集合是：
 
@@ -123,6 +126,7 @@ RendererDiagnostics selftest
 2. [x] RenderGraph schedule/state/lifecycle、queue submission/fence 和 descriptor/resource telemetry。
 3. [x] 具名 control/observation、确定性 scenario、timeout、assertion 与失败自动 finalize。
 4. [x] `run`、`inspect`、`query`、`diff`、`reproduce`、`selftest` 命令行闭环。
-5. [ ] 通用 GPU readback/image assertion、DRED attachment、后台写盘、压缩与保留策略。
+5. [x] Diagnostics 自有的通用 texture readback/image assertion、capture attachment、PNG 后台写入与 device-removal DRED attachment。
+6. [ ] 实际 shader access 对图声明的通用校验、更多 cross-queue/lifetime invariant，以及完整 session 的后台归档、压缩与 retention policy。
 
 关闭诊断时不得分配 GPU resource、插入 readback 或改变 pass topology。开启 capture 时必须限制内存，不得每条事件同步刷盘，并显式标记所有可能造成 GPU/CPU stall 的操作。

@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-26 by Hui
+//Modify Begin:2026-08-28 by Hui
 #include <Automation/RuntimeAutomationController.h>
 
 #include <Framework/Diagnostics/DiagnosticsSession.h>
@@ -248,7 +248,7 @@ void DemoAutomation::RuntimeAutomationController::Initialize(
     FrameworkDiagnostics::AutomationRunnerOptions runnerOptions;
     runnerOptions.DefaultSettleFrames = 1;
     runnerOptions.DefaultSettleSeconds = m_StepIntervalSeconds;
-    runnerOptions.FinalizeDiagnosticsOnCompletion = true;
+    runnerOptions.FinalizeDiagnosticsOnCompletion = false;
     if (!m_Runner.Start(
         std::move(scenario),
         diagnostics,

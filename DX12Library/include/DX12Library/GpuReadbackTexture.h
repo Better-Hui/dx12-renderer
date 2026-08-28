@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-25 by Hui
+//Modify Begin:2026-08-28 by Hui
 #pragma once
 
 #include <d3d12.h>
@@ -36,6 +36,7 @@ public:
     uint32_t GetWidth() const { return m_Footprint.Footprint.Width; }
     uint32_t GetHeight() const { return m_NumRows; }
     uint32_t GetRowPitch() const { return m_Footprint.Footprint.RowPitch; }
+    uint64_t GetRowSizeInBytes() const { return m_RowSizeInBytes; }
     DXGI_FORMAT GetFormat() const { return m_Footprint.Footprint.Format; }
 
 private:

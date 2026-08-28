@@ -30,16 +30,13 @@
 #include <RenderGraph/RaytracingDemoGraphResources.h>
 #include <RenderGraph/RenderMetadata.h>
 
-//Modify Begin:2026-08-20 by Hui
-#include <DirectXTex.h>
-#include <array>
-#include <wincodec.h>
-//Modify End
 #include <DirectXMath.h>
-#include <d3dx12/d3dx12.h>
 #include <imgui.h>
 
 #include <algorithm>
+//Modify Begin:2026-08-28 by Hui
+#include <array>
+//Modify End
 #include <cctype>
 #include <chrono>
 #include <cmath>
@@ -460,7 +457,7 @@ namespace
 
 }
 
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-08-28 by Hui
 RaytracingDemo::RaytracingDemo(
     Application& application,
     const std::wstring& name,
@@ -473,6 +470,7 @@ RaytracingDemo::RaytracingDemo(
     , m_Height(height)
     , m_FrameworkDeviceContext(CreateFrameworkDeviceContext(application, std::move(frameFeatureServices)))
     , m_ShaderPipelineBootstrap(m_FrameworkDeviceContext)
+    , m_DiagnosticsImageCapture(m_FrameworkDeviceContext, m_Diagnostics)
     , m_DLSS(m_FrameworkDeviceContext)
     , m_PathTracingPipelines(m_FrameworkDeviceContext)
     , m_ActivePixels(m_FrameworkDeviceContext)
@@ -1303,12 +1301,14 @@ void RaytracingDemo::InitializeDiagnostics()
     m_Diagnostics.Record("application.lifecycle", "load_content_begin");
 }
 
+//Modify Begin:2026-08-28 by Hui
 void RaytracingDemo::RecordDiagnosticsFailure(std::string stage, const std::exception& exception)
 {
     if (!m_Diagnostics.IsEnabled())
     {
         return;
     }
+    m_Diagnostics.AttachDeviceRemovalDred(*m_FrameworkDeviceContext.GetDevice().Get(), stage);
     m_Diagnostics.RecordAssertion(
         "runtime." + stage,
         FrameworkDiagnostics::AssertionResult::Failed,
@@ -1316,6 +1316,7 @@ void RaytracingDemo::RecordDiagnosticsFailure(std::string stage, const std::exce
         { { "stage", stage } });
     m_Diagnostics.Finalize(FrameworkDiagnostics::SessionStatus::Failed, exception.what());
 }
+//Modify End
 
 void RaytracingDemo::InitializeRuntimeAutomation()
 {
@@ -1909,7 +1910,8 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
     }
 }
 
-void RaytracingDemo::CapturePendingAutomationScreenshot(const RenderGraph::RenderMetadata& renderMetadata)
+//Modify Begin:2026-08-28 by Hui
+void RaytracingDemo::CapturePendingAutomationScreenshot()
 {
     if (!m_PendingAutomationScreenshot.has_value())
     {
@@ -1921,175 +1923,21 @@ void RaytracingDemo::CapturePendingAutomationScreenshot(const RenderGraph::Rende
     }
 
     const uint32_t captureIndex = m_PendingAutomationScreenshot.value();
-//Modify Begin:2026-08-26 by Hui
-    const std::array<std::wstring, 5> fileNames = {
-        L"pt-direct.png",
-        L"pt-indirect.png",
-        L"restir-di.png",
-        L"restir-gi.png",
-        L"restir-di-gi.png",
+    constexpr std::array<const char*, 5u> captureNames = {
+        "pt-direct", "pt-indirect", "restir-di", "restir-gi", "restir-di-gi",
     };
-    const std::array<std::string, 5> captureNames = {
-        "PT Direct",
-        "PT Indirect",
-        "ReSTIR DI",
-        "ReSTIR GI",
-        "ReSTIR DI + GI",
-    };
-//Modify End
-
     RenderGraph::RenderGraphRoot& renderGraph = m_RenderPipeline.GetRenderGraph();
     const std::shared_ptr<Texture>& presentationTexture =
         renderGraph.GetTexture(renderGraph.GetPresentationResourceId());
-    const Microsoft::WRL::ComPtr<ID3D12Device2> device = m_FrameworkDeviceContext.GetDevice();
-    const Microsoft::WRL::ComPtr<ID3D12Resource> sourceResource = presentationTexture->GetD3D12Resource();
-    const D3D12_RESOURCE_DESC sourceDescription = sourceResource->GetDesc();
-    if (sourceDescription.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D ||
-        sourceDescription.DepthOrArraySize != 1u || sourceDescription.SampleDesc.Count != 1u)
+    if (!m_DiagnosticsImageCapture.Request(*presentationTexture, captureNames[captureIndex]))
     {
-        throw std::runtime_error("Automation screenshot source must be a single-sample 2D texture.");
+        return;
     }
-
-    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
-    UINT rowCount = 0u;
-    UINT64 rowSizeInBytes = 0u;
-    UINT64 readbackSizeInBytes = 0u;
-    device->GetCopyableFootprints(
-        &sourceDescription,
-        0u,
-        1u,
-        0u,
-        &footprint,
-        &rowCount,
-        &rowSizeInBytes,
-        &readbackSizeInBytes);
-
-    const CD3DX12_HEAP_PROPERTIES readbackHeapProperties(D3D12_HEAP_TYPE_READBACK);
-    const CD3DX12_RESOURCE_DESC readbackDescription = CD3DX12_RESOURCE_DESC::Buffer(readbackSizeInBytes);
-    Microsoft::WRL::ComPtr<ID3D12Resource> readbackResource;
-    ThrowIfFailed(device->CreateCommittedResource(
-        &readbackHeapProperties,
-        D3D12_HEAP_FLAG_NONE,
-        &readbackDescription,
-        D3D12_RESOURCE_STATE_COPY_DEST,
-        nullptr,
-        IID_PPV_ARGS(&readbackResource)));
-
-    renderGraph.ReadbackTexture(
-        renderMetadata,
-        renderGraph.GetPresentationResourceId(),
-        readbackResource,
-        footprint,
-        true);
-
-    DirectX::ScratchImage capturedImage;
-    ThrowIfFailed(capturedImage.Initialize2D(
-        sourceDescription.Format,
-        static_cast<size_t>(sourceDescription.Width),
-        sourceDescription.Height,
-        1u,
-        1u));
-    const DirectX::Image* capturedSubresource = capturedImage.GetImage(0u, 0u, 0u);
-    if (capturedSubresource == nullptr || rowCount != capturedSubresource->height ||
-        rowSizeInBytes > capturedSubresource->rowPitch)
-    {
-        throw std::runtime_error("Automation screenshot readback footprint is incompatible with the output image.");
-    }
-
-    const D3D12_RANGE readRange = { footprint.Offset, footprint.Offset + readbackSizeInBytes };
-    void* mappedData = nullptr;
-    ThrowIfFailed(readbackResource->Map(0u, &readRange, &mappedData));
-    const uint8_t* mappedReadback = static_cast<const uint8_t*>(mappedData);
-    for (UINT row = 0u; row < rowCount; ++row)
-    {
-        std::memcpy(
-            capturedSubresource->pixels + static_cast<size_t>(row) * capturedSubresource->rowPitch,
-            mappedReadback + footprint.Offset + static_cast<size_t>(row) * footprint.Footprint.RowPitch,
-            static_cast<size_t>(rowSizeInBytes));
-    }
-    const D3D12_RANGE writeRange = { 0u, 0u };
-    readbackResource->Unmap(0u, &writeRange);
-
-    const DirectX::Image* sourceImage = capturedImage.GetImage(0u, 0u, 0u);
-    if (sourceImage == nullptr)
-    {
-        throw std::runtime_error("Automation screenshot capture returned no image.");
-    }
-
-    DirectX::ScratchImage convertedImage;
-    const DirectX::Image* outputImage = sourceImage;
-    if (sourceImage->format != DXGI_FORMAT_R8G8B8A8_UNORM)
-    {
-        ThrowIfFailed(DirectX::Convert(
-            *sourceImage,
-            DXGI_FORMAT_R8G8B8A8_UNORM,
-            DirectX::TEX_FILTER_DEFAULT,
-            DirectX::TEX_THRESHOLD_DEFAULT,
-            convertedImage));
-        outputImage = convertedImage.GetImage(0u, 0u, 0u);
-    }
-    if (outputImage == nullptr || outputImage->width == 0u || outputImage->height == 0u)
-    {
-        throw std::runtime_error("Automation screenshot conversion returned an invalid image.");
-    }
-
-    const std::filesystem::path outputDirectory =
-        std::filesystem::current_path() / "Saved" / "AutomationScreenshots";
-    std::filesystem::create_directories(outputDirectory);
-    const std::filesystem::path outputPath = outputDirectory / fileNames[captureIndex];
-    std::error_code removeError;
-    std::filesystem::remove(outputPath, removeError);
-    if (removeError)
-    {
-        throw std::runtime_error("Failed to replace automation screenshot: " + outputPath.string());
-    }
-    ThrowIfFailed(DirectX::SaveToWICFile(
-        *outputImage,
-        DirectX::WIC_FLAGS_FORCE_SRGB,
-        GUID_ContainerFormatPng,
-        outputPath.c_str()));
-
-    uint64_t nonBlackPixelCount = 0u;
-    uint64_t redSum = 0u;
-    uint64_t greenSum = 0u;
-    uint64_t blueSum = 0u;
-    for (size_t y = 0u; y < outputImage->height; ++y)
-    {
-        const uint8_t* row = outputImage->pixels + y * outputImage->rowPitch;
-        for (size_t x = 0u; x < outputImage->width; ++x)
-        {
-            const uint8_t* pixel = row + x * 4u;
-            redSum += pixel[0];
-            greenSum += pixel[1];
-            blueSum += pixel[2];
-            if ((std::max)({ pixel[0], pixel[1], pixel[2] }) > 2u)
-            {
-                ++nonBlackPixelCount;
-            }
-        }
-    }
-
-    const uint64_t pixelCount = outputImage->width * outputImage->height;
-    const double normalization = 1.0 / (static_cast<double>(pixelCount) * 255.0);
-    const double meanRed = static_cast<double>(redSum) * normalization;
-    const double meanGreen = static_cast<double>(greenSum) * normalization;
-    const double meanBlue = static_cast<double>(blueSum) * normalization;
-    const double nonBlackRatio = static_cast<double>(nonBlackPixelCount) / static_cast<double>(pixelCount);
-    if (nonBlackRatio < 0.001 || (std::max)({ meanRed, meanGreen, meanBlue }) < 0.0005)
-    {
-        throw std::runtime_error(
-            "Automation screenshot is black or near-black: " + captureNames[captureIndex] + ".");
-    }
-
     m_RuntimeAutomation.AppendDiagnosticLog(
-        "Screenshot " + captureNames[captureIndex] +
-        ": path=" + outputPath.string() +
-        "; size=" + std::to_string(outputImage->width) + "x" + std::to_string(outputImage->height) +
-        "; meanRGB=(" + std::to_string(meanRed) + ", " + std::to_string(meanGreen) + ", " +
-        std::to_string(meanBlue) + ")" +
-        "; nonBlackRatio=" + std::to_string(nonBlackRatio) + ".");
+        "Queued asynchronous diagnostics image capture: " + std::string(captureNames[captureIndex]) + ".");
     m_PendingAutomationScreenshot.reset();
 }
+//Modify End
 
 //Modify Begin:2026-08-23 by Hui
 bool RaytracingDemo::AdvanceStartupLoad()
@@ -2361,6 +2209,9 @@ void RaytracingDemo::UnloadContent()
         m_RenderPipeline.GetRenderGraph().SetDiagnosticTelemetrySink(nullptr);
     }
 //Modify End
+//Modify Begin:2026-08-28 by Hui
+    m_DiagnosticsImageCapture.Drain();
+//Modify End
 //Modify Begin:2026-08-19 by Hui
     m_Bloom.ReleaseInteropResource();
 //Modify End
@@ -2394,13 +2245,18 @@ void RaytracingDemo::UnloadContent()
     m_CopyGpuTimestampProfiler.Shutdown();
 //Modify End
     m_SceneResources.Clear();
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-08-28 by Hui
     GetApplication().SetDiagnosticTelemetrySink(nullptr);
     if (m_Diagnostics.IsEnabled())
     {
+        const bool automationFailed = m_RuntimeAutomation.HasFailed();
         m_Diagnostics.Finalize(
-            FrameworkDiagnostics::SessionStatus::Passed,
-            "RaytracingDemo unloaded normally.");
+            automationFailed ? FrameworkDiagnostics::SessionStatus::Failed : FrameworkDiagnostics::SessionStatus::Passed,
+            automationFailed
+                ? m_RuntimeAutomation.GetFailureMessage()
+                : m_RuntimeAutomation.IsCompleted()
+                    ? "Automation scenario completed successfully."
+                    : "RaytracingDemo unloaded normally.");
     }
 //Modify End
 }
@@ -2881,7 +2737,7 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     }
 //Modify End
 
-//Modify Begin:2026-08-25 by Hui
+//Modify Begin:2026-08-28 by Hui
     const auto directCommandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
     const auto asyncComputeCommandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE);
     const auto copyCommandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COPY);
@@ -3123,7 +2979,7 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     try
     {
         PresentDisplayOutput();
-        CapturePendingAutomationScreenshot(metadata);
+        CapturePendingAutomationScreenshot();
     }
     catch (const std::exception& exception)
     {

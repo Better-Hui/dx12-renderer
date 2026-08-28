@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-08-28 by Hui
 #include "RendererDiagnosticsCommands.h"
 
 #include "RendererDiagnosticsCapture.h"
@@ -10,6 +10,7 @@
 
 #include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <optional>
 #include <ranges>
@@ -28,6 +29,14 @@ int RendererDiagnosticsTool::SelfTestCommand()
     options.OutputDirectory = output;
     options.MaxEventCount = 1024u;
     if (!session.Begin(std::move(options))) throw std::runtime_error("DiagnosticsSession::Begin failed in selftest.");
+    const std::filesystem::path attachmentPath = output / "attachments" / "selftest.txt";
+    std::filesystem::create_directories(attachmentPath.parent_path());
+    std::ofstream(attachmentPath, std::ios::trunc) << "RendererDiagnostics attachment selftest.\n";
+    if (!session.RegisterAttachment("attachments/selftest.txt", "text/plain") ||
+        session.RegisterAttachment("../outside-capture.txt", "text/plain"))
+    {
+        throw std::runtime_error("DiagnosticsSession attachment path validation failed in selftest.");
+    }
     session.AddMetadata("env.RAYTRACING_DEMO_AUTOTEST", "stress");
     session.AddMetadata("executable_path", "RaytracingDemo.exe");
     session.Record("selftest.failure", "retained_error", DiagnosticTelemetrySeverity::Error, {
@@ -134,18 +143,19 @@ int RendererDiagnosticsTool::SelfTestCommand()
     const bool dropped = ToUint64(Find(capture.Manifest.AsObject(), "dropped_event_count")) > 0u;
     const bool reproduction = std::filesystem::is_regular_file(output / "reproduction.json");
     const bool descriptors = std::filesystem::is_regular_file(output / "descriptors.json");
+    const bool attachment = std::filesystem::is_regular_file(attachmentPath);
     const bool retainedCriticalEvent = std::ranges::any_of(capture.Events, [](const Event& event)
     {
         return event.Name == "retained_error" && event.Severity == "error";
     });
-    const bool result = bounded && dropped && retainedCriticalEvent && reproduction && descriptors;
+    const bool result = bounded && dropped && retainedCriticalEvent && reproduction && descriptors && attachment;
     std::error_code cleanupError;
     std::filesystem::remove_all(output, cleanupError);
     std::cout << "{\"schema_version\":1,\"selftest\":" << (result ? "\"pass\"" : "\"fail\"")
               << ",\"bounded_buffer\":" << (bounded ? "true" : "false")
               << ",\"drop_accounting\":" << (dropped ? "true" : "false")
               << ",\"critical_event_retention\":" << (retainedCriticalEvent ? "true" : "false")
-              << ",\"artifacts\":" << (reproduction && descriptors ? "true" : "false")
+              << ",\"artifacts\":" << (reproduction && descriptors && attachment ? "true" : "false")
               << ",\"cleanup_error\":";
     if (cleanupError) WriteJsonString(std::cout, cleanupError.message());
     else std::cout << "null";
