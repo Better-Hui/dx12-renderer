@@ -155,6 +155,13 @@ void FrameworkDiagnostics::AutomationRunner::Tick(const uint64_t frameIndex, con
     {
         return;
     }
+    if (m_Diagnostics != nullptr && m_Diagnostics->HasFailedAssertions())
+    {
+        Fail(
+            AutomationExitCode::AssertionFailure,
+            "A Diagnostics invariant failed during the automation scenario.");
+        return;
+    }
     if (m_StepIndex >= m_Scenario.Steps.size())
     {
         CompleteScenario();

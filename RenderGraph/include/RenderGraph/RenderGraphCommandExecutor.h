@@ -6,6 +6,8 @@
 #include "RenderGraphTaskScheduler.h"
 #include "RenderTargetInfo.h"
 
+#include <DX12Library/DiagnosticRenderScope.h>
+
 #include <map>
 #include <memory>
 #include <span>
@@ -84,6 +86,11 @@ namespace RenderGraph
             const RenderPass& pass,
             double durationMilliseconds,
             std::string recordingMode) const noexcept;
+        std::unique_ptr<DX12Diagnostics::DiagnosticRenderPassScope> CreateDiagnosticRenderPassScope(
+            const RenderPass& pass,
+            uint64_t frameIndex) const;
+        void EmitShaderAccessValidation(
+            const DX12Diagnostics::DiagnosticRenderPassScope& scope) const noexcept;
         static uint64_t GetPassCorrelationId(const RenderPass& pass) noexcept;
 
         std::shared_ptr<CommandQueue> m_DirectCommandQueue;

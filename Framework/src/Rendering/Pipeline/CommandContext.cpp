@@ -4,10 +4,12 @@
 
 #include <DX12Library/CommandList.h>
 #include <DX12Library/CommandListInternalAccess.h>
+#include <DX12Library/DiagnosticRenderScope.h>
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Resource.h>
 #include <DX12Library/StructuredBuffer.h>
 #include <Framework/Core/FrameworkDeviceContext.h>
+#include <Framework/Diagnostics/RenderGraphAccessValidation.h>
 #include <Framework/Rendering/Pipeline/BindlessDescriptorHeap.h>
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
 #include <Framework/Rendering/Pipeline/IndirectCommandSignature.h>
@@ -106,13 +108,50 @@ namespace
         }
     }
 
+    void ValidateDescriptorSetResourceAccesses(
+        FrameworkDeviceContext& deviceContext,
+        const PipelineDescriptorSet& descriptorSet)
+    {
+        if (DX12Diagnostics::DiagnosticRenderPassScope::GetCurrent() == nullptr)
+        {
+            return;
+        }
+
+        for (const auto& [rootParameterIndex, boundResource] : descriptorSet.GetBoundResources())
+        {
+            for (const auto& shaderResource : boundResource.ShaderResources)
+            {
+                if (shaderResource.has_value())
+                {
+                    FrameworkDiagnostics::ValidateActiveRenderGraphResourceAccess(
+                        deviceContext,
+                        shaderResource->ResourceIdentity,
+                        DX12Diagnostics::DiagnosticResourceAccess::Read,
+                        "srv",
+                        rootParameterIndex);
+                }
+            }
+            FrameworkDiagnostics::ValidateActiveRenderGraphResourceAccess(
+                deviceContext,
+                boundResource.UnorderedAccessViewResourceIdentity,
+                DX12Diagnostics::DiagnosticResourceAccess::Write,
+                "uav",
+                rootParameterIndex);
+        }
+    }
+
     void EmitDescriptorSetTelemetry(
         const PipelineBindPoint bindPoint,
         const PipelineDescriptorSet& descriptorSet)
     {
         FrameworkDeviceContext& deviceContext = descriptorSet.GetLayout().GetDeviceContext();
-        if (!deviceContext.HasDiagnosticTelemetrySink() ||
-            !ShouldEmitDescriptorSetTelemetry(bindPoint, descriptorSet))
+        if (!deviceContext.HasDiagnosticTelemetrySink())
+        {
+            return;
+        }
+
+        ValidateDescriptorSetResourceAccesses(deviceContext, descriptorSet);
+        if (!ShouldEmitDescriptorSetTelemetry(bindPoint, descriptorSet))
         {
             return;
         }
@@ -124,6 +163,14 @@ namespace
             { "sampler_descriptor_offset", static_cast<uint64_t>(descriptorSet.GetSamplerDescriptorOffset()) },
             { "bound_root_parameter_count", static_cast<uint64_t>(descriptorSet.GetBoundResources().size()) },
         };
+        if (const DX12Diagnostics::DiagnosticRenderPassScope* scope =
+            DX12Diagnostics::DiagnosticRenderPassScope::GetCurrent())
+        {
+            const DX12Diagnostics::DiagnosticRenderPassScopeDesc& scopeDesc = scope->GetDesc();
+            fields.push_back({ "render_graph.pass_correlation", scopeDesc.CorrelationId });
+            fields.push_back({ "render_graph.pass", scopeDesc.PassName });
+            fields.push_back({ "render_graph.queue", scopeDesc.QueueName });
+        }
         size_t bindingIndex = 0;
         for (const auto& [rootParameterIndex, boundResource] : descriptorSet.GetBoundResources())
         {
@@ -133,6 +180,7 @@ namespace
             fields.push_back({ prefix + ".has_uav", boundResource.UnorderedAccessView.has_value() });
             fields.push_back({ prefix + ".constant_buffer_bytes", static_cast<uint64_t>(boundResource.ConstantBufferData.size()) });
             fields.push_back({ prefix + ".has_acceleration_structure", boundResource.AccelerationStructure != nullptr });
+            fields.push_back({ prefix + ".has_structured_buffer", boundResource.StructuredBufferResource != nullptr });
             fields.push_back({
                 prefix + ".uav_resource_identity",
                 static_cast<uint64_t>(reinterpret_cast<uintptr_t>(boundResource.UnorderedAccessViewResourceIdentity)),

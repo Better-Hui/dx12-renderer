@@ -9,6 +9,7 @@
 #include <DX12Library/CommandList.h>
 #include <DX12Library/CommandListInternalAccess.h>
 #include <DX12Library/CommandQueue.h>
+#include <DX12Library/DiagnosticRenderScope.h>
 #include <DX12Library/DiagnosticTelemetry.h>
 #include <DX12Library/Helpers.h>
 #include <DX12Library/RenderTarget.h>
@@ -19,6 +20,9 @@
 #include <chrono>
 #include <exception>
 #include <future>
+#include <map>
+#include <mutex>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -32,6 +36,92 @@ namespace
         hash *= 1099511628211ull;
         hash ^= batchIndex;
         return hash * 1099511628211ull;
+    }
+
+    const char* GetDiagnosticQueueName(const RenderGraph::RenderPassQueue queue)
+    {
+        switch (queue)
+        {
+        case RenderGraph::RenderPassQueue::Direct: return "Direct";
+        case RenderGraph::RenderPassQueue::AsyncCompute: return "AsyncCompute";
+        case RenderGraph::RenderPassQueue::Copy: return "Copy";
+        default: return "Unknown";
+        }
+    }
+
+    std::string NarrowDiagnosticName(const std::wstring& value)
+    {
+        std::string result;
+        result.reserve(value.size());
+        for (const wchar_t character : value)
+        {
+            result.push_back(character >= 0 && character < 128 ? static_cast<char>(character) : '?');
+        }
+        return result;
+    }
+
+    DX12Diagnostics::DiagnosticResourceAccess GetDiagnosticAccess(const RenderGraph::InputType type)
+    {
+        using namespace RenderGraph;
+        switch (type)
+        {
+        case InputType::ShaderResource:
+        case InputType::NonPixelShaderResource:
+        case InputType::UnorderedAccess:
+        case InputType::CopySource:
+        case InputType::IndirectArgument:
+            return DX12Diagnostics::DiagnosticResourceAccess::Read;
+        default:
+            return DX12Diagnostics::DiagnosticResourceAccess::None;
+        }
+    }
+
+    DX12Diagnostics::DiagnosticResourceAccess GetDiagnosticAccess(const RenderGraph::OutputType type)
+    {
+        using namespace RenderGraph;
+        switch (type)
+        {
+        case OutputType::DepthRead:
+            return DX12Diagnostics::DiagnosticResourceAccess::Read;
+        case OutputType::RenderTarget:
+        case OutputType::DepthWrite:
+        case OutputType::UnorderedAccess:
+        case OutputType::CopyDestination:
+            return DX12Diagnostics::DiagnosticResourceAccess::Write;
+        default:
+            return DX12Diagnostics::DiagnosticResourceAccess::None;
+        }
+    }
+
+    uint64_t GetShaderAccessValidationSignature(
+        const DX12Diagnostics::DiagnosticRenderPassScope& scope) noexcept
+    {
+        uint64_t hash = 14695981039346656037ull;
+        const auto combine = [&hash](const uint64_t value)
+        {
+            hash ^= value;
+            hash *= 1099511628211ull;
+        };
+        const DX12Diagnostics::DiagnosticRenderPassScopeDesc& scopeDesc = scope.GetDesc();
+        combine(scopeDesc.CorrelationId);
+        for (const DX12Diagnostics::DiagnosticDeclaredResource& resource : scopeDesc.DeclaredResources)
+        {
+            combine(resource.LogicalResourceId);
+            combine(static_cast<uint64_t>(resource.Access));
+        }
+        combine(scope.GetObservedAccessCount());
+        combine(scope.GetMatchedAccessCount());
+        return hash;
+    }
+
+    bool ShouldEmitShaderAccessValidation(const DX12Diagnostics::DiagnosticRenderPassScope& scope)
+    {
+        static std::mutex mutex;
+        static std::map<uint64_t, std::set<uint64_t>> signatures;
+        const DX12Diagnostics::DiagnosticRenderPassScopeDesc& scopeDesc = scope.GetDesc();
+        const uint64_t signature = GetShaderAccessValidationSignature(scope);
+        std::lock_guard lock(mutex);
+        return signatures[scopeDesc.CorrelationId].insert(signature).second;
     }
 }
 
@@ -104,6 +194,130 @@ void RenderGraph::RenderGraphCommandExecutor::EmitCpuPassTiming(
     });
 }
 
+std::unique_ptr<DX12Diagnostics::DiagnosticRenderPassScope>
+RenderGraph::RenderGraphCommandExecutor::CreateDiagnosticRenderPassScope(
+    const RenderPass& pass,
+    const uint64_t frameIndex) const
+{
+    if (!HasDiagnosticTelemetrySink())
+    {
+        return nullptr;
+    }
+
+    DX12Diagnostics::DiagnosticRenderPassScopeDesc desc = {};
+    desc.CorrelationId = GetPassCorrelationId(pass);
+    desc.FrameIndex = frameIndex;
+    desc.PassName = NarrowDiagnosticName(pass.GetPassName());
+    desc.QueueName = GetDiagnosticQueueName(pass.GetQueue());
+    const auto addResource = [&desc](
+        const Resource& resource,
+        const ResourceId resourceId,
+        std::string resourceName,
+        const DX12Diagnostics::DiagnosticResourceAccess access)
+    {
+        if (access == DX12Diagnostics::DiagnosticResourceAccess::None)
+        {
+            return;
+        }
+        resource.ForEachResourceRecursive([&desc, resourceId, &resourceName, access](const Resource& nestedResource)
+        {
+            ID3D12Resource* resourceIdentity = nestedResource.GetD3D12Resource().Get();
+            if (resourceIdentity == nullptr)
+            {
+                return;
+            }
+            const auto existing = std::ranges::find_if(
+                desc.DeclaredResources,
+                [resourceIdentity](const DX12Diagnostics::DiagnosticDeclaredResource& candidate)
+                {
+                    return candidate.ResourceIdentity == resourceIdentity;
+                });
+            if (existing != desc.DeclaredResources.end())
+            {
+                existing->Access = existing->Access | access;
+                return;
+            }
+            desc.DeclaredResources.push_back({
+                .ResourceIdentity = resourceIdentity,
+                .LogicalResourceId = resourceId,
+                .LogicalResourceName = resourceName,
+                .Access = access,
+            });
+        });
+    };
+
+    for (const Input& input : pass.GetInputs())
+    {
+        const DX12Diagnostics::DiagnosticResourceAccess access = GetDiagnosticAccess(input.m_Type);
+        if (access != DX12Diagnostics::DiagnosticResourceAccess::None &&
+            m_ResourcePool->IsRegistered(input.m_Id))
+        {
+            addResource(
+                m_ResourcePool->GetResource(input.m_Id),
+                input.m_Id,
+                NarrowDiagnosticName(ResourceIds::GetResourceName(input.m_Id)),
+                access);
+        }
+    }
+    for (const Output& output : pass.GetOutputs())
+    {
+        const DX12Diagnostics::DiagnosticResourceAccess access = GetDiagnosticAccess(output.m_Type);
+        if (access != DX12Diagnostics::DiagnosticResourceAccess::None &&
+            m_ResourcePool->IsRegistered(output.m_Id))
+        {
+            addResource(
+                m_ResourcePool->GetResource(output.m_Id),
+                output.m_Id,
+                NarrowDiagnosticName(ResourceIds::GetResourceName(output.m_Id)),
+                access);
+        }
+    }
+    for (const ExternalResourceAccess& access : pass.GetExternalResourceAccesses())
+    {
+        addResource(
+            access.Resolve(),
+            access.Id,
+            NarrowDiagnosticName(ResourceIds::GetResourceName(access.Id)),
+            access.Mode == ExternalResourceAccessMode::Read
+                ? DX12Diagnostics::DiagnosticResourceAccess::Read
+                : DX12Diagnostics::DiagnosticResourceAccess::Write);
+    }
+
+    return std::make_unique<DX12Diagnostics::DiagnosticRenderPassScope>(std::move(desc));
+}
+
+void RenderGraph::RenderGraphCommandExecutor::EmitShaderAccessValidation(
+    const DX12Diagnostics::DiagnosticRenderPassScope& scope) const noexcept
+{
+    if (!HasDiagnosticTelemetrySink())
+    {
+        return;
+    }
+    const DX12Diagnostics::DiagnosticRenderPassScopeDesc& scopeDesc = scope.GetDesc();
+    const bool valid = scope.GetInvalidAccessCount() == 0u;
+    if (valid && !ShouldEmitShaderAccessValidation(scope))
+    {
+        return;
+    }
+    EmitTelemetry({
+        .Category = "assertion",
+        .Name = "render_graph_shader_access_declaration",
+        .Severity = valid ? DiagnosticTelemetrySeverity::Info : DiagnosticTelemetrySeverity::Error,
+        .FrameIndex = scopeDesc.FrameIndex,
+        .CorrelationId = scopeDesc.CorrelationId,
+        .Fields = {
+            { "result", std::string(valid ? "pass" : "fail") },
+            { "message", std::string("All tracked shader descriptor resources are declared by the active RenderGraph pass.") },
+            { "pass", scopeDesc.PassName },
+            { "queue", scopeDesc.QueueName },
+            { "declared_resource_count", static_cast<uint64_t>(scopeDesc.DeclaredResources.size()) },
+            { "observed_access_count", scope.GetObservedAccessCount() },
+            { "matched_access_count", scope.GetMatchedAccessCount() },
+            { "invalid_access_count", scope.GetInvalidAccessCount() },
+        },
+    });
+}
+
 void RenderGraph::RenderGraphCommandExecutor::Execute(
     const RenderMetadata& renderMetadata,
     const CompiledRenderGraph& compiledGraph,
@@ -114,7 +328,7 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
     const std::vector<RenderGraphRecordingBatch>& recordingBatches = compiledGraph.GetRecordingBatches();
     const std::map<const RenderPass*, RenderTargetInfo>& renderTargets = compiledGraph.GetRenderTargets();
     const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans = compiledGraph.GetResourceStatePlans();
-    m_QueueScheduler.BeginFrame();
+    m_QueueScheduler.BeginFrame(renderMetadata.m_FrameIndex);
     if (HasDiagnosticTelemetrySink())
     {
         EmitTelemetry({
@@ -290,7 +504,13 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
                         context,
                         renderTargets,
                         resourceStatePlans);
+                    const std::unique_ptr<DX12Diagnostics::DiagnosticRenderPassScope> diagnosticScope =
+                        CreateDiagnosticRenderPassScope(*renderPass, renderMetadata.m_FrameIndex);
                     renderPass->Execute(context, commandList);
+                    if (diagnosticScope != nullptr)
+                    {
+                        EmitShaderAccessValidation(*diagnosticScope);
+                    }
                 }
                 catch (const std::exception& exception)
                 {
@@ -327,6 +547,7 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
     {
         m_QueueScheduler.SubmitDirect(directCommandList);
     }
+    m_QueueScheduler.ValidateFrameResourceRetirements();
     if (HasDiagnosticTelemetrySink())
     {
         EmitTelemetry({
@@ -380,8 +601,14 @@ void RenderGraph::RenderGraphCommandExecutor::ExecuteParallelDirectBatch(
                         context,
                         renderTargets,
                         resourceStatePlans);
+                    const std::unique_ptr<DX12Diagnostics::DiagnosticRenderPassScope> diagnosticScope =
+                        CreateDiagnosticRenderPassScope(*renderPass, renderMetadata.m_FrameIndex);
                     PIXScope(*commandList, renderPass->GetPassName().c_str());
                     renderPass->Execute(context, *commandList);
+                    if (diagnosticScope != nullptr)
+                    {
+                        EmitShaderAccessValidation(*diagnosticScope);
+                    }
                 }
                 catch (const std::exception& exception)
                 {
@@ -473,6 +700,7 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareDirectQueueDependencies(
 
     m_QueueScheduler.SubmitDirect(directCommandList);
     m_QueueScheduler.WaitForDependencies(RenderPassQueue::Direct, producerFences);
+    m_QueueScheduler.ValidateDirectPassDependencies(passes, producerFences);
 
     if (m_Profiler.IsQueueFrameActive(RenderPassQueue::Direct))
     {
@@ -523,8 +751,14 @@ void RenderGraph::RenderGraphCommandExecutor::ExecuteNonDirectBatch(
                 context,
                 renderTargets,
                 resourceStatePlans);
+            const std::unique_ptr<DX12Diagnostics::DiagnosticRenderPassScope> diagnosticScope =
+                CreateDiagnosticRenderPassScope(*pass, renderMetadata.m_FrameIndex);
             PIXScope(*commandList, pass->GetPassName().c_str());
             pass->Execute(context, *commandList);
+            if (diagnosticScope != nullptr)
+            {
+                EmitShaderAccessValidation(*diagnosticScope);
+            }
         }
         catch (const std::exception& exception)
         {
@@ -617,6 +851,11 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareNonDirectBatchDependencies(
 
     const uint64_t preambleFenceValue = m_QueueScheduler.SubmitDirect(directCommandList);
     m_QueueScheduler.WaitForDirectSubmission(batch.Queue, preambleFenceValue);
+    m_QueueScheduler.ValidateNonDirectBatchDependencies(
+        batch.Passes,
+        batch.Queue,
+        producerFences,
+        preambleFenceValue);
 }
 
 void RenderGraph::RenderGraphCommandExecutor::ApplyDirectQueuePreamble(

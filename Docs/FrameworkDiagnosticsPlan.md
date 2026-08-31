@@ -1,6 +1,6 @@
 # Framework Diagnostics, Automation, and Profiling
 
-> Status: the baseline is implemented and validated with real Demo automation. The maintained Copy-queue, `meshlet-indirect`, and `dynamic-scene` scenarios cover real cross-queue synchronization, descriptor-sensitive Meshlet culling, retirement, and in-place acceleration-structure updates. `DiagnosticsImageCapture` now supplies non-blocking GPU texture readback, image assertions, capture attachments, and background PNG encoding; device-removal failures attach DRED text. Remaining work is actual shader-access versus graph-declaration closure, broader cross-queue/lifetime invariants, and whole-session background archival, compression, and retention policy.
+> Status: the baseline is implemented and validated with real Demo automation. RenderGraph pass scopes match actual SRV/UAV descriptor access to graph declarations, while DLSS/NGX and OIDN/CUDA native D3D12 boundaries explicitly report their accesses. Runtime invariants fail automation with exit code `24` when a cross-queue producer signal, consumer wait, state plan, or resource retirement is missing. Real `copy` and `oidn` scenarios cover Direct -> Copy -> Async Compute and Direct -> CUDA -> Direct respectively. Remaining work is strict attribution for RTAS, bindless, and global/default descriptors, plus whole-session background archival, compression, and retention policy.
 
 ## Goal
 
@@ -40,7 +40,7 @@ images/*.png           asynchronously captured image attachments listed by manif
 dred.txt               DRED breadcrumb/page-fault attachment on device removal
 ```
 
-Large GPU resources are not dumped by default. The in-memory event buffer is bounded; ordinary events may be evicted under pressure, while every assertion result (including passes) plus error/fatal events receives retention priority so `assertions.json` keeps the conclusions of executed invariants. The manifest records `dropped_event_count`. `RendererDiagnostics inspect` reports an incomplete verdict and exit code `12` for dropped events, a non-terminal capture, or unknown assertions, so missing evidence or unresolved invariants cannot be mistaken for a clean result. Tool-driven automation defaults to 262,144 events; long `visual` captures should explicitly use `--max-events 524288` and increase it further when `inspect` reports incompleteness.
+Large GPU resources are not dumped by default. The in-memory event buffer defaults to `65,536` entries. Normal high-frequency CPU timing, batch, descriptor, queue, and per-frame lifetime-success events are sampled as the first frame plus every 60 frames per semantic series; failed assertions, warnings, errors, and fatal events are never sampled. The manifest separates `sampled_event_count` from real capacity loss in `dropped_event_count`; `RENDERER_DIAGNOSTICS_SAMPLE_INTERVAL_FRAMES` overrides the interval. `RendererDiagnostics inspect` reports an incomplete verdict and exit code `12` for dropped events, a non-terminal capture, or unknown assertions, so missing evidence or unresolved invariants cannot be mistaken for a clean result.
 
 ## Automation contract
 
@@ -59,6 +59,7 @@ The developer tool is generated only with `DX12_RENDERER_BUILD_DEVELOPER_TOOLS=O
 ```text
 RendererDiagnostics run --exe RaytracingDemo.exe --scenario stress --output Saved/Diagnostics/run-001
 RendererDiagnostics run --exe RaytracingDemo.exe --scenario copy --output Saved/Diagnostics/copy-001
+RendererDiagnostics run --exe RaytracingDemo.exe --scenario oidn --output Saved/Diagnostics/oidn-001
 RendererDiagnostics run --exe RaytracingDemo.exe --scenario rtas --output Saved/Diagnostics/rtas-001
 RendererDiagnostics run --exe RaytracingDemo.exe --scenario dynamic-scene --output Saved/Diagnostics/dynamic-scene-001 --set RAYTRACING_DEMO_AUTOTEST_STEP_MS=50 --set RAYTRACING_DEMO_DIRECT_LIGHTING=none --set RAYTRACING_DEMO_INDIRECT_LIGHTING=none --set RAYTRACING_DEMO_DENOISER=off
 RendererDiagnostics run --exe RaytracingDemo.exe --scenario meshlet-indirect --output Saved/Diagnostics/meshlet-indirect-001 --set RAYTRACING_DEMO_AUTOTEST_STEP_MS=50 --set RAYTRACING_DEMO_MESHLET_GBUFFER=1 --set RAYTRACING_DEMO_MESHLET_BACKEND=indirect --set RAYTRACING_DEMO_DIRECT_LIGHTING=none --set RAYTRACING_DEMO_INDIRECT_LIGHTING=none --set RAYTRACING_DEMO_DENOISER=off
@@ -83,8 +84,11 @@ Implemented:
 - Direct/Compute/Copy submission, signal, wait, fence completion, and CPU-wait telemetry with queue+fence correlation IDs;
 - RenderGraph pass, batch, resource, state-plan, and lifetime telemetry;
 - descriptor allocation, descriptor-set revision, and resource-identity telemetry;
+- thread-local `DiagnosticRenderPassScope` matching logical graph resource IDs and declared read/write access to actual SRV/UAV descriptor access; undeclared, permission-mismatched, or identity-mismatched access emits `render_graph_shader_access_declaration=result=fail`;
+- explicit native-D3D12 observations for DLSS/NGX and OIDN readback/upload, while ReSTIR and Bloom continue through descriptor-path validation;
 - compacted active-count/finalized indirect-dispatch consistency;
-- Direct -> Copy -> Async Compute -> Direct validation with producer-fence, GPU-wait, state-plan, batch, and retirement assertions;
+- runtime validation of cross-queue producer signals, consumer waits, state plans, and graph-resource retirement; the real `copy` scenario validates Direct -> Copy -> Async Compute -> Direct;
+- Direct -> CUDA -> Direct shared-fence handoff validation for OIDN, including Direct signal, CUDA wait/signal, and Direct wait;
 - reusable non-blocking `GpuReadbackBuffer` and `GpuReadbackTexture` ring-slot primitives, exercised by compacted active-pixel validation. `DiagnosticsImageCapture::Request()` submits an independent Direct-queue copy; `Poll()` completes it in a later frame, converts to RGBA8, computes mean/non-black metrics, and records `image.<name>` assertions. Up to two background PNG writers encode attachments. Automation defers terminal finalization until shutdown `Drain()` has completed the final readback and writer. OIDN uses D3D12 shared buffers/fences -> CUDA `Quality::Fast` -> D3D12 copy-back when available and retains readback -> CPU `Fast` -> upload as a fallback; OIDN automation records the selected backend and verifies static-result holding plus generation invalidation after camera motion;
 - `DiagnosticsSession::AttachDeviceRemovalDred()` writes `dred.txt` with the removal HRESULT, at most 128 auto-breadcrumb nodes, and page-fault allocations, then registers it in the manifest;
 - dynamic RTAS validation with ordinary/Meshlet vertex uploads, Meshlet bounds and instance updates, emissive-mesh refresh, dirty-BLAS refits, in-place TLAS updates, resource-retirement counters, restore-frame assertions, and an explicit skinned-update capability rejection;
@@ -92,8 +96,7 @@ Implemented:
 
 Still required:
 
-- complete validation of actual RenderGraph access against declared usage and state plans;
-- generic coverage of cross-queue waits and multi-queue retirement beyond the maintained Copy validation topology;
+- strict attribution for RTAS, bindless tables, and global/default descriptors; the current scope covers enumerable SRV/UAV and native D3D12 boundaries;
 - a generic Framework invariant for backend capability versus scheduled passes.
 - whole-session background archival, compression, and retention policy; only image PNG attachments are currently written in the background.
 
@@ -129,6 +132,7 @@ Separate queue timestamps must not be presented as a global GPU overlap truth un
 3. [x] Named controls/observations, deterministic scenarios, timeout/assertion handling, and automatic failure finalization.
 4. [x] `run`, `inspect`, `query`, `diff`, `reproduce`, and `selftest` command loop.
 5. [x] Diagnostics-owned texture readback/image assertions, capture attachments, background PNG writing, and device-removal DRED attachments.
-6. [ ] Generic validation of actual shader access against graph declarations, broader cross-queue/lifetime invariants, and whole-session background archival, compression, and retention policy.
+6. [x] Actual SRV/UAV/native-D3D12 access validation against graph declarations and runtime cross-queue signal/wait/state-plan/retirement invariants, verified in real ReSTIR, OIDN, DLSS, Bloom, and Copy paths.
+7. [ ] Strict RTAS/bindless/global-descriptor access attribution and whole-session background archival, compression, and retention policy.
 
 Disabled diagnostics must not allocate GPU resources, add readbacks, or change pass topology. Enabled capture must use bounded memory, avoid per-event disk flushing, and make every potentially stalling operation explicit.

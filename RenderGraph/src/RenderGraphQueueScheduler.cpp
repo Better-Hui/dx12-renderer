@@ -24,6 +24,17 @@ namespace RenderGraph
             default: return "Unknown";
             }
         }
+
+        std::string NarrowName(const std::wstring& value)
+        {
+            std::string result;
+            result.reserve(value.size());
+            for (const wchar_t character : value)
+            {
+                result.push_back(character >= 0 && character < 128 ? static_cast<char>(character) : '?');
+            }
+            return result;
+        }
     }
 
     size_t RenderGraphQueueSynchronizationStats::GetQueueIndex(const RenderPassQueue queue)
@@ -90,7 +101,7 @@ namespace RenderGraph
         }
     }
 
-    void RenderGraphQueueScheduler::BeginFrame()
+    void RenderGraphQueueScheduler::BeginFrame(const uint64_t frameIndex)
     {
         if (m_LastAsyncComputeFenceValue != 0)
         {
@@ -105,9 +116,13 @@ namespace RenderGraph
         m_LastWriterFenceValues.clear();
         m_ExternalResourceUsages.clear();
         m_ResourceRetirements.clear();
+        m_ReferencedGraphResources.clear();
         m_FrameSubmissionFences = {};
         m_FrameSynchronizationStats = {};
+        m_WaitedProducerFences = {};
+        m_FrameRuntimeValidation = {};
         m_PendingDirectResources.clear();
+        m_CurrentFrameIndex = frameIndex;
         m_LastAsyncComputeFenceValue = 0;
         m_LastCopyFenceValue = 0;
     }
@@ -324,6 +339,10 @@ namespace RenderGraph
             if (fenceValue != 0)
             {
                 consumer.Wait(GetCommandQueue(producerQueue), fenceValue);
+                uint64_t& waitedFence = QueueFence(
+                    m_WaitedProducerFences[QueueIndex(waitingQueue)],
+                    producerQueue);
+                waitedFence = (std::max)(waitedFence, fenceValue);
                 m_FrameSynchronizationStats.RecordWait(producerQueue, waitingQueue);
                 if (HasDiagnosticTelemetrySink())
                 {
@@ -362,6 +381,10 @@ namespace RenderGraph
         if (fenceValue != 0)
         {
             GetCommandQueue(waitingQueue).Wait(*m_DirectCommandQueue, fenceValue);
+            uint64_t& waitedFence = QueueFence(
+                m_WaitedProducerFences[QueueIndex(waitingQueue)],
+                RenderPassQueue::Direct);
+            waitedFence = (std::max)(waitedFence, fenceValue);
             m_FrameSynchronizationStats.RecordWait(RenderPassQueue::Direct, waitingQueue);
             if (HasDiagnosticTelemetrySink())
             {
@@ -385,6 +408,7 @@ namespace RenderGraph
     {
         const auto trackResource = [this, &pass, fenceValue](const ResourceId resourceId)
         {
+            m_ReferencedGraphResources.insert(resourceId);
             if (pass.GetQueue() == RenderPassQueue::Direct)
             {
                 m_PendingDirectResources.insert(resourceId);
@@ -416,6 +440,209 @@ namespace RenderGraph
         {
             TrackExternalResourceAccess(access, pass.GetQueue(), fenceValue);
         }
+    }
+
+    void RenderGraphQueueScheduler::ValidateDirectPassDependencies(
+        const std::span<RenderPass* const> passes,
+        const RenderGraphQueueFenceValues& dependencies)
+    {
+        for (const RenderPass* pass : passes)
+        {
+            Assert(pass != nullptr && pass->GetQueue() == RenderPassQueue::Direct,
+                "Direct dependency validation received an invalid pass.");
+            std::set<ResourceId> resources;
+            for (const Input& input : pass->GetInputs())
+            {
+                if (input.m_Type != InputType::Token && input.m_Type != InputType::ExternalAccess)
+                {
+                    resources.insert(input.m_Id);
+                }
+            }
+            for (const Output& output : pass->GetOutputs())
+            {
+                if (output.m_Type != OutputType::Token && output.m_Type != OutputType::ExternalAccess)
+                {
+                    resources.insert(output.m_Id);
+                }
+            }
+            for (const ResourceId resourceId : resources)
+            {
+                ValidateResourceDependency(
+                    *pass,
+                    resourceId,
+                    RenderPassQueue::Direct,
+                    dependencies,
+                    false,
+                    0u);
+            }
+        }
+    }
+
+    void RenderGraphQueueScheduler::ValidateNonDirectBatchDependencies(
+        const std::span<RenderPass* const> passes,
+        const RenderPassQueue queue,
+        const RenderGraphQueueFenceValues& producerDependencies,
+        const uint64_t directPreambleFence)
+    {
+        Assert(queue != RenderPassQueue::Direct,
+            "Non-direct dependency validation cannot target the direct queue.");
+        for (const RenderPass* pass : passes)
+        {
+            Assert(pass != nullptr && pass->GetQueue() == queue,
+                "Non-direct dependency validation received an invalid pass.");
+            std::set<ResourceId> resources;
+            for (const Input& input : pass->GetInputs())
+            {
+                if (input.m_Type != InputType::Token && input.m_Type != InputType::ExternalAccess)
+                {
+                    resources.insert(input.m_Id);
+                }
+            }
+            for (const Output& output : pass->GetOutputs())
+            {
+                if (output.m_Type != OutputType::Token && output.m_Type != OutputType::ExternalAccess)
+                {
+                    resources.insert(output.m_Id);
+                }
+            }
+            for (const ResourceId resourceId : resources)
+            {
+                ValidateResourceDependency(
+                    *pass,
+                    resourceId,
+                    queue,
+                    producerDependencies,
+                    true,
+                    directPreambleFence);
+            }
+        }
+    }
+
+    void RenderGraphQueueScheduler::ValidateFrameResourceRetirements()
+    {
+        for (const ResourceId resourceId : m_ReferencedGraphResources)
+        {
+            const RenderGraphQueueFenceValues retirement = GetResourceRetirement(resourceId);
+            if (!retirement.IsEmpty())
+            {
+                continue;
+            }
+
+            ++m_FrameRuntimeValidation.MissingRetirementFenceCount;
+            RecordRuntimeInvariantFailure(
+                "render_graph_resource_retirement",
+                "A graph resource was referenced without a retirement fence.",
+                {
+                    { "resource_id", static_cast<uint64_t>(resourceId) },
+                    { "resource_name", NarrowName(ResourceIds::GetResourceName(resourceId)) },
+                });
+        }
+
+        EmitTelemetry({
+            .Category = "assertion",
+            .Name = "render_graph_queue_lifetime_runtime",
+            .Severity = m_FrameRuntimeValidation.IsValid()
+                ? DiagnosticTelemetrySeverity::Info
+                : DiagnosticTelemetrySeverity::Error,
+            .FrameIndex = m_CurrentFrameIndex,
+            .Fields = {
+                { "result", std::string(m_FrameRuntimeValidation.IsValid() ? "pass" : "fail") },
+                { "cross_queue_transfer_count", m_FrameRuntimeValidation.CrossQueueTransferCount },
+                { "missing_producer_signal_count", m_FrameRuntimeValidation.MissingProducerSignalCount },
+                { "missing_consumer_wait_count", m_FrameRuntimeValidation.MissingConsumerWaitCount },
+                { "missing_retirement_fence_count", m_FrameRuntimeValidation.MissingRetirementFenceCount },
+            },
+        });
+    }
+
+    void RenderGraphQueueScheduler::ValidateResourceDependency(
+        const RenderPass& pass,
+        const ResourceId resourceId,
+        const RenderPassQueue consumerQueue,
+        const RenderGraphQueueFenceValues& producerDependencies,
+        const bool throughDirectPreamble,
+        const uint64_t directPreambleFence)
+    {
+        const auto producerQueueIt = m_LastWriterQueues.find(resourceId);
+        if (producerQueueIt == m_LastWriterQueues.end() || producerQueueIt->second == consumerQueue)
+        {
+            return;
+        }
+
+        ++m_FrameRuntimeValidation.CrossQueueTransferCount;
+        const RenderPassQueue producerQueue = producerQueueIt->second;
+        const auto producerFenceIt = m_LastWriterFenceValues.find(resourceId);
+        if (producerFenceIt == m_LastWriterFenceValues.end() || producerFenceIt->second == 0u)
+        {
+            ++m_FrameRuntimeValidation.MissingProducerSignalCount;
+            RecordRuntimeInvariantFailure(
+                "render_graph_cross_queue_producer_signal",
+                "A cross-queue resource consumer has no producer fence signal.",
+                {
+                    { "pass", NarrowName(pass.GetPassName()) },
+                    { "resource_id", static_cast<uint64_t>(resourceId) },
+                    { "resource_name", NarrowName(ResourceIds::GetResourceName(resourceId)) },
+                    { "producer_queue", std::string(GetQueueName(producerQueue)) },
+                    { "consumer_queue", std::string(GetQueueName(consumerQueue)) },
+                });
+            return;
+        }
+
+        const uint64_t producerFence = producerFenceIt->second;
+        const uint64_t declaredDependencyFence = QueueFence(producerDependencies, producerQueue);
+        const uint64_t directWaitedProducerFence = QueueFence(
+            m_WaitedProducerFences[QueueIndex(RenderPassQueue::Direct)],
+            producerQueue);
+        const uint64_t consumerWaitedDirectFence = QueueFence(
+            m_WaitedProducerFences[QueueIndex(consumerQueue)],
+            RenderPassQueue::Direct);
+        const uint64_t consumerWaitedProducerFence = QueueFence(
+            m_WaitedProducerFences[QueueIndex(consumerQueue)],
+            producerQueue);
+
+        const bool producerWaitCovered = throughDirectPreamble
+            ? (producerQueue == RenderPassQueue::Direct
+                ? directPreambleFence != 0u
+                : declaredDependencyFence >= producerFence && directWaitedProducerFence >= producerFence)
+            : declaredDependencyFence >= producerFence && consumerWaitedProducerFence >= producerFence;
+        const bool consumerWaitCovered = !throughDirectPreamble ||
+            (directPreambleFence != 0u && consumerWaitedDirectFence >= directPreambleFence);
+        if (producerWaitCovered && consumerWaitCovered)
+        {
+            return;
+        }
+
+        ++m_FrameRuntimeValidation.MissingConsumerWaitCount;
+        RecordRuntimeInvariantFailure(
+            "render_graph_cross_queue_consumer_wait",
+            "A cross-queue resource transfer is not covered by the required queue wait chain.",
+            {
+                { "pass", NarrowName(pass.GetPassName()) },
+                { "resource_id", static_cast<uint64_t>(resourceId) },
+                { "resource_name", NarrowName(ResourceIds::GetResourceName(resourceId)) },
+                { "producer_queue", std::string(GetQueueName(producerQueue)) },
+                { "consumer_queue", std::string(GetQueueName(consumerQueue)) },
+                { "producer_fence", producerFence },
+                { "declared_dependency_fence", declaredDependencyFence },
+                { "direct_preamble_fence", directPreambleFence },
+                { "through_direct_preamble", throughDirectPreamble },
+            });
+    }
+
+    void RenderGraphQueueScheduler::RecordRuntimeInvariantFailure(
+        std::string name,
+        std::string message,
+        std::vector<DiagnosticTelemetryField> fields)
+    {
+        fields.insert(fields.begin(), { "message", std::move(message) });
+        fields.insert(fields.begin(), { "result", std::string("fail") });
+        EmitTelemetry({
+            .Category = "assertion",
+            .Name = std::move(name),
+            .Severity = DiagnosticTelemetrySeverity::Error,
+            .FrameIndex = m_CurrentFrameIndex,
+            .Fields = std::move(fields),
+        });
     }
 
     void RenderGraphQueueScheduler::FinalizeDirectSubmission(const uint64_t fenceValue)
@@ -514,6 +741,12 @@ namespace RenderGraph
     RenderGraphQueueScheduler::GetFrameSynchronizationStats() const
     {
         return m_FrameSynchronizationStats;
+    }
+
+    const RenderGraphQueueRuntimeValidation&
+    RenderGraphQueueScheduler::GetFrameRuntimeValidation() const
+    {
+        return m_FrameRuntimeValidation;
     }
 
     size_t RenderGraphQueueScheduler::QueueIndex(const RenderPassQueue queue)

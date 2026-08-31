@@ -6,6 +6,7 @@
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Texture.h>
 #include <Framework/Core/FrameworkDeviceContext.h>
+#include <Framework/Diagnostics/RenderGraphAccessValidation.h>
 
 #include <nvsdk_ngx_helpers.h>
 #include <sl.h>
@@ -113,6 +114,53 @@ namespace
             texture->GetD3D12Resource().Get(),
             static_cast<uint32_t>(state),
         };
+    }
+
+    void ValidateDlssNativeResourceAccesses(
+        FrameworkDeviceContext& deviceContext,
+        const DLSSExecutionInputs& inputs)
+    {
+        FrameworkDiagnostics::ValidateActiveRenderGraphResourceAccess(
+            deviceContext,
+            inputs.Color != nullptr ? inputs.Color->GetD3D12Resource().Get() : nullptr,
+            DX12Diagnostics::DiagnosticResourceAccess::Read,
+            "native_dlss_color");
+        FrameworkDiagnostics::ValidateActiveRenderGraphResourceAccess(
+            deviceContext,
+            inputs.Depth != nullptr ? inputs.Depth->GetD3D12Resource().Get() : nullptr,
+            DX12Diagnostics::DiagnosticResourceAccess::Read,
+            "native_dlss_depth");
+        FrameworkDiagnostics::ValidateActiveRenderGraphResourceAccess(
+            deviceContext,
+            inputs.MotionVectors != nullptr ? inputs.MotionVectors->GetD3D12Resource().Get() : nullptr,
+            DX12Diagnostics::DiagnosticResourceAccess::Read,
+            "native_dlss_motion_vectors");
+        FrameworkDiagnostics::ValidateActiveRenderGraphResourceAccess(
+            deviceContext,
+            inputs.Output != nullptr ? inputs.Output->GetD3D12Resource().Get() : nullptr,
+            DX12Diagnostics::DiagnosticResourceAccess::Write,
+            "native_dlss_output");
+    }
+
+    void ValidateDlssRayReconstructionNativeResourceAccesses(
+        FrameworkDeviceContext& deviceContext,
+        const DLSSExecutionInputs& inputs)
+    {
+        FrameworkDiagnostics::ValidateActiveRenderGraphResourceAccess(
+            deviceContext,
+            inputs.DiffuseAlbedo != nullptr ? inputs.DiffuseAlbedo->GetD3D12Resource().Get() : nullptr,
+            DX12Diagnostics::DiagnosticResourceAccess::Read,
+            "native_dlss_rr_diffuse_albedo");
+        FrameworkDiagnostics::ValidateActiveRenderGraphResourceAccess(
+            deviceContext,
+            inputs.SpecularAlbedo != nullptr ? inputs.SpecularAlbedo->GetD3D12Resource().Get() : nullptr,
+            DX12Diagnostics::DiagnosticResourceAccess::Read,
+            "native_dlss_rr_specular_albedo");
+        FrameworkDiagnostics::ValidateActiveRenderGraphResourceAccess(
+            deviceContext,
+            inputs.NormalRoughness != nullptr ? inputs.NormalRoughness->GetD3D12Resource().Get() : nullptr,
+            DX12Diagnostics::DiagnosticResourceAccess::Read,
+            "native_dlss_rr_normal_roughness");
     }
 
     std::string GetStreamlineResultMessage(const char* operation, const sl::Result result)
@@ -398,6 +446,7 @@ void DLSS::Execute(CommandList& commandList, const DLSSExecutionInputs& inputs)
         throw std::runtime_error("DLSS requires color, depth, motion-vector, and output textures.");
     }
 
+    ValidateDlssNativeResourceAccesses(m_DeviceContext, inputs);
     if (m_RayReconstructionEnabled)
     {
         ExecuteRayReconstruction(commandList, inputs);
@@ -619,6 +668,7 @@ void DLSS::ExecuteRayReconstruction(CommandList& commandList, const DLSSExecutio
         throw std::runtime_error("DLSS Ray Reconstruction requires diffuse albedo, specular albedo, and a packed normal-roughness texture.");
     }
 
+    ValidateDlssRayReconstructionNativeResourceAccesses(m_DeviceContext, inputs);
     const std::shared_ptr<FrameFeaturesRuntime> frameFeaturesRuntime = m_DeviceContext.GetFrameFeaturesRuntime();
     if (frameFeaturesRuntime == nullptr || !frameFeaturesRuntime->IsInitialized())
     {

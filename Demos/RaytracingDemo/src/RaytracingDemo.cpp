@@ -1393,30 +1393,26 @@ void RaytracingDemo::ApplyRuntimeAutomationMatrixCase(const uint32_t caseIndex)
     ResetAccumulation();
 }
 
-void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, const uint32_t value)
+bool RaytracingDemo::ApplyTopologyRuntimeAutomationAction(
+    const uint32_t actionValue,
+    const uint32_t value)
 {
     const bool enabled = value != 0u;
     const auto action = static_cast<RuntimeAutomationAction>(actionValue);
     switch (action)
     {
-    case RuntimeAutomationAction::SoftShadows:
-        m_SoftShadowsEnabled = enabled;
-        EnsureRayTracingPipelines();
-        BindRayTracingShaderResources();
-        ResetAccumulation();
-        break;
     case RuntimeAutomationAction::StressSpheres:
         m_SceneRuntime.SetStressTestSpheresEnabled(enabled);
-        break;
+        return true;
     case RuntimeAutomationAction::MeshletGBuffer:
         m_UseMeshletGBuffer = enabled;
         ResetAccumulation();
-        break;
+        return true;
     case RuntimeAutomationAction::MeshletTaskShader:
         m_UseTaskShaderMeshlets = enabled;
         m_UseMeshletGBuffer = true;
         ResetAccumulation();
-        break;
+        return true;
     case RuntimeAutomationAction::PathTracingBackend:
         m_PathTracingBackend = static_cast<PathTracingBackend>(value);
         if (m_PathTracingBackend != PathTracingBackend::InlineRayQuery)
@@ -1424,13 +1420,58 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
             m_AsyncComputeEnabled = false;
         }
         ResetAccumulation();
-        break;
+        return true;
     case RuntimeAutomationAction::DirectLighting:
         m_DirectLightingTechnique = static_cast<RaytracingDemoLightingTechnique>(value);
         ResetAccumulation();
-        break;
+        return true;
     case RuntimeAutomationAction::IndirectLighting:
         m_IndirectLightingTechnique = static_cast<RaytracingDemoLightingTechnique>(value);
+        ResetAccumulation();
+        return true;
+    case RuntimeAutomationAction::CopyQueueValidation:
+        m_CopyQueueValidationEnabled = enabled;
+        ResetAccumulation();
+        return true;
+    case RuntimeAutomationAction::DynamicRayTracingUpdate:
+        m_SceneResources.SetDynamicRayTracingUpdatesEnabled(enabled);
+        ResetAccumulation();
+        return true;
+    case RuntimeAutomationAction::Denoiser:
+        if (value > static_cast<uint32_t>(DenoiserController::Algorithm::OIDN))
+        {
+            throw std::out_of_range("Runtime automation denoiser selection is out of range.");
+        }
+        m_Denoisers.SetAlgorithm(static_cast<DenoiserController::Algorithm>(value));
+        ResetAccumulation();
+        return true;
+    case RuntimeAutomationAction::DLSS:
+        m_DLSS.SetMode(static_cast<DLSSMode>(value));
+        ResetAccumulation();
+        return true;
+    case RuntimeAutomationAction::Skybox:
+        m_SkyboxEnabled = enabled;
+        ResetAccumulation();
+        return true;
+    default:
+        return false;
+    }
+}
+
+void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, const uint32_t value)
+{
+    const bool enabled = value != 0u;
+    const auto action = static_cast<RuntimeAutomationAction>(actionValue);
+    if (ApplyTopologyRuntimeAutomationAction(actionValue, value))
+    {
+        return;
+    }
+    switch (action)
+    {
+    case RuntimeAutomationAction::SoftShadows:
+        m_SoftShadowsEnabled = enabled;
+        EnsureRayTracingPipelines();
+        BindRayTracingShaderResources();
         ResetAccumulation();
         break;
     case RuntimeAutomationAction::MaxBounces:
@@ -1516,10 +1557,6 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
             std::to_string(diagnostics->DispatchZ) + ").");
         break;
     }
-    case RuntimeAutomationAction::CopyQueueValidation:
-        m_CopyQueueValidationEnabled = enabled;
-        ResetAccumulation();
-        break;
     case RuntimeAutomationAction::VerifyCopyQueueValidation:
     {
         const auto failCopyQueueAssertion = [this](std::string message)
@@ -1611,10 +1648,6 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         m_RuntimeAutomation.AppendDiagnosticLog(message);
         break;
     }
-    case RuntimeAutomationAction::DynamicRayTracingUpdate:
-        m_SceneResources.SetDynamicRayTracingUpdatesEnabled(enabled);
-        ResetAccumulation();
-        break;
     case RuntimeAutomationAction::VerifyDynamicRayTracingUpdate:
     {
         const auto failDynamicRtasAssertion = [this](std::string message)
@@ -1717,14 +1750,6 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         m_RuntimeAutomation.AppendDiagnosticLog(message);
         break;
     }
-    case RuntimeAutomationAction::Denoiser:
-        if (value > static_cast<uint32_t>(DenoiserController::Algorithm::OIDN))
-        {
-            throw std::out_of_range("Runtime automation denoiser selection is out of range.");
-        }
-        m_Denoisers.SetAlgorithm(static_cast<DenoiserController::Algorithm>(value));
-        ResetAccumulation();
-        break;
     case RuntimeAutomationAction::OIDNStaticSpp:
         m_Denoisers.SetOIDNStaticSpp(value);
         ResetAccumulation();
@@ -1832,10 +1857,6 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
     case RuntimeAutomationAction::ParallelDirectCommandRecording:
         m_ParallelDirectCommandRecordingEnabled = enabled;
         break;
-    case RuntimeAutomationAction::Skybox:
-        m_SkyboxEnabled = enabled;
-        ResetAccumulation();
-        break;
     case RuntimeAutomationAction::Accumulation:
         m_AccumulationEnabled = enabled;
         ResetAccumulation();
@@ -1886,10 +1907,6 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
     }
     case RuntimeAutomationAction::DumpTiming:
         m_RenderGraphTimingHistory.DumpCsv();
-        break;
-    case RuntimeAutomationAction::DLSS:
-        m_DLSS.SetMode(static_cast<DLSSMode>(value));
-        ResetAccumulation();
         break;
     case RuntimeAutomationAction::MaterialShading:
         SetMaterialShadingModel(static_cast<MaterialShadingModel>(value));

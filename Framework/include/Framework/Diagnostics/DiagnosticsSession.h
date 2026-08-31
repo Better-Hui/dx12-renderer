@@ -42,6 +42,7 @@ namespace FrameworkDiagnostics
         std::string SessionName = "capture";
         std::filesystem::path OutputDirectory;
         size_t MaxEventCount = 65536;
+        uint64_t HighFrequencySampleIntervalFrames = 60;
         bool Enabled = true;
     };
 
@@ -91,6 +92,8 @@ class DiagnosticsSession final : public DiagnosticTelemetrySink
         [[nodiscard]] bool IsEnabled() const noexcept { return m_Enabled.load(std::memory_order_acquire); }
         [[nodiscard]] bool IsFinalized() const noexcept { return m_Finalized.load(std::memory_order_acquire); }
         [[nodiscard]] uint64_t GetDroppedEventCount() const noexcept { return m_DroppedEventCount.load(); }
+        [[nodiscard]] uint64_t GetFailedAssertionCount() const noexcept { return m_FailedAssertionCount.load(); }
+        [[nodiscard]] bool HasFailedAssertions() const noexcept { return GetFailedAssertionCount() != 0u; }
         [[nodiscard]] std::filesystem::path GetOutputDirectory() const;
         [[nodiscard]] std::string GetLastError() const;
         [[nodiscard]] std::vector<RecordedDiagnosticEvent> GetEventsSnapshot() const;
@@ -114,6 +117,9 @@ class DiagnosticsSession final : public DiagnosticTelemetrySink
         std::atomic<uint64_t> m_CurrentFrameIndex = DiagnosticTelemetryEvent::NoFrame;
         std::atomic<uint64_t> m_NextSequence = 1;
         std::atomic<uint64_t> m_DroppedEventCount = 0;
+        std::atomic<uint64_t> m_SampledEventCount = 0;
+        std::atomic<uint64_t> m_FailedAssertionCount = 0;
+        std::map<std::string, uint64_t> m_LastSampledFrames;
         std::atomic_bool m_Enabled = false;
         std::atomic_bool m_Finalized = false;
     };

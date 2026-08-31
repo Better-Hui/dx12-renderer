@@ -3,12 +3,14 @@
 
 #include <DX12Library/CommandList.h>
 #include <DX12Library/CommandQueue.h>
+#include <DX12Library/DiagnosticRenderScope.h>
 #include <DX12Library/GpuReadbackTexture.h>
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Resource.h>
 #include <DX12Library/ResourceUploader.h>
 #include <DX12Library/Texture.h>
 #include <Framework/Core/FrameworkDeviceContext.h>
+#include <Framework/Diagnostics/RenderGraphAccessValidation.h>
 #include <Framework/OIDNComposite_CS.h>
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
@@ -254,6 +256,8 @@ bool OIDNDenoiser::BeginReadback(
 
     m_ReadbackQueued = m_UsingCuda || m_Readback->BeginCopy();
     m_ReadbackRecorded = false;
+    m_ReadbackDiagnosticFrameIndex = DiagnosticTelemetryEvent::NoFrame;
+    m_ReadbackDiagnosticCorrelationId = 0u;
     if (m_ReadbackQueued)
     {
         m_ReadbackGeneration = m_Generation;
@@ -268,6 +272,18 @@ bool OIDNDenoiser::RecordReadback(CommandList& commandList, const std::shared_pt
     {
         return false;
     }
+
+    if (const DX12Diagnostics::DiagnosticRenderPassScope* scope =
+        DX12Diagnostics::DiagnosticRenderPassScope::GetCurrent())
+    {
+        m_ReadbackDiagnosticFrameIndex = scope->GetDesc().FrameIndex;
+        m_ReadbackDiagnosticCorrelationId = scope->GetDesc().CorrelationId;
+    }
+    FrameworkDiagnostics::ValidateActiveRenderGraphResourceAccess(
+        m_DeviceContext,
+        source->GetD3D12Resource().Get(),
+        DX12Diagnostics::DiagnosticResourceAccess::Read,
+        "native_oidn_readback_source");
 
     m_ReadbackRecorded = m_UsingCuda
         ? RecordCudaInput(commandList, source)
@@ -391,6 +407,11 @@ bool OIDNDenoiser::RecordCudaInput(
 
     const Microsoft::WRL::ComPtr<ID3D12Resource> sourceResource = source->GetD3D12Resource();
     const Microsoft::WRL::ComPtr<ID3D12Resource> destinationResource = resources.Input->GetD3D12Resource();
+    FrameworkDiagnostics::ValidateActiveRenderGraphResourceAccess(
+        m_DeviceContext,
+        destinationResource.Get(),
+        DX12Diagnostics::DiagnosticResourceAccess::Write,
+        "native_oidn_cuda_input");
     const D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = resources.Footprint;
     commandList.ExecuteExternalCommandRecording(
         [sourceResource, destinationResource, footprint](ID3D12GraphicsCommandList2& nativeCommandList)
@@ -414,6 +435,16 @@ void OIDNDenoiser::RecordCudaOutput(CommandList& commandList, const Job& job)
     Assert(job.Cuda != nullptr && m_Output != nullptr, "OIDN CUDA output copy resources are invalid.");
     const Microsoft::WRL::ComPtr<ID3D12Resource> sourceResource = job.Cuda->Output->GetD3D12Resource();
     const Microsoft::WRL::ComPtr<ID3D12Resource> destinationResource = m_Output->GetD3D12Resource();
+    FrameworkDiagnostics::ValidateActiveRenderGraphResourceAccess(
+        m_DeviceContext,
+        sourceResource.Get(),
+        DX12Diagnostics::DiagnosticResourceAccess::Read,
+        "native_oidn_cuda_output");
+    FrameworkDiagnostics::ValidateActiveRenderGraphResourceAccess(
+        m_DeviceContext,
+        destinationResource.Get(),
+        DX12Diagnostics::DiagnosticResourceAccess::Write,
+        "native_oidn_output");
     const D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = job.Cuda->Footprint;
     commandList.ExecuteExternalCommandRecording(
         [sourceResource, destinationResource, footprint](ID3D12GraphicsCommandList2& nativeCommandList)
@@ -449,13 +480,35 @@ void OIDNDenoiser::EndReadback(const uint64_t submittedFenceValue)
         job.Height = m_Height;
         job.Spp = m_ReadbackSpp;
         job.Cuda = m_CudaResources;
+        job.DirectSubmissionFenceValue = submittedFenceValue;
         job.CudaInputFenceValue = ++m_CudaResources->NextFenceValue;
         job.CudaCompletionFenceValue = ++m_CudaResources->NextFenceValue;
+        job.DiagnosticFrameIndex = m_ReadbackDiagnosticFrameIndex;
+        job.DiagnosticCorrelationId = m_ReadbackDiagnosticCorrelationId;
         const auto directQueue = m_DeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
         Assert(directQueue != nullptr, "OIDN CUDA requires the direct command queue.");
-        ThrowIfFailed(directQueue->GetD3D12CommandQueue()->Signal(
-            m_CudaResources->Fence.Get(),
-            job.CudaInputFenceValue));
+        try
+        {
+            ThrowIfFailed(directQueue->GetD3D12CommandQueue()->Signal(
+                m_CudaResources->Fence.Get(),
+                job.CudaInputFenceValue));
+            job.CudaProducerSignalIssued = true;
+            RecordCudaFenceHandoff(
+                job,
+                "direct_to_cuda_signal",
+                job.CudaInputFenceValue != 0u &&
+                    job.CudaCompletionFenceValue > job.CudaInputFenceValue,
+                "The Direct submission signaled the shared OIDN CUDA fence.");
+        }
+        catch (const std::exception& exception)
+        {
+            RecordCudaFenceHandoff(
+                job,
+                "direct_to_cuda_signal",
+                false,
+                exception.what());
+            throw;
+        }
 
         {
             const std::lock_guard lock(m_WorkMutex);
@@ -512,9 +565,43 @@ void OIDNDenoiser::Poll(CommandQueue& directQueue)
         }
 
         const std::shared_ptr<CudaResources>& cuda = completed->Cuda;
-        ThrowIfFailed(directQueue.GetD3D12CommandQueue()->Wait(
-            cuda->Fence.Get(),
-            completed->CudaCompletionFenceValue));
+        const bool validProducerChain =
+            completed->CudaProducerSignalIssued &&
+            completed->CudaInputWaitIssued &&
+            completed->CudaCompletionSignalIssued &&
+            completed->CudaInputFenceValue != 0u &&
+            completed->CudaCompletionFenceValue > completed->CudaInputFenceValue;
+        if (!validProducerChain)
+        {
+            RecordCudaFenceHandoff(
+                *completed,
+                "cuda_to_direct_wait",
+                false,
+                "OIDN CUDA completed without a valid producer signal and CUDA wait/signal chain.");
+            return;
+        }
+
+        try
+        {
+            ThrowIfFailed(directQueue.GetD3D12CommandQueue()->Wait(
+                cuda->Fence.Get(),
+                completed->CudaCompletionFenceValue));
+            completed->CudaConsumerWaitIssued = true;
+            RecordCudaFenceHandoff(
+                *completed,
+                "cuda_to_direct_wait",
+                true,
+                "The Direct queue waits for the OIDN CUDA completion fence before result upload.");
+        }
+        catch (const std::exception& exception)
+        {
+            RecordCudaFenceHandoff(
+                *completed,
+                "cuda_to_direct_wait",
+                false,
+                exception.what());
+            throw;
+        }
 
         if (completed->Generation == m_Generation &&
             completed->Width == m_Width &&
@@ -698,8 +785,29 @@ void OIDNDenoiser::WorkerLoop(const std::stop_token stopToken)
                 ExecuteCpuDenoise(job);
             }
         }
+        catch (const std::exception& exception)
+        {
+            if (job.UsesCuda())
+            {
+                RecordCudaFenceHandoff(
+                    job,
+                    "cuda_worker",
+                    false,
+                    exception.what());
+            }
+            job.Pixels.clear();
+            job.Succeeded = false;
+        }
         catch (...)
         {
+            if (job.UsesCuda())
+            {
+                RecordCudaFenceHandoff(
+                    job,
+                    "cuda_worker",
+                    false,
+                    "OIDN CUDA worker failed with an unknown exception.");
+            }
             job.Pixels.clear();
             job.Succeeded = false;
         }
@@ -743,10 +851,25 @@ void OIDNDenoiser::ExecuteCudaDenoise(Job& job)
     Assert(job.Cuda != nullptr, "OIDN CUDA job has no shared resources.");
     Assert(job.Width > 0u && job.Height > 0u, "OIDN CUDA job dimensions are invalid.");
 
+    const bool validInputFence =
+        job.CudaProducerSignalIssued &&
+        job.CudaInputFenceValue != 0u &&
+        job.CudaCompletionFenceValue > job.CudaInputFenceValue;
+    if (!validInputFence)
+    {
+        RecordCudaFenceHandoff(
+            job,
+            "cuda_input_wait",
+            false,
+            "OIDN CUDA was scheduled without a valid Direct producer signal.");
+        throw std::logic_error("OIDN CUDA was scheduled without a valid Direct producer signal.");
+    }
+
     CudaResources& cuda = *job.Cuda;
     constexpr size_t pixelStride = sizeof(float) * 4u;
     cuda.Device.waitSemaphoreAsync(cuda.FenceSemaphore, job.CudaInputFenceValue);
     ThrowIfOidnError(cuda.Device, "OIDN CUDA input fence wait failed");
+    job.CudaInputWaitIssued = true;
 
     oidn::FilterRef filter = cuda.Device.newFilter("RT");
     if (!filter)
@@ -781,6 +904,12 @@ void OIDNDenoiser::ExecuteCudaDenoise(Job& job)
     cuda.Device.signalSemaphoreAsync(cuda.FenceSemaphore, job.CudaCompletionFenceValue);
     cuda.Device.sync();
     ThrowIfOidnError(cuda.Device, "OIDN CUDA output fence signal failed");
+    job.CudaCompletionSignalIssued = true;
+    RecordCudaFenceHandoff(
+        job,
+        "cuda_wait_and_signal",
+        true,
+        "OIDN CUDA waited for Direct input and signaled completion on the shared fence.");
     job.Succeeded = true;
 }
 
@@ -861,7 +990,39 @@ void OIDNDenoiser::RecordUpload(CommandList& commandList)
         0u,
         1u,
         &subresource);
+    FrameworkDiagnostics::ValidateActiveRenderGraphResourceAccess(
+        m_DeviceContext,
+        m_Output->GetD3D12Resource().Get(),
+        DX12Diagnostics::DiagnosticResourceAccess::Write,
+        "native_oidn_output");
     m_HasUploadedResult.store(true, std::memory_order_release);
+}
+
+void OIDNDenoiser::RecordCudaFenceHandoff(
+    const Job& job,
+    const char* phase,
+    const bool valid,
+    const char* message) const noexcept
+{
+    m_DeviceContext.RecordDiagnosticTelemetry({
+        .Category = "assertion",
+        .Name = "oidn_cuda_fence_handoff",
+        .Severity = valid ? DiagnosticTelemetrySeverity::Info : DiagnosticTelemetrySeverity::Error,
+        .FrameIndex = job.DiagnosticFrameIndex,
+        .CorrelationId = job.DiagnosticCorrelationId,
+        .Fields = {
+            { "result", std::string(valid ? "pass" : "fail") },
+            { "phase", std::string(phase != nullptr ? phase : "unknown") },
+            { "message", std::string(message != nullptr ? message : "") },
+            { "direct_submission_fence", job.DirectSubmissionFenceValue },
+            { "cuda_input_fence", job.CudaInputFenceValue },
+            { "cuda_completion_fence", job.CudaCompletionFenceValue },
+            { "producer_signal_issued", job.CudaProducerSignalIssued },
+            { "cuda_input_wait_issued", job.CudaInputWaitIssued },
+            { "cuda_completion_signal_issued", job.CudaCompletionSignalIssued },
+            { "direct_consumer_wait_issued", job.CudaConsumerWaitIssued },
+        },
+    });
 }
 
 void OIDNDenoiser::RecordComposite(

@@ -1,6 +1,7 @@
 //Modify Begin:2026-08-25 by Hui
 #pragma once
 
+#include <DX12Library/DiagnosticTelemetry.h>
 #include <RenderGraph/ResourceId.h>
 
 #include <atomic>
@@ -73,8 +74,15 @@ private:
         uint32_t Spp = 0u;
         std::vector<float> Pixels;
         std::shared_ptr<CudaResources> Cuda;
+        uint64_t DirectSubmissionFenceValue = 0u;
         uint64_t CudaInputFenceValue = 0u;
         uint64_t CudaCompletionFenceValue = 0u;
+        uint64_t DiagnosticFrameIndex = DiagnosticTelemetryEvent::NoFrame;
+        uint64_t DiagnosticCorrelationId = 0u;
+        bool CudaProducerSignalIssued = false;
+        bool CudaInputWaitIssued = false;
+        bool CudaCompletionSignalIssued = false;
+        bool CudaConsumerWaitIssued = false;
         bool Succeeded = false;
 
         bool UsesCuda() const { return Cuda != nullptr; }
@@ -90,9 +98,14 @@ private:
 
     void WorkerLoop(std::stop_token stopToken);
     static void ExecuteCpuDenoise(Job& job);
-    static void ExecuteCudaDenoise(Job& job);
+    void ExecuteCudaDenoise(Job& job);
     bool TryCreateCudaResources(uint32_t width, uint32_t height);
     void InvalidateGeneration(bool resetReadbackResources);
+    void RecordCudaFenceHandoff(
+        const Job& job,
+        const char* phase,
+        bool valid,
+        const char* message) const noexcept;
     bool RecordCudaInput(CommandList& commandList, const std::shared_ptr<Texture>& source);
     void RecordCudaOutput(CommandList& commandList, const Job& job);
     void RecordUpload(CommandList& commandList);
@@ -119,6 +132,8 @@ private:
     std::atomic_bool m_HasUploadedResult = false;
     uint64_t m_Generation = 1u;
     uint64_t m_ReadbackGeneration = 0u;
+    uint64_t m_ReadbackDiagnosticFrameIndex = DiagnosticTelemetryEvent::NoFrame;
+    uint64_t m_ReadbackDiagnosticCorrelationId = 0u;
     uint32_t m_ReadbackSpp = 0u;
     uint32_t m_Width = 0u;
     uint32_t m_Height = 0u;

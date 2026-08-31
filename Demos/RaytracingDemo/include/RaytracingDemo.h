@@ -212,6 +212,7 @@ private:
     void InitializeRuntimeAutomation();
     void UpdateRuntimeAutomation(double totalTime);
     void ApplyRuntimeAutomationAction(uint32_t action, uint32_t value);
+    bool ApplyTopologyRuntimeAutomationAction(uint32_t action, uint32_t value);
     void ApplyRuntimeAutomationMatrixCase(uint32_t caseIndex);
     void CapturePendingAutomationScreenshot();
     void SaveCurrentScene();

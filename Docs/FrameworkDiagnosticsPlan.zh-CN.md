@@ -1,6 +1,6 @@
 # Framework 诊断、自动化与 Profiler
 
-> 状态：基础能力已落地并通过真实 Demo 自动化验证；受维护的 Copy queue、`meshlet-indirect` 与 `dynamic-scene` 场景已经覆盖真实跨 queue 同步、descriptor 敏感的 Meshlet cull、retirement 和原地 acceleration-structure update。`DiagnosticsImageCapture` 已提供非阻塞 GPU texture readback、image assertion、capture attachment 与后台 PNG 写盘；device removal 会附加 DRED 文本。尚未完成的是实际 shader access 与图声明的闭环、更多跨 queue/lifetime invariant，以及完整 session 的后台归档、压缩与 retention policy。
+> 状态：基础能力已落地并通过真实 Demo 自动化验证。RenderGraph pass scope 已把实际 SRV/UAV descriptor 访问与图声明对应；DLSS/NGX 和 OIDN/CUDA 的 native D3D12 边界也会显式上报访问。运行期会检查跨 queue producer signal、consumer wait、state plan 与资源 retirement，失败 assertion 会令 automation 以退出码 `24` 失败。真实 `copy` 与 `oidn` 场景已分别覆盖 Direct → Copy → Async Compute 和 Direct → CUDA → Direct。仍待完成的是 RTAS/bindless/global descriptor 的严格访问归因，以及完整 session 的后台归档、压缩与 retention policy。
 
 ## 目标
 
@@ -40,7 +40,7 @@ images/*.png           异步采集的图像附件；manifest 列出相对路径
 dred.txt               device removal 时的 DRED breadcrumb/page-fault 附件
 ```
 
-默认不导出大型 GPU resource。内存事件缓冲有明确上限；普通事件可在压力下淘汰，但所有 assertion（包括通过结果）以及 error/fatal 会优先保留，确保 `assertions.json` 始终保留已执行约束的结论。manifest 记录 `dropped_event_count`。`RendererDiagnostics inspect` 对丢事件、非终态 capture 或 unknown assertion 返回 `incomplete` 和退出码 `12`，不会把证据缺失或未决约束误判为通过。命令行自动化默认上限为 262,144 条事件；长的 `visual` capture 应显式使用 `--max-events 524288` 或基于 `inspect` 的结果继续增大。
+默认不导出大型 GPU resource。内存事件缓冲默认上限为 `65,536`；正常高频的 CPU timing、batch、descriptor、queue 与逐帧 lifetime 成功事件按“每个语义序列首帧 + 每 60 帧”采样，失败 assertion、warning、error 和 fatal 永不采样。manifest 分别记录 `sampled_event_count` 与真正的 `dropped_event_count`，后者仍表示证据容量不足。`RENDERER_DIAGNOSTICS_SAMPLE_INTERVAL_FRAMES` 可覆盖采样间隔。`RendererDiagnostics inspect` 对丢事件、非终态 capture 或 unknown assertion 返回 `incomplete` 和退出码 `12`，不会把证据缺失或未决约束误判为通过。
 
 ## 自动化契约
 
@@ -59,6 +59,7 @@ Developer tool 仅在 `DX12_RENDERER_BUILD_DEVELOPER_TOOLS=ON` 时生成：
 ```text
 RendererDiagnostics run --exe RaytracingDemo.exe --scenario stress --output Saved/Diagnostics/run-001
 RendererDiagnostics run --exe RaytracingDemo.exe --scenario copy --output Saved/Diagnostics/copy-001
+RendererDiagnostics run --exe RaytracingDemo.exe --scenario oidn --output Saved/Diagnostics/oidn-001
 RendererDiagnostics run --exe RaytracingDemo.exe --scenario rtas --output Saved/Diagnostics/rtas-001
 RendererDiagnostics run --exe RaytracingDemo.exe --scenario dynamic-scene --output Saved/Diagnostics/dynamic-scene-001 --set RAYTRACING_DEMO_AUTOTEST_STEP_MS=50 --set RAYTRACING_DEMO_DIRECT_LIGHTING=none --set RAYTRACING_DEMO_INDIRECT_LIGHTING=none --set RAYTRACING_DEMO_DENOISER=off
 RendererDiagnostics run --exe RaytracingDemo.exe --scenario meshlet-indirect --output Saved/Diagnostics/meshlet-indirect-001 --set RAYTRACING_DEMO_AUTOTEST_STEP_MS=50 --set RAYTRACING_DEMO_MESHLET_GBUFFER=1 --set RAYTRACING_DEMO_MESHLET_BACKEND=indirect --set RAYTRACING_DEMO_DIRECT_LIGHTING=none --set RAYTRACING_DEMO_INDIRECT_LIGHTING=none --set RAYTRACING_DEMO_DENOISER=off
@@ -81,8 +82,11 @@ RendererDiagnostics selftest
 - 已记录 Direct/Compute/Copy submission、signal、wait、fence completion 与 CPU wait，并使用 queue+fence 唯一 correlation ID；
 - 已记录 RenderGraph pass/batch/resource/state-plan/lifecycle；
 - 已记录 descriptor allocation、descriptor-set revision 与资源身份；
+- `DiagnosticRenderPassScope` 已将 pass 的逻辑资源声明与实际 SRV/UAV descriptor 访问匹配；未声明、权限不符或资源 identity 不符会产生 `render_graph_shader_access_declaration=result=fail`；
+- DLSS/NGX、OIDN readback/upload 等不会经过 `CommandContext::SetDescriptorSet()` 的 native D3D12 边界已显式上报 read/write observation；ReSTIR、Bloom 继续由 descriptor 路径验证；
 - 已检查 compacted active count 与 finalized indirect arguments/dispatch 的一致性；
-- 已通过 Direct -> Copy -> Async Compute -> Direct 验证 producer fence、GPU wait、state plan、batch 和 retirement；
+- 已在每帧运行期检查跨 queue producer signal、consumer wait、state plan 和图资源 retirement；Direct → Copy → Async Compute → Direct 的真实 `copy` 场景已验证该链路；
+- OIDN 的 D3D12 shared resource 在 Direct → CUDA → Direct handoff 中验证 Direct signal、CUDA wait/signal 与 Direct wait；
 - 已具备可复用、非阻塞的 `GpuReadbackBuffer` 与 `GpuReadbackTexture` ring-slot 基元；compacted active-pixel 验证实际使用它们。`DiagnosticsImageCapture::Request()` 在 Direct queue 单独提交 copy，`Poll()` 在后续帧确认 fence、转换 RGBA8、计算均值/非黑像素比并记录 `image.<name>` assertion；PNG 最多两个后台 writer 并行写入。自动化 terminal finalize 延后至 shutdown 的 `Drain()`，确保最后一个异步图像结论和附件先写入 capture。OIDN 在可用时走 D3D12 shared buffer/fence → CUDA `Quality::Fast` → D3D12 copy-back，CUDA 初始化或 external-memory import 失败时才使用 HDR readback → CPU `Fast` → upload fallback；OIDN 自动化记录 backend，并验证静止结果保持以及相机移动后的 generation 作废；
 - device removal 失败路径通过 `DiagnosticsSession::AttachDeviceRemovalDred()` 写入 `dred.txt`，包含 removal HRESULT、最多 128 个 auto-breadcrumb 和 page-fault allocation；该附件由 manifest 声明；
 - 已通过动态 RTAS 验证普通/Meshlet 顶点上传、Meshlet bounds 与 instance 更新、自发光 mesh refresh、dirty BLAS refit、原地 TLAS update、资源 retirement counter、restore frame，以及显式拒绝 skinned update 的 capability；
@@ -90,9 +94,8 @@ RendererDiagnostics selftest
 
 仍待补齐：
 
-- 验证 RenderGraph 实际访问完全符合声明 usage/state plan；
-- 在受维护的 Copy 验证拓扑之外，继续扩大 cross-queue wait 与多 queue retirement 的通用覆盖；
-- backend capability 与实际调度 pass 的通用 Framework invariant。
+- RTAS、bindless table 和 global/default descriptor 的严格实际访问归因；现有 scope 已覆盖可枚举 SRV/UAV 与 native D3D12 边界；
+- backend capability 与实际调度 pass 的通用 Framework invariant；
 - 完整 capture session 的后台归档、压缩与 retention policy；当前仅图像 PNG 附件后台写入。
 
 最初规划的完整约束集合是：
@@ -127,6 +130,7 @@ RendererDiagnostics selftest
 3. [x] 具名 control/observation、确定性 scenario、timeout、assertion 与失败自动 finalize。
 4. [x] `run`、`inspect`、`query`、`diff`、`reproduce`、`selftest` 命令行闭环。
 5. [x] Diagnostics 自有的通用 texture readback/image assertion、capture attachment、PNG 后台写入与 device-removal DRED attachment。
-6. [ ] 实际 shader access 对图声明的通用校验、更多 cross-queue/lifetime invariant，以及完整 session 的后台归档、压缩与 retention policy。
+6. [x] 实际 SRV/UAV/native D3D12 资源访问对图声明的校验，以及跨 queue signal/wait/state-plan/retirement 的运行期 invariant；真实 ReSTIR、OIDN、DLSS、Bloom 与 Copy 场景均已验收。
+7. [ ] RTAS/bindless/global descriptor 的严格访问归因，以及完整 session 的后台归档、压缩与 retention policy。
 
 关闭诊断时不得分配 GPU resource、插入 readback 或改变 pass topology。开启 capture 时必须限制内存，不得每条事件同步刷盘，并显式标记所有可能造成 GPU/CPU stall 的操作。

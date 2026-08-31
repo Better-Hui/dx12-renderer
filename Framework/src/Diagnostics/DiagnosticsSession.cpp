@@ -288,6 +288,88 @@ namespace
         }, field->Value);
     }
 
+    std::string TelemetryFieldToString(const DiagnosticTelemetryEvent& event, const std::string_view name)
+    {
+        const auto field = std::ranges::find_if(event.Fields, [name](const DiagnosticTelemetryField& candidate)
+        {
+            return candidate.Name == name;
+        });
+        if (field == event.Fields.end())
+        {
+            return {};
+        }
+        return std::visit([](const auto& value)
+        {
+            using ValueType = std::decay_t<decltype(value)>;
+            if constexpr (std::is_same_v<ValueType, bool>)
+            {
+                return std::string(value ? "true" : "false");
+            }
+            else if constexpr (std::is_same_v<ValueType, std::string>)
+            {
+                return value;
+            }
+            else
+            {
+                std::ostringstream output;
+                output << std::setprecision(15) << value;
+                return output.str();
+            }
+        }, field->Value);
+    }
+
+    bool IsHighFrequencyInformationalEvent(const DiagnosticTelemetryEvent& event)
+    {
+        if (event.Severity >= DiagnosticTelemetrySeverity::Warning)
+        {
+            return false;
+        }
+        if (event.Category == "profiler.cpu" ||
+            event.Category == "render_graph.batch" ||
+            event.Category == "descriptor.binding" ||
+            event.Category == "render_graph.frame" ||
+            event.Category == "command_queue.signal" ||
+            event.Category == "command_queue.submission" ||
+            event.Category == "command_queue.command_list" ||
+            event.Category == "command_queue.wait" ||
+            event.Category == "render_graph.queue.submission" ||
+            event.Category == "render_graph.queue.wait")
+        {
+            return true;
+        }
+        return event.Category == "assertion" && event.Name == "render_graph_queue_lifetime_runtime";
+    }
+
+    std::string BuildHighFrequencySeriesKey(const DiagnosticTelemetryEvent& event)
+    {
+        std::string key = event.Category + "\x1f" + event.Name;
+        for (const std::string_view fieldName : {
+                 "queue",
+                 "consumer_queue",
+                 "producer_queue",
+                 "render_graph.pass_correlation",
+                 "set_index",
+                 "bind_point",
+                 "batch_index",
+                 "recording_mode",
+                 "parallel",
+                 "cross_queue_transfer_count",
+                 "missing_producer_signal_count",
+                 "missing_consumer_wait_count",
+                 "missing_retirement_fence_count" })
+        {
+            const std::string value = TelemetryFieldToString(event, fieldName);
+            if (!value.empty())
+            {
+                key += "\x1e";
+                key += fieldName;
+                key += '=';
+                key += value;
+            }
+        }
+        return key;
+    }
+
     std::string EscapeCsv(const std::string_view value)
     {
         std::string output = "\"";
@@ -409,6 +491,7 @@ bool FrameworkDiagnostics::DiagnosticsSession::Begin(DiagnosticsSessionOptions o
         return false;
     }
     options.MaxEventCount = (std::max<size_t>)(1024u, options.MaxEventCount);
+    options.HighFrequencySampleIntervalFrames = (std::max)(uint64_t{ 1 }, options.HighFrequencySampleIntervalFrames);
     try
     {
         const std::filesystem::path outputDirectory = ResolveOutputDirectory(options);
@@ -420,6 +503,7 @@ bool FrameworkDiagnostics::DiagnosticsSession::Begin(DiagnosticsSessionOptions o
             m_Metadata.clear();
             m_Attachments.clear();
             m_Events.clear();
+            m_LastSampledFrames.clear();
             m_LastError.clear();
             m_FinalMessage.clear();
             m_Status = SessionStatus::Running;
@@ -430,12 +514,15 @@ bool FrameworkDiagnostics::DiagnosticsSession::Begin(DiagnosticsSessionOptions o
         m_CurrentFrameIndex.store(DiagnosticTelemetryEvent::NoFrame);
         m_NextSequence.store(1);
         m_DroppedEventCount.store(0);
+        m_SampledEventCount.store(0);
+        m_FailedAssertionCount.store(0);
         m_Finalized.store(false, std::memory_order_release);
         m_Enabled.store(true, std::memory_order_release);
         Record("session", "begin", DiagnosticTelemetrySeverity::Info, {
             { "application", m_Options.ApplicationName },
             { "session", m_Options.SessionName },
             { "max_events", static_cast<uint64_t>(m_Options.MaxEventCount) },
+            { "high_frequency_sample_interval_frames", m_Options.HighFrequencySampleIntervalFrames },
         });
         return true;
     }
@@ -469,6 +556,9 @@ bool FrameworkDiagnostics::DiagnosticsSession::BeginFromEnvironment(
     options.MaxEventCount = ParsePositiveSize(
         GetEnvironmentVariable("RENDERER_DIAGNOSTICS_MAX_EVENTS"),
         options.MaxEventCount);
+    options.HighFrequencySampleIntervalFrames = ParsePositiveSize(
+        GetEnvironmentVariable("RENDERER_DIAGNOSTICS_SAMPLE_INTERVAL_FRAMES"),
+        options.HighFrequencySampleIntervalFrames);
     return Begin(std::move(options));
 }
 
@@ -610,22 +700,43 @@ void FrameworkDiagnostics::DiagnosticsSession::RecordTelemetry(DiagnosticTelemet
     }
     try
     {
+        const bool failedAssertion = event.Category == "assertion" && std::ranges::any_of(
+            event.Fields,
+            [](const DiagnosticTelemetryField& field)
+            {
+                const std::string* value = std::get_if<std::string>(&field.Value);
+                return field.Name == "result" && value != nullptr && *value == "fail";
+            });
         if (event.FrameIndex == DiagnosticTelemetryEvent::NoFrame)
         {
             event.FrameIndex = m_CurrentFrameIndex.load(std::memory_order_acquire);
         }
+        std::scoped_lock lock(m_Mutex);
+        if (m_Finalized.load(std::memory_order_acquire))
+        {
+            return;
+        }
+        if (!failedAssertion && IsHighFrequencyInformationalEvent(event))
+        {
+            const std::string seriesKey = BuildHighFrequencySeriesKey(event);
+            const auto previous = m_LastSampledFrames.find(seriesKey);
+            const uint64_t frameIndex = event.FrameIndex;
+            if (previous != m_LastSampledFrames.end() &&
+                frameIndex >= previous->second &&
+                frameIndex - previous->second < m_Options.HighFrequencySampleIntervalFrames)
+            {
+                m_SampledEventCount.fetch_add(1, std::memory_order_relaxed);
+                return;
+            }
+            m_LastSampledFrames.insert_or_assign(std::move(seriesKey), frameIndex);
+        }
+
         RecordedDiagnosticEvent recorded;
         recorded.Sequence = m_NextSequence.fetch_add(1);
         recorded.TimestampNanoseconds = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
             std::chrono::steady_clock::now() - m_StartTime).count());
         recorded.ThreadId = static_cast<uint64_t>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
         recorded.Event = std::move(event);
-
-        std::scoped_lock lock(m_Mutex);
-        if (m_Finalized.load(std::memory_order_acquire))
-        {
-            return;
-        }
         if (m_Events.size() >= m_Options.MaxEventCount)
         {
             const auto removable = std::ranges::find_if(m_Events, [](const RecordedDiagnosticEvent& candidate)
@@ -644,6 +755,10 @@ void FrameworkDiagnostics::DiagnosticsSession::RecordTelemetry(DiagnosticTelemet
             m_DroppedEventCount.fetch_add(1);
         }
         m_Events.push_back(std::move(recorded));
+        if (failedAssertion)
+        {
+            m_FailedAssertionCount.fetch_add(1, std::memory_order_release);
+        }
     }
     catch (...)
     {
@@ -886,6 +1001,7 @@ bool FrameworkDiagnostics::DiagnosticsSession::ExportSnapshot(
                    << "Session: " << options.SessionName << '\n'
                    << "Events: " << events.size() << '\n'
                    << "Dropped events: " << m_DroppedEventCount.load() << '\n'
+                   << "Sampled informational events: " << m_SampledEventCount.load() << '\n'
                    << "Failed assertions: " << failedAssertions << '\n'
                    << "Unknown assertions: " << unknownAssertions << '\n'
                    << "Error or fatal events: " << errorEvents << '\n';
@@ -929,6 +1045,7 @@ bool FrameworkDiagnostics::DiagnosticsSession::ExportSnapshot(
             }
             output << ",\"event_count\":" << events.size()
                    << ",\"dropped_event_count\":" << m_DroppedEventCount.load()
+                   << ",\"sampled_event_count\":" << m_SampledEventCount.load()
                    << ",\"failed_assertion_count\":" << failedAssertions
                    << ",\"unknown_assertion_count\":" << unknownAssertions
                    << ",\"error_event_count\":" << errorEvents
