@@ -12,6 +12,11 @@ cmake_policy(SET CMP0079 NEW)
 
 project(LearningDirectX12 LANGUAGES CXX)
 
+option(
+        DX12_RENDERER_ENABLE_PERFORMANCE_SCOPES
+        "Compile Debug CPU performance scopes into an explicit developer profiling build."
+        OFF)
+
 set(DX12_RENDERER_SHADER_MODEL_VERSION "6.8")
 string(REPLACE "." "_" DX12_RENDERER_SHADER_MODEL_SUFFIX "${DX12_RENDERER_SHADER_MODEL_VERSION}")
 set(DX12_RENDERER_RAYTRACING_SHADER_MODEL "lib_${DX12_RENDERER_SHADER_MODEL_SUFFIX}")

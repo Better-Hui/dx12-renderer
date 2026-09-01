@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-09-01 by Hui
 #include "RenderGraphCommandExecutor.h"
 
 #include "RenderGraphProfiler.h"
@@ -12,12 +12,12 @@
 #include <DX12Library/DiagnosticRenderScope.h>
 #include <DX12Library/DiagnosticTelemetry.h>
 #include <DX12Library/Helpers.h>
+#include <DX12Library/PerformanceScope.h>
 #include <DX12Library/RenderTarget.h>
 #include <DX12Library/Resource.h>
 #include <DX12Library/Texture.h>
 
 #include <algorithm>
-#include <chrono>
 #include <exception>
 #include <future>
 #include <map>
@@ -170,30 +170,6 @@ uint64_t RenderGraph::RenderGraphCommandExecutor::GetPassCorrelationId(const Ren
     return hash * 1099511628211ull;
 }
 
-void RenderGraph::RenderGraphCommandExecutor::EmitCpuPassTiming(
-    const RenderPass& pass,
-    const double durationMilliseconds,
-    std::string recordingMode) const noexcept
-{
-    if (!HasDiagnosticTelemetrySink())
-    {
-        return;
-    }
-    const char* queueName = pass.GetQueue() == RenderPassQueue::Direct
-        ? "Direct"
-        : pass.GetQueue() == RenderPassQueue::AsyncCompute ? "AsyncCompute" : "Copy";
-    EmitTelemetry({
-        .Category = "profiler.cpu",
-        .Name = RenderGraphProfiler::NarrowPassName(pass.GetPassName()),
-        .CorrelationId = GetPassCorrelationId(pass),
-        .Fields = {
-            { "queue", std::string(queueName) },
-            { "recording_mode", std::move(recordingMode) },
-            { "cpu_duration_ms", durationMilliseconds },
-        },
-    });
-}
-
 std::unique_ptr<DX12Diagnostics::DiagnosticRenderPassScope>
 RenderGraph::RenderGraphCommandExecutor::CreateDiagnosticRenderPassScope(
     const RenderPass& pass,
@@ -324,6 +300,13 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
     const bool debugSerializeAsyncCompute,
     const bool enableParallelDirectRecording)
 {
+    DX12_CPU_PERFORMANCE_SCOPE(
+        m_DiagnosticTelemetrySink,
+        renderMetadata.m_FrameIndex,
+        "RenderGraph.Execute",
+        "CPU",
+        0u,
+        "render_graph_execute");
     const std::vector<RenderPass*>& renderPasses = compiledGraph.GetRenderPasses();
     const std::vector<RenderGraphRecordingBatch>& recordingBatches = compiledGraph.GetRecordingBatches();
     const std::map<const RenderPass*, RenderTargetInfo>& renderTargets = compiledGraph.GetRenderTargets();
@@ -460,9 +443,13 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
 
             CommandList& commandList = *directCommandList;
             context.SetRenderTargetInfo({});
-            const auto passRecordStart = HasDiagnosticTelemetrySink()
-                ? std::chrono::steady_clock::now()
-                : std::chrono::steady_clock::time_point{};
+            DX12_CPU_PERFORMANCE_SCOPE(
+                m_DiagnosticTelemetrySink,
+                renderMetadata.m_FrameIndex,
+                RenderGraphProfiler::NarrowPassName(renderPass->GetPassName()),
+                GetDiagnosticQueueName(RenderPassQueue::Direct),
+                GetPassCorrelationId(*renderPass),
+                renderPass->IsExternal() ? "render_graph_external_pass" : "render_graph_pass");
             if (renderPass->IsExternal())
             {
                 {
@@ -522,14 +509,6 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
                 m_Profiler.WritePassTimestamp(RenderPassQueue::Direct, commandList, renderPass->GetPassName());
                 m_QueueScheduler.TrackPassResources(*renderPass, 0u);
             }
-            if (HasDiagnosticTelemetrySink())
-            {
-                EmitCpuPassTiming(
-                    *renderPass,
-                    std::chrono::duration<double, std::milli>(
-                        std::chrono::steady_clock::now() - passRecordStart).count(),
-                    renderPass->IsExternal() ? "external" : "sequential");
-            }
         }
     }
 
@@ -582,9 +561,13 @@ void RenderGraph::RenderGraphCommandExecutor::ExecuteParallelDirectBatch(
         recordingTasks.push_back(m_ParallelRecordingTaskScheduler.Enqueue(
             [this, renderPass, &renderMetadata, &renderTargets, &resourceStatePlans]()
             {
-                const auto passRecordStart = HasDiagnosticTelemetrySink()
-                    ? std::chrono::steady_clock::now()
-                    : std::chrono::steady_clock::time_point{};
+                DX12_CPU_PERFORMANCE_SCOPE(
+                    m_DiagnosticTelemetrySink,
+                    renderMetadata.m_FrameIndex,
+                    RenderGraphProfiler::NarrowPassName(renderPass->GetPassName()),
+                    GetDiagnosticQueueName(RenderPassQueue::Direct),
+                    GetPassCorrelationId(*renderPass),
+                    "render_graph_pass_parallel");
                 auto commandList = m_DirectCommandQueue->GetCommandList();
                 FrameContext context(m_ResourcePool, renderMetadata);
                 const auto renderTargetIt = renderTargets.find(renderPass);
@@ -616,14 +599,6 @@ void RenderGraph::RenderGraphCommandExecutor::ExecuteParallelDirectBatch(
                         "RenderGraph parallel direct pass '" +
                         RenderGraphProfiler::NarrowPassName(renderPass->GetPassName()) +
                         "' execution failed: " + exception.what());
-                }
-                if (HasDiagnosticTelemetrySink())
-                {
-                    EmitCpuPassTiming(
-                        *renderPass,
-                        std::chrono::duration<double, std::milli>(
-                            std::chrono::steady_clock::now() - passRecordStart).count(),
-                        "parallel");
                 }
                 return commandList;
             }));
@@ -739,9 +714,13 @@ void RenderGraph::RenderGraphCommandExecutor::ExecuteNonDirectBatch(
     FrameContext context(m_ResourcePool, renderMetadata);
     for (RenderPass* pass : batch.Passes)
     {
-        const auto passRecordStart = HasDiagnosticTelemetrySink()
-            ? std::chrono::steady_clock::now()
-            : std::chrono::steady_clock::time_point{};
+        DX12_CPU_PERFORMANCE_SCOPE(
+            m_DiagnosticTelemetrySink,
+            renderMetadata.m_FrameIndex,
+            RenderGraphProfiler::NarrowPassName(pass->GetPassName()),
+            GetDiagnosticQueueName(batch.Queue),
+            GetPassCorrelationId(*pass),
+            "render_graph_pass");
         context.SetRenderTargetInfo({});
         try
         {
@@ -771,14 +750,6 @@ void RenderGraph::RenderGraphCommandExecutor::ExecuteNonDirectBatch(
                 "' execution failed: " + exception.what());
         }
         m_Profiler.WritePassTimestamp(batch.Queue, *commandList, pass->GetPassName());
-        if (HasDiagnosticTelemetrySink())
-        {
-            EmitCpuPassTiming(
-                *pass,
-                std::chrono::duration<double, std::milli>(
-                    std::chrono::steady_clock::now() - passRecordStart).count(),
-                "sequential");
-        }
     }
 
     const bool containsLastQueuePass = lastQueuePass != nullptr &&

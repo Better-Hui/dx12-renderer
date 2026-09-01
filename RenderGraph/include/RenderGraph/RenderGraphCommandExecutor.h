@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-09-01 by Hui
 #pragma once
 
 #include "RenderGraphExecutionPlan.h"
@@ -82,10 +82,6 @@ namespace RenderGraph
             std::span<const PassExternalResourceTransition> transitions);
         void EmitTelemetry(DiagnosticTelemetryEvent event) const noexcept;
         [[nodiscard]] bool HasDiagnosticTelemetrySink() const noexcept { return m_DiagnosticTelemetrySink != nullptr; }
-        void EmitCpuPassTiming(
-            const RenderPass& pass,
-            double durationMilliseconds,
-            std::string recordingMode) const noexcept;
         std::unique_ptr<DX12Diagnostics::DiagnosticRenderPassScope> CreateDiagnosticRenderPassScope(
             const RenderPass& pass,
             uint64_t frameIndex) const;

@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-09-01 by Hui
 #include "RendererDiagnosticsCommands.h"
 
 #include "RendererDiagnosticsCapture.h"
@@ -160,6 +160,50 @@ namespace
         return timings;
     }
 
+    void WriteTimingHotspots(const Capture& capture)
+    {
+        struct TimingHotspot
+        {
+            std::string Scope;
+            double Mean = 0.0;
+            double P95 = 0.0;
+            size_t SampleCount = 0;
+        };
+
+        std::vector<TimingHotspot> hotspots;
+        for (const auto& [scope, stats] : CollectTimings(capture))
+        {
+            if (stats.Samples.empty())
+            {
+                continue;
+            }
+            hotspots.push_back({ scope, stats.Mean(), stats.Percentile(0.95), stats.Samples.size() });
+        }
+        std::ranges::sort(hotspots, [](const TimingHotspot& left, const TimingHotspot& right)
+        {
+            return std::tie(left.P95, left.Mean, left.SampleCount, left.Scope) >
+                std::tie(right.P95, right.Mean, right.SampleCount, right.Scope);
+        });
+
+        constexpr size_t maximumHotspotCount = 16u;
+        const size_t hotspotCount = (std::min)(hotspots.size(), maximumHotspotCount);
+        std::cout << "{\"scope_count\":" << hotspots.size() << ",\"hotspots\":[";
+        for (size_t index = 0; index < hotspotCount; ++index)
+        {
+            if (index != 0)
+            {
+                std::cout << ',';
+            }
+            const TimingHotspot& hotspot = hotspots[index];
+            std::cout << "{\"scope\":";
+            WriteJsonString(std::cout, hotspot.Scope);
+            std::cout << ",\"mean_ms\":" << hotspot.Mean
+                      << ",\"p95_ms\":" << hotspot.P95
+                      << ",\"sample_count\":" << hotspot.SampleCount << '}';
+        }
+        std::cout << "]}";
+    }
+
     template<typename Collection>
     std::vector<typename Collection::value_type> Difference(const Collection& lhs, const Collection& rhs)
     {
@@ -197,9 +241,11 @@ int RendererDiagnosticsTool::InspectCommand(const std::vector<std::string>& argu
         ? ScalarToString(*messageValue)
         : std::string();
     const uint64_t droppedEventCount = ToUint64(Find(manifest, "dropped_event_count"));
+    const uint64_t droppedPerformanceEventCount = ToUint64(Find(manifest, "dropped_performance_event_count"));
     const uint64_t unknownAssertionCount = ToUint64(Find(manifest, "unknown_assertion_count"));
     const bool terminalStatus = status == "passed" || status == "failed" || status == "aborted";
-    const bool captureComplete = droppedEventCount == 0u && terminalStatus && unknownAssertionCount == 0u;
+    const bool captureComplete = droppedEventCount == 0u && droppedPerformanceEventCount == 0u &&
+        terminalStatus && unknownAssertionCount == 0u;
     const bool failed = !failures.empty() || status == "failed" || status == "aborted";
     const std::string verdict = failed ? "failed" : (captureComplete ? "passed" : "incomplete");
 
@@ -213,6 +259,7 @@ int RendererDiagnosticsTool::InspectCommand(const std::vector<std::string>& argu
     if (sessionMessage.empty()) std::cout << "null"; else WriteJsonString(std::cout, sessionMessage);
     std::cout << ",\"event_count\":" << capture.Events.size()
               << ",\"dropped_event_count\":" << droppedEventCount
+              << ",\"dropped_performance_event_count\":" << droppedPerformanceEventCount
               << ",\"unknown_assertion_count\":" << unknownAssertionCount
               << ",\"capture_health\":{\"complete\":" << (captureComplete ? "true" : "false")
               << ",\"terminal_status\":" << (terminalStatus ? "true" : "false")
@@ -222,6 +269,14 @@ int RendererDiagnosticsTool::InspectCommand(const std::vector<std::string>& argu
     {
         WriteJsonString(std::cout, "The bounded event buffer dropped " + std::to_string(droppedEventCount) +
             " earlier events; absence of evidence is not a clean result.");
+        hasCaptureIssue = true;
+    }
+    if (droppedPerformanceEventCount != 0u)
+    {
+        if (hasCaptureIssue) std::cout << ',';
+        WriteJsonString(std::cout, "The bounded performance buffer dropped " +
+            std::to_string(droppedPerformanceEventCount) +
+            " samples; performance statistics are incomplete.");
         hasCaptureIssue = true;
     }
     if (!terminalStatus)
@@ -236,7 +291,9 @@ int RendererDiagnosticsTool::InspectCommand(const std::vector<std::string>& argu
         WriteJsonString(std::cout, "One or more invariants are unknown; the capture cannot establish a clean result.");
     }
     std::cout << "]}"
-              << ",\"finding_count\":" << failures.size() << ",\"findings\":[";
+              << ",\"performance\":";
+    WriteTimingHotspots(capture);
+    std::cout << ",\"finding_count\":" << failures.size() << ",\"findings\":[";
     for (size_t failureIndex = 0; failureIndex < failures.size(); ++failureIndex)
     {
         if (failureIndex != 0) std::cout << ',';
@@ -401,12 +458,19 @@ int RendererDiagnosticsTool::DiffCommand(const std::vector<std::string>& argumen
 
     const uint64_t baselineDropped = ToUint64(Find(baseline.Manifest.AsObject(), "dropped_event_count"));
     const uint64_t currentDropped = ToUint64(Find(current.Manifest.AsObject(), "dropped_event_count"));
-    const bool comparisonComplete = baselineDropped == 0u && currentDropped == 0u;
+    const uint64_t baselinePerformanceDropped = ToUint64(
+        Find(baseline.Manifest.AsObject(), "dropped_performance_event_count"));
+    const uint64_t currentPerformanceDropped = ToUint64(
+        Find(current.Manifest.AsObject(), "dropped_performance_event_count"));
+    const bool comparisonComplete = baselineDropped == 0u && currentDropped == 0u &&
+        baselinePerformanceDropped == 0u && currentPerformanceDropped == 0u;
     std::cout << "{\"schema_version\":1,\"baseline\":"; WriteJsonString(std::cout, baseline.Directory.string());
     std::cout << ",\"current\":"; WriteJsonString(std::cout, current.Directory.string());
     std::cout << ",\"comparison_complete\":" << (comparisonComplete ? "true" : "false")
               << ",\"baseline_dropped_event_count\":" << baselineDropped
-              << ",\"current_dropped_event_count\":" << currentDropped;
+              << ",\"current_dropped_event_count\":" << currentDropped
+              << ",\"baseline_dropped_performance_event_count\":" << baselinePerformanceDropped
+              << ",\"current_dropped_performance_event_count\":" << currentPerformanceDropped;
     std::cout << ",\"graph\":{\"added_passes\":"; WriteStringArray(addedPasses);
     std::cout << ",\"removed_passes\":"; WriteStringArray(removedPasses);
     std::cout << "},\"new_failed_assertions\":"; WriteStringArray(newAssertions);

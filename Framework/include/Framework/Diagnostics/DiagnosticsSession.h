@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-28 by Hui
+//Modify Begin:2026-09-01 by Hui
 #pragma once
 
 #include <DX12Library/DiagnosticTelemetry.h>
@@ -42,6 +42,7 @@ namespace FrameworkDiagnostics
         std::string SessionName = "capture";
         std::filesystem::path OutputDirectory;
         size_t MaxEventCount = 65536;
+        size_t MaxPerformanceEventCount = 262144;
         uint64_t HighFrequencySampleIntervalFrames = 60;
         bool Enabled = true;
     };
@@ -92,11 +93,16 @@ class DiagnosticsSession final : public DiagnosticTelemetrySink
         [[nodiscard]] bool IsEnabled() const noexcept { return m_Enabled.load(std::memory_order_acquire); }
         [[nodiscard]] bool IsFinalized() const noexcept { return m_Finalized.load(std::memory_order_acquire); }
         [[nodiscard]] uint64_t GetDroppedEventCount() const noexcept { return m_DroppedEventCount.load(); }
+        [[nodiscard]] uint64_t GetDroppedPerformanceEventCount() const noexcept
+        {
+            return m_DroppedPerformanceEventCount.load();
+        }
         [[nodiscard]] uint64_t GetFailedAssertionCount() const noexcept { return m_FailedAssertionCount.load(); }
         [[nodiscard]] bool HasFailedAssertions() const noexcept { return GetFailedAssertionCount() != 0u; }
         [[nodiscard]] std::filesystem::path GetOutputDirectory() const;
         [[nodiscard]] std::string GetLastError() const;
         [[nodiscard]] std::vector<RecordedDiagnosticEvent> GetEventsSnapshot() const;
+        [[nodiscard]] std::vector<RecordedDiagnosticEvent> GetPerformanceEventsSnapshot() const;
 
     private:
         bool ExportSnapshot(SessionStatus status, std::string_view message);
@@ -108,6 +114,7 @@ class DiagnosticsSession final : public DiagnosticTelemetrySink
         std::map<std::string, std::string> m_Metadata;
         std::map<std::filesystem::path, std::string> m_Attachments;
         std::deque<RecordedDiagnosticEvent> m_Events;
+        std::deque<RecordedDiagnosticEvent> m_PerformanceEvents;
         std::chrono::steady_clock::time_point m_StartTime = {};
         std::string m_StartUtc;
         std::string m_EndUtc;
@@ -117,6 +124,7 @@ class DiagnosticsSession final : public DiagnosticTelemetrySink
         std::atomic<uint64_t> m_CurrentFrameIndex = DiagnosticTelemetryEvent::NoFrame;
         std::atomic<uint64_t> m_NextSequence = 1;
         std::atomic<uint64_t> m_DroppedEventCount = 0;
+        std::atomic<uint64_t> m_DroppedPerformanceEventCount = 0;
         std::atomic<uint64_t> m_SampledEventCount = 0;
         std::atomic<uint64_t> m_FailedAssertionCount = 0;
         std::map<std::string, uint64_t> m_LastSampledFrames;

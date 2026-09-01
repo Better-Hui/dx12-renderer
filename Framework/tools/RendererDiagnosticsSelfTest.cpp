@@ -1,10 +1,12 @@
-//Modify Begin:2026-08-28 by Hui
+//Modify Begin:2026-09-01 by Hui
 #include "RendererDiagnosticsCommands.h"
 
 #include "RendererDiagnosticsCapture.h"
 
 #include <Framework/Diagnostics/AutomationRunner.h>
 #include <Framework/Diagnostics/DiagnosticsSession.h>
+
+#include <DX12Library/PerformanceScope.h>
 
 #include <Windows.h>
 
@@ -28,6 +30,7 @@ int RendererDiagnosticsTool::SelfTestCommand()
     options.SessionName = "selftest";
     options.OutputDirectory = output;
     options.MaxEventCount = 1024u;
+    options.MaxPerformanceEventCount = 1024u;
     if (!session.Begin(std::move(options))) throw std::runtime_error("DiagnosticsSession::Begin failed in selftest.");
     const std::filesystem::path attachmentPath = output / "attachments" / "selftest.txt";
     std::filesystem::create_directories(attachmentPath.parent_path());
@@ -49,6 +52,22 @@ int RendererDiagnosticsTool::SelfTestCommand()
     session.Record("descriptor.binding", "escaped", DiagnosticTelemetrySeverity::Info, {
         { "text", std::string("quote=\" slash=\\ newline=\n") },
     });
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            &session,
+            7u,
+            "selftest.performance.outer",
+            "CPU",
+            17u,
+            "selftest");
+        DX12_CPU_PERFORMANCE_SCOPE(
+            &session,
+            7u,
+            "selftest.performance.inner",
+            "CPU",
+            17u,
+            "selftest");
+    }
 
     uint64_t controlValue = 0;
     int completionCode = -1;
@@ -139,23 +158,56 @@ int RendererDiagnosticsTool::SelfTestCommand()
         throw std::runtime_error("DiagnosticsSession::Finalize failed in selftest.");
     }
     const Capture capture = LoadCapture(output);
-    const bool bounded = capture.Events.size() == 1024u;
+    const size_t regularEventCount = static_cast<size_t>(std::ranges::count_if(capture.Events, [](const Event& event)
+    {
+        return !event.Category.starts_with("profiler.");
+    }));
+    const bool bounded = regularEventCount == 1024u;
     const bool dropped = ToUint64(Find(capture.Manifest.AsObject(), "dropped_event_count")) > 0u;
+    const bool performanceComplete =
+        ToUint64(Find(capture.Manifest.AsObject(), "dropped_performance_event_count")) == 0u;
     const bool reproduction = std::filesystem::is_regular_file(output / "reproduction.json");
     const bool descriptors = std::filesystem::is_regular_file(output / "descriptors.json");
     const bool attachment = std::filesystem::is_regular_file(attachmentPath);
+    const bool performanceArtifacts =
+        std::filesystem::is_regular_file(output / "performance_events.jsonl") &&
+        std::filesystem::is_regular_file(output / "performance_frames.csv") &&
+        std::filesystem::is_regular_file(output / "performance_summary.json");
+    const std::string performanceFrames = ReadTextFile(output / "performance_frames.csv");
+    const JsonValue performanceSummary = JsonParser(
+        ReadTextFile(output / "performance_summary.json")).Parse();
     const bool retainedCriticalEvent = std::ranges::any_of(capture.Events, [](const Event& event)
     {
         return event.Name == "retained_error" && event.Severity == "error";
     });
-    const bool result = bounded && dropped && retainedCriticalEvent && reproduction && descriptors && attachment;
+    const bool performanceScopeRecorded = std::ranges::any_of(capture.Events, [](const Event& event)
+    {
+        return event.Category == "profiler.cpu.scope" && event.Name == "selftest.performance.inner" &&
+            GetField(event, "parent_scope_id") != "0";
+    });
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+    const bool performanceScopeResult = performanceScopeRecorded;
+    const bool performanceExport =
+        performanceFrames.find("selftest.performance.inner") != std::string::npos &&
+        ToUint64(Find(performanceSummary.AsObject(), "performance_event_count")) == 2u;
+#else
+    const bool performanceScopeResult = !performanceScopeRecorded;
+    const bool performanceExport =
+        performanceFrames.find("selftest.performance.inner") == std::string::npos &&
+        ToUint64(Find(performanceSummary.AsObject(), "performance_event_count")) == 0u;
+#endif
+    const bool result = bounded && dropped && retainedCriticalEvent && reproduction && descriptors && attachment &&
+        performanceArtifacts && performanceComplete && performanceScopeResult && performanceExport;
     std::error_code cleanupError;
     std::filesystem::remove_all(output, cleanupError);
     std::cout << "{\"schema_version\":1,\"selftest\":" << (result ? "\"pass\"" : "\"fail\"")
               << ",\"bounded_buffer\":" << (bounded ? "true" : "false")
               << ",\"drop_accounting\":" << (dropped ? "true" : "false")
+              << ",\"performance_capture_complete\":" << (performanceComplete ? "true" : "false")
               << ",\"critical_event_retention\":" << (retainedCriticalEvent ? "true" : "false")
-              << ",\"artifacts\":" << (reproduction && descriptors && attachment ? "true" : "false")
+              << ",\"performance_scope\":" << (performanceScopeResult ? "true" : "false")
+              << ",\"performance_export\":" << (performanceExport ? "true" : "false")
+              << ",\"artifacts\":" << (reproduction && descriptors && attachment && performanceArtifacts ? "true" : "false")
               << ",\"cleanup_error\":";
     if (cleanupError) WriteJsonString(std::cout, cleanupError.message());
     else std::cout << "null";

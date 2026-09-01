@@ -20,6 +20,7 @@ set(HEADER_FILES
         include/DX12Library/Defines.h
         include/DX12Library/DiagnosticReporter.h
         include/DX12Library/DiagnosticRenderScope.h
+        include/DX12Library/PerformanceScope.h
         include/DX12Library/DescriptorAllocation.h
         include/DX12Library/DescriptorAllocator.h
         include/DX12Library/DescriptorAllocatorPage.h

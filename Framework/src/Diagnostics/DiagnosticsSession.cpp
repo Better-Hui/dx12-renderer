@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-28 by Hui
+//Modify Begin:2026-09-01 by Hui
 #include <Framework/Diagnostics/DiagnosticsSession.h>
 
 #include <Windows.h>
@@ -8,13 +8,16 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <functional>
 #include <iomanip>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <thread>
+#include <tuple>
 #include <type_traits>
 
 namespace
@@ -325,6 +328,7 @@ namespace
             return false;
         }
         if (event.Category == "profiler.cpu" ||
+            event.Category == "profiler.cpu.scope" ||
             event.Category == "render_graph.batch" ||
             event.Category == "descriptor.binding" ||
             event.Category == "render_graph.frame" ||
@@ -379,6 +383,150 @@ namespace
         }
         output += '"';
         return output;
+    }
+
+    void WritePerformanceFramesCsv(
+        std::ostream& output,
+        const std::vector<RecordedDiagnosticEvent>& performanceEvents)
+    {
+        output << "sequence,frame,thread_id,correlation_id,category,name,queue,scope_kind,scope_id,parent_scope_id,scope_depth,cpu_duration_ms,gpu_delta_ms,gpu_total_ms,cpu_delta_ms,cpu_total_ms\n";
+        for (const RecordedDiagnosticEvent& event : performanceEvents)
+        {
+            output << event.Sequence << ',';
+            if (event.Event.FrameIndex != DiagnosticTelemetryEvent::NoFrame)
+            {
+                output << event.Event.FrameIndex;
+            }
+            output << ',' << event.ThreadId
+                   << ',' << event.Event.CorrelationId
+                   << ',' << EscapeCsv(event.Event.Category)
+                   << ',' << EscapeCsv(event.Event.Name)
+                   << ',' << EscapeCsv(FieldToString(event, "queue"))
+                   << ',' << EscapeCsv(FieldToString(event, "scope_kind"))
+                   << ',' << FieldToString(event, "scope_id")
+                   << ',' << FieldToString(event, "parent_scope_id")
+                   << ',' << FieldToString(event, "scope_depth")
+                   << ',' << FieldToString(event, "cpu_duration_ms")
+                   << ',' << FieldToString(event, "gpu_delta_ms")
+                   << ',' << FieldToString(event, "gpu_total_ms")
+                   << ',' << FieldToString(event, "cpu_delta_ms")
+                   << ',' << FieldToString(event, "cpu_total_ms") << '\n';
+        }
+    }
+
+    struct PerformanceScopeStatistics
+    {
+        std::string Category;
+        std::string Name;
+        std::string Queue;
+        std::string ScopeKind;
+        std::string Metric;
+        std::vector<double> Samples;
+        std::set<uint64_t> Frames;
+        bool HasUnframedSamples = false;
+
+        [[nodiscard]] double Mean() const
+        {
+            double total = 0.0;
+            for (const double sample : Samples)
+            {
+                total += sample;
+            }
+            return Samples.empty() ? 0.0 : total / static_cast<double>(Samples.size());
+        }
+
+        [[nodiscard]] double Percentile(const double percentile) const
+        {
+            if (Samples.empty())
+            {
+                return 0.0;
+            }
+            std::vector<double> sorted = Samples;
+            std::ranges::sort(sorted);
+            const size_t index = static_cast<size_t>(std::ceil(percentile * static_cast<double>(sorted.size()))) - 1u;
+            return sorted[(std::min)(index, sorted.size() - 1u)];
+        }
+    };
+
+    void WritePerformanceSummary(
+        std::ostream& output,
+        const std::vector<RecordedDiagnosticEvent>& performanceEvents,
+        const uint64_t droppedPerformanceEventCount)
+    {
+        using StatisticsKey = std::tuple<std::string, std::string, std::string, std::string, std::string>;
+        std::map<StatisticsKey, PerformanceScopeStatistics> statistics;
+        for (const RecordedDiagnosticEvent& event : performanceEvents)
+        {
+            const std::string cpuDuration = FieldToString(event, "cpu_duration_ms");
+            const std::string gpuDuration = FieldToString(event, "gpu_delta_ms");
+            const std::string metric = !cpuDuration.empty() ? "cpu_duration_ms" : "gpu_delta_ms";
+            const std::string duration = !cpuDuration.empty() ? cpuDuration : gpuDuration;
+            if (duration.empty())
+            {
+                continue;
+            }
+            char* end = nullptr;
+            const double milliseconds = std::strtod(duration.c_str(), &end);
+            if (end == duration.c_str() || *end != '\0' || !std::isfinite(milliseconds))
+            {
+                continue;
+            }
+
+            const std::string queue = FieldToString(event, "queue");
+            const std::string scopeKind = FieldToString(event, "scope_kind");
+            StatisticsKey key = { event.Event.Category, event.Event.Name, queue, scopeKind, metric };
+            auto [iterator, inserted] = statistics.try_emplace(key);
+            PerformanceScopeStatistics& entry = iterator->second;
+            if (inserted)
+            {
+                entry.Category = event.Event.Category;
+                entry.Name = event.Event.Name;
+                entry.Queue = queue;
+                entry.ScopeKind = scopeKind;
+                entry.Metric = metric;
+            }
+            entry.Samples.push_back(milliseconds);
+            if (event.Event.FrameIndex == DiagnosticTelemetryEvent::NoFrame)
+            {
+                entry.HasUnframedSamples = true;
+            }
+            else
+            {
+                entry.Frames.insert(event.Event.FrameIndex);
+            }
+        }
+
+        output << "{\"schema_version\":1"
+               << ",\"performance_event_count\":" << performanceEvents.size()
+               << ",\"dropped_performance_event_count\":" << droppedPerformanceEventCount
+               << ",\"complete\":" << (droppedPerformanceEventCount == 0u ? "true" : "false")
+               << ",\"scope_count\":" << statistics.size()
+               << ",\"scopes\":[";
+        bool first = true;
+        for (const auto& [key, entry] : statistics)
+        {
+            (void)key;
+            if (!first)
+            {
+                output << ',';
+            }
+            first = false;
+            const auto [minimum, maximum] = std::minmax_element(entry.Samples.begin(), entry.Samples.end());
+            output << "{\"category\":\"" << EscapeJson(entry.Category)
+                   << "\",\"name\":\"" << EscapeJson(entry.Name)
+                   << "\",\"queue\":\"" << EscapeJson(entry.Queue)
+                   << "\",\"scope_kind\":\"" << EscapeJson(entry.ScopeKind)
+                   << "\",\"metric\":\"" << entry.Metric
+                   << "\",\"sample_count\":" << entry.Samples.size()
+                   << ",\"frame_count\":" << entry.Frames.size()
+                   << ",\"has_unframed_samples\":" << (entry.HasUnframedSamples ? "true" : "false")
+                   << ",\"mean_ms\":" << std::setprecision(15) << entry.Mean()
+                   << ",\"min_ms\":" << *minimum
+                   << ",\"p50_ms\":" << entry.Percentile(0.50)
+                   << ",\"p95_ms\":" << entry.Percentile(0.95)
+                   << ",\"max_ms\":" << *maximum << '}';
+        }
+        output << "]}\n";
     }
 
     std::string WideToUtf8(const wchar_t* value)
@@ -491,6 +639,7 @@ bool FrameworkDiagnostics::DiagnosticsSession::Begin(DiagnosticsSessionOptions o
         return false;
     }
     options.MaxEventCount = (std::max<size_t>)(1024u, options.MaxEventCount);
+    options.MaxPerformanceEventCount = (std::max<size_t>)(1024u, options.MaxPerformanceEventCount);
     options.HighFrequencySampleIntervalFrames = (std::max)(uint64_t{ 1 }, options.HighFrequencySampleIntervalFrames);
     try
     {
@@ -503,6 +652,7 @@ bool FrameworkDiagnostics::DiagnosticsSession::Begin(DiagnosticsSessionOptions o
             m_Metadata.clear();
             m_Attachments.clear();
             m_Events.clear();
+            m_PerformanceEvents.clear();
             m_LastSampledFrames.clear();
             m_LastError.clear();
             m_FinalMessage.clear();
@@ -514,6 +664,7 @@ bool FrameworkDiagnostics::DiagnosticsSession::Begin(DiagnosticsSessionOptions o
         m_CurrentFrameIndex.store(DiagnosticTelemetryEvent::NoFrame);
         m_NextSequence.store(1);
         m_DroppedEventCount.store(0);
+        m_DroppedPerformanceEventCount.store(0);
         m_SampledEventCount.store(0);
         m_FailedAssertionCount.store(0);
         m_Finalized.store(false, std::memory_order_release);
@@ -522,6 +673,7 @@ bool FrameworkDiagnostics::DiagnosticsSession::Begin(DiagnosticsSessionOptions o
             { "application", m_Options.ApplicationName },
             { "session", m_Options.SessionName },
             { "max_events", static_cast<uint64_t>(m_Options.MaxEventCount) },
+            { "max_performance_events", static_cast<uint64_t>(m_Options.MaxPerformanceEventCount) },
             { "high_frequency_sample_interval_frames", m_Options.HighFrequencySampleIntervalFrames },
         });
         return true;
@@ -556,6 +708,9 @@ bool FrameworkDiagnostics::DiagnosticsSession::BeginFromEnvironment(
     options.MaxEventCount = ParsePositiveSize(
         GetEnvironmentVariable("RENDERER_DIAGNOSTICS_MAX_EVENTS"),
         options.MaxEventCount);
+    options.MaxPerformanceEventCount = ParsePositiveSize(
+        GetEnvironmentVariable("RENDERER_DIAGNOSTICS_MAX_PERFORMANCE_EVENTS"),
+        options.MaxPerformanceEventCount);
     options.HighFrequencySampleIntervalFrames = ParsePositiveSize(
         GetEnvironmentVariable("RENDERER_DIAGNOSTICS_SAMPLE_INTERVAL_FRAMES"),
         options.HighFrequencySampleIntervalFrames);
@@ -698,6 +853,7 @@ void FrameworkDiagnostics::DiagnosticsSession::RecordTelemetry(DiagnosticTelemet
     {
         return;
     }
+    const bool performanceEvent = event.Category.starts_with("profiler.");
     try
     {
         const bool failedAssertion = event.Category == "assertion" && std::ranges::any_of(
@@ -716,6 +872,22 @@ void FrameworkDiagnostics::DiagnosticsSession::RecordTelemetry(DiagnosticTelemet
         {
             return;
         }
+        if (performanceEvent)
+        {
+            RecordedDiagnosticEvent recorded;
+            recorded.Sequence = m_NextSequence.fetch_add(1);
+            recorded.TimestampNanoseconds = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now() - m_StartTime).count());
+            recorded.ThreadId = static_cast<uint64_t>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
+            recorded.Event = std::move(event);
+            if (m_PerformanceEvents.size() >= m_Options.MaxPerformanceEventCount)
+            {
+                m_PerformanceEvents.pop_front();
+                m_DroppedPerformanceEventCount.fetch_add(1, std::memory_order_relaxed);
+            }
+            m_PerformanceEvents.push_back(std::move(recorded));
+            return;
+        }
         if (!failedAssertion && IsHighFrequencyInformationalEvent(event))
         {
             const std::string seriesKey = BuildHighFrequencySeriesKey(event);
@@ -730,7 +902,6 @@ void FrameworkDiagnostics::DiagnosticsSession::RecordTelemetry(DiagnosticTelemet
             }
             m_LastSampledFrames.insert_or_assign(std::move(seriesKey), frameIndex);
         }
-
         RecordedDiagnosticEvent recorded;
         recorded.Sequence = m_NextSequence.fetch_add(1);
         recorded.TimestampNanoseconds = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -762,7 +933,14 @@ void FrameworkDiagnostics::DiagnosticsSession::RecordTelemetry(DiagnosticTelemet
     }
     catch (...)
     {
-        m_DroppedEventCount.fetch_add(1);
+        if (performanceEvent)
+        {
+            m_DroppedPerformanceEventCount.fetch_add(1, std::memory_order_relaxed);
+        }
+        else
+        {
+            m_DroppedEventCount.fetch_add(1, std::memory_order_relaxed);
+        }
     }
 }
 
@@ -841,6 +1019,13 @@ FrameworkDiagnostics::DiagnosticsSession::GetEventsSnapshot() const
     return { m_Events.begin(), m_Events.end() };
 }
 
+std::vector<FrameworkDiagnostics::RecordedDiagnosticEvent>
+FrameworkDiagnostics::DiagnosticsSession::GetPerformanceEventsSnapshot() const
+{
+    std::scoped_lock lock(m_Mutex);
+    return { m_PerformanceEvents.begin(), m_PerformanceEvents.end() };
+}
+
 std::filesystem::path FrameworkDiagnostics::DiagnosticsSession::ResolveOutputDirectory(
     const DiagnosticsSessionOptions& options)
 {
@@ -863,27 +1048,39 @@ bool FrameworkDiagnostics::DiagnosticsSession::ExportSnapshot(
     try
     {
         std::vector<RecordedDiagnosticEvent> events;
+        std::vector<RecordedDiagnosticEvent> performanceEvents;
         std::map<std::string, std::string> metadata;
         std::map<std::filesystem::path, std::string> attachments;
         DiagnosticsSessionOptions options;
         std::filesystem::path outputDirectory;
         std::string startUtc;
         std::string endUtc;
+        uint64_t droppedPerformanceEventCount = 0;
         {
             std::scoped_lock lock(m_Mutex);
             events.assign(m_Events.begin(), m_Events.end());
+            performanceEvents.assign(m_PerformanceEvents.begin(), m_PerformanceEvents.end());
             metadata = m_Metadata;
             attachments = m_Attachments;
             options = m_Options;
             outputDirectory = m_OutputDirectory;
             startUtc = m_StartUtc;
             endUtc = m_EndUtc;
+            droppedPerformanceEventCount = m_DroppedPerformanceEventCount.load(std::memory_order_acquire);
         }
         std::filesystem::create_directories(outputDirectory);
 
         WriteAtomically(outputDirectory / "events.jsonl", [&events](std::ostream& output)
         {
             for (const RecordedDiagnosticEvent& event : events)
+            {
+                WriteEventJson(output, event);
+                output << '\n';
+            }
+        });
+        WriteAtomically(outputDirectory / "performance_events.jsonl", [&performanceEvents](std::ostream& output)
+        {
+            for (const RecordedDiagnosticEvent& event : performanceEvents)
             {
                 WriteEventJson(output, event);
                 output << '\n';
@@ -956,29 +1153,19 @@ bool FrameworkDiagnostics::DiagnosticsSession::ExportSnapshot(
             output << "],\"source_session\":\"" << EscapeJson(options.SessionName) << "\"}\n";
         });
 
-        WriteAtomically(outputDirectory / "timings.csv", [&events](std::ostream& output)
+        WriteAtomically(outputDirectory / "performance_frames.csv", [&performanceEvents](std::ostream& output)
         {
-            output << "sequence,frame,category,name,queue,cpu_duration_ms,gpu_delta_ms,gpu_total_ms,cpu_delta_ms,cpu_total_ms\n";
-            for (const RecordedDiagnosticEvent& event : events)
-            {
-                if (!CategoryStartsWith(event, "profiler."))
-                {
-                    continue;
-                }
-                output << event.Sequence << ',';
-                if (event.Event.FrameIndex != DiagnosticTelemetryEvent::NoFrame)
-                {
-                    output << event.Event.FrameIndex;
-                }
-                output << ',' << EscapeCsv(event.Event.Category)
-                       << ',' << EscapeCsv(event.Event.Name)
-                       << ',' << EscapeCsv(FieldToString(event, "queue"))
-                       << ',' << FieldToString(event, "cpu_duration_ms")
-                       << ',' << FieldToString(event, "gpu_delta_ms")
-                       << ',' << FieldToString(event, "gpu_total_ms")
-                       << ',' << FieldToString(event, "cpu_delta_ms")
-                       << ',' << FieldToString(event, "cpu_total_ms") << '\n';
-            }
+            WritePerformanceFramesCsv(output, performanceEvents);
+        });
+        WriteAtomically(outputDirectory / "timings.csv", [&performanceEvents](std::ostream& output)
+        {
+            WritePerformanceFramesCsv(output, performanceEvents);
+        });
+        WriteAtomically(
+            outputDirectory / "performance_summary.json",
+            [&performanceEvents, droppedPerformanceEventCount](std::ostream& output)
+        {
+            WritePerformanceSummary(output, performanceEvents, droppedPerformanceEventCount);
         });
 
         size_t failedAssertions = 0;
@@ -1001,6 +1188,9 @@ bool FrameworkDiagnostics::DiagnosticsSession::ExportSnapshot(
                    << "Session: " << options.SessionName << '\n'
                    << "Events: " << events.size() << '\n'
                    << "Dropped events: " << m_DroppedEventCount.load() << '\n'
+                   << "Performance events: " << performanceEvents.size() << '\n'
+                   << "Dropped performance events: " << droppedPerformanceEventCount << '\n'
+                   << "Performance data complete: " << (droppedPerformanceEventCount == 0u ? "yes" : "no") << '\n'
                    << "Sampled informational events: " << m_SampledEventCount.load() << '\n'
                    << "Failed assertions: " << failedAssertions << '\n'
                    << "Unknown assertions: " << unknownAssertions << '\n'
@@ -1045,6 +1235,8 @@ bool FrameworkDiagnostics::DiagnosticsSession::ExportSnapshot(
             }
             output << ",\"event_count\":" << events.size()
                    << ",\"dropped_event_count\":" << m_DroppedEventCount.load()
+                   << ",\"performance_event_count\":" << performanceEvents.size()
+                   << ",\"dropped_performance_event_count\":" << droppedPerformanceEventCount
                    << ",\"sampled_event_count\":" << m_SampledEventCount.load()
                    << ",\"failed_assertion_count\":" << failedAssertions
                    << ",\"unknown_assertion_count\":" << unknownAssertions
@@ -1069,9 +1261,10 @@ bool FrameworkDiagnostics::DiagnosticsSession::ExportSnapshot(
                 first = false;
                 output << '"' << EscapeJson(key) << "\":\"" << EscapeJson(value) << '"';
             }
-            const std::array<std::string_view, 9u> standardArtifacts = {
+            const std::array<std::string_view, 12u> standardArtifacts = {
                 "summary.txt", "events.jsonl", "render_graph.json", "queue_submissions.json",
-                "resources.json", "descriptors.json", "timings.csv", "assertions.json", "reproduction.json",
+                "resources.json", "descriptors.json", "performance_events.jsonl", "performance_frames.csv",
+                "performance_summary.json", "timings.csv", "assertions.json", "reproduction.json",
             };
             output << "},\"artifacts\":[";
             bool firstArtifact = true;

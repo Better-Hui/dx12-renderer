@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-09-01 by Hui
 #include "RendererDiagnosticsCapture.h"
 
 #include <algorithm>
@@ -73,13 +73,29 @@ RendererDiagnosticsTool::Capture RendererDiagnosticsTool::LoadCapture(std::files
         }
     }
 
-    std::ifstream eventsFile(capture.Directory / "events.jsonl", std::ios::in | std::ios::binary);
-    if (!eventsFile.is_open()) throw std::runtime_error("Capture events.jsonl is missing.");
-    std::string line;
-    while (std::getline(eventsFile, line))
+    const auto loadEventFile = [&capture](const std::filesystem::path& eventPath, const bool required)
     {
-        if (!line.empty()) capture.Events.push_back(ParseEvent(line));
-    }
+        std::ifstream eventsFile(eventPath, std::ios::in | std::ios::binary);
+        if (!eventsFile.is_open())
+        {
+            if (required)
+            {
+                throw std::runtime_error("Capture events.jsonl is missing.");
+            }
+            return;
+        }
+        std::string line;
+        while (std::getline(eventsFile, line))
+        {
+            if (!line.empty()) capture.Events.push_back(ParseEvent(line));
+        }
+    };
+    loadEventFile(capture.Directory / "events.jsonl", true);
+    loadEventFile(capture.Directory / "performance_events.jsonl", false);
+    std::ranges::sort(capture.Events, [](const Event& left, const Event& right)
+    {
+        return left.Sequence < right.Sequence;
+    });
 
     const std::filesystem::path reproductionPath = capture.Directory / "reproduction.json";
     if (std::filesystem::is_regular_file(reproductionPath))

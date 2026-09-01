@@ -10,6 +10,7 @@
 #include <DX12Library/CommandQueue.h>
 #include <DX12Library/Events.h>
 #include <DX12Library/Helpers.h>
+#include <DX12Library/PerformanceScope.h>
 #include <DX12Library/Window.h>
 
 #include <Framework/Core/GraphicsSettings.h>
@@ -1252,7 +1253,10 @@ void RaytracingDemo::InitializeDiagnostics()
     const bool automationEnabled = !automationModeValue.empty() &&
         automationModeValue != "0" && automationModeValue != "off";
 
-    if (!m_Diagnostics.BeginFromEnvironment("RaytracingDemo", automationEnabled))
+//Modify Begin:2026-09-01 by Hui
+    if (!m_Diagnostics.BeginFromEnvironment(
+        "RaytracingDemo",
+        automationEnabled || DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES != 0))
     {
         if (automationEnabled)
         {
@@ -1262,6 +1266,14 @@ void RaytracingDemo::InitializeDiagnostics()
         return;
     }
     m_Diagnostics.AddMetadata("diagnostics_schema", "1");
+    m_Diagnostics.AddMetadata(
+        "performance_scopes",
+        DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES != 0 ? "debug_enabled" : "compiled_out");
+    if (DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES != 0)
+    {
+        m_GpuTimingEnabled = true;
+    }
+//Modify End
     m_Diagnostics.AddMetadata("automation_mode", automationEnabled ? automationModeValue : "off");
     m_Diagnostics.AddMetadata("scene_path", GetScenePath().string());
     m_Diagnostics.AddMetadata("initial_width", std::to_string(m_Width));
@@ -3005,7 +3017,18 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     renderGraph.SetCopyGpuTimestampProfiler(
         m_GpuTimingEnabled ? &m_CopyGpuTimestampProfiler : nullptr);
     renderGraph.SetDebugSerializeAsyncCompute(m_DebugSerializeAsyncCompute);
+//Modify Begin:2026-09-01 by Hui
+    DX12_CPU_PERFORMANCE_SCOPE(
+        m_Diagnostics.IsEnabled() ? &m_Diagnostics : nullptr,
+        m_FrameIndex,
+        "RaytracingDemo.RenderGraph.Execute",
+        "CPU",
+        0u,
+        "render_graph_execute");
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
     const auto renderGraphCpuStart = std::chrono::steady_clock::now();
+#endif
+//Modify End
     const bool readsCompactedRayTracedPixelCount =
         m_RenderGraphFrameState->UsesCompactedRayTracedPixelDispatch();
     const bool activeRayCountReadbackQueued =
@@ -3081,20 +3104,16 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
         RecordDiagnosticsFailure("render_graph_execute", exception);
         throw std::runtime_error(std::string("RaytracingDemo::OnRender RenderGraph.Execute failed: ") + exception.what());
     }
+//Modify Begin:2026-09-01 by Hui
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
     const double renderGraphCpuMilliseconds = std::chrono::duration<double, std::milli>(
         std::chrono::steady_clock::now() - renderGraphCpuStart).count();
     if (m_GpuTimingEnabled)
     {
         m_ProfilerDisplay.AccumulateRenderGraphCpuMilliseconds(renderGraphCpuMilliseconds);
     }
-    if (m_Diagnostics.IsEnabled())
-    {
-        m_Diagnostics.Record(
-            "profiler.cpu",
-            "render_graph_execute",
-            DiagnosticTelemetrySeverity::Info,
-            { { "cpu_duration_ms", renderGraphCpuMilliseconds } });
-    }
+#endif
+//Modify End
 
     try
     {

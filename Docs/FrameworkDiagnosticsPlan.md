@@ -33,14 +33,17 @@ render_graph.json      passes, batches, queues, resource-state plans, and lifeti
 queue_submissions.json command-list type/order, waits, signals, and fence values
 resources.json         resource identity, descriptions, state, and lifetime events
 descriptors.json       allocations, descriptor-set revisions, and bound resource identity
-timings.csv            correlated CPU scopes and per-queue GPU timestamps
+performance_events.jsonl every unsampled CPU/GPU performance event for correlation by `RendererDiagnostics`
+performance_frames.csv raw per-frame, per-scope CPU/GPU samples with thread, queue, scope hierarchy, and correlation
+performance_summary.json per category/name/queue/scope-kind sample/frame counts and mean/min/P50/P95/max aggregates
+timings.csv            compatibility alias for `performance_frames.csv`
 assertions.json        structured pass/fail/unknown invariant results
 reproduction.json      scenario, environment, and the applied control sequence
 images/*.png           asynchronously captured image attachments listed by manifest
 dred.txt               DRED breadcrumb/page-fault attachment on device removal
 ```
 
-Large GPU resources are not dumped by default. The in-memory event buffer defaults to `65,536` entries. Normal high-frequency CPU timing, batch, descriptor, queue, and per-frame lifetime-success events are sampled as the first frame plus every 60 frames per semantic series; failed assertions, warnings, errors, and fatal events are never sampled. The manifest separates `sampled_event_count` from real capacity loss in `dropped_event_count`; `RENDERER_DIAGNOSTICS_SAMPLE_INTERVAL_FRAMES` overrides the interval. `RendererDiagnostics inspect` reports an incomplete verdict and exit code `12` for dropped events, a non-terminal capture, or unknown assertions, so missing evidence or unresolved invariants cannot be mistaken for a clean result.
+Large GPU resources are not dumped by default. The ordinary in-memory event buffer defaults to `65,536` entries. Normal high-frequency batch, descriptor, queue, and per-frame lifetime-success events are sampled as the first frame plus every 60 frames per semantic series; failed assertions, warnings, errors, and fatal events are never sampled. Performance events use a separate, bounded `262,144`-entry buffer: `profiler.*` bypasses ordinary sampling entirely, so `performance_frames.csv` retains every frame's raw sample. It is atomically exported only at Flush/finalization, never synchronously per frame. `RENDERER_DIAGNOSTICS_MAX_PERFORMANCE_EVENTS` overrides its capacity. The manifest records both `dropped_event_count` and `dropped_performance_event_count`; either makes `RendererDiagnostics inspect/diff` report incomplete with exit code `12`, so incomplete statistics cannot be treated as a clean performance result. `RENDERER_DIAGNOSTICS_SAMPLE_INTERVAL_FRAMES` affects only ordinary high-frequency telemetry, not performance samples.
 
 ## Automation contract
 
@@ -122,6 +125,14 @@ The profiler currently correlates frame/pass/batch/submission/correlation identi
 - Direct/Compute/Copy GPU timestamps;
 - queue waits, signals, idle gaps visible to the renderer, and fence completion;
 - descriptor allocation/binding; unified upload/readback high-water marks remain pending.
+
+### Debug CPU performance scopes
+
+`DX12Library/PerformanceScope.h` provides `DX12_CPU_PERFORMANCE_SCOPE(...)`. It is a nested RAII CPU scope that writes a `profiler.cpu.scope` event at C++ scope exit with `frame`, `queue`, `scope_kind`, `scope_id`, `parent_scope_id`, `scope_depth`, `correlation_id`, and `cpu_duration_ms`. RenderGraph uses it around `RenderGraph.Execute`, Direct/Async Compute/Copy pass recording, and parallel Direct workers; the Demo also wraps `RaytracingDemo.RenderGraph.Execute`, separating the full CPU block from individual recording passes.
+
+The macro creates a real object only under `_DEBUG` or an explicit developer profiling build configured with `-DDX12_RENDERER_ENABLE_PERFORMANCE_SCOPES=ON`. The latter permits runnable validation when the DLSS SDK cannot link the MSVC Debug CRT; it is not a shipping configuration. Default `Release`/`RelWithDebInfo` builds expand it to `static_cast<void>(0)`: arguments are not evaluated, no clock is read, no allocation occurs, and no telemetry is written. This is compile-time removal rather than a runtime switch. Debug/explicit profiling Demo sessions automatically enable Diagnostics and GPU timestamp capture. CPU scopes and GPU timestamps enter the dedicated performance stream: `performance_frames.csv` is raw per-frame/per-scope data, `performance_summary.json` aggregates mean/min/P50/P95/max per scope, and `performance_events.jsonl` retains raw JSONL that can be correlated with normal events by sequence/frame/correlation; `timings.csv` remains a compatibility alias. `RendererDiagnostics inspect <capture>` emits mean/P95-sorted `performance.hotspots`, while `diff` compares CPU/GPU mean/P95 across complete samples. Any performance-buffer loss explicitly marks the capture incomplete, so a partial summary is never a performance conclusion.
+
+CPU scopes measure wall-clock time spent in CPU recording/scheduling code, not GPU execution time. GPU pass duration remains D3D12 timestamp-query data. PIX remains the tool for calibrated cross-queue timelines, wave/occupancy, or driver-level investigation.
 
 Separate queue timestamps must not be presented as a global GPU overlap truth unless they share a calibrated clock. The capture should link to a PIX workflow whenever full cross-queue timing is required.
 

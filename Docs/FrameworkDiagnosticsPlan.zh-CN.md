@@ -33,14 +33,17 @@ render_graph.json      pass、batch、queue、resource state plan 与生命周�
 queue_submissions.json command-list 类型/顺序、wait、signal 和 fence value
 resources.json         resource identity、description、state 与生命周期事件
 descriptors.json       allocation、descriptor-set revision 与绑定资源身份
-timings.csv            关联后的 CPU scope 与各 queue GPU timestamp
+performance_events.jsonl 每个未采样的 CPU/GPU 性能事件，供 `RendererDiagnostics` 关联分析
+performance_frames.csv 每帧每个 scope 的原始 CPU/GPU 样本，含线程、queue、父子 scope 与 correlation
+performance_summary.json 按 category/name/queue/scope_kind 聚合的 sample/frame count、mean/min/P50/P95/max
+timings.csv            `performance_frames.csv` 的兼容别名
 assertions.json        结构化 pass/fail/unknown 结果
 reproduction.json      scenario、环境与实际 control 变更序列
 images/*.png           异步采集的图像附件；manifest 列出相对路径
 dred.txt               device removal 时的 DRED breadcrumb/page-fault 附件
 ```
 
-默认不导出大型 GPU resource。内存事件缓冲默认上限为 `65,536`；正常高频的 CPU timing、batch、descriptor、queue 与逐帧 lifetime 成功事件按“每个语义序列首帧 + 每 60 帧”采样，失败 assertion、warning、error 和 fatal 永不采样。manifest 分别记录 `sampled_event_count` 与真正的 `dropped_event_count`，后者仍表示证据容量不足。`RENDERER_DIAGNOSTICS_SAMPLE_INTERVAL_FRAMES` 可覆盖采样间隔。`RendererDiagnostics inspect` 对丢事件、非终态 capture 或 unknown assertion 返回 `incomplete` 和退出码 `12`，不会把证据缺失或未决约束误判为通过。
+默认不导出大型 GPU resource。普通内存事件缓冲默认上限为 `65,536`；正常高频的 batch、descriptor、queue 与逐帧 lifetime 成功事件按“每个语义序列首帧 + 每 60 帧”采样，失败 assertion、warning、error 和 fatal 永不采样。性能事件使用独立、默认 `262,144` 条的有界缓冲：`profiler.*` 完全绕过普通采样，因此 `performance_frames.csv` 保留每帧原始样本；结束或 Flush 时才原子导出，运行期不逐帧写盘。`RENDERER_DIAGNOSTICS_MAX_PERFORMANCE_EVENTS` 可覆盖容量。manifest 分别记录 `dropped_event_count` 与 `dropped_performance_event_count`；任一非零都会使 `RendererDiagnostics inspect/diff` 返回 `incomplete`/退出码 `12`，不会把不完整的性能统计误判为通过。`RENDERER_DIAGNOSTICS_SAMPLE_INTERVAL_FRAMES` 仅影响普通高频遥测，不影响性能样本。
 
 ## 自动化契约
 
@@ -120,6 +123,14 @@ RendererDiagnostics selftest
 - Direct/Compute/Copy GPU timestamp；
 - queue wait、signal、Framework 可见的 idle gap 与 fence completion；
 - descriptor allocation/binding；upload/readback high-water mark 尚未统一接入。
+
+### Debug CPU 性能桩
+
+`DX12Library/PerformanceScope.h` 提供 `DX12_CPU_PERFORMANCE_SCOPE(...)`。它是有嵌套关系的 RAII CPU scope：离开 C++ 作用域时写出 `profiler.cpu.scope`，其中含 `frame`、`queue`、`scope_kind`、`scope_id`、`parent_scope_id`、`scope_depth`、`correlation_id` 和 `cpu_duration_ms`。RenderGraph 已将它接到 `RenderGraph.Execute`、Direct/Async Compute/Copy pass，以及 parallel Direct worker；Demo 另包住一次 `RaytracingDemo.RenderGraph.Execute`，因此可以区分整段 CPU 开销与各个实际 command-recording pass。
+
+该宏只在 `_DEBUG` 或显式 developer profiling 构建 `-DDX12_RENDERER_ENABLE_PERFORMANCE_SCOPES=ON` 下定义实际对象。后者用于 DLSS SDK 无法链接 MSVC Debug CRT 时的可运行验收，并不是 shipping 配置：默认 `Release`/`RelWithDebInfo` 会展开为 `static_cast<void>(0)`，参数不求值、不读时钟、不分配、不写 telemetry；不是运行时开关。Debug/显式 profiling Demo 会自动启用 Diagnostics 和 GPU timestamp capture。CPU scope 与 GPU timestamp 都进入独立性能流：`performance_frames.csv` 是逐帧逐 scope 原始数据，`performance_summary.json` 是按 scope 聚合的 mean/min/P50/P95/max，`performance_events.jsonl` 则保留可与普通事件按 sequence/frame/correlation 关联的原始 JSONL；`timings.csv` 保留为前者的兼容别名。`RendererDiagnostics inspect <capture>` 直接输出按 mean/P95 排序的 `performance.hotspots`，`diff` 比较完整样本的 CPU/GPU mean/P95。性能缓冲一旦溢出会明确标记 capture 不完整，不能把残缺统计当成性能结论。
+
+CPU scope 测的是 CPU 录制/调度代码在该 C++ 作用域停留的 wall-clock 时间，不等价于 GPU 执行时间。GPU pass 时间继续用 D3D12 timestamp query；PIX 仍用于需要跨 queue 校准、wave/occupancy 或驱动级事件的深挖。
 
 如果多个 queue timestamp 没有校准到同一时钟，不能把它们伪装成全局 overlap 结论。需要完整跨 queue 时间线时，capture 应明确引导使用 PIX。
 
