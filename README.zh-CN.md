@@ -58,7 +58,7 @@ builder.AddComputePass<PassData>(
     });
 ```
 
-输入/输出声明会参与依赖分析与资源状态安排。`AddPass` 创建 Direct pass；`AddComputePass` 在可用时使用 Async Compute，否则回退到 Direct；`AddCopyPass` 要求 Copy queue 可用；`AddExternalPass` 固定使用 Direct。无人值守的 `Copy Queue Validation` 走 `Direct HDR -> Copy -> Async Compute -> Direct`，并断言 producer fence、GPU wait、state plan、submission batch 和资源 retirement fence。`AsyncCompute` 不是自动性能优化开关：RenderGraph 会处理必要的 GPU fence 等待，但不会自动判断哪个 pass 最适合异步、拆分 pass，或保证一定产生 direct/compute overlap。
+输入/输出声明会参与依赖分析与资源状态安排。`AddPass` 创建 Direct pass；`AddComputePass` 在可用时使用 Async Compute，否则回退到 Direct；`AddCopyPass` 要求 Copy queue 可用；`AddExternalPass` 固定使用 Direct。无人值守的 `Copy Queue Validation` 同时覆盖 `Direct HDR -> Copy -> Async Compute -> Direct` 和真实的 `Direct transient -> Copy transient -> Async Compute transient` heap 复用链，并断言 producer fence、Direct alias barrier、两段 GPU wait、state plan、submission batch 和合并后的 heap retirement fence。`AsyncCompute` 不是自动性能优化开关：RenderGraph 会处理必要的 GPU fence 等待，但不会自动判断哪个 pass 最适合异步、拆分 pass，或保证一定产生 direct/compute overlap。
 
 当前 queue 提交、last-writer 和跨 queue fence 由 `RenderGraphQueueScheduler` 管理。Compiler 为每个 pass 生成不可变的 transition/aliasing 计划，Executor 把它录入所属的 command list；`CommandList` 在最终提交顺序中通过共享 `ResourceStateRegistry` 解析每条 list 的初始状态。因此 CPU 录制先后不会改变 GPU 的资源状态与执行顺序。
 
@@ -253,7 +253,7 @@ CMake 生成的工程会保持各 target 的真实源码目录。`DX12Library`�
 - Direct、Async Compute 和 Copy queue 都由 pass **显式指定**。RenderGraph 不会自动选择 queue、拆分 pass 或优化 overlap；`Copy Queue Validation` 是受维护的 Diagnostics sample 路径，不代表自动 queue placement 策略。
 - Compiler 会把 queue 相同且资源交接兼容的连续 Async Compute/Copy pass 合并为 non-direct recording/submission batch；遇到 aliasing 或需要中途 Direct preamble 的资源关系时仍会拆开。
 - `RenderGraphRoot::Execute()` 现在只是图执行入口；pass 录制/提交由 `RenderGraphCommandExecutor` 负责，Direct/Async Compute/Copy 的可选 timestamp 生命周期由 `RenderGraphProfiler` 负责。Root 仍负责图构建和拓扑编排。
-- transient resource 会按本帧实际记录的 Direct/Async Compute/Copy fence 做延迟退休。aliasing 仍采取保守策略：不同 queue 使用的资源不会互相 alias，后续再设计更一般的多 queue allocator。
+- transient resource 会按本帧实际记录的 Direct/Async Compute/Copy fence 做延迟退休。两个生命周期不重叠且各自只属于单一 queue 的资源，只有在 Compiler 能证明“前者最后一次使用 pass → 后者第一次使用 pass”存在 RenderGraph 依赖路径时才允许跨 queue alias：Direct queue 先等待 producer、录制 alias barrier，再 signal preamble fence；非 Direct consumer 必须等待该 fence，共享 heap 的退休值会合并所有相关 queue fence。生命周期本身涉及多个 queue 的资源仍禁止 alias。
 - Raster Bloom 的 scratch texture 已重新使用 transient aliasing：alias barrier 在真实首次使用、首个 transition 之前写入，新 placed resource 从 `COMMON` 开始；无桌面输入的反复重建压力测试覆盖此顺序。
 - 当前 Framework 和 RenderGraph 的执行路径由应用组合根显式注入 device、queue 和 descriptor 分配器。独立运行时的 application/window 生命周期，以及少量 legacy resource-wrapper 兼容路径，仍保留 `Application` 依赖。
 - `RaytracingDemoSceneResources` 内部已拆成 texture/material、geometry、meshlet、RTAS 四个 builder；facade 仍是 sample 层入口。

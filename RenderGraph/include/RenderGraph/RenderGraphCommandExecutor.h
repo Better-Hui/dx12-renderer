@@ -59,7 +59,8 @@ namespace RenderGraph
             const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
         void PrepareDirectQueueDependencies(
             std::span<RenderPass* const> passes,
-            std::shared_ptr<CommandList>& directCommandList);
+            std::shared_ptr<CommandList>& directCommandList,
+            const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
         void ExecuteNonDirectBatch(
             const RenderGraphRecordingBatch& batch,
             const RenderMetadata& renderMetadata,
@@ -75,6 +76,9 @@ namespace RenderGraph
         void ApplyDirectQueuePreamble(
             const RenderPass& pass,
             CommandList& commandList,
+            const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
+        void RecordLocalAliasingBarriers(
+            const RenderPass& pass,
             const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
         CommandQueue& GetCommandQueue(RenderPassQueue queue) const;
         static void ApplyExternalResourceTransitions(

@@ -3,11 +3,13 @@
 #include "RenderPass.h"
 #include "ResourceDescription.h"
 
+#include <algorithm>
+
 using namespace RenderGraph;
 
 namespace
 {
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-09-09 by Hui
     constexpr uint8_t DirectQueueMask = 1u << 0u;
     constexpr uint8_t AsyncComputeQueueMask = 1u << 1u;
     constexpr uint8_t CopyQueueMask = 1u << 2u;
@@ -31,6 +33,69 @@ namespace
         return queueMask == DirectQueueMask ||
             queueMask == AsyncComputeQueueMask ||
             queueMask == CopyQueueMask;
+    }
+
+    bool IsProducerOutput(const RenderGraph::OutputType outputType)
+    {
+        return outputType == RenderGraph::OutputType::Token ||
+            outputType == RenderGraph::OutputType::RenderTarget ||
+            outputType == RenderGraph::OutputType::DepthWrite ||
+            outputType == RenderGraph::OutputType::UnorderedAccess ||
+            outputType == RenderGraph::OutputType::ExternalAccess ||
+            outputType == RenderGraph::OutputType::CopyDestination;
+    }
+
+    bool DirectlyDependsOn(
+        const RenderGraph::RenderPass& pass,
+        const RenderGraph::RenderPass& potentialProducer)
+    {
+        for (const RenderGraph::Input& input : pass.GetInputs())
+        {
+            for (const RenderGraph::Output& output : potentialProducer.GetOutputs())
+            {
+                if (IsProducerOutput(output.m_Type) && input.m_Id == output.m_Id)
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    TransientResourceAllocator::PassReachability BuildPassReachability(
+        const std::vector<RenderGraph::RenderPass*>& renderPasses)
+    {
+        const size_t passCount = renderPasses.size();
+        TransientResourceAllocator::PassReachability reachability(
+            passCount,
+            std::vector<uint8_t>(passCount, 0u));
+        for (size_t producerIndex = 0; producerIndex < passCount; ++producerIndex)
+        {
+            for (size_t consumerIndex = producerIndex + 1u; consumerIndex < passCount; ++consumerIndex)
+            {
+                if (DirectlyDependsOn(*renderPasses[consumerIndex], *renderPasses[producerIndex]))
+                {
+                    reachability[producerIndex][consumerIndex] = 1u;
+                }
+            }
+        }
+
+        for (size_t intermediate = 0; intermediate < passCount; ++intermediate)
+        {
+            for (size_t producerIndex = 0; producerIndex < passCount; ++producerIndex)
+            {
+                if (reachability[producerIndex][intermediate] == 0u)
+                {
+                    continue;
+                }
+                for (size_t consumerIndex = 0; consumerIndex < passCount; ++consumerIndex)
+                {
+                    reachability[producerIndex][consumerIndex] |=
+                        reachability[intermediate][consumerIndex];
+                }
+            }
+        }
+        return reachability;
     }
 
     TransientResourceAllocator::ResourceLifecycle& GetOrAdd(
@@ -63,14 +128,49 @@ bool TransientResourceAllocator::ResourceLifecycle::Intersect(const ResourceLife
     return IntersectHelper(lifecycle1, lifecycle2) || IntersectHelper(lifecycle2, lifecycle1);
 }
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-09-09 by Hui
+bool TransientResourceAllocator::ResourceLifecycle::UsesSingleQueue() const
+{
+    return HasSingleQueue(m_QueueMask);
+}
+
+RenderPassQueue TransientResourceAllocator::ResourceLifecycle::GetQueue() const
+{
+    Assert(UsesSingleQueue(), "A transient resource lifecycle does not belong to exactly one queue.");
+    if (m_QueueMask == AsyncComputeQueueMask)
+    {
+        return RenderPassQueue::AsyncCompute;
+    }
+    if (m_QueueMask == CopyQueueMask)
+    {
+        return RenderPassQueue::Copy;
+    }
+    return RenderPassQueue::Direct;
+}
+
 bool TransientResourceAllocator::ResourceLifecycle::CanAlias(
     const ResourceLifecycle& lifecycle1,
-    const ResourceLifecycle& lifecycle2)
+    const ResourceLifecycle& lifecycle2,
+    const PassReachability& passReachability)
 {
-    return HasSingleQueue(lifecycle1.m_QueueMask) &&
-        lifecycle1.m_QueueMask == lifecycle2.m_QueueMask &&
-        !Intersect(lifecycle1, lifecycle2);
+    if (!lifecycle1.UsesSingleQueue() ||
+        !lifecycle2.UsesSingleQueue() ||
+        Intersect(lifecycle1, lifecycle2))
+    {
+        return false;
+    }
+    if (lifecycle1.m_QueueMask == lifecycle2.m_QueueMask)
+    {
+        return true;
+    }
+
+    const ResourceLifecycle& earlier = lifecycle1.m_EndPassIndex < lifecycle2.m_BeginPassIndex
+        ? lifecycle1
+        : lifecycle2;
+    const ResourceLifecycle& later = &earlier == &lifecycle1 ? lifecycle2 : lifecycle1;
+    return earlier.m_EndPassIndex < passReachability.size() &&
+        later.m_BeginPassIndex < passReachability[earlier.m_EndPassIndex].size() &&
+        passReachability[earlier.m_EndPassIndex][later.m_BeginPassIndex] != 0u;
 }
 //Modify End
 
@@ -140,9 +240,18 @@ std::map<ResourceId, TransientResourceAllocator::ResourceLifecycle> TransientRes
 }
 
 
-std::vector<TransientResourceAllocator::HeapInfo> TransientResourceAllocator::CreateHeaps(const std::map<ResourceId, ResourceLifecycle>& lifecycles, const std::map<ResourceId, ResourceDescription>& resourceDescriptions, const Microsoft::WRL::ComPtr<ID3D12Device2>& pDevice)
+//Modify Begin:2026-09-09 by Hui
+std::vector<TransientResourceAllocator::HeapInfo> TransientResourceAllocator::CreateHeaps(
+    const std::map<ResourceId, ResourceLifecycle>& lifecycles,
+    const std::map<ResourceId, ResourceDescription>& resourceDescriptions,
+    const std::vector<RenderPass*>& renderPasses,
+    const Microsoft::WRL::ComPtr<ID3D12Device2>& pDevice)
+//Modify End
 {
     std::vector<HeapInfo> heaps;
+//Modify Begin:2026-09-09 by Hui
+    const PassReachability passReachability = BuildPassReachability(renderPasses);
+//Modify End
 
     for (const auto& [id, lifecycle] : lifecycles)
     {
@@ -191,7 +300,10 @@ std::vector<TransientResourceAllocator::HeapInfo> TransientResourceAllocator::Cr
 
                     for (const auto& expandingLifecycle : expandingHeap.m_ResourceLifecycles)
                     {
-                        if (!ResourceLifecycle::CanAlias(expandingLifecycle, otherLifecycle))
+                        if (!ResourceLifecycle::CanAlias(
+                            expandingLifecycle,
+                            otherLifecycle,
+                            passReachability))
                         {
                             intersect = true;
                             break;
@@ -217,7 +329,12 @@ std::vector<TransientResourceAllocator::HeapInfo> TransientResourceAllocator::Cr
 
                     for (const auto& resourceLifecycle : expandingHeap.m_ResourceLifecycles)
                     {
-                        Assert(ResourceLifecycle::CanAlias(resourceLifecycle, otherLifecycle), "Some of the existing lifecycles cannot safely alias the newly added one.");
+                        Assert(
+                            ResourceLifecycle::CanAlias(
+                                resourceLifecycle,
+                                otherLifecycle,
+                                passReachability),
+                            "Some of the existing lifecycles cannot safely alias the newly added one.");
                     }
 
                     expandingHeap.m_ResourceLifecycles.push_back(otherLifecycle);
@@ -231,6 +348,18 @@ std::vector<TransientResourceAllocator::HeapInfo> TransientResourceAllocator::Cr
 
     }
     while (compacting);
+
+//Modify Begin:2026-09-09 by Hui
+    for (HeapInfo& heapInfo : heaps)
+    {
+        std::ranges::sort(
+            heapInfo.m_ResourceLifecycles,
+            [](const ResourceLifecycle& left, const ResourceLifecycle& right)
+            {
+                return left.m_BeginPassIndex < right.m_BeginPassIndex;
+            });
+    }
+//Modify End
 
     for (uint32_t i = 0; i < heaps.size(); ++i)
     {

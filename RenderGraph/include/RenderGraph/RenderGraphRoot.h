@@ -109,6 +109,9 @@ namespace RenderGraph
         const RenderGraphQueueFenceValues& GetFrameSubmissionFences() const;
         const RenderGraphQueueSynchronizationStats& GetFrameSynchronizationStats() const;
         RenderGraphQueueFenceValues GetResourceRetirement(ResourceId resourceId) const;
+        RenderGraphQueueFenceValues GetTransientHeapRetirement(ResourceId resourceId) const;
+        bool ShareTransientHeap(ResourceId first, ResourceId second) const;
+        const RenderGraphQueueRuntimeValidation& GetFrameRuntimeValidation() const;
         const RenderGraphCrossQueuePlanValidation& GetCrossQueuePlanValidation() const;
 //Modify End
         void MarkDirty();

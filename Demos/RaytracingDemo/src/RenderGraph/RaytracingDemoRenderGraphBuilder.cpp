@@ -252,7 +252,9 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
         resources.CopyQueue,
         renderGraphBuilder.ReleasePasses(),
         std::move(textureDescriptions),
-        RaytracingDemoRenderGraph::CreateBufferDescriptions(useCompactedRayTracedPixels),
+        RaytracingDemoRenderGraph::CreateBufferDescriptions(
+            useCompactedRayTracedPixels,
+            frameState.CopyQueueValidationEnabled),
         std::move(tokenDescriptions),
         RenderGraph::RenderGraphOutputResources{
             .Presentation = displayColor,

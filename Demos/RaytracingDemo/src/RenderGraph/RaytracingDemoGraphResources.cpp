@@ -131,45 +131,74 @@ namespace RaytracingDemoRenderGraph
 //Modify End
     }
 
-    std::vector<RenderGraph::BufferDescription> CreateBufferDescriptions(const bool includeCompactedPathTracing)
+//Modify Begin:2026-09-09 by Hui
+    std::vector<RenderGraph::BufferDescription> CreateBufferDescriptions(
+        const bool includeCompactedPathTracing,
+        const bool includeCopyQueueValidation)
     {
-//Modify Begin:2026-08-19 by Hui
-        if (!includeCompactedPathTracing)
-        {
-            return {};
-        }
+        std::vector<RenderGraph::BufferDescription> descriptions;
         const RenderGraph::RenderMetadataExpression<size_t> activePixelCapacity = [](const RenderGraph::RenderMetadata& metadata)
         {
             return static_cast<size_t>(metadata.m_ScreenWidth) * metadata.m_ScreenHeight;
         };
-        return {
-            {
+        if (includeCompactedPathTracing)
+        {
+            descriptions.insert(descriptions.end(), {
+                {
                 ResourceIds::ActiveRayPixelIndices,
                 activePixelCapacity,
                 sizeof(uint32_t),
                 RenderGraph::ResourceInitAction::Discard,
                 RenderGraph::BufferKind::Structured,
                 RenderGraph::BufferUsage::ShaderResource | RenderGraph::BufferUsage::UnorderedAccess,
-            },
-            {
+                },
+                {
                 ResourceIds::ActiveRayPixelCount,
                 [](const RenderGraph::RenderMetadata&) { return size_t{ 4u }; },
                 size_t{ 1u },
                 RenderGraph::ResourceInitAction::Discard,
                 RenderGraph::BufferKind::Raw,
                 RenderGraph::BufferUsage::ShaderResource | RenderGraph::BufferUsage::UnorderedAccess,
-            },
-            {
+                },
+                {
                 ResourceIds::ActivePixelDispatchData,
                 [](const RenderGraph::RenderMetadata&) { return sizeof(ActivePixelDispatchDiagnostics); },
                 size_t{ 1u },
                 RenderGraph::ResourceInitAction::Discard,
                 RenderGraph::BufferKind::Raw,
                 RenderGraph::BufferUsage::UnorderedAccess,
-            },
-        };
-//Modify End
+                },
+            });
+        }
+        if (includeCopyQueueValidation)
+        {
+            const RenderGraph::RenderMetadataExpression<size_t> aliasScratchSize =
+                [](const RenderGraph::RenderMetadata&) { return size_t{ 333336u }; };
+            descriptions.emplace_back(
+                ResourceIds::CopyQueueAliasDirectScratch,
+                aliasScratchSize,
+                size_t{ 1u },
+                RenderGraph::ResourceInitAction::Discard,
+                RenderGraph::BufferKind::Raw,
+                RenderGraph::BufferUsage::UnorderedAccess);
+            descriptions.emplace_back(
+                ResourceIds::CopyQueueAliasCopyScratch,
+                aliasScratchSize,
+                size_t{ 1u },
+                RenderGraph::ResourceInitAction::CopyDestination,
+                RenderGraph::BufferKind::Raw,
+                RenderGraph::BufferUsage::UnorderedAccess);
+            descriptions.emplace_back(
+                ResourceIds::CopyQueueAliasComputeScratch,
+                aliasScratchSize,
+                size_t{ 1u },
+                RenderGraph::ResourceInitAction::Discard,
+                RenderGraph::BufferKind::Raw,
+                RenderGraph::BufferUsage::UnorderedAccess);
+        }
+        return descriptions;
     }
+//Modify End
 
     std::vector<RenderGraph::TokenDescription> CreateTokenDescriptions(
         const bool includeDLSS,
@@ -218,6 +247,8 @@ namespace RaytracingDemoRenderGraph
         {
             tokenDescriptions.emplace_back(ResourceIds::CopyQueueValidationFinishedToken);
             tokenDescriptions.emplace_back(ResourceIds::CopyQueueValidationComputeFinishedToken);
+            tokenDescriptions.emplace_back(ResourceIds::CopyQueueAliasDirectReadyToken);
+            tokenDescriptions.emplace_back(ResourceIds::CopyQueueAliasCopyReadyToken);
         }
         if (includeDynamicRayTracingUpdate)
         {

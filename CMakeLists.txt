@@ -17,6 +17,11 @@ option(
         "Compile Debug CPU performance scopes into an explicit developer profiling build."
         OFF)
 
+option(
+        DX12_RENDERER_ENABLE_FULL_PERFORMANCE_SCOPES
+        "Enable scopes and use allocation-heavy rich CPU telemetry instead of the lightweight scope ring."
+        OFF)
+
 set(DX12_RENDERER_SHADER_MODEL_VERSION "6.8")
 string(REPLACE "." "_" DX12_RENDERER_SHADER_MODEL_SUFFIX "${DX12_RENDERER_SHADER_MODEL_VERSION}")
 set(DX12_RENDERER_RAYTRACING_SHADER_MODEL "lib_${DX12_RENDERER_SHADER_MODEL_SUFFIX}")

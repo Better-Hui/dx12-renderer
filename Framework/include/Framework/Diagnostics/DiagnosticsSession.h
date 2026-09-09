@@ -8,19 +8,25 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <condition_variable>
 #include <deque>
 #include <filesystem>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <span>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 struct ID3D12Device2;
 
 namespace FrameworkDiagnostics
 {
+    struct PerformanceThreadBuffer;
+    struct PerformanceScopeStorage;
+
     enum class SessionStatus : uint8_t
     {
         Running,
@@ -58,7 +64,7 @@ namespace FrameworkDiagnostics
 class DiagnosticsSession final : public DiagnosticTelemetrySink
     {
     public:
-        DiagnosticsSession() = default;
+        DiagnosticsSession();
         ~DiagnosticsSession() override;
 
         DiagnosticsSession(const DiagnosticsSession&) = delete;
@@ -89,6 +95,7 @@ class DiagnosticsSession final : public DiagnosticTelemetrySink
             std::string_view queueName,
             std::span<const GpuTimestampSample> samples) noexcept;
         void RecordTelemetry(DiagnosticTelemetryEvent event) noexcept override;
+        void RecordPerformanceScope(DiagnosticPerformanceScopeRecord record) noexcept override;
 
         [[nodiscard]] bool IsEnabled() const noexcept { return m_Enabled.load(std::memory_order_acquire); }
         [[nodiscard]] bool IsFinalized() const noexcept { return m_Finalized.load(std::memory_order_acquire); }
@@ -106,6 +113,10 @@ class DiagnosticsSession final : public DiagnosticTelemetrySink
 
     private:
         bool ExportSnapshot(SessionStatus status, std::string_view message);
+        void FlushPerformanceBuffers() noexcept;
+        void StopPerformanceCollector() noexcept;
+        void PerformanceCollectorLoop(std::stop_token stopToken) noexcept;
+        [[nodiscard]] std::vector<RecordedDiagnosticEvent> BuildPerformanceEventsSnapshotLocked() const;
         static std::filesystem::path ResolveOutputDirectory(const DiagnosticsSessionOptions& options);
 
         mutable std::mutex m_Mutex;
@@ -115,6 +126,12 @@ class DiagnosticsSession final : public DiagnosticTelemetrySink
         std::map<std::filesystem::path, std::string> m_Attachments;
         std::deque<RecordedDiagnosticEvent> m_Events;
         std::deque<RecordedDiagnosticEvent> m_PerformanceEvents;
+        std::vector<std::shared_ptr<PerformanceThreadBuffer>> m_PerformanceBuffers;
+        std::unique_ptr<PerformanceScopeStorage> m_PerformanceScopeStorage;
+        uint64_t m_PerformanceBufferGeneration = 0;
+        std::mutex m_PerformanceCollectorMutex;
+        std::condition_variable_any m_PerformanceCollectorWake;
+        std::jthread m_PerformanceCollector;
         std::chrono::steady_clock::time_point m_StartTime = {};
         std::string m_StartUtc;
         std::string m_EndUtc;

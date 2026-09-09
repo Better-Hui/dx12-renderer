@@ -1,6 +1,6 @@
 # Framework 诊断、自动化与 Profiler
 
-> 状态：基础能力已落地并通过真实 Demo 自动化验证。RenderGraph pass scope 已把实际 SRV/UAV descriptor 访问与图声明对应；DLSS/NGX 和 OIDN/CUDA 的 native D3D12 边界也会显式上报访问。运行期会检查跨 queue producer signal、consumer wait、state plan 与资源 retirement，失败 assertion 会令 automation 以退出码 `24` 失败。真实 `copy` 与 `oidn` 场景已分别覆盖 Direct → Copy → Async Compute 和 Direct → CUDA → Direct。仍待完成的是 RTAS/bindless/global descriptor 的严格访问归因，以及完整 session 的后台归档、压缩与 retention policy。
+> 状态：基础能力已落地并通过真实 Demo 自动化验证。RenderGraph pass scope 已把实际 SRV/UAV descriptor 访问与图声明对应；DLSS/NGX 和 OIDN/CUDA 的 native D3D12 边界也会显式上报访问。运行期会检查跨 queue producer signal、consumer wait、state plan、alias barrier handoff 与资源 retirement，失败 assertion 会令 automation 以退出码 `24` 失败。真实 `copy` 场景覆盖 Direct → Copy → Async Compute → Direct 以及三个资源的跨 queue transient heap 复用，`oidn` 覆盖 Direct → CUDA → Direct。仍待完成的是 RTAS/bindless/global descriptor 的严格访问归因，以及完整 session 的后台归档、压缩与 retention policy。
 
 ## 目标
 
@@ -88,7 +88,7 @@ RendererDiagnostics selftest
 - `DiagnosticRenderPassScope` 已将 pass 的逻辑资源声明与实际 SRV/UAV descriptor 访问匹配；未声明、权限不符或资源 identity 不符会产生 `render_graph_shader_access_declaration=result=fail`；
 - DLSS/NGX、OIDN readback/upload 等不会经过 `CommandContext::SetDescriptorSet()` 的 native D3D12 边界已显式上报 read/write observation；ReSTIR、Bloom 继续由 descriptor 路径验证；
 - 已检查 compacted active count 与 finalized indirect arguments/dispatch 的一致性；
-- 已在每帧运行期检查跨 queue producer signal、consumer wait、state plan 和图资源 retirement；Direct → Copy → Async Compute → Direct 的真实 `copy` 场景已验证该链路；
+- 已在每帧运行期检查跨 queue producer signal、consumer wait、state plan、图资源 retirement 和 transient alias handoff；真实 `copy` 场景除 Direct → Copy → Async Compute → Direct 外，还验证 Direct/Copy/Async Compute 三个逻辑资源复用同一 heap：必须存在依赖路径，Direct alias barrier 必须等待 producer，consumer 必须等待 barrier preamble，共享 heap 退休必须合并三个 queue fence；
 - OIDN 的 D3D12 shared resource 在 Direct → CUDA → Direct handoff 中验证 Direct signal、CUDA wait/signal 与 Direct wait；
 - 已具备可复用、非阻塞的 `GpuReadbackBuffer` 与 `GpuReadbackTexture` ring-slot 基元；compacted active-pixel 验证实际使用它们。`DiagnosticsImageCapture::Request()` 在 Direct queue 单独提交 copy，`Poll()` 在后续帧确认 fence、转换 RGBA8、计算均值/非黑像素比并记录 `image.<name>` assertion；PNG 最多两个后台 writer 并行写入。自动化 terminal finalize 延后至 shutdown 的 `Drain()`，确保最后一个异步图像结论和附件先写入 capture。OIDN 在可用时走 D3D12 shared buffer/fence → CUDA `Quality::Fast` → D3D12 copy-back，CUDA 初始化或 external-memory import 失败时才使用 HDR readback → CPU `Fast` → upload fallback；OIDN 自动化记录 backend，并验证静止结果保持以及相机移动后的 generation 作废；
 - device removal 失败路径通过 `DiagnosticsSession::AttachDeviceRemovalDred()` 写入 `dred.txt`，包含 removal HRESULT、最多 128 个 auto-breadcrumb 和 page-fault allocation；该附件由 manifest 声明；
@@ -126,9 +126,9 @@ RendererDiagnostics selftest
 
 ### Debug CPU 性能桩
 
-`DX12Library/PerformanceScope.h` 提供 `DX12_CPU_PERFORMANCE_SCOPE(...)`。它是有嵌套关系的 RAII CPU scope：离开 C++ 作用域时写出 `profiler.cpu.scope`，其中含 `frame`、`queue`、`scope_kind`、`scope_id`、`parent_scope_id`、`scope_depth`、`correlation_id` 和 `cpu_duration_ms`。RenderGraph 已将它接到 `RenderGraph.Execute`、Direct/Async Compute/Copy pass，以及 parallel Direct worker；Demo 另包住一次 `RaytracingDemo.RenderGraph.Execute`，因此可以区分整段 CPU 开销与各个实际 command-recording pass。
+`DX12Library/PerformanceScope.h` 提供 `DX12_CPU_PERFORMANCE_SCOPE(...)`。它是有嵌套关系的 RAII CPU scope：离开 C++ 作用域时写出 `profiler.cpu.scope`，其中含 `frame`、`queue`、`scope_kind`、`scope_id`、`parent_scope_id`、`scope_depth`、`correlation_id` 和 `cpu_duration_ms`。默认路径只向 thread-local 固定容量 ring 写入 POD sample，不在每个 scope 构造 rich telemetry 或争抢 session mutex；50 ms 周期的后台 collector 批量转存 sample，只有快照/导出阶段才构造字符串、`variant` 和 JSON event。RenderGraph 已将它接到 `RenderGraph.Execute`、Direct/Async Compute/Copy pass，以及 parallel Direct worker；Demo 另包住一次 `RaytracingDemo.RenderGraph.Execute`，因此可以区分整段 CPU 开销与各个实际 command-recording pass。
 
-该宏只在 `_DEBUG` 或显式 developer profiling 构建 `-DDX12_RENDERER_ENABLE_PERFORMANCE_SCOPES=ON` 下定义实际对象。后者用于 DLSS SDK 无法链接 MSVC Debug CRT 时的可运行验收，并不是 shipping 配置：默认 `Release`/`RelWithDebInfo` 会展开为 `static_cast<void>(0)`，参数不求值、不读时钟、不分配、不写 telemetry；不是运行时开关。Debug/显式 profiling Demo 会自动启用 Diagnostics 和 GPU timestamp capture。CPU scope 与 GPU timestamp 都进入独立性能流：`performance_frames.csv` 是逐帧逐 scope 原始数据，`performance_summary.json` 是按 scope 聚合的 mean/min/P50/P95/max，`performance_events.jsonl` 则保留可与普通事件按 sequence/frame/correlation 关联的原始 JSONL；`timings.csv` 保留为前者的兼容别名。`RendererDiagnostics inspect <capture>` 直接输出按 mean/P95 排序的 `performance.hotspots`，`diff` 比较完整样本的 CPU/GPU mean/P95。性能缓冲一旦溢出会明确标记 capture 不完整，不能把残缺统计当成性能结论。
+该宏只在 `_DEBUG` 或显式 developer profiling 构建 `-DDX12_RENDERER_ENABLE_PERFORMANCE_SCOPES=ON` 下定义实际对象。后者用于 DLSS SDK 无法链接 MSVC Debug CRT 时的可运行验收，并不是 shipping 配置：默认 `Release`/`RelWithDebInfo` 会展开为 `static_cast<void>(0)`，参数不求值、不读时钟、不分配、不写 telemetry；不是运行时开关。需要验证旧的 allocation-heavy 路径时可使用 `-DDX12_RENDERER_ENABLE_FULL_PERFORMANCE_SCOPES=ON`，它会同时启用 scope，只能作为侵入性 A/B 对照。Debug/显式 profiling Demo 会自动启用 Diagnostics 和 GPU timestamp capture。CPU scope 与 GPU timestamp 都进入独立性能流：`performance_frames.csv` 是逐帧逐 scope 原始数据，`performance_summary.json` 是按 scope 聚合的 mean/min/P50/P95/max，`performance_events.jsonl` 则保留可与普通事件按 sequence/frame/correlation 关联的原始 JSONL；`timings.csv` 保留为前者的兼容别名。`RendererDiagnostics inspect <capture>` 直接输出按 mean/P95 排序的 `performance.hotspots`，`diff` 比较完整样本的 CPU/GPU mean/P95。性能缓冲一旦溢出会明确标记 capture 不完整，不能把残缺统计当成性能结论。
 
 CPU scope 测的是 CPU 录制/调度代码在该 C++ 作用域停留的 wall-clock 时间，不等价于 GPU 执行时间。GPU pass 时间继续用 D3D12 timestamp query；PIX 仍用于需要跨 queue 校准、wave/occupancy 或驱动级事件的深挖。
 

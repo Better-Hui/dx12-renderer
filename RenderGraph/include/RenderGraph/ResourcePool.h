@@ -3,6 +3,9 @@
 #include <functional>
 #include <memory>
 #include <map>
+//Modify Begin:2026-09-09 by Hui
+#include <optional>
+//Modify End
 #include <queue>
 #include <vector>
 
@@ -55,6 +58,13 @@ namespace RenderGraph
         const TransientResourceAllocator::ResourceLifecycle& GetResourceLifecycle(ResourceId resourceId);
 //Modify Begin:2026-07-28 by Hui
         bool HasResourceLifecycle(ResourceId resourceId) const;
+//Modify End
+//Modify Begin:2026-09-09 by Hui
+        [[nodiscard]] std::optional<ResourceId> GetAliasingPredecessor(ResourceId resourceId) const;
+        [[nodiscard]] bool ShareTransientHeap(ResourceId first, ResourceId second) const;
+        [[nodiscard]] RenderGraphQueueFenceValues GetTransientHeapRetirement(
+            ResourceId resourceId,
+            const std::map<ResourceId, RenderGraphQueueFenceValues>& resourceRetirements) const;
 //Modify End
 
         bool IsRegistered(ResourceId resourceId) const;

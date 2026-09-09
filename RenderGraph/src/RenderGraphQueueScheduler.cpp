@@ -10,6 +10,8 @@
 #include <DX12Library/DiagnosticTelemetry.h>
 #include <DX12Library/Helpers.h>
 
+#include "ResourcePool.h"
+
 namespace RenderGraph
 {
     namespace
@@ -34,6 +36,15 @@ namespace RenderGraph
                 result.push_back(character >= 0 && character < 128 ? static_cast<char>(character) : '?');
             }
             return result;
+        }
+
+        std::span<const PassAliasingTransition> GetAliasingTransitions(
+            const PassResourceStatePlan& statePlan)
+        {
+            return statePlan.DirectPreamble.has_value()
+                ? std::span<const PassAliasingTransition>(
+                    statePlan.DirectPreamble->AliasingOutputs)
+                : std::span<const PassAliasingTransition>(statePlan.AliasingOutputs);
         }
     }
 
@@ -122,6 +133,8 @@ namespace RenderGraph
         m_WaitedProducerFences = {};
         m_FrameRuntimeValidation = {};
         m_PendingDirectResources.clear();
+        m_ExpectedAliasingBarriers.clear();
+        m_RecordedAliasingBarriers.clear();
         m_CurrentFrameIndex = frameIndex;
         m_LastAsyncComputeFenceValue = 0;
         m_LastCopyFenceValue = 0;
@@ -244,6 +257,7 @@ namespace RenderGraph
 
     RenderGraphQueueFenceValues RenderGraphQueueScheduler::GetCrossQueueProducerFences(
         const RenderPass& pass,
+        const PassResourceStatePlan& statePlan,
         const RenderPassQueue waitingQueue) const
     {
         RenderGraphQueueFenceValues dependencies = {};
@@ -284,6 +298,19 @@ namespace RenderGraph
             {
                 inspectResource(output.m_Id);
             }
+        }
+
+        for (const PassAliasingTransition& transition : GetAliasingTransitions(statePlan))
+        {
+            if (!transition.HasBefore || !transition.CrossQueue)
+            {
+                continue;
+            }
+            const RenderGraphQueueFenceValues predecessorRetirement =
+                GetResourceRetirement(transition.BeforeId);
+            inspectFence(
+                transition.BeforeQueue,
+                QueueFence(predecessorRetirement, transition.BeforeQueue));
         }
 
         for (const ExternalResourceAccess& access : pass.GetExternalResourceAccesses())
@@ -444,6 +471,7 @@ namespace RenderGraph
 
     void RenderGraphQueueScheduler::ValidateDirectPassDependencies(
         const std::span<RenderPass* const> passes,
+        const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans,
         const RenderGraphQueueFenceValues& dependencies)
     {
         for (const RenderPass* pass : passes)
@@ -475,12 +503,28 @@ namespace RenderGraph
                     false,
                     0u);
             }
+
+            const auto statePlan = resourceStatePlans.find(pass);
+            Assert(statePlan != resourceStatePlans.end(),
+                "Direct dependency validation requires a resource state plan.");
+            for (const PassAliasingTransition& transition :
+                GetAliasingTransitions(statePlan->second))
+            {
+                ValidateAliasingDependency(
+                    *pass,
+                    transition,
+                    RenderPassQueue::Direct,
+                    dependencies,
+                    false,
+                    0u);
+            }
         }
     }
 
     void RenderGraphQueueScheduler::ValidateNonDirectBatchDependencies(
         const std::span<RenderPass* const> passes,
         const RenderPassQueue queue,
+        const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans,
         const RenderGraphQueueFenceValues& producerDependencies,
         const uint64_t directPreambleFence)
     {
@@ -515,10 +559,35 @@ namespace RenderGraph
                     true,
                     directPreambleFence);
             }
+
+            const auto statePlan = resourceStatePlans.find(pass);
+            Assert(statePlan != resourceStatePlans.end(),
+                "Non-direct dependency validation requires a resource state plan.");
+            for (const PassAliasingTransition& transition :
+                GetAliasingTransitions(statePlan->second))
+            {
+                ValidateAliasingDependency(
+                    *pass,
+                    transition,
+                    queue,
+                    producerDependencies,
+                    true,
+                    directPreambleFence);
+            }
         }
     }
 
-    void RenderGraphQueueScheduler::ValidateFrameResourceRetirements()
+    void RenderGraphQueueScheduler::RecordAliasingBarrier(
+        const PassAliasingTransition& transition)
+    {
+        if (transition.HasBefore)
+        {
+            m_RecordedAliasingBarriers.insert(transition.AfterId);
+        }
+    }
+
+    void RenderGraphQueueScheduler::ValidateFrameResourceRetirements(
+        const ResourcePool& resourcePool)
     {
         for (const ResourceId resourceId : m_ReferencedGraphResources)
         {
@@ -538,6 +607,46 @@ namespace RenderGraph
                 });
         }
 
+        for (const auto& [afterId, transition] : m_ExpectedAliasingBarriers)
+        {
+            if (!m_RecordedAliasingBarriers.contains(afterId))
+            {
+                ++m_FrameRuntimeValidation.MissingAliasBarrierCount;
+                RecordRuntimeInvariantFailure(
+                    "render_graph_alias_barrier",
+                    "A transient heap reuse has no executed aliasing barrier.",
+                    {
+                        { "before_resource_id", static_cast<uint64_t>(transition.BeforeId) },
+                        { "after_resource_id", static_cast<uint64_t>(transition.AfterId) },
+                    });
+            }
+            if (!transition.CrossQueue)
+            {
+                continue;
+            }
+
+            const RenderGraphQueueFenceValues heapRetirement =
+                resourcePool.GetTransientHeapRetirement(
+                    transition.AfterId,
+                    m_ResourceRetirements);
+            if (QueueFence(heapRetirement, transition.BeforeQueue) != 0u &&
+                QueueFence(heapRetirement, transition.AfterQueue) != 0u)
+            {
+                continue;
+            }
+
+            ++m_FrameRuntimeValidation.MissingAliasedHeapRetirementFenceCount;
+            RecordRuntimeInvariantFailure(
+                "render_graph_alias_heap_retirement",
+                "A cross-queue aliased heap retirement does not cover both queue users.",
+                {
+                    { "before_resource_id", static_cast<uint64_t>(transition.BeforeId) },
+                    { "after_resource_id", static_cast<uint64_t>(transition.AfterId) },
+                    { "before_queue", std::string(GetQueueName(transition.BeforeQueue)) },
+                    { "after_queue", std::string(GetQueueName(transition.AfterQueue)) },
+                });
+        }
+
         EmitTelemetry({
             .Category = "assertion",
             .Name = "render_graph_queue_lifetime_runtime",
@@ -551,6 +660,12 @@ namespace RenderGraph
                 { "missing_producer_signal_count", m_FrameRuntimeValidation.MissingProducerSignalCount },
                 { "missing_consumer_wait_count", m_FrameRuntimeValidation.MissingConsumerWaitCount },
                 { "missing_retirement_fence_count", m_FrameRuntimeValidation.MissingRetirementFenceCount },
+                { "cross_queue_alias_handoff_count", m_FrameRuntimeValidation.CrossQueueAliasHandoffCount },
+                { "missing_alias_producer_fence_count", m_FrameRuntimeValidation.MissingAliasProducerFenceCount },
+                { "missing_alias_barrier_wait_count", m_FrameRuntimeValidation.MissingAliasBarrierWaitCount },
+                { "missing_alias_consumer_wait_count", m_FrameRuntimeValidation.MissingAliasConsumerWaitCount },
+                { "missing_alias_barrier_count", m_FrameRuntimeValidation.MissingAliasBarrierCount },
+                { "missing_alias_heap_retirement_fence_count", m_FrameRuntimeValidation.MissingAliasedHeapRetirementFenceCount },
             },
         });
     }
@@ -626,6 +741,102 @@ namespace RenderGraph
                 { "declared_dependency_fence", declaredDependencyFence },
                 { "direct_preamble_fence", directPreambleFence },
                 { "through_direct_preamble", throughDirectPreamble },
+            });
+    }
+
+    void RenderGraphQueueScheduler::ValidateAliasingDependency(
+        const RenderPass& pass,
+        const PassAliasingTransition& transition,
+        const RenderPassQueue consumerQueue,
+        const RenderGraphQueueFenceValues& producerDependencies,
+        const bool throughDirectPreamble,
+        const uint64_t directPreambleFence)
+    {
+        if (!transition.HasBefore)
+        {
+            return;
+        }
+        m_ExpectedAliasingBarriers.insert_or_assign(transition.AfterId, transition);
+        if (!transition.CrossQueue)
+        {
+            return;
+        }
+
+        ++m_FrameRuntimeValidation.CrossQueueAliasHandoffCount;
+        const RenderGraphQueueFenceValues predecessorRetirement =
+            GetResourceRetirement(transition.BeforeId);
+        const uint64_t producerFence = QueueFence(
+            predecessorRetirement,
+            transition.BeforeQueue);
+        if (producerFence == 0u)
+        {
+            ++m_FrameRuntimeValidation.MissingAliasProducerFenceCount;
+            RecordRuntimeInvariantFailure(
+                "render_graph_alias_producer_signal",
+                "A cross-queue transient alias handoff has no producer retirement fence.",
+                {
+                    { "pass", NarrowName(pass.GetPassName()) },
+                    { "before_resource_id", static_cast<uint64_t>(transition.BeforeId) },
+                    { "after_resource_id", static_cast<uint64_t>(transition.AfterId) },
+                    { "producer_queue", std::string(GetQueueName(transition.BeforeQueue)) },
+                    { "consumer_queue", std::string(GetQueueName(consumerQueue)) },
+                });
+            return;
+        }
+
+        const uint64_t declaredDependencyFence = QueueFence(
+            producerDependencies,
+            transition.BeforeQueue);
+        const uint64_t directWaitedProducerFence = QueueFence(
+            m_WaitedProducerFences[QueueIndex(RenderPassQueue::Direct)],
+            transition.BeforeQueue);
+        const bool barrierWaitCovered = throughDirectPreamble
+            ? (transition.BeforeQueue == RenderPassQueue::Direct
+                ? directPreambleFence >= producerFence
+                : declaredDependencyFence >= producerFence &&
+                    directWaitedProducerFence >= producerFence)
+            : declaredDependencyFence >= producerFence &&
+                directWaitedProducerFence >= producerFence;
+        if (!barrierWaitCovered)
+        {
+            ++m_FrameRuntimeValidation.MissingAliasBarrierWaitCount;
+            RecordRuntimeInvariantFailure(
+                "render_graph_alias_barrier_wait",
+                "The direct queue aliasing barrier is not ordered after the producer queue.",
+                {
+                    { "pass", NarrowName(pass.GetPassName()) },
+                    { "before_resource_id", static_cast<uint64_t>(transition.BeforeId) },
+                    { "after_resource_id", static_cast<uint64_t>(transition.AfterId) },
+                    { "producer_fence", producerFence },
+                    { "declared_dependency_fence", declaredDependencyFence },
+                    { "direct_preamble_fence", directPreambleFence },
+                });
+        }
+
+        if (!throughDirectPreamble)
+        {
+            return;
+        }
+        const uint64_t consumerWaitedDirectFence = QueueFence(
+            m_WaitedProducerFences[QueueIndex(consumerQueue)],
+            RenderPassQueue::Direct);
+        if (directPreambleFence != 0u &&
+            consumerWaitedDirectFence >= directPreambleFence)
+        {
+            return;
+        }
+
+        ++m_FrameRuntimeValidation.MissingAliasConsumerWaitCount;
+        RecordRuntimeInvariantFailure(
+            "render_graph_alias_consumer_wait",
+            "A non-direct alias consumer did not wait for the direct barrier preamble.",
+            {
+                { "pass", NarrowName(pass.GetPassName()) },
+                { "before_resource_id", static_cast<uint64_t>(transition.BeforeId) },
+                { "after_resource_id", static_cast<uint64_t>(transition.AfterId) },
+                { "consumer_queue", std::string(GetQueueName(consumerQueue)) },
+                { "direct_preamble_fence", directPreambleFence },
+                { "consumer_waited_direct_fence", consumerWaitedDirectFence },
             });
     }
 

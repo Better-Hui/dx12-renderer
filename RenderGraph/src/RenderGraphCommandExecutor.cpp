@@ -418,7 +418,8 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
         {
             PrepareDirectQueueDependencies(
                 recordingBatch.Passes,
-                directCommandList);
+                directCommandList,
+                resourceStatePlans);
             ExecuteParallelDirectBatch(
                 recordingBatch,
                 renderMetadata,
@@ -435,7 +436,8 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
                 "Direct recording batch contains a non-direct pass.");
             PrepareDirectQueueDependencies(
                 std::span<RenderPass* const>(&renderPass, 1u),
-                directCommandList);
+                directCommandList,
+                resourceStatePlans);
             if (directCommandList == nullptr)
             {
                 directCommandList = m_DirectCommandQueue->GetCommandList();
@@ -460,6 +462,7 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
                         context,
                         renderTargets,
                         resourceStatePlans);
+                    RecordLocalAliasingBarriers(*renderPass, resourceStatePlans);
                     m_Profiler.WriteMarker(
                         RenderPassQueue::Direct,
                         commandList,
@@ -491,6 +494,7 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
                         context,
                         renderTargets,
                         resourceStatePlans);
+                    RecordLocalAliasingBarriers(*renderPass, resourceStatePlans);
                     const std::unique_ptr<DX12Diagnostics::DiagnosticRenderPassScope> diagnosticScope =
                         CreateDiagnosticRenderPassScope(*renderPass, renderMetadata.m_FrameIndex);
                     renderPass->Execute(context, commandList);
@@ -526,7 +530,7 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
     {
         m_QueueScheduler.SubmitDirect(directCommandList);
     }
-    m_QueueScheduler.ValidateFrameResourceRetirements();
+    m_QueueScheduler.ValidateFrameResourceRetirements(*m_ResourcePool);
     if (HasDiagnosticTelemetrySink())
     {
         EmitTelemetry({
@@ -632,6 +636,9 @@ void RenderGraph::RenderGraphCommandExecutor::ExecuteParallelDirectBatch(
             RenderPassQueue::Direct,
             *commandList,
             batch.Passes[passOffset]->GetPassName());
+        RecordLocalAliasingBarriers(
+            *batch.Passes[passOffset],
+            resourceStatePlans);
         m_QueueScheduler.TrackPassResources(*batch.Passes[passOffset], 0u);
         recordedCommandLists.push_back(std::move(commandList));
     }
@@ -646,7 +653,8 @@ void RenderGraph::RenderGraphCommandExecutor::ExecuteParallelDirectBatch(
 
 void RenderGraph::RenderGraphCommandExecutor::PrepareDirectQueueDependencies(
     const std::span<RenderPass* const> passes,
-    std::shared_ptr<CommandList>& directCommandList)
+    std::shared_ptr<CommandList>& directCommandList,
+    const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans)
 {
     Assert(!passes.empty(), "Direct queue dependency preparation requires at least one pass.");
 
@@ -655,12 +663,20 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareDirectQueueDependencies(
     {
         Assert(pass != nullptr, "Direct queue dependency preparation received a null pass.");
         Assert(pass->GetQueue() == RenderPassQueue::Direct, "Only direct passes can enter a parallel recording batch.");
+        const auto statePlan = resourceStatePlans.find(pass);
+        Assert(statePlan != resourceStatePlans.end(),
+            "Direct queue dependency preparation requires a resource state plan.");
         producerFences.Merge(m_QueueScheduler.GetCrossQueueProducerFences(
             *pass,
+            statePlan->second,
             RenderPassQueue::Direct));
     }
     if (producerFences.IsEmpty())
     {
+        m_QueueScheduler.ValidateDirectPassDependencies(
+            passes,
+            resourceStatePlans,
+            producerFences);
         return;
     }
 
@@ -675,7 +691,10 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareDirectQueueDependencies(
 
     m_QueueScheduler.SubmitDirect(directCommandList);
     m_QueueScheduler.WaitForDependencies(RenderPassQueue::Direct, producerFences);
-    m_QueueScheduler.ValidateDirectPassDependencies(passes, producerFences);
+    m_QueueScheduler.ValidateDirectPassDependencies(
+        passes,
+        resourceStatePlans,
+        producerFences);
 
     if (m_Profiler.IsQueueFrameActive(RenderPassQueue::Direct))
     {
@@ -785,8 +804,12 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareNonDirectBatchDependencies(
     {
         Assert(pass != nullptr && pass->GetQueue() == batch.Queue,
             "Non-direct dependency preparation received an invalid pass.");
+        const auto statePlan = resourceStatePlans.find(pass);
+        Assert(statePlan != resourceStatePlans.end(),
+            "Non-direct dependency preparation requires a resource state plan.");
         producerFences.Merge(m_QueueScheduler.GetCrossQueueProducerFences(
             *pass,
+            statePlan->second,
             RenderPassQueue::Direct));
     }
 
@@ -825,6 +848,7 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareNonDirectBatchDependencies(
     m_QueueScheduler.ValidateNonDirectBatchDependencies(
         batch.Passes,
         batch.Queue,
+        resourceStatePlans,
         producerFences,
         preambleFenceValue);
 }
@@ -859,13 +883,14 @@ void RenderGraph::RenderGraphCommandExecutor::ApplyDirectQueuePreamble(
 
     ApplyExternalResourceTransitions(commandList, directPreamble.ExternalResourceTransitions);
 
-    for (const ResourceId outputId : directPreamble.AliasingOutputs)
+    for (const PassAliasingTransition& transition : directPreamble.AliasingOutputs)
     {
-        const auto& resource = m_ResourcePool->GetResource(outputId);
+        const auto& resource = m_ResourcePool->GetResource(transition.AfterId);
         resource.ForEachResourceRecursive([&commandList](const Resource& nestedResource)
         {
             CommandListInternalAccess::AliasingBarrierBeforeFirstUse(commandList, nestedResource);
         });
+        m_QueueScheduler.RecordAliasingBarrier(transition);
     }
 
     for (const PassResourceTransition& transition : directPreamble.OutputTransitions)
@@ -888,6 +913,19 @@ void RenderGraph::RenderGraphCommandExecutor::ApplyDirectQueuePreamble(
         RenderPassQueue::Direct,
         commandList,
         "Queue Prepare." + RenderGraphProfiler::NarrowPassName(pass.GetPassName()));
+}
+
+void RenderGraph::RenderGraphCommandExecutor::RecordLocalAliasingBarriers(
+    const RenderPass& pass,
+    const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans)
+{
+    const auto statePlan = resourceStatePlans.find(&pass);
+    Assert(statePlan != resourceStatePlans.end(),
+        "Aliasing barrier recording requires a resource state plan.");
+    for (const PassAliasingTransition& transition : statePlan->second.AliasingOutputs)
+    {
+        m_QueueScheduler.RecordAliasingBarrier(transition);
+    }
 }
 
 CommandQueue& RenderGraph::RenderGraphCommandExecutor::GetCommandQueue(const RenderPassQueue queue) const
@@ -954,9 +992,9 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareResourcesForRenderPass(
 
     ApplyExternalResourceTransitions(commandList, resourceStatePlan.ExternalResourceTransitions);
 
-    for (const ResourceId outputId : resourceStatePlan.AliasingOutputs)
+    for (const PassAliasingTransition& transition : resourceStatePlan.AliasingOutputs)
     {
-        const auto& resource = m_ResourcePool->GetResource(outputId);
+        const auto& resource = m_ResourcePool->GetResource(transition.AfterId);
         resource.ForEachResourceRecursive([&commandList](const Resource& nestedResource)
         {
             CommandListInternalAccess::AliasingBarrierBeforeFirstUse(commandList, nestedResource);

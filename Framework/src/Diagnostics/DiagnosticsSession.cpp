@@ -1,4 +1,4 @@
-//Modify Begin:2026-09-01 by Hui
+//Modify Begin:2026-09-09 by Hui
 #include <Framework/Diagnostics/DiagnosticsSession.h>
 
 #include <Windows.h>
@@ -10,6 +10,7 @@
 #include <array>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <functional>
 #include <iomanip>
@@ -20,10 +21,72 @@
 #include <tuple>
 #include <type_traits>
 
+namespace FrameworkDiagnostics
+{
+    struct PerformanceScopeSample
+    {
+        static constexpr size_t NameCapacity = 160u;
+        static constexpr size_t QueueNameCapacity = 32u;
+        static constexpr size_t ScopeKindCapacity = 64u;
+
+        uint64_t FrameIndex = DiagnosticTelemetryEvent::NoFrame;
+        uint64_t Sequence = 0;
+        uint64_t TimestampNanoseconds = 0;
+        uint64_t CorrelationId = 0;
+        uint64_t ScopeId = 0;
+        uint64_t ParentScopeId = 0;
+        uint64_t ScopeDepth = 0;
+        uint64_t ThreadId = 0;
+        double DurationMilliseconds = 0.0;
+        uint16_t NameLength = 0;
+        uint16_t QueueNameLength = 0;
+        uint16_t ScopeKindLength = 0;
+        std::array<char, NameCapacity> Name = {};
+        std::array<char, QueueNameCapacity> QueueName = {};
+        std::array<char, ScopeKindCapacity> ScopeKind = {};
+    };
+
+    struct PerformanceThreadBuffer
+    {
+        static constexpr size_t Capacity = 4096u;
+
+        DiagnosticsSession* Owner = nullptr;
+        uint64_t Generation = 0;
+        uint64_t ThreadId = 0;
+        uint64_t NextIndex = 0;
+        std::atomic<uint64_t> ReadIndex = 0;
+        std::atomic<uint64_t> PublishedIndex = 0;
+        std::array<PerformanceScopeSample, Capacity> Samples = {};
+    };
+
+    struct PerformanceScopeStorage
+    {
+        std::vector<PerformanceScopeSample> Samples;
+    };
+}
+
 namespace
 {
     using FrameworkDiagnostics::RecordedDiagnosticEvent;
+    using FrameworkDiagnostics::PerformanceScopeSample;
+    using FrameworkDiagnostics::PerformanceThreadBuffer;
     using FrameworkDiagnostics::SessionStatus;
+
+    std::atomic<uint64_t> s_NextPerformanceBufferGeneration = 1u;
+
+    template <size_t Capacity>
+    uint16_t CopyPerformanceScopeText(
+        std::array<char, Capacity>& destination,
+        const std::string_view source) noexcept
+    {
+        const size_t length = (std::min)(source.size(), Capacity - 1u);
+        if (length != 0u)
+        {
+            std::memcpy(destination.data(), source.data(), length);
+        }
+        destination[length] = '\0';
+        return static_cast<uint16_t>(length);
+    }
 
     std::string GetEnvironmentVariable(const char* name)
     {
@@ -624,6 +687,8 @@ namespace
     }
 }
 
+FrameworkDiagnostics::DiagnosticsSession::DiagnosticsSession() = default;
+
 FrameworkDiagnostics::DiagnosticsSession::~DiagnosticsSession()
 {
     if (IsEnabled() && !IsFinalized())
@@ -634,6 +699,7 @@ FrameworkDiagnostics::DiagnosticsSession::~DiagnosticsSession()
 
 bool FrameworkDiagnostics::DiagnosticsSession::Begin(DiagnosticsSessionOptions options)
 {
+    StopPerformanceCollector();
     if (!options.Enabled)
     {
         return false;
@@ -653,6 +719,11 @@ bool FrameworkDiagnostics::DiagnosticsSession::Begin(DiagnosticsSessionOptions o
             m_Attachments.clear();
             m_Events.clear();
             m_PerformanceEvents.clear();
+            m_PerformanceBuffers.clear();
+            m_PerformanceScopeStorage = std::make_unique<PerformanceScopeStorage>();
+            m_PerformanceScopeStorage->Samples.reserve(m_Options.MaxPerformanceEventCount);
+            m_PerformanceBufferGeneration = s_NextPerformanceBufferGeneration.fetch_add(
+                1u, std::memory_order_relaxed);
             m_LastSampledFrames.clear();
             m_LastError.clear();
             m_FinalMessage.clear();
@@ -669,6 +740,14 @@ bool FrameworkDiagnostics::DiagnosticsSession::Begin(DiagnosticsSessionOptions o
         m_FailedAssertionCount.store(0);
         m_Finalized.store(false, std::memory_order_release);
         m_Enabled.store(true, std::memory_order_release);
+#if defined(DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES) && DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES && \
+    !(defined(DX12_RENDERER_FULL_PERFORMANCE_SCOPES) && DX12_RENDERER_FULL_PERFORMANCE_SCOPES)
+        m_PerformanceCollector = std::jthread(
+            [this](const std::stop_token stopToken)
+            {
+                PerformanceCollectorLoop(stopToken);
+            });
+#endif
         Record("session", "begin", DiagnosticTelemetrySeverity::Info, {
             { "application", m_Options.ApplicationName },
             { "session", m_Options.SessionName },
@@ -880,10 +959,13 @@ void FrameworkDiagnostics::DiagnosticsSession::RecordTelemetry(DiagnosticTelemet
                 std::chrono::steady_clock::now() - m_StartTime).count());
             recorded.ThreadId = static_cast<uint64_t>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
             recorded.Event = std::move(event);
-            if (m_PerformanceEvents.size() >= m_Options.MaxPerformanceEventCount)
+            const size_t compactScopeCount = m_PerformanceScopeStorage != nullptr
+                ? m_PerformanceScopeStorage->Samples.size()
+                : 0u;
+            if (m_PerformanceEvents.size() + compactScopeCount >= m_Options.MaxPerformanceEventCount)
             {
-                m_PerformanceEvents.pop_front();
                 m_DroppedPerformanceEventCount.fetch_add(1, std::memory_order_relaxed);
+                return;
             }
             m_PerformanceEvents.push_back(std::move(recorded));
             return;
@@ -944,6 +1026,147 @@ void FrameworkDiagnostics::DiagnosticsSession::RecordTelemetry(DiagnosticTelemet
     }
 }
 
+void FrameworkDiagnostics::DiagnosticsSession::RecordPerformanceScope(
+    const DiagnosticPerformanceScopeRecord record) noexcept
+{
+    if (!IsEnabled() || IsFinalized())
+    {
+        return;
+    }
+
+    try
+    {
+        static thread_local std::vector<std::weak_ptr<PerformanceThreadBuffer>> threadBuffers;
+        std::shared_ptr<PerformanceThreadBuffer> buffer;
+        for (auto iterator = threadBuffers.begin(); iterator != threadBuffers.end();)
+        {
+            const std::shared_ptr<PerformanceThreadBuffer> candidate = iterator->lock();
+            if (candidate == nullptr)
+            {
+                iterator = threadBuffers.erase(iterator);
+                continue;
+            }
+            if (candidate->Owner == this &&
+                candidate->Generation == m_PerformanceBufferGeneration &&
+                candidate->Generation != 0u)
+            {
+                buffer = candidate;
+                break;
+            }
+            ++iterator;
+        }
+        if (buffer == nullptr)
+        {
+            buffer = std::make_shared<PerformanceThreadBuffer>();
+            buffer->Owner = this;
+            buffer->Generation = m_PerformanceBufferGeneration;
+            buffer->ThreadId = static_cast<uint64_t>(std::hash<std::thread::id>{}(
+                std::this_thread::get_id()));
+            threadBuffers.emplace_back(buffer);
+            {
+                std::scoped_lock lock(m_Mutex);
+                if (m_Finalized.load(std::memory_order_acquire) ||
+                    !m_Enabled.load(std::memory_order_acquire))
+                {
+                    return;
+                }
+                m_PerformanceBuffers.push_back(buffer);
+            }
+        }
+
+        const uint64_t readIndex = buffer->ReadIndex.load(std::memory_order_acquire);
+        if (buffer->NextIndex - readIndex >= PerformanceThreadBuffer::Capacity)
+        {
+            m_DroppedPerformanceEventCount.fetch_add(1u, std::memory_order_relaxed);
+            return;
+        }
+        PerformanceScopeSample& sample = buffer->Samples[buffer->NextIndex % PerformanceThreadBuffer::Capacity];
+        sample.FrameIndex = record.FrameIndex == DiagnosticTelemetryEvent::NoFrame
+            ? m_CurrentFrameIndex.load(std::memory_order_acquire)
+            : record.FrameIndex;
+        sample.Sequence = m_NextSequence.fetch_add(1u, std::memory_order_relaxed);
+        sample.TimestampNanoseconds = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now() - m_StartTime).count());
+        sample.CorrelationId = record.CorrelationId;
+        sample.ScopeId = record.ScopeId;
+        sample.ParentScopeId = record.ParentScopeId;
+        sample.ScopeDepth = record.ScopeDepth;
+        sample.ThreadId = buffer->ThreadId;
+        sample.DurationMilliseconds = record.DurationMilliseconds;
+        sample.NameLength = CopyPerformanceScopeText(sample.Name, record.Name);
+        sample.QueueNameLength = CopyPerformanceScopeText(sample.QueueName, record.QueueName);
+        sample.ScopeKindLength = CopyPerformanceScopeText(sample.ScopeKind, record.ScopeKind);
+        ++buffer->NextIndex;
+        buffer->PublishedIndex.store(buffer->NextIndex, std::memory_order_release);
+    }
+    catch (...)
+    {
+        m_DroppedPerformanceEventCount.fetch_add(1u, std::memory_order_relaxed);
+    }
+}
+
+void FrameworkDiagnostics::DiagnosticsSession::FlushPerformanceBuffers() noexcept
+{
+    try
+    {
+        std::scoped_lock lock(m_Mutex);
+        for (const std::shared_ptr<PerformanceThreadBuffer>& buffer : m_PerformanceBuffers)
+        {
+            const uint64_t publishedIndex = buffer->PublishedIndex.load(std::memory_order_acquire);
+            uint64_t readIndex = buffer->ReadIndex.load(std::memory_order_relaxed);
+            for (; readIndex < publishedIndex; ++readIndex)
+            {
+                const PerformanceScopeSample& sample = buffer->Samples[readIndex % PerformanceThreadBuffer::Capacity];
+                if (m_PerformanceScopeStorage == nullptr ||
+                    m_PerformanceScopeStorage->Samples.size() + m_PerformanceEvents.size() >=
+                        m_Options.MaxPerformanceEventCount)
+                {
+                    m_DroppedPerformanceEventCount.fetch_add(1u, std::memory_order_relaxed);
+                    continue;
+                }
+                m_PerformanceScopeStorage->Samples.push_back(sample);
+            }
+            buffer->ReadIndex.store(publishedIndex, std::memory_order_release);
+        }
+    }
+    catch (...)
+    {
+        m_DroppedPerformanceEventCount.fetch_add(1u, std::memory_order_relaxed);
+    }
+}
+
+void FrameworkDiagnostics::DiagnosticsSession::PerformanceCollectorLoop(
+    const std::stop_token stopToken) noexcept
+{
+    std::unique_lock collectorLock(m_PerformanceCollectorMutex);
+    while (!stopToken.stop_requested())
+    {
+        m_PerformanceCollectorWake.wait_for(
+            collectorLock,
+            stopToken,
+            std::chrono::milliseconds(50),
+            [] { return false; });
+        if (stopToken.stop_requested())
+        {
+            break;
+        }
+        collectorLock.unlock();
+        FlushPerformanceBuffers();
+        collectorLock.lock();
+    }
+}
+
+void FrameworkDiagnostics::DiagnosticsSession::StopPerformanceCollector() noexcept
+{
+    if (!m_PerformanceCollector.joinable())
+    {
+        return;
+    }
+    m_PerformanceCollector.request_stop();
+    m_PerformanceCollectorWake.notify_all();
+    m_PerformanceCollector.join();
+}
+
 bool FrameworkDiagnostics::DiagnosticsSession::Flush()
 {
     if (!IsEnabled())
@@ -995,6 +1218,7 @@ bool FrameworkDiagnostics::DiagnosticsSession::Finalize(SessionStatus status, st
         finalMessage = m_FinalMessage;
         m_EndUtc = FormatUtc(std::chrono::system_clock::now());
     }
+    StopPerformanceCollector();
     const bool result = ExportSnapshot(status, finalMessage);
     m_Enabled.store(false, std::memory_order_release);
     return result;
@@ -1022,8 +1246,41 @@ FrameworkDiagnostics::DiagnosticsSession::GetEventsSnapshot() const
 std::vector<FrameworkDiagnostics::RecordedDiagnosticEvent>
 FrameworkDiagnostics::DiagnosticsSession::GetPerformanceEventsSnapshot() const
 {
+    const_cast<DiagnosticsSession*>(this)->FlushPerformanceBuffers();
     std::scoped_lock lock(m_Mutex);
-    return { m_PerformanceEvents.begin(), m_PerformanceEvents.end() };
+    return BuildPerformanceEventsSnapshotLocked();
+}
+
+std::vector<FrameworkDiagnostics::RecordedDiagnosticEvent>
+FrameworkDiagnostics::DiagnosticsSession::BuildPerformanceEventsSnapshotLocked() const
+{
+    std::vector<RecordedDiagnosticEvent> result(m_PerformanceEvents.begin(), m_PerformanceEvents.end());
+    if (m_PerformanceScopeStorage != nullptr)
+    {
+        result.reserve(result.size() + m_PerformanceScopeStorage->Samples.size());
+        for (const PerformanceScopeSample& sample : m_PerformanceScopeStorage->Samples)
+        {
+            RecordedDiagnosticEvent recorded;
+            recorded.Sequence = sample.Sequence;
+            recorded.TimestampNanoseconds = sample.TimestampNanoseconds;
+            recorded.ThreadId = sample.ThreadId;
+            recorded.Event.Category = "profiler.cpu.scope";
+            recorded.Event.Name.assign(sample.Name.data(), sample.NameLength);
+            recorded.Event.FrameIndex = sample.FrameIndex;
+            recorded.Event.CorrelationId = sample.CorrelationId;
+            recorded.Event.Fields = {
+                { "queue", std::string(sample.QueueName.data(), sample.QueueNameLength) },
+                { "scope_kind", std::string(sample.ScopeKind.data(), sample.ScopeKindLength) },
+                { "scope_id", sample.ScopeId },
+                { "parent_scope_id", sample.ParentScopeId },
+                { "scope_depth", sample.ScopeDepth },
+                { "cpu_duration_ms", sample.DurationMilliseconds },
+            };
+            result.push_back(std::move(recorded));
+        }
+    }
+    std::ranges::sort(result, {}, &RecordedDiagnosticEvent::Sequence);
+    return result;
 }
 
 std::filesystem::path FrameworkDiagnostics::DiagnosticsSession::ResolveOutputDirectory(
@@ -1047,6 +1304,7 @@ bool FrameworkDiagnostics::DiagnosticsSession::ExportSnapshot(
 {
     try
     {
+        FlushPerformanceBuffers();
         std::vector<RecordedDiagnosticEvent> events;
         std::vector<RecordedDiagnosticEvent> performanceEvents;
         std::map<std::string, std::string> metadata;
@@ -1059,7 +1317,7 @@ bool FrameworkDiagnostics::DiagnosticsSession::ExportSnapshot(
         {
             std::scoped_lock lock(m_Mutex);
             events.assign(m_Events.begin(), m_Events.end());
-            performanceEvents.assign(m_PerformanceEvents.begin(), m_PerformanceEvents.end());
+            performanceEvents = BuildPerformanceEventsSnapshotLocked();
             metadata = m_Metadata;
             attachments = m_Attachments;
             options = m_Options;

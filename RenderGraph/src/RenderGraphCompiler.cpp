@@ -43,6 +43,36 @@ namespace
         return false;
     }
 
+    bool HasDependencyPath(
+        const std::vector<RenderPass*>& renderPasses,
+        const uint32_t producerIndex,
+        const uint32_t consumerIndex)
+    {
+        if (producerIndex >= consumerIndex || consumerIndex >= renderPasses.size())
+        {
+            return false;
+        }
+        std::vector<uint8_t> reachable(renderPasses.size(), 0u);
+        reachable[producerIndex] = 1u;
+        for (uint32_t candidateIndex = producerIndex + 1u;
+            candidateIndex <= consumerIndex;
+            ++candidateIndex)
+        {
+            for (uint32_t reachableIndex = producerIndex;
+                reachableIndex < candidateIndex;
+                ++reachableIndex)
+            {
+                if (reachable[reachableIndex] != 0u &&
+                    DirectlyDependsOn(*renderPasses[candidateIndex], *renderPasses[reachableIndex]))
+                {
+                    reachable[candidateIndex] = 1u;
+                    break;
+                }
+            }
+        }
+        return reachable[consumerIndex] != 0u;
+    }
+
     std::vector<std::vector<RenderPass*>> TopologicallySort(
         std::span<const std::unique_ptr<RenderPass>> renderPasses)
     {
@@ -596,7 +626,37 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
             {
                 if (!m_ResourcePool->GetDescription(output.m_Id).m_DedicatedResource)
                 {
-                    resourceStatePlan.AliasingOutputs.push_back(output.m_Id);
+                    PassAliasingTransition aliasingTransition = {
+                        .AfterId = output.m_Id,
+                        .AfterQueue = renderPass->GetQueue(),
+                    };
+                    ++compiledGraph.m_CrossQueuePlanValidation.AliasingBarrierCount;
+                    if (const std::optional<ResourceId> predecessor =
+                            m_ResourcePool->GetAliasingPredecessor(output.m_Id);
+                        predecessor.has_value())
+                    {
+                        const auto& predecessorLifecycle =
+                            m_ResourcePool->GetResourceLifecycle(*predecessor);
+                        aliasingTransition.BeforeId = *predecessor;
+                        aliasingTransition.BeforeQueue = predecessorLifecycle.GetQueue();
+                        aliasingTransition.HasBefore = true;
+                        aliasingTransition.CrossQueue =
+                            aliasingTransition.BeforeQueue != aliasingTransition.AfterQueue;
+                        ++compiledGraph.m_CrossQueuePlanValidation.AliasingReuseCount;
+                        if (aliasingTransition.CrossQueue)
+                        {
+                            ++compiledGraph.m_CrossQueuePlanValidation.CrossQueueAliasingCount;
+                            if (!HasDependencyPath(
+                                compiledGraph.m_RenderPasses,
+                                predecessorLifecycle.m_EndPassIndex,
+                                lifecycle.m_BeginPassIndex))
+                            {
+                                ++compiledGraph.m_CrossQueuePlanValidation.
+                                    MissingAliasingHappensBeforeCount;
+                            }
+                        }
+                    }
+                    resourceStatePlan.AliasingOutputs.push_back(aliasingTransition);
                 }
                 resourceStatePlan.InitOutputs.push_back(output.m_Id);
             }

@@ -13,6 +13,7 @@
 
 #include <DX12Library/DiagnosticTelemetry.h>
 
+#include "RenderGraphExecutionPlan.h"
 #include "RenderGraphQueueFence.h"
 #include "RenderPass.h"
 
@@ -22,18 +23,31 @@ class DiagnosticTelemetrySink;
 
 namespace RenderGraph
 {
+    class ResourcePool;
+
     struct RenderGraphQueueRuntimeValidation final
     {
         uint64_t CrossQueueTransferCount = 0;
         uint64_t MissingProducerSignalCount = 0;
         uint64_t MissingConsumerWaitCount = 0;
         uint64_t MissingRetirementFenceCount = 0;
+        uint64_t CrossQueueAliasHandoffCount = 0;
+        uint64_t MissingAliasProducerFenceCount = 0;
+        uint64_t MissingAliasBarrierWaitCount = 0;
+        uint64_t MissingAliasConsumerWaitCount = 0;
+        uint64_t MissingAliasBarrierCount = 0;
+        uint64_t MissingAliasedHeapRetirementFenceCount = 0;
 
         [[nodiscard]] bool IsValid() const
         {
             return MissingProducerSignalCount == 0u &&
                 MissingConsumerWaitCount == 0u &&
-                MissingRetirementFenceCount == 0u;
+                MissingRetirementFenceCount == 0u &&
+                MissingAliasProducerFenceCount == 0u &&
+                MissingAliasBarrierWaitCount == 0u &&
+                MissingAliasConsumerWaitCount == 0u &&
+                MissingAliasBarrierCount == 0u &&
+                MissingAliasedHeapRetirementFenceCount == 0u;
         }
     };
 
@@ -55,6 +69,7 @@ namespace RenderGraph
 
         RenderGraphQueueFenceValues GetCrossQueueProducerFences(
             const RenderPass& pass,
+            const PassResourceStatePlan& statePlan,
             RenderPassQueue waitingQueue) const;
         void WaitForDependencies(RenderPassQueue waitingQueue, const RenderGraphQueueFenceValues& dependencies);
         void WaitForDirectSubmission(RenderPassQueue waitingQueue, uint64_t fenceValue);
@@ -62,13 +77,16 @@ namespace RenderGraph
         void TrackPassResources(const RenderPass& pass, uint64_t fenceValue);
         void ValidateDirectPassDependencies(
             std::span<RenderPass* const> passes,
+            const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans,
             const RenderGraphQueueFenceValues& dependencies);
         void ValidateNonDirectBatchDependencies(
             std::span<RenderPass* const> passes,
             RenderPassQueue queue,
+            const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans,
             const RenderGraphQueueFenceValues& producerDependencies,
             uint64_t directPreambleFence);
-        void ValidateFrameResourceRetirements();
+        void RecordAliasingBarrier(const PassAliasingTransition& transition);
+        void ValidateFrameResourceRetirements(const ResourcePool& resourcePool);
         void TrackExternalResource(ResourceId resourceId, RenderPassQueue queue);
         const std::map<ResourceId, RenderGraphQueueFenceValues>& GetResourceRetirements() const;
         RenderGraphQueueFenceValues GetResourceRetirement(ResourceId resourceId) const;
@@ -83,6 +101,13 @@ namespace RenderGraph
         void ValidateResourceDependency(
             const RenderPass& pass,
             ResourceId resourceId,
+            RenderPassQueue consumerQueue,
+            const RenderGraphQueueFenceValues& producerDependencies,
+            bool throughDirectPreamble,
+            uint64_t directPreambleFence);
+        void ValidateAliasingDependency(
+            const RenderPass& pass,
+            const PassAliasingTransition& transition,
             RenderPassQueue consumerQueue,
             const RenderGraphQueueFenceValues& producerDependencies,
             bool throughDirectPreamble,
@@ -128,6 +153,8 @@ namespace RenderGraph
         std::array<RenderGraphQueueFenceValues, 3> m_WaitedProducerFences = {};
         RenderGraphQueueRuntimeValidation m_FrameRuntimeValidation;
         std::set<ResourceId> m_PendingDirectResources;
+        std::map<ResourceId, PassAliasingTransition> m_ExpectedAliasingBarriers;
+        std::set<ResourceId> m_RecordedAliasingBarriers;
         uint64_t m_CurrentFrameIndex = DiagnosticTelemetryEvent::NoFrame;
         uint64_t m_LastAsyncComputeFenceValue = 0;
         uint64_t m_LastCopyFenceValue = 0;

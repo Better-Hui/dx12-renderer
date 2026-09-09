@@ -1601,6 +1601,19 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         const RenderGraph::RenderGraphQueueFenceValues computeColorRetirement =
             renderGraph.GetResourceRetirement(
                 RaytracingDemoRenderGraph::ResourceIds::CopyQueueValidationComputeColor);
+//Modify Begin:2026-09-09 by Hui
+        const RenderGraph::RenderGraphQueueRuntimeValidation& runtimeValidation =
+            renderGraph.GetFrameRuntimeValidation();
+        const bool aliasResourcesShareHeap = renderGraph.ShareTransientHeap(
+                RaytracingDemoRenderGraph::ResourceIds::CopyQueueAliasDirectScratch,
+                RaytracingDemoRenderGraph::ResourceIds::CopyQueueAliasCopyScratch) &&
+            renderGraph.ShareTransientHeap(
+                RaytracingDemoRenderGraph::ResourceIds::CopyQueueAliasCopyScratch,
+                RaytracingDemoRenderGraph::ResourceIds::CopyQueueAliasComputeScratch);
+        const RenderGraph::RenderGraphQueueFenceValues aliasHeapRetirement =
+            renderGraph.GetTransientHeapRetirement(
+                RaytracingDemoRenderGraph::ResourceIds::CopyQueueAliasComputeScratch);
+//Modify End
 
         const bool passed =
             plan.IsValid() &&
@@ -1626,12 +1639,28 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
             copiedColorRetirement.Copy != 0u &&
             copiedColorRetirement.AsyncCompute != 0u &&
             computeColorRetirement.AsyncCompute != 0u &&
-            computeColorRetirement.Direct != 0u;
+            computeColorRetirement.Direct != 0u &&
+//Modify Begin:2026-09-09 by Hui
+            plan.CrossQueueAliasingCount >= 2u &&
+            plan.MissingAliasingHappensBeforeCount == 0u &&
+            runtimeValidation.IsValid() &&
+            runtimeValidation.CrossQueueAliasHandoffCount >= 2u &&
+            aliasResourcesShareHeap &&
+            aliasHeapRetirement.Direct != 0u &&
+            aliasHeapRetirement.Copy != 0u &&
+            aliasHeapRetirement.AsyncCompute != 0u;
+//Modify End
         const std::string message =
             "Copy queue handoff: cross_queue_transfers=" +
             std::to_string(plan.CrossQueueResourceTransferCount) +
             ", missing_state_transitions=" + std::to_string(plan.MissingStatePlanTransitionCount) +
             ", incorrect_state_transitions=" + std::to_string(plan.IncorrectStatePlanTransitionCount) +
+//Modify Begin:2026-09-09 by Hui
+            ", cross_queue_aliases=" + std::to_string(plan.CrossQueueAliasingCount) +
+            ", runtime_alias_handoffs=" +
+                std::to_string(runtimeValidation.CrossQueueAliasHandoffCount) +
+            ", alias_heap_shared=" + std::string(aliasResourcesShareHeap ? "true" : "false") +
+//Modify End
             ", copy_fence=" + std::to_string(frameFences.Copy) +
             ", async_fence=" + std::to_string(frameFences.AsyncCompute) + ".";
         if (!passed)
@@ -1655,6 +1684,14 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
                     { "copy_retirement_fence", copiedColorRetirement.Copy },
                     { "async_retirement_fence", copiedColorRetirement.AsyncCompute },
                     { "direct_consumer_retirement_fence", computeColorRetirement.Direct },
+//Modify Begin:2026-09-09 by Hui
+                    { "cross_queue_aliasing_count", plan.CrossQueueAliasingCount },
+                    { "runtime_alias_handoff_count", runtimeValidation.CrossQueueAliasHandoffCount },
+                    { "alias_heap_shared", aliasResourcesShareHeap },
+                    { "alias_heap_direct_retirement_fence", aliasHeapRetirement.Direct },
+                    { "alias_heap_copy_retirement_fence", aliasHeapRetirement.Copy },
+                    { "alias_heap_async_retirement_fence", aliasHeapRetirement.AsyncCompute },
+//Modify End
                 });
         }
         m_RuntimeAutomation.AppendDiagnosticLog(message);

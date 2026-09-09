@@ -56,9 +56,12 @@ namespace RaytracingDemoRenderGraph
 //Modify Begin:2026-08-17 by Hui
         static inline const RenderGraph::ResourceId BloomOutput = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.BloomOutput");
 //Modify End
-//Modify Begin:2026-08-25 by Hui
+//Modify Begin:2026-09-09 by Hui
         static inline const RenderGraph::ResourceId CopyQueueValidationColor = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.CopyQueueValidationColor");
         static inline const RenderGraph::ResourceId CopyQueueValidationComputeColor = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.CopyQueueValidationComputeColor");
+        static inline const RenderGraph::ResourceId CopyQueueAliasDirectScratch = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.CopyQueueAliasDirectScratch");
+        static inline const RenderGraph::ResourceId CopyQueueAliasCopyScratch = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.CopyQueueAliasCopyScratch");
+        static inline const RenderGraph::ResourceId CopyQueueAliasComputeScratch = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.CopyQueueAliasComputeScratch");
 //Modify End
 //Modify Begin:2026-08-23 by Hui
         static inline const RenderGraph::ResourceId AutoExposureOutput = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.AutoExposureOutput");
@@ -98,9 +101,11 @@ namespace RaytracingDemoRenderGraph
 //Modify Begin:2026-08-24 by Hui
         static inline const RenderGraph::ResourceId BloomFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.BloomFinished");
 //Modify End
-//Modify Begin:2026-08-25 by Hui
+//Modify Begin:2026-09-09 by Hui
         static inline const RenderGraph::ResourceId CopyQueueValidationFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.CopyQueueValidationFinished");
         static inline const RenderGraph::ResourceId CopyQueueValidationComputeFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.CopyQueueValidationComputeFinished");
+        static inline const RenderGraph::ResourceId CopyQueueAliasDirectReadyToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.CopyQueueAliasDirectReady");
+        static inline const RenderGraph::ResourceId CopyQueueAliasCopyReadyToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.CopyQueueAliasCopyReady");
         static inline const RenderGraph::ResourceId DynamicRayTracingGeometryUploadedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DynamicRayTracingGeometryUploaded");
         static inline const RenderGraph::ResourceId DynamicRayTracingUpdatedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DynamicRayTracingUpdated");
 //Modify End
@@ -155,7 +160,11 @@ namespace RaytracingDemoRenderGraph
         bool includeCopyQueueValidation,
         bool hdr10Output);
 //Modify End
-    std::vector<RenderGraph::BufferDescription> CreateBufferDescriptions(bool includeCompactedPathTracing);
+//Modify Begin:2026-09-09 by Hui
+    std::vector<RenderGraph::BufferDescription> CreateBufferDescriptions(
+        bool includeCompactedPathTracing,
+        bool includeCopyQueueValidation);
+//Modify End
 //Modify Begin:2026-08-07 by Hui
     std::vector<RenderGraph::TokenDescription> CreateTokenDescriptions(
         bool includeDLSS,

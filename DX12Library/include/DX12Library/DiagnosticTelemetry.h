@@ -37,6 +37,19 @@ struct DiagnosticTelemetryEvent
     std::vector<DiagnosticTelemetryField> Fields;
 };
 
+struct DiagnosticPerformanceScopeRecord
+{
+    uint64_t FrameIndex = DiagnosticTelemetryEvent::NoFrame;
+    uint64_t CorrelationId = 0;
+    uint64_t ScopeId = 0;
+    uint64_t ParentScopeId = 0;
+    uint64_t ScopeDepth = 0;
+    std::string_view Name;
+    std::string_view QueueName;
+    std::string_view ScopeKind;
+    double DurationMilliseconds = 0.0;
+};
+
 inline uint64_t MakeDiagnosticQueueFenceCorrelationId(
     const std::string_view queueName,
     const uint64_t fenceValue) noexcept
@@ -60,5 +73,22 @@ class DiagnosticTelemetrySink
 public:
     virtual ~DiagnosticTelemetrySink() = default;
     virtual void RecordTelemetry(DiagnosticTelemetryEvent event) noexcept = 0;
+    virtual void RecordPerformanceScope(DiagnosticPerformanceScopeRecord record) noexcept
+    {
+        RecordTelemetry({
+            .Category = "profiler.cpu.scope",
+            .Name = std::string(record.Name),
+            .FrameIndex = record.FrameIndex,
+            .CorrelationId = record.CorrelationId,
+            .Fields = {
+                { "queue", std::string(record.QueueName) },
+                { "scope_kind", std::string(record.ScopeKind) },
+                { "scope_id", record.ScopeId },
+                { "parent_scope_id", record.ParentScopeId },
+                { "scope_depth", record.ScopeDepth },
+                { "cpu_duration_ms", record.DurationMilliseconds },
+            },
+        });
+    }
 };
 //Modify End

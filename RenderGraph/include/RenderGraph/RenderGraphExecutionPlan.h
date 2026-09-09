@@ -33,11 +33,21 @@ namespace RenderGraph
         bool InsertUavBarrier = false;
     };
 
+    struct PassAliasingTransition
+    {
+        ResourceId BeforeId = 0;
+        ResourceId AfterId = 0;
+        RenderPassQueue BeforeQueue = RenderPassQueue::Direct;
+        RenderPassQueue AfterQueue = RenderPassQueue::Direct;
+        bool HasBefore = false;
+        bool CrossQueue = false;
+    };
+
     struct PassResourceStatePlan
     {
         std::vector<PassResourceTransition> InputTransitions;
         std::vector<PassExternalResourceTransition> ExternalResourceTransitions;
-        std::vector<ResourceId> AliasingOutputs;
+        std::vector<PassAliasingTransition> AliasingOutputs;
         std::vector<PassResourceTransition> OutputTransitions;
         std::vector<ResourceId> InitOutputs;
 
@@ -45,7 +55,7 @@ namespace RenderGraph
         {
             std::vector<PassResourceTransition> CrossQueueInputTransitions;
             std::vector<PassExternalResourceTransition> ExternalResourceTransitions;
-            std::vector<ResourceId> AliasingOutputs;
+            std::vector<PassAliasingTransition> AliasingOutputs;
             std::vector<PassResourceTransition> OutputTransitions;
         };
 
@@ -68,11 +78,16 @@ namespace RenderGraph
         uint64_t CopyPassCount = 0;
         uint64_t DirectToCopyTransferCount = 0;
         uint64_t CopyToConsumerTransferCount = 0;
+        uint64_t AliasingBarrierCount = 0;
+        uint64_t AliasingReuseCount = 0;
+        uint64_t CrossQueueAliasingCount = 0;
+        uint64_t MissingAliasingHappensBeforeCount = 0;
 
         [[nodiscard]] bool IsValid() const
         {
             return MissingStatePlanTransitionCount == 0 &&
-                IncorrectStatePlanTransitionCount == 0;
+                IncorrectStatePlanTransitionCount == 0 &&
+                MissingAliasingHappensBeforeCount == 0;
         }
     };
 

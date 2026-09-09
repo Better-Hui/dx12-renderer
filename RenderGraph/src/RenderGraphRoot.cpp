@@ -440,6 +440,27 @@ RenderGraph::RenderGraphQueueFenceValues RenderGraph::RenderGraphRoot::GetResour
     return m_QueueScheduler.GetResourceRetirement(resourceId);
 }
 
+RenderGraph::RenderGraphQueueFenceValues RenderGraph::RenderGraphRoot::GetTransientHeapRetirement(
+    const ResourceId resourceId) const
+{
+    return m_ResourcePool->GetTransientHeapRetirement(
+        resourceId,
+        m_QueueScheduler.GetResourceRetirements());
+}
+
+bool RenderGraph::RenderGraphRoot::ShareTransientHeap(
+    const ResourceId first,
+    const ResourceId second) const
+{
+    return m_ResourcePool->ShareTransientHeap(first, second);
+}
+
+const RenderGraph::RenderGraphQueueRuntimeValidation&
+RenderGraph::RenderGraphRoot::GetFrameRuntimeValidation() const
+{
+    return m_QueueScheduler.GetFrameRuntimeValidation();
+}
+
 const RenderGraph::RenderGraphCrossQueuePlanValidation&
 RenderGraph::RenderGraphRoot::GetCrossQueuePlanValidation() const
 {
@@ -501,6 +522,10 @@ void RenderGraph::RenderGraphRoot::EmitCompiledGraphSnapshot(const RenderMetadat
                 { "copy_pass_count", crossQueuePlanValidation.CopyPassCount },
                 { "direct_to_copy_transfer_count", crossQueuePlanValidation.DirectToCopyTransferCount },
                 { "copy_to_consumer_transfer_count", crossQueuePlanValidation.CopyToConsumerTransferCount },
+                { "aliasing_barrier_count", crossQueuePlanValidation.AliasingBarrierCount },
+                { "aliasing_reuse_count", crossQueuePlanValidation.AliasingReuseCount },
+                { "cross_queue_aliasing_count", crossQueuePlanValidation.CrossQueueAliasingCount },
+                { "missing_aliasing_happens_before_count", crossQueuePlanValidation.MissingAliasingHappensBeforeCount },
             },
         });
 
@@ -531,6 +556,15 @@ void RenderGraph::RenderGraphRoot::EmitCompiledGraphSnapshot(const RenderMetadat
                 fields.push_back({ "state_plan.aliasing_output_count", static_cast<uint64_t>(plan.AliasingOutputs.size()) });
                 fields.push_back({ "state_plan.init_output_count", static_cast<uint64_t>(plan.InitOutputs.size()) });
                 fields.push_back({ "state_plan.has_direct_preamble", plan.DirectPreamble.has_value() });
+                for (size_t transitionIndex = 0; transitionIndex < plan.AliasingOutputs.size(); ++transitionIndex)
+                {
+                    const PassAliasingTransition& transition = plan.AliasingOutputs[transitionIndex];
+                    const std::string prefix = "state_plan.aliasing." + std::to_string(transitionIndex);
+                    fields.push_back({ prefix + ".before_resource_id", static_cast<uint64_t>(transition.BeforeId) });
+                    fields.push_back({ prefix + ".after_resource_id", static_cast<uint64_t>(transition.AfterId) });
+                    fields.push_back({ prefix + ".has_before", transition.HasBefore });
+                    fields.push_back({ prefix + ".cross_queue", transition.CrossQueue });
+                }
                 for (size_t transitionIndex = 0; transitionIndex < plan.InputTransitions.size(); ++transitionIndex)
                 {
                     const PassResourceTransition& transition = plan.InputTransitions[transitionIndex];

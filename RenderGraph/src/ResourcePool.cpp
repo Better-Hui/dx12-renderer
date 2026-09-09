@@ -260,6 +260,54 @@ bool RenderGraph::ResourcePool::HasResourceLifecycle(const ResourceId resourceId
 }
 //Modify End
 
+//Modify Begin:2026-09-09 by Hui
+std::optional<RenderGraph::ResourceId> RenderGraph::ResourcePool::GetAliasingPredecessor(
+    const ResourceId resourceId) const
+{
+    const auto resourceHeap = m_ResourceHeapInfo.find(resourceId);
+    if (resourceHeap == m_ResourceHeapInfo.end() || resourceHeap->second.m_LifecycleIndex == 0u)
+    {
+        return std::nullopt;
+    }
+    const ResourceHeapInfo& heapLocation = resourceHeap->second;
+    const auto& lifecycles = m_HeapInfos.at(heapLocation.m_HeapIndex).m_ResourceLifecycles;
+    return lifecycles.at(heapLocation.m_LifecycleIndex - 1u).m_Id;
+}
+
+bool RenderGraph::ResourcePool::ShareTransientHeap(
+    const ResourceId first,
+    const ResourceId second) const
+{
+    const auto firstHeap = m_ResourceHeapInfo.find(first);
+    const auto secondHeap = m_ResourceHeapInfo.find(second);
+    return firstHeap != m_ResourceHeapInfo.end() &&
+        secondHeap != m_ResourceHeapInfo.end() &&
+        firstHeap->second.m_HeapIndex == secondHeap->second.m_HeapIndex;
+}
+
+RenderGraph::RenderGraphQueueFenceValues RenderGraph::ResourcePool::GetTransientHeapRetirement(
+    const ResourceId resourceId,
+    const std::map<ResourceId, RenderGraphQueueFenceValues>& resourceRetirements) const
+{
+    RenderGraphQueueFenceValues result;
+    const auto resourceHeap = m_ResourceHeapInfo.find(resourceId);
+    if (resourceHeap == m_ResourceHeapInfo.end())
+    {
+        return result;
+    }
+    for (const auto& lifecycle :
+        m_HeapInfos.at(resourceHeap->second.m_HeapIndex).m_ResourceLifecycles)
+    {
+        if (const auto retirement = resourceRetirements.find(lifecycle.m_Id);
+            retirement != resourceRetirements.end())
+        {
+            result.Merge(retirement->second);
+        }
+    }
+    return result;
+}
+//Modify End
+
 bool RenderGraph::ResourcePool::IsRegistered(const ResourceId resourceId) const
 {
     return m_ResourceDescriptions.contains(resourceId);
@@ -344,7 +392,11 @@ void RenderGraph::ResourcePool::InitHeaps(
     m_ResourceLifecycles = lifecycles;
 //Modify End
 //Modify Begin:2026-07-28 by Hui
-    m_HeapInfos = TransientResourceAllocator::CreateHeaps(m_ResourceLifecycles, m_ResourceDescriptions, pDevice);
+    m_HeapInfos = TransientResourceAllocator::CreateHeaps(
+        m_ResourceLifecycles,
+        m_ResourceDescriptions,
+        renderPasses,
+        pDevice);
 //Modify End
 
     for (uint32_t heapIndex = 0; heapIndex < m_HeapInfos.size(); ++heapIndex)
@@ -529,7 +581,12 @@ void RenderGraph::ResourcePool::RegisterBuffer(const BufferDescription& desc, co
     }
 
     const size_t elementsCount = desc.m_SizeExpression(renderMetadata);
-    const size_t totalSize = elementsCount * desc.m_Stride;
+//Modify Begin:2026-09-09 by Hui
+    const size_t requestedSize = elementsCount * desc.m_Stride;
+    const size_t totalSize = desc.m_Kind == BufferKind::Raw
+        ? Math::AlignUp(requestedSize, size_t{ 4u })
+        : requestedSize;
+//Modify End
     const auto dxDesc = CD3DX12_RESOURCE_DESC::Buffer(totalSize, resourceFlags);
 
     ResourceDescription description = {};
