@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-08-26 by Hui
+//Modify Begin:2026-09-10 by Hui
 #include <DirectXMath.h>
 
 class SceneLightManager;
@@ -8,7 +8,10 @@ class SceneLightManager;
 class DemoLightEditor final
 {
 public:
-    bool Draw(SceneLightManager& lightManager);
+    bool Draw(
+        SceneLightManager& lightManager,
+        bool softShadowsEnabled,
+        bool autoExposureEnabled);
 
 private:
     DirectX::XMFLOAT3 m_NewDirectionalLightDirection = { -0.35f, 0.8f, -0.48f };

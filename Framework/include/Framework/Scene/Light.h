@@ -36,7 +36,7 @@ struct PointLight
 	float LinearAttenuation = 0.22f;
 	float QuadraticAttenuation = 0.2f;
 	float Range = 20.0f;
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-09-10 by Hui
 	float SourceRadius = 0.25f;
 
 	void RecalculateAttenuationCoefficients();
@@ -112,7 +112,9 @@ struct AreaLight
 	DirectX::XMFLOAT4 NormalWs = { 0, -1, 0, 0 };
 	DirectX::XMFLOAT4 AxisUWsAndExtent = { 1, 0, 0, 0.5f };
 	DirectX::XMFLOAT4 AxisVWsAndExtent = { 0, 0, 1, 0.5f };
+	// RGB stores the linear radiance tint and W stores its multiplier.
 	DirectX::XMFLOAT4 Color = { 1, 1, 1, 1 };
+	// Hard maximum illumination distance in world units, not a falloff coefficient.
 	float Range = 20.0f;
 	float _Padding[3]{};
 };

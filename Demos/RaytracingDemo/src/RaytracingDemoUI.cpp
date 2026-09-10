@@ -762,10 +762,13 @@ void RaytracingDemo::OnImGui()
     }
 //Modify End
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-09-10 by Hui
     if (ImGui::CollapsingHeader("Lights"))
     {
-        if (m_LightEditor.Draw(m_Lights))
+        if (m_LightEditor.Draw(
+            m_Lights,
+            m_SoftShadowsEnabled,
+            m_AutoExposure.GetSettings().Enabled))
         {
             ResetAccumulation();
         }

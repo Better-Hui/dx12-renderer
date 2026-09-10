@@ -50,7 +50,18 @@ VertexShaderOutput main(VertexAttributes IN)
     VertexShaderOutput OUT;
     const uint lightType = (uint)round(g_LightBillboard_TypeAndParams.x);
     float3 positionWs;
-    if (lightType == 3u)
+//Modify Begin:2026-09-10 by Hui
+    if (lightType == 1u)
+    {
+        const float fullWidth = max(g_LightBillboard_TypeAndParams.y, 1.0e-4f) * 2.0f;
+        const float fullHeight = max(g_LightBillboard_TypeAndParams.z, 1.0e-4f) * 2.0f;
+        positionWs =
+            g_LightBillboard_PositionAndSize.xyz +
+            g_LightBillboard_CameraRight.xyz * (IN.PositionOs.x * fullWidth) +
+            g_LightBillboard_CameraUp.xyz * (IN.PositionOs.y * fullHeight);
+    }
+//Modify End
+    else if (lightType == 3u)
     {
         const float3 forward = normalize(g_LightBillboard_DirectionAndLength.xyz);
         const float3 referenceAxis = abs(forward.y) < 0.99f ?

@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-26 by Hui
+//Modify Begin:2026-09-10 by Hui
 #include <Scene/SceneLightManager.h>
 
 #include <DX12Library/CommandList.h>
@@ -51,6 +51,68 @@ namespace
         const XMVECTOR axisVVector = XMVector3Normalize(XMVector3Cross(normalVector, axisUVector));
         XMStoreFloat3(&axisU, axisUVector);
         XMStoreFloat3(&axisV, axisVVector);
+    }
+
+    void NormalizeAreaLightBasis(AreaLightData& light)
+    {
+        XMVECTOR normal = XMLoadFloat4(&light.NormalAndType);
+        const XMVECTOR sourceAxisU = XMLoadFloat4(&light.AxisUAndExtent);
+        const XMVECTOR sourceAxisV = XMLoadFloat4(&light.AxisVAndExtent);
+        if (XMVectorGetX(XMVector3LengthSq(normal)) <= 1.0e-8f)
+        {
+            normal = XMVector3Cross(sourceAxisU, sourceAxisV);
+        }
+        if (XMVectorGetX(XMVector3LengthSq(normal)) <= 1.0e-8f)
+        {
+            normal = XMVectorSet(0.0f, -1.0f, 0.0f, 0.0f);
+        }
+        normal = XMVector3Normalize(normal);
+
+        XMVECTOR axisU = XMVectorSubtract(
+            sourceAxisU,
+            XMVectorScale(normal, XMVectorGetX(XMVector3Dot(sourceAxisU, normal))));
+        XMVECTOR axisV;
+        if (XMVectorGetX(XMVector3LengthSq(axisU)) <= 1.0e-8f)
+        {
+            XMFLOAT3 normalValue{};
+            XMFLOAT3 axisUValue{};
+            XMFLOAT3 axisVValue{};
+            XMStoreFloat3(&normalValue, normal);
+            BuildAreaLightAxes(normalValue, axisUValue, axisVValue);
+            axisU = XMLoadFloat3(&axisUValue);
+            axisV = XMLoadFloat3(&axisVValue);
+        }
+        else
+        {
+            axisU = XMVector3Normalize(axisU);
+            axisV = XMVector3Normalize(XMVector3Cross(normal, axisU));
+            if (XMVectorGetX(XMVector3LengthSq(sourceAxisV)) > 1.0e-8f &&
+                XMVectorGetX(XMVector3Dot(axisV, sourceAxisV)) < 0.0f)
+            {
+                axisU = XMVectorNegate(axisU);
+                axisV = XMVectorNegate(axisV);
+            }
+        }
+
+        XMFLOAT3 normalValue{};
+        XMFLOAT3 axisUValue{};
+        XMFLOAT3 axisVValue{};
+        XMStoreFloat3(&normalValue, normal);
+        XMStoreFloat3(&axisUValue, axisU);
+        XMStoreFloat3(&axisVValue, axisV);
+        light.NormalAndType = { normalValue.x, normalValue.y, normalValue.z, light.NormalAndType.w };
+        light.AxisUAndExtent = {
+            axisUValue.x,
+            axisUValue.y,
+            axisUValue.z,
+            std::max(1.0e-4f, light.AxisUAndExtent.w)
+        };
+        light.AxisVAndExtent = {
+            axisVValue.x,
+            axisVValue.y,
+            axisVValue.z,
+            std::max(1.0e-4f, light.AxisVAndExtent.w)
+        };
     }
 
     template<typename T>
@@ -435,14 +497,8 @@ void SceneLightManager::CommitSpotLightEdit(const size_t lightIndex)
 void SceneLightManager::CommitAreaLightEdit(const size_t lightIndex)
 {
     AreaLightData& light = EditAreaLight(lightIndex);
-    const XMFLOAT3 normal = NormalizeVector({ light.NormalAndType.x, light.NormalAndType.y, light.NormalAndType.z });
-    XMFLOAT3 axisU{};
-    XMFLOAT3 axisV{};
-    BuildAreaLightAxes(normal, axisU, axisV);
     light.PositionAndRange.w = std::max(0.1f, light.PositionAndRange.w);
-    light.NormalAndType = { normal.x, normal.y, normal.z, light.NormalAndType.w };
-    light.AxisUAndExtent = { axisU.x, axisU.y, axisU.z, std::max(0.1f, light.AxisUAndExtent.w) };
-    light.AxisVAndExtent = { axisV.x, axisV.y, axisV.z, std::max(0.1f, light.AxisVAndExtent.w) };
+    NormalizeAreaLightBasis(light);
     light.ColorAndIntensity.x = std::max(0.0f, light.ColorAndIntensity.x);
     light.ColorAndIntensity.y = std::max(0.0f, light.ColorAndIntensity.y);
     light.ColorAndIntensity.z = std::max(0.0f, light.ColorAndIntensity.z);

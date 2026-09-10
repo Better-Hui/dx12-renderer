@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-26 by Hui
+//Modify Begin:2026-09-10 by Hui
 #include <UI/DemoLightEditor.h>
 
 #include <Scene/SceneLightManager.h>
@@ -66,9 +66,26 @@ namespace
         light.RecalculateAttenuationCoefficients();
         return light;
     }
+
+    void DrawLastItemTooltip(const char* description)
+    {
+        if (!ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+        {
+            return;
+        }
+
+        ImGui::BeginTooltip();
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 30.0f);
+        ImGui::TextUnformatted(description);
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
 }
 
-bool DemoLightEditor::Draw(SceneLightManager& lightManager)
+bool DemoLightEditor::Draw(
+    SceneLightManager& lightManager,
+    const bool softShadowsEnabled,
+    const bool autoExposureEnabled)
 {
     bool changed = false;
 
@@ -139,11 +156,23 @@ bool DemoLightEditor::Draw(SceneLightManager& lightManager)
                 }
                 if (open)
                 {
-                    const bool lightChanged =
+                    bool lightChanged =
                         FrameworkImGui::SliderFloat3("Direction", &light.m_DirectionWs.x, -1.0f, 1.0f, "%.4f") |
                         FrameworkImGui::SliderFloat3("Color", &light.m_Color.x, 0.0f, 10.0f, "%.3f") |
-                        FrameworkImGui::SliderFloat("Intensity", &light.m_Color.w, 0.0f, 100.0f, "%.3f") |
-                        FrameworkImGui::SliderFloat("Angular Radius", &light.m_DirectionWs.w, 0.0f, 0.1f, "%.5f");
+                        FrameworkImGui::SliderFloat("Intensity", &light.m_Color.w, 0.0f, 100.0f, "%.3f");
+                    if (softShadowsEnabled)
+                    {
+                        lightChanged |= FrameworkImGui::SliderFloat(
+                            "Angular Radius",
+                            &light.m_DirectionWs.w,
+                            0.0f,
+                            0.1f,
+                            "%.5f");
+                    }
+                    else
+                    {
+                        ImGui::TextDisabled("Angular Radius: enable Soft Shadows to edit");
+                    }
                     if (lightChanged)
                     {
                         lightManager.CommitDirectionalLightEdit(index);
@@ -161,7 +190,14 @@ bool DemoLightEditor::Draw(SceneLightManager& lightManager)
             FrameworkImGui::SliderFloat3("Direction", &m_NewDirectionalLightDirection.x, -1.0f, 1.0f, "%.4f");
             FrameworkImGui::SliderFloat3("Color", &m_NewDirectionalLightColor.x, 0.0f, 10.0f, "%.3f");
             FrameworkImGui::SliderFloat("Intensity", &m_NewDirectionalLightIntensity, 0.0f, 100.0f, "%.3f");
-            FrameworkImGui::SliderFloat("Angular Radius", &m_NewDirectionalLightAngularRadius, 0.0f, 0.1f, "%.5f");
+            if (softShadowsEnabled)
+            {
+                FrameworkImGui::SliderFloat("Angular Radius", &m_NewDirectionalLightAngularRadius, 0.0f, 0.1f, "%.5f");
+            }
+            else
+            {
+                ImGui::TextDisabled("Angular Radius: enable Soft Shadows to edit");
+            }
             if (ImGui::Button("Add Directional Light"))
             {
                 const XMFLOAT3 direction = NormalizeVector(m_NewDirectionalLightDirection);
@@ -229,8 +265,20 @@ bool DemoLightEditor::Draw(SceneLightManager& lightManager)
                     bool pointChanged =
                         FrameworkImGui::SliderFloat3("Color", &light.Color.x, 0.0f, 10.0f, "%.3f") |
                         FrameworkImGui::SliderFloat("Intensity", &light.Color.w, 0.0f, 100.0f, "%.3f") |
-                        FrameworkImGui::SliderFloat("Range", &light.Range, 0.1f, 500.0f, "%.3f") |
-                        FrameworkImGui::SliderFloat("Source Radius", &light.SourceRadius, 0.0f, 10.0f, "%.4f");
+                        FrameworkImGui::SliderFloat("Range", &light.Range, 0.1f, 500.0f, "%.3f");
+                    if (softShadowsEnabled)
+                    {
+                        pointChanged |= FrameworkImGui::SliderFloat(
+                            "Source Radius",
+                            &light.SourceRadius,
+                            0.0f,
+                            10.0f,
+                            "%.4f");
+                    }
+                    else
+                    {
+                        ImGui::TextDisabled("Source Radius: enable Soft Shadows to edit");
+                    }
                     if (ImGui::Checkbox("Animated", &animation.Enabled))
                     {
                         pointChanged = true;
@@ -259,7 +307,14 @@ bool DemoLightEditor::Draw(SceneLightManager& lightManager)
             FrameworkImGui::SliderFloat3("Color", &m_NewPointLightColor.x, 0.0f, 10.0f, "%.3f");
             FrameworkImGui::SliderFloat("Intensity", &m_NewPointLightIntensity, 0.0f, 100.0f, "%.3f");
             FrameworkImGui::SliderFloat("Range", &m_NewPointLightRange, 0.1f, 500.0f, "%.3f");
-            FrameworkImGui::SliderFloat("Source Radius", &m_NewPointLightSourceRadius, 0.0f, 10.0f, "%.4f");
+            if (softShadowsEnabled)
+            {
+                FrameworkImGui::SliderFloat("Source Radius", &m_NewPointLightSourceRadius, 0.0f, 10.0f, "%.4f");
+            }
+            else
+            {
+                ImGui::TextDisabled("Source Radius: enable Soft Shadows to edit");
+            }
             FrameworkImGui::SliderFloat("Random Spawn Radius", &m_RandomPointLightSpawnRadius, 1.0f, 80.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
             if (ImGui::Button("Add At Origin"))
             {
@@ -399,13 +454,20 @@ bool DemoLightEditor::Draw(SceneLightManager& lightManager)
     if (ImGui::CollapsingHeader("Area Lights"))
     {
         bool areaLightsEnabled = lightManager.AreAreaLightsEnabled();
-        if (ImGui::Checkbox("Enable Area Lights", &areaLightsEnabled))
+        if (ImGui::Checkbox("Enable Direct Sampling (Area + Emissive Meshes)", &areaLightsEnabled))
         {
             lightManager.SetLightGroupSettings(
                 lightManager.AreDirectionalLightsEnabled(),
                 lightManager.ArePointLightsEnabled(),
                 areaLightsEnabled);
             changed = true;
+        }
+        ImGui::TextWrapped(
+            "Rectangle emitters use constant one-sided radiance. Emitted RGB radiance is Radiance Color x Radiance Multiplier.");
+        if (autoExposureEnabled)
+        {
+            ImGui::TextDisabled(
+                "Auto Exposure is enabled and can compensate broad intensity changes. Disable it under Post Process to compare absolute light levels.");
         }
 
         if (ImGui::CollapsingHeader("Area Light List"))
@@ -439,23 +501,43 @@ bool DemoLightEditor::Draw(SceneLightManager& lightManager)
                     XMFLOAT3 position = { light.PositionAndRange.x, light.PositionAndRange.y, light.PositionAndRange.z };
                     XMFLOAT3 normal = { light.NormalAndType.x, light.NormalAndType.y, light.NormalAndType.z };
                     XMFLOAT2 size = { light.AxisUAndExtent.w * 2.0f, light.AxisVAndExtent.w * 2.0f };
-                    const bool lightChanged =
-                        FrameworkImGui::SliderFloat3("Position", &position.x, -500.0f, 500.0f, "%.3f") |
-                        FrameworkImGui::SliderFloat3("Normal", &normal.x, -1.0f, 1.0f, "%.4f") |
-                        FrameworkImGui::SliderFloat2("Size", &size.x, 0.1f, 100.0f, "%.3f") |
-                        FrameworkImGui::SliderFloat("Range", &light.PositionAndRange.w, 0.1f, 500.0f, "%.3f") |
-                        FrameworkImGui::SliderFloat3("Color", &light.ColorAndIntensity.x, 0.0f, 10.0f, "%.3f") |
-                        FrameworkImGui::SliderFloat("Intensity", &light.ColorAndIntensity.w, 0.0f, 100.0f, "%.3f");
+                    bool lightChanged = FrameworkImGui::SliderFloat3(
+                        "Center Position", &position.x, -500.0f, 500.0f, "%.3f");
+                    DrawLastItemTooltip("World-space center of the emitting rectangle.");
+                    lightChanged |= FrameworkImGui::SliderFloat3(
+                        "Emission Direction", &normal.x, -1.0f, 1.0f, "%.4f");
+                    DrawLastItemTooltip(
+                        "One-sided emitting direction. Samples behind the rectangle receive no light.");
+                    lightChanged |= FrameworkImGui::SliderFloat2(
+                        "Full Size", &size.x, 0.1f, 10000.0f, "%.3f");
+                    DrawLastItemTooltip(
+                        "Full world-space width and height. Radiance stays constant, so increasing area also increases total emitted power.");
+                    lightChanged |= FrameworkImGui::SliderFloat(
+                        "Max Illumination Distance",
+                        &light.PositionAndRange.w,
+                        0.1f,
+                        10000.0f,
+                        "%.3f");
+                    DrawLastItemTooltip(
+                        "Hard sampling cutoff in world units. This is not an attenuation coefficient; receivers farther away get no contribution.");
+                    lightChanged |= FrameworkImGui::SliderFloat3(
+                        "Radiance Color", &light.ColorAndIntensity.x, 0.0f, 10.0f, "%.3f");
+                    DrawLastItemTooltip("Linear RGB tint used by the path tracer and ReSTIR DI.");
+                    lightChanged |= FrameworkImGui::SliderFloat(
+                        "Radiance Multiplier", &light.ColorAndIntensity.w, 0.0f, 10000.0f, "%.3f");
+                    DrawLastItemTooltip(
+                        "Scalar multiplier applied to Radiance Color before direct-light evaluation.");
+                    ImGui::Text(
+                        "Effective RGB radiance: (%.3f, %.3f, %.3f)",
+                        light.ColorAndIntensity.x * light.ColorAndIntensity.w,
+                        light.ColorAndIntensity.y * light.ColorAndIntensity.w,
+                        light.ColorAndIntensity.z * light.ColorAndIntensity.w);
                     if (lightChanged)
                     {
-                        const XMFLOAT3 normalizedNormal = NormalizeVector(normal);
-                        XMFLOAT3 axisU{};
-                        XMFLOAT3 axisV{};
-                        BuildAreaLightAxes(normalizedNormal, axisU, axisV);
                         light.PositionAndRange = { position.x, position.y, position.z, light.PositionAndRange.w };
-                        light.NormalAndType = { normalizedNormal.x, normalizedNormal.y, normalizedNormal.z, light.NormalAndType.w };
-                        light.AxisUAndExtent = { axisU.x, axisU.y, axisU.z, std::max(0.1f, size.x) * 0.5f };
-                        light.AxisVAndExtent = { axisV.x, axisV.y, axisV.z, std::max(0.1f, size.y) * 0.5f };
+                        light.NormalAndType = { normal.x, normal.y, normal.z, light.NormalAndType.w };
+                        light.AxisUAndExtent.w = std::max(0.1f, size.x) * 0.5f;
+                        light.AxisVAndExtent.w = std::max(0.1f, size.y) * 0.5f;
                         lightManager.CommitAreaLightEdit(index);
                         changed = true;
                     }
@@ -468,12 +550,18 @@ bool DemoLightEditor::Draw(SceneLightManager& lightManager)
         ImGui::PushID("NewAreaLight");
         if (ImGui::CollapsingHeader("New Area Light"))
         {
-            FrameworkImGui::SliderFloat3("Position", &m_NewAreaLightPosition.x, -500.0f, 500.0f, "%.3f");
-            FrameworkImGui::SliderFloat3("Normal", &m_NewAreaLightNormal.x, -1.0f, 1.0f, "%.4f");
-            FrameworkImGui::SliderFloat2("Size", &m_NewAreaLightSize.x, 0.1f, 100.0f, "%.3f");
-            FrameworkImGui::SliderFloat3("Color", &m_NewAreaLightColor.x, 0.0f, 10.0f, "%.3f");
-            FrameworkImGui::SliderFloat("Intensity", &m_NewAreaLightIntensity, 0.0f, 100.0f, "%.3f");
-            FrameworkImGui::SliderFloat("Range", &m_NewAreaLightRange, 0.1f, 500.0f, "%.3f");
+            FrameworkImGui::SliderFloat3("Center Position", &m_NewAreaLightPosition.x, -500.0f, 500.0f, "%.3f");
+            DrawLastItemTooltip("World-space center of the emitting rectangle.");
+            FrameworkImGui::SliderFloat3("Emission Direction", &m_NewAreaLightNormal.x, -1.0f, 1.0f, "%.4f");
+            DrawLastItemTooltip("One-sided emitting direction.");
+            FrameworkImGui::SliderFloat2("Full Size", &m_NewAreaLightSize.x, 0.1f, 10000.0f, "%.3f");
+            DrawLastItemTooltip("Full world-space width and height.");
+            FrameworkImGui::SliderFloat3("Radiance Color", &m_NewAreaLightColor.x, 0.0f, 10.0f, "%.3f");
+            DrawLastItemTooltip("Linear RGB radiance tint.");
+            FrameworkImGui::SliderFloat("Radiance Multiplier", &m_NewAreaLightIntensity, 0.0f, 10000.0f, "%.3f");
+            DrawLastItemTooltip("Scalar multiplier applied to Radiance Color.");
+            FrameworkImGui::SliderFloat("Max Illumination Distance", &m_NewAreaLightRange, 0.1f, 10000.0f, "%.3f");
+            DrawLastItemTooltip("Hard sampling cutoff in world units; this is not attenuation.");
             if (ImGui::Button("Add Area Light"))
             {
                 const XMFLOAT3 normal = NormalizeVector(m_NewAreaLightNormal);

@@ -10,7 +10,16 @@
 
 using namespace DirectX;
 
-//Modify Begin:2026-08-06 by Hui
+//Modify Begin:2026-09-10 by Hui
+namespace
+{
+    float ToneMapLightGizmoChannel(const float linearRadiance)
+    {
+        const float value = std::max(0.0f, linearRadiance);
+        return value / (1.0f + value);
+    }
+}
+
 void RaytracingDemo::DrawLightBillboards(CommandList& cmd)
 {
     const std::shared_ptr<Shader>& shader = m_ShaderPipelineBootstrap.GetLightBillboardShader();
@@ -89,22 +98,49 @@ void RaytracingDemo::DrawLightBillboards(CommandList& cmd)
 
         for (const AreaLightData& light : m_Lights.GetAreaLights())
         {
+            const float intensity = std::max(0.0f, light.ColorAndIntensity.w);
+            const float displayRed = ToneMapLightGizmoChannel(light.ColorAndIntensity.x * intensity);
+            const float displayGreen = ToneMapLightGizmoChannel(light.ColorAndIntensity.y * intensity);
+            const float displayBlue = ToneMapLightGizmoChannel(light.ColorAndIntensity.z * intensity);
+            const float displayLuminance =
+                displayRed * 0.2126f + displayGreen * 0.7152f + displayBlue * 0.0722f;
             LightBillboardConstants constants{};
             constants.PositionAndSize = {
                 light.PositionAndRange.x,
                 light.PositionAndRange.y,
                 light.PositionAndRange.z,
-                std::clamp(light.PositionAndRange.w * 0.07f, 1.1f, 2.8f)
+                1.0f
             };
             constants.ColorAndAlpha = {
-                light.ColorAndIntensity.x,
-                light.ColorAndIntensity.y,
-                light.ColorAndIntensity.z,
-                0.42f
+                displayRed,
+                displayGreen,
+                displayBlue,
+                std::clamp(0.18f + displayLuminance * 0.38f, 0.18f, 0.56f)
             };
-            constants.CameraRight = cameraRightFloat;
-            constants.CameraUp = cameraUpFloat;
-            constants.TypeAndParams = { 1.0f, 0.0f, 0.0f, 0.0f };
+            constants.CameraRight = {
+                light.AxisUAndExtent.x,
+                light.AxisUAndExtent.y,
+                light.AxisUAndExtent.z,
+                0.0f
+            };
+            constants.CameraUp = {
+                light.AxisVAndExtent.x,
+                light.AxisVAndExtent.y,
+                light.AxisVAndExtent.z,
+                0.0f
+            };
+            constants.TypeAndParams = {
+                1.0f,
+                std::max(1.0e-4f, light.AxisUAndExtent.w),
+                std::max(1.0e-4f, light.AxisVAndExtent.w),
+                intensity
+            };
+            constants.DirectionAndLength = {
+                light.NormalAndType.x,
+                light.NormalAndType.y,
+                light.NormalAndType.z,
+                light.PositionAndRange.w
+            };
 
             commandContext.SetConstantBuffer(*shader, "MaterialCBuffer", constants);
             commandContext.BindDescriptorSet(shader->GetDescriptorSet());

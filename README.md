@@ -117,6 +117,8 @@ const SceneImportResult result = SceneImporter::ImportFromFile(scenePath, option
 
 Spot Light data flows from `Scene` through `LightingGpuResources` into the camera constants and the Inline PT/ReSTIR DI/GI direct-light sampling path; it is no longer converted into a point-light fallback. The editor and `.runtime.json` scene state can create, edit, remove, and persist spot lights. Only the first active FBX camera is selected; `GenerateFallbackCamera` frames the imported world-space bounds when an asset has no camera. Transparency, clearcoat, transmission, animation playback, and other advanced material models remain outside this sample contract.
 
+Rectangle area lights are one-sided constant-radiance emitters. The light editor exposes their world-space center, emission direction, full width/height, hard maximum illumination distance, linear radiance color, and radiance multiplier; the effective emitted RGB is `Radiance Color * Radiance Multiplier`. Size changes preserve the emitter radiance while changing its total emitted power. Editing updates both the surface-emitter instance buffer and the direct-light sampling CDF used by Path Tracing and ReSTIR DI. The scene gizmo uses the same axes, extents, and radiance values, while the UI warns when Auto Exposure can visually compensate broad intensity changes. Directional angular radius and point source radius are editable only when Soft Shadows is enabled because hard-shadow shader variants do not consume them.
+
 For a no-window parser check, enable the developer tool and run:
 
 ```text
