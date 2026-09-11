@@ -55,6 +55,22 @@ float3 SanitizeNRDRadiance(float3 color)
     return min(max(color, 0.0f), 250.0f);
 }
 
+#if !RAYTRACING_DEMO_COMPOSITE_INDIRECT_LIGHTING
+// A one-bounce/direct-only render still needs a small environment term. The
+// path tracer samples the environment on a miss (the next bounce), so disabling
+// indirect lighting otherwise removes all sky contribution and leaves surfaces
+// outside explicit lights completely black.
+float3 EvaluateDirectOnlyEnvironment(uint2 pixel)
+{
+    const float4 albedoOcclusion = GBufferTextures[GBuffer_AlbedoOcclusion].Load(int3(pixel, 0));
+    const float4 emissionMetallic = GBufferTextures[GBuffer_EmissionMetallic].Load(int3(pixel, 0));
+    const float metallic = saturate(emissionMetallic.a);
+    const float diffuseWeight = (1.0f - metallic) * saturate(albedoOcclusion.a);
+    const float3 sky = Camera_SkyLight.ColorAndIntensity.rgb * Camera_SkyLight.ColorAndIntensity.w;
+    return max(albedoOcclusion.rgb, 0.0f) * diffuseWeight * sky * 0.5f;
+}
+#endif
+
 //Modify Begin:2026-07-30 by Hui
 #if RAYTRACING_DEMO_COMPOSITE_DENOISER_MODE == 1
 float3 GetNRDDiffuseDemodulation(uint2 pixel)
@@ -78,22 +94,6 @@ float GetGBufferViewZ(uint2 pixel)
     const float3 cameraForward = normalize(mul(Camera_InverseView, float4(0.0f, 0.0f, 1.0f, 0.0f)).xyz);
     return max(0.001f, dot(positionWs - Camera_Position.xyz, cameraForward));
 }
-
-#if !RAYTRACING_DEMO_COMPOSITE_INDIRECT_LIGHTING
-// A one-bounce/direct-only render still needs a small environment term. The
-// path tracer samples the environment on a miss (the next bounce), so disabling
-// indirect lighting otherwise removes all sky contribution and leaves surfaces
-// outside explicit lights completely black.
-float3 EvaluateDirectOnlyEnvironment(uint2 pixel)
-{
-    const float4 albedoOcclusion = GBufferTextures[GBuffer_AlbedoOcclusion].Load(int3(pixel, 0));
-    const float4 emissionMetallic = GBufferTextures[GBuffer_EmissionMetallic].Load(int3(pixel, 0));
-    const float metallic = saturate(emissionMetallic.a);
-    const float diffuseWeight = (1.0f - metallic) * saturate(albedoOcclusion.a);
-    const float3 sky = Camera_SkyLight.ColorAndIntensity.rgb * Camera_SkyLight.ColorAndIntensity.w;
-    return max(albedoOcclusion.rgb, 0.0f) * diffuseWeight * sky * 0.5f;
-}
-#endif
 
 float4 PackNRDDiffuseRadianceHitDistance(float3 radiance, float hitDistance, float viewZ, float roughness)
 {

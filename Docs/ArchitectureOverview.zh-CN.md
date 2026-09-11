@@ -148,7 +148,7 @@ Mitsuba XML importer 是有意保持紧凑的兼容路径：会展开场景内 `
 
 场景生命周期属于 Demo composition，而不是 Framework `Scene` 的职责。`RaytracingDemoSceneRuntimeController` 持有一个根据源场景 stem 选择的可选 behavior，并调用其 `OnLoad`、主线程 `OnUpdate` 和 `OnUnload`。仅 LowPolyStreet 激活的 showreel behavior 把房屋固定为观察点和圆锥顶点，原始相机方向是中心轴；相机用 2 秒平滑展开到垂直底面上半顶角为 10° 的圆周路径。三盏面积光与三盏较低的交错点光另在房屋 XZ 平面绕转。它通过 `SceneLightManager` 更新灯光 buffer，且不会保存 RenderGraph builder。`F12` 只切换相机所有权；`↑`/`↓` 以 `0.05 rad/s` 为步长调节脚本相机角速度，默认 `0.2 rad/s`、限制在 `0.05-1.0 rad/s`，`W`/`S` 仍是手动前后移动。`RAYTRACING_DEMO_SCENE_BEHAVIOR=0` 用于无人值守静态测试时关闭整个行为。
 
-LowPolyStreet 额外使用 `←`/`→` 以 `1°` 为步长调节 `2°-30°` 的圆锥半顶角；`↑`/`↓` 仍调节运镜角速度。Demo 的渲染配置采用分层、可原子保存的契约：先读取 executable-relative `Config/RaytracingDemo.ini`，再用 `Saved/RaytracingDemo.ini` 覆盖，最后应用自动化环境变量。`Save Settings` 序列化所有 ImGui 控制，包括 NRD/SVGF（即使实例尚未初始化）、天空光、灯光组开关、场景中的方向/点/聚光/面积光以及新增灯光默认值；`Save Scene` 仍负责把相机位姿和场景资产数据写入 runtime sidecar。
+LowPolyStreet 额外使用 `←`/`→` 以 `1°` 为步长调节 `2°-30°` 的圆锥半顶角；`↑`/`↓` 仍调节运镜角速度。Demo 的渲染配置只使用 executable-relative `Config/RaytracingDemo.ini`，之后应用自动化环境变量。`Save Settings` 通过原子替换把所有 ImGui 控件写回同一个文件，包括 NRD/SVGF（即使实例尚未初始化）、天空光、灯光组开关、场景中的方向/点/聚光/面积光以及新增灯光默认值；`Save Scene` 仍负责把相机位姿和场景资产数据写入 runtime sidecar。
 
 ### 已演示的渲染路径
 

@@ -1019,12 +1019,7 @@ void RaytracingDemo::LoadStartupConfiguration()
 //Modify Begin:2026-09-11 by Hui
     const std::filesystem::path runtimeRoot = GetRuntimeRootPath();
     const std::filesystem::path configurationPath = runtimeRoot / "Config" / "RaytracingDemo.ini";
-    const std::filesystem::path userConfigurationPath = runtimeRoot / "Saved" / "RaytracingDemo.ini";
     StartupIni configuration = StartupIni::Load(configurationPath);
-    if (std::filesystem::is_regular_file(userConfigurationPath))
-    {
-        configuration.Overlay(StartupIni::Load(userConfigurationPath));
-    }
     m_StartupConfigurationStatus = configuration.GetStatus();
 //Modify End
 
@@ -1661,11 +1656,6 @@ void RaytracingDemo::ApplyStartupLightConfiguration()
 {
     const std::filesystem::path runtimeRoot = GetRuntimeRootPath();
     StartupIni configuration = StartupIni::Load(runtimeRoot / "Config" / "RaytracingDemo.ini");
-    const std::filesystem::path userConfigurationPath = runtimeRoot / "Saved" / "RaytracingDemo.ini";
-    if (std::filesystem::is_regular_file(userConfigurationPath))
-    {
-        configuration.Overlay(StartupIni::Load(userConfigurationPath));
-    }
 
     bool boolValue = false;
     if (configuration.TryGetBoolean("Lights", "DirectionalEnabled", boolValue))
@@ -1891,7 +1881,7 @@ void RaytracingDemo::SaveRuntimeConfiguration()
         }
     };
 
-    const std::filesystem::path outputPath = GetRuntimeRootPath() / "Saved" / "RaytracingDemo.ini";
+    const std::filesystem::path outputPath = GetRuntimeRootPath() / "Config" / "RaytracingDemo.ini";
     std::filesystem::create_directories(outputPath.parent_path());
     std::filesystem::path temporaryPath = outputPath;
     temporaryPath += ".tmp";
@@ -1899,12 +1889,12 @@ void RaytracingDemo::SaveRuntimeConfiguration()
     std::ofstream stream(temporaryPath, std::ios::binary | std::ios::trunc);
     if (!stream)
     {
-        throw std::runtime_error("Failed to open runtime configuration temporary file: " + temporaryPath.string());
+        throw std::runtime_error("Failed to open project configuration temporary file: " + temporaryPath.string());
     }
     stream << std::boolalpha << std::setprecision(9);
 
-    stream << "; User-saved RaytracingDemo settings.\n"
-           << "; This file overrides Config/RaytracingDemo.ini on the next launch.\n\n"
+    stream << "; RaytracingDemo project settings.\n"
+           << "; Saved by the ImGui settings action and loaded on the next launch.\n\n"
            << "[Renderer]\n"
            << "PathTracingBackend = " << (m_PathTracingBackend == PathTracingBackend::ShaderTableDxr ? "dxr" : "inline") << '\n'
            << "PathTracingDispatch = " << (m_PathTracingDispatchMode == PathTracingDispatchMode::CompactedIndirect ? "compacted-indirect" : "full-resolution") << '\n'

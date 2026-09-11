@@ -108,7 +108,7 @@ FBX 外部纹理会依次从作者记录的引用、FBX 同目录、同级 `text
 
 场景特有的运行时逻辑只放在 Demo。`RaytracingDemoSceneRuntimeController` 根据规范化后的源场景 stem 选择可选的 `OnLoad`/`OnUpdate`/`OnUnload` behavior，Framework 的 `Scene` 仍是纯数据。LowPolyStreet behavior 在主线程执行：固定的房屋中心同时是观察点和圆锥顶点；原始相机方向是圆锥中心轴，相机从该初始姿态平滑展开到垂直底面上的圆周路径，圆锥半顶角默认 15°，并始终 LookAt 房屋。三盏导入面积光与三盏高度更低、角位置交错的新增点光则独立在房屋 XZ 平面绕转。它只对 `LowPolyStreet.fbx` 激活；`F12` 仅释放或恢复脚本的相机控制权，灯光仍继续运动，恢复控制时脚本角速度设为最大值 `1.0 rad/s`。`↑`/`↓` 以 `0.05 rad/s` 为步长调节脚本相机角速度（范围 `0.05-1.0 rad/s`），`←`/`→` 以 `1°` 为步长调节圆锥半顶角（范围 `2°-30°`）；`W`/`S` 仍保留手动前后移动。`RAYTRACING_DEMO_SCENE_BEHAVIOR=0` 可在无人值守静态测试中关闭整个行为。行为激活时灯光每帧变化，因此 accumulation 与 ReSTIR/OIDN 静态图像历史会每帧失效。
 
-渲染设置采用两层 INI：随程序部署的 `Config/RaytracingDemo.ini` 提供完整默认值，`Saved/RaytracingDemo.ini` 保存用户覆盖并在下次启动时后加载；环境变量仍具有最高优先级。ImGui 顶部的 `Save Settings` 会通过临时文件和原子替换写入用户 INI，覆盖 Renderer、Camera、Auto Exposure、ReSTIR DI/GI、NRD、SVGF、OIDN、Bloom、DLSS/HDR 和 Diagnostics 参数。场景对象、灯光、材质、天空盒及相机位姿仍由 `Save Scene` 写入 `<scene>.runtime.json`，避免把不同场景的可变数组混入全局渲染配置。
+渲染设置统一使用一个项目 INI：随程序部署的 `Config/RaytracingDemo.ini` 在启动时读取，环境变量仍具有最高优先级。ImGui 顶部的 `Save Settings` 会通过临时文件和原子替换写回同一个文件，覆盖 Renderer、Camera、Auto Exposure、ReSTIR DI/GI、NRD、SVGF、OIDN、Bloom、DLSS/HDR 和 Diagnostics 参数。场景对象、灯光、材质、天空盒及相机位姿仍由 `Save Scene` 写入 `<scene>.runtime.json`，避免把不同场景的可变数组混入全局渲染配置。
 
 当前 Path Tracing 的 `DirectLightCdf` 没有环境贴图的直接光 NEE 项：平行光、点光、Spot、矩形面积光和自发光 mesh 会进入直接光采样，环境贴图只在路径 miss 时求值。因此 `Bounces = 1` 时，局部灯光覆盖不到的外围地面可能接近黑色；增加一次反弹后，BSDF 射线可 miss 到环境并照亮地面。这是采样路径的局限，不是地面材质再次丢失。
 
