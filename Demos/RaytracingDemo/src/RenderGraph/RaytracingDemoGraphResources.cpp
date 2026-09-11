@@ -207,7 +207,7 @@ namespace RaytracingDemoRenderGraph
         const bool includeCopyQueueValidation,
         const bool includeDynamicRayTracingUpdate)
     {
-//Modify Begin:2026-08-20 by Hui
+//Modify Begin:2026-09-10 by Hui
         std::vector<RenderGraph::TokenDescription> tokenDescriptions = {
             { ResourceIds::BaseResourcesFinishedToken },
             { ResourceIds::SceneResourcesReadyToken },
@@ -218,6 +218,7 @@ namespace RaytracingDemoRenderGraph
             { ResourceIds::IndirectLightingFinishedToken },
             { ResourceIds::RayTracingFinishedToken },
             { ResourceIds::DenoiseFinishedToken },
+            { ResourceIds::AccumulationFinishedToken },
             { ResourceIds::BloomFinishedToken },
 //Modify Begin:2026-08-23 by Hui
             { ResourceIds::AutoExposureFinishedToken },

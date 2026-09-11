@@ -20,6 +20,7 @@ void ReSTIRDI::SetSettings(const ReSTIRDISettings& settings)
     m_Settings.SpatialSamplingRadius = std::clamp(m_Settings.SpatialSamplingRadius, 1.0f, 64.0f);
     m_Settings.TemporalNormalSimilarityThreshold = std::clamp(m_Settings.TemporalNormalSimilarityThreshold, -1.0f, 1.0f);
     m_Settings.TemporalDepthSimilarityThreshold = std::clamp(m_Settings.TemporalDepthSimilarityThreshold, 0.0f, 1.0f);
+    m_Settings.TemporalMaterialSimilarityThreshold = std::clamp(m_Settings.TemporalMaterialSimilarityThreshold, 0.0f, 2.0f);
     m_Settings.SpatialNormalSimilarityThreshold = std::clamp(m_Settings.SpatialNormalSimilarityThreshold, -1.0f, 1.0f);
     m_Settings.SpatialDepthSimilarityThreshold = std::clamp(m_Settings.SpatialDepthSimilarityThreshold, 0.0f, 1.0f);
     m_Settings.SpatialMaterialSimilarityThreshold = std::clamp(m_Settings.SpatialMaterialSimilarityThreshold, 0.0f, 2.0f);
@@ -43,6 +44,7 @@ ReSTIRDIFrameConstants ReSTIRDI::GetFrameConstants(const bool historyValid) cons
         historyValid ? 1u : 0u,
         m_Settings.EnableTemporalVisibilityShortcut ? 1u : 0u,
         m_Settings.EnableTemporalPermutationSampling ? 1u : 0u,
+        m_Settings.EnableTemporalMaterialSimilarityTest ? 1u : 0u,
         m_Settings.EnableBoilingFilter ? 1u : 0u,
 
         m_Settings.TemporalMaxHistoryLength,
@@ -61,7 +63,7 @@ ReSTIRDIFrameConstants ReSTIRDI::GetFrameConstants(const bool historyValid) cons
         m_Settings.BoilingFilterStrength,
         m_Settings.TemporalNormalSimilarityThreshold,
         m_Settings.TemporalDepthSimilarityThreshold,
-        0.0f,
+        m_Settings.TemporalMaterialSimilarityThreshold,
 
         m_Settings.SpatialSamplingRadius,
         m_Settings.SpatialNormalSimilarityThreshold,
@@ -72,6 +74,7 @@ ReSTIRDIFrameConstants ReSTIRDI::GetFrameConstants(const bool historyValid) cons
         0.0f,
         0.0f,
         0.0f,
+        m_Settings.EnableTemporalIgnoreGeometry ? 1u : 0u,
     };
 }
 //Modify End

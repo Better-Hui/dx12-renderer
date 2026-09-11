@@ -183,7 +183,8 @@ private:
 //Modify Begin:2026-08-19 by Hui
     void ResetAccumulation(
         bool resetDenoiserHistory = true,
-        bool resetReSTIRHistory = true,
+        // ReSTIR reservoirs are temporal state, not multi-SPP accumulation; callers opt in explicitly.
+        bool resetReSTIRHistory = false,
         bool resetOIDNHistory = true);
 //Modify End
 //Modify Begin:2026-08-25 by Hui
@@ -206,6 +207,8 @@ private:
     bool IsStartupLoadComplete() const { return m_StartupLoadStage == StartupLoadStage::Complete; }
     void ResetCameraToInitialSceneState();
     void LoadStartupConfiguration();
+    void ApplyStartupLightConfiguration();
+    void SaveRuntimeConfiguration();
     bool ApplyHdr10Output(bool enabled);
     void InitializeDiagnostics();
     void RecordDiagnosticsFailure(std::string stage, const std::exception& exception);
@@ -331,6 +334,7 @@ private:
     float m_MousePanSpeed = 0.04f;
     float m_MouseDollySpeed = 0.04f;
     float m_MouseWheelDollySpeed = 0.5f;
+    bool m_HasCameraProjectionConfiguration = false;
     PathTracingBackend m_PathTracingBackend = PathTracingBackend::InlineRayQuery;
     bool m_OpenDxrCompatibilityPopup = false;
     PathTracingDispatchMode m_PathTracingDispatchMode = PathTracingDispatchMode::FullResolution;
@@ -340,6 +344,7 @@ private:
     bool m_HasSceneCamera = false;
     std::string m_CameraSaveStatus;
     std::string m_StartupConfigurationStatus;
+    std::string m_RuntimeConfigurationSaveStatus;
 
     StartupLoadStage m_StartupLoadStage = StartupLoadStage::Bootstrap;
     std::filesystem::path m_StartupScenePath;

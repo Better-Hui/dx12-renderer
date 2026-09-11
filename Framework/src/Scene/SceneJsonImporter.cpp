@@ -15,7 +15,7 @@
 #include <string_view>
 #include <variant>
 
-//Modify Begin:2026-08-26 by Hui
+//Modify Begin:2026-09-10 by Hui
 namespace
 {
     struct JsonValue
@@ -678,7 +678,100 @@ void SceneImporter::ApplyJsonRuntimeState(
         {
             skybox.AmbientColorAndIntensity = ReadFloat4(*ambient, "skybox.ambientColorAndIntensity");
         }
+        if (const JsonValue* texture = Find(skyboxObject, "texture"))
+        {
+            skybox.Texture.AssetPath = ResolveAssetPath(statePath.parent_path(), texture, "skybox.texture");
+        }
         scene.SetSkybox(skybox);
+    }
+
+    if (const JsonValue* materialsValue = Find(root, "materials"))
+    {
+        std::vector<SceneMaterial>& materials = scene.GetMutableMaterials();
+        for (const auto& [materialKey, materialValue] : materialsValue->AsObject("materials"))
+        {
+            auto materialIterator = std::find_if(
+                materials.begin(),
+                materials.end(),
+                [&materialKey](const SceneMaterial& material)
+                {
+                    return material.SourceId == materialKey;
+                });
+            if (materialIterator == materials.end())
+            {
+                for (auto iterator = materials.begin(); iterator != materials.end(); ++iterator)
+                {
+                    if (iterator->Name != materialKey)
+                    {
+                        continue;
+                    }
+                    if (materialIterator != materials.end())
+                    {
+                        throw std::runtime_error(
+                            "JSON runtime material name is ambiguous; use SourceId instead: " + materialKey);
+                    }
+                    materialIterator = iterator;
+                }
+            }
+            if (materialIterator == materials.end())
+            {
+                throw std::runtime_error("JSON runtime material does not exist in the scene: " + materialKey);
+            }
+
+            SceneMaterial& material = *materialIterator;
+            const std::string context = "materials." + materialKey;
+            const JsonValue::Object& materialObject = materialValue.AsObject(context);
+            if (const JsonValue* value = Find(materialObject, "baseColor"))
+            {
+                material.BaseColor = ReadColor(*value, context + ".baseColor");
+            }
+            if (const JsonValue* value = Find(materialObject, "specColor"))
+            {
+                material.SpecColor = ReadColor(*value, context + ".specColor");
+            }
+            if (const JsonValue* value = Find(materialObject, "emissionColor"))
+            {
+                material.EmissionColor = ReadColor(*value, context + ".emissionColor");
+            }
+            if (const JsonValue* value = Find(materialObject, "metallic"))
+            {
+                material.Metallic = std::clamp(ReadNumber(*value, context + ".metallic"), 0.0f, 1.0f);
+            }
+            if (const JsonValue* value = Find(materialObject, "roughness"))
+            {
+                material.Roughness = std::clamp(ReadNumber(*value, context + ".roughness"), 0.0f, 1.0f);
+            }
+            if (const JsonValue* value = Find(materialObject, "normalScale"))
+            {
+                material.NormalScale = std::max(0.0f, ReadNumber(*value, context + ".normalScale"));
+            }
+            if (const JsonValue* value = Find(materialObject, "occlusionStrength"))
+            {
+                material.OcclusionStrength = std::max(0.0f, ReadNumber(*value, context + ".occlusionStrength"));
+            }
+
+            const auto applyTexture = [&materialObject, &statePath, &context](
+                const char* name,
+                SceneTextureBinding& binding)
+            {
+                if (const JsonValue* value = Find(materialObject, name))
+                {
+                    binding.AssetPath = ResolveAssetPath(
+                        statePath.parent_path(),
+                        value,
+                        context + "." + name);
+                    binding.EmbeddedTexture.reset();
+                }
+            };
+            applyTexture("baseMap", material.BaseMap);
+            applyTexture("normalMap", material.NormalMap);
+            applyTexture("metallicGlossMap", material.MetallicGlossMap);
+            applyTexture("metallicMap", material.MetallicMap);
+            applyTexture("roughnessMap", material.RoughnessMap);
+            applyTexture("occlusionMap", material.OcclusionMap);
+            applyTexture("emissionMap", material.EmissionMap);
+            material.IsPbrMaterial = true;
+        }
     }
 
     if (const JsonValue* lightGroupsValue = Find(root, "lightGroups"))
@@ -791,6 +884,48 @@ void SceneImporter::WriteJsonRuntimeState(
     {
         output << '[' << value.x << ", " << value.y << ", " << value.z << ", " << value.w << ']';
     };
+    const auto writeString = [&output](const std::string_view value)
+    {
+        static constexpr char HexDigits[] = "0123456789abcdef";
+        output << '"';
+        for (const unsigned char character : value)
+        {
+            switch (character)
+            {
+            case '"': output << "\\\""; break;
+            case '\\': output << "\\\\"; break;
+            case '\b': output << "\\b"; break;
+            case '\f': output << "\\f"; break;
+            case '\n': output << "\\n"; break;
+            case '\r': output << "\\r"; break;
+            case '\t': output << "\\t"; break;
+            default:
+                if (character < 0x20u)
+                {
+                    output << "\\u00" << HexDigits[character >> 4u] << HexDigits[character & 0x0fu];
+                }
+                else
+                {
+                    output << static_cast<char>(character);
+                }
+                break;
+            }
+        }
+        output << '"';
+    };
+    const auto writeAssetPath = [&output, &writeString, &statePath](const std::filesystem::path& assetPath)
+    {
+        std::error_code relativePathError;
+        std::filesystem::path persistedPath = std::filesystem::relative(
+            assetPath,
+            statePath.parent_path(),
+            relativePathError);
+        if (relativePathError)
+        {
+            persistedPath = assetPath;
+        }
+        writeString(persistedPath.generic_string());
+    };
 
     const SceneCamera& camera = scene.GetCamera();
     DirectX::XMFLOAT3 cameraPosition{};
@@ -804,9 +939,54 @@ void SceneImporter::WriteJsonRuntimeState(
     output << ", \"fieldOfView\": " << camera.FieldOfView
         << ", \"nearClipPlane\": " << camera.NearClipPlane
         << ", \"farClipPlane\": " << camera.FarClipPlane << " },\n";
+    const SceneSkybox& skybox = scene.GetSkybox();
     output << "  \"skybox\": { \"ambientColorAndIntensity\": ";
-    writeFloat4(scene.GetSkybox().AmbientColorAndIntensity);
+    writeFloat4(skybox.AmbientColorAndIntensity);
+    if (!skybox.Texture.AssetPath.empty())
+    {
+        output << ", \"texture\": ";
+        writeAssetPath(skybox.Texture.AssetPath);
+    }
     output << " },\n";
+
+    output << "  \"materials\": {";
+    for (size_t index = 0; index < scene.GetMaterials().size(); ++index)
+    {
+        if (index != 0) output << ',';
+        const SceneMaterial& material = scene.GetMaterials()[index];
+        output << "\n    ";
+        writeString(material.SourceId.empty() ? material.Name : material.SourceId);
+        output << ": { \"baseColor\": ";
+        writeFloat4(material.BaseColor);
+        output << ", \"specColor\": ";
+        writeFloat4(material.SpecColor);
+        output << ", \"emissionColor\": ";
+        writeFloat4(material.EmissionColor);
+        output << ", \"metallic\": " << material.Metallic
+            << ", \"roughness\": " << material.Roughness
+            << ", \"normalScale\": " << material.NormalScale
+            << ", \"occlusionStrength\": " << material.OcclusionStrength;
+        const auto writeTexture = [&output, &writeAssetPath](
+            const char* name,
+            const SceneTextureBinding& binding)
+        {
+            if (binding.AssetPath.empty())
+            {
+                return;
+            }
+            output << ", \"" << name << "\": ";
+            writeAssetPath(binding.AssetPath);
+        };
+        writeTexture("baseMap", material.BaseMap);
+        writeTexture("normalMap", material.NormalMap);
+        writeTexture("metallicGlossMap", material.MetallicGlossMap);
+        writeTexture("metallicMap", material.MetallicMap);
+        writeTexture("roughnessMap", material.RoughnessMap);
+        writeTexture("occlusionMap", material.OcclusionMap);
+        writeTexture("emissionMap", material.EmissionMap);
+        output << " }";
+    }
+    output << "\n  },\n";
 
     const SceneLightGroupSettings& lightGroups = scene.GetLightGroupSettings();
     output << "  \"lightGroups\": { \"directionalEnabled\": "

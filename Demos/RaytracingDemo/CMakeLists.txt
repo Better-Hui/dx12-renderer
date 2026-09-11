@@ -161,6 +161,7 @@ set(SHADER_FILES_COMPUTE
         shaders/PathTracing/DirectLighting.softshadow.cs.hlsl
         shaders/PathTracing/IndirectLighting.softshadow.cs.hlsl
         shaders/PathTracing/LightingComposite.cs.hlsl
+        shaders/PathTracing/PostDenoiseAccumulation.cs.hlsl
         shaders/Upscaling/DLSSRayReconstructionPrepare.cs.hlsl
         shaders/Diagnostics/CopyQueueValidation.cs.hlsl
         shaders/Skybox/Skybox.cs.hlsl
@@ -228,7 +229,9 @@ add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/Config/RaytracingDemo.ini" "$<TARGET_FILE_DIR:${TARGET_NAME}>/Config/RaytracingDemo.ini"
         COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${TARGET_NAME}>/Assets/Scenes"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/Assets/Scenes/DefaultScene.json" "$<TARGET_FILE_DIR:${TARGET_NAME}>/Assets/Scenes/DefaultScene.json"
-        COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/Assets/Scenes/CountryKitchen" "$<TARGET_FILE_DIR:${TARGET_NAME}>/Assets/Scenes/CountryKitchen"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/Assets/Scenes/LowPolyStreet" "$<TARGET_FILE_DIR:${TARGET_NAME}>/Assets/Scenes/LowPolyStreet"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${TARGET_NAME}>/Assets/Textures/skybox"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/Assets/Textures/skybox/meadow_2_4k.exr" "$<TARGET_FILE_DIR:${TARGET_NAME}>/Assets/Textures/skybox/meadow_2_4k.exr"
         VERBATIM
 )
 

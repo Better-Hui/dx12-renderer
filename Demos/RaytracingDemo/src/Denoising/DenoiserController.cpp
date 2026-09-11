@@ -14,11 +14,21 @@ void DenoiserController::Initialize(FrameworkDeviceContext& deviceContext)
     m_NRD = std::make_unique<NRD>(deviceContext);
     m_OIDN = std::make_unique<OIDNDenoiser>(deviceContext);
     m_SVGF = std::make_unique<SVGF>(deviceContext);
+    m_NRD->GetSettings() = m_NRDSettings;
+    m_SVGF->GetSettings() = m_SVGFSettings;
     ApplySelection();
 }
 
 void DenoiserController::Shutdown()
 {
+    if (m_NRD != nullptr)
+    {
+        m_NRDSettings = m_NRD->GetSettings();
+    }
+    if (m_SVGF != nullptr)
+    {
+        m_SVGFSettings = m_SVGF->GetSettings();
+    }
     m_SVGF.reset();
     m_OIDN.reset();
     m_NRD.reset();
@@ -98,6 +108,36 @@ void DenoiserController::SetOIDNStaticSpp(const uint32_t spp)
     }
 }
 
+NRD::Settings DenoiserController::GetNRDSettings() const
+{
+    return m_NRD != nullptr ? m_NRD->GetSettings() : m_NRDSettings;
+}
+
+void DenoiserController::SetNRDSettings(const NRD::Settings& settings)
+{
+    m_NRDSettings = settings;
+    if (m_NRD != nullptr)
+    {
+        m_NRD->GetSettings() = settings;
+        m_NRD->ResetHistory();
+    }
+}
+
+SVGF::Settings DenoiserController::GetSVGFSettings() const
+{
+    return m_SVGF != nullptr ? m_SVGF->GetSettings() : m_SVGFSettings;
+}
+
+void DenoiserController::SetSVGFSettings(const SVGF::Settings& settings)
+{
+    m_SVGFSettings = settings;
+    if (m_SVGF != nullptr)
+    {
+        m_SVGF->GetSettings() = settings;
+        m_SVGF->ResetHistory();
+    }
+}
+
 void DenoiserController::OnResourcesRecreated(const uint32_t width, const uint32_t height)
 {
     if (m_OIDN != nullptr)
@@ -147,12 +187,12 @@ void DenoiserController::PollOIDN(CommandQueue& directQueue)
 
 NRD::DenoiserMode DenoiserController::GetNRDMode() const
 {
-    return m_NRD != nullptr ? m_NRD->GetSettings().Mode : NRD::DenoiserMode::ReblurDiffuse;
+    return GetNRDSettings().Mode;
 }
 
 uint32_t DenoiserController::GetSVGFAtrousIterations() const
 {
-    return m_SVGF != nullptr ? m_SVGF->GetSettings().AtrousIterations : 1u;
+    return GetSVGFSettings().AtrousIterations;
 }
 
 void DenoiserController::FillCameraConstants(
@@ -270,6 +310,7 @@ bool DenoiserController::DrawImGui()
 
         if (nrdChanged)
         {
+            m_NRDSettings = nrdSettings;
             m_NRD->ResetHistory();
             changed = true;
         }
@@ -292,6 +333,7 @@ bool DenoiserController::DrawImGui()
         svgfChanged |= FrameworkImGui::SliderFloat("SVGF Phi Depth", &svgfSettings.PhiDepth, 0.001f, 10.0f, "%.3f");
         if (svgfChanged)
         {
+            m_SVGFSettings = svgfSettings;
             m_SVGF->ResetHistory();
             changed = true;
         }

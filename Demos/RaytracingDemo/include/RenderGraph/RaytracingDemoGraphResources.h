@@ -98,7 +98,8 @@ namespace RaytracingDemoRenderGraph
         static inline const RenderGraph::ResourceId IndirectLightingFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.IndirectLightingFinished");
         static inline const RenderGraph::ResourceId RayTracingFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.RayTracingFinished");
         static inline const RenderGraph::ResourceId DenoiseFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DenoiseFinished");
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-09-10 by Hui
+        static inline const RenderGraph::ResourceId AccumulationFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.AccumulationFinished");
         static inline const RenderGraph::ResourceId BloomFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.BloomFinished");
 //Modify End
 //Modify Begin:2026-09-09 by Hui

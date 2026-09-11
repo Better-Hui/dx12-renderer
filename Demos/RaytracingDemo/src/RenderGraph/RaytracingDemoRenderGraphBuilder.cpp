@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-28 by Hui
+//Modify Begin:2026-09-10 by Hui
 #include <RenderGraph/RaytracingDemoRenderGraphBuilder.h>
 
 #include <RenderGraph/RaytracingDemoGraphResources.h>
@@ -143,6 +143,15 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
                 debugTarget,
                 sceneReadyToken);
             sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::DebugOutputFinishedToken;
+        }
+        if (frameState.UsesPostDenoiseAccumulation())
+        {
+            RaytracingDemoPasses::Builder::AddPostDenoiseAccumulationPass(
+                renderGraphBuilder,
+                resources,
+                config,
+                sceneReadyToken);
+            sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::AccumulationFinishedToken;
         }
     }
     if (frameState.SkyboxEnabled)

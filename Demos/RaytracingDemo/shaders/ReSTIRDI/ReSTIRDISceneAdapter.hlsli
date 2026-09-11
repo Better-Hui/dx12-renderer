@@ -22,5 +22,13 @@
 #define ReSTIRDI_FrameIndex Camera_FrameIndex
 #define ReSTIRDI_CameraPosition Camera_Position
 
+float ReSTIRDIGetLinearDepth(const float3 positionWs)
+{
+    const float3 cameraForward = normalize(mul(Camera_InverseView, float4(0.0f, 0.0f, 1.0f, 0.0f)).xyz);
+    return max(0.0f, dot(positionWs - Camera_Position.xyz, cameraForward));
+}
+
+#define ReSTIRDI_LinearDepth ReSTIRDIGetLinearDepth
+
 #endif
 //Modify End

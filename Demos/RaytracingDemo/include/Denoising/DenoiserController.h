@@ -41,6 +41,10 @@ public:
     bool UsesRenderGraphPasses() const { return IsNRDEnabled() || IsSVGFEnabled() || IsOIDNEnabled(); }
     void SetOIDNStaticSpp(uint32_t spp);
     uint32_t GetOIDNStaticSpp() const { return m_OIDNStaticSpp; }
+    NRD::Settings GetNRDSettings() const;
+    void SetNRDSettings(const NRD::Settings& settings);
+    SVGF::Settings GetSVGFSettings() const;
+    void SetSVGFSettings(const SVGF::Settings& settings);
     NRD::DenoiserMode GetNRDMode() const;
     uint32_t GetSVGFAtrousIterations() const;
     void ResetHistory();
@@ -69,5 +73,7 @@ private:
     std::unique_ptr<SVGF> m_SVGF;
     Algorithm m_Algorithm = Algorithm::NRD;
     uint32_t m_OIDNStaticSpp = 16u;
+    NRD::Settings m_NRDSettings;
+    SVGF::Settings m_SVGFSettings;
 };
 //Modify End

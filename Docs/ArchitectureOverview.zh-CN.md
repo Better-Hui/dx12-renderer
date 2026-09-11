@@ -142,7 +142,13 @@ Scene
 
 FBX 外部纹理在成功解析后保留文件路径；嵌入纹理复制到拥有所有权的 `SceneEmbeddedTexture`。Demo resource builder 通过 `TextureLoader` 对两种来源使用同一套 GPU 上传和缓存流程，因此不需要先把 FBX 转成 Unity 场景或项目 JSON。mesh 导入启用 Assimp 的结构校验、三角化、非法数据过滤、四骨骼权重限制和 16 位索引安全的大 mesh 拆分；非法面、索引和骨骼引用在运行时明确报错，而不是依赖只在 Debug 生效的 assert。
 
-Mitsuba XML importer 是有意保持紧凑的兼容路径：会展开场景内 `<default>` 变量，支持 perspective sensor、OBJ shape 及其 `to_world` matrix、rectangle area emitter，以及顶层 `spot` emitter 的 `intensity`、`cutoffAngle`、`beamWidth` 和可选有限 `range`。它会转换到 DirectX 运行时的坐标约定：该反射会先把 Mitsuba sensor 的局部 `+Z` 视线轴映射为渲染器局部 `-Z`，再构造左手相机，以保留原始世界空间观察方向。其有意受限的 PBR 转换会展开 `twosided`、`mask`、`bumpmap`，按 diffuse/plastic/conductor/dielectric 映射金属度和粗糙度启发式，并导入常量 base color 与 `reflectance`、`diffuse_reflectance`、`base_color` 的 bitmap 绑定。它不复现完整 Mitsuba 的 transmission、alpha、bump/normal、spectral IOR 等高级 BSDF 语义。相对 OBJ 与纹理引用均限制在 XML 场景目录内。`Assets/Scenes/CountryKitchen/scene.xml` 是 Demo 的默认启动场景，并覆盖此路径；在 streaming 或 cooked geometry 落地前，其 295 个独立 OBJ 属于较重的启动路径。
+外部纹理重定位覆盖作者路径、FBX 同目录、同级/上级 `textures` 目录、唯一同 stem 换扩展名，以及唯一数字版本后缀。Scene-to-GPU 转换会按导入资产和 source submesh 缓存 geometry index：重复场景节点共享一次上传的 mesh 与 BLAS 输入，同时保留各自 transform/material。无人值守启动可用 `RAYTRACING_DEMO_SCENE` 和 `RAYTRACING_DEMO_SKYBOX` 选择场景与可选天空盒覆盖，而不修改源资产。`<scene>.runtime.json` 可按稳定 `SourceId` 或唯一材质名覆盖 PBR 因子、自发光和贴图；它用于恢复 FBX 无法表达的 Blender 纯 `Emission` 节点等交换损失，并在 `Save Scene` 时完整保留。对 Blender FBX PBR 材质，只有 Assimp 没有原生 metallic factor 时才把旧式 `ReflectionFactor` 映射为 metallic；介质 F0 使用 `0.04`，不再误用 Blender FBX 中被写成 base color 的旧式 specular 字段。
+
+Mitsuba XML importer 是有意保持紧凑的兼容路径：会展开场景内 `<default>` 变量，支持 perspective sensor、OBJ shape 及其 `to_world` matrix、rectangle area emitter，以及顶层 `spot` emitter 的 `intensity`、`cutoffAngle`、`beamWidth` 和可选有限 `range`。它会转换到 DirectX 运行时的坐标约定：该反射会先把 Mitsuba sensor 的局部 `+Z` 视线轴映射为渲染器局部 `-Z`，再构造左手相机，以保留原始世界空间观察方向。其有意受限的 PBR 转换会展开 `twosided`、`mask`、`bumpmap`，按 diffuse/plastic/conductor/dielectric 映射金属度和粗糙度启发式，并导入常量 base color 与 `reflectance`、`diffuse_reflectance`、`base_color` 的 bitmap 绑定。它不复现完整 Mitsuba 的 transmission、alpha、bump/normal、spectral IOR 等高级 BSDF 语义。相对 OBJ 与纹理引用均限制在 XML 场景目录内。`Assets/Scenes/LowPolyStreet/LowPolyStreet.fbx` 现在是 Demo 的默认启动场景；runtime sidecar 保留 Blender 相机视角，并以相对路径引用 `Assets/Textures/skybox/meadow_2_4k.exr`，因此安装后的 Demo 不依赖本机桌面路径。
+
+场景生命周期属于 Demo composition，而不是 Framework `Scene` 的职责。`RaytracingDemoSceneRuntimeController` 持有一个根据源场景 stem 选择的可选 behavior，并调用其 `OnLoad`、主线程 `OnUpdate` 和 `OnUnload`。仅 LowPolyStreet 激活的 showreel behavior 把房屋固定为观察点和圆锥顶点，原始相机方向是中心轴；相机用 2 秒平滑展开到垂直底面上半顶角为 10° 的圆周路径。三盏面积光与三盏较低的交错点光另在房屋 XZ 平面绕转。它通过 `SceneLightManager` 更新灯光 buffer，且不会保存 RenderGraph builder。`F12` 只切换相机所有权；`↑`/`↓` 以 `0.05 rad/s` 为步长调节脚本相机角速度，默认 `0.2 rad/s`、限制在 `0.05-1.0 rad/s`，`W`/`S` 仍是手动前后移动。`RAYTRACING_DEMO_SCENE_BEHAVIOR=0` 用于无人值守静态测试时关闭整个行为。
+
+LowPolyStreet 额外使用 `←`/`→` 以 `1°` 为步长调节 `2°-30°` 的圆锥半顶角；`↑`/`↓` 仍调节运镜角速度。Demo 的渲染配置采用分层、可原子保存的契约：先读取 executable-relative `Config/RaytracingDemo.ini`，再用 `Saved/RaytracingDemo.ini` 覆盖，最后应用自动化环境变量。`Save Settings` 序列化所有 ImGui 控制，包括 NRD/SVGF（即使实例尚未初始化）、天空光、灯光组开关、场景中的方向/点/聚光/面积光以及新增灯光默认值；`Save Scene` 仍负责把相机位姿和场景资产数据写入 runtime sidecar。
 
 ### 已演示的渲染路径
 
@@ -152,8 +158,9 @@ Mitsuba XML importer 是有意保持紧凑的兼容路径：会展开场景内 `
 - 无人值守的 `rtas` 场景覆盖基础动态 RTAS 路径；`dynamic-scene` 是当前完整矩阵：task shader 和 compute-indirect Meshlet GBuffer 均会通过图声明更新普通 vertex、compacted Meshlet vertex 与 bounds、transform/instance buffer、dirty BLAS 和既有 TLAS，随后验证 restore frame。自发光目标还会刷新 mesh surface-emitter 数据。runtime skinning output 当前明确不支持，绝不以过期数据静默 fallback。
 - 平行光、点光、Spot Light、矩形面积光与自发光 surface emitter 都通过 GPU buffer 上传。平行光和点光的软阴影使用预编译 shader variant；Spot Light 在直接光采样中计算锥形衰减，矩形面积光直接采样发光面。
 - 可选 NRD/SVGF、TAA、skybox、Framework Raster Bloom、CUDA Bloom、Native DLSS SR/DLAA、HDR10/PQ 呈现，以及实验性 Streamline RR/FG 围绕核心光照输出组合。
+- 普通 accumulation 参与 RenderGraph topology/shader permutation。无降噪和 OIDN 在 `Lighting Composite` 累积原始 HDR；NRD/SVGF 组合则在 denoiser composite 后执行 `Post-Denoise Accumulation`，避免 denoiser 随后覆盖累积结果。相机或渲染输入变化仍将 sample count 清零。
 
-ReSTIR DI 由 Demo 调用 Framework 的 `ReSTIRDIPass::AddPasses`。Framework 分别注册 `Initial Sampling`、`Temporal Resampling`、`Boiling Filter`、`Spatial Resampling` 和 `Shade`，用 token 与 imported reservoir/history 连接。Demo 只提供 logical scene input 和运行时 resolver，不再调度内部阶段或编码 barrier。
+ReSTIR DI 由 Demo 调用 Framework 的 `ReSTIRDIPass::AddPasses`。Framework 分别注册 `Initial Sampling`、`Temporal Resampling`、`Boiling Filter`、`Spatial Resampling` 和 `Shade`，用 token 与 imported reservoir/history 连接。Demo 只提供 logical scene input 和运行时 resolver，不再调度内部阶段或编码 barrier。Temporal reproject/permutation search 按 RTXDI 的法线与线性视深 compatibility test 工作；可选的 `TemporalMaterialSimilarityTest` 才会额外比较漫反射、镜面、粗糙度、金属度和 AO。
 
 ReSTIR GI 通过 `ReSTIRGIPass::AddPasses` 分别注册 `Initial Sampling`、`Temporal Resampling`、`Spatial Resampling` 和 `Shade`。imported ping-pong history 根据运行时 frame index 解析，不需要保存 Builder。Demo adapter 提供 GBuffer、TLAS、bindless scene data、直接光采样、自发光和环境光契约；该路径当前只支持 Inline Ray Query。
 

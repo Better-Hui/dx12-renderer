@@ -26,6 +26,7 @@
 #include <DirectXMath.h>
 #include <wrl.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -62,7 +63,6 @@ struct RaytracingDemoCameraConstants
     uint32_t AccumulationEnabled = 1;
     uint32_t NRDDenoiserMode = 0;
     uint32_t PaddingBeforeNrdParameters0 = 0;
-    uint32_t PaddingBeforeNrdParameters1 = 0;
     DirectX::XMFLOAT4 NRDReblurHitDistanceParameters = { 3.0f, 0.1f, 20.0f, 0.0f };
     uint32_t ReSTIRDIHistoryValid = 0;
     uint32_t UseSolidSkyFallback = 0;
@@ -70,6 +70,17 @@ struct RaytracingDemoCameraConstants
     uint32_t Padding2 = 0;
     SkyLightData SkyLight = {};
 };
+
+static_assert(offsetof(RaytracingDemoCameraConstants, NRDReblurHitDistanceParameters) == 192u,
+    "RaytracingDemoCameraConstants must match the HLSL cbuffer layout.");
+static_assert(offsetof(RaytracingDemoCameraConstants, ReSTIRDIHistoryValid) == 208u,
+    "RaytracingDemoCameraConstants must match the HLSL cbuffer layout.");
+static_assert(offsetof(RaytracingDemoCameraConstants, UseSolidSkyFallback) == 212u,
+    "RaytracingDemoCameraConstants must match the HLSL cbuffer layout.");
+static_assert(offsetof(RaytracingDemoCameraConstants, SkyLight) == 224u,
+    "RaytracingDemoCameraConstants must match the HLSL cbuffer layout.");
+static_assert(sizeof(RaytracingDemoCameraConstants) == 240u,
+    "RaytracingDemoCameraConstants must match the HLSL cbuffer size.");
 
 struct RaytracingDemoPipelineConstants
 {
@@ -141,6 +152,7 @@ struct RaytracingDemoPassResources
     DLSS& Dlss;
     std::shared_ptr<ComputeShader> DLSSRayReconstructionPrepareShader;
     std::shared_ptr<ComputeShader> CopyQueueValidationShader;
+    std::shared_ptr<ComputeShader> PostDenoiseAccumulationShader;
     DenoiserController& Denoisers;
     BloomController& Bloom;
     AutoExposure& Exposure;
@@ -214,6 +226,7 @@ struct RaytracingDemoFrameState
     DirectX::XMMATRIX View = DirectX::XMMatrixIdentity();
     DirectX::XMMATRIX Projection = DirectX::XMMatrixIdentity();
     DirectX::XMMATRIX ViewProjection = DirectX::XMMatrixIdentity();
+    bool ManualAccumulationEnabled = false;
     bool AccumulationEnabled = false;
     uint32_t FrameIndex = 0;
     uint32_t AccumulationFrameIndex = 0;
@@ -288,13 +301,20 @@ struct RaytracingDemoFrameState
         const bool writesInlineDenoiserInput = DenoiserEnabled &&
             (DenoiserAlgorithm == DenoiserController::Algorithm::NRD ||
              DenoiserAlgorithm == DenoiserController::Algorithm::SVGF);
+        const bool accumulateBeforeDenoising = AccumulationEnabled && !UsesPostDenoiseAccumulation();
         return {
             .DirectLightingEnabled = UsesDirectLighting(),
             .IndirectLightingEnabled = UsesIndirectLighting(),
-            .AccumulationEnabled = AccumulationEnabled,
+            .AccumulationEnabled = accumulateBeforeDenoising,
             .DenoiserMode = writesInlineDenoiserInput ? static_cast<uint32_t>(DenoiserAlgorithm) : 0u,
             .UseNrdReblur = false,
         };
+    }
+
+    bool UsesPostDenoiseAccumulation() const noexcept
+    {
+        // Manual accumulation is a final composite operation and is mutually exclusive with denoising.
+        return ManualAccumulationEnabled;
     }
 };
 

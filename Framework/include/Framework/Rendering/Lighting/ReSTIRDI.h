@@ -27,9 +27,13 @@ struct ReSTIRDISettings
     ReSTIRDITemporalBiasCorrectionMode TemporalBiasCorrection = ReSTIRDITemporalBiasCorrectionMode::Basic;
     uint32_t TemporalMaxHistoryLength = 20;
     bool EnableTemporalVisibilityShortcut = false;
-    bool EnableTemporalPermutationSampling = true;
+    bool EnableTemporalPermutationSampling = false;
+    bool EnableTemporalMaterialSimilarityTest = false;
+    // Debug-only bypass for temporal geometric compatibility rejection.
+    bool EnableTemporalIgnoreGeometry = false;
     float TemporalNormalSimilarityThreshold = 0.5f;
     float TemporalDepthSimilarityThreshold = 0.1f;
+    float TemporalMaterialSimilarityThreshold = 0.05f;
 
     bool EnableBoilingFilter = true;
     float BoilingFilterStrength = 0.2f;
@@ -62,6 +66,7 @@ struct ReSTIRDIFrameConstants
     uint32_t HistoryValid = 0;
     uint32_t TemporalVisibilityShortcutEnabled = 0;
     uint32_t TemporalPermutationSamplingEnabled = 0;
+    uint32_t TemporalMaterialSimilarityTestEnabled = 0;
     uint32_t BoilingFilterEnabled = 0;
 
     uint32_t TemporalMaxHistoryLength = 1;
@@ -81,7 +86,7 @@ struct ReSTIRDIFrameConstants
     float BoilingFilterStrength = 0.2f;
     float TemporalNormalSimilarityThreshold = 0.5f;
     float TemporalDepthSimilarityThreshold = 0.1f;
-    float Padding0 = 0.0f;
+    float TemporalMaterialSimilarityThreshold = 0.05f;
 
     float SpatialSamplingRadius = 1.0f;
     float SpatialNormalSimilarityThreshold = 0.5f;
@@ -92,6 +97,7 @@ struct ReSTIRDIFrameConstants
     float Padding1 = 0.0f;
     float Padding2 = 0.0f;
     float Padding3 = 0.0f;
+    uint32_t TemporalIgnoreGeometryEnabled = 0;
 };
 
 class ReSTIRDI final

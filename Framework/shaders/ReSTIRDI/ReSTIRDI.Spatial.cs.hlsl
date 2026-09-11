@@ -126,14 +126,14 @@ ReSTIRDIReservoir ReSTIRDIPairwiseSpatialResampling(
     ReSTIRDIReservoir result = ReSTIRDIEmptyReservoir();
     uint validSpatialSampleCount = 0u;
     const uint offsetStart = uint(ReSTIRDI_Random01(rngState) * 32.0f) & 31u;
-    const float centerDepth = length(centerSurface.PositionWs - ReSTIRDI_CameraPosition.xyz);
+    const float centerDepth = ReSTIRDI_LinearDepth(centerSurface.PositionWs);
     [loop]
     for (uint neighborIndex = 0u; neighborIndex < neighborCount; ++neighborIndex)
     {
         const uint offsetIndex = (offsetStart + neighborIndex) & 31u;
         const int2 neighborPixel = ReSTIRDIGetSpatialNeighborPixel(pixel, offsetIndex);
         const ReSTIRDI_Surface neighborSurface = ReSTIRDI_LoadSurface(uint2(neighborPixel));
-        const float neighborDepth = length(neighborSurface.PositionWs - ReSTIRDI_CameraPosition.xyz);
+        const float neighborDepth = ReSTIRDI_LinearDepth(neighborSurface.PositionWs);
         if (!ReSTIRDIHaveCompatibleSpatialSurfaces(centerSurface, centerDepth, neighborSurface, neighborDepth))
         {
             continue;
@@ -186,7 +186,7 @@ ReSTIRDIReservoir ReSTIRDIStandardSpatialResampling(
         : ReSTIRDILightIndexMask;
     const uint offsetStart = uint(ReSTIRDI_Random01(rngState) * 32.0f) & 31u;
     uint validNeighborMask = 0u;
-    const float centerDepth = length(centerSurface.PositionWs - ReSTIRDI_CameraPosition.xyz);
+    const float centerDepth = ReSTIRDI_LinearDepth(centerSurface.PositionWs);
 
     [loop]
     for (uint neighborIndex = 0u; neighborIndex < neighborCount; ++neighborIndex)
@@ -194,7 +194,7 @@ ReSTIRDIReservoir ReSTIRDIStandardSpatialResampling(
         const uint offsetIndex = (offsetStart + neighborIndex) & 31u;
         const int2 neighborPixel = ReSTIRDIGetSpatialNeighborPixel(pixel, offsetIndex);
         const ReSTIRDI_Surface neighborSurface = ReSTIRDI_LoadSurface(uint2(neighborPixel));
-        const float neighborDepth = length(neighborSurface.PositionWs - ReSTIRDI_CameraPosition.xyz);
+        const float neighborDepth = ReSTIRDI_LinearDepth(neighborSurface.PositionWs);
         if (!ReSTIRDIHaveCompatibleSpatialSurfaces(centerSurface, centerDepth, neighborSurface, neighborDepth))
         {
             continue;

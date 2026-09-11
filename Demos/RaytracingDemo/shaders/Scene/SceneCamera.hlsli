@@ -23,7 +23,6 @@ cbuffer CameraConstants : register(b0, space0)
     uint Camera_NRDDenoiserMode;
 //Modify Begin:2026-08-13 by Hui
     uint Camera_PaddingBeforeNrdParameters0;
-    uint Camera_PaddingBeforeNrdParameters1;
 //Modify End
     float4 Camera_NRDReblurHitDistanceParameters;
 //Modify Begin:2026-08-05 by Hui

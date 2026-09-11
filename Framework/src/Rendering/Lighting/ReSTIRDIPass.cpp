@@ -759,7 +759,8 @@ uint32_t ReSTIRDIPass::GetStageVariantKey(
         featureKey = 1u |
             ((constants.TemporalBiasCorrectionMode & 0x3u) << 1u) |
             ((constants.TemporalVisibilityShortcutEnabled != 0u ? 1u : 0u) << 3u) |
-            ((constants.TemporalPermutationSamplingEnabled != 0u ? 1u : 0u) << 4u);
+            ((constants.TemporalPermutationSamplingEnabled != 0u ? 1u : 0u) << 4u) |
+            ((constants.TemporalIgnoreGeometryEnabled != 0u ? 1u : 0u) << 5u);
         break;
 
     case ReSTIRDIStage::BoilingFilter:
@@ -823,6 +824,7 @@ std::vector<ShaderVariantDefine> ReSTIRDIPass::GetStageVariantDefines(
             { "RESTIR_DI_TEMPORAL_BIAS_MODE", std::to_string(constants.TemporalBiasCorrectionMode) },
             booleanDefine("RESTIR_DI_USE_TEMPORAL_VISIBILITY_SHORTCUT", constants.TemporalVisibilityShortcutEnabled != 0u),
             booleanDefine("RESTIR_DI_USE_TEMPORAL_PERMUTATION_SAMPLING", constants.TemporalPermutationSamplingEnabled != 0u),
+            booleanDefine("RESTIR_DI_TEMPORAL_IGNORE_GEOMETRY", constants.TemporalIgnoreGeometryEnabled != 0u),
         };
         break;
 

@@ -100,7 +100,17 @@ options.GenerateFallbackCamera = true;
 const SceneImportResult result = SceneImporter::ImportFromFile(scenePath, options);
 ```
 
-`SceneImporter` 按不区分大小写的扩展名分发。Unity YAML 和项目 JSON 保留原有资产约定；FBX 通过 Assimp 作为完整场景导入。一个节点实例化多个 mesh 时，会为每个子网格生成一个 `SceneObject`，并在 `SceneMeshReference::SubmeshIndex` 保存原始 Assimp mesh index，因此不会依赖重复或空的 mesh 名称。FBX 嵌入纹理会从内存交给 `TextureLoader` 解码，并和文件纹理共用缓存。受支持的 Mitsuba XML 会展开场景内 `<default>` 变量，并导入 perspective sensor、OBJ shape 及其 `to_world` matrix、rectangle area emitter，以及顶层 `spot` emitter 的 `intensity`、`cutoffAngle`、`beamWidth` 和可选有限 `range`；右手到左手的反射会先把 Mitsuba sensor 的局部 `+Z` 视线轴映射为渲染器局部 `-Z`，再构造左手相机，因而保留源场景的观察方向。其有意受限的材质转换会展开 `twosided`/`mask`/`bumpmap` 包装，按 diffuse/plastic/conductor/dielectric 映射金属度与粗糙度启发式，并导入常量 base color 与 `reflectance`、`diffuse_reflectance`、`base_color` 的 bitmap 绑定。它不复现完整 Mitsuba 的 transmission、alpha、bump/normal、spectral IOR 等高级 BSDF 语义。OBJ 与纹理路径必须限制在场景目录内。`Assets/Scenes/CountryKitchen/scene.xml` 是 Demo 的默认启动场景；其 295 个独立 OBJ 尚未使用 streaming 或 cooked geometry cache，因此属于较重的启动路径。
+`SceneImporter` 按不区分大小写的扩展名分发。Unity YAML 和项目 JSON 保留原有资产约定；FBX 通过 Assimp 作为完整场景导入。一个节点实例化多个 mesh 时，会为每个子网格生成一个 `SceneObject`，并在 `SceneMeshReference::SubmeshIndex` 保存原始 Assimp mesh index，因此不会依赖重复或空的 mesh 名称。FBX 嵌入纹理会从内存交给 `TextureLoader` 解码，并和文件纹理共用缓存。受支持的 Mitsuba XML 会展开场景内 `<default>` 变量，并导入 perspective sensor、OBJ shape 及其 `to_world` matrix、rectangle area emitter，以及顶层 `spot` emitter 的 `intensity`、`cutoffAngle`、`beamWidth` 和可选有限 `range`；右手到左手的反射会先把 Mitsuba sensor 的局部 `+Z` 视线轴映射为渲染器局部 `-Z`，再构造左手相机，因而保留源场景的观察方向。其有意受限的材质转换会展开 `twosided`/`mask`/`bumpmap` 包装，按 diffuse/plastic/conductor/dielectric 映射金属度与粗糙度启发式，并导入常量 base color 与 `reflectance`、`diffuse_reflectance`、`base_color` 的 bitmap 绑定。它不复现完整 Mitsuba 的 transmission、alpha、bump/normal、spectral IOR 等高级 BSDF 语义。OBJ 与纹理路径必须限制在场景目录内。`Assets/Scenes/LowPolyStreet/LowPolyStreet.fbx` 现在是 Demo 的默认启动场景；runtime sidecar 保留 Blender 相机视角，并以相对路径选择仓库内的 `meadow_2_4k.exr` 天空盒。
+
+`<scene>.runtime.json` 除相机、天空盒和灯光外，也可按稳定 `SourceId`（无稳定 ID 时才按唯一材质名）覆盖 `baseColor`、`specColor`、`emissionColor`、`metallic`、`roughness`、`normalScale`、`occlusionStrength` 及全部 PBR 贴图路径；相对贴图路径以 sidecar 目录解析，`Save Scene` 会完整保留这些材质覆盖。该能力用于补齐交换格式的表达损失，而不是按场景名硬编码：例如 Blender 的纯 `Emission` shader node 导出 FBX 后会退化为默认灰色 Principled，LowPolyStreet 的窗户、霓虹和车灯因此由 sidecar 恢复线性自发光。Blender FBX 还会把 Principled metallic 写入旧式 `ReflectionFactor`；只有 Assimp 没有提供原生 metallic factor 时，FBX importer 才把它作为 metallic fallback，并把介质 F0 恢复为 `0.04`。FBX 不能完整保留 Blender shader graph、EEVEE 的光照近似和 AgX/Filmic 色彩管理，所以相机轮廓可以严格对齐，最终曝光与逐像素画面不承诺和 Blender 一致。
+
+FBX 外部纹理会依次从作者记录的引用、FBX 同目录、同级 `textures` 目录和上一级资产目录的 `textures` 中解析。原扩展名不存在时，可唯一匹配同 stem 的其他受支持格式；也允许唯一的数字版本后缀，例如 `_2.0`。同一个 FBX source submesh 只上传一次，所有引用它的 `SceneObject` 只保留各自 transform/material 实例，因而 Blender Dupli 一类场景不会再按对象重复 GPU geometry、BLAS 输入和 Meshlet 构建。启动时可用 `RAYTRACING_DEMO_SCENE` 指定场景，并用 `RAYTRACING_DEMO_SKYBOX` 指定绝对路径或相对场景目录的天空盒覆盖。
+
+场景特有的运行时逻辑只放在 Demo。`RaytracingDemoSceneRuntimeController` 根据规范化后的源场景 stem 选择可选的 `OnLoad`/`OnUpdate`/`OnUnload` behavior，Framework 的 `Scene` 仍是纯数据。LowPolyStreet behavior 在主线程执行：固定的房屋中心同时是观察点和圆锥顶点；原始相机方向是圆锥中心轴，相机从该初始姿态平滑展开到垂直底面上的圆周路径，圆锥半顶角默认 15°，并始终 LookAt 房屋。三盏导入面积光与三盏高度更低、角位置交错的新增点光则独立在房屋 XZ 平面绕转。它只对 `LowPolyStreet.fbx` 激活；`F12` 仅释放或恢复脚本的相机控制权，灯光仍继续运动，恢复控制时脚本角速度设为最大值 `1.0 rad/s`。`↑`/`↓` 以 `0.05 rad/s` 为步长调节脚本相机角速度（范围 `0.05-1.0 rad/s`），`←`/`→` 以 `1°` 为步长调节圆锥半顶角（范围 `2°-30°`）；`W`/`S` 仍保留手动前后移动。`RAYTRACING_DEMO_SCENE_BEHAVIOR=0` 可在无人值守静态测试中关闭整个行为。行为激活时灯光每帧变化，因此 accumulation 与 ReSTIR/OIDN 静态图像历史会每帧失效。
+
+渲染设置采用两层 INI：随程序部署的 `Config/RaytracingDemo.ini` 提供完整默认值，`Saved/RaytracingDemo.ini` 保存用户覆盖并在下次启动时后加载；环境变量仍具有最高优先级。ImGui 顶部的 `Save Settings` 会通过临时文件和原子替换写入用户 INI，覆盖 Renderer、Camera、Auto Exposure、ReSTIR DI/GI、NRD、SVGF、OIDN、Bloom、DLSS/HDR 和 Diagnostics 参数。场景对象、灯光、材质、天空盒及相机位姿仍由 `Save Scene` 写入 `<scene>.runtime.json`，避免把不同场景的可变数组混入全局渲染配置。
+
+当前 Path Tracing 的 `DirectLightCdf` 没有环境贴图的直接光 NEE 项：平行光、点光、Spot、矩形面积光和自发光 mesh 会进入直接光采样，环境贴图只在路径 miss 时求值。因此 `Bounces = 1` 时，局部灯光覆盖不到的外围地面可能接近黑色；增加一次反弹后，BSDF 射线可 miss 到环境并照亮地面。这是采样路径的局限，不是地面材质再次丢失。
 
 Spot Light 会从 `Scene` 经 `LightingGpuResources` 进入相机常量与 Inline PT/ReSTIR DI/GI 的直接光采样，不再回退为点光。编辑器和 `.runtime.json` 场景状态可创建、编辑、删除并持久化 Spot Light。FBX 多相机只选择第一个相机；没有相机时，`GenerateFallbackCamera` 会根据导入后的世界空间包围盒生成观察相机。透明、clearcoat、transmission、动画播放等高级材质/动态场景能力仍不属于当前 sample 契约。
 
@@ -264,7 +274,7 @@ CMake 生成的工程会保持各 target 的真实源码目录。`DX12Library`�
 - RenderGraph timing 分别记录每条 queue 上的 pass 时长；判断跨 queue overlap、wait 和 GPU bubble 时，请使用 PIX Timing Capture。
 - Meshlet 路径是实验性 GBuffer 后端，不是完整的 visibility / streaming 系统，也不代表已达到最优 Meshlet 性能。
 - `Stylized Comic` 是实验性的风格化 PBR/PBR-NPR 材质评估：它保留金属度、粗糙度和 GGX 材质输入，同时加入分段漫反射、冷色阴影和图形化高光；这不是完整的 Spider-Verse 复刻，线稿、网点、套印、hatching 与时间风格化仍不属于该材质模型。
-- ReSTIR DI 是实验性的 inline ray-query 直接光 sample。它的光源采样、自发光表面发射体、时空复用和可见性测试选项仍在演进；图像质量、稳定性和性能均未作为等价 RTXDI 的实现完成验收。
+- ReSTIR DI 是实验性的 inline ray-query 直接光 sample。Temporal 候选默认按 RTXDI 的法线与线性视深测试；如需避免共面异材质像素间复用，可开启 `TemporalMaterialSimilarityTest`，额外比较漫反射、镜面、粗糙度、金属度和 AO。它的光源采样、自发光表面发射体、时空复用和可见性测试选项仍在演进；图像质量、稳定性和性能均未作为等价 RTXDI 的实现完成验收。
 - ReSTIR GI 是实验性的 inline ray-query 间接光 sample，参考 [DQLin/ReSTIR_PT](https://github.com/DQLin/ReSTIR_PT) 中 ReSTIR GI 的数据流实现。当前目标是 one-bounce transport，使用持久化 packed reservoir；现阶段只有构建与自动化覆盖，画质、时域稳定性、显存占用和性能仍需要在目标硬件上验收。
 - Active Pixel Compaction 已实现并覆盖 PT Direct/Indirect、ReSTIR DI/GI 的 compacted 消费路径；它仍需在不同 active-pixel 密度和目标硬件上完成收益边界验证。
 - 软阴影当前使用固定 4 次采样的变体：平行光读取 angular radius，点光源读取 source radius；自适应采样和质量档位尚未实现。

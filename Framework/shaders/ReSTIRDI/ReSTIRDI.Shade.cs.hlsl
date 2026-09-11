@@ -78,7 +78,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     ReSTIRDICurrentReservoir[pixel] = ReSTIRDIPackReservoirCore(reservoir);
     ReSTIRDICurrentReservoirState[pixel] = ReSTIRDIPackReservoirState(reservoir);
     ReSTIRDICurrentPosition[pixel] = surface.Valid
-        ? float4(surface.PositionWs, length(surface.PositionWs - ReSTIRDI_CameraPosition.xyz))
+        ? float4(surface.PositionWs, ReSTIRDI_LinearDepth(surface.PositionWs))
         : 0.0f;
     ReSTIRDICurrentNormalRoughness[pixel] = surface.Valid
         ? float4(normalize(surface.NormalWs), surface.Roughness)

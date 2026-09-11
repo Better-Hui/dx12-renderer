@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-09-10 by Hui
 #include <Framework/Scene/Scene.h>
 
 #include <algorithm>
@@ -231,6 +231,11 @@ const std::vector<SceneObject>& Scene::GetObjects() const
 }
 
 const std::vector<SceneMaterial>& Scene::GetMaterials() const
+{
+    return m_Materials;
+}
+
+std::vector<SceneMaterial>& Scene::GetMutableMaterials()
 {
     return m_Materials;
 }

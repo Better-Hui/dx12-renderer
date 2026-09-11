@@ -1,4 +1,4 @@
-﻿//Modify Begin:2026-08-21 by Hui
+﻿//Modify Begin:2026-09-10 by Hui
 #include <Scene/SceneResources.h>
 #include <Scene/SceneLightManager.h>
 #include <Scene/SceneStressTestFactory.h>
@@ -587,6 +587,7 @@ void RaytracingDemoSceneResources::LoadSceneObjects(
 {
     ModelLoader modelLoader;
     std::unordered_map<std::string, std::vector<MeshPrototype>> importedMeshPrototypeCache;
+    std::unordered_map<std::string, std::vector<uint32_t>> importedGeometryIndexCache;
 
     for (const SceneObject& object : scene.GetObjects())
     {
@@ -667,8 +668,22 @@ void RaytracingDemoSceneResources::LoadSceneObjects(
                 "', index=" + std::to_string(object.Mesh.SubmeshIndex) +
                 ", name='" + object.Mesh.SubmeshName + "'.");
         }
-        auto model = modelLoader.Load(commandList, std::vector<MeshPrototype>{ *prototype });
-        const uint32_t geometryIndex = AddSceneGeometry(model, std::vector<MeshPrototype>{ *prototype });
+        const size_t prototypeIndex = static_cast<size_t>(
+            prototype - prototypeIterator->second.data());
+        std::vector<uint32_t>& cachedGeometryIndices = importedGeometryIndexCache[meshKey];
+        if (cachedGeometryIndices.empty())
+        {
+            cachedGeometryIndices.resize(
+                prototypeIterator->second.size(),
+                SceneMeshReference::InvalidSubmeshIndex);
+        }
+
+        uint32_t& geometryIndex = cachedGeometryIndices[prototypeIndex];
+        if (geometryIndex == SceneMeshReference::InvalidSubmeshIndex)
+        {
+            auto model = modelLoader.Load(commandList, std::vector<MeshPrototype>{ *prototype });
+            geometryIndex = AddSceneGeometry(model, std::vector<MeshPrototype>{ *prototype });
+        }
         AddSceneObject(object.WorldMatrix, geometryIndex, materialIndex);
     }
 }

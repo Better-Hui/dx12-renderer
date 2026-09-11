@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "camera": {
+    "position": [2665.991821, 1435.811279, -1676.521729],
+    "rotationQuaternion": [0.134412, -0.477555, 0.074202, 0.865083],
+    "fieldOfView": 22.8952,
+    "nearClipPlane": 10.0,
+    "farClipPlane": 100000.0
+  },
+  "skybox": {
+    "texture": "../../Textures/skybox/meadow_2_4k.exr",
+    "ambientColorAndIntensity": [0.033428, 0.062292, 0.073236, 1.0]
+  },
+  "materials": {
+    "BG": {
+      "baseColor": [0.004393, 0.627507, 0.800000, 1.0],
+      "metallic": 0.0,
+      "roughness": 0.5
+    },
+    "GROUND": {
+      "baseColor": [0.800000, 0.781810, 0.455439, 1.0],
+      "metallic": 0.0,
+      "roughness": 0.208861
+    },
+    "BLUE-LIGHT": {
+      "baseColor": [0.0, 0.0, 0.0, 1.0],
+      "emissionColor": [0.462532, 8.879426, 10.000000, 1.0]
+    },
+    "MAROON-LIGHT": {
+      "baseColor": [0.0, 0.0, 0.0, 1.0],
+      "emissionColor": [15.000000, 0.269985, 1.615496, 1.0]
+    },
+    "RED-LIGHT": {
+      "baseColor": [0.0, 0.0, 0.0, 1.0],
+      "emissionColor": [25.000000, 0.094639, 0.0, 1.0]
+    },
+    "TORCH": {
+      "baseColor": [0.0, 0.0, 0.0, 1.0],
+      "emissionColor": [25.000000, 10.179596, 0.501697, 1.0]
+    },
+    "WHITE-LIGHT": {
+      "baseColor": [0.0, 0.0, 0.0, 1.0],
+      "emissionColor": [5.000000, 5.000000, 5.000000, 1.0]
+    },
+    "WINDOWS": {
+      "baseColor": [0.0, 0.0, 0.0, 1.0],
+      "emissionColor": [10.000000, 7.308080, 0.940311, 1.0]
+    }
+  },
+  "areaLights": [
+    {
+      "positionAndRange": [-1226.485252, 2215.013695, 1423.191738, 100000.0],
+      "normalAndType": [0.452708, -0.707107, -0.543190, 0.0],
+      "axisUAndExtent": [0.768187, 0.0, 0.640226, 103.299555],
+      "axisVAndExtent": [-0.452708, -0.707107, 0.543190, 103.299560],
+      "colorAndIntensity": [1.0, 1.0, 1.0, 250.0]
+    },
+    {
+      "positionAndRange": [-987.587833, 1613.427544, -1746.064568, 100000.0],
+      "normalAndType": [0.268646, -0.707107, 0.654087, 0.0],
+      "axisUAndExtent": [-0.925018, 0.0, 0.379923, 103.299555],
+      "axisVAndExtent": [-0.268646, -0.707107, -0.654087, 103.299558],
+      "colorAndIntensity": [1.0, 0.282737, 0.0, 100.0]
+    },
+    {
+      "positionAndRange": [2207.213974, 2048.312378, 104.480505, 100000.0],
+      "normalAndType": [-0.700223, -0.707107, 0.098425, 0.0],
+      "axisUAndExtent": [-0.139194, 0.0, -0.990265, 103.299564],
+      "axisVAndExtent": [0.700223, -0.707107, -0.098425, 103.299558],
+      "colorAndIntensity": [0.243161, 0.887797, 1.0, 100.0]
+    }
+  ]
+}

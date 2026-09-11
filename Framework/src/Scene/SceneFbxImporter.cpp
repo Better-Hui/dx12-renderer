@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-09-10 by Hui
 #include <Framework/Scene/SceneImporter.h>
 
 #include "../Geometry/AssimpImportSettings.h"
@@ -178,11 +178,21 @@ namespace
         const std::string& textureReference)
     {
         std::filesystem::path referencePath = PathFromUtf8(textureReference);
-        std::array<std::filesystem::path, 3> candidates = {
-            referencePath,
-            context.ScenePath.parent_path() / referencePath,
-            context.ScenePath.parent_path() / referencePath.filename()
+        const std::filesystem::path sceneDirectory = context.ScenePath.parent_path();
+        const std::vector<std::filesystem::path> searchDirectories = {
+            sceneDirectory,
+            sceneDirectory / "textures",
+            sceneDirectory.parent_path() / "textures"
         };
+        std::vector<std::filesystem::path> candidates = {
+            referencePath,
+            sceneDirectory / referencePath,
+            sceneDirectory / referencePath.filename()
+        };
+        for (const std::filesystem::path& directory : searchDirectories)
+        {
+            candidates.push_back(directory / referencePath.filename());
+        }
 
         for (std::filesystem::path& candidate : candidates)
         {
@@ -197,7 +207,111 @@ namespace
             }
         }
 
+        const std::array<std::string_view, 10> supportedExtensions = {
+            ".png", ".jpg", ".jpeg", ".tga", ".bmp",
+            ".dds", ".exr", ".hdr", ".tif", ".tiff"
+        };
+        std::vector<std::filesystem::path> textureFiles;
+        for (const std::filesystem::path& directory : searchDirectories)
+        {
+            std::error_code iteratorError;
+            for (std::filesystem::directory_iterator iterator(directory, iteratorError), end;
+                !iteratorError && iterator != end;
+                iterator.increment(iteratorError))
+            {
+                if (!iterator->is_regular_file(iteratorError))
+                {
+                    continue;
+                }
+                const std::string extension = ToLower(iterator->path().extension().string());
+                if (std::ranges::find(supportedExtensions, extension) == supportedExtensions.end())
+                {
+                    continue;
+                }
+
+                std::error_code canonicalError;
+                const std::filesystem::path canonicalPath =
+                    std::filesystem::weakly_canonical(iterator->path(), canonicalError);
+                const std::filesystem::path& pathToAdd = canonicalError ? iterator->path() : canonicalPath;
+                if (std::ranges::find(textureFiles, pathToAdd) == textureFiles.end())
+                {
+                    textureFiles.push_back(pathToAdd);
+                }
+            }
+        }
+
         const std::string referenceStem = ToLower(referencePath.stem().string());
+        const auto resolveUniqueMatch = [
+            &context,
+            &textureFiles,
+            &textureReference](const auto& predicate, const char* matchKind)
+            -> std::filesystem::path
+        {
+            std::vector<std::filesystem::path> matches;
+            for (const std::filesystem::path& textureFile : textureFiles)
+            {
+                if (predicate(ToLower(textureFile.stem().string())))
+                {
+                    matches.push_back(textureFile);
+                }
+            }
+            if (matches.size() != 1)
+            {
+                return {};
+            }
+
+            context.Diagnostics.push_back(
+                "FBX texture reference '" + textureReference + "' was remapped by " + matchKind +
+                " to '" + PathToUtf8(matches.front()) + "'.");
+            return matches.front();
+        };
+
+        if (const std::filesystem::path extensionRemap = resolveUniqueMatch(
+            [&referenceStem](const std::string& candidateStem)
+            {
+                return candidateStem == referenceStem;
+            },
+            "matching filename stem");
+            !extensionRemap.empty())
+        {
+            return extensionRemap;
+        }
+
+        if (const std::filesystem::path versionedRemap = resolveUniqueMatch(
+            [&referenceStem](const std::string& candidateStem)
+            {
+                if (!candidateStem.starts_with(referenceStem) || candidateStem.size() <= referenceStem.size())
+                {
+                    return false;
+                }
+                const std::string_view suffix(candidateStem.data() + referenceStem.size(), candidateStem.size() - referenceStem.size());
+                if (suffix.front() != '_' && suffix.front() != '-')
+                {
+                    return false;
+                }
+
+                bool hasDigit = false;
+                for (size_t index = 1; index < suffix.size(); ++index)
+                {
+                    const unsigned char character = static_cast<unsigned char>(suffix[index]);
+                    if (std::isdigit(character))
+                    {
+                        hasDigit = true;
+                        continue;
+                    }
+                    if (character != '.')
+                    {
+                        return false;
+                    }
+                }
+                return hasDigit;
+            },
+            "versioned filename");
+            !versionedRemap.empty())
+        {
+            return versionedRemap;
+        }
+
         const std::array<std::string, 7> semanticSuffixes = {
             "basecolor", "albedo", "normal", "metallic", "roughness", "occlusion", "emissive"
         };
@@ -231,28 +345,21 @@ namespace
         std::vector<std::filesystem::path> semanticMatches;
         if (!semanticSuffix.empty() && !sourcePrefix.empty())
         {
-            std::error_code iteratorError;
-            for (std::filesystem::directory_iterator iterator(context.ScenePath.parent_path(), iteratorError), end;
-                !iteratorError && iterator != end;
-                iterator.increment(iteratorError))
+            for (const std::filesystem::path& textureFile : textureFiles)
             {
-                if (!iterator->is_regular_file(iteratorError))
-                {
-                    continue;
-                }
-                const std::string candidateStem = ToLower(iterator->path().stem().string());
+                const std::string candidateStem = ToLower(textureFile.stem().string());
                 if (candidateStem.starts_with(sourcePrefix) && candidateStem.ends_with(semanticSuffix))
                 {
-                    semanticMatches.push_back(iterator->path());
+                    semanticMatches.push_back(textureFile);
                 }
             }
         }
         if (semanticMatches.size() == 1)
         {
             context.Diagnostics.push_back(
-                "FBX texture reference '" + textureReference + "' was remapped to same-directory asset '" +
-                semanticMatches.front().filename().string() + "'.");
-            return std::filesystem::weakly_canonical(semanticMatches.front());
+                "FBX texture reference '" + textureReference + "' was remapped by material semantic to '" +
+                PathToUtf8(semanticMatches.front()) + "'.");
+            return semanticMatches.front();
         }
 
         ++context.MissingTextureCount;
@@ -431,14 +538,30 @@ namespace
             {
                 material.BaseColor = ReadColor(*sourceMaterial, AI_MATKEY_COLOR_DIFFUSE, material.BaseColor);
             }
-            material.SpecColor = ReadColor(*sourceMaterial, AI_MATKEY_COLOR_SPECULAR, { 0.04f, 0.04f, 0.04f, 1.0f });
             material.EmissionColor = ReadColor(*sourceMaterial, AI_MATKEY_COLOR_EMISSIVE, { 0, 0, 0, 1 });
             const float emissiveIntensity = (std::max)(0.0f, ReadFloat(*sourceMaterial, AI_MATKEY_EMISSIVE_INTENSITY, 1.0f));
             material.EmissionColor.x *= emissiveIntensity;
             material.EmissionColor.y *= emissiveIntensity;
             material.EmissionColor.z *= emissiveIntensity;
             material.BaseColor.w *= std::clamp(ReadFloat(*sourceMaterial, AI_MATKEY_OPACITY, 1.0f), 0.0f, 1.0f);
-            material.Metallic = std::clamp(ReadFloat(*sourceMaterial, AI_MATKEY_METALLIC_FACTOR, 0.0f), 0.0f, 1.0f);
+
+            float metallicFactor = 0.0f;
+            const bool hasMetallicFactor =
+                aiGetMaterialFloat(sourceMaterial, AI_MATKEY_METALLIC_FACTOR, &metallicFactor) == AI_SUCCESS &&
+                std::isfinite(metallicFactor);
+            float reflectionFactor = 0.0f;
+            const bool hasReflectionFactor =
+                aiGetMaterialFloat(sourceMaterial, AI_MATKEY_REFLECTIVITY, &reflectionFactor) == AI_SUCCESS &&
+                std::isfinite(reflectionFactor);
+            if (!hasMetallicFactor && hasReflectionFactor)
+            {
+                // Blender's FBX exporter stores Principled metallic in the legacy ReflectionFactor property.
+                metallicFactor = reflectionFactor;
+            }
+            material.Metallic = std::clamp(metallicFactor, 0.0f, 1.0f);
+            material.SpecColor = hasMetallicFactor || hasReflectionFactor
+                ? XMFLOAT4{ 0.04f, 0.04f, 0.04f, 1.0f }
+                : ReadColor(*sourceMaterial, AI_MATKEY_COLOR_SPECULAR, { 0.04f, 0.04f, 0.04f, 1.0f });
 
             const float shininess = (std::max)(0.0f, ReadFloat(*sourceMaterial, AI_MATKEY_SHININESS, 0.0f));
             const float roughnessFallback = shininess > 0.0f

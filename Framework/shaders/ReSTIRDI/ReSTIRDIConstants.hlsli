@@ -22,6 +22,10 @@
 #define RESTIR_DI_USE_TEMPORAL_PERMUTATION_SAMPLING 0
 #endif
 
+#ifndef RESTIR_DI_TEMPORAL_IGNORE_GEOMETRY
+#define RESTIR_DI_TEMPORAL_IGNORE_GEOMETRY 0
+#endif
+
 #ifndef RESTIR_DI_USE_TEMPORAL_BOILING_FILTER
 #define RESTIR_DI_USE_TEMPORAL_BOILING_FILTER 0
 #endif
@@ -62,6 +66,7 @@ cbuffer ReSTIRDIConstants : register(b1)
     uint ReSTIRDI_HistoryValid;
     uint ReSTIRDI_TemporalVisibilityShortcutEnabled;
     uint ReSTIRDI_TemporalPermutationSamplingEnabled;
+    uint ReSTIRDI_TemporalMaterialSimilarityTestEnabled;
     uint ReSTIRDI_BoilingFilterEnabled;
 
     uint ReSTIRDI_TemporalMaxHistoryLength;
@@ -80,7 +85,7 @@ cbuffer ReSTIRDIConstants : register(b1)
     float ReSTIRDI_BoilingFilterStrength;
     float ReSTIRDI_TemporalNormalSimilarityThreshold;
     float ReSTIRDI_TemporalDepthSimilarityThreshold;
-    float ReSTIRDI_Padding0;
+    float ReSTIRDI_TemporalMaterialSimilarityThreshold;
 
     float ReSTIRDI_SpatialSamplingRadius;
     float ReSTIRDI_SpatialNormalSimilarityThreshold;
@@ -91,6 +96,7 @@ cbuffer ReSTIRDIConstants : register(b1)
     float ReSTIRDI_Padding1;
     float ReSTIRDI_Padding2;
     float ReSTIRDI_Padding3;
+    uint ReSTIRDI_TemporalIgnoreGeometryEnabled;
 };
 //Modify End
 

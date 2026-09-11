@@ -12,38 +12,36 @@ void ApplyReSTIRDIBoilingFilter(
     const uint groupIndex,
     inout ReSTIRDIReservoir reservoir)
 {
-    float waveWeightSum = WaveActiveSum(reservoir.WeightSum);
-    uint waveValidCount = WaveActiveCountBits(reservoir.WeightSum > 0.0f);
-    const uint waveIndex = groupIndex / WaveGetLaneCount();
-    if (WaveIsFirstLane())
-    {
-        ReSTIRDIBoilingWeightSums[waveIndex] = waveWeightSum;
-        ReSTIRDIBoilingValidCounts[waveIndex] = waveValidCount;
-    }
-
+    // Use a fixed 64-lane reduction instead of wave operations inside a
+    // divergent branch. The latter can produce an undefined active-lane mask
+    // on hardware with a wave size different from the thread-group size.
+    ReSTIRDIBoilingWeightSums[groupIndex] = reservoir.WeightSum;
+    ReSTIRDIBoilingValidCounts[groupIndex] = reservoir.WeightSum > 0.0f ? 1u : 0u;
     GroupMemoryBarrierWithGroupSync();
 
-    const uint waveCount = (64u + WaveGetLaneCount() - 1u) / WaveGetLaneCount();
-    if (groupIndex < waveCount)
+    for (uint stride = 32u; stride > 0u; stride >>= 1u)
     {
-        waveWeightSum = ReSTIRDIBoilingWeightSums[groupIndex];
-        waveValidCount = ReSTIRDIBoilingValidCounts[groupIndex];
-        waveWeightSum = WaveActiveSum(waveWeightSum);
-        waveValidCount = WaveActiveSum(waveValidCount);
-        if (groupIndex == 0u)
+        if (groupIndex < stride)
         {
-            ReSTIRDIBoilingWeightSums[0] = waveValidCount > 0u
-                ? waveWeightSum / float(waveValidCount)
-                : 0.0f;
+            ReSTIRDIBoilingWeightSums[groupIndex] += ReSTIRDIBoilingWeightSums[groupIndex + stride];
+            ReSTIRDIBoilingValidCounts[groupIndex] += ReSTIRDIBoilingValidCounts[groupIndex + stride];
         }
+        GroupMemoryBarrierWithGroupSync();
     }
-
-    GroupMemoryBarrierWithGroupSync();
 
     const float thresholdMultiplier = 10.0f / clamp(ReSTIRDI_BoilingFilterStrength, 0.000001f, 1.0f) - 9.0f;
-    if (reservoir.WeightSum > ReSTIRDIBoilingWeightSums[0] * thresholdMultiplier)
+    const float averageWeight = ReSTIRDIBoilingValidCounts[0] > 0u
+        ? ReSTIRDIBoilingWeightSums[0] / float(ReSTIRDIBoilingValidCounts[0])
+        : 0.0f;
+    const float boilingThreshold = averageWeight * thresholdMultiplier;
+    if (boilingThreshold > 0.0f && reservoir.WeightSum > boilingThreshold)
     {
-        reservoir = ReSTIRDIEmptyReservoir();
+        // Keep the selected sample and cap only the outlier weight. Clearing the
+        // reservoir removes all direct lighting for the pixel; on glossy/metal
+        // surfaces that makes the material look diffuse because only indirect
+        // lighting remains. Boiling is a heuristic firefly filter, so preserving
+        // the sample gives a stable, visually meaningful result.
+        reservoir.WeightSum = boilingThreshold;
     }
 }
 

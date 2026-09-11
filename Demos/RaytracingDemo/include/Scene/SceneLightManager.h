@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-26 by Hui
+//Modify Begin:2026-09-10 by Hui
 #pragma once
 
 #include <Framework/Scene/Light.h>
@@ -9,6 +9,7 @@
 
 #include <DirectXMath.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <functional>
 #include <vector>
@@ -53,6 +54,8 @@ public:
 
     bool IsPointLightAnimationEnabled() const { return m_AnimatePointLights; }
     void SetPointLightAnimationEnabled(bool enabled) { m_AnimatePointLights = enabled; }
+    size_t GetImportedPointLightCount() const { return m_ImportedPointLightCount; }
+    void SetImportedPointLightCount(size_t count) { m_ImportedPointLightCount = (std::min)(count, m_PointLights.size()); }
     void ApplyToScene(Scene& scene) const;
     const SkyLightData& GetSkyLight() const { return m_SkyLight; }
     void SetSkyLight(const SkyLightData& skyLight);
@@ -74,9 +77,9 @@ public:
     PointLightAnimation GetPointLightAnimation(size_t lightIndex) const;
     void SetPointLightAnimation(size_t lightIndex, const PointLightAnimation& animation);
     void CommitDirectionalLightEdit(size_t lightIndex);
-    void CommitPointLightEdit(size_t lightIndex);
+    void CommitPointLightEdit(size_t lightIndex, bool updateSamplingDistribution = true);
     void CommitSpotLightEdit(size_t lightIndex);
-    void CommitAreaLightEdit(size_t lightIndex);
+    void CommitAreaLightEdit(size_t lightIndex, bool updateSamplingDistribution = true);
     void AddDirectionalLight(const DirectionalLight& light);
     void AddPointLight(const PointLight& light, const PointLightAnimation& animation = {});
     void AddSpotLight(const SpotLight& light);

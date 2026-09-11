@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-26 by Hui
+//Modify Begin:2026-09-10 by Hui
 #include <Framework/Rendering/Lighting/LightingGpuResources.h>
 
 #include <DX12Library/CommandList.h>
@@ -314,7 +314,10 @@ void LightingGpuResources::UpdateSpotLight(const SpotLight& light, const size_t 
     MarkSpotLightsDirty(lightIndex, lightIndex + 1, true);
 }
 
-void LightingGpuResources::UpdateAreaLight(const AreaLightData& light, const size_t lightIndex)
+void LightingGpuResources::UpdateAreaLight(
+    const AreaLightData& light,
+    const size_t lightIndex,
+    const bool updateSamplingDistribution)
 {
     if (m_AreaLights.size() <= lightIndex)
     {
@@ -322,7 +325,7 @@ void LightingGpuResources::UpdateAreaLight(const AreaLightData& light, const siz
     }
 
     m_AreaLights[lightIndex] = light;
-    UpdateAreaLightSurfaceEmitter(lightIndex);
+    UpdateAreaLightSurfaceEmitter(lightIndex, updateSamplingDistribution);
 }
 
 void LightingGpuResources::Initialize(CommandList& commandList)
@@ -650,7 +653,9 @@ void LightingGpuResources::RebuildSurfaceEmitterGpuData()
     }
 }
 
-void LightingGpuResources::UpdateAreaLightSurfaceEmitter(const size_t lightIndex)
+void LightingGpuResources::UpdateAreaLightSurfaceEmitter(
+    const size_t lightIndex,
+    const bool updateSamplingDistribution)
 {
     const size_t instanceIndex = m_RectangleSurfaceEmitterOffset + lightIndex;
     if (lightIndex >= m_AreaLights.size() ||
@@ -668,7 +673,10 @@ void LightingGpuResources::UpdateAreaLightSurfaceEmitter(const size_t lightIndex
         m_SurfaceEmitterGeometryGpuData[m_RectangleEmitterGeometryIndex],
         m_SurfaceEmitterTriangleGpuData);
     MarkDirtyRange(instanceIndex, instanceIndex + 1, m_SurfaceEmitterInstanceDirtyBegin, m_SurfaceEmitterInstanceDirtyEnd);
-    MarkDirectLightSamplingDirty();
+    if (updateSamplingDistribution)
+    {
+        MarkDirectLightSamplingDirty();
+    }
 }
 
 void LightingGpuResources::RebuildDirectLightSamplingCdf()

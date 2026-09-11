@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-09-10 by Hui
 #include <RaytracingDemo.h>
 
 #include <DX12Library/Window.h>
@@ -221,6 +221,20 @@ void RaytracingDemo::OnImGui()
     {
         ImGui::TextDisabled("%s", m_StartupConfigurationStatus.c_str());
     }
+//Modify Begin:2026-09-11 by Hui
+    if (ImGui::Button("Save Settings"))
+    {
+        try
+        {
+            SaveRuntimeConfiguration();
+        }
+        catch (const std::exception& exception)
+        {
+            m_RuntimeConfigurationSaveStatus = std::string("Settings save failed: ") + exception.what();
+        }
+    }
+    ImGui::SameLine();
+//Modify End
     if (ImGui::Button("Save Scene"))
     {
         try
@@ -236,6 +250,12 @@ void RaytracingDemo::OnImGui()
     {
         ImGui::TextWrapped("%s", m_CameraSaveStatus.c_str());
     }
+//Modify Begin:2026-09-11 by Hui
+    if (!m_RuntimeConfigurationSaveStatus.empty())
+    {
+        ImGui::TextWrapped("%s", m_RuntimeConfigurationSaveStatus.c_str());
+    }
+//Modify End
     if (m_GpuTimestampProfiler.IsAvailable())
     {
         if (ImGui::Checkbox("Enable RG Timing", &m_GpuTimingEnabled))
@@ -403,6 +423,9 @@ void RaytracingDemo::OnImGui()
                         "Off\0Basic\0Ray Traced\0");
                     settingsChanged |= FrameworkImGui::SliderInt("Temporal Max History Length", &temporalMaxHistoryLength, 1, 64);
                     settingsChanged |= ImGui::Checkbox("Enable Permutation Sampling", &restirSettings.EnableTemporalPermutationSampling);
+                    settingsChanged |= ImGui::Checkbox(
+                        "Enable Temporal Material Similarity Test",
+                        &restirSettings.EnableTemporalMaterialSimilarityTest);
                     settingsChanged |= FrameworkImGui::SliderFloat(
                         "Temporal Normal Threshold",
                         &restirSettings.TemporalNormalSimilarityThreshold,
@@ -413,6 +436,11 @@ void RaytracingDemo::OnImGui()
                         &restirSettings.TemporalDepthSimilarityThreshold,
                         0.0f,
                         1.0f);
+                    settingsChanged |= FrameworkImGui::SliderFloat(
+                        "Temporal Material Threshold",
+                        &restirSettings.TemporalMaterialSimilarityThreshold,
+                        0.0f,
+                        2.0f);
                 }
                 settingsChanged |= ImGui::Checkbox("Enable Boiling Filter", &restirSettings.EnableBoilingFilter);
                 if (restirSettings.EnableBoilingFilter)
@@ -665,6 +693,10 @@ void RaytracingDemo::OnImGui()
     {
     if (ImGui::Checkbox("Enable Accumulation", &m_AccumulationEnabled))
     {
+        if (m_AccumulationEnabled && m_Denoisers.IsEnabled())
+        {
+            m_Denoisers.SetAlgorithm(DenoiserController::Algorithm::Off);
+        }
         ResetAccumulation();
     }
     if (ImGui::Checkbox("Enable Soft Shadows", &m_SoftShadowsEnabled))
@@ -852,6 +884,10 @@ void RaytracingDemo::OnImGui()
     {
     if (m_Denoisers.DrawImGui())
     {
+        if (m_Denoisers.IsEnabled() && m_AccumulationEnabled)
+        {
+            m_AccumulationEnabled = false;
+        }
         ResetAccumulation();
     }
     if (DrawBloomControls(
@@ -1015,7 +1051,7 @@ void RaytracingDemo::OnImGui()
     }
     ImGui::TextDisabled("Stylized Comic keeps GGX material inputs and applies PBR-NPR banding, shadow tint, and graphic highlights.");
 //Modify End
-//Modify Begin:2026-08-11 by Hui
+//Modify Begin:2026-09-10 by Hui
     bouncesChanged = FrameworkImGui::SliderInt(
         "Bounces",
         &requestedMaxBounces,
@@ -1038,10 +1074,10 @@ void RaytracingDemo::OnImGui()
         100000.0f,
         "%.1f",
         ImGuiSliderFlags_AlwaysClamp);
-    rotateSpeedChanged = FrameworkImGui::SliderFloat("Mouse Rotate", &m_MouseRotateSpeed, 0.01f, 0.5f, "%.3f");
-    panSpeedChanged = FrameworkImGui::SliderFloat("Mouse Pan", &m_MousePanSpeed, 0.005f, 0.25f, "%.3f");
-    dollySpeedChanged = FrameworkImGui::SliderFloat("Mouse Dolly", &m_MouseDollySpeed, 0.005f, 0.25f, "%.3f");
-    wheelSpeedChanged = FrameworkImGui::SliderFloat("Wheel Dolly", &m_MouseWheelDollySpeed, 0.05f, 5.0f, "%.2f");
+    rotateSpeedChanged = FrameworkImGui::SliderFloat("Mouse Rotate", &m_MouseRotateSpeed, 0.01f, 2.0f, "%.3f");
+    panSpeedChanged = FrameworkImGui::SliderFloat("Mouse Pan", &m_MousePanSpeed, 0.005f, 25.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
+    dollySpeedChanged = FrameworkImGui::SliderFloat("Mouse Dolly", &m_MouseDollySpeed, 0.005f, 25.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
+    wheelSpeedChanged = FrameworkImGui::SliderFloat("Wheel Dolly", &m_MouseWheelDollySpeed, 0.05f, 500.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
     }
 //Modify End
 

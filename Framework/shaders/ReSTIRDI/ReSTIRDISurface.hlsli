@@ -23,7 +23,8 @@ bool ReSTIRDIHaveCompatibleSurfaces(
     const float sourceDepth,
     const float normalThreshold,
     const float depthThreshold,
-    const float materialThreshold)
+    const float materialThreshold,
+    const bool testMaterialSimilarity)
 {
     return source.Valid &&
         ReSTIRDIIsSurfaceCompatible(
@@ -33,7 +34,7 @@ bool ReSTIRDIHaveCompatibleSurfaces(
             sourceDepth,
             normalThreshold,
             depthThreshold) &&
-        ReSTIRDIHaveSimilarMaterials(receiver, source, materialThreshold);
+        (!testMaterialSimilarity || ReSTIRDIHaveSimilarMaterials(receiver, source, materialThreshold));
 }
 
 #endif

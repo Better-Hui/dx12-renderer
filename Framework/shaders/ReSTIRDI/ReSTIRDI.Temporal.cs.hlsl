@@ -91,7 +91,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
 #endif
 
                 const int2 reprojectedPixel = int2(round(float2(pixel) + motion));
-                const float receiverDepth = length(surface.PositionWs - ReSTIRDI_CameraPosition.xyz);
+                const float receiverDepth = ReSTIRDI_LinearDepth(surface.PositionWs);
                 ReSTIRDIReservoir history = ReSTIRDIEmptyReservoir();
                 ReSTIRDI_Surface historySurface = (ReSTIRDI_Surface)0;
                 int2 selectedPixel = int2(-1, -1);
@@ -114,17 +114,34 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
                     }
 
                     const ReSTIRDI_Surface candidateSurface = ReSTIRDI_LoadHistorySurface(uint2(candidatePixel));
-                    const float candidateDepth = ReSTIRDIHistoryPosition.Load(int3(candidatePixel, 0)).w;
-                    if (!candidateSurface.Valid || !ReSTIRDIIsSurfaceCompatible(
-                        surface.NormalWs,
-                        receiverDepth,
-                        candidateSurface.NormalWs,
-                        candidateDepth,
-                        ReSTIRDI_TemporalNormalSimilarityThreshold,
-                        ReSTIRDI_TemporalDepthSimilarityThreshold))
+                    if (!candidateSurface.Valid)
                     {
                         continue;
                     }
+                    const float candidateDepth = ReSTIRDI_LinearDepth(candidateSurface.PositionWs);
+#if !RESTIR_DI_TEMPORAL_IGNORE_GEOMETRY
+                    if (!ReSTIRDIHaveCompatibleSurfaces(
+                        surface,
+                        receiverDepth,
+                        candidateSurface,
+                        candidateDepth,
+                        ReSTIRDI_TemporalNormalSimilarityThreshold,
+                        ReSTIRDI_TemporalDepthSimilarityThreshold,
+                        ReSTIRDI_TemporalMaterialSimilarityThreshold,
+                        ReSTIRDI_TemporalMaterialSimilarityTestEnabled != 0u))
+                    {
+                        continue;
+                    }
+#else
+                    if (ReSTIRDI_TemporalMaterialSimilarityTestEnabled != 0u &&
+                        !ReSTIRDIHaveSimilarMaterials(
+                            surface,
+                            candidateSurface,
+                            ReSTIRDI_TemporalMaterialSimilarityThreshold))
+                    {
+                        continue;
+                    }
+#endif
 
                     history = ReSTIRDIUnpackReservoir(
                         ReSTIRDIHistoryReservoir.Load(int3(candidatePixel, 0)),

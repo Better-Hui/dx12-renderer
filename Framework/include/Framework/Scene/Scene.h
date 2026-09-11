@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-09-10 by Hui
 #pragma once
 
 #include <DX12Library/Camera.h>
@@ -178,6 +178,7 @@ public:
     const std::vector<SceneNode>& GetNodes() const;
     const std::vector<SceneObject>& GetObjects() const;
     const std::vector<SceneMaterial>& GetMaterials() const;
+    std::vector<SceneMaterial>& GetMutableMaterials();
     const std::vector<DirectionalLight>& GetDirectionalLights() const;
     const std::vector<PointLight>& GetPointLights() const;
     const std::vector<SpotLight>& GetSpotLights() const;

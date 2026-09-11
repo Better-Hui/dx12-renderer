@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-08-26 by Hui
+//Modify Begin:2026-09-10 by Hui
 #include <DX12Library/StructuredBuffer.h>
 
 #include <Framework/Rendering/Lighting/LightingData.h>
@@ -48,7 +48,10 @@ public:
     void UpdateDirectionalLight(const DirectionalLight& light, size_t lightIndex);
     void UpdatePointLight(const PointLight& light, size_t lightIndex, bool updateSamplingDistribution = true);
     void UpdateSpotLight(const SpotLight& light, size_t lightIndex);
-    void UpdateAreaLight(const AreaLightData& light, size_t lightIndex);
+    void UpdateAreaLight(
+        const AreaLightData& light,
+        size_t lightIndex,
+        bool updateSamplingDistribution = true);
 
     void Initialize(CommandList& commandList);
     bool Upload(CommandList& commandList, uint64_t frameIndex);
@@ -68,7 +71,7 @@ private:
         const std::vector<PointLight>& pointLights,
         const std::vector<SpotLight>& spotLights);
     void RebuildSurfaceEmitterGpuData();
-    void UpdateAreaLightSurfaceEmitter(size_t lightIndex);
+    void UpdateAreaLightSurfaceEmitter(size_t lightIndex, bool updateSamplingDistribution);
     void RebuildDirectLightSamplingCdf();
     void MarkDirectLightSamplingDirty();
     void MarkAllGpuDataDirty();

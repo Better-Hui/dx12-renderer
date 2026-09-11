@@ -45,6 +45,9 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+//Modify Begin:2026-09-11 by Hui
+#include <iomanip>
+//Modify End
 #include <random>
 #include <stdexcept>
 #include <string>
@@ -107,6 +110,12 @@ namespace
         return std::filesystem::path(std::wstring(buffer.data(), length)).string();
     }
 
+    std::filesystem::path GetRuntimeRootPath()
+    {
+        const std::filesystem::path executablePath(GetExecutablePath());
+        return executablePath.empty() ? std::filesystem::current_path() : executablePath.parent_path();
+    }
+
     uint32_t ComputeDescriptorArrayCapacity(const size_t resourceCount, const size_t resourceCapacity)
     {
         return static_cast<uint32_t>(std::max<size_t>(
@@ -167,6 +176,25 @@ namespace
 
         value = std::strcmp(environmentValue, "0") != 0;
         std::free(environmentValue);
+        return true;
+    }
+
+    bool TryGetEnvironmentFloat(const char* variableName, float& value)
+    {
+        const std::string environmentValue = GetEnvironmentValue(variableName);
+        if (environmentValue.empty())
+        {
+            return false;
+        }
+
+        char* parseEnd = nullptr;
+        const float parsedValue = std::strtof(environmentValue.c_str(), &parseEnd);
+        if (parseEnd == environmentValue.c_str() || *parseEnd != '\0' || !std::isfinite(parsedValue))
+        {
+            return false;
+        }
+
+        value = parsedValue;
         return true;
     }
 
@@ -311,9 +339,22 @@ namespace
 
         const std::string& GetStatus() const { return m_Status; }
 
+        void Overlay(const StartupIni& overlay)
+        {
+            for (const auto& [key, value] : overlay.m_Values)
+            {
+                m_Values.insert_or_assign(key, value);
+            }
+            if (!overlay.m_Values.empty())
+            {
+                m_Status += " User override loaded: " + overlay.m_SourcePath.string();
+            }
+        }
+
         static StartupIni Load(const std::filesystem::path& path)
         {
             StartupIni ini;
+            ini.m_SourcePath = path;
             std::ifstream stream(path);
             if (!stream)
             {
@@ -367,6 +408,7 @@ namespace
         }
 
         std::unordered_map<std::string, std::string> m_Values;
+        std::filesystem::path m_SourcePath;
         std::string m_Status;
     };
 //Modify End
@@ -403,12 +445,12 @@ namespace
         }
         std::free(scenePath);
 
-        constexpr const char* DefaultCountryKitchenRelativePath =
-            "Assets/Scenes/CountryKitchen/scene.xml";
+        constexpr const char* DefaultSceneRelativePath =
+            "Assets/Scenes/LowPolyStreet/LowPolyStreet.fbx";
         std::filesystem::path searchDirectory = std::filesystem::current_path();
         while (!searchDirectory.empty())
         {
-            const std::filesystem::path defaultScene = searchDirectory / DefaultCountryKitchenRelativePath;
+            const std::filesystem::path defaultScene = searchDirectory / DefaultSceneRelativePath;
             if (std::filesystem::exists(defaultScene))
             {
                 return defaultScene;
@@ -422,7 +464,7 @@ namespace
             searchDirectory = parentDirectory;
         }
 
-        throw std::runtime_error("Default CountryKitchen scene file does not exist. Set RAYTRACING_DEMO_SCENE to a .json, .unity, .fbx, or Mitsuba .xml file.");
+        throw std::runtime_error("Default LowPolyStreet scene file does not exist. Set RAYTRACING_DEMO_SCENE to a .json, .unity, .fbx, or Mitsuba .xml file.");
     }
 //Modify End
 
@@ -591,6 +633,28 @@ RaytracingDemo::RaytracingDemo(
         m_IndirectLightingReSTIRGI.SetSettings(restirGISettings);
     }
 
+    ReSTIRDISettings restirDISettings = m_DirectLightingReSTIRDI.GetSettings();
+    bool restirDISettingsOverridden = false;
+    restirDISettingsOverridden |= TryGetEnvironmentBoolean(
+        "RAYTRACING_DEMO_RESTIRDI_TEMPORAL",
+        restirDISettings.EnableTemporalResampling);
+    restirDISettingsOverridden |= TryGetEnvironmentBoolean(
+        "RAYTRACING_DEMO_RESTIRDI_SPATIAL",
+        restirDISettings.EnableSpatialResampling);
+    restirDISettingsOverridden |= TryGetEnvironmentBoolean(
+        "RAYTRACING_DEMO_RESTIRDI_BOILING",
+        restirDISettings.EnableBoilingFilter);
+    restirDISettingsOverridden |= TryGetEnvironmentBoolean(
+        "RAYTRACING_DEMO_RESTIRDI_TEMPORAL_IGNORE_GEOMETRY",
+        restirDISettings.EnableTemporalIgnoreGeometry);
+    restirDISettingsOverridden |= TryGetEnvironmentFloat(
+        "RAYTRACING_DEMO_RESTIRDI_BOILING_STRENGTH",
+        restirDISettings.BoilingFilterStrength);
+    if (restirDISettingsOverridden)
+    {
+        m_DirectLightingReSTIRDI.SetSettings(restirDISettings);
+    }
+
     char* softShadows = nullptr;
     size_t softShadowsLength = 0;
     _dupenv_s(&softShadows, &softShadowsLength, "RAYTRACING_DEMO_SOFT_SHADOWS");
@@ -617,6 +681,12 @@ RaytracingDemo::RaytracingDemo(
         m_Denoisers.SetAlgorithmFromName(denoiserMode);
     }
     std::free(denoiserMode);
+
+    // Manual accumulation and denoising are mutually exclusive; accumulation wins at startup.
+    if (m_AccumulationEnabled && m_Denoisers.IsEnabled())
+    {
+        m_Denoisers.SetAlgorithm(DenoiserController::Algorithm::Off);
+    }
 
     char* dlssMode = nullptr;
     size_t dlssModeLength = 0;
@@ -712,7 +782,7 @@ RaytracingDemo::RaytracingDemo(
 
 }
 
-//Modify Begin:2026-08-26 by Hui
+//Modify Begin:2026-09-10 by Hui
 void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::filesystem::path& scenePath)
 {
     const auto recordStartupCheckpoint = [this](const char* checkpoint)
@@ -768,6 +838,23 @@ void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::files
 
     SceneSkybox sceneSkybox = m_Scene.GetSkybox();
     std::filesystem::path skyboxTexturePath = sceneSkybox.Texture.AssetPath;
+    const std::string skyboxOverride = GetEnvironmentValue("RAYTRACING_DEMO_SKYBOX");
+    if (!skyboxOverride.empty())
+    {
+        skyboxTexturePath = std::filesystem::path(skyboxOverride);
+        if (!skyboxTexturePath.is_absolute())
+        {
+            skyboxTexturePath = scenePath.parent_path() / skyboxTexturePath;
+        }
+        std::error_code skyboxPathError;
+        skyboxTexturePath = std::filesystem::weakly_canonical(skyboxTexturePath, skyboxPathError);
+        if (skyboxPathError || !std::filesystem::is_regular_file(skyboxTexturePath))
+        {
+            throw std::runtime_error(
+                "RAYTRACING_DEMO_SKYBOX does not reference an existing texture file: " + skyboxOverride);
+        }
+        sceneSkybox.Texture.AssetPath = skyboxTexturePath;
+    }
     const bool hasSceneSkyboxTexture =
         !skyboxTexturePath.empty() && std::filesystem::exists(skyboxTexturePath);
     const bool hasExplicitSkyRadiance =
@@ -795,6 +882,7 @@ void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::files
     m_Scene.SetSkybox(sceneSkybox);
 
     m_Lights.CreateFromScene(m_Scene);
+    ApplyStartupLightConfiguration();
     bool directionalLightsEnabled = m_Lights.AreDirectionalLightsEnabled();
     bool pointLightsEnabled = m_Lights.ArePointLightsEnabled();
     bool areaLightsEnabled = m_Lights.AreAreaLightsEnabled();
@@ -811,24 +899,57 @@ void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::files
         m_Lights.SetSkyLight(skyLight);
     }
     m_Lights.SetEmissiveMeshSurfaceEmitters(m_SceneResources.CollectEmissiveMeshSurfaceEmitters());
-    recordStartupCheckpoint("scene_lighting_initialized");
     m_SkyboxEnabled = true;
     m_HasSceneCamera = m_Scene.HasCamera();
 
     ApplySceneCamera(GetSceneCamera(), sceneCamera, m_Width, m_Height);
+    if (m_HasCameraProjectionConfiguration)
+    {
+        GetSceneCamera().SetProjection(
+            m_CameraFov,
+            static_cast<float>(m_Width) / static_cast<float>(m_Height),
+            m_CameraNearClipPlane,
+            m_CameraFarClipPlane);
+    }
+    else
+    {
+        m_CameraFov = sceneCamera.FieldOfView;
+        m_CameraNearClipPlane = sceneCamera.NearClipPlane;
+        m_CameraFarClipPlane = sceneCamera.FarClipPlane;
+    }
     const XMFLOAT3 forward = RotateCameraVector(GetSceneCamera().GetRotation(), { 0.0f, 0.0f, 1.0f });
     CalculateCameraControllerFromLookDirection(
         XMVectorSet(forward.x, forward.y, forward.z, 0.0f),
         m_CameraController.Yaw,
         m_CameraController.Pitch);
-    m_CameraFov = sceneCamera.FieldOfView;
-    m_CameraNearClipPlane = sceneCamera.NearClipPlane;
-    m_CameraFarClipPlane = sceneCamera.FarClipPlane;
     XMStoreFloat3(&m_InitialSceneCameraTranslation, GetSceneCamera().GetTranslation());
     XMStoreFloat4(&m_InitialSceneCameraRotation, GetSceneCamera().GetRotation());
     m_InitialSceneCameraYaw = m_CameraController.Yaw;
     m_InitialSceneCameraPitch = m_CameraController.Pitch;
     m_HasInitialSceneCameraState = true;
+
+    bool sceneBehaviorEnabled = true;
+    TryGetEnvironmentBoolean("RAYTRACING_DEMO_SCENE_BEHAVIOR", sceneBehaviorEnabled);
+    m_SceneRuntime.SetSceneBehaviorEnabled(sceneBehaviorEnabled);
+    m_SceneRuntime.LoadScene(m_Scene, m_Lights, GetSceneCamera());
+
+    if (m_Diagnostics.IsEnabled())
+    {
+        const std::string behaviorName(m_SceneRuntime.GetActiveSceneBehaviorName());
+        m_Diagnostics.AddMetadata("scene_behavior", behaviorName.empty() ? "none" : behaviorName);
+        m_Diagnostics.Record(
+            "scene.runtime",
+            "behavior_loaded",
+            DiagnosticTelemetrySeverity::Info,
+            {
+                { "behavior", behaviorName.empty() ? "none" : behaviorName },
+                { "enabled", m_SceneRuntime.IsSceneBehaviorEnabled() },
+                { "camera_control_enabled", m_SceneRuntime.IsSceneCameraControlEnabled() },
+                { "light_animation_enabled", m_SceneRuntime.IsSceneLightAnimationEnabled() },
+                { "execution_thread", "main" },
+            });
+    }
+    recordStartupCheckpoint("scene_lighting_initialized");
 
     m_SkyboxTexture.reset();
     m_EnvironmentFallbackCubemap.reset();
@@ -890,14 +1011,22 @@ void RaytracingDemo::ResetCameraToInitialSceneState()
     m_CameraController.Yaw = m_InitialSceneCameraYaw;
     m_CameraController.Pitch = m_InitialSceneCameraPitch;
     m_HasPreviousViewProjection = false;
-    ResetAccumulation();
+    ResetAccumulation(true, true, true);
 }
 
 void RaytracingDemo::LoadStartupConfiguration()
 {
-    const std::filesystem::path configurationPath = std::filesystem::current_path() / "Config" / "RaytracingDemo.ini";
-    const StartupIni configuration = StartupIni::Load(configurationPath);
+//Modify Begin:2026-09-11 by Hui
+    const std::filesystem::path runtimeRoot = GetRuntimeRootPath();
+    const std::filesystem::path configurationPath = runtimeRoot / "Config" / "RaytracingDemo.ini";
+    const std::filesystem::path userConfigurationPath = runtimeRoot / "Saved" / "RaytracingDemo.ini";
+    StartupIni configuration = StartupIni::Load(configurationPath);
+    if (std::filesystem::is_regular_file(userConfigurationPath))
+    {
+        configuration.Overlay(StartupIni::Load(userConfigurationPath));
+    }
     m_StartupConfigurationStatus = configuration.GetStatus();
+//Modify End
 
     auto applyBackend = [&](const char* section, const char* key)
     {
@@ -1004,6 +1133,71 @@ void RaytracingDemo::LoadStartupConfiguration()
         stringValue = ToLower(stringValue);
         m_MaterialShadingModel = ParseMaterialShadingModel(stringValue.c_str());
     }
+//Modify Begin:2026-09-11 by Hui
+    if (configuration.TryGetBoolean("Renderer", "CopyQueueValidation", boolValue))
+    {
+        m_CopyQueueValidationEnabled = boolValue;
+    }
+    if (configuration.TryGetBoolean("Renderer", "DebugSerializeAsyncCompute", boolValue))
+    {
+        m_DebugSerializeAsyncCompute = boolValue;
+    }
+    if (configuration.TryGetInt("Renderer", "DebugLightingTexture", intValue))
+    {
+        m_DebugLightingTextureTarget = std::clamp(intValue, 0, 3);
+    }
+    if (configuration.TryGetInt("Renderer", "MeshletDebugTarget", intValue))
+    {
+        m_DebugTextureTarget = std::clamp(intValue, 0, 3);
+    }
+    if (configuration.TryGetBoolean("Renderer", "StressTestSpheres", boolValue))
+    {
+        m_SceneRuntime.SetStressTestSpheresEnabled(boolValue);
+    }
+    if (configuration.TryGetBoolean("Renderer", "DynamicRTASRefit", boolValue))
+    {
+        m_SceneResources.SetDynamicRayTracingUpdatesEnabled(boolValue);
+        if (boolValue)
+        {
+            m_UseMeshletGBuffer = false;
+            m_DebugMeshletClusters = false;
+        }
+    }
+
+    bool cameraProjectionConfigured = false;
+    if (configuration.TryGetFloat("Camera", "FieldOfView", floatValue))
+    {
+        m_CameraFov = std::clamp(floatValue, 12.0f, 90.0f);
+        cameraProjectionConfigured = true;
+    }
+    if (configuration.TryGetFloat("Camera", "NearClipPlane", floatValue))
+    {
+        m_CameraNearClipPlane = std::max(0.001f, floatValue);
+        cameraProjectionConfigured = true;
+    }
+    if (configuration.TryGetFloat("Camera", "FarClipPlane", floatValue))
+    {
+        m_CameraFarClipPlane = std::max(m_CameraNearClipPlane + 0.001f, floatValue);
+        cameraProjectionConfigured = true;
+    }
+    m_HasCameraProjectionConfiguration = cameraProjectionConfigured;
+    if (configuration.TryGetFloat("Camera", "MouseRotateSpeed", floatValue))
+    {
+        m_MouseRotateSpeed = std::clamp(floatValue, 0.01f, 2.0f);
+    }
+    if (configuration.TryGetFloat("Camera", "MousePanSpeed", floatValue))
+    {
+        m_MousePanSpeed = std::clamp(floatValue, 0.005f, 25.0f);
+    }
+    if (configuration.TryGetFloat("Camera", "MouseDollySpeed", floatValue))
+    {
+        m_MouseDollySpeed = std::clamp(floatValue, 0.005f, 25.0f);
+    }
+    if (configuration.TryGetFloat("Camera", "MouseWheelDollySpeed", floatValue))
+    {
+        m_MouseWheelDollySpeed = std::clamp(floatValue, 0.05f, 500.0f);
+    }
+//Modify End
 //Modify Begin:2026-08-28 by Hui
     if (configuration.TryGetBoolean("Display", "HDR10", boolValue))
     {
@@ -1020,6 +1214,71 @@ void RaytracingDemo::LoadStartupConfiguration()
     {
         m_Denoisers.SetOIDNStaticSpp(static_cast<uint32_t>(std::max(intValue, 1)));
     }
+//Modify Begin:2026-09-11 by Hui
+    NRD::Settings nrdSettings = m_Denoisers.GetNRDSettings();
+    if (configuration.TryGetString("NRD", "Mode", stringValue))
+    {
+        stringValue = ToLower(stringValue);
+        nrdSettings.Mode = stringValue == "relax" || stringValue == "relax-diffuse"
+            ? NRD::DenoiserMode::RelaxDiffuse
+            : NRD::DenoiserMode::ReblurDiffuse;
+    }
+#define LOAD_NRD_FLOAT(Key, Field) if (configuration.TryGetFloat("NRD", Key, floatValue)) { nrdSettings.Field = floatValue; }
+#define LOAD_NRD_INT(Key, Field) if (configuration.TryGetInt("NRD", Key, intValue)) { nrdSettings.Field = static_cast<uint32_t>(std::max(intValue, 0)); }
+#define LOAD_NRD_BOOL(Key, Field) if (configuration.TryGetBoolean("NRD", Key, boolValue)) { nrdSettings.Field = boolValue; }
+    LOAD_NRD_FLOAT("DenoisingRange", DenoisingRange)
+    LOAD_NRD_FLOAT("RelaxFastHistoryClampingSigmaScale", RelaxFastHistoryClampingSigmaScale)
+    LOAD_NRD_FLOAT("RelaxDiffusePrepassBlurRadius", RelaxDiffusePrepassBlurRadius)
+    LOAD_NRD_FLOAT("RelaxMinHitDistanceWeight", RelaxMinHitDistanceWeight)
+    LOAD_NRD_FLOAT("RelaxDiffusePhiLuminance", RelaxDiffusePhiLuminance)
+    LOAD_NRD_FLOAT("RelaxLobeAngleFraction", RelaxLobeAngleFraction)
+    LOAD_NRD_FLOAT("RelaxRoughnessFraction", RelaxRoughnessFraction)
+    LOAD_NRD_FLOAT("RelaxDepthThreshold", RelaxDepthThreshold)
+    LOAD_NRD_FLOAT("RelaxLuminanceEdgeStoppingRelaxation", RelaxLuminanceEdgeStoppingRelaxation)
+    LOAD_NRD_FLOAT("RelaxNormalEdgeStoppingRelaxation", RelaxNormalEdgeStoppingRelaxation)
+    LOAD_NRD_FLOAT("RelaxRoughnessEdgeStoppingRelaxation", RelaxRoughnessEdgeStoppingRelaxation)
+    LOAD_NRD_INT("RelaxDiffuseMaxAccumulatedFrameNum", RelaxDiffuseMaxAccumulatedFrameNum)
+    LOAD_NRD_INT("RelaxDiffuseMaxFastAccumulatedFrameNum", RelaxDiffuseMaxFastAccumulatedFrameNum)
+    LOAD_NRD_INT("RelaxHistoryFixFrameNum", RelaxHistoryFixFrameNum)
+    LOAD_NRD_INT("RelaxHistoryFixBasePixelStride", RelaxHistoryFixBasePixelStride)
+    LOAD_NRD_INT("RelaxSpatialVarianceEstimationHistoryThreshold", RelaxSpatialVarianceEstimationHistoryThreshold)
+    LOAD_NRD_INT("RelaxAtrousIterationNum", RelaxAtrousIterationNum)
+    LOAD_NRD_BOOL("RelaxEnableAntiFirefly", RelaxEnableAntiFirefly)
+    LOAD_NRD_BOOL("RelaxEnableRoughnessEdgeStopping", RelaxEnableRoughnessEdgeStopping)
+    LOAD_NRD_FLOAT("ReblurHitDistanceA", ReblurHitDistanceA)
+    LOAD_NRD_FLOAT("ReblurHitDistanceB", ReblurHitDistanceB)
+    LOAD_NRD_FLOAT("ReblurHitDistanceC", ReblurHitDistanceC)
+    LOAD_NRD_FLOAT("ReblurFastHistoryClampingSigmaScale", ReblurFastHistoryClampingSigmaScale)
+    LOAD_NRD_FLOAT("ReblurDiffusePrepassBlurRadius", ReblurDiffusePrepassBlurRadius)
+    LOAD_NRD_FLOAT("ReblurMinHitDistanceWeight", ReblurMinHitDistanceWeight)
+    LOAD_NRD_FLOAT("ReblurMinBlurRadius", ReblurMinBlurRadius)
+    LOAD_NRD_FLOAT("ReblurMaxBlurRadius", ReblurMaxBlurRadius)
+    LOAD_NRD_FLOAT("ReblurLobeAngleFraction", ReblurLobeAngleFraction)
+    LOAD_NRD_FLOAT("ReblurRoughnessFraction", ReblurRoughnessFraction)
+    LOAD_NRD_FLOAT("ReblurPlaneDistanceSensitivity", ReblurPlaneDistanceSensitivity)
+    LOAD_NRD_FLOAT("ReblurFireflySuppressorMinRelativeScale", ReblurFireflySuppressorMinRelativeScale)
+    LOAD_NRD_INT("ReblurMaxAccumulatedFrameNum", ReblurMaxAccumulatedFrameNum)
+    LOAD_NRD_INT("ReblurMaxFastAccumulatedFrameNum", ReblurMaxFastAccumulatedFrameNum)
+    LOAD_NRD_INT("ReblurHistoryFixFrameNum", ReblurHistoryFixFrameNum)
+    LOAD_NRD_INT("ReblurHistoryFixBasePixelStride", ReblurHistoryFixBasePixelStride)
+    LOAD_NRD_BOOL("ReblurEnableAntiFirefly", ReblurEnableAntiFirefly)
+#undef LOAD_NRD_BOOL
+#undef LOAD_NRD_INT
+#undef LOAD_NRD_FLOAT
+    m_Denoisers.SetNRDSettings(nrdSettings);
+
+    SVGF::Settings svgfSettings = m_Denoisers.GetSVGFSettings();
+    if (configuration.TryGetInt("SVGF", "AtrousIterations", intValue))
+    {
+        svgfSettings.AtrousIterations = static_cast<uint32_t>(std::clamp(intValue, 1, 8));
+    }
+    if (configuration.TryGetFloat("SVGF", "TemporalAlpha", floatValue)) svgfSettings.TemporalAlpha = floatValue;
+    if (configuration.TryGetFloat("SVGF", "MomentsAlpha", floatValue)) svgfSettings.MomentsAlpha = floatValue;
+    if (configuration.TryGetFloat("SVGF", "PhiColor", floatValue)) svgfSettings.PhiColor = floatValue;
+    if (configuration.TryGetFloat("SVGF", "PhiNormal", floatValue)) svgfSettings.PhiNormal = floatValue;
+    if (configuration.TryGetFloat("SVGF", "PhiDepth", floatValue)) svgfSettings.PhiDepth = floatValue;
+    m_Denoisers.SetSVGFSettings(svgfSettings);
+//Modify End
 
     if (configuration.TryGetString("DLSS", "Mode", stringValue))
     {
@@ -1072,6 +1331,30 @@ void RaytracingDemo::LoadStartupConfiguration()
     {
         restirDISettings.EnableTemporalPermutationSampling = boolValue;
     }
+    if (configuration.TryGetBoolean("ReSTIRDI", "TemporalMaterialSimilarityTest", boolValue))
+    {
+        restirDISettings.EnableTemporalMaterialSimilarityTest = boolValue;
+    }
+    if (configuration.TryGetBoolean("ReSTIRDI", "TemporalIgnoreGeometry", boolValue))
+    {
+        restirDISettings.EnableTemporalIgnoreGeometry = boolValue;
+    }
+    if (configuration.TryGetInt("ReSTIRDI", "TemporalMaxHistoryLength", intValue))
+    {
+        restirDISettings.TemporalMaxHistoryLength = static_cast<uint32_t>(std::clamp(intValue, 1, 64));
+    }
+    if (configuration.TryGetFloat("ReSTIRDI", "TemporalNormalSimilarityThreshold", floatValue))
+    {
+        restirDISettings.TemporalNormalSimilarityThreshold = floatValue;
+    }
+    if (configuration.TryGetFloat("ReSTIRDI", "TemporalDepthSimilarityThreshold", floatValue))
+    {
+        restirDISettings.TemporalDepthSimilarityThreshold = floatValue;
+    }
+    if (configuration.TryGetFloat("ReSTIRDI", "TemporalMaterialSimilarityThreshold", floatValue))
+    {
+        restirDISettings.TemporalMaterialSimilarityThreshold = floatValue;
+    }
     if (configuration.TryGetBoolean("ReSTIRDI", "BoilingFilter", boolValue))
     {
         restirDISettings.EnableBoilingFilter = boolValue;
@@ -1116,6 +1399,24 @@ void RaytracingDemo::LoadStartupConfiguration()
     {
         restirDISettings.SpatialTargetHistoryLength = static_cast<uint32_t>(std::clamp(intValue, 0, 64));
     }
+//Modify Begin:2026-09-11 by Hui
+    if (configuration.TryGetFloat("ReSTIRDI", "SpatialSamplingRadius", floatValue))
+    {
+        restirDISettings.SpatialSamplingRadius = floatValue;
+    }
+    if (configuration.TryGetFloat("ReSTIRDI", "SpatialNormalSimilarityThreshold", floatValue))
+    {
+        restirDISettings.SpatialNormalSimilarityThreshold = floatValue;
+    }
+    if (configuration.TryGetFloat("ReSTIRDI", "SpatialDepthSimilarityThreshold", floatValue))
+    {
+        restirDISettings.SpatialDepthSimilarityThreshold = floatValue;
+    }
+    if (configuration.TryGetFloat("ReSTIRDI", "SpatialMaterialSimilarityThreshold", floatValue))
+    {
+        restirDISettings.SpatialMaterialSimilarityThreshold = floatValue;
+    }
+//Modify End
     if (configuration.TryGetBoolean("ReSTIRDI", "SpatialMaterialSimilarityTest", boolValue))
     {
         restirDISettings.EnableSpatialMaterialSimilarityTest = boolValue;
@@ -1167,7 +1468,58 @@ void RaytracingDemo::LoadStartupConfiguration()
     {
         restirGISettings.SpatialNeighborCount = static_cast<uint32_t>(std::clamp(intValue, 1, 16));
     }
+//Modify Begin:2026-09-11 by Hui
+    if (configuration.TryGetInt("ReSTIRGI", "TemporalMaxHistoryLength", intValue))
+    {
+        restirGISettings.TemporalMaxHistoryLength = static_cast<uint32_t>(std::max(intValue, 1));
+    }
+    if (configuration.TryGetInt("ReSTIRGI", "SpatialMaxHistoryLength", intValue))
+    {
+        restirGISettings.SpatialMaxHistoryLength = static_cast<uint32_t>(std::max(intValue, 1));
+    }
+    if (configuration.TryGetInt("ReSTIRGI", "MaxSampleAge", intValue))
+    {
+        restirGISettings.MaxSampleAge = static_cast<uint32_t>(std::max(intValue, 1));
+    }
+    if (configuration.TryGetFloat("ReSTIRGI", "TemporalNormalSimilarityThreshold", floatValue))
+    {
+        restirGISettings.TemporalNormalSimilarityThreshold = floatValue;
+    }
+    if (configuration.TryGetFloat("ReSTIRGI", "TemporalPositionSimilarityThreshold", floatValue))
+    {
+        restirGISettings.TemporalPositionSimilarityThreshold = floatValue;
+    }
+    if (configuration.TryGetFloat("ReSTIRGI", "SpatialNormalSimilarityThreshold", floatValue))
+    {
+        restirGISettings.SpatialNormalSimilarityThreshold = floatValue;
+    }
+    if (configuration.TryGetFloat("ReSTIRGI", "SpatialPositionSimilarityThreshold", floatValue))
+    {
+        restirGISettings.SpatialPositionSimilarityThreshold = floatValue;
+    }
+    if (configuration.TryGetFloat("ReSTIRGI", "SpatialSamplingRadius", floatValue))
+    {
+        restirGISettings.SpatialSamplingRadius = floatValue;
+    }
+    if (configuration.TryGetFloat("ReSTIRGI", "MaxJacobian", floatValue))
+    {
+        restirGISettings.MaxJacobian = floatValue;
+    }
+    if (configuration.TryGetFloat("ReSTIRGI", "MaxSpatialWeight", floatValue))
+    {
+        restirGISettings.MaxSpatialWeight = floatValue;
+    }
+//Modify End
     m_IndirectLightingReSTIRGI.SetSettings(restirGISettings);
+
+//Modify Begin:2026-09-11 by Hui
+    AutoExposure::Settings autoExposureSettings = m_AutoExposure.GetSettings();
+    if (configuration.TryGetBoolean("AutoExposure", "Enabled", boolValue)) autoExposureSettings.Enabled = boolValue;
+    if (configuration.TryGetFloat("AutoExposure", "AdaptationTau", floatValue)) autoExposureSettings.Tau = floatValue;
+    if (configuration.TryGetFloat("AutoExposure", "MinLogLuminance", floatValue)) autoExposureSettings.MinLogLuminance = floatValue;
+    if (configuration.TryGetFloat("AutoExposure", "MaxLogLuminance", floatValue)) autoExposureSettings.MaxLogLuminance = floatValue;
+    m_AutoExposure.SetSettings(autoExposureSettings);
+//Modify End
 
     if (configuration.TryGetBoolean("Bloom", "Enabled", boolValue))
     {
@@ -1245,7 +1597,612 @@ void RaytracingDemo::LoadStartupConfiguration()
     {
         SetProfilerDisplayRefreshIntervalSeconds(floatValue);
     }
+//Modify Begin:2026-09-11 by Hui
+    if (configuration.TryGetBoolean("Debug", "CaptureTimingHistory", boolValue))
+    {
+        m_RenderGraphTimingCaptureEnabled = m_GpuTimingEnabled && boolValue;
+    }
+    if (configuration.TryGetInt("Debug", "TimingHistoryCapacity", intValue))
+    {
+        m_RenderGraphTimingHistory.SetCapacity(static_cast<size_t>(std::clamp(intValue, 30, 3600)));
+    }
+    if (configuration.TryGetBoolean("Debug", "ReSTIRGIStageTiming", boolValue))
+    {
+        m_ReSTIRGIStageTimingEnabled = boolValue;
+    }
+//Modify End
+
+    DemoLightEditor::Configuration lightEditorConfiguration = m_LightEditor.GetConfiguration();
+    const auto loadEditorFloat = [&configuration](const char* key, float& value)
+    {
+        return configuration.TryGetFloat("Lights.EditorDefaults", key, value);
+    };
+    const auto loadEditorFloat3 = [&loadEditorFloat](const char* prefix, XMFLOAT3& value)
+    {
+        bool found = false;
+        found |= loadEditorFloat((std::string(prefix) + "X").c_str(), value.x);
+        found |= loadEditorFloat((std::string(prefix) + "Y").c_str(), value.y);
+        found |= loadEditorFloat((std::string(prefix) + "Z").c_str(), value.z);
+        return found;
+    };
+    const auto loadEditorFloat2 = [&loadEditorFloat](const char* prefix, XMFLOAT2& value)
+    {
+        bool found = false;
+        found |= loadEditorFloat((std::string(prefix) + "X").c_str(), value.x);
+        found |= loadEditorFloat((std::string(prefix) + "Y").c_str(), value.y);
+        return found;
+    };
+    loadEditorFloat3("NewDirectionalDirection", lightEditorConfiguration.NewDirectionalLightDirection);
+    loadEditorFloat3("NewDirectionalColor", lightEditorConfiguration.NewDirectionalLightColor);
+    loadEditorFloat("NewDirectionalIntensity", lightEditorConfiguration.NewDirectionalLightIntensity);
+    loadEditorFloat("NewDirectionalAngularRadius", lightEditorConfiguration.NewDirectionalLightAngularRadius);
+    loadEditorFloat3("NewPointColor", lightEditorConfiguration.NewPointLightColor);
+    loadEditorFloat("NewPointIntensity", lightEditorConfiguration.NewPointLightIntensity);
+    loadEditorFloat("NewPointRange", lightEditorConfiguration.NewPointLightRange);
+    loadEditorFloat("NewPointSourceRadius", lightEditorConfiguration.NewPointLightSourceRadius);
+    loadEditorFloat("RandomPointSpawnRadius", lightEditorConfiguration.RandomPointLightSpawnRadius);
+    loadEditorFloat3("NewSpotPosition", lightEditorConfiguration.NewSpotLightPosition);
+    loadEditorFloat3("NewSpotDirection", lightEditorConfiguration.NewSpotLightDirection);
+    loadEditorFloat3("NewSpotColor", lightEditorConfiguration.NewSpotLightColor);
+    loadEditorFloat("NewSpotIntensity", lightEditorConfiguration.NewSpotLightIntensity);
+    loadEditorFloat("NewSpotRange", lightEditorConfiguration.NewSpotLightRange);
+    loadEditorFloat("NewSpotInnerAngleDegrees", lightEditorConfiguration.NewSpotLightInnerAngleDegrees);
+    loadEditorFloat("NewSpotOuterAngleDegrees", lightEditorConfiguration.NewSpotLightOuterAngleDegrees);
+    loadEditorFloat3("NewAreaPosition", lightEditorConfiguration.NewAreaLightPosition);
+    loadEditorFloat3("NewAreaNormal", lightEditorConfiguration.NewAreaLightNormal);
+    loadEditorFloat2("NewAreaSize", lightEditorConfiguration.NewAreaLightSize);
+    loadEditorFloat3("NewAreaColor", lightEditorConfiguration.NewAreaLightColor);
+    loadEditorFloat("NewAreaIntensity", lightEditorConfiguration.NewAreaLightIntensity);
+    loadEditorFloat("NewAreaRange", lightEditorConfiguration.NewAreaLightRange);
+    m_LightEditor.SetConfiguration(lightEditorConfiguration);
 }
+
+void RaytracingDemo::ApplyStartupLightConfiguration()
+{
+    const std::filesystem::path runtimeRoot = GetRuntimeRootPath();
+    StartupIni configuration = StartupIni::Load(runtimeRoot / "Config" / "RaytracingDemo.ini");
+    const std::filesystem::path userConfigurationPath = runtimeRoot / "Saved" / "RaytracingDemo.ini";
+    if (std::filesystem::is_regular_file(userConfigurationPath))
+    {
+        configuration.Overlay(StartupIni::Load(userConfigurationPath));
+    }
+
+    bool boolValue = false;
+    if (configuration.TryGetBoolean("Lights", "DirectionalEnabled", boolValue))
+    {
+        m_Lights.SetLightGroupSettings(
+            boolValue,
+            m_Lights.ArePointLightsEnabled(),
+            m_Lights.AreAreaLightsEnabled());
+    }
+    if (configuration.TryGetBoolean("Lights", "PointEnabled", boolValue))
+    {
+        m_Lights.SetLightGroupSettings(
+            m_Lights.AreDirectionalLightsEnabled(),
+            boolValue,
+            m_Lights.AreAreaLightsEnabled());
+    }
+    if (configuration.TryGetBoolean("Lights", "AreaEnabled", boolValue))
+    {
+        m_Lights.SetLightGroupSettings(
+            m_Lights.AreDirectionalLightsEnabled(),
+            m_Lights.ArePointLightsEnabled(),
+            boolValue);
+    }
+    if (configuration.TryGetBoolean("Lights", "AnimatePointLights", boolValue))
+    {
+        m_Lights.SetPointLightAnimationEnabled(boolValue);
+    }
+
+    auto readFloat = [&configuration](const std::string& section, const std::string& key, float& value)
+    {
+        return configuration.TryGetFloat(section.c_str(), key.c_str(), value);
+    };
+    auto readFloat3 = [&readFloat](const std::string& section, const char* prefix, XMFLOAT3& value)
+    {
+        bool found = false;
+        std::string key = std::string(prefix) + "X";
+        found |= readFloat(section, key, value.x);
+        key = std::string(prefix) + "Y";
+        found |= readFloat(section, key, value.y);
+        key = std::string(prefix) + "Z";
+        found |= readFloat(section, key, value.z);
+        return found;
+    };
+    auto readFloat4 = [&readFloat](const std::string& section, const char* prefix, XMFLOAT4& value)
+    {
+        bool found = false;
+        std::string key = std::string(prefix) + "X";
+        found |= readFloat(section, key, value.x);
+        key = std::string(prefix) + "Y";
+        found |= readFloat(section, key, value.y);
+        key = std::string(prefix) + "Z";
+        found |= readFloat(section, key, value.z);
+        key = std::string(prefix) + "W";
+        found |= readFloat(section, key, value.w);
+        return found;
+    };
+
+    SkyLightData skyLight = m_Lights.GetSkyLight();
+    XMFLOAT3 skyColor = { skyLight.ColorAndIntensity.x, skyLight.ColorAndIntensity.y, skyLight.ColorAndIntensity.z };
+    float skyIntensity = skyLight.ColorAndIntensity.w;
+    const bool skyConfigured = readFloat3("Lights", "SkyColor", skyColor) |
+        readFloat("Lights", "SkyIntensity", skyIntensity);
+    if (skyConfigured)
+    {
+        skyLight.ColorAndIntensity = { skyColor.x, skyColor.y, skyColor.z, skyIntensity };
+        m_Lights.SetSkyLight(skyLight);
+    }
+
+    int count = 0;
+    const bool hasDirectionalConfiguration = configuration.TryGetInt("Lights", "DirectionalCount", count);
+    const int directionalCount = std::max(count, 0);
+    const bool hasPointConfiguration = configuration.TryGetInt("Lights", "PointCount", count);
+    const int pointCount = std::max(count, 0);
+    const bool hasSpotConfiguration = configuration.TryGetInt("Lights", "SpotCount", count);
+    const int spotCount = std::max(count, 0);
+    const bool hasAreaConfiguration = configuration.TryGetInt("Lights", "AreaCount", count);
+    const int areaCount = std::max(count, 0);
+
+    if (hasDirectionalConfiguration)
+    {
+        while (!m_Lights.GetDirectionalLights().empty())
+        {
+            m_Lights.RemoveDirectionalLight(m_Lights.GetDirectionalLights().size() - 1);
+        }
+        for (int index = 0; index < directionalCount; ++index)
+        {
+            DirectionalLight light{};
+            const std::string section = "Lights.Directional." + std::to_string(index);
+            readFloat4(section, "Direction", light.m_DirectionWs);
+            readFloat4(section, "Color", light.m_Color);
+            m_Lights.AddDirectionalLight(light);
+        }
+    }
+
+    if (hasPointConfiguration)
+    {
+        while (!m_Lights.GetPointLights().empty())
+        {
+            m_Lights.RemovePointLight(m_Lights.GetPointLights().size() - 1);
+        }
+        for (int index = 0; index < pointCount; ++index)
+        {
+            PointLight light{};
+            const std::string section = "Lights.Point." + std::to_string(index);
+            readFloat4(section, "Position", light.PositionWs);
+            readFloat4(section, "Color", light.Color);
+            readFloat(section, "Range", light.Range);
+            readFloat(section, "SourceRadius", light.SourceRadius);
+            SceneLightManager::PointLightAnimation animation{};
+            animation.BaseY = light.PositionWs.y;
+            animation.OrbitCenter = { light.PositionWs.x, light.PositionWs.y, light.PositionWs.z };
+            readFloat(section, "AnimationBaseY", animation.BaseY);
+            readFloat(section, "AnimationPhase", animation.Phase);
+            readFloat(section, "AnimationOrbitRadius", animation.OrbitRadius);
+            readFloat(section, "AnimationOrbitSpeed", animation.OrbitSpeed);
+            readFloat3(section, "AnimationOrbitCenter", animation.OrbitCenter);
+            configuration.TryGetBoolean(section.c_str(), "AnimationEnabled", animation.Enabled);
+            m_Lights.AddPointLight(light, animation);
+        }
+        if (configuration.TryGetInt("Lights", "ImportedPointLightCount", count))
+        {
+            m_Lights.SetImportedPointLightCount(static_cast<size_t>(std::max(count, 0)));
+        }
+    }
+
+    if (hasSpotConfiguration)
+    {
+        while (!m_Lights.GetSpotLights().empty())
+        {
+            m_Lights.RemoveSpotLight(m_Lights.GetSpotLights().size() - 1);
+        }
+        for (int index = 0; index < spotCount; ++index)
+        {
+            SpotLight light{};
+            const std::string section = "Lights.Spot." + std::to_string(index);
+            readFloat4(section, "Position", light.PositionWs);
+            readFloat4(section, "Direction", light.DirectionWs);
+            readFloat4(section, "Color", light.Color);
+            readFloat(section, "Intensity", light.Intensity);
+            readFloat(section, "Range", light.Range);
+            float innerConeAngleDegrees = XMConvertToDegrees(light.InnerConeAngle);
+            float outerConeAngleDegrees = XMConvertToDegrees(light.OuterConeAngle);
+            readFloat(section, "InnerConeAngle", innerConeAngleDegrees);
+            readFloat(section, "OuterConeAngle", outerConeAngleDegrees);
+            light.InnerConeAngle = XMConvertToRadians(innerConeAngleDegrees);
+            light.OuterConeAngle = XMConvertToRadians(outerConeAngleDegrees);
+            m_Lights.AddSpotLight(light);
+        }
+    }
+
+    if (hasAreaConfiguration)
+    {
+        while (!m_Lights.GetAreaLights().empty())
+        {
+            m_Lights.RemoveAreaLight(m_Lights.GetAreaLights().size() - 1);
+        }
+        for (int index = 0; index < areaCount; ++index)
+        {
+            AreaLightData light{};
+            const std::string section = "Lights.Area." + std::to_string(index);
+            readFloat4(section, "PositionAndRange", light.PositionAndRange);
+            readFloat4(section, "NormalAndType", light.NormalAndType);
+            readFloat4(section, "AxisUAndExtent", light.AxisUAndExtent);
+            readFloat4(section, "AxisVAndExtent", light.AxisVAndExtent);
+            readFloat4(section, "ColorAndIntensity", light.ColorAndIntensity);
+            m_Lights.AddAreaLight(light);
+        }
+    }
+}
+
+//Modify Begin:2026-09-11 by Hui
+void RaytracingDemo::SaveRuntimeConfiguration()
+{
+    const auto lightingTechniqueName = [](const RaytracingDemoLightingTechnique technique)
+    {
+        switch (technique)
+        {
+        case RaytracingDemoLightingTechnique::PathTracing: return "pathtracing";
+        case RaytracingDemoLightingTechnique::ReSTIRDI: return "restirdi";
+        case RaytracingDemoLightingTechnique::ReSTIRGI: return "restirgi";
+        default: return "none";
+        }
+    };
+    const auto dlssModeName = [](const DLSSMode mode)
+    {
+        switch (mode)
+        {
+        case DLSSMode::DLAA: return "dlaa";
+        case DLSSMode::Quality: return "quality";
+        case DLSSMode::Balanced: return "balanced";
+        case DLSSMode::Performance: return "performance";
+        case DLSSMode::UltraPerformance: return "ultra-performance";
+        default: return "off";
+        }
+    };
+    const auto denoiserName = [](const DenoiserController::Algorithm algorithm)
+    {
+        switch (algorithm)
+        {
+        case DenoiserController::Algorithm::NRD: return "nrd";
+        case DenoiserController::Algorithm::SVGF: return "svgf";
+        case DenoiserController::Algorithm::OIDN: return "oidn";
+        default: return "off";
+        }
+    };
+    const auto temporalBiasName = [](const ReSTIRDITemporalBiasCorrectionMode mode)
+    {
+        switch (mode)
+        {
+        case ReSTIRDITemporalBiasCorrectionMode::Basic: return "basic";
+        case ReSTIRDITemporalBiasCorrectionMode::RayTraced: return "raytraced";
+        default: return "off";
+        }
+    };
+    const auto spatialBiasName = [](const ReSTIRDISpatialBiasCorrectionMode mode)
+    {
+        switch (mode)
+        {
+        case ReSTIRDISpatialBiasCorrectionMode::Basic: return "basic";
+        case ReSTIRDISpatialBiasCorrectionMode::Pairwise: return "pairwise";
+        case ReSTIRDISpatialBiasCorrectionMode::RayTraced: return "raytraced";
+        default: return "off";
+        }
+    };
+
+    const std::filesystem::path outputPath = GetRuntimeRootPath() / "Saved" / "RaytracingDemo.ini";
+    std::filesystem::create_directories(outputPath.parent_path());
+    std::filesystem::path temporaryPath = outputPath;
+    temporaryPath += ".tmp";
+
+    std::ofstream stream(temporaryPath, std::ios::binary | std::ios::trunc);
+    if (!stream)
+    {
+        throw std::runtime_error("Failed to open runtime configuration temporary file: " + temporaryPath.string());
+    }
+    stream << std::boolalpha << std::setprecision(9);
+
+    stream << "; User-saved RaytracingDemo settings.\n"
+           << "; This file overrides Config/RaytracingDemo.ini on the next launch.\n\n"
+           << "[Renderer]\n"
+           << "PathTracingBackend = " << (m_PathTracingBackend == PathTracingBackend::ShaderTableDxr ? "dxr" : "inline") << '\n'
+           << "PathTracingDispatch = " << (m_PathTracingDispatchMode == PathTracingDispatchMode::CompactedIndirect ? "compacted-indirect" : "full-resolution") << '\n'
+           << "DirectLighting = " << lightingTechniqueName(m_DirectLightingTechnique) << '\n'
+           << "IndirectLighting = " << lightingTechniqueName(m_IndirectLightingTechnique) << '\n'
+           << "MaxBounces = " << m_MaxBounces << '\n'
+           << "Accumulation = " << m_AccumulationEnabled << '\n'
+           << "SoftShadows = " << m_SoftShadowsEnabled << '\n'
+           << "AsyncCompute = " << m_AsyncComputeEnabled << '\n'
+           << "DebugSerializeAsyncCompute = " << m_DebugSerializeAsyncCompute << '\n'
+           << "CopyQueueValidation = " << m_CopyQueueValidationEnabled << '\n'
+           << "ParallelDirectCommandRecording = " << m_ParallelDirectCommandRecordingEnabled << '\n'
+           << "StressTestSpheres = " << m_SceneRuntime.AreStressTestSpheresEnabled() << '\n'
+           << "DynamicRTASRefit = " << m_SceneResources.AreDynamicRayTracingUpdatesEnabled() << '\n'
+           << "MeshletGBuffer = " << m_UseMeshletGBuffer << '\n'
+           << "MeshletDebug = " << m_DebugMeshletClusters << '\n'
+           << "MeshletDebugTarget = " << m_DebugTextureTarget << '\n'
+           << "MeshletBackend = " << (m_UseTaskShaderMeshlets ? "task" : "compute-indirect") << '\n'
+           << "DebugLightingTexture = " << m_DebugLightingTextureTarget << '\n'
+           << "MaterialShading = " << (m_MaterialShadingModel == MaterialShadingModel::StylizedComic ? "stylized-comic" : "pbr") << "\n\n";
+
+    stream << "[Camera]\n"
+           << "FieldOfView = " << m_CameraFov << '\n'
+           << "NearClipPlane = " << m_CameraNearClipPlane << '\n'
+           << "FarClipPlane = " << m_CameraFarClipPlane << '\n'
+           << "MouseRotateSpeed = " << m_MouseRotateSpeed << '\n'
+           << "MousePanSpeed = " << m_MousePanSpeed << '\n'
+           << "MouseDollySpeed = " << m_MouseDollySpeed << '\n'
+           << "MouseWheelDollySpeed = " << m_MouseWheelDollySpeed << "\n\n";
+
+    stream << "[Denoiser]\n"
+           << "Algorithm = " << denoiserName(m_Denoisers.GetAlgorithm()) << '\n'
+           << "OIDNStaticSpp = " << m_Denoisers.GetOIDNStaticSpp() << "\n\n";
+
+    const NRD::Settings nrd = m_Denoisers.GetNRDSettings();
+    stream << "[NRD]\n"
+           << "Mode = " << (nrd.Mode == NRD::DenoiserMode::RelaxDiffuse ? "relax-diffuse" : "reblur-diffuse") << '\n'
+           << "DenoisingRange = " << nrd.DenoisingRange << '\n'
+           << "RelaxDiffuseMaxAccumulatedFrameNum = " << nrd.RelaxDiffuseMaxAccumulatedFrameNum << '\n'
+           << "RelaxDiffuseMaxFastAccumulatedFrameNum = " << nrd.RelaxDiffuseMaxFastAccumulatedFrameNum << '\n'
+           << "RelaxHistoryFixFrameNum = " << nrd.RelaxHistoryFixFrameNum << '\n'
+           << "RelaxHistoryFixBasePixelStride = " << nrd.RelaxHistoryFixBasePixelStride << '\n'
+           << "RelaxFastHistoryClampingSigmaScale = " << nrd.RelaxFastHistoryClampingSigmaScale << '\n'
+           << "RelaxDiffusePrepassBlurRadius = " << nrd.RelaxDiffusePrepassBlurRadius << '\n'
+           << "RelaxMinHitDistanceWeight = " << nrd.RelaxMinHitDistanceWeight << '\n'
+           << "RelaxSpatialVarianceEstimationHistoryThreshold = " << nrd.RelaxSpatialVarianceEstimationHistoryThreshold << '\n'
+           << "RelaxDiffusePhiLuminance = " << nrd.RelaxDiffusePhiLuminance << '\n'
+           << "RelaxLobeAngleFraction = " << nrd.RelaxLobeAngleFraction << '\n'
+           << "RelaxRoughnessFraction = " << nrd.RelaxRoughnessFraction << '\n'
+           << "RelaxAtrousIterationNum = " << nrd.RelaxAtrousIterationNum << '\n'
+           << "RelaxDepthThreshold = " << nrd.RelaxDepthThreshold << '\n'
+           << "RelaxLuminanceEdgeStoppingRelaxation = " << nrd.RelaxLuminanceEdgeStoppingRelaxation << '\n'
+           << "RelaxNormalEdgeStoppingRelaxation = " << nrd.RelaxNormalEdgeStoppingRelaxation << '\n'
+           << "RelaxRoughnessEdgeStoppingRelaxation = " << nrd.RelaxRoughnessEdgeStoppingRelaxation << '\n'
+           << "RelaxEnableAntiFirefly = " << nrd.RelaxEnableAntiFirefly << '\n'
+           << "RelaxEnableRoughnessEdgeStopping = " << nrd.RelaxEnableRoughnessEdgeStopping << '\n'
+           << "ReblurHitDistanceA = " << nrd.ReblurHitDistanceA << '\n'
+           << "ReblurHitDistanceB = " << nrd.ReblurHitDistanceB << '\n'
+           << "ReblurHitDistanceC = " << nrd.ReblurHitDistanceC << '\n'
+           << "ReblurMaxAccumulatedFrameNum = " << nrd.ReblurMaxAccumulatedFrameNum << '\n'
+           << "ReblurMaxFastAccumulatedFrameNum = " << nrd.ReblurMaxFastAccumulatedFrameNum << '\n'
+           << "ReblurHistoryFixFrameNum = " << nrd.ReblurHistoryFixFrameNum << '\n'
+           << "ReblurHistoryFixBasePixelStride = " << nrd.ReblurHistoryFixBasePixelStride << '\n'
+           << "ReblurFastHistoryClampingSigmaScale = " << nrd.ReblurFastHistoryClampingSigmaScale << '\n'
+           << "ReblurDiffusePrepassBlurRadius = " << nrd.ReblurDiffusePrepassBlurRadius << '\n'
+           << "ReblurMinHitDistanceWeight = " << nrd.ReblurMinHitDistanceWeight << '\n'
+           << "ReblurMinBlurRadius = " << nrd.ReblurMinBlurRadius << '\n'
+           << "ReblurMaxBlurRadius = " << nrd.ReblurMaxBlurRadius << '\n'
+           << "ReblurLobeAngleFraction = " << nrd.ReblurLobeAngleFraction << '\n'
+           << "ReblurRoughnessFraction = " << nrd.ReblurRoughnessFraction << '\n'
+           << "ReblurPlaneDistanceSensitivity = " << nrd.ReblurPlaneDistanceSensitivity << '\n'
+           << "ReblurFireflySuppressorMinRelativeScale = " << nrd.ReblurFireflySuppressorMinRelativeScale << '\n'
+           << "ReblurEnableAntiFirefly = " << nrd.ReblurEnableAntiFirefly << "\n\n";
+
+    const SVGF::Settings svgf = m_Denoisers.GetSVGFSettings();
+    stream << "[SVGF]\n"
+           << "AtrousIterations = " << svgf.AtrousIterations << '\n'
+           << "TemporalAlpha = " << svgf.TemporalAlpha << '\n'
+           << "MomentsAlpha = " << svgf.MomentsAlpha << '\n'
+           << "PhiColor = " << svgf.PhiColor << '\n'
+           << "PhiNormal = " << svgf.PhiNormal << '\n'
+           << "PhiDepth = " << svgf.PhiDepth << "\n\n";
+
+    stream << "[DLSS]\n"
+           << "Mode = " << dlssModeName(m_DLSS.GetMode()) << '\n'
+           << "RayReconstruction = " << m_DLSS.IsRayReconstructionEnabled() << '\n'
+           << "FrameGeneration = " << m_DLSS.IsFrameGenerationEnabled() << "\n\n"
+           << "[Display]\n"
+           << "HDR10 = " << m_Hdr10OutputRequested << "\n\n";
+
+    const AutoExposure::Settings autoExposure = m_AutoExposure.GetSettings();
+    stream << "[AutoExposure]\n"
+           << "Enabled = " << autoExposure.Enabled << '\n'
+           << "AdaptationTau = " << autoExposure.Tau << '\n'
+           << "MinLogLuminance = " << autoExposure.MinLogLuminance << '\n'
+           << "MaxLogLuminance = " << autoExposure.MaxLogLuminance << "\n\n";
+
+    const ReSTIRDISettings restirDI = m_DirectLightingReSTIRDI.GetSettings();
+    stream << "[ReSTIRDI]\n"
+           << "CandidateCount = " << restirDI.CandidateCount << '\n'
+           << "InitialVisibility = " << restirDI.EnableInitialVisibility << '\n'
+           << "TemporalResampling = " << restirDI.EnableTemporalResampling << '\n'
+           << "TemporalBiasCorrection = " << temporalBiasName(restirDI.TemporalBiasCorrection) << '\n'
+           << "TemporalMaxHistoryLength = " << restirDI.TemporalMaxHistoryLength << '\n'
+           << "TemporalVisibilityShortcut = " << restirDI.EnableTemporalVisibilityShortcut << '\n'
+           << "TemporalPermutationSampling = " << restirDI.EnableTemporalPermutationSampling << '\n'
+           << "TemporalMaterialSimilarityTest = " << restirDI.EnableTemporalMaterialSimilarityTest << '\n'
+           << "TemporalIgnoreGeometry = " << restirDI.EnableTemporalIgnoreGeometry << '\n'
+           << "TemporalNormalSimilarityThreshold = " << restirDI.TemporalNormalSimilarityThreshold << '\n'
+           << "TemporalDepthSimilarityThreshold = " << restirDI.TemporalDepthSimilarityThreshold << '\n'
+           << "TemporalMaterialSimilarityThreshold = " << restirDI.TemporalMaterialSimilarityThreshold << '\n'
+           << "BoilingFilter = " << restirDI.EnableBoilingFilter << '\n'
+           << "BoilingFilterStrength = " << restirDI.BoilingFilterStrength << '\n'
+           << "SpatialResampling = " << restirDI.EnableSpatialResampling << '\n'
+           << "SpatialBiasCorrection = " << spatialBiasName(restirDI.SpatialBiasCorrection) << '\n'
+           << "SpatialNeighborCount = " << restirDI.SpatialNeighborCount << '\n'
+           << "SpatialDisocclusionBoostSampleCount = " << restirDI.SpatialDisocclusionBoostSampleCount << '\n'
+           << "SpatialTargetHistoryLength = " << restirDI.SpatialTargetHistoryLength << '\n'
+           << "SpatialSamplingRadius = " << restirDI.SpatialSamplingRadius << '\n'
+           << "SpatialNormalSimilarityThreshold = " << restirDI.SpatialNormalSimilarityThreshold << '\n'
+           << "SpatialDepthSimilarityThreshold = " << restirDI.SpatialDepthSimilarityThreshold << '\n'
+           << "SpatialMaterialSimilarityTest = " << restirDI.EnableSpatialMaterialSimilarityTest << '\n'
+           << "SpatialMaterialSimilarityThreshold = " << restirDI.SpatialMaterialSimilarityThreshold << '\n'
+           << "FinalVisibility = " << restirDI.EnableFinalVisibility << '\n'
+           << "ReuseFinalVisibility = " << restirDI.ReuseFinalVisibility << '\n'
+           << "DiscardInvisibleFinalSamples = " << restirDI.DiscardInvisibleFinalSamples << '\n'
+           << "FinalVisibilityMaxAge = " << restirDI.FinalVisibilityMaxAge << '\n'
+           << "FinalVisibilityMaxDistance = " << restirDI.FinalVisibilityMaxDistance << "\n\n";
+
+    const ReSTIRGISettings restirGI = m_IndirectLightingReSTIRGI.GetSettings();
+    stream << "[ReSTIRGI]\n"
+           << "InitialCandidateCount = " << restirGI.InitialCandidateCount << '\n'
+           << "TemporalResampling = " << restirGI.EnableTemporalResampling << '\n'
+           << "SpatialResampling = " << restirGI.EnableSpatialResampling << '\n'
+           << "TemporalJacobian = " << restirGI.EnableTemporalJacobian << '\n'
+           << "RayTracedSpatialBiasCorrection = " << restirGI.EnableRayTracedSpatialBiasCorrection << '\n'
+           << "TemporalMaxHistoryLength = " << restirGI.TemporalMaxHistoryLength << '\n'
+           << "SpatialMaxHistoryLength = " << restirGI.SpatialMaxHistoryLength << '\n'
+           << "MaxSampleAge = " << restirGI.MaxSampleAge << '\n'
+           << "SpatialNeighborCount = " << restirGI.SpatialNeighborCount << '\n'
+           << "TemporalNormalSimilarityThreshold = " << restirGI.TemporalNormalSimilarityThreshold << '\n'
+           << "TemporalPositionSimilarityThreshold = " << restirGI.TemporalPositionSimilarityThreshold << '\n'
+           << "SpatialNormalSimilarityThreshold = " << restirGI.SpatialNormalSimilarityThreshold << '\n'
+           << "SpatialPositionSimilarityThreshold = " << restirGI.SpatialPositionSimilarityThreshold << '\n'
+           << "SpatialSamplingRadius = " << restirGI.SpatialSamplingRadius << '\n'
+           << "MaxJacobian = " << restirGI.MaxJacobian << '\n'
+           << "MaxSpatialWeight = " << restirGI.MaxSpatialWeight << "\n\n";
+
+    const BloomController::Settings bloom = m_Bloom.GetSettings();
+    const char* bloomMethod = bloom.Method == BloomController::CudaMethod::BoxFilterApproximation
+        ? "box-filter"
+        : bloom.Method == BloomController::CudaMethod::BoxFilterOriginalPaper
+            ? "box-filter-original"
+            : "classic-pyramid";
+    stream << "[Bloom]\n"
+           << "Enabled = " << bloom.Enabled << '\n'
+           << "Backend = " << (bloom.SelectedBackend == BloomController::Backend::Cuda ? "cuda" : "raster") << '\n'
+           << "CudaMethod = " << bloomMethod << '\n'
+           << "Threshold = " << bloom.Threshold << '\n'
+           << "SoftThreshold = " << bloom.SoftThreshold << '\n'
+           << "Intensity = " << bloom.Intensity << '\n'
+           << "PyramidLevels = " << bloom.PyramidLevels << '\n'
+           << "BoxFilterSigma = " << bloom.BoxFilterSigma << '\n'
+           << "SharedMemoryDownsampling = " << bloom.UseSharedMemoryDownsampling << '\n'
+           << "ThreadBlockSize = " << static_cast<uint32_t>(bloom.BlockSize) << "\n\n";
+
+    stream << "[Debug]\n"
+           << "GpuTiming = " << m_GpuTimingEnabled << '\n'
+           << "CaptureTimingHistory = " << m_RenderGraphTimingCaptureEnabled << '\n'
+           << "TimingHistoryCapacity = " << m_RenderGraphTimingHistory.GetCapacity() << '\n'
+           << "ReSTIRGIStageTiming = " << m_ReSTIRGIStageTimingEnabled << '\n'
+           << "ProfilerDisplayRefreshIntervalSeconds = " << m_ProfilerDisplay.GetRefreshIntervalSeconds() << '\n';
+
+    const auto writeFloat3 = [&stream](const char* prefix, const XMFLOAT3& value)
+    {
+        stream << prefix << "X = " << value.x << '\n'
+               << prefix << "Y = " << value.y << '\n'
+               << prefix << "Z = " << value.z << '\n';
+    };
+    const auto writeFloat4 = [&stream](const char* prefix, const XMFLOAT4& value)
+    {
+        stream << prefix << "X = " << value.x << '\n'
+               << prefix << "Y = " << value.y << '\n'
+               << prefix << "Z = " << value.z << '\n'
+               << prefix << "W = " << value.w << '\n';
+    };
+    const DemoLightEditor::Configuration lightEditorConfiguration = m_LightEditor.GetConfiguration();
+    stream << "\n[Lights]\n"
+           << "DirectionalEnabled = " << m_Lights.AreDirectionalLightsEnabled() << '\n'
+           << "PointEnabled = " << m_Lights.ArePointLightsEnabled() << '\n'
+           << "AreaEnabled = " << m_Lights.AreAreaLightsEnabled() << '\n'
+           << "AnimatePointLights = " << m_Lights.IsPointLightAnimationEnabled() << '\n'
+           << "ImportedPointLightCount = " << m_Lights.GetImportedPointLightCount() << '\n'
+           << "DirectionalCount = " << m_Lights.GetDirectionalLights().size() << '\n'
+           << "PointCount = " << m_Lights.GetPointLights().size() << '\n'
+           << "SpotCount = " << m_Lights.GetSpotLights().size() << '\n'
+           << "AreaCount = " << m_Lights.GetAreaLights().size() << '\n';
+    const SkyLightData& skyLight = m_Lights.GetSkyLight();
+    stream << "SkyColorX = " << skyLight.ColorAndIntensity.x << '\n'
+           << "SkyColorY = " << skyLight.ColorAndIntensity.y << '\n'
+           << "SkyColorZ = " << skyLight.ColorAndIntensity.z << '\n'
+           << "SkyIntensity = " << skyLight.ColorAndIntensity.w << "\n\n"
+           << "[Lights.EditorDefaults]\n";
+    writeFloat3("NewDirectionalDirection", lightEditorConfiguration.NewDirectionalLightDirection);
+    writeFloat3("NewDirectionalColor", lightEditorConfiguration.NewDirectionalLightColor);
+    stream << "NewDirectionalIntensity = " << lightEditorConfiguration.NewDirectionalLightIntensity << '\n'
+           << "NewDirectionalAngularRadius = " << lightEditorConfiguration.NewDirectionalLightAngularRadius << '\n';
+    writeFloat3("NewPointColor", lightEditorConfiguration.NewPointLightColor);
+    stream << "NewPointIntensity = " << lightEditorConfiguration.NewPointLightIntensity << '\n'
+           << "NewPointRange = " << lightEditorConfiguration.NewPointLightRange << '\n'
+           << "NewPointSourceRadius = " << lightEditorConfiguration.NewPointLightSourceRadius << '\n'
+           << "RandomPointSpawnRadius = " << lightEditorConfiguration.RandomPointLightSpawnRadius << '\n';
+    writeFloat3("NewSpotPosition", lightEditorConfiguration.NewSpotLightPosition);
+    writeFloat3("NewSpotDirection", lightEditorConfiguration.NewSpotLightDirection);
+    writeFloat3("NewSpotColor", lightEditorConfiguration.NewSpotLightColor);
+    stream << "NewSpotIntensity = " << lightEditorConfiguration.NewSpotLightIntensity << '\n'
+           << "NewSpotRange = " << lightEditorConfiguration.NewSpotLightRange << '\n'
+           << "NewSpotInnerAngleDegrees = " << lightEditorConfiguration.NewSpotLightInnerAngleDegrees << '\n'
+           << "NewSpotOuterAngleDegrees = " << lightEditorConfiguration.NewSpotLightOuterAngleDegrees << '\n';
+    writeFloat3("NewAreaPosition", lightEditorConfiguration.NewAreaLightPosition);
+    writeFloat3("NewAreaNormal", lightEditorConfiguration.NewAreaLightNormal);
+    stream << "NewAreaSizeX = " << lightEditorConfiguration.NewAreaLightSize.x << '\n'
+           << "NewAreaSizeY = " << lightEditorConfiguration.NewAreaLightSize.y << '\n';
+    writeFloat3("NewAreaColor", lightEditorConfiguration.NewAreaLightColor);
+    stream << "NewAreaIntensity = " << lightEditorConfiguration.NewAreaLightIntensity << '\n'
+           << "NewAreaRange = " << lightEditorConfiguration.NewAreaLightRange << "\n\n";
+
+    for (size_t index = 0; index < m_Lights.GetDirectionalLights().size(); ++index)
+    {
+        const DirectionalLight& light = m_Lights.GetDirectionalLights()[index];
+        stream << "[Lights.Directional." << index << "]\n";
+        writeFloat4("Direction", light.m_DirectionWs);
+        writeFloat4("Color", light.m_Color);
+        stream << '\n';
+    }
+    for (size_t index = 0; index < m_Lights.GetPointLights().size(); ++index)
+    {
+        const PointLight& light = m_Lights.GetPointLights()[index];
+        const SceneLightManager::PointLightAnimation animation = m_Lights.GetPointLightAnimation(index);
+        stream << "[Lights.Point." << index << "]\n";
+        writeFloat4("Position", light.PositionWs);
+        writeFloat4("Color", light.Color);
+        stream << "Range = " << light.Range << '\n'
+               << "SourceRadius = " << light.SourceRadius << '\n'
+               << "AnimationBaseY = " << animation.BaseY << '\n'
+               << "AnimationPhase = " << animation.Phase << '\n'
+               << "AnimationOrbitRadius = " << animation.OrbitRadius << '\n'
+               << "AnimationOrbitSpeed = " << animation.OrbitSpeed << '\n'
+               << "AnimationEnabled = " << animation.Enabled << '\n';
+        writeFloat3("AnimationOrbitCenter", animation.OrbitCenter);
+        stream << '\n';
+    }
+    for (size_t index = 0; index < m_Lights.GetSpotLights().size(); ++index)
+    {
+        const SpotLight& light = m_Lights.GetSpotLights()[index];
+        stream << "[Lights.Spot." << index << "]\n";
+        writeFloat4("Position", light.PositionWs);
+        writeFloat4("Direction", light.DirectionWs);
+        writeFloat4("Color", light.Color);
+        stream << "Intensity = " << light.Intensity << '\n'
+               << "Range = " << light.Range << '\n'
+               << "InnerConeAngle = " << XMConvertToDegrees(light.InnerConeAngle) << '\n'
+               << "OuterConeAngle = " << XMConvertToDegrees(light.OuterConeAngle) << "\n\n";
+    }
+    for (size_t index = 0; index < m_Lights.GetAreaLights().size(); ++index)
+    {
+        const AreaLightData& light = m_Lights.GetAreaLights()[index];
+        stream << "[Lights.Area." << index << "]\n";
+        writeFloat4("PositionAndRange", light.PositionAndRange);
+        writeFloat4("NormalAndType", light.NormalAndType);
+        writeFloat4("AxisUAndExtent", light.AxisUAndExtent);
+        writeFloat4("AxisVAndExtent", light.AxisVAndExtent);
+        writeFloat4("ColorAndIntensity", light.ColorAndIntensity);
+        stream << '\n';
+    }
+    stream.flush();
+    if (!stream)
+    {
+        throw std::runtime_error("Failed while writing runtime configuration: " + temporaryPath.string());
+    }
+    stream.close();
+
+    if (!MoveFileExW(
+            temporaryPath.c_str(),
+            outputPath.c_str(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+    {
+        const DWORD error = GetLastError();
+        std::error_code ignored;
+        std::filesystem::remove(temporaryPath, ignored);
+        throw std::runtime_error(
+            "Failed to atomically publish runtime configuration (Win32 error " +
+            std::to_string(error) + "): " + outputPath.string());
+    }
+
+    m_RuntimeConfigurationSaveStatus = "Settings saved: " + outputPath.string();
+}
+//Modify End
 
 void RaytracingDemo::InitializeDiagnostics()
 {
@@ -1280,6 +2237,10 @@ void RaytracingDemo::InitializeDiagnostics()
     m_Diagnostics.AddMetadata("initial_height", std::to_string(m_Height));
     m_Diagnostics.AddMetadata("executable_path", GetExecutablePath());
     m_Diagnostics.AddMetadata("command_line", GetCommandLineA() != nullptr ? GetCommandLineA() : "");
+    const ReSTIRDISettings& restirDISettings = m_DirectLightingReSTIRDI.GetSettings();
+    m_Diagnostics.AddMetadata("restirdi.boiling_filter_enabled", restirDISettings.EnableBoilingFilter ? "true" : "false");
+    m_Diagnostics.AddMetadata("restirdi.temporal_ignore_geometry", restirDISettings.EnableTemporalIgnoreGeometry ? "true" : "false");
+    m_Diagnostics.AddMetadata("restirdi.boiling_filter_strength", std::to_string(restirDISettings.BoilingFilterStrength));
 //Modify Begin:2026-08-28 by Hui
     const Hdr10OutputCapabilities& hdr10Capabilities = PWindow->GetHdr10OutputCapabilities();
     m_Diagnostics.AddMetadata("presentation.hdr10_active", m_Hdr10OutputEnabled ? "true" : "false");
@@ -1295,7 +2256,7 @@ void RaytracingDemo::InitializeDiagnostics()
             { "peak_nits", static_cast<double>(m_Hdr10PeakNits) },
         });
 //Modify End
-//Modify Begin:2026-08-28 by Hui
+//Modify Begin:2026-09-10 by Hui
     constexpr const char* reproductionEnvironment[] = {
         "RAYTRACING_DEMO_AUTOTEST",
         "RAYTRACING_DEMO_AUTOTEST_START_CASE",
@@ -1304,6 +2265,7 @@ void RaytracingDemo::InitializeDiagnostics()
         "RAYTRACING_DEMO_AUTOTEST_TIMEOUT_SECONDS",
         "RAYTRACING_DEMO_SCENE",
         "RAYTRACING_DEMO_UNITY_SCENE",
+        "RAYTRACING_DEMO_SKYBOX",
         "RAYTRACING_DEMO_MODE",
         "RAYTRACING_DEMO_RAY_TRACING_DISPATCH",
         "RAYTRACING_DEMO_DIRECT_LIGHTING",
@@ -1323,6 +2285,12 @@ void RaytracingDemo::InitializeDiagnostics()
         "RAYTRACING_DEMO_MESHLET_GBUFFER",
         "RAYTRACING_DEMO_MESHLET_DEBUG",
         "RAYTRACING_DEMO_MESHLET_BACKEND",
+        "RAYTRACING_DEMO_RESTIRDI_TEMPORAL",
+        "RAYTRACING_DEMO_RESTIRDI_SPATIAL",
+        "RAYTRACING_DEMO_RESTIRDI_BOILING",
+        "RAYTRACING_DEMO_RESTIRDI_BOILING_STRENGTH",
+        "RAYTRACING_DEMO_RESTIRDI_TEMPORAL_IGNORE_GEOMETRY",
+        "RAYTRACING_DEMO_SCENE_BEHAVIOR",
     };
 //Modify End
     for (const char* variableName : reproductionEnvironment)
@@ -1455,6 +2423,10 @@ bool RaytracingDemo::ApplyTopologyRuntimeAutomationAction(
             throw std::out_of_range("Runtime automation denoiser selection is out of range.");
         }
         m_Denoisers.SetAlgorithm(static_cast<DenoiserController::Algorithm>(value));
+        if (m_Denoisers.IsEnabled())
+        {
+            m_AccumulationEnabled = false;
+        }
         ResetAccumulation();
         return true;
     case RuntimeAutomationAction::DLSS:
@@ -1838,7 +2810,7 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
     {
         m_OIDNGenerationBeforeCameraMotion = m_Denoisers.GetOIDNGeneration();
         GetSceneCamera().Translate(DirectX::XMVectorSet(0.0f, 0.0f, 0.05f, 0.0f), Space::Local);
-        ResetAccumulation(false, false);
+        ResetAccumulation(false, false, false);
         m_OIDNGenerationAfterCameraMotion = m_Denoisers.GetOIDNGeneration();
         const bool passed =
             m_OIDNGenerationAfterCameraMotion > m_OIDNGenerationBeforeCameraMotion &&
@@ -1908,6 +2880,10 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         break;
     case RuntimeAutomationAction::Accumulation:
         m_AccumulationEnabled = enabled;
+        if (m_AccumulationEnabled && m_Denoisers.IsEnabled())
+        {
+            m_Denoisers.SetAlgorithm(DenoiserController::Algorithm::Off);
+        }
         ResetAccumulation();
         break;
     case RuntimeAutomationAction::GpuTiming:
@@ -2690,7 +3666,7 @@ void RaytracingDemo::EnsureRenderGraphTopology()
         RaytracingDemoRenderPipelineController::BuildConfiguration(*m_RenderGraphFrameState)))
     {
         RebuildRenderGraph();
-        ResetAccumulation();
+        ResetAccumulation(true, true, true);
     }
 }
 
@@ -2758,7 +3734,7 @@ void RaytracingDemo::SaveCurrentScene()
 }
 //Modify End
 
-//Modify Begin:2026-08-26 by Hui
+//Modify Begin:2026-09-10 by Hui
 RaytracingDemoPassResources RaytracingDemo::CreatePassResources()
 {
     return {
@@ -2773,6 +3749,7 @@ RaytracingDemoPassResources RaytracingDemo::CreatePassResources()
         m_DLSS,
         m_ShaderPipelineBootstrap.GetDLSSRayReconstructionPrepareShader(),
         m_ShaderPipelineBootstrap.GetCopyQueueValidationShader(),
+        m_ShaderPipelineBootstrap.GetPostDenoiseAccumulationShader(),
         m_Denoisers,
         m_Bloom,
         m_AutoExposure,
@@ -2807,7 +3784,7 @@ RaytracingDemoPassConfig RaytracingDemo::CreatePassConfig() const
 }
 //Modify End
 
-//Modify Begin:2026-08-28 by Hui
+//Modify Begin:2026-09-10 by Hui
 void RaytracingDemo::UpdateRenderGraphFrameState()
 {
     RaytracingDemoFrameState& state = *m_RenderGraphFrameState;
@@ -2857,6 +3834,7 @@ void RaytracingDemo::UpdateRenderGraphFrameState()
         state.Projection.r[2].m128_f32[1] -= 2.0f * state.DLSSJitterOffset.y / static_cast<float>(state.Height);
     }
     state.ViewProjection = state.View * state.Projection;
+    state.ManualAccumulationEnabled = m_AccumulationEnabled;
     state.AccumulationEnabled = IsAccumulationActive();
     state.FrameIndex = m_FrameIndex;
     state.AccumulationFrameIndex = m_AccumulationFrameIndex;

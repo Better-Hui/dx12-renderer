@@ -132,7 +132,6 @@ void SVGF::AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs input
     Assert(!inputs.DiagnosticNamePrefix.empty(), "SVGF requires a diagnostic-name prefix.");
 
     EnsureCreated(inputs.Width, inputs.Height);
-    ResetHistory();
     const auto sharedInputs = std::make_shared<const GraphInputs>(std::move(inputs));
     const auto frameParity = sharedInputs->ResolveFrameIndex;
     const auto importHistory = [&builder, this, frameParity, &sharedInputs](

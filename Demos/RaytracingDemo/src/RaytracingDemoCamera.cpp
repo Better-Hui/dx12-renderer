@@ -1,15 +1,19 @@
-//Modify Begin:2026-08-28 by Hui
+//Modify Begin:2026-09-10 by Hui
 #include <RaytracingDemo.h>
 
 #include <DX12Library/Application.h>
 #include <DX12Library/Events.h>
 
 #include <algorithm>
+#include <cmath>
 
 using namespace DirectX;
 
 namespace
 {
+    constexpr float SceneCameraAngularSpeedStep = 0.05f;
+    constexpr float SceneCameraConeHalfAngleStep = XMConvertToRadians(1.0f);
+
     template<typename T>
     constexpr const T& ClampCameraValue(const T& val, const T& min, const T& max)
     {
@@ -30,10 +34,6 @@ void RaytracingDemo::OnUpdate(UpdateEventArgs& e)
     m_Denoisers.PollOIDN(*directCommandQueue);
     m_DiagnosticsImageCapture.Poll();
     UpdateRuntimeAutomation(e.TotalTime);
-    if (m_SceneRuntime.UpdateAnimatedLights(m_Lights, static_cast<float>(e.TotalTime)))
-    {
-        ResetAccumulation(false, true);
-    }
 
     const float speedMultiplier = m_CameraController.Shift ? 16.0f : 4.0f;
     const float speed = speedMultiplier * m_DeltaTime;
@@ -46,7 +46,7 @@ void RaytracingDemo::OnUpdate(UpdateEventArgs& e)
         m_CameraController.Down != 0.0f;
     if (movedByKeyboard)
     {
-        ResetAccumulation(false, false);
+        ResetAccumulation(false, false, false);
     }
 
     const XMVECTOR cameraTranslate = XMVectorSet(
@@ -68,6 +68,32 @@ void RaytracingDemo::OnUpdate(UpdateEventArgs& e)
         XMConvertToRadians(m_CameraController.Yaw),
         0.0f);
     GetSceneCamera().SetRotation(cameraRotation);
+
+    const bool sceneRuntimeUpdated = m_SceneRuntime.Update(
+        m_Lights,
+        GetSceneCamera(),
+        m_DeltaTime,
+        static_cast<float>(e.TotalTime));
+    if (sceneRuntimeUpdated)
+    {
+        if (m_SceneRuntime.HasActiveSceneBehavior() &&
+            m_SceneRuntime.IsSceneBehaviorEnabled() &&
+            m_SceneRuntime.IsSceneCameraControlEnabled())
+        {
+            const XMVECTOR sceneForward = XMVector3Normalize(XMVector3Rotate(
+                XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f),
+                GetSceneCamera().GetRotation()));
+            m_CameraController.Yaw = XMConvertToDegrees(std::atan2(
+                XMVectorGetX(sceneForward),
+                XMVectorGetZ(sceneForward)));
+            m_CameraController.Pitch = XMConvertToDegrees(std::asin(std::clamp(
+                XMVectorGetY(sceneForward),
+                -1.0f,
+                1.0f)));
+        }
+        // Keep ReSTIR history across scene motion; temporal compatibility tests handle reprojection.
+        ResetAccumulation(false, false, false);
+    }
 }
 
 void RaytracingDemo::OnKeyPressed(KeyEventArgs& e)
@@ -85,18 +111,106 @@ void RaytracingDemo::OnKeyPressed(KeyEventArgs& e)
         GetApplication().Quit(0);
         break;
     case KeyCode::Up:
+        {
+            float newAngularSpeed = 0.0f;
+            if (m_SceneRuntime.AdjustSceneCameraAngularSpeed(
+                    SceneCameraAngularSpeedStep,
+                    newAngularSpeed))
+            {
+                if (m_Diagnostics.IsEnabled())
+                {
+                    m_Diagnostics.Record(
+                        "scene.runtime",
+                        "camera_speed_changed",
+                        DiagnosticTelemetrySeverity::Info,
+                        {
+                            { "radians_per_second", static_cast<double>(newAngularSpeed) },
+                            { "trigger", "Up" },
+                        });
+                }
+                break;
+            }
+            m_CameraController.Forward = 1.0f;
+        }
+        break;
     case KeyCode::W:
         m_CameraController.Forward = 1.0f;
         break;
     case KeyCode::Left:
+        {
+            float newConeHalfAngle = 0.0f;
+            if (m_SceneRuntime.AdjustSceneCameraConeHalfAngle(
+                    -SceneCameraConeHalfAngleStep,
+                    newConeHalfAngle))
+            {
+                if (m_Diagnostics.IsEnabled())
+                {
+                    m_Diagnostics.Record(
+                        "scene.runtime",
+                        "camera_cone_half_angle_changed",
+                        DiagnosticTelemetrySeverity::Info,
+                        {
+                            { "degrees", static_cast<double>(XMConvertToDegrees(newConeHalfAngle)) },
+                            { "trigger", "Left" },
+                        });
+                }
+                break;
+            }
+            m_CameraController.Left = 1.0f;
+        }
+        break;
     case KeyCode::A:
         m_CameraController.Left = 1.0f;
         break;
     case KeyCode::Down:
+        {
+            float newAngularSpeed = 0.0f;
+            if (m_SceneRuntime.AdjustSceneCameraAngularSpeed(
+                    -SceneCameraAngularSpeedStep,
+                    newAngularSpeed))
+            {
+                if (m_Diagnostics.IsEnabled())
+                {
+                    m_Diagnostics.Record(
+                        "scene.runtime",
+                        "camera_speed_changed",
+                        DiagnosticTelemetrySeverity::Info,
+                        {
+                            { "radians_per_second", static_cast<double>(newAngularSpeed) },
+                            { "trigger", "Down" },
+                        });
+                }
+                break;
+            }
+            m_CameraController.Backward = 1.0f;
+        }
+        break;
     case KeyCode::S:
         m_CameraController.Backward = 1.0f;
         break;
     case KeyCode::Right:
+        {
+            float newConeHalfAngle = 0.0f;
+            if (m_SceneRuntime.AdjustSceneCameraConeHalfAngle(
+                    SceneCameraConeHalfAngleStep,
+                    newConeHalfAngle))
+            {
+                if (m_Diagnostics.IsEnabled())
+                {
+                    m_Diagnostics.Record(
+                        "scene.runtime",
+                        "camera_cone_half_angle_changed",
+                        DiagnosticTelemetrySeverity::Info,
+                        {
+                            { "degrees", static_cast<double>(XMConvertToDegrees(newConeHalfAngle)) },
+                            { "trigger", "Right" },
+                        });
+                }
+                break;
+            }
+            m_CameraController.Right = 1.0f;
+        }
+        break;
     case KeyCode::D:
         m_CameraController.Right = 1.0f;
         break;
@@ -114,6 +228,60 @@ void RaytracingDemo::OnKeyPressed(KeyEventArgs& e)
 
 void RaytracingDemo::OnKeyReleased(KeyEventArgs& e)
 {
+    if (e.Key == KeyCode::F11 && m_SceneRuntime.HasActiveSceneBehavior())
+    {
+        const bool lightAnimationEnabled = !m_SceneRuntime.IsSceneLightAnimationEnabled();
+        m_SceneRuntime.SetSceneLightAnimationEnabled(lightAnimationEnabled);
+        if (m_Diagnostics.IsEnabled())
+        {
+            m_Diagnostics.Record(
+                "scene.runtime",
+                "light_animation_changed",
+                DiagnosticTelemetrySeverity::Info,
+                {
+                    { "behavior", std::string(m_SceneRuntime.GetActiveSceneBehaviorName()) },
+                    { "light_animation_enabled", lightAnimationEnabled },
+                    { "trigger", "F11" },
+                });
+        }
+        ResetAccumulation(false, true);
+        return;
+    }
+
+    if (e.Key == KeyCode::F12 && m_SceneRuntime.HasActiveSceneBehavior())
+    {
+        const bool cameraControlEnabled = !m_SceneRuntime.IsSceneCameraControlEnabled();
+        m_SceneRuntime.SetSceneCameraControlEnabled(cameraControlEnabled);
+        float angularSpeed = 0.0f;
+        if (cameraControlEnabled && m_SceneRuntime.SetSceneCameraAngularSpeedToMaximum(angularSpeed) &&
+            m_Diagnostics.IsEnabled())
+        {
+            m_Diagnostics.Record(
+                "scene.runtime",
+                "camera_speed_changed",
+                DiagnosticTelemetrySeverity::Info,
+                {
+                    { "radians_per_second", static_cast<double>(angularSpeed) },
+                    { "trigger", "F12" },
+                });
+        }
+        if (m_Diagnostics.IsEnabled())
+        {
+            m_Diagnostics.Record(
+                "scene.runtime",
+                "camera_control_changed",
+                DiagnosticTelemetrySeverity::Info,
+                {
+                    { "behavior", std::string(m_SceneRuntime.GetActiveSceneBehaviorName()) },
+                    { "camera_control_enabled", cameraControlEnabled },
+                    { "trigger", "F12" },
+                });
+        }
+        // Toggling script control does not invalidate ReSTIR or OIDN history.
+        ResetAccumulation(false, false, false);
+        return;
+    }
+
     if (m_ImGui != nullptr && m_ImGui->WantsToCaptureKeyboard())
     {
         return;
@@ -124,18 +292,38 @@ void RaytracingDemo::OnKeyReleased(KeyEventArgs& e)
     switch (e.Key)
     {
     case KeyCode::Up:
+        if (!m_SceneRuntime.HasActiveSceneBehavior())
+        {
+            m_CameraController.Forward = 0.0f;
+        }
+        break;
     case KeyCode::W:
         m_CameraController.Forward = 0.0f;
         break;
     case KeyCode::Left:
+        if (!m_SceneRuntime.HasActiveSceneBehavior())
+        {
+            m_CameraController.Left = 0.0f;
+        }
+        break;
     case KeyCode::A:
         m_CameraController.Left = 0.0f;
         break;
     case KeyCode::Down:
+        if (!m_SceneRuntime.HasActiveSceneBehavior())
+        {
+            m_CameraController.Backward = 0.0f;
+        }
+        break;
     case KeyCode::S:
         m_CameraController.Backward = 0.0f;
         break;
     case KeyCode::Right:
+        if (!m_SceneRuntime.HasActiveSceneBehavior())
+        {
+            m_CameraController.Right = 0.0f;
+        }
+        break;
     case KeyCode::D:
         m_CameraController.Right = 0.0f;
         break;
@@ -167,7 +355,7 @@ void RaytracingDemo::OnMouseMoved(MouseMotionEventArgs& e)
             m_LeftMouseDragSincePress = true;
             m_CameraController.Pitch = ClampCameraValue(m_CameraController.Pitch + e.RelY * m_MouseRotateSpeed, -90.0f, 90.0f);
             m_CameraController.Yaw += e.RelX * m_MouseRotateSpeed;
-            ResetAccumulation(false, false);
+            ResetAccumulation(false, false, false);
         }
         return;
     }
@@ -182,7 +370,7 @@ void RaytracingDemo::OnMouseMoved(MouseMotionEventArgs& e)
                 0.0f,
                 0.0f);
             GetSceneCamera().Translate(cameraPan, Space::Local);
-            ResetAccumulation(false, false);
+            ResetAccumulation(false, false, false);
         }
         return;
     }
@@ -197,7 +385,7 @@ void RaytracingDemo::OnMouseMoved(MouseMotionEventArgs& e)
                 static_cast<float>(e.RelX) * m_MouseDollySpeed,
                 0.0f);
             GetSceneCamera().Translate(cameraForward, Space::Local);
-            ResetAccumulation(false, false);
+            ResetAccumulation(false, false, false);
         }
     }
 }
@@ -266,7 +454,7 @@ void RaytracingDemo::OnMouseWheel(MouseWheelEventArgs& e)
             e.WheelDelta * m_MouseWheelDollySpeed,
             0.0f);
         GetSceneCamera().Translate(cameraForward, Space::Local);
-        ResetAccumulation(false, false);
+        ResetAccumulation(false, false, false);
     }
 }
 

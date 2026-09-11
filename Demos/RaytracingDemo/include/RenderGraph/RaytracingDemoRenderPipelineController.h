@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-08-28 by Hui
+//Modify Begin:2026-09-10 by Hui
 #include <Denoising/DenoiserController.h>
 #include <Passes/RaytracingDemoPassResources.h>
 #include <RenderGraph/RenderGraphRoot.h>
@@ -23,6 +23,7 @@ struct RaytracingDemoRenderGraphTopology
     bool FrameGenerationEnabled = false;
     bool Hdr10OutputEnabled = false;
     bool AsyncComputeEnabled = false;
+    bool AccumulationEnabled = false;
 //Modify Begin:2026-08-25 by Hui
     bool CopyQueueValidationEnabled = false;
     bool DynamicRayTracingUpdateEnabled = false;

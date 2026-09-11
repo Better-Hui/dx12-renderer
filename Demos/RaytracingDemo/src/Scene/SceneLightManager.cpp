@@ -458,7 +458,9 @@ void SceneLightManager::CommitDirectionalLightEdit(const size_t lightIndex)
     m_GpuResources.UpdateDirectionalLight(light, lightIndex);
 }
 
-void SceneLightManager::CommitPointLightEdit(const size_t lightIndex)
+void SceneLightManager::CommitPointLightEdit(
+    const size_t lightIndex,
+    const bool updateSamplingDistribution)
 {
     PointLight& light = EditPointLight(lightIndex);
     light.PositionWs.w = 1.0f;
@@ -469,7 +471,7 @@ void SceneLightManager::CommitPointLightEdit(const size_t lightIndex)
     light.Range = std::max(0.1f, light.Range);
     light.SourceRadius = std::max(0.0f, light.SourceRadius);
     light.RecalculateAttenuationCoefficients();
-    m_GpuResources.UpdatePointLight(light, lightIndex);
+    m_GpuResources.UpdatePointLight(light, lightIndex, updateSamplingDistribution);
 }
 
 void SceneLightManager::CommitSpotLightEdit(const size_t lightIndex)
@@ -494,7 +496,9 @@ void SceneLightManager::CommitSpotLightEdit(const size_t lightIndex)
     m_GpuResources.UpdateSpotLight(light, lightIndex);
 }
 
-void SceneLightManager::CommitAreaLightEdit(const size_t lightIndex)
+void SceneLightManager::CommitAreaLightEdit(
+    const size_t lightIndex,
+    const bool updateSamplingDistribution)
 {
     AreaLightData& light = EditAreaLight(lightIndex);
     light.PositionAndRange.w = std::max(0.1f, light.PositionAndRange.w);
@@ -503,7 +507,7 @@ void SceneLightManager::CommitAreaLightEdit(const size_t lightIndex)
     light.ColorAndIntensity.y = std::max(0.0f, light.ColorAndIntensity.y);
     light.ColorAndIntensity.z = std::max(0.0f, light.ColorAndIntensity.z);
     light.ColorAndIntensity.w = std::max(0.0f, light.ColorAndIntensity.w);
-    m_GpuResources.UpdateAreaLight(light, lightIndex);
+    m_GpuResources.UpdateAreaLight(light, lightIndex, updateSamplingDistribution);
 }
 
 void SceneLightManager::AddDirectionalLight(const DirectionalLight& light)

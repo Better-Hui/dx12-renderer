@@ -82,6 +82,60 @@ namespace
     }
 }
 
+DemoLightEditor::Configuration DemoLightEditor::GetConfiguration() const
+{
+    return {
+        m_NewDirectionalLightDirection,
+        m_NewDirectionalLightColor,
+        m_NewDirectionalLightIntensity,
+        m_NewDirectionalLightAngularRadius,
+        m_NewPointLightColor,
+        m_NewPointLightIntensity,
+        m_NewPointLightRange,
+        m_NewPointLightSourceRadius,
+        m_RandomPointLightSpawnRadius,
+        m_NewSpotLightPosition,
+        m_NewSpotLightDirection,
+        m_NewSpotLightColor,
+        m_NewSpotLightIntensity,
+        m_NewSpotLightRange,
+        m_NewSpotLightInnerAngleDegrees,
+        m_NewSpotLightOuterAngleDegrees,
+        m_NewAreaLightPosition,
+        m_NewAreaLightNormal,
+        m_NewAreaLightSize,
+        m_NewAreaLightColor,
+        m_NewAreaLightIntensity,
+        m_NewAreaLightRange,
+    };
+}
+
+void DemoLightEditor::SetConfiguration(const Configuration& configuration)
+{
+    m_NewDirectionalLightDirection = configuration.NewDirectionalLightDirection;
+    m_NewDirectionalLightColor = configuration.NewDirectionalLightColor;
+    m_NewDirectionalLightIntensity = configuration.NewDirectionalLightIntensity;
+    m_NewDirectionalLightAngularRadius = configuration.NewDirectionalLightAngularRadius;
+    m_NewPointLightColor = configuration.NewPointLightColor;
+    m_NewPointLightIntensity = configuration.NewPointLightIntensity;
+    m_NewPointLightRange = configuration.NewPointLightRange;
+    m_NewPointLightSourceRadius = configuration.NewPointLightSourceRadius;
+    m_RandomPointLightSpawnRadius = configuration.RandomPointLightSpawnRadius;
+    m_NewSpotLightPosition = configuration.NewSpotLightPosition;
+    m_NewSpotLightDirection = configuration.NewSpotLightDirection;
+    m_NewSpotLightColor = configuration.NewSpotLightColor;
+    m_NewSpotLightIntensity = configuration.NewSpotLightIntensity;
+    m_NewSpotLightRange = configuration.NewSpotLightRange;
+    m_NewSpotLightInnerAngleDegrees = configuration.NewSpotLightInnerAngleDegrees;
+    m_NewSpotLightOuterAngleDegrees = configuration.NewSpotLightOuterAngleDegrees;
+    m_NewAreaLightPosition = configuration.NewAreaLightPosition;
+    m_NewAreaLightNormal = configuration.NewAreaLightNormal;
+    m_NewAreaLightSize = configuration.NewAreaLightSize;
+    m_NewAreaLightColor = configuration.NewAreaLightColor;
+    m_NewAreaLightIntensity = configuration.NewAreaLightIntensity;
+    m_NewAreaLightRange = configuration.NewAreaLightRange;
+}
+
 bool DemoLightEditor::Draw(
     SceneLightManager& lightManager,
     const bool softShadowsEnabled,

@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-08-28 by Hui
+//Modify Begin:2026-09-10 by Hui
 #include <Framework/Geometry/Mesh.h>
 #include <Framework/Geometry/Meshlet.h>
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
@@ -37,6 +37,7 @@ public:
     [[nodiscard]] const std::shared_ptr<ComputeShader>& GetSkyboxCubemapStripComputeShader() const { return m_SkyboxCubemapStripComputeShader; }
     [[nodiscard]] const std::shared_ptr<ComputeShader>& GetDLSSRayReconstructionPrepareShader() const { return m_DLSSRayReconstructionPrepareShader; }
     [[nodiscard]] const std::shared_ptr<ComputeShader>& GetCopyQueueValidationShader() const { return m_CopyQueueValidationShader; }
+    [[nodiscard]] const std::shared_ptr<ComputeShader>& GetPostDenoiseAccumulationShader() const { return m_PostDenoiseAccumulationShader; }
     [[nodiscard]] const std::shared_ptr<Shader>& GetLightBillboardShader() const { return m_LightBillboardShader; }
 
 private:
@@ -60,6 +61,7 @@ private:
     std::shared_ptr<ComputeShader> m_SkyboxCubemapStripComputeShader;
     std::shared_ptr<ComputeShader> m_DLSSRayReconstructionPrepareShader;
     std::shared_ptr<ComputeShader> m_CopyQueueValidationShader;
+    std::shared_ptr<ComputeShader> m_PostDenoiseAccumulationShader;
     std::shared_ptr<Shader> m_LightBillboardShader;
 };
 //Modify End

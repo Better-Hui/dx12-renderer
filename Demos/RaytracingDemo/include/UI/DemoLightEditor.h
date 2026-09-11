@@ -8,10 +8,42 @@ class SceneLightManager;
 class DemoLightEditor final
 {
 public:
+    struct Configuration
+    {
+        DirectX::XMFLOAT3 NewDirectionalLightDirection = { -0.35f, 0.8f, -0.48f };
+        DirectX::XMFLOAT3 NewDirectionalLightColor = { 1.0f, 0.95f, 0.82f };
+        float NewDirectionalLightIntensity = 1.0f;
+        float NewDirectionalLightAngularRadius = 0.0f;
+
+        DirectX::XMFLOAT3 NewPointLightColor = { 1.0f, 0.85f, 0.55f };
+        float NewPointLightIntensity = 18.0f;
+        float NewPointLightRange = 24.0f;
+        float NewPointLightSourceRadius = 0.25f;
+        float RandomPointLightSpawnRadius = 28.0f;
+
+        DirectX::XMFLOAT3 NewSpotLightPosition = { 0.0f, 4.0f, 0.0f };
+        DirectX::XMFLOAT3 NewSpotLightDirection = { 0.0f, -1.0f, 0.0f };
+        DirectX::XMFLOAT3 NewSpotLightColor = { 1.0f, 0.85f, 0.55f };
+        float NewSpotLightIntensity = 18.0f;
+        float NewSpotLightRange = 24.0f;
+        float NewSpotLightInnerAngleDegrees = 20.0f;
+        float NewSpotLightOuterAngleDegrees = 30.0f;
+
+        DirectX::XMFLOAT3 NewAreaLightPosition = { 0.0f, 4.0f, 0.0f };
+        DirectX::XMFLOAT3 NewAreaLightNormal = { 0.0f, -1.0f, 0.0f };
+        DirectX::XMFLOAT2 NewAreaLightSize = { 2.0f, 2.0f };
+        DirectX::XMFLOAT3 NewAreaLightColor = { 1.0f, 0.85f, 0.55f };
+        float NewAreaLightIntensity = 8.0f;
+        float NewAreaLightRange = 35.0f;
+    };
+
     bool Draw(
         SceneLightManager& lightManager,
         bool softShadowsEnabled,
         bool autoExposureEnabled);
+
+    Configuration GetConfiguration() const;
+    void SetConfiguration(const Configuration& configuration);
 
 private:
     DirectX::XMFLOAT3 m_NewDirectionalLightDirection = { -0.35f, 0.8f, -0.48f };
