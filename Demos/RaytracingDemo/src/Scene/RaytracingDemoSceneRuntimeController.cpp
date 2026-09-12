@@ -30,7 +30,7 @@ public:
     virtual ~RaytracingDemoSceneBehavior() = default;
 
     virtual std::string_view GetName() const noexcept = 0;
-    virtual void OnLoad(SceneLightManager& lights, const Camera& camera) = 0;
+    virtual void OnLoad(SceneLightManager& lights, const Camera& camera, const Scene& scene) = 0;
     virtual bool OnUpdate(
         SceneLightManager& lights,
         Camera& camera,
@@ -101,7 +101,7 @@ namespace
             return "LowPolyStreet.ShowreelOrbit";
         }
 
-        void OnLoad(SceneLightManager& lights, const Camera& camera) override
+        void OnLoad(SceneLightManager& lights, const Camera& camera, const Scene& scene) override
         {
             const std::vector<AreaLightData>& areaLights = lights.GetAreaLights();
             if (areaLights.size() < LowPolyStreetAnimatedAreaLightCount)
@@ -122,23 +122,35 @@ namespace
             m_OrbitCenter.x /= static_cast<float>(m_InitialLights.size());
             m_OrbitCenter.z /= static_cast<float>(m_InitialLights.size());
 
+            XMFLOAT3 houseCenter = {};
+            size_t houseObjectCount = 0;
+            for (const SceneObject& object : scene.GetObjects())
+            {
+                if (object.Name.find("BUILDING") == std::string::npos)
+                {
+                    continue;
+                }
+
+                XMFLOAT3 objectOrigin{};
+                XMStoreFloat3(
+                    &objectOrigin,
+                    XMVector3TransformCoord(XMVectorZero(), object.WorldMatrix));
+                houseCenter.x += objectOrigin.x;
+                houseCenter.y += objectOrigin.y;
+                houseCenter.z += objectOrigin.z;
+                ++houseObjectCount;
+            }
+            if (houseObjectCount > 0)
+            {
+                const float inverseObjectCount = 1.0f / static_cast<float>(houseObjectCount);
+                houseCenter.x *= inverseObjectCount;
+                houseCenter.y *= inverseObjectCount;
+                houseCenter.z *= inverseObjectCount;
+                m_OrbitCenter = houseCenter;
+            }
+
             XMStoreFloat3(&m_InitialCameraPosition, camera.GetTranslation());
-            XMFLOAT3 initialForward{};
-            XMStoreFloat3(
-                &initialForward,
-                XMVector3Rotate(XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f), camera.GetRotation()));
-            const float horizontalForwardLengthSquared =
-                initialForward.x * initialForward.x + initialForward.z * initialForward.z;
-            const float targetDistance = horizontalForwardLengthSquared > 1.e-6f
-                ? ((m_OrbitCenter.x - m_InitialCameraPosition.x) * initialForward.x +
-                   (m_OrbitCenter.z - m_InitialCameraPosition.z) * initialForward.z) /
-                    horizontalForwardLengthSquared
-                : 0.0f;
-            m_LookAtTarget = {
-                m_OrbitCenter.x,
-                m_InitialCameraPosition.y + initialForward.y * targetDistance,
-                m_OrbitCenter.z
-            };
+            m_LookAtTarget = { m_OrbitCenter.x, houseCenter.y, m_OrbitCenter.z };
 
             const XMVECTOR cameraPosition = XMLoadFloat3(&m_InitialCameraPosition);
             const XMVECTOR lookAtTarget = XMLoadFloat3(&m_LookAtTarget);
@@ -412,7 +424,7 @@ void RaytracingDemoSceneRuntimeController::LoadScene(
     m_SceneLightAnimationEnabled = true;
     if (m_SceneBehavior != nullptr)
     {
-        m_SceneBehavior->OnLoad(lights, camera);
+        m_SceneBehavior->OnLoad(lights, camera, scene);
     }
 }
 
