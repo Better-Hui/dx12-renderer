@@ -57,9 +57,9 @@ namespace
     constexpr float LowPolyStreetCameraOrbitRampDuration = 2.0f;
     constexpr float LowPolyStreetLightAngularSpeed = 0.45f;
     constexpr float LowPolyStreetPointLightAngularOffset = XM_PI / 3.0f;
-    constexpr float LowPolyStreetPointLightHeightOffset = 650.0f;
+    constexpr float LowPolyStreetPointLightHeightOffset = 162.5f;
     constexpr float LowPolyStreetPointLightIntensity = 1200.0f;
-    constexpr float LowPolyStreetPointLightSourceRadius = 35.0f;
+    constexpr float LowPolyStreetPointLightSourceRadius = 8.75f;
     constexpr float LowPolyStreetPointLightRange = 100000.0f;
 
     std::string NormalizeSceneStem(const std::filesystem::path& scenePath)

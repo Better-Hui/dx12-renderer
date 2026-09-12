@@ -34,6 +34,7 @@ void RaytracingDemo::OnUpdate(UpdateEventArgs& e)
     m_Denoisers.PollOIDN(*directCommandQueue);
     m_DiagnosticsImageCapture.Poll();
     UpdateRuntimeAutomation(e.TotalTime);
+    UpdateShowreel();
 
     const float speedMultiplier = m_CameraController.Shift ? 16.0f : 4.0f;
     const float speed = speedMultiplier * m_DeltaTime;
@@ -228,6 +229,12 @@ void RaytracingDemo::OnKeyPressed(KeyEventArgs& e)
 
 void RaytracingDemo::OnKeyReleased(KeyEventArgs& e)
 {
+    if (e.Key == KeyCode::F10 && m_ShowreelEnabled)
+    {
+        ToggleShowreelPlayback();
+        return;
+    }
+
     if (e.Key == KeyCode::F11 && m_SceneRuntime.HasActiveSceneBehavior())
     {
         const bool lightAnimationEnabled = !m_SceneRuntime.IsSceneLightAnimationEnabled();

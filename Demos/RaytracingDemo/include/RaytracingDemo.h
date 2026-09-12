@@ -214,6 +214,10 @@ private:
     void RecordDiagnosticsFailure(std::string stage, const std::exception& exception);
     void InitializeRuntimeAutomation();
     void UpdateRuntimeAutomation(double totalTime);
+    void InitializeShowreel();
+    void UpdateShowreel();
+    void ToggleShowreelPlayback();
+    void ApplyShowreelStage(uint32_t stage);
     void ApplyRuntimeAutomationAction(uint32_t action, uint32_t value);
     bool ApplyTopologyRuntimeAutomationAction(uint32_t action, uint32_t value);
     void ApplyRuntimeAutomationMatrixCase(uint32_t caseIndex);
@@ -258,6 +262,13 @@ private:
     RaytracingDemoSceneResources m_SceneResources;
 //Modify Begin:2026-08-19 by Hui
     RaytracingDemoSceneRuntimeController m_SceneRuntime;
+//Modify End
+//Modify Begin:2026-09-12 by Hui
+    bool m_ShowreelEnabled = false;
+    bool m_ShowreelPaused = false;
+    bool m_ShowreelCompleted = false;
+    uint32_t m_ShowreelStage = 0;
+    double m_ShowreelElapsedSeconds = 0.0;
 //Modify End
     SceneLightManager m_Lights;
     DemoLightEditor m_LightEditor;

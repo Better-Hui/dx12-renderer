@@ -2256,6 +2256,7 @@ void RaytracingDemo::InitializeDiagnostics()
         "RAYTRACING_DEMO_AUTOTEST_STEP_MS",
         "RAYTRACING_DEMO_AUTOTEST_TIMEOUT_SECONDS",
         "RAYTRACING_DEMO_SCENE",
+        "RAYTRACING_DEMO_SHOWREEL",
         "RAYTRACING_DEMO_UNITY_SCENE",
         "RAYTRACING_DEMO_SKYBOX",
         "RAYTRACING_DEMO_MODE",
@@ -2333,6 +2334,126 @@ void RaytracingDemo::UpdateRuntimeAutomation(const double totalTime)
 {
     m_RuntimeAutomation.Update(m_FrameIndex, totalTime);
 }
+
+//Modify Begin:2026-09-12 by Hui
+void RaytracingDemo::InitializeShowreel()
+{
+    m_ShowreelEnabled = m_SceneRuntime.GetActiveSceneBehaviorName() == "LowPolyStreet.ShowreelOrbit";
+    TryGetEnvironmentBoolean("RAYTRACING_DEMO_SHOWREEL", m_ShowreelEnabled);
+    m_ShowreelPaused = false;
+    m_ShowreelCompleted = false;
+    m_ShowreelStage = 0u;
+    m_ShowreelElapsedSeconds = 0.0;
+    if (m_ShowreelEnabled)
+    {
+        ApplyShowreelStage(m_ShowreelStage);
+    }
+}
+
+void RaytracingDemo::ApplyShowreelStage(const uint32_t stage)
+{
+    if (stage > 4u)
+    {
+        return;
+    }
+
+    ReSTIRDISettings restirSettings = m_DirectLightingReSTIRDI.GetSettings();
+    restirSettings.EnableTemporalResampling = stage >= 2u;
+    restirSettings.EnableSpatialResampling = stage >= 3u;
+    m_DirectLightingReSTIRDI.SetSettings(restirSettings);
+
+    if (stage == 0u)
+    {
+        m_DirectLightingTechnique = RaytracingDemoLightingTechnique::PathTracing;
+        m_IndirectLightingTechnique = RaytracingDemoLightingTechnique::PathTracing;
+        m_Denoisers.SetAlgorithm(DenoiserController::Algorithm::Off);
+    }
+    else
+    {
+        m_DirectLightingTechnique = RaytracingDemoLightingTechnique::ReSTIRDI;
+        m_IndirectLightingTechnique = RaytracingDemoLightingTechnique::None;
+        m_Denoisers.SetAlgorithm(
+            stage >= 4u ? DenoiserController::Algorithm::NRD : DenoiserController::Algorithm::Off);
+    }
+
+    m_AccumulationEnabled = false;
+    ResetAccumulation(true, true, true);
+    if (m_Diagnostics.IsEnabled())
+    {
+        static constexpr const char* stageNames[] = {
+            "pt",
+            "restir_ris",
+            "restir_temporal",
+            "restir_spatial",
+            "nrd",
+        };
+        m_Diagnostics.Record(
+            "scene.showreel",
+            "stage_changed",
+            DiagnosticTelemetrySeverity::Info,
+            {
+                { "stage", stageNames[stage] },
+                { "duration_seconds", 6.0 },
+            });
+    }
+}
+
+void RaytracingDemo::UpdateShowreel()
+{
+    if (!m_ShowreelEnabled || m_ShowreelPaused || m_ShowreelCompleted || m_DeltaTime <= 0.0f)
+    {
+        return;
+    }
+
+    m_ShowreelElapsedSeconds += std::clamp(static_cast<double>(m_DeltaTime), 0.0, 0.1);
+    const uint32_t nextStage = static_cast<uint32_t>(m_ShowreelElapsedSeconds / 6.0);
+    if (nextStage >= 5u)
+    {
+        m_ShowreelElapsedSeconds = 30.0;
+        m_ShowreelCompleted = true;
+        return;
+    }
+
+    if (nextStage != m_ShowreelStage)
+    {
+        m_ShowreelStage = nextStage;
+        ApplyShowreelStage(m_ShowreelStage);
+    }
+}
+
+void RaytracingDemo::ToggleShowreelPlayback()
+{
+    if (!m_ShowreelEnabled)
+    {
+        return;
+    }
+
+    if (m_ShowreelCompleted)
+    {
+        m_ShowreelCompleted = false;
+        m_ShowreelPaused = false;
+        m_ShowreelElapsedSeconds = 0.0;
+        m_ShowreelStage = 0u;
+        ApplyShowreelStage(m_ShowreelStage);
+        return;
+    }
+
+    m_ShowreelPaused = !m_ShowreelPaused;
+    if (m_Diagnostics.IsEnabled())
+    {
+        m_Diagnostics.Record(
+            "scene.showreel",
+            "playback_toggled",
+            DiagnosticTelemetrySeverity::Info,
+            {
+                { "paused", m_ShowreelPaused },
+                { "stage", static_cast<uint64_t>(m_ShowreelStage) },
+                { "elapsed_seconds", m_ShowreelElapsedSeconds },
+                { "trigger", "F10" },
+            });
+    }
+}
+//Modify End
 
 void RaytracingDemo::ApplyRuntimeAutomationMatrixCase(const uint32_t caseIndex)
 {
@@ -3114,6 +3235,7 @@ try
 //Modify End
 
     m_Denoisers.Initialize(m_FrameworkDeviceContext);
+    InitializeShowreel();
     RayTracingAccelerationStructureBuildSettings accelerationStructureSettings{};
     accelerationStructureSettings.AllowUpdate = true;
     m_SceneResources.BuildRayTracingAccelerationStructure(*commandList, accelerationStructureSettings);
