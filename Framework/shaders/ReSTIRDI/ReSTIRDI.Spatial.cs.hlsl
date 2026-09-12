@@ -54,8 +54,8 @@ bool ReSTIRDIHaveCompatibleSpatialSurfaces(
         centerDepth,
         neighborSurface.NormalWs,
         neighborDepth,
-        ReSTIRDI_SpatialNormalSimilarityThreshold,
-        ReSTIRDI_SpatialDepthSimilarityThreshold))
+        RESTIR_DI_SPATIAL_NORMAL_SIMILARITY_THRESHOLD,
+        RESTIR_DI_SPATIAL_DEPTH_SIMILARITY_THRESHOLD))
     {
         return false;
     }
@@ -72,7 +72,15 @@ bool ReSTIRDIHaveCompatibleSpatialSurfaces(
 
 int2 ReSTIRDIGetSpatialNeighborPixel(const uint2 pixel, const uint sampleIndex)
 {
-    const int2 offset = int2(ReSTIRDISpatialOffsets[sampleIndex & 31u] * ReSTIRDI_SpatialSamplingRadius);
+    const float2 rawOffset = ReSTIRDISpatialOffsets[sampleIndex & 31u];
+    const float offsetLengthSquared = dot(rawOffset, rawOffset);
+    // Keep the reuse footprint circular. The original table contains points outside
+    // the unit disk; using them directly creates a square support region and visible
+    // block-shaped light boundaries on hard point-light shadows.
+    const float2 diskOffset = offsetLengthSquared > 1.0f
+        ? rawOffset * rsqrt(offsetLengthSquared)
+        : rawOffset;
+    const int2 offset = int2(round(diskOffset * ReSTIRDI_SpatialSamplingRadius));
     return clamp(
         int2(pixel) + offset,
         int2(0, 0),
@@ -143,7 +151,7 @@ ReSTIRDIReservoir ReSTIRDIPairwiseSpatialResampling(
             ReSTIRDITemporalReservoir.Load(int3(neighborPixel, 0)),
             ReSTIRDITemporalReservoirState.Load(int3(neighborPixel, 0)));
 
-        const int2 spatialOffset = int2(ReSTIRDISpatialOffsets[offsetIndex] * ReSTIRDI_SpatialSamplingRadius);
+        const int2 spatialOffset = ReSTIRDIGetSpatialNeighborPixel(pixel, offsetIndex) - int2(pixel);
         neighborReservoir.SpatialDistance += spatialOffset;
         ++validSpatialSampleCount;
         if (neighborReservoir.M > 0.0f)
@@ -203,7 +211,7 @@ ReSTIRDIReservoir ReSTIRDIStandardSpatialResampling(
         ReSTIRDIReservoir neighborReservoir = ReSTIRDIUnpackReservoir(
             ReSTIRDITemporalReservoir.Load(int3(neighborPixel, 0)),
             ReSTIRDITemporalReservoirState.Load(int3(neighborPixel, 0)));
-        const int2 spatialOffset = int2(ReSTIRDISpatialOffsets[offsetIndex] * ReSTIRDI_SpatialSamplingRadius);
+        const int2 spatialOffset = ReSTIRDIGetSpatialNeighborPixel(pixel, offsetIndex) - int2(pixel);
         neighborReservoir.SpatialDistance += spatialOffset;
         // The normalization pass must cover exactly the neighbors merged into
         // the reservoir. Counting discarded naive samples darkens the result

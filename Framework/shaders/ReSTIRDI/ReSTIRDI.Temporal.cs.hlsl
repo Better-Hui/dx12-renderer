@@ -86,10 +86,6 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
             {
                 uint rngState = ReSTIRDI_InitializeRandomState(pixel, ReSTIRDI_ScreenWidth, ReSTIRDI_FrameIndex, 0x0f16c4a3u);
                 float2 motion = MotionVectorTexture.Load(int3(pixel, 0)) * float2(ReSTIRDI_ScreenWidth, ReSTIRDI_ScreenHeight);
-#if !RESTIR_DI_USE_TEMPORAL_PERMUTATION_SAMPLING
-                    motion += float2(ReSTIRDI_Random01(rngState), ReSTIRDI_Random01(rngState)) - 0.5f;
-#endif
-
                 const int2 reprojectedPixel = int2(round(float2(pixel) + motion));
                 const float receiverDepth = ReSTIRDI_LinearDepth(surface.PositionWs);
                 ReSTIRDIReservoir history = ReSTIRDIEmptyReservoir();
@@ -125,8 +121,8 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
                         receiverDepth,
                         candidateSurface,
                         candidateDepth,
-                        ReSTIRDI_TemporalNormalSimilarityThreshold,
-                        ReSTIRDI_TemporalDepthSimilarityThreshold,
+                        RESTIR_DI_TEMPORAL_NORMAL_SIMILARITY_THRESHOLD,
+                        RESTIR_DI_TEMPORAL_DEPTH_SIMILARITY_THRESHOLD,
                         ReSTIRDI_TemporalMaterialSimilarityThreshold,
                         ReSTIRDI_TemporalMaterialSimilarityTestEnabled != 0u))
                     {

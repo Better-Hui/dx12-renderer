@@ -65,13 +65,16 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         {
             previousColor = HistoryColor.Load(int3(previousPixel, 0));
             previousMoments = HistoryMoments.Load(int3(previousPixel, 0));
-            const float3 normal = DecodeSVGFNormal(GBufferNormal.Load(int3(pixel, 0)).xyz);
-            const float3 previousNormal = DecodeSVGFNormal(GBufferNormal.Load(int3(previousPixel, 0)).xyz);
-            const float3 position = GBufferPosition.Load(int3(pixel, 0)).xyz;
-            const float3 previousPosition = GBufferPosition.Load(int3(previousPixel, 0)).xyz;
-            const float normalWeight = SVGFNormalWeight(normal, previousNormal, PhiNormal);
-            const float depthWeight = SVGFDepthWeight(depth, depth, position, previousPosition, PhiDepth);
-            historyWeight = saturate(previousColor.a > 0.0f ? normalWeight * depthWeight : 0.0f);
+            // The current frame does not contain a previous-frame GBuffer. Comparing
+            // the reprojected pixel against current-frame normals/positions rejects
+            // valid history whenever the camera moves. Motion-vector bounds and the
+            // history alpha are the available temporal validity tests here.
+            // Keep the normal/position resources live for the reflected binding set;
+            // only reject non-finite GBuffer values, never camera-induced changes.
+            const float3 currentNormal = GBufferNormal.Load(int3(pixel, 0)).xyz;
+            const float3 currentPosition = GBufferPosition.Load(int3(pixel, 0)).xyz;
+            const bool gBufferFinite = all(isfinite(currentNormal)) && all(isfinite(currentPosition));
+            historyWeight = previousColor.a > 0.0f && gBufferFinite ? 1.0f : 0.0f;
         }
     }
 

@@ -3,6 +3,21 @@
 #include <Bindless/BindlessResources.hlsli>
 #include "../Scene/SceneGeometry.hlsli"
 
+cbuffer PipelineCBuffer : register(b0, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE)
+{
+    matrix g_Pipeline_View;
+    matrix g_Pipeline_Projection;
+    matrix g_Pipeline_ViewProjection;
+    float4 g_Pipeline_CameraPosition;
+    matrix g_Pipeline_InverseView;
+    matrix g_Pipeline_InverseProjection;
+    float2 g_Pipeline_ScreenResolution;
+    float2 g_Pipeline_ScreenTexelSize;
+    matrix g_Pipeline_PreviousViewProjection;
+    uint g_Pipeline_DebugMeshletClusters;
+    uint3 g_Pipeline_Padding0;
+};
+
 struct PixelShaderInput
 {
     float3 PositionWs : POSITION_WS;
@@ -74,7 +89,13 @@ PixelShaderOutput main(PixelShaderInput IN)
     const float3 outputBaseColor = IN.DebugMeshletClusters != 0u ? HashClusterColor(IN.MeshletDebugId) : baseColor;
 
     float3 normalWs = normalize(IN.NormalWs);
-    if (!IN.IsFrontFace)
+    const float3 geometricNormal = normalize(cross(ddx(IN.PositionWs), ddy(IN.PositionWs)));
+    if (dot(normalWs, geometricNormal) < 0.0f)
+    {
+        normalWs = -normalWs;
+    }
+    const float3 viewToCamera = normalize(g_Pipeline_CameraPosition.xyz - IN.PositionWs);
+    if (dot(normalWs, viewToCamera) < 0.0f)
     {
         normalWs = -normalWs;
     }

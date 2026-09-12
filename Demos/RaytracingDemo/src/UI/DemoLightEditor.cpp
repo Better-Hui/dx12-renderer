@@ -315,11 +315,28 @@ bool DemoLightEditor::Draw(
                 if (open)
                 {
                     XMFLOAT3 position = { light.PositionWs.x, light.PositionWs.y, light.PositionWs.z };
-                    const bool positionChanged = FrameworkImGui::SliderFloat3("Position", &position.x, -500.0f, 500.0f, "%.3f");
+                    const float positionLimit = std::max(
+                        500.0f,
+                        std::ceil(std::max({
+                            std::abs(position.x),
+                            std::abs(position.y),
+                            std::abs(position.z)
+                        }) * 1.1f));
+                    const bool positionChanged = FrameworkImGui::SliderFloat3(
+                        "Position",
+                        &position.x,
+                        -positionLimit,
+                        positionLimit,
+                        "%.3f");
                     bool pointChanged =
                         FrameworkImGui::SliderFloat3("Color", &light.Color.x, 0.0f, 10.0f, "%.3f") |
                         FrameworkImGui::SliderFloat("Intensity", &light.Color.w, 0.0f, 100.0f, "%.3f") |
-                        FrameworkImGui::SliderFloat("Range", &light.Range, 0.1f, 500.0f, "%.3f");
+                        FrameworkImGui::SliderFloat(
+                            "Range",
+                            &light.Range,
+                            0.1f,
+                            std::max(500.0f, std::ceil(light.Range * 1.1f)),
+                            "%.3f");
                     if (softShadowsEnabled)
                     {
                         pointChanged |= FrameworkImGui::SliderFloat(

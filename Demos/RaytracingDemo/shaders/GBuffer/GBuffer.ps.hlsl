@@ -3,6 +3,18 @@
 #include <Bindless/BindlessResources.hlsli>
 //Modify End
 
+cbuffer PipelineCBuffer : register(b0, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE)
+{
+    matrix g_Pipeline_View;
+    matrix g_Pipeline_Projection;
+    matrix g_Pipeline_ViewProjection;
+    float4 g_Pipeline_CameraPosition;
+    matrix g_Pipeline_InverseView;
+    matrix g_Pipeline_InverseProjection;
+    float2 g_Pipeline_ScreenResolution;
+    float2 g_Pipeline_ScreenTexelSize;
+};
+
 struct PixelShaderInput
 {
     float3 PositionWs : POSITION_WS;
@@ -117,12 +129,15 @@ PixelShaderOutput main(PixelShaderInput IN)
 //Modify End
 
     float3 normalWs = normalize(IN.NormalWs);
-//Modify Begin:2026-07-29 by Hui
     if (!IN.IsFrontFace)
     {
         normalWs = -normalWs;
     }
-//Modify End
+    const float3 viewToCamera = normalize(g_Pipeline_CameraPosition.xyz - IN.PositionWs);
+    if (dot(normalWs, viewToCamera) < 0.0f)
+    {
+        normalWs = -normalWs;
+    }
     if (HasNormalMap != 0u)
     {
         normalWs = ApplyNormalMap(normalWs, IN.TangentWs, IN.BitangentWs, uv);

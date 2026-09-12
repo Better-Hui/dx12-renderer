@@ -427,16 +427,6 @@ void RaytracingDemo::OnImGui()
                         "Enable Temporal Material Similarity Test",
                         &restirSettings.EnableTemporalMaterialSimilarityTest);
                     settingsChanged |= FrameworkImGui::SliderFloat(
-                        "Temporal Normal Threshold",
-                        &restirSettings.TemporalNormalSimilarityThreshold,
-                        -1.0f,
-                        1.0f);
-                    settingsChanged |= FrameworkImGui::SliderFloat(
-                        "Temporal Depth Threshold",
-                        &restirSettings.TemporalDepthSimilarityThreshold,
-                        0.0f,
-                        1.0f);
-                    settingsChanged |= FrameworkImGui::SliderFloat(
                         "Temporal Material Threshold",
                         &restirSettings.TemporalMaterialSimilarityThreshold,
                         0.0f,
@@ -486,16 +476,6 @@ void RaytracingDemo::OnImGui()
                         &restirSettings.SpatialSamplingRadius,
                         1.0f,
                         64.0f);
-                    settingsChanged |= FrameworkImGui::SliderFloat(
-                        "Spatial Normal Threshold",
-                        &restirSettings.SpatialNormalSimilarityThreshold,
-                        -1.0f,
-                        1.0f);
-                    settingsChanged |= FrameworkImGui::SliderFloat(
-                        "Spatial Depth Threshold",
-                        &restirSettings.SpatialDepthSimilarityThreshold,
-                        0.0f,
-                        1.0f);
                     settingsChanged |= ImGui::Checkbox(
                         "Enable Spatial Material Similarity Test",
                         &restirSettings.EnableSpatialMaterialSimilarityTest);

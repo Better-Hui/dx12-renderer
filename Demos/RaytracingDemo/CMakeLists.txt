@@ -226,7 +226,7 @@ add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:NRD>" "$<TARGET_FILE_DIR:${TARGET_NAME}>/NRD.dll"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${DX12_RENDERER_OIDN_RUNTIME_FILES} "$<TARGET_FILE_DIR:${TARGET_NAME}>"
         COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${TARGET_NAME}>/Config"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/Config/RaytracingDemo.ini" "$<TARGET_FILE_DIR:${TARGET_NAME}>/Config/RaytracingDemo.ini"
+        COMMAND ${CMAKE_COMMAND} -DSOURCE:FILEPATH=${CMAKE_CURRENT_SOURCE_DIR}/Config/RaytracingDemo.ini -DDESTINATION:FILEPATH=$<TARGET_FILE_DIR:${TARGET_NAME}>/Config/RaytracingDemo.ini -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/CopyConfigIfMissing.cmake"
         COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${TARGET_NAME}>/Assets/Scenes"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/Assets/Scenes/DefaultScene.json" "$<TARGET_FILE_DIR:${TARGET_NAME}>/Assets/Scenes/DefaultScene.json"
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/Assets/Scenes/LowPolyStreet" "$<TARGET_FILE_DIR:${TARGET_NAME}>/Assets/Scenes/LowPolyStreet"

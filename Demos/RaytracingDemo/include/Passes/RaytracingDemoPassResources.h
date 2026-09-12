@@ -214,6 +214,8 @@ struct RaytracingDemoFrameState
     DenoiserController::Algorithm DenoiserAlgorithm = DenoiserController::Algorithm::Off;
     NRD::DenoiserMode NRDDenoiserMode = NRD::DenoiserMode::ReblurDiffuse;
     uint32_t SVGFAtrousIterations = 1;
+    bool ReSTIRDITemporalResampling = false;
+    bool ReSTIRDISpatialResampling = false;
     bool BloomEnabled = false;
     BloomController::Backend BloomBackend = BloomController::Backend::Cuda;
     int BloomPyramidLevels = 1;

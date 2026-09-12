@@ -693,7 +693,8 @@ void LightingGpuResources::RebuildDirectLightSamplingCdf()
     {
         if (enabled)
         {
-            totalWeight += std::max(1.0e-4f, weight);
+            const float finiteWeight = std::isfinite(weight) ? std::max(0.0f, weight) : 0.0f;
+            totalWeight += std::max(1.0e-4f, finiteWeight);
         }
         m_DirectLightCdfGpuData.push_back(totalWeight);
     };

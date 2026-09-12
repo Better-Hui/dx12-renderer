@@ -53,6 +53,25 @@
 #ifndef RESTIR_DI_DISCARD_INVISIBLE_FINAL_SAMPLES
 #define RESTIR_DI_DISCARD_INVISIBLE_FINAL_SAMPLES 0
 #endif
+
+// RTXDI-compatible geometric reuse thresholds. These are intentionally shader constants:
+// changing them changes the statistical validity/quality of the reuse heuristic and should
+// not be exposed as a per-frame UI control.
+#ifndef RESTIR_DI_TEMPORAL_NORMAL_SIMILARITY_THRESHOLD
+#define RESTIR_DI_TEMPORAL_NORMAL_SIMILARITY_THRESHOLD 0.5f
+#endif
+
+#ifndef RESTIR_DI_TEMPORAL_DEPTH_SIMILARITY_THRESHOLD
+#define RESTIR_DI_TEMPORAL_DEPTH_SIMILARITY_THRESHOLD 0.1f
+#endif
+
+#ifndef RESTIR_DI_SPATIAL_NORMAL_SIMILARITY_THRESHOLD
+#define RESTIR_DI_SPATIAL_NORMAL_SIMILARITY_THRESHOLD 0.9f
+#endif
+
+#ifndef RESTIR_DI_SPATIAL_DEPTH_SIMILARITY_THRESHOLD
+#define RESTIR_DI_SPATIAL_DEPTH_SIMILARITY_THRESHOLD 0.1f
+#endif
 //Modify End
 
 //Modify Begin:2026-07-30 by Hui

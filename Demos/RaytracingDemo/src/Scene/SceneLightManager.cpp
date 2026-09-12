@@ -463,13 +463,25 @@ void SceneLightManager::CommitPointLightEdit(
     const bool updateSamplingDistribution)
 {
     PointLight& light = EditPointLight(lightIndex);
+    if (!std::isfinite(light.PositionWs.x))
+    {
+        light.PositionWs.x = 0.0f;
+    }
+    if (!std::isfinite(light.PositionWs.y))
+    {
+        light.PositionWs.y = 0.0f;
+    }
+    if (!std::isfinite(light.PositionWs.z))
+    {
+        light.PositionWs.z = 0.0f;
+    }
     light.PositionWs.w = 1.0f;
-    light.Color.x = std::max(0.0f, light.Color.x);
-    light.Color.y = std::max(0.0f, light.Color.y);
-    light.Color.z = std::max(0.0f, light.Color.z);
-    light.Color.w = std::max(0.0f, light.Color.w);
-    light.Range = std::max(0.1f, light.Range);
-    light.SourceRadius = std::max(0.0f, light.SourceRadius);
+    light.Color.x = std::isfinite(light.Color.x) ? std::max(0.0f, light.Color.x) : 0.0f;
+    light.Color.y = std::isfinite(light.Color.y) ? std::max(0.0f, light.Color.y) : 0.0f;
+    light.Color.z = std::isfinite(light.Color.z) ? std::max(0.0f, light.Color.z) : 0.0f;
+    light.Color.w = std::isfinite(light.Color.w) ? std::max(0.0f, light.Color.w) : 0.0f;
+    light.Range = std::isfinite(light.Range) ? std::max(0.1f, light.Range) : 0.1f;
+    light.SourceRadius = std::isfinite(light.SourceRadius) ? std::max(0.0f, light.SourceRadius) : 0.0f;
     light.RecalculateAttenuationCoefficients();
     m_GpuResources.UpdatePointLight(light, lightIndex, updateSamplingDistribution);
 }

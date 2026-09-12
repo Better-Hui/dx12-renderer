@@ -239,19 +239,26 @@ void SVGF::AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs input
         });
 
     RenderGraph::ResourceId filtered = temporalColor;
+    RenderGraph::ResourceId previousAtrousToken = temporalToken;
     const uint32_t iterationCount = std::clamp(m_Settings.AtrousIterations, 1u, 8u);
     for (uint32_t iteration = 0u; iteration < iterationCount; ++iteration)
     {
         const uint32_t stepSize = 1u << iteration;
+        const RenderGraph::ResourceId horizontalToken = builder.CreateToken(
+            (sharedInputs->DiagnosticNamePrefix + L".AtrousHorizontalFinished." + std::to_wstring(iteration)).c_str());
+        const RenderGraph::ResourceId verticalToken = builder.CreateToken(
+            (sharedInputs->DiagnosticNamePrefix + L".AtrousVerticalFinished." + std::to_wstring(iteration)).c_str());
         const auto addAtrousPass = [this, &builder, sharedInputs, variance, stepSize](
             const wchar_t* passName,
             const RenderGraph::ResourceId source,
             const RenderGraph::ResourceId destination,
-            const uint32_t direction)
+            const uint32_t direction,
+            const RenderGraph::ResourceId inputToken,
+            const RenderGraph::ResourceId outputToken)
         {
             builder.AddPass<SvgfAtrousPassData>(
                 passName,
-                [this, sharedInputs, source, destination, variance, stepSize, direction](
+                [this, sharedInputs, source, destination, variance, stepSize, direction, inputToken, outputToken](
                     RenderGraph::RenderGraphPassBuilder& passBuilder,
                     SvgfAtrousPassData& passData)
                 {
@@ -262,12 +269,14 @@ void SVGF::AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs input
                     passData.Variance = variance;
                     passData.StepSize = stepSize;
                     passData.Direction = direction;
+                    passBuilder.ReadToken(inputToken);
                     passBuilder.ReadBuffer(source);
                     passBuilder.ReadBuffer(variance);
                     passBuilder.ReadBuffer(sharedInputs->GBufferNormal);
                     passBuilder.ReadBuffer(sharedInputs->GBufferPosition);
                     passBuilder.ReadBuffer(sharedInputs->Depth);
                     passBuilder.WriteUav(destination);
+                    passBuilder.WriteToken(outputToken);
                 },
                 [](const SvgfAtrousPassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
                 {
@@ -288,21 +297,22 @@ void SVGF::AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs input
 
         const std::wstring horizontalName = L"SVGF A-Trous Horizontal " + std::to_wstring(iteration);
         const std::wstring verticalName = L"SVGF A-Trous Vertical " + std::to_wstring(iteration);
-        addAtrousPass(horizontalName.c_str(), filtered, atrousPing, 0u);
-        addAtrousPass(verticalName.c_str(), atrousPing, atrousPong, 1u);
+        addAtrousPass(horizontalName.c_str(), filtered, atrousPing, 0u, previousAtrousToken, horizontalToken);
+        addAtrousPass(verticalName.c_str(), atrousPing, atrousPong, 1u, horizontalToken, verticalToken);
         filtered = atrousPong;
+        previousAtrousToken = verticalToken;
     }
 
     builder.AddPass<SvgfCompositePassData>(
         L"SVGF Composite",
-        [this, sharedInputs, filtered, temporalToken](
+        [this, sharedInputs, filtered, previousAtrousToken](
             RenderGraph::RenderGraphPassBuilder& passBuilder,
             SvgfCompositePassData& passData)
         {
             passData.Feature = this;
             passData.Inputs = sharedInputs;
             passData.Source = filtered;
-            passBuilder.ReadToken(temporalToken);
+            passBuilder.ReadToken(previousAtrousToken);
             passBuilder.ReadBuffer(filtered);
             passBuilder.ReadBuffer(sharedInputs->Depth);
             passBuilder.WriteUav(sharedInputs->Output);

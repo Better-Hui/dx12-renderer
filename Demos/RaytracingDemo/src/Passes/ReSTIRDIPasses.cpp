@@ -25,6 +25,7 @@ void RaytracingDemoPasses::Builder::AddReSTIRDIPass(
 {
     using namespace RenderGraph;
     const bool useCompactedDispatch = config.FrameState->UsesCompactedRayTracedPixelDispatch();
+    const ReSTIRDISettings settings = resources.DirectLightingReSTIRDI.GetSettings();
     ReSTIRDIGraphInputs graphInputs;
     graphInputs.DirectLighting = DemoResourceIds::DirectLighting;
     graphInputs.InputToken = DemoResourceIds::BaseResourcesFinishedToken;
@@ -32,9 +33,9 @@ void RaytracingDemoPasses::Builder::AddReSTIRDIPass(
     graphInputs.Width = config.FrameState->Width;
     graphInputs.Height = config.FrameState->Height;
     graphInputs.UseCompactedDispatch = useCompactedDispatch;
-    graphInputs.EnableTemporalResampling = true;
-    graphInputs.EnableBoilingFilter = true;
-    graphInputs.EnableSpatialResampling = true;
+    graphInputs.EnableTemporalResampling = settings.EnableTemporalResampling;
+    graphInputs.EnableBoilingFilter = settings.EnableBoilingFilter;
+    graphInputs.EnableSpatialResampling = settings.EnableSpatialResampling;
     graphInputs.GetFrameIndex = [frameState = config.FrameState]()
     {
         return frameState->FrameIndex;

@@ -179,8 +179,11 @@ bool ReSTIRDIIsSurfaceCompatible(
     const float depthThreshold)
 {
     const float depthDifference = abs(receiverDepth - sourceDepth);
-    const float normalizedDepthThreshold = depthThreshold * max(receiverDepth, sourceDepth);
-    return dot(receiverNormal, sourceNormal) >= normalThreshold && depthDifference <= normalizedDepthThreshold;
+    // A zero threshold disables depth rejection. Requiring exact equality here
+    // would reject every reprojected sample after even a sub-pixel camera move.
+    const bool depthCompatible = depthThreshold <= 0.0f ||
+        depthDifference <= depthThreshold * max(receiverDepth, sourceDepth);
+    return dot(receiverNormal, sourceNormal) >= normalThreshold && depthCompatible;
 }
 
 float ReSTIRDIPairwiseMFactor(const float q0, const float q1)

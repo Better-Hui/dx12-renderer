@@ -1338,14 +1338,6 @@ void RaytracingDemo::LoadStartupConfiguration()
     {
         restirDISettings.TemporalMaxHistoryLength = static_cast<uint32_t>(std::clamp(intValue, 1, 64));
     }
-    if (configuration.TryGetFloat("ReSTIRDI", "TemporalNormalSimilarityThreshold", floatValue))
-    {
-        restirDISettings.TemporalNormalSimilarityThreshold = floatValue;
-    }
-    if (configuration.TryGetFloat("ReSTIRDI", "TemporalDepthSimilarityThreshold", floatValue))
-    {
-        restirDISettings.TemporalDepthSimilarityThreshold = floatValue;
-    }
     if (configuration.TryGetFloat("ReSTIRDI", "TemporalMaterialSimilarityThreshold", floatValue))
     {
         restirDISettings.TemporalMaterialSimilarityThreshold = floatValue;
@@ -1398,14 +1390,6 @@ void RaytracingDemo::LoadStartupConfiguration()
     if (configuration.TryGetFloat("ReSTIRDI", "SpatialSamplingRadius", floatValue))
     {
         restirDISettings.SpatialSamplingRadius = floatValue;
-    }
-    if (configuration.TryGetFloat("ReSTIRDI", "SpatialNormalSimilarityThreshold", floatValue))
-    {
-        restirDISettings.SpatialNormalSimilarityThreshold = floatValue;
-    }
-    if (configuration.TryGetFloat("ReSTIRDI", "SpatialDepthSimilarityThreshold", floatValue))
-    {
-        restirDISettings.SpatialDepthSimilarityThreshold = floatValue;
     }
     if (configuration.TryGetFloat("ReSTIRDI", "SpatialMaterialSimilarityThreshold", floatValue))
     {
@@ -2003,8 +1987,6 @@ void RaytracingDemo::SaveRuntimeConfiguration()
            << "TemporalPermutationSampling = " << restirDI.EnableTemporalPermutationSampling << '\n'
            << "TemporalMaterialSimilarityTest = " << restirDI.EnableTemporalMaterialSimilarityTest << '\n'
            << "TemporalIgnoreGeometry = " << restirDI.EnableTemporalIgnoreGeometry << '\n'
-           << "TemporalNormalSimilarityThreshold = " << restirDI.TemporalNormalSimilarityThreshold << '\n'
-           << "TemporalDepthSimilarityThreshold = " << restirDI.TemporalDepthSimilarityThreshold << '\n'
            << "TemporalMaterialSimilarityThreshold = " << restirDI.TemporalMaterialSimilarityThreshold << '\n'
            << "BoilingFilter = " << restirDI.EnableBoilingFilter << '\n'
            << "BoilingFilterStrength = " << restirDI.BoilingFilterStrength << '\n'
@@ -2014,8 +1996,6 @@ void RaytracingDemo::SaveRuntimeConfiguration()
            << "SpatialDisocclusionBoostSampleCount = " << restirDI.SpatialDisocclusionBoostSampleCount << '\n'
            << "SpatialTargetHistoryLength = " << restirDI.SpatialTargetHistoryLength << '\n'
            << "SpatialSamplingRadius = " << restirDI.SpatialSamplingRadius << '\n'
-           << "SpatialNormalSimilarityThreshold = " << restirDI.SpatialNormalSimilarityThreshold << '\n'
-           << "SpatialDepthSimilarityThreshold = " << restirDI.SpatialDepthSimilarityThreshold << '\n'
            << "SpatialMaterialSimilarityTest = " << restirDI.EnableSpatialMaterialSimilarityTest << '\n'
            << "SpatialMaterialSimilarityThreshold = " << restirDI.SpatialMaterialSimilarityThreshold << '\n'
            << "FinalVisibility = " << restirDI.EnableFinalVisibility << '\n'
@@ -2188,6 +2168,28 @@ void RaytracingDemo::SaveRuntimeConfiguration()
         throw std::runtime_error(
             "Failed to atomically publish runtime configuration (Win32 error " +
             std::to_string(error) + "): " + outputPath.string());
+    }
+
+    // Keep the checked-in template synchronized when the demo is running from
+    // the standard repository build layout. The runtime file remains the source
+    // of truth during launch, while this mirror prevents the next deployment
+    // from carrying stale defaults.
+    const std::filesystem::path sourceConfigurationPath =
+        GetRuntimeRootPath().parent_path().parent_path().parent_path() /
+        "dx12-renderer-master" / "Demos" / "RaytracingDemo" / "Config" / "RaytracingDemo.ini";
+    std::error_code syncError;
+    if (std::filesystem::exists(sourceConfigurationPath, syncError) && !syncError)
+    {
+        std::filesystem::copy_file(
+            outputPath,
+            sourceConfigurationPath,
+            std::filesystem::copy_options::overwrite_existing,
+            syncError);
+        if (syncError)
+        {
+            throw std::runtime_error(
+                "Failed to synchronize project configuration template: " + sourceConfigurationPath.string());
+        }
     }
 
     m_RuntimeConfigurationSaveStatus = "Settings saved: " + outputPath.string();
@@ -3799,6 +3801,9 @@ void RaytracingDemo::UpdateRenderGraphFrameState()
         : DenoiserController::Algorithm::Off;
     state.NRDDenoiserMode = m_Denoisers.GetNRDMode();
     state.SVGFAtrousIterations = m_Denoisers.GetSVGFAtrousIterations();
+    const ReSTIRDISettings restirDISettings = m_DirectLightingReSTIRDI.GetSettings();
+    state.ReSTIRDITemporalResampling = restirDISettings.EnableTemporalResampling;
+    state.ReSTIRDISpatialResampling = restirDISettings.EnableSpatialResampling;
     state.BloomEnabled = m_Bloom.IsEnabled();
     state.BloomBackend = m_Bloom.GetBackend();
     state.BloomPyramidLevels = (std::max)(1, m_Bloom.GetPyramidLevels());

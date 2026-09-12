@@ -21,7 +21,7 @@ enum class ReSTIRDISpatialBiasCorrectionMode : uint32_t
 struct ReSTIRDISettings
 {
     uint32_t CandidateCount = 8;
-    bool EnableInitialVisibility = true;
+    bool EnableInitialVisibility = false;
 
     bool EnableTemporalResampling = true;
     ReSTIRDITemporalBiasCorrectionMode TemporalBiasCorrection = ReSTIRDITemporalBiasCorrectionMode::Basic;
@@ -44,7 +44,7 @@ struct ReSTIRDISettings
     uint32_t SpatialDisocclusionBoostSampleCount = 8;
     uint32_t SpatialTargetHistoryLength = 0;
     float SpatialSamplingRadius = 32.0f;
-    float SpatialNormalSimilarityThreshold = 0.5f;
+    float SpatialNormalSimilarityThreshold = 0.9f;
     float SpatialDepthSimilarityThreshold = 0.1f;
     bool EnableSpatialMaterialSimilarityTest = true;
     float SpatialMaterialSimilarityThreshold = 0.5f;
@@ -89,7 +89,7 @@ struct ReSTIRDIFrameConstants
     float TemporalMaterialSimilarityThreshold = 0.05f;
 
     float SpatialSamplingRadius = 1.0f;
-    float SpatialNormalSimilarityThreshold = 0.5f;
+    float SpatialNormalSimilarityThreshold = 0.9f;
     float SpatialDepthSimilarityThreshold = 0.1f;
     float SpatialMaterialSimilarityThreshold = 0.5f;
 

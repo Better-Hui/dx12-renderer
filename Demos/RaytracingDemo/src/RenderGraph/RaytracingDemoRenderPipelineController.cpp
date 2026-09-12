@@ -12,6 +12,8 @@ RaytracingDemoRenderPipelineConfiguration RaytracingDemoRenderPipelineController
             .DenoiserAlgorithm = frameState.DenoiserAlgorithm,
             .NRDDenoiserMode = frameState.NRDDenoiserMode,
             .SVGFAtrousIterations = frameState.SVGFAtrousIterations,
+            .ReSTIRDITemporalResampling = frameState.ReSTIRDITemporalResampling,
+            .ReSTIRDISpatialResampling = frameState.ReSTIRDISpatialResampling,
             .BloomEnabled = frameState.BloomEnabled,
             .BloomBackend = frameState.BloomBackend,
             .BloomPyramidLevels = frameState.BloomBackend == BloomController::Backend::FrameworkRaster
