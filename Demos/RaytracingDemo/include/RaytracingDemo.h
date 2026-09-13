@@ -216,7 +216,7 @@ private:
     void UpdateRuntimeAutomation(double totalTime);
     void InitializeShowreel();
     void UpdateShowreel();
-    void ToggleShowreelPlayback();
+    void StartShowreelPlayback();
     void ApplyShowreelStage(uint32_t stage);
     void ApplyRuntimeAutomationAction(uint32_t action, uint32_t value);
     bool ApplyTopologyRuntimeAutomationAction(uint32_t action, uint32_t value);
@@ -263,7 +263,7 @@ private:
 //Modify Begin:2026-08-19 by Hui
     RaytracingDemoSceneRuntimeController m_SceneRuntime;
 //Modify End
-//Modify Begin:2026-09-12 by Hui
+//Modify Begin:2026-09-13 by Hui
     bool m_ShowreelEnabled = false;
     bool m_ShowreelPaused = false;
     bool m_ShowreelCompleted = false;

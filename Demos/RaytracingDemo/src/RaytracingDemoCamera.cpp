@@ -1,4 +1,4 @@
-//Modify Begin:2026-09-10 by Hui
+//Modify Begin:2026-09-13 by Hui
 #include <RaytracingDemo.h>
 
 #include <DX12Library/Application.h>
@@ -231,7 +231,7 @@ void RaytracingDemo::OnKeyReleased(KeyEventArgs& e)
 {
     if (e.Key == KeyCode::F10 && m_ShowreelEnabled)
     {
-        ToggleShowreelPlayback();
+        StartShowreelPlayback();
         return;
     }
 

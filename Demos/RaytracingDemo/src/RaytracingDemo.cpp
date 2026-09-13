@@ -2335,12 +2335,13 @@ void RaytracingDemo::UpdateRuntimeAutomation(const double totalTime)
     m_RuntimeAutomation.Update(m_FrameIndex, totalTime);
 }
 
-//Modify Begin:2026-09-12 by Hui
+//Modify Begin:2026-09-13 by Hui
 void RaytracingDemo::InitializeShowreel()
 {
     m_ShowreelEnabled = m_SceneRuntime.GetActiveSceneBehaviorName() == "LowPolyStreet.ShowreelOrbit";
     TryGetEnvironmentBoolean("RAYTRACING_DEMO_SHOWREEL", m_ShowreelEnabled);
-    m_ShowreelPaused = false;
+    // Wait for the explicit playback trigger so startup leaves time for capture setup.
+    m_ShowreelPaused = true;
     m_ShowreelCompleted = false;
     m_ShowreelStage = 0u;
     m_ShowreelElapsedSeconds = 0.0;
@@ -2375,6 +2376,7 @@ void RaytracingDemo::ApplyShowreelStage(const uint32_t stage)
         m_Denoisers.SetAlgorithm(
             stage >= 4u ? DenoiserController::Algorithm::NRD : DenoiserController::Algorithm::Off);
     }
+    m_Bloom.SetEnabled(stage >= 4u);
 
     m_AccumulationEnabled = false;
     ResetAccumulation(true, true, true);
@@ -2421,32 +2423,25 @@ void RaytracingDemo::UpdateShowreel()
     }
 }
 
-void RaytracingDemo::ToggleShowreelPlayback()
+void RaytracingDemo::StartShowreelPlayback()
 {
-    if (!m_ShowreelEnabled)
+    if (!m_ShowreelEnabled || (!m_ShowreelPaused && !m_ShowreelCompleted))
     {
         return;
     }
 
-    if (m_ShowreelCompleted)
-    {
-        m_ShowreelCompleted = false;
-        m_ShowreelPaused = false;
-        m_ShowreelElapsedSeconds = 0.0;
-        m_ShowreelStage = 0u;
-        ApplyShowreelStage(m_ShowreelStage);
-        return;
-    }
-
-    m_ShowreelPaused = !m_ShowreelPaused;
+    m_ShowreelCompleted = false;
+    m_ShowreelPaused = false;
+    m_ShowreelElapsedSeconds = 0.0;
+    m_ShowreelStage = 0u;
+    ApplyShowreelStage(m_ShowreelStage);
     if (m_Diagnostics.IsEnabled())
     {
         m_Diagnostics.Record(
             "scene.showreel",
-            "playback_toggled",
+            "playback_started",
             DiagnosticTelemetrySeverity::Info,
             {
-                { "paused", m_ShowreelPaused },
                 { "stage", static_cast<uint64_t>(m_ShowreelStage) },
                 { "elapsed_seconds", m_ShowreelElapsedSeconds },
                 { "trigger", "F10" },
