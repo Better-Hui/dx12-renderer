@@ -75,7 +75,7 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
     }
     RaytracingDemoPasses::Builder::AddLightingCompositePass(renderGraphBuilder, resources, config);
     RenderGraph::ResourceId sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::RayTracingFinishedToken;
-    if (frameState.UseMeshletGBuffer && frameState.DebugMeshletClusters)
+    if (frameState.DebugMeshletClusters)
     {
         RenderGraph::ResourceId debugTarget = RaytracingDemoRenderGraph::ResourceIds::GBufferAlbedoOcclusion;
         const int debugTextureTarget = frameState.DebugTextureTarget;
@@ -89,6 +89,12 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
             break;
         case 3:
             debugTarget = RaytracingDemoRenderGraph::ResourceIds::MotionVector;
+            break;
+        case 4:
+            debugTarget = RaytracingDemoRenderGraph::ResourceIds::DepthBuffer;
+            break;
+        case 5:
+            debugTarget = RaytracingDemoRenderGraph::ResourceIds::GBufferEmissionMetallic;
             break;
         default:
             debugTarget = RaytracingDemoRenderGraph::ResourceIds::GBufferAlbedoOcclusion;

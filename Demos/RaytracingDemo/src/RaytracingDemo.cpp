@@ -770,6 +770,30 @@ RaytracingDemo::RaytracingDemo(
     }
     std::free(meshletDebug);
 
+    char* gbufferDebug = nullptr;
+    size_t gbufferDebugLength = 0;
+    _dupenv_s(&gbufferDebug, &gbufferDebugLength, "RAYTRACING_DEMO_GBUFFER_DEBUG");
+    if (gbufferDebug != nullptr)
+    {
+        // Enable the existing debug-output path without forcing meshlet rasterization.
+        m_DebugMeshletClusters = std::strcmp(gbufferDebug, "0") != 0;
+    }
+    std::free(gbufferDebug);
+
+    char* gbufferDebugTarget = nullptr;
+    size_t gbufferDebugTargetLength = 0;
+    _dupenv_s(&gbufferDebugTarget, &gbufferDebugTargetLength, "RAYTRACING_DEMO_GBUFFER_DEBUG_TARGET");
+    if (gbufferDebugTarget != nullptr)
+    {
+        char* parseEnd = nullptr;
+        const long parsedTarget = std::strtol(gbufferDebugTarget, &parseEnd, 10);
+        if (parseEnd != gbufferDebugTarget && *parseEnd == '\0')
+        {
+            m_DebugTextureTarget = std::clamp(static_cast<int>(parsedTarget), 0, 5);
+        }
+    }
+    std::free(gbufferDebugTarget);
+
     char* meshletBackend = nullptr;
     size_t meshletBackendLength = 0;
     _dupenv_s(&meshletBackend, &meshletBackendLength, "RAYTRACING_DEMO_MESHLET_BACKEND");
@@ -932,6 +956,11 @@ void RaytracingDemo::LoadSceneContent(CommandList& commandList, const std::files
     TryGetEnvironmentBoolean("RAYTRACING_DEMO_SCENE_BEHAVIOR", sceneBehaviorEnabled);
     m_SceneRuntime.SetSceneBehaviorEnabled(sceneBehaviorEnabled);
     m_SceneRuntime.LoadScene(m_Scene, m_Lights, GetSceneCamera());
+    bool sceneLightAnimationEnabled = m_SceneRuntime.IsSceneLightAnimationEnabled();
+    if (TryGetEnvironmentBoolean("RAYTRACING_DEMO_SCENE_LIGHT_ANIMATION", sceneLightAnimationEnabled))
+    {
+        m_SceneRuntime.SetSceneLightAnimationEnabled(sceneLightAnimationEnabled);
+    }
 
     if (m_Diagnostics.IsEnabled())
     {

@@ -30,6 +30,7 @@ namespace DemoAutomation
         std::vector<Step> Rtas;
         std::vector<Step> DynamicScene;
         std::vector<Step> OIDN;
+        std::vector<Step> RasterGBufferMotion;
         std::vector<Step> Matrix;
         std::vector<Step> ReSTIRGIProfile;
         std::vector<Step> ReSTIRGIVariants;

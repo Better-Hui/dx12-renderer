@@ -129,12 +129,10 @@ PixelShaderOutput main(PixelShaderInput IN)
 //Modify End
 
     float3 normalWs = normalize(IN.NormalWs);
-    if (!IN.IsFrontFace)
-    {
-        normalWs = -normalWs;
-    }
-    const float3 viewToCamera = normalize(g_Pipeline_CameraPosition.xyz - IN.PositionWs);
-    if (dot(normalWs, viewToCamera) < 0.0f)
+    const float3 geometricNormalUnnormalized = cross(ddx(IN.PositionWs), ddy(IN.PositionWs));
+    const float geometricNormalLengthSquared = dot(geometricNormalUnnormalized, geometricNormalUnnormalized);
+    if (geometricNormalLengthSquared > 1.0e-8f &&
+        dot(normalWs, geometricNormalUnnormalized) < 0.0f)
     {
         normalWs = -normalWs;
     }

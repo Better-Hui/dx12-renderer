@@ -447,6 +447,22 @@ DemoAutomation::TestSuites RaytracingDemoAutomation::CreateTestSuites()
         makeStep(Action::VerifyActiveRayTracedPixelCount, 0u, "visual-default-active-pixels"),
         makeStep(Action::CaptureScreenshot, static_cast<uint32_t>(ScreenshotCapture::ReSTIRDIAndGI), "visual-capture=restirdi-restirgi"),
     };
+    testSuites.RasterGBufferMotion = {
+        makeStep(Action::DirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::PathTracing), "raster-motion-direct=pathtracing"),
+        makeStep(Action::IndirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::None), "raster-motion-indirect=none"),
+        makeStep(Action::MaxBounces, 1u, "raster-motion-bounces=1"),
+        makeStep(Action::Wait, 0u, "raster-motion-warmup=1"),
+        makeStep(Action::Wait, 0u, "raster-motion-warmup=2"),
+        makeStep(Action::CaptureScreenshot, static_cast<uint32_t>(ScreenshotCapture::PathTracingDirect), "raster-motion-capture=1"),
+        makeStep(Action::Wait, 0u, "raster-motion-frame=2"),
+        makeStep(Action::CaptureScreenshot, static_cast<uint32_t>(ScreenshotCapture::PathTracingDirect), "raster-motion-capture=2"),
+        makeStep(Action::Wait, 0u, "raster-motion-frame=3"),
+        makeStep(Action::CaptureScreenshot, static_cast<uint32_t>(ScreenshotCapture::PathTracingDirect), "raster-motion-capture=3"),
+        makeStep(Action::Wait, 0u, "raster-motion-frame=4"),
+        makeStep(Action::CaptureScreenshot, static_cast<uint32_t>(ScreenshotCapture::PathTracingDirect), "raster-motion-capture=4"),
+        makeStep(Action::Wait, 0u, "raster-motion-frame=5"),
+        makeStep(Action::CaptureScreenshot, static_cast<uint32_t>(ScreenshotCapture::PathTracingDirect), "raster-motion-capture=5"),
+    };
     testSuites.ReSTIRGIProfile = {
         makeStep(Action::GpuTiming, 1u, "timing=1"),
         makeStep(Action::TimingCapture, 1u, "timingcapture=1"),

@@ -15,6 +15,10 @@ namespace RaytracingDemoRenderGraph
     constexpr FLOAT GBUFFER_CLEAR_COLOR[] = { 0.0f, 0.0f, 0.0f, 0.0f };
     constexpr FLOAT OUTPUT_CLEAR_COLOR[] = { 0.4f, 0.6f, 0.9f, 1.0f };
     constexpr DXGI_FORMAT GBUFFER_COLOR_FORMAT = DXGI_FORMAT_R8G8B8A8_UNORM;
+//Modify Begin:2026-09-13 by Hui
+    // Emissive radiance is HDR and must not be clamped to the normalized GBuffer format.
+    constexpr DXGI_FORMAT GBUFFER_EMISSION_FORMAT = DXGI_FORMAT_R16G16B16A16_FLOAT;
+//Modify End
     constexpr DXGI_FORMAT GBUFFER_NORMAL_FORMAT = DXGI_FORMAT_R10G10B10A2_UNORM;
     constexpr DXGI_FORMAT GBUFFER_POSITION_FORMAT = DXGI_FORMAT_R32G32B32A32_FLOAT;
     constexpr DXGI_FORMAT MOTION_VECTOR_FORMAT = DXGI_FORMAT_R16G16_FLOAT;

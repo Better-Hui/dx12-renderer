@@ -51,6 +51,7 @@ namespace
     constexpr float LowPolyStreetCameraAngularSpeed = 1.0f;
     constexpr float LowPolyStreetCameraMinimumAngularSpeed = 0.05f;
     constexpr float LowPolyStreetCameraMaximumAngularSpeed = 1.0f;
+    constexpr float LowPolyStreetCameraTargetHeightOffset = 50.0f;
     constexpr float LowPolyStreetCameraConeHalfAngle = XMConvertToRadians(15.0f);
     constexpr float LowPolyStreetCameraMinimumConeHalfAngle = XMConvertToRadians(2.0f);
     constexpr float LowPolyStreetCameraMaximumConeHalfAngle = XMConvertToRadians(30.0f);
@@ -150,7 +151,11 @@ namespace
             }
 
             XMStoreFloat3(&m_InitialCameraPosition, camera.GetTranslation());
-            m_LookAtTarget = { m_OrbitCenter.x, houseCenter.y, m_OrbitCenter.z };
+            m_LookAtTarget = {
+                m_OrbitCenter.x,
+                houseCenter.y + LowPolyStreetCameraTargetHeightOffset,
+                m_OrbitCenter.z
+            };
 
             const XMVECTOR cameraPosition = XMLoadFloat3(&m_InitialCameraPosition);
             const XMVECTOR lookAtTarget = XMLoadFloat3(&m_LookAtTarget);

@@ -121,6 +121,10 @@ void DemoAutomation::RuntimeAutomationController::Initialize(
     {
         steps = testSuites.OIDN;
     }
+    else if (mode == "raster-gbuffer-motion")
+    {
+        steps = testSuites.RasterGBufferMotion;
+    }
     else if (mode == "matrix")
     {
         steps = testSuites.Matrix;
@@ -178,7 +182,7 @@ void DemoAutomation::RuntimeAutomationController::Initialize(
     else
     {
         throw std::runtime_error(
-            "RAYTRACING_DEMO_AUTOTEST must be 'core', 'stress', 'meshlet-indirect', 'copy', 'rtas', 'dynamic-scene', 'oidn', 'matrix', 'restirgi-profile', 'restirgi-variants', 'restirdi-variants', or 'visual'.");
+            "RAYTRACING_DEMO_AUTOTEST must be 'core', 'stress', 'meshlet-indirect', 'copy', 'rtas', 'dynamic-scene', 'oidn', 'raster-gbuffer-motion', 'matrix', 'restirgi-profile', 'restirgi-variants', 'restirdi-variants', or 'visual'.");
     }
 
     const std::string stepTimeoutSeconds = GetEnvironmentVariable("RAYTRACING_DEMO_AUTOTEST_TIMEOUT_SECONDS");
