@@ -44,9 +44,10 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     command.Flags = 0u;
     command.Padding0 = 0u;
     command.Padding1 = 0u;
-    command.VertexCountPerInstance = meshlet.IndexCount;
+    command.IndexCountPerInstance = meshlet.IndexCount;
     command.InstanceCount = 1;
-    command.StartVertexLocation = 0;
+    command.StartIndexLocation = meshlet.IndexOffset;
+    command.BaseVertexLocation = int(meshlet.VertexOffset);
     command.StartInstanceLocation = 0;
     MeshletIndirectCommands[commandIndex] = command;
 }

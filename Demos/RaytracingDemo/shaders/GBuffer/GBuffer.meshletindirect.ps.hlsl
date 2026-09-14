@@ -89,19 +89,14 @@ PixelShaderOutput main(PixelShaderInput IN)
     const float3 outputBaseColor = IN.DebugMeshletClusters != 0u ? HashClusterColor(IN.MeshletDebugId) : baseColor;
 
     float3 normalWs = normalize(IN.NormalWs);
-    const float3 geometricNormal = normalize(cross(ddx(IN.PositionWs), ddy(IN.PositionWs)));
-    if (dot(normalWs, geometricNormal) < 0.0f)
-    {
-        normalWs = -normalWs;
-    }
-    const float3 viewToCamera = normalize(g_Pipeline_CameraPosition.xyz - IN.PositionWs);
-    if (dot(normalWs, viewToCamera) < 0.0f)
-    {
-        normalWs = -normalWs;
-    }
     if (material.HasNormalMap != 0u)
     {
         normalWs = ApplyNormalMap(material, normalWs, IN.TangentWs, IN.BitangentWs, uv);
+    }
+    const float3 viewToCamera = g_Pipeline_CameraPosition.xyz - IN.PositionWs;
+    if (dot(normalWs, viewToCamera) < 0.0f)
+    {
+        normalWs = -normalWs;
     }
 
     float metallic = material.Metallic;

@@ -35,6 +35,16 @@ ByteAddressBuffer::ByteAddressBuffer(
     CreateViews(numElements, elementSize);
 }
 
+D3D12_INDEX_BUFFER_VIEW ByteAddressBuffer::GetIndexBufferView(const DXGI_FORMAT format) const
+{
+    Assert(IsValid(), "Byte-address index view is requested before the buffer is initialized.");
+    return {
+        m_d3d12Resource->GetGPUVirtualAddress(),
+        static_cast<UINT>(m_BufferSize),
+        format,
+    };
+}
+
 void ByteAddressBuffer::CreateViews(size_t numElements, size_t elementSize)
 {
     const auto device = m_DeviceContext->GetDevice();

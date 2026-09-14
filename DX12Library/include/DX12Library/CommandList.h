@@ -234,6 +234,10 @@ public:
      * Set the vertex buffer to the rendering pipeline.
      */
     void SetVertexBuffer(uint32_t slot, const VertexBuffer& vertexBuffer);
+    void SetVertexBufferView(
+        uint32_t slot,
+        const D3D12_VERTEX_BUFFER_VIEW& vertexBufferView,
+        const Resource& resource);
 
     /**
      * Set dynamic vertex buffer data to the rendering pipeline.
@@ -250,6 +254,9 @@ public:
      * Bind the index buffer to the rendering pipeline.
      */
     void SetIndexBuffer(const IndexBuffer& indexBuffer);
+    void SetIndexBufferView(
+        const D3D12_INDEX_BUFFER_VIEW& indexBufferView,
+        const Resource& resource);
 
     /**
      * Bind dynamic index buffer data to the rendering pipeline.

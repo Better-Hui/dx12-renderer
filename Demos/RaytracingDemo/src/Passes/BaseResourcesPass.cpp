@@ -84,6 +84,17 @@ namespace
         passBuilder.ReadExternal(*meshletResources.Instances, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     }
 
+    void DeclareMeshletIndirectDrawResources(
+        RenderGraph::RenderGraphPassBuilder& passBuilder,
+        const MeshletGpuResources& meshletResources)
+    {
+        Assert(meshletResources.IsValid(), "Meshlet resources must be initialized before graph construction.");
+        passBuilder.ReadExternal(*meshletResources.Vertices, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+        passBuilder.ReadExternal(*meshletResources.Indices, D3D12_RESOURCE_STATE_INDEX_BUFFER);
+        passBuilder.ReadExternal(*meshletResources.Transforms, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        passBuilder.ReadExternal(*meshletResources.Instances, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    }
+
     MeshletCullConstants BuildMeshletCullConstants(
         const RaytracingDemoPassResources& resources,
         const MeshletGpuResources& meshletResources)
@@ -271,10 +282,21 @@ namespace
         commandContext.BindBindlessDescriptorHeap(resources.Scene.GetBindlessDescriptorHeap());
         Shader& shader = *resources.GBufferMeshletIndirectShader;
         commandContext.BindPipeline(shader);
-        BindMeshletDrawResources(commandContext, shader, resources, meshletResources);
+        if (shader.GetDescriptorSet().HasBinding("BindlessTextures", DescriptorBindingKind::ShaderResourceView))
+        {
+            commandContext.SetShaderResourceViews(
+                shader,
+                "BindlessTextures",
+                resources.Scene.GetTextureShaderResourceViews());
+        }
+        commandContext.SetStructuredBuffer(shader, "MeshletTransforms", *meshletResources.Transforms);
+        commandContext.SetStructuredBuffer(shader, "MeshletInstances", *meshletResources.Instances);
+        commandContext.SetStructuredBuffer(shader, "MeshletMaterials", resources.Scene.GetMaterialBuffer());
         commandContext.SetConstantBuffer(shader, "PipelineCBuffer", BuildPassPipelineConstants(resources, config));
         commandContext.BindDescriptorSet(shader.GetDescriptorSet());
         commandList.SetPrimitiveTopology(Mesh::PRIMITIVE_TOPOLOGY);
+        commandList.SetVertexBufferView(0u, meshletResources.Vertices->GetVertexBufferView(), *meshletResources.Vertices);
+        commandList.SetIndexBufferView(meshletResources.Indices->GetIndexBufferView(), *meshletResources.Indices);
         commandContext.DrawIndirect(
             *resources.MeshletDrawCommandSignature,
             IndirectCommandExecutionDesc{
@@ -354,7 +376,7 @@ namespace
                 passBuilder.ReadToken(DemoResourceIds::MeshletCullFinishedToken);
                 DeclareGBufferOutputs(passBuilder);
                 DeclareGBufferShaderResources(passBuilder, resources);
-                DeclareMeshletShaderResources(passBuilder, meshletResources);
+                DeclareMeshletIndirectDrawResources(passBuilder, meshletResources);
                 passBuilder.ReadIndirectArgument(*meshletResources.IndirectCommands);
                 passBuilder.WriteToken(DemoResourceIds::BaseResourcesFinishedToken);
             },

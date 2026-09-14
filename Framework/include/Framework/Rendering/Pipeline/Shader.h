@@ -24,6 +24,7 @@
 #include <Framework/Rendering/Pipeline/PipelineLayout.h>
 #include <Framework/Rendering/Pipeline/PipelineStateCache.h>
 #include <Framework/Rendering/Pipeline/PipelineStateKey.h>
+#include <Framework/Rendering/Pipeline/IndirectCommandSignature.h>
 //Modify End
 #include <Framework/Rendering/Pipeline/ShaderBlob.h>
 #include <Framework/Rendering/Pipeline/ShaderReflection.h>
@@ -74,7 +75,8 @@ public:
 //Modify Begin:2026-07-31 by Hui
 	std::unique_ptr<IndirectCommandSignature> CreateIndirectDrawCommandSignature(
 		const std::string& rootConstantBufferName,
-		UINT byteStride) const;
+		UINT byteStride,
+		IndirectArgumentType executionArgumentType = IndirectArgumentType::Draw) const;
 //Modify End
 
 private:

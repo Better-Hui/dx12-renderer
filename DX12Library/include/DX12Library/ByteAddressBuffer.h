@@ -59,6 +59,9 @@ public:
         return m_BufferSize;
     }
 
+    D3D12_INDEX_BUFFER_VIEW GetIndexBufferView(
+        DXGI_FORMAT format = DXGI_FORMAT_R16_UINT) const;
+
     /**
      * Create the views for the buffer resource.
      * Used by the CommandList when setting the buffer contents.

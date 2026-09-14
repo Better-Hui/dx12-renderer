@@ -333,6 +333,15 @@ void CommandList::SetVertexBuffer(const uint32_t slot, const VertexBuffer& verte
     TrackResource(vertexBuffer);
 }
 
+void CommandList::SetVertexBufferView(
+    const uint32_t slot,
+    const D3D12_VERTEX_BUFFER_VIEW& vertexBufferView,
+    const Resource& resource)
+{
+    m_D3d12CommandList->IASetVertexBuffers(slot, 1, &vertexBufferView);
+    TrackResource(resource);
+}
+
 void CommandList::SetIndexBuffer(const IndexBuffer& indexBuffer)
 {
     const auto indexBufferView = indexBuffer.GetIndexBufferView();
@@ -340,6 +349,14 @@ void CommandList::SetIndexBuffer(const IndexBuffer& indexBuffer)
     m_D3d12CommandList->IASetIndexBuffer(&indexBufferView);
 
     TrackResource(indexBuffer);
+}
+
+void CommandList::SetIndexBufferView(
+    const D3D12_INDEX_BUFFER_VIEW& indexBufferView,
+    const Resource& resource)
+{
+    m_D3d12CommandList->IASetIndexBuffer(&indexBufferView);
+    TrackResource(resource);
 }
 //Modify End
 

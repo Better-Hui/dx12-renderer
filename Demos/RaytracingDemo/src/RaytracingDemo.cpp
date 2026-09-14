@@ -789,7 +789,7 @@ RaytracingDemo::RaytracingDemo(
         const long parsedTarget = std::strtol(gbufferDebugTarget, &parseEnd, 10);
         if (parseEnd != gbufferDebugTarget && *parseEnd == '\0')
         {
-            m_DebugTextureTarget = std::clamp(static_cast<int>(parsedTarget), 0, 5);
+            m_DebugTextureTarget = std::clamp(static_cast<int>(parsedTarget), 0, 6);
         }
     }
     std::free(gbufferDebugTarget);
@@ -1168,11 +1168,11 @@ void RaytracingDemo::LoadStartupConfiguration()
     }
     if (configuration.TryGetInt("Renderer", "DebugLightingTexture", intValue))
     {
-        m_DebugLightingTextureTarget = std::clamp(intValue, 0, 3);
+        m_DebugLightingTextureTarget = std::clamp(intValue, 0, 4);
     }
     if (configuration.TryGetInt("Renderer", "MeshletDebugTarget", intValue))
     {
-        m_DebugTextureTarget = std::clamp(intValue, 0, 3);
+        m_DebugTextureTarget = std::clamp(intValue, 0, 6);
     }
     if (configuration.TryGetBoolean("Renderer", "StressTestSpheres", boolValue))
     {

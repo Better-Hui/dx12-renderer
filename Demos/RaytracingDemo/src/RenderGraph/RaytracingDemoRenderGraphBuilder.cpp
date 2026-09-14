@@ -96,6 +96,9 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
         case 5:
             debugTarget = RaytracingDemoRenderGraph::ResourceIds::GBufferEmissionMetallic;
             break;
+        case 6:
+            debugTarget = RaytracingDemoRenderGraph::ResourceIds::GBufferSpecularSmoothness;
+            break;
         default:
             debugTarget = RaytracingDemoRenderGraph::ResourceIds::GBufferAlbedoOcclusion;
             break;
@@ -120,18 +123,24 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
         switch (debugLightingTextureTarget)
         {
         case 1:
+            if (frameState.UsesDirectLighting())
+            {
+                debugTarget = RaytracingDemoRenderGraph::ResourceIds::DirectLighting;
+            }
+            break;
+        case 2:
             if (frameState.UsesIndirectLighting())
             {
                 debugTarget = RaytracingDemoRenderGraph::ResourceIds::IndirectLighting;
             }
             break;
-        case 2:
+        case 3:
             if (frameState.DenoiserAlgorithm == DenoiserController::Algorithm::NRD)
             {
                 debugTarget = RaytracingDemoRenderGraph::ResourceIds::NRDNoisyRadiance;
             }
             break;
-        case 3:
+        case 4:
             if (frameState.DenoiserAlgorithm == DenoiserController::Algorithm::NRD)
             {
                 debugTarget = RaytracingDemoRenderGraph::ResourceIds::NRDDenoisedRadiance;

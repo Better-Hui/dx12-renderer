@@ -156,7 +156,8 @@ bool Shader::HasUnorderedAccessView(const std::string& variableName) const
 //Modify Begin:2026-07-31 by Hui
 std::unique_ptr<IndirectCommandSignature> Shader::CreateIndirectDrawCommandSignature(
     const std::string& rootConstantBufferName,
-    const UINT byteStride) const
+    const UINT byteStride,
+    const IndirectArgumentType executionArgumentType) const
 {
     Assert(m_PipelineLayout != nullptr && m_RootSignature != nullptr, "Shader pipeline layout and root signature must be created.");
     const PipelineRootConstantDesc* rootConstant = m_PipelineLayout->FindRootConstant(rootConstantBufferName);
@@ -169,7 +170,7 @@ std::unique_ptr<IndirectCommandSignature> Shader::CreateIndirectDrawCommandSigna
             .RootConstantCount = static_cast<uint32_t>((rootConstant->SizeInBytes + 3u) / 4u),
         },
         {
-            .Type = IndirectArgumentType::Draw,
+            .Type = executionArgumentType,
         },
     };
     return std::make_unique<IndirectCommandSignature>(

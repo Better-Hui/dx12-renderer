@@ -62,6 +62,8 @@ public:
 
     size_t GetElementSize() const;
 
+    D3D12_VERTEX_BUFFER_VIEW GetVertexBufferView() const;
+
     void CreateViews(size_t numElements, size_t elementSize) override;
 
     D3D12_CPU_DESCRIPTOR_HANDLE GetShaderResourceView(const D3D12_SHADER_RESOURCE_VIEW_DESC* srvDesc = nullptr) const override;

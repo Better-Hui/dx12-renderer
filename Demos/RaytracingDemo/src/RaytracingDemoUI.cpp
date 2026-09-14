@@ -727,6 +727,7 @@ void RaytracingDemo::OnImGui()
     ImGui::TextDisabled("Current batch: Inline Ray Query direct and indirect lighting. GPU execution remains ordered.");
     const char* lightingDebugTargetNames[] = {
         "Off",
+        "Direct Lighting",
         "Indirect Lighting",
         "NRD Noisy Radiance",
         "NRD Denoised Radiance",
@@ -735,11 +736,11 @@ void RaytracingDemo::OnImGui()
         "Debug Lighting Texture",
         &m_DebugLightingTextureTarget,
         lightingDebugTargetNames,
-        4))
+        5))
     {
         ResetAccumulation();
     }
-    if (m_DebugLightingTextureTarget == 3 && !m_Denoisers.IsNRDEnabled())
+    if (m_DebugLightingTextureTarget >= 3 && !m_Denoisers.IsNRDEnabled())
     {
         ImGui::TextDisabled("NRD Denoised Radiance requires the NRD denoiser.");
     }
@@ -747,7 +748,7 @@ void RaytracingDemo::OnImGui()
     {
         ResetAccumulation();
     }
-    if (ImGui::Checkbox("Debug Meshlet Clusters", &m_DebugMeshletClusters))
+    if (ImGui::Checkbox("Debug GBuffer / Meshlet Output", &m_DebugMeshletClusters))
     {
         if (m_DebugMeshletClusters)
         {
@@ -755,10 +756,19 @@ void RaytracingDemo::OnImGui()
         }
         ResetAccumulation();
     }
+    ImGui::TextDisabled("Shows the selected intermediate GBuffer target before lighting and post processing.");
     if (m_DebugMeshletClusters)
     {
-        const char* debugTargetNames[] = { "GBuffer Albedo", "GBuffer Normal", "GBuffer Position", "Motion Vector" };
-        if (ImGui::Combo("Debug Target", &m_DebugTextureTarget, debugTargetNames, 4))
+        const char* debugTargetNames[] = {
+            "GBuffer Albedo / Occlusion",
+            "GBuffer Normal",
+            "GBuffer Position",
+            "Motion Vector",
+            "Depth",
+            "GBuffer Emission / Metallic",
+            "GBuffer Specular / Smoothness",
+        };
+        if (ImGui::Combo("GBuffer Debug Target", &m_DebugTextureTarget, debugTargetNames, 7))
         {
             ResetAccumulation();
         }
@@ -860,16 +870,19 @@ void RaytracingDemo::OnImGui()
 //Modify End
 
 //Modify Begin:2026-08-28 by Hui
+    if (ImGui::CollapsingHeader("Denoise"))
+    {
+        if (m_Denoisers.DrawImGui())
+        {
+            if (m_Denoisers.IsEnabled() && m_AccumulationEnabled)
+            {
+                m_AccumulationEnabled = false;
+            }
+            ResetAccumulation();
+        }
+    }
     if (ImGui::CollapsingHeader("Post-Processing"))
     {
-    if (m_Denoisers.DrawImGui())
-    {
-        if (m_Denoisers.IsEnabled() && m_AccumulationEnabled)
-        {
-            m_AccumulationEnabled = false;
-        }
-        ResetAccumulation();
-    }
     if (DrawBloomControls(
         m_Bloom,
         m_ProfilerDisplay.GetCudaTiming(),

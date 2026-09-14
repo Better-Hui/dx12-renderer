@@ -17,6 +17,15 @@ struct VertexShaderOutput
     float4 PositionCs : SV_POSITION;
 };
 
+struct VertexShaderInput
+{
+    float4 Position : POSITION;
+    float4 Normal : NORMAL;
+    float4 Uv : TEXCOORD0;
+    float4 Tangent : TANGENT;
+    float4 Bitangent : BINORMAL;
+};
+
 cbuffer PipelineCBuffer : register(b0, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE)
 {
     matrix g_Pipeline_View;
@@ -39,19 +48,13 @@ cbuffer MeshletDrawCBuffer : register(b4, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE)
     uint2 g_MeshletDraw_Padding0;
 };
 
-StructuredBuffer<MeshletVertexAttributes> MeshletVertices : register(t0, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
-ByteAddressBuffer MeshletIndices : register(t1, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
-StructuredBuffer<Meshlet> Meshlets : register(t2, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
 StructuredBuffer<MeshletTransformData> MeshletTransforms : register(t3, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
 StructuredBuffer<MeshletInstanceData> MeshletInstances : register(t4, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
 
-VertexShaderOutput main(uint vertexId : SV_VertexID)
+VertexShaderOutput main(VertexShaderInput input)
 {
     const MeshletInstanceData instance = MeshletInstances[g_MeshletDraw_InstanceIndex];
-    const Meshlet meshlet = Meshlets[instance.MeshletIndex];
     const MeshletTransformData transform = MeshletTransforms[instance.TransformIndex];
-    const uint localVertexIndex = MeshletLoadIndex(MeshletIndices, meshlet.IndexOffset, vertexId);
-    const MeshletVertexAttributes input = MeshletVertices[meshlet.VertexOffset + localVertexIndex];
 
     VertexShaderOutput output;
     const float4 positionWs = mul(float4(input.Position.xyz, 1.0f), transform.Model);

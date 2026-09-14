@@ -69,9 +69,10 @@ struct MeshletIndirectCommand
     uint Flags;
     uint Padding0;
     uint Padding1;
-    uint VertexCountPerInstance;
+    uint IndexCountPerInstance;
     uint InstanceCount;
-    uint StartVertexLocation;
+    uint StartIndexLocation;
+    int BaseVertexLocation;
     uint StartInstanceLocation;
 };
 

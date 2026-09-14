@@ -129,16 +129,14 @@ PixelShaderOutput main(PixelShaderInput IN)
 //Modify End
 
     float3 normalWs = normalize(IN.NormalWs);
-    const float3 geometricNormalUnnormalized = cross(ddx(IN.PositionWs), ddy(IN.PositionWs));
-    const float geometricNormalLengthSquared = dot(geometricNormalUnnormalized, geometricNormalUnnormalized);
-    if (geometricNormalLengthSquared > 1.0e-8f &&
-        dot(normalWs, geometricNormalUnnormalized) < 0.0f)
-    {
-        normalWs = -normalWs;
-    }
     if (HasNormalMap != 0u)
     {
         normalWs = ApplyNormalMap(normalWs, IN.TangentWs, IN.BitangentWs, uv);
+    }
+    const float3 viewToCamera = g_Pipeline_CameraPosition.xyz - IN.PositionWs;
+    if (dot(normalWs, viewToCamera) < 0.0f)
+    {
+        normalWs = -normalWs;
     }
 
     float metallic = Metallic;

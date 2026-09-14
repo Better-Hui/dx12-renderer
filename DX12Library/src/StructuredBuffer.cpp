@@ -97,6 +97,16 @@ size_t StructuredBuffer::GetElementSize() const
     return m_ElementSize;
 }
 
+D3D12_VERTEX_BUFFER_VIEW StructuredBuffer::GetVertexBufferView() const
+{
+    Assert(IsValid(), "Structured-buffer vertex view is requested before the buffer is initialized.");
+    return {
+        m_d3d12Resource->GetGPUVirtualAddress(),
+        static_cast<UINT>(m_NumElements * m_ElementSize),
+        static_cast<UINT>(m_ElementSize),
+    };
+}
+
 void StructuredBuffer::CreateViews(size_t numElements, size_t elementSize)
 {
     const auto device = m_DeviceContext->GetDevice();

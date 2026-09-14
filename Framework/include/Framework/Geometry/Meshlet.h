@@ -10,6 +10,7 @@
 #include <d3d12.h>
 
 #include <cstdint>
+#include <cstddef>
 #include <span>
 #include <unordered_map>
 #include <utility>
@@ -99,8 +100,11 @@ struct MeshletIndirectCommand
     uint32_t Flags = 0;
     uint32_t Padding0 = 0;
     uint32_t Padding1 = 0;
-    D3D12_DRAW_ARGUMENTS DrawArguments = {};
+    D3D12_DRAW_INDEXED_ARGUMENTS DrawArguments = {};
 };
+
+static_assert(offsetof(MeshletIndirectCommand, DrawArguments) == 16u);
+static_assert(sizeof(MeshletIndirectCommand) == 36u);
 
 struct MeshletGpuResources
 {

@@ -153,7 +153,8 @@ void RaytracingDemoShaderPipelineController::CreateGeometryPipelines()
             ComputePipelineDescBuilder::ReflectedDefault(*shaderBlob).Build());
         m_MeshletDrawCommandSignature = m_GBufferMeshletIndirectShader->CreateIndirectDrawCommandSignature(
             "MeshletDrawCBuffer",
-            sizeof(MeshletIndirectCommand));
+            sizeof(MeshletIndirectCommand),
+            IndirectArgumentType::DrawIndexed);
     });
 }
 
