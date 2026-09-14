@@ -308,7 +308,7 @@ private:
     ReSTIRGI m_IndirectLightingReSTIRGI;
     bool m_ReSTIRGIHistoryValid = false;
 //Modify End
-//Modify Begin:2026-08-28 by Hui
+//Modify Begin:2026-09-14 by Hui
     bool m_AsyncComputeEnabled = false;
     bool m_CopyQueueValidationEnabled = false;
     bool m_DebugSerializeAsyncCompute = false;
@@ -348,7 +348,7 @@ private:
     bool m_HasCameraProjectionConfiguration = false;
     PathTracingBackend m_PathTracingBackend = PathTracingBackend::InlineRayQuery;
     bool m_OpenDxrCompatibilityPopup = false;
-    PathTracingDispatchMode m_PathTracingDispatchMode = PathTracingDispatchMode::FullResolution;
+    PathTracingDispatchMode m_PathTracingDispatchMode = PathTracingDispatchMode::CompactedIndirect;
     int m_Width = 1;
     int m_Height = 1;
     Scene m_Scene;
