@@ -78,6 +78,7 @@ set(FRAMEWORK_RESTIR_GI_ALL_SHADER_FILES
 
 set(SHADERS_HEADER_FILES
         "shaders/Common/ActivePixelList.hlsli"
+        "shaders/Common/BlueNoise.hlsli"
         "shaders/Common/Noise.hlsli"
         "shaders/Common/EnvironmentTexture.hlsli"
         "shaders/Bindless/BindlessResources.hlsli"

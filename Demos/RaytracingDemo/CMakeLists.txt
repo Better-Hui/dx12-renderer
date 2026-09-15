@@ -20,6 +20,7 @@ set(HEADER_FILES
         include/Passes/BloomController.h
         include/Passes/RaytracingDemoPassResources.h
         include/Scene/SceneLightManager.h
+        include/Scene/RaytracingDemoBlueNoiseResources.h
         include/Scene/RaytracingDemoSceneRuntimeController.h
         include/Scene/SceneLighting.h
         include/Scene/SceneResourceTypes.h
@@ -63,6 +64,7 @@ set(SOURCE_FILES
         src/RenderGraph/RaytracingDemoGraphResources.cpp
         src/Passes/SkyboxPass.cpp
         src/Scene/SceneLightManager.cpp
+        src/Scene/RaytracingDemoBlueNoiseResources.cpp
         src/Scene/RaytracingDemoSceneRuntimeController.cpp
         src/Scene/SceneResourceBuilders.cpp
         src/Scene/SceneStressTestFactory.cpp

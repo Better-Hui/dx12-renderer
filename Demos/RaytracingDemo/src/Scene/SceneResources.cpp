@@ -124,10 +124,16 @@ void RaytracingDemoSceneResources::Clear()
     m_DynamicRayTracingBaseVertices.clear();
     m_DynamicRayTracingVertices.clear();
     m_DynamicRayTracingUpdateStatistics = {};
+    m_BlueNoiseResources.Clear();
     m_StressTestSphereObjects.clear();
     m_StressTestSphereObjectStart = 0;
     m_StressTestSphereMaterialIndex = (std::numeric_limits<uint32_t>::max)();
     m_StressTestSpheresEnabled = false;
+}
+
+void RaytracingDemoSceneResources::LoadBlueNoiseTextures(CommandList& commandList)
+{
+    m_BlueNoiseResources.Load(commandList);
 }
 
 uint32_t RaytracingDemoSceneResources::AddTexture(CommandList& commandList, const std::wstring& path, TextureUsageType usage)
@@ -205,6 +211,11 @@ void RaytracingDemoSceneResources::ForEachRayTracingShaderResource(
 {
     m_TextureMaterialResources.ForEachShaderResource(action);
     m_RayTracingResources.ForEachShaderResource(action);
+    if (m_BlueNoiseResources.IsLoaded())
+    {
+        action(*m_BlueNoiseResources.GetScalarTexture());
+        action(*m_BlueNoiseResources.GetVec2Texture());
+    }
 }
 
 SurfaceEmitterSceneData RaytracingDemoSceneResources::CollectEmissiveMeshSurfaceEmitters() const
@@ -332,6 +343,7 @@ SurfaceEmitterSceneData RaytracingDemoSceneResources::CollectEmissiveMeshSurface
 
 void RaytracingDemoSceneResources::LoadDeferredLightingScene(CommandList& commandList)
 {
+    LoadBlueNoiseTextures(commandList);
     ModelLoader modelLoader;
 
     const uint32_t whiteTexture = AddTexture(commandList, L"Assets/Textures/white.png");
@@ -495,6 +507,7 @@ bool RaytracingDemoSceneResources::LoadScene(
         return false;
     }
 
+    LoadBlueNoiseTextures(commandList);
     const uint32_t whiteTexture = AddTexture(commandList, L"Assets/Textures/white.png");
     const std::vector<uint32_t> materialIndexMap = LoadSceneMaterials(commandList, scene, whiteTexture);
     const uint32_t defaultMaterial = AddDiffuseMaterial({ 0.85f, 0.85f, 0.85f, 1.0f }, { 1, 1, 0, 0 }, whiteTexture, 0.0f, 0.45f);

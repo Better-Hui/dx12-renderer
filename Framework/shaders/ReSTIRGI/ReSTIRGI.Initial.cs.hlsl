@@ -2,9 +2,6 @@
 #include "ReSTIRGI/ReSTIRGI.hlsli"
 #include "ReSTIRGI/ReSTIRGIConstants.hlsli"
 #include <Common/ActivePixelList.hlsli>
-//Modify Begin:2026-07-30 by Hui
-#include <Common/Noise.hlsli>
-//Modify End
 
 //Modify Begin:2026-08-19 by Hui
 RWTexture2D<uint4> ReSTIRGIInitialCreation : register(u2);

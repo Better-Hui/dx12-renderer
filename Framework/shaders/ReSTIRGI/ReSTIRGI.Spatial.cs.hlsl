@@ -2,8 +2,6 @@
 #include "ReSTIRGI/ReSTIRGI.hlsli"
 #include "ReSTIRGI/ReSTIRGIConstants.hlsli"
 #include <Common/ActivePixelList.hlsli>
-//Modify Begin:2026-08-19 by Hui
-#include <Common/Noise.hlsli>
 
 Texture2D<uint4> ReSTIRGITemporalCreation : register(t12, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
 Texture2D<uint4> ReSTIRGITemporalHit : register(t13, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);

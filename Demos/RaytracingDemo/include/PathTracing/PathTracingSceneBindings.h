@@ -35,6 +35,15 @@ struct RaytracingDemoPassBindings
         const RaytracingDemoPassConfig& config,
         const RenderGraph::FrameContext& context);
 
+    static void BindBlueNoiseInputs(
+        const RaytracingDemoPassResources& resources,
+        CommandContext& commandContext,
+        ComputeShader& shader);
+
+    static void BindBlueNoiseInputs(
+        const RaytracingDemoPassResources& resources,
+        RayTracingBindingSet& shader);
+
     static void BindInlinePathTracingInputs(
         const RaytracingDemoPassResources& resources,
         CommandContext& commandContext,

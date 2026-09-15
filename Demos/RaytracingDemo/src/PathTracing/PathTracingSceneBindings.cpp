@@ -26,6 +26,61 @@ RaytracingDemoCameraConstants RaytracingDemoPassBindings::BuildPassCameraConstan
     return ::BuildPassCameraConstants(resources, config, context);
 }
 
+void RaytracingDemoPassBindings::BindBlueNoiseInputs(
+    const RaytracingDemoPassResources& resources,
+    CommandContext& commandContext,
+    ComputeShader& shader)
+{
+    const bool hasScalarBinding = shader.HasShaderResourceView("FrameworkBlueNoiseScalarTexture");
+    const bool hasVec2Binding = shader.HasShaderResourceView("FrameworkBlueNoiseVec2Texture");
+    if (hasScalarBinding || hasVec2Binding)
+    {
+        Assert(
+            resources.Scene.GetBlueNoiseResources().IsLoaded(),
+            "A shader declared STBN inputs, but the scene blue-noise resources are not loaded.");
+    }
+    if (hasScalarBinding)
+    {
+        commandContext.SetShaderResourceView(
+            shader,
+            "FrameworkBlueNoiseScalarTexture",
+            ShaderResourceView(resources.Scene.GetBlueNoiseScalarTexture()));
+    }
+    if (hasVec2Binding)
+    {
+        commandContext.SetShaderResourceView(
+            shader,
+            "FrameworkBlueNoiseVec2Texture",
+            ShaderResourceView(resources.Scene.GetBlueNoiseVec2Texture()));
+    }
+}
+
+void RaytracingDemoPassBindings::BindBlueNoiseInputs(
+    const RaytracingDemoPassResources& resources,
+    RayTracingBindingSet& shader)
+{
+    const bool hasScalarBinding = shader.HasBinding("FrameworkBlueNoiseScalarTexture");
+    const bool hasVec2Binding = shader.HasBinding("FrameworkBlueNoiseVec2Texture");
+    if (hasScalarBinding || hasVec2Binding)
+    {
+        Assert(
+            resources.Scene.GetBlueNoiseResources().IsLoaded(),
+            "A shader declared STBN inputs, but the scene blue-noise resources are not loaded.");
+    }
+    if (hasScalarBinding)
+    {
+        shader.SetTexture(
+            "FrameworkBlueNoiseScalarTexture",
+            ShaderResourceView(resources.Scene.GetBlueNoiseScalarTexture()));
+    }
+    if (hasVec2Binding)
+    {
+        shader.SetTexture(
+            "FrameworkBlueNoiseVec2Texture",
+            ShaderResourceView(resources.Scene.GetBlueNoiseVec2Texture()));
+    }
+}
+
 void RaytracingDemoPassBindings::DeclareRayTracingExternalResourceAccesses(
     RenderGraph::RenderGraphPassBuilder& passBuilder,
     const RaytracingDemoPassResources& resources,
@@ -106,6 +161,7 @@ void RaytracingDemoPassBindings::BindInlinePathTracingInputs(
         const std::vector<ShaderResourceView>& sceneTextures = resources.Scene.GetTextureShaderResourceViews();
         commandContext.SetShaderResourceViews(shader, "BindlessTextures", sceneTextures);
     }
+    BindBlueNoiseInputs(resources, commandContext, shader);
     resources.Lights.BindComputeResources(commandContext, shader);
 }
 
@@ -139,6 +195,7 @@ void RaytracingDemoPassBindings::BindDxrPathTracingInputs(
     {
         shader.SetTextureArray("BindlessTextures", resources.Scene.GetTextureShaderResourceViews());
     }
+    BindBlueNoiseInputs(resources, shader);
     resources.Lights.BindRayTracingResources(shader);
     if (shader.HasBinding("CameraConstants"))
     {

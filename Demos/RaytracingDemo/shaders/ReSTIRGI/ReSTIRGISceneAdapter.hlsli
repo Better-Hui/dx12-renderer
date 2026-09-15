@@ -155,10 +155,8 @@ bool RaytracingDemoReSTIRGITestVisibilityAt(
 #define ReSTIRGI_Luminance Luminance
 #define ReSTIRGI_Random01 Random01
 #define ReSTIRGI_InitializeRandomState InitializeRandomState
-// Keep GI on the shared IGN + random-rotation sequence without its diagonal
-// temporal coordinate shift; mix the frame into the salt instead.
 #define ReSTIRGI_SampleNoise(pixel, frameIndex, salt) \
-    FrameworkInterleavedGradientNoise2D((pixel), 0u, (salt) ^ ((frameIndex) * 0x9e3779b9u))
+    FrameworkSampleStbnVec2((pixel), (frameIndex), (salt))
 //Modify End
 
 #endif

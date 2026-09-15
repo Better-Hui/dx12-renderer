@@ -45,8 +45,11 @@ ReSTIRDI_Surface ReSTIRDI_LoadHistorySurface(const uint2 pixel)
 #if RESTIR_DI_USE_TEMPORAL_PERMUTATION_SAMPLING
 int2 ApplyReSTIRDIPermutationSampling(const int2 pixel)
 {
-    const uint uniformRandomNumber = ReSTIRDI_FrameIndex * 747796405u + 2891336453u;
-    const int2 offset = int2(uniformRandomNumber & 3u, (uniformRandomNumber >> 2u) & 3u);
+    const float2 permutationNoise = FrameworkSampleStbnVec2(
+        uint2(0u, 0u),
+        ReSTIRDI_FrameIndex,
+        0x7a3d1f0bu);
+    const int2 offset = int2(permutationNoise * 4.0f);
     int2 permutedPixel = pixel + offset;
     permutedPixel.x ^= 3;
     permutedPixel.y ^= 3;

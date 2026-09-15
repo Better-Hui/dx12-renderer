@@ -1,6 +1,7 @@
 //Modify Begin:2026-09-15 by Hui
 #pragma once
 
+#include <Scene/RaytracingDemoBlueNoiseResources.h>
 #include <Scene/SceneResourceBuilders.h>
 #include <Scene/SceneLighting.h>
 #include <Framework/Geometry/Mesh.h>
@@ -82,6 +83,9 @@ public:
     SurfaceEmitterSceneData CollectEmissiveMeshSurfaceEmitters() const;
     const std::vector<std::shared_ptr<Texture>>& GetTextures() const { return m_TextureMaterialResources.GetTextures(); }
     const std::vector<ShaderResourceView>& GetTextureShaderResourceViews() const { return m_TextureMaterialResources.GetTextureShaderResourceViews(); }
+    const RaytracingDemoBlueNoiseResources& GetBlueNoiseResources() const noexcept { return m_BlueNoiseResources; }
+    const std::shared_ptr<Texture>& GetBlueNoiseScalarTexture() const { return m_BlueNoiseResources.GetScalarTexture(); }
+    const std::shared_ptr<Texture>& GetBlueNoiseVec2Texture() const { return m_BlueNoiseResources.GetVec2Texture(); }
     const StructuredBuffer& GetMaterialBuffer() const { return m_TextureMaterialResources.GetMaterialBuffer(); }
     const StructuredBuffer& GetGeometryBuffer() const { return m_RayTracingResources.GetGeometryBuffer(); }
     void ForEachGBufferShaderResource(const std::function<void(const Resource&)>& action) const;
@@ -132,6 +136,7 @@ private:
     void InitializeMeshletSceneResources();
     void AddStressTestSpheres(CommandList& commandList, uint32_t whiteTextureIndex, const Camera& camera);
     void AddDynamicSceneAutomationEmitter(CommandList& commandList, uint32_t whiteTextureIndex);
+    void LoadBlueNoiseTextures(CommandList& commandList);
     void UploadMeshletBuffers(CommandList& commandList);
     void InitializeDynamicRayTracingUpdateTarget();
     SceneTextureMaterialResources m_TextureMaterialResources;
@@ -155,5 +160,6 @@ private:
     VertexCollectionType m_DynamicRayTracingVertices;
     RaytracingDemoDynamicRtasUpdateStatistics m_DynamicRayTracingUpdateStatistics;
     RaytracingDemoDynamicSceneCapabilities m_DynamicSceneCapabilities;
+    RaytracingDemoBlueNoiseResources m_BlueNoiseResources;
 };
 //Modify End

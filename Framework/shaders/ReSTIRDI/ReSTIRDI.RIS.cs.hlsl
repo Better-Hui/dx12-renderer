@@ -32,16 +32,18 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         for (uint candidateIndex = 0u; candidateIndex < ReSTIRDI_CandidateCount; ++candidateIndex)
         {
             const uint candidateSalt = 0x4d3a2b1cu + candidateIndex * 0x9e3779b9u;
-            const uint frameSalt = ReSTIRDI_FrameIndex * 0x9e3779b9u;
-            const float2 lightSelectionNoise = FrameworkNoiseHash02(
-                pixel ^ uint2(frameSalt, frameSalt * 0x85ebca6bu),
+            const float2 lightSelectionNoise = FrameworkSampleStbnVec2(
+                pixel,
+                ReSTIRDI_FrameIndex,
                 candidateSalt);
-            const float2 sampleNoise = FrameworkNoiseHash02(
-                pixel ^ uint2(frameSalt, frameSalt * 0xc2b2ae35u),
+            const float2 sampleNoise = FrameworkSampleStbnVec2(
+                pixel,
+                ReSTIRDI_FrameIndex,
                 candidateSalt ^ 0x68bc21ebu);
-            const float reservoirRandom = FrameworkNoiseHash02(
-                pixel ^ uint2(frameSalt, frameSalt * 0xd1b54a35u),
-                candidateSalt ^ 0x02e5be93u).x;
+            const float reservoirRandom = FrameworkSampleStbnScalar(
+                pixel,
+                ReSTIRDI_FrameIndex,
+                candidateSalt ^ 0x02e5be93u);
             const float lightSelectionRandom = (lightSelectionNoise.x + float(candidateIndex)) /
                 float(ReSTIRDI_CandidateCount);
             uint lightIndex;

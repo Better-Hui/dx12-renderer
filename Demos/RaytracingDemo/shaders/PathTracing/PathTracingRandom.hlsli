@@ -3,7 +3,7 @@
 
 #include "../Common/PathTracingConstants.hlsli"
 //Modify Begin:2026-08-06 by Hui
-#include <Common/Noise.hlsli>
+#include <Common/BlueNoise.hlsli>
 //Modify End
 
 uint Hash(uint value)
@@ -20,8 +20,31 @@ uint Hash(uint value)
 
 float Random01(inout uint state)
 {
+    // The first three dimensions of every pixel stream come directly from the
+    // spatiotemporal blue-noise masks. The packed state uses 10 bits per
+    // dimension, matching the effective precision of the imported 8-bit masks
+    // while retaining the existing uint state footprint.
+    const uint blueNoisePhase = state >> 30u;
+    if (blueNoisePhase == 3u)
+    {
+        const uint x = (state >> 20u) & 0x3ffu;
+        state = (state & 0x000fffffu) | 0x80000000u;
+        return (float(x) + 0.5f) / 1024.0f;
+    }
+    if (blueNoisePhase == 2u)
+    {
+        const uint y = (state >> 10u) & 0x3ffu;
+        state = (state & 0x000003ffu) | 0x40000000u;
+        return (float(y) + 0.5f) / 1024.0f;
+    }
+    if (blueNoisePhase == 1u)
+    {
+        const uint scalar = state & 0x3ffu;
+        state = Hash(scalar) & 0x3fffffffu;
+        return (float(scalar) + 0.5f) / 1024.0f;
+    }
 //Modify Begin:2026-07-30 by Hui
-    state = state * 747796405u + 2891336453u;
+    state = (state * 747796405u + 2891336453u) & 0x3fffffffu;
     uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
     word = (word >> 22u) ^ word;
     return (float(word) + 0.5f) / 4294967296.0f;
@@ -35,27 +58,24 @@ float HashToFloat(uint value)
 
 float InterleavedGradientNoise(float2 pixel)
 {
-//Modify Begin:2026-08-06 by Hui
-    return FrameworkInterleavedGradientNoise(pixel);
-//Modify End
+    return FrameworkSampleStbnScalar(uint2(max(pixel, 0.0f)), 0u, 0x1f123bb5u);
 }
 
 float AnimatedInterleavedGradientNoise(uint2 pixel, uint frameIndex)
 {
-//Modify Begin:2026-08-06 by Hui
-    return FrameworkAnimatedInterleavedGradientNoise(pixel, frameIndex);
-//Modify End
+    return FrameworkSampleStbnScalar(pixel, frameIndex, 0x1f123bb5u);
 }
 
 uint InitializeRandomState(uint2 pixel, uint width, uint frameIndex, uint salt)
 {
 //Modify Begin:2026-08-06 by Hui
-    const uint pixelIndex = pixel.x + pixel.y * width;
-    const uint xHash = Hash(pixel.x * 0x8da6b343u);
-    const uint yHash = Hash(pixel.y * 0xd8163841u);
-    const uint frameHash = Hash(frameIndex * 0xcb1ab31fu);
-    const float2 noise = FrameworkInterleavedGradientNoise2D(pixel, frameIndex, salt);
-    return Hash(xHash ^ yHash ^ Hash(pixelIndex) ^ frameHash ^ salt ^ asuint(noise.x) ^ asuint(noise.y));
+    (void)width;
+    const float2 blueNoiseVec2 = FrameworkSampleStbnVec2(pixel, frameIndex, salt);
+    const float blueNoiseScalar = FrameworkSampleStbnScalar(pixel, frameIndex, salt ^ 0x68bc21ebu);
+    const uint blueNoiseX = min(uint(saturate(blueNoiseVec2.x) * 1023.0f), 1023u);
+    const uint blueNoiseY = min(uint(saturate(blueNoiseVec2.y) * 1023.0f), 1023u);
+    const uint blueNoiseZ = min(uint(saturate(blueNoiseScalar) * 1023.0f), 1023u);
+    return 0xc0000000u | (blueNoiseX << 20u) | (blueNoiseY << 10u) | blueNoiseZ;
 //Modify End
 }
 
