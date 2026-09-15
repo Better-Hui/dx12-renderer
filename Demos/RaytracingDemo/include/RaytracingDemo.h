@@ -241,6 +241,7 @@ private:
     DLSSFrameGenerationInputs m_FrameGenerationInputs;
     PathTracingPipelineController m_PathTracingPipelines;
     ActivePixelListController m_ActivePixels;
+    MeshletCullingStatisticsController m_MeshletCullingStatistics;
     ReSTIRDIPass m_DirectLightingReSTIRDIPass;
     ReSTIRGIPass m_IndirectLightingReSTIRGIPass;
 //Modify End
@@ -309,7 +310,7 @@ private:
     bool m_ReSTIRGIHistoryValid = false;
 //Modify End
 //Modify Begin:2026-09-14 by Hui
-    bool m_AsyncComputeEnabled = false;
+    bool m_AsyncComputeEnabled = true;
     bool m_CopyQueueValidationEnabled = false;
     bool m_DebugSerializeAsyncCompute = false;
     bool m_ParallelDirectCommandRecordingEnabled = true;
@@ -329,6 +330,7 @@ private:
     DemoAutomation::RuntimeAutomationController m_RuntimeAutomation;
     std::optional<uint32_t> m_PendingAutomationScreenshot;
     bool m_UseMeshletGBuffer = true;
+    bool m_UseMeshletInstanceCull = true;
     bool m_DebugMeshletClusters = false;
     bool m_UseTaskShaderMeshlets = true;
     bool m_SkyboxEnabled = false;

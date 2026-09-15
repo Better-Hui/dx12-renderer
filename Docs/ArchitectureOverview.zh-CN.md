@@ -58,6 +58,7 @@ DX12Library
 ### 几何、光追与场景
 
 - Meshlet 构建与 mesh shader 公共数据位于 `Framework/Geometry` 和 `Framework/shaders/Meshlet`。
+- Meshlet 可见性采用四阶段 GPU 管线：Instance 粗剔除、Candidate Meshlet 展开、Wave/Group Compaction 精剔除，最后由 Compute/IA 或 Task/Mesh GBuffer 消费连续 Visible Meshlet 列表；中间阶段使用固定上界派发，最终阶段才读取 GPU 生成的间接参数。
 - `RayTracingAccelerationStructure`、`RayTracingShader`、`RayTracingShaderTable` 封装 BLAS/TLAS、ray tracing pipeline 和 shader-table dispatch。场景变化可增删、更新 instance，不必重建无关几何。
 - 公共 `Scene` 保存 sample 资源路径需要的 camera、light、transform、PBR material 与 mesh 数据。
 - `SurfaceEmitter` 定义矩形面积光和自发光 mesh 的 GPU 表示与采样数据。场景适配器构建共享 geometry 的 triangle CDF 与每实例数据，避免为每个重复实例的每个三角形存储完整灯光记录。
@@ -148,7 +149,7 @@ Mitsuba XML importer 是有意保持紧凑的兼容路径：会展开场景内 `
 
 场景生命周期属于 Demo composition，而不是 Framework `Scene` 的职责。`RaytracingDemoSceneRuntimeController` 持有一个根据源场景 stem 选择的可选 behavior，并调用其 `OnLoad`、主线程 `OnUpdate` 和 `OnUnload`。仅 LowPolyStreet 激活的 showreel behavior 把房屋固定为观察点和圆锥顶点，原始相机方向是中心轴；相机用 2 秒平滑展开到垂直底面上半顶角为 10° 的圆周路径。三盏面积光与三盏较低的交错点光另在房屋 XZ 平面绕转。它通过 `SceneLightManager` 更新灯光 buffer，且不会保存 RenderGraph builder。`F12` 只切换相机所有权；`↑`/`↓` 以 `0.05 rad/s` 为步长调节脚本相机角速度，默认 `0.2 rad/s`、限制在 `0.05-1.0 rad/s`，`W`/`S` 仍是手动前后移动。`RAYTRACING_DEMO_SCENE_BEHAVIOR=0` 用于无人值守静态测试时关闭整个行为。
 
-LowPolyStreet 额外使用 `←`/`→` 以 `1°` 为步长调节 `2°-30°` 的圆锥半顶角；`↑`/`↓` 仍调节运镜角速度。它的 showreel 启动后停在第一个阶段，等待快捷键触发；按一次 `F10` 会重置到仅 Path Tracing 阶段并播放一轮 30 秒的五阶段序列，最后阶段同时启用 NRD 和 Bloom，播放期间重复按键会被忽略，完成后再次按 `F10` 可重新播放；`RAYTRACING_DEMO_SHOWREEL=0` 可禁用该序列。Demo 的渲染配置只使用 executable-relative `Config/RaytracingDemo.ini`，之后应用自动化环境变量。`Save Settings` 通过原子替换把所有 ImGui 控件写回同一个文件，包括 NRD/SVGF（即使实例尚未初始化）、天空光、灯光组开关、场景中的方向/点/聚光/面积光以及新增灯光默认值；`Save Scene` 仍负责把相机位姿和场景资产数据写入 runtime sidecar。
+LowPolyStreet 额外使用 `←`/`→` 以 `1°` 为步长调节 `2°-30°` 的圆锥半顶角；`↑`/`↓` 仍调节运镜角速度。它的 showreel 默认立即播放：先展示 6 秒 Meshlet 簇 debug，然后依次播放 PT、ReSTIR RIS、时域复用、空域复用、NRD/Bloom 五个 6 秒阶段，总计 36 秒；`F10` 在播放中暂停，再按一次从第一阶段重新播放，完成后也可按 `F10` 重播；`RAYTRACING_DEMO_SHOWREEL=0` 可禁用该序列。Demo 的渲染配置只使用 executable-relative `Config/RaytracingDemo.ini`，之后应用自动化环境变量。`Save Settings` 通过原子替换把所有 ImGui 控件写回同一个文件，包括 NRD/SVGF（即使实例尚未初始化）、天空光、灯光组开关、场景中的方向/点/聚光/面积光以及新增灯光默认值；`Save Scene` 仍负责把相机位姿和场景资产数据写入 runtime sidecar。
 
 ### 已演示的渲染路径
 

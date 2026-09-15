@@ -1,12 +1,14 @@
-//Modify Begin:2026-08-06 by Hui
+//Modify Begin:2026-09-15 by Hui
 #include <Scene/SceneStressTestFactory.h>
 
+#include <DX12Library/Camera.h>
 #include <DX12Library/CommandList.h>
 
 #include <Framework/Geometry/ModelLoader.h>
 
 #include <DirectXMath.h>
 
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 
@@ -105,7 +107,8 @@ StressTestSceneData SceneStressTestFactory::Create(
     CommandList& commandList,
     SceneTextureMaterialResources& textureMaterialResources,
     SceneGeometryResources& geometryResources,
-    const uint32_t whiteTextureIndex)
+    const uint32_t whiteTextureIndex,
+    const Camera& camera)
 {
     ModelLoader modelLoader;
     MeshPrototype spherePrototype = CreateSpherePrototype(1.0f, 12);
@@ -148,9 +151,19 @@ StressTestSceneData SceneStressTestFactory::Create(
     constexpr float YSpacing = 0.46f;
     constexpr float ZSpacing = 0.78f;
     constexpr float Radius = 0.17f;
-    constexpr float CenterX = -4.50f;
-    constexpr float CenterY = 2.85f;
-    constexpr float CenterZ = -2.80f;
+    constexpr float ReferenceCameraDistance = 35.0f;
+    constexpr float ReferenceVerticalFovDegrees = 45.0f;
+    constexpr float MinimumLayoutScale = 0.25f;
+    constexpr float MaximumLayoutScale = 100.0f;
+    const float cameraDistance = XMVectorGetX(XMVector3Length(camera.GetTranslation()));
+    const float projectedHalfHeight = cameraDistance * std::tan(
+        XMConvertToRadians(camera.GetFov()) * 0.5f);
+    const float referenceProjectedHalfHeight = ReferenceCameraDistance * std::tan(
+        XMConvertToRadians(ReferenceVerticalFovDegrees) * 0.5f);
+    const float layoutScale = std::clamp(
+        projectedHalfHeight / referenceProjectedHalfHeight,
+        MinimumLayoutScale,
+        MaximumLayoutScale);
     const float startX = -static_cast<float>(Columns - 1) * XSpacing * 0.5f;
     const float startY = -static_cast<float>(Rows - 1) * YSpacing * 0.5f;
     const float startZ = -static_cast<float>(DepthLayers - 1) * ZSpacing * 0.5f;
@@ -168,11 +181,14 @@ StressTestSceneData SceneStressTestFactory::Create(
                     static_cast<float>(layer) * 0.83f);
                 const float stagger = (static_cast<float>((row + layer) & 1u) - 0.5f) * XSpacing * 0.35f;
                 result.Objects.push_back({
-                    XMMatrixScaling(Radius, Radius, Radius) *
+                    XMMatrixScaling(
+                        Radius * layoutScale,
+                        Radius * layoutScale,
+                        Radius * layoutScale) *
                         XMMatrixTranslation(
-                            CenterX + startX + static_cast<float>(column) * XSpacing + stagger,
-                            CenterY + startY + static_cast<float>(row) * YSpacing + wave * 0.045f,
-                            CenterZ + startZ + static_cast<float>(layer) * ZSpacing),
+                            (startX + static_cast<float>(column) * XSpacing + stagger) * layoutScale,
+                            (startY + static_cast<float>(row) * YSpacing + wave * 0.045f) * layoutScale,
+                            (startZ + static_cast<float>(layer) * ZSpacing) * layoutScale),
                     sphereGeometryIndex,
                     result.MaterialIndex
                 });

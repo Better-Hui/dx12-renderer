@@ -1,12 +1,13 @@
 #pragma once
 
-//Modify Begin:2026-08-06 by Hui
+//Modify Begin:2026-09-15 by Hui
 #include <Scene/SceneResourceBuilders.h>
 
 #include <cstdint>
 #include <vector>
 
 class CommandList;
+class Camera;
 
 struct StressTestSceneData
 {
@@ -22,6 +23,7 @@ public:
         CommandList& commandList,
         SceneTextureMaterialResources& textureMaterialResources,
         SceneGeometryResources& geometryResources,
-        uint32_t whiteTextureIndex);
+        uint32_t whiteTextureIndex,
+        const Camera& camera);
 };
 //Modify End

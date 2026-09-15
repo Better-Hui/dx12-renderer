@@ -39,7 +39,7 @@ void RaytracingDemoPasses::Builder::AddDynamicRayTracingUpdatePasses(
             passBuilder.WriteExternal(*meshletGpuResources.Vertices, D3D12_RESOURCE_STATE_COPY_DEST);
             passBuilder.WriteExternal(*meshletGpuResources.Meshlets, D3D12_RESOURCE_STATE_COPY_DEST);
             passBuilder.WriteExternal(*meshletGpuResources.Transforms, D3D12_RESOURCE_STATE_COPY_DEST);
-            passBuilder.WriteExternal(*meshletGpuResources.Instances, D3D12_RESOURCE_STATE_COPY_DEST);
+            passBuilder.WriteExternal(*meshletGpuResources.Draws, D3D12_RESOURCE_STATE_COPY_DEST);
             passBuilder.WriteToken(DemoResourceIds::DynamicRayTracingGeometryUploadedToken);
         },
         [](const DynamicRayTracingUpdatePassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)

@@ -5,6 +5,7 @@
 #include <PathTracing/PathTracingPipelineController.h>
 #include <Scene/SceneResources.h>
 #include <Scene/SceneLighting.h>
+#include <Rendering/MeshletCullingStatisticsController.h>
 
 #include <Framework/Geometry/Mesh.h>
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
@@ -145,6 +146,7 @@ struct RaytracingDemoPassResources
     SceneLightManager& Lights;
     PathTracingPipelineController& Pipelines;
     ActivePixelListController& ActivePixels;
+    MeshletCullingStatisticsController& MeshletCullingStatistics;
     ReSTIRDI& DirectLightingReSTIRDI;
     ReSTIRDIPass& DirectLightingReSTIRDIPass;
     ReSTIRGI& IndirectLightingReSTIRGI;
@@ -159,8 +161,12 @@ struct RaytracingDemoPassResources
     std::shared_ptr<Shader> GBufferShader;
     std::shared_ptr<Shader> GBufferMeshletIndirectShader;
     std::shared_ptr<MeshShader> GBufferTaskMeshShader;
+    std::shared_ptr<ComputeShader> MeshletInstanceCullShader;
+    std::shared_ptr<ComputeShader> MeshletCandidateExpandShader;
     std::shared_ptr<ComputeShader> MeshletCullShader;
     IndirectCommandSignature* MeshletDrawCommandSignature = nullptr;
+    IndirectCommandSignature* MeshletComputeDispatchCommandSignature = nullptr;
+    IndirectCommandSignature* MeshletDispatchMeshCommandSignature = nullptr;
     std::shared_ptr<Shader> DisplayCompositeShader;
     std::shared_ptr<ComputeShader> SkyboxComputeShader;
     std::shared_ptr<ComputeShader> SkyboxEquirectangularComputeShader;
@@ -199,6 +205,7 @@ struct RaytracingDemoFrameState
     bool CopyQueueValidationEnabled = false;
     bool DynamicRayTracingUpdateEnabled = false;
     bool UseMeshletGBuffer = false;
+    bool UseMeshletInstanceCull = true;
     bool UseTaskShaderMeshlets = false;
     bool DebugMeshletClusters = false;
     bool SkyboxEnabled = false;

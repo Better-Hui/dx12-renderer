@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-26 by Hui
+//Modify Begin:2026-09-15 by Hui
 #include <Automation/RaytracingDemoAutomation.h>
 
 #include <utility>
@@ -94,12 +94,12 @@ const char* RaytracingDemoAutomation::GetActionControlName(const Action action)
     case Action::VerifyDynamicRayTracingUpdate: return "assert.dynamic_rtas_update";
     case Action::VerifyDynamicSkinnedMeshCapability: return "assert.dynamic_skinned_mesh_capability";
     case Action::Denoiser: return "denoiser.algorithm";
+    case Action::SVGFAtrousIterations: return "denoiser.svgf_atrous_iterations";
     case Action::OIDNStaticSpp: return "denoiser.oidn_static_spp";
     case Action::VerifyOIDNResult: return "assert.oidn_result";
-//Modify Begin:2026-08-25 by Hui
     case Action::OIDNCameraMotion: return "camera.oidn_motion";
     case Action::VerifyOIDNInvalidated: return "assert.oidn_motion_invalidation";
-//Modify End
+    case Action::GBufferCameraMotion: return "camera.gbuffer_motion";
     case Action::CaptureScreenshot: return "capture.screenshot";
     case Action::MatrixCase: return "scenario.matrix_case";
     default: return "unknown";
@@ -364,7 +364,6 @@ DemoAutomation::TestSuites RaytracingDemoAutomation::CreateTestSuites()
         makeStep(Action::VerifyDynamicRayTracingUpdate, 1u, "dynamic-scene-indirect-restore-verify"),
         makeStep(Action::VerifyDynamicSkinnedMeshCapability, 0u, "dynamic-scene-skinned-explicit-reject"),
     };
-//Modify Begin:2026-08-25 by Hui
     testSuites.OIDN = {
         makeStep(Action::Denoiser, static_cast<uint32_t>(DenoiserController::Algorithm::OIDN), "denoiser=oidn"),
         makeStep(Action::Accumulation, 0u, "oidn-manual-accumulation=0"),
@@ -394,7 +393,22 @@ DemoAutomation::TestSuites RaytracingDemoAutomation::CreateTestSuites()
         makeStep(Action::VerifyOIDNResult, 0u, "oidn-rebuild-result-verify"),
         makeStep(Action::Denoiser, static_cast<uint32_t>(DenoiserController::Algorithm::NRD), "denoiser=nrd"),
     };
-//Modify End
+    testSuites.SVGF = {
+        makeStep(Action::PathTracingBackend, static_cast<uint32_t>(PathTracingBackend::InlineRayQuery), "svgf-backend=inline"),
+        makeStep(Action::DirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::PathTracing), "svgf-direct=pathtracing"),
+        makeStep(Action::IndirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::None), "svgf-indirect=none"),
+        makeStep(Action::MaxBounces, 1u, "svgf-bounces=1"),
+        makeStep(Action::Denoiser, static_cast<uint32_t>(DenoiserController::Algorithm::SVGF), "denoiser=svgf"),
+        makeStep(Action::SVGFAtrousIterations, 1u, "svgf-atrous=1"),
+        makeStep(Action::Wait, 0u, "svgf-atrous=1-warmup"),
+        makeStep(Action::SVGFAtrousIterations, 2u, "svgf-atrous=2"),
+        makeStep(Action::Wait, 0u, "svgf-atrous=2-warmup"),
+        makeStep(Action::SVGFAtrousIterations, 4u, "svgf-atrous=4"),
+        makeStep(Action::Wait, 0u, "svgf-atrous=4-warmup"),
+        makeStep(Action::SVGFAtrousIterations, 8u, "svgf-atrous=8"),
+        makeStep(Action::Wait, 0u, "svgf-atrous=8-warmup"),
+        makeStep(Action::Denoiser, static_cast<uint32_t>(DenoiserController::Algorithm::Off), "denoiser=off"),
+    };
     testSuites.Visual = {
         makeStep(Action::DLSS, static_cast<uint32_t>(DLSSMode::Disabled), "visual-dlss=off"),
         makeStep(Action::MaterialShading, static_cast<uint32_t>(MaterialShadingModel::Pbr), "visual-shading=pbr"),
@@ -454,13 +468,13 @@ DemoAutomation::TestSuites RaytracingDemoAutomation::CreateTestSuites()
         makeStep(Action::Wait, 0u, "raster-motion-warmup=1"),
         makeStep(Action::Wait, 0u, "raster-motion-warmup=2"),
         makeStep(Action::CaptureScreenshot, static_cast<uint32_t>(ScreenshotCapture::PathTracingDirect), "raster-motion-capture=1"),
-        makeStep(Action::Wait, 0u, "raster-motion-frame=2"),
+        makeStep(Action::GBufferCameraMotion, 1u, "raster-motion-frame=2"),
         makeStep(Action::CaptureScreenshot, static_cast<uint32_t>(ScreenshotCapture::PathTracingDirect), "raster-motion-capture=2"),
-        makeStep(Action::Wait, 0u, "raster-motion-frame=3"),
+        makeStep(Action::GBufferCameraMotion, 2u, "raster-motion-frame=3"),
         makeStep(Action::CaptureScreenshot, static_cast<uint32_t>(ScreenshotCapture::PathTracingDirect), "raster-motion-capture=3"),
-        makeStep(Action::Wait, 0u, "raster-motion-frame=4"),
+        makeStep(Action::GBufferCameraMotion, 3u, "raster-motion-frame=4"),
         makeStep(Action::CaptureScreenshot, static_cast<uint32_t>(ScreenshotCapture::PathTracingDirect), "raster-motion-capture=4"),
-        makeStep(Action::Wait, 0u, "raster-motion-frame=5"),
+        makeStep(Action::GBufferCameraMotion, 4u, "raster-motion-frame=5"),
         makeStep(Action::CaptureScreenshot, static_cast<uint32_t>(ScreenshotCapture::PathTracingDirect), "raster-motion-capture=5"),
     };
     testSuites.ReSTIRGIProfile = {

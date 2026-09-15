@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-25 by Hui
+//Modify Begin:2026-09-15 by Hui
 #pragma once
 
 #include <Scene/SceneResourceBuilders.h>
@@ -20,6 +20,7 @@
 #include <vector>
 
 class CommandList;
+class Camera;
 class D3D12DeviceContext;
 class Resource;
 class VertexBuffer;
@@ -129,7 +130,7 @@ private:
     uint32_t AddSceneGeometry(const std::shared_ptr<Model>& model, std::vector<MeshPrototype> prototypes);
     void AddSceneObject(const DirectX::XMMATRIX& worldMatrix, uint32_t geometryIndex, uint32_t materialIndex);
     void InitializeMeshletSceneResources();
-    void AddStressTestSpheres(CommandList& commandList, uint32_t whiteTextureIndex);
+    void AddStressTestSpheres(CommandList& commandList, uint32_t whiteTextureIndex, const Camera& camera);
     void AddDynamicSceneAutomationEmitter(CommandList& commandList, uint32_t whiteTextureIndex);
     void UploadMeshletBuffers(CommandList& commandList);
     void InitializeDynamicRayTracingUpdateTarget();

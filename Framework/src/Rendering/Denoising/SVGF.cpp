@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-09-15 by Hui
 #include <Framework/Rendering/Denoising/SVGF.h>
 
 #include <DX12Library/CommandList.h>
@@ -160,8 +160,9 @@ void SVGF::AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs input
         importHistory(L"HistoryMoments.Write", &SVGF::m_HistoryMoments, true);
 
     const auto createScratchTexture = [&builder, &sharedInputs](
-        const wchar_t* suffix,
-        const DXGI_FORMAT format)
+        const std::wstring& suffix,
+        const DXGI_FORMAT format,
+        const bool dedicatedResource)
     {
         const std::wstring name = sharedInputs->DiagnosticNamePrefix + L"." + suffix;
         return builder.CreateTexture(
@@ -173,19 +174,15 @@ void SVGF::AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs input
             RenderGraph::ResourceInitAction::Discard,
             D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
             D3D12_HEAP_FLAG_NONE,
-            SvgfScratchUsesDedicatedResources);
+            dedicatedResource);
     };
 
     const RenderGraph::ResourceId temporalColor =
-        createScratchTexture(L"TemporalColor", DXGI_FORMAT_R16G16B16A16_FLOAT);
+        createScratchTexture(L"TemporalColor", DXGI_FORMAT_R16G16B16A16_FLOAT, SvgfScratchUsesDedicatedResources);
     const RenderGraph::ResourceId temporalMoments =
-        createScratchTexture(L"TemporalMoments", DXGI_FORMAT_R16G16_FLOAT);
+        createScratchTexture(L"TemporalMoments", DXGI_FORMAT_R16G16_FLOAT, SvgfScratchUsesDedicatedResources);
     const RenderGraph::ResourceId variance =
-        createScratchTexture(L"Variance", DXGI_FORMAT_R16_FLOAT);
-    const RenderGraph::ResourceId atrousPing =
-        createScratchTexture(L"AtrousPing", DXGI_FORMAT_R16G16B16A16_FLOAT);
-    const RenderGraph::ResourceId atrousPong =
-        createScratchTexture(L"AtrousPong", DXGI_FORMAT_R16G16B16A16_FLOAT);
+        createScratchTexture(L"Variance", DXGI_FORMAT_R16_FLOAT, SvgfScratchUsesDedicatedResources);
     const std::wstring temporalTokenName = sharedInputs->DiagnosticNamePrefix + L".TemporalFinished";
     const RenderGraph::ResourceId temporalToken = builder.CreateToken(temporalTokenName.c_str());
 
@@ -244,6 +241,16 @@ void SVGF::AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs input
     for (uint32_t iteration = 0u; iteration < iterationCount; ++iteration)
     {
         const uint32_t stepSize = 1u << iteration;
+        // The graph is not SSA: every half-pass needs a distinct logical version.
+        // The transient allocator can still alias non-overlapping physical memory.
+        const RenderGraph::ResourceId horizontalOutput = createScratchTexture(
+            L"AtrousHorizontal." + std::to_wstring(iteration),
+            DXGI_FORMAT_R16G16B16A16_FLOAT,
+            false);
+        const RenderGraph::ResourceId verticalOutput = createScratchTexture(
+            L"AtrousVertical." + std::to_wstring(iteration),
+            DXGI_FORMAT_R16G16B16A16_FLOAT,
+            false);
         const RenderGraph::ResourceId horizontalToken = builder.CreateToken(
             (sharedInputs->DiagnosticNamePrefix + L".AtrousHorizontalFinished." + std::to_wstring(iteration)).c_str());
         const RenderGraph::ResourceId verticalToken = builder.CreateToken(
@@ -297,9 +304,9 @@ void SVGF::AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs input
 
         const std::wstring horizontalName = L"SVGF A-Trous Horizontal " + std::to_wstring(iteration);
         const std::wstring verticalName = L"SVGF A-Trous Vertical " + std::to_wstring(iteration);
-        addAtrousPass(horizontalName.c_str(), filtered, atrousPing, 0u, previousAtrousToken, horizontalToken);
-        addAtrousPass(verticalName.c_str(), atrousPing, atrousPong, 1u, horizontalToken, verticalToken);
-        filtered = atrousPong;
+        addAtrousPass(horizontalName.c_str(), filtered, horizontalOutput, 0u, previousAtrousToken, horizontalToken);
+        addAtrousPass(verticalName.c_str(), horizontalOutput, verticalOutput, 1u, horizontalToken, verticalToken);
+        filtered = verticalOutput;
         previousAtrousToken = verticalToken;
     }
 

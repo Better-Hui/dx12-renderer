@@ -265,6 +265,19 @@ namespace
             });
     }
 
+    std::string NarrowPassName(const std::wstring& wideName)
+    {
+        std::string name;
+        name.reserve(wideName.size());
+        for (const wchar_t character : wideName)
+        {
+            name.push_back(character >= 0 && character <= 0x7f
+                ? static_cast<char>(character)
+                : '?');
+        }
+        return name;
+    }
+
     bool IsLiveGpuResource(
         const ResourceId resourceId,
         std::span<RenderPass* const> renderPasses,
@@ -497,17 +510,21 @@ void RenderGraph::RenderGraphCompiler::ValidateDefinition(
         }
         for (const Input& input : renderPass->GetInputs())
         {
+            const std::string passName = NarrowPassName(renderPass->GetPassName());
+            const std::string message = "Input undefined in pass '" + passName + "' (id=" + std::to_string(input.m_Id) + ").";
             Assert(
                 IsResourceDefined(input.m_Id, textures, buffers, tokens) ||
                     (input.m_Type == InputType::ExternalAccess && HasMatchingImportedAccess(*renderPass, input.m_Id)),
-                "Input undefined.");
+                message.c_str());
         }
         for (const Output& output : renderPass->GetOutputs())
         {
+            const std::string passName = NarrowPassName(renderPass->GetPassName());
+            const std::string message = "Output undefined in pass '" + passName + "' (id=" + std::to_string(output.m_Id) + ").";
             Assert(
                 IsResourceDefined(output.m_Id, textures, buffers, tokens) ||
                     (output.m_Type == OutputType::ExternalAccess && HasMatchingImportedAccess(*renderPass, output.m_Id)),
-                "Output undefined.");
+                message.c_str());
         }
     }
 }

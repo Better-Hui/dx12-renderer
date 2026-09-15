@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-25 by Hui
+//Modify Begin:2026-09-15 by Hui
 #ifndef FRAMEWORK_MESHLET_COMMON_HLSLI
 #define FRAMEWORK_MESHLET_COMMON_HLSLI
 
@@ -61,6 +61,7 @@ struct MeshletInstanceData
 struct MeshletTaskPayload
 {
     uint MeshletInstanceIndices[MeshletTaskGroupSize];
+    uint MeshletCount;
 };
 
 struct MeshletIndirectCommand
@@ -74,6 +75,16 @@ struct MeshletIndirectCommand
     uint StartIndexLocation;
     int BaseVertexLocation;
     uint StartInstanceLocation;
+};
+
+struct MeshletDrawData
+{
+    uint MeshletOffset;
+    uint MeshletCount;
+    uint TransformIndex;
+    uint MaterialIndex;
+    float3 BoundsCenter;
+    float BoundsRadius;
 };
 
 uint MeshletLoadIndex(ByteAddressBuffer meshletIndices, uint indexOffset, uint indexNumber)

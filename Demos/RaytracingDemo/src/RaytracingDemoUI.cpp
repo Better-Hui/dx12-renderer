@@ -691,38 +691,6 @@ void RaytracingDemo::OnImGui()
         m_SceneRuntime.SetStressTestSpheresEnabled(stressTestSpheresEnabled);
     }
     ImGui::TextDisabled("Adds or removes instances; BLAS and static meshlet geometry stay resident.");
-    bool dynamicRayTracingUpdatesEnabled = m_SceneResources.AreDynamicRayTracingUpdatesEnabled();
-    if (ImGui::Checkbox("Enable Dynamic RTAS Refit", &dynamicRayTracingUpdatesEnabled))
-    {
-        m_SceneResources.SetDynamicRayTracingUpdatesEnabled(dynamicRayTracingUpdatesEnabled);
-        if (dynamicRayTracingUpdatesEnabled)
-        {
-            m_UseMeshletGBuffer = false;
-            m_DebugMeshletClusters = false;
-        }
-        ResetAccumulation();
-    }
-    ImGui::TextDisabled("Animates one scene mesh and refits its BLAS/TLAS every frame. Meshlet GBuffer is disabled while this validation path is active.");
-    if (m_PathTracingBackend == PathTracingBackend::InlineRayQuery)
-    {
-        if (ImGui::Checkbox("Use Async Compute for Indirect Lighting", &m_AsyncComputeEnabled))
-        {
-            ResetAccumulation();
-        }
-        ImGui::Checkbox("Debug: CPU Serialize Async Compute", &m_DebugSerializeAsyncCompute);
-        ImGui::TextDisabled("Diagnostic only: waits on the CPU after each async submission.");
-    }
-    else
-    {
-        ImGui::TextDisabled("Async Compute: Inline Ray Query only");
-    }
-//Modify Begin:2026-08-25 by Hui
-    if (ImGui::Checkbox("Debug: Validate Copy Queue Handoff", &m_CopyQueueValidationEnabled))
-    {
-        ResetAccumulation();
-    }
-    ImGui::TextDisabled("Routes HDR color through Direct -> Copy -> Async Compute -> Direct.");
-//Modify End
     ImGui::Checkbox("Enable Parallel Direct Command Recording", &m_ParallelDirectCommandRecordingEnabled);
     ImGui::TextDisabled("Current batch: Inline Ray Query direct and indirect lighting. GPU execution remains ordered.");
     const char* lightingDebugTargetNames[] = {
@@ -748,6 +716,14 @@ void RaytracingDemo::OnImGui()
     {
         ResetAccumulation();
     }
+    if (m_UseMeshletGBuffer && ImGui::Checkbox("Instance Coarse Culling", &m_UseMeshletInstanceCull))
+    {
+        ResetAccumulation();
+    }
+    if (m_UseMeshletGBuffer)
+    {
+        ImGui::TextDisabled("Cull whole instances before expanding candidate meshlets.");
+    }
     if (ImGui::Checkbox("Debug GBuffer / Meshlet Output", &m_DebugMeshletClusters))
     {
         if (m_DebugMeshletClusters)
@@ -759,6 +735,33 @@ void RaytracingDemo::OnImGui()
     ImGui::TextDisabled("Shows the selected intermediate GBuffer target before lighting and post processing.");
     if (m_DebugMeshletClusters)
     {
+        if (m_UseMeshletGBuffer)
+        {
+            const MeshletGpuResources meshletResources = m_SceneResources.GetMeshletGpuResources();
+            ImGui::SeparatorText("Meshlet Workload");
+            ImGui::Text(
+                "Scene Object Instances: %llu",
+                static_cast<unsigned long long>(m_SceneResources.GetSceneObjects().size()));
+            const std::optional<MeshletCullingStatistics> statistics =
+                m_MeshletCullingStatistics.GetLatestStatistics();
+            if (statistics.has_value())
+            {
+                ImGui::Text(
+                    "Meshlet Draw Instances: %u / %u visible",
+                    statistics->VisibleDrawCount,
+                    meshletResources.DrawCount);
+                ImGui::Text(
+                    "Meshlets: %u / %u visible",
+                    statistics->VisibleMeshletCount,
+                    meshletResources.CandidateCapacity);
+            }
+            else
+            {
+                ImGui::Text("Meshlet Draw Instances: pending / %u", meshletResources.DrawCount);
+                ImGui::Text("Meshlets: pending / %u", meshletResources.CandidateCapacity);
+            }
+            ImGui::TextDisabled("GPU counters are read back asynchronously only in this debug view.");
+        }
         const char* debugTargetNames[] = {
             "GBuffer Albedo / Occlusion",
             "GBuffer Normal",

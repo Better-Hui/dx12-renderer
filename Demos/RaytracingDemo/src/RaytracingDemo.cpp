@@ -517,6 +517,7 @@ RaytracingDemo::RaytracingDemo(
     , m_DLSS(m_FrameworkDeviceContext)
     , m_PathTracingPipelines(m_FrameworkDeviceContext)
     , m_ActivePixels(m_FrameworkDeviceContext)
+    , m_MeshletCullingStatistics(m_FrameworkDeviceContext)
     , m_DirectLightingReSTIRDIPass(
         m_FrameworkDeviceContext,
         {
@@ -756,6 +757,15 @@ RaytracingDemo::RaytracingDemo(
         m_UseMeshletGBuffer = std::strcmp(meshletGBuffer, "0") != 0;
     }
     std::free(meshletGBuffer);
+
+    char* meshletInstanceCull = nullptr;
+    size_t meshletInstanceCullLength = 0;
+    _dupenv_s(&meshletInstanceCull, &meshletInstanceCullLength, "RAYTRACING_DEMO_MESHLET_INSTANCE_CULL");
+    if (meshletInstanceCull != nullptr)
+    {
+        m_UseMeshletInstanceCull = std::strcmp(meshletInstanceCull, "0") != 0;
+    }
+    std::free(meshletInstanceCull);
 
     char* meshletDebug = nullptr;
     size_t meshletDebugLength = 0;
@@ -1130,6 +1140,10 @@ void RaytracingDemo::LoadStartupConfiguration()
     if (configuration.TryGetBoolean("Renderer", "MeshletGBuffer", boolValue))
     {
         m_UseMeshletGBuffer = boolValue;
+    }
+    if (configuration.TryGetBoolean("Renderer", "MeshletInstanceCull", boolValue))
+    {
+        m_UseMeshletInstanceCull = boolValue;
     }
     if (configuration.TryGetBoolean("Renderer", "MeshletDebug", boolValue))
     {
@@ -1923,6 +1937,7 @@ void RaytracingDemo::SaveRuntimeConfiguration()
            << "StressTestSpheres = " << m_SceneRuntime.AreStressTestSpheresEnabled() << '\n'
            << "DynamicRTASRefit = " << m_SceneResources.AreDynamicRayTracingUpdatesEnabled() << '\n'
            << "MeshletGBuffer = " << m_UseMeshletGBuffer << '\n'
+           << "MeshletInstanceCull = " << m_UseMeshletInstanceCull << '\n'
            << "MeshletDebug = " << m_DebugMeshletClusters << '\n'
            << "MeshletDebugTarget = " << m_DebugTextureTarget << '\n'
            << "MeshletBackend = " << (m_UseTaskShaderMeshlets ? "task" : "compute-indirect") << '\n'
@@ -2305,7 +2320,10 @@ void RaytracingDemo::InitializeDiagnostics()
         "RAYTRACING_DEMO_PARALLEL_DIRECT_RECORDING",
         "RAYTRACING_DEMO_BLOOM",
         "RAYTRACING_DEMO_MESHLET_GBUFFER",
+        "RAYTRACING_DEMO_MESHLET_INSTANCE_CULL",
         "RAYTRACING_DEMO_MESHLET_DEBUG",
+        "RAYTRACING_DEMO_GBUFFER_DEBUG",
+        "RAYTRACING_DEMO_GBUFFER_DEBUG_TARGET",
         "RAYTRACING_DEMO_MESHLET_BACKEND",
         "RAYTRACING_DEMO_RESTIRDI_TEMPORAL",
         "RAYTRACING_DEMO_RESTIRDI_SPATIAL",
@@ -2369,8 +2387,7 @@ void RaytracingDemo::InitializeShowreel()
 {
     m_ShowreelEnabled = m_SceneRuntime.GetActiveSceneBehaviorName() == "LowPolyStreet.ShowreelOrbit";
     TryGetEnvironmentBoolean("RAYTRACING_DEMO_SHOWREEL", m_ShowreelEnabled);
-    // Wait for the explicit playback trigger so startup leaves time for capture setup.
-    m_ShowreelPaused = true;
+    m_ShowreelPaused = false;
     m_ShowreelCompleted = false;
     m_ShowreelStage = 0u;
     m_ShowreelElapsedSeconds = 0.0;
@@ -2382,17 +2399,19 @@ void RaytracingDemo::InitializeShowreel()
 
 void RaytracingDemo::ApplyShowreelStage(const uint32_t stage)
 {
-    if (stage > 4u)
+    if (stage > 5u)
     {
         return;
     }
 
     ReSTIRDISettings restirSettings = m_DirectLightingReSTIRDI.GetSettings();
-    restirSettings.EnableTemporalResampling = stage >= 2u;
-    restirSettings.EnableSpatialResampling = stage >= 3u;
+    restirSettings.EnableTemporalResampling = stage >= 3u;
+    restirSettings.EnableSpatialResampling = stage >= 4u;
     m_DirectLightingReSTIRDI.SetSettings(restirSettings);
+    m_UseMeshletGBuffer = true;
+    m_DebugMeshletClusters = stage == 0u;
 
-    if (stage == 0u)
+    if (stage <= 1u)
     {
         m_DirectLightingTechnique = RaytracingDemoLightingTechnique::PathTracing;
         m_IndirectLightingTechnique = RaytracingDemoLightingTechnique::PathTracing;
@@ -2403,15 +2422,16 @@ void RaytracingDemo::ApplyShowreelStage(const uint32_t stage)
         m_DirectLightingTechnique = RaytracingDemoLightingTechnique::ReSTIRDI;
         m_IndirectLightingTechnique = RaytracingDemoLightingTechnique::None;
         m_Denoisers.SetAlgorithm(
-            stage >= 4u ? DenoiserController::Algorithm::NRD : DenoiserController::Algorithm::Off);
+            stage >= 5u ? DenoiserController::Algorithm::NRD : DenoiserController::Algorithm::Off);
     }
-    m_Bloom.SetEnabled(stage >= 4u);
+    m_Bloom.SetEnabled(stage >= 5u);
 
     m_AccumulationEnabled = false;
     ResetAccumulation(true, true, true);
     if (m_Diagnostics.IsEnabled())
     {
         static constexpr const char* stageNames[] = {
+            "meshlet_clusters",
             "pt",
             "restir_ris",
             "restir_temporal",
@@ -2438,9 +2458,9 @@ void RaytracingDemo::UpdateShowreel()
 
     m_ShowreelElapsedSeconds += std::clamp(static_cast<double>(m_DeltaTime), 0.0, 0.1);
     const uint32_t nextStage = static_cast<uint32_t>(m_ShowreelElapsedSeconds / 6.0);
-    if (nextStage >= 5u)
+    if (nextStage >= 6u)
     {
-        m_ShowreelElapsedSeconds = 30.0;
+        m_ShowreelElapsedSeconds = 36.0;
         m_ShowreelCompleted = true;
         return;
     }
@@ -2566,6 +2586,16 @@ bool RaytracingDemo::ApplyTopologyRuntimeAutomationAction(
         }
         ResetAccumulation();
         return true;
+//Modify Begin:2026-09-15 by Hui
+    case RuntimeAutomationAction::SVGFAtrousIterations:
+    {
+        SVGF::Settings settings = m_Denoisers.GetSVGFSettings();
+        settings.AtrousIterations = std::clamp(value, 1u, 8u);
+        m_Denoisers.SetSVGFSettings(settings);
+        ResetAccumulation();
+        return true;
+    }
+//Modify End
     case RuntimeAutomationAction::DLSS:
         m_DLSS.SetMode(static_cast<DLSSMode>(value));
         ResetAccumulation();
@@ -3105,6 +3135,12 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
             throw std::out_of_range("Runtime automation screenshot capture index is out of range.");
         }
         m_PendingAutomationScreenshot = value;
+        break;
+    case RuntimeAutomationAction::GBufferCameraMotion:
+        GetSceneCamera().Translate(
+            DirectX::XMVectorSet(0.025f, 0.0f, 0.0f, 0.0f),
+            Space::Local);
+        ResetAccumulation(false, false, false);
         break;
 //Modify End
     case RuntimeAutomationAction::MatrixCase:
@@ -3880,6 +3916,7 @@ RaytracingDemoPassResources RaytracingDemo::CreatePassResources()
         m_Lights,
         m_PathTracingPipelines,
         m_ActivePixels,
+        m_MeshletCullingStatistics,
         m_DirectLightingReSTIRDI,
         m_DirectLightingReSTIRDIPass,
         m_IndirectLightingReSTIRGI,
@@ -3894,8 +3931,12 @@ RaytracingDemoPassResources RaytracingDemo::CreatePassResources()
         m_ShaderPipelineBootstrap.GetGBufferShader(),
         m_ShaderPipelineBootstrap.GetMeshletIndirectGBufferShader(),
         m_ShaderPipelineBootstrap.GetTaskMeshGBufferShader(),
+        m_ShaderPipelineBootstrap.GetMeshletInstanceCullShader(),
+        m_ShaderPipelineBootstrap.GetMeshletCandidateExpandShader(),
         m_ShaderPipelineBootstrap.GetMeshletCullShader(),
         m_ShaderPipelineBootstrap.GetMeshletDrawCommandSignature(),
+        m_ShaderPipelineBootstrap.GetMeshletComputeDispatchCommandSignature(),
+        m_ShaderPipelineBootstrap.GetMeshletDispatchMeshCommandSignature(),
         m_ShaderPipelineBootstrap.GetDisplayCompositeShader(),
         m_ShaderPipelineBootstrap.GetSkyboxComputeShader(),
         m_ShaderPipelineBootstrap.GetSkyboxEquirectangularComputeShader(),
@@ -3935,6 +3976,7 @@ void RaytracingDemo::UpdateRenderGraphFrameState()
     state.CopyQueueValidationEnabled = m_CopyQueueValidationEnabled;
     state.DynamicRayTracingUpdateEnabled = m_SceneResources.RequiresDynamicRayTracingUpdatePass();
     state.UseMeshletGBuffer = m_UseMeshletGBuffer;
+    state.UseMeshletInstanceCull = m_UseMeshletInstanceCull;
     state.UseTaskShaderMeshlets = m_UseTaskShaderMeshlets;
     state.DebugMeshletClusters = m_DebugMeshletClusters;
     state.SkyboxEnabled = m_SkyboxEnabled;
@@ -4189,6 +4231,10 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
         m_RenderGraphFrameState->UsesCompactedRayTracedPixelDispatch();
     const bool activeRayCountReadbackQueued =
         readsCompactedRayTracedPixelCount && m_ActivePixels.BeginCountReadback();
+    const bool meshletStatisticsReadbackQueued =
+        m_RenderGraphFrameState->UseMeshletGBuffer &&
+        m_RenderGraphFrameState->DebugMeshletClusters &&
+        m_MeshletCullingStatistics.BeginReadback();
     const bool oidnReadbackQueued = m_Denoisers.BeginOIDNReadback(
         m_RenderGraphFrameState->AccumulationEnabled,
         m_RenderGraphFrameState->AccumulationFrameIndex);
@@ -4217,6 +4263,21 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
         m_ActivePixels.EndCountReadback(renderGraph.GetFrameSubmissionFences().Direct);
         activeRayCountReadbackEnded = true;
     };
+    bool meshletStatisticsReadbackEnded = false;
+    const auto endMeshletStatisticsReadback = [
+        &renderGraph,
+        &meshletStatisticsReadbackEnded,
+        meshletStatisticsReadbackQueued,
+        this]()
+    {
+        if (!meshletStatisticsReadbackQueued || meshletStatisticsReadbackEnded)
+        {
+            return;
+        }
+
+        m_MeshletCullingStatistics.EndReadback(renderGraph.GetFrameSubmissionFences().Direct);
+        meshletStatisticsReadbackEnded = true;
+    };
     bool oidnReadbackEnded = false;
     const auto endOidnReadback = [&renderGraph, &oidnReadbackEnded, oidnReadbackQueued, this]()
     {
@@ -4233,6 +4294,7 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
         renderGraph.Execute(metadata);
         endBindlessFrame();
         endActiveRayCountReadback();
+        endMeshletStatisticsReadback();
         endOidnReadback();
     }
     catch (const std::exception& exception)
@@ -4248,6 +4310,14 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
             {
                 m_ActivePixels.CancelCountReadback();
             }
+        }
+        if (meshletStatisticsReadbackQueued && renderGraph.GetFrameSubmissionFences().Direct != 0u)
+        {
+            endMeshletStatisticsReadback();
+        }
+        else if (meshletStatisticsReadbackQueued)
+        {
+            m_MeshletCullingStatistics.CancelReadback();
         }
         if (oidnReadbackQueued && renderGraph.GetFrameSubmissionFences().Direct != 0u)
         {

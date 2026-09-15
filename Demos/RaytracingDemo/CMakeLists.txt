@@ -9,6 +9,7 @@ set(HEADER_FILES
         include/Profiling/ProfilerDisplayController.h
         include/Profiling/RenderGraphTimingHistory.h
         include/RaytracingDemo.h
+        include/Rendering/MeshletCullingStatisticsController.h
         include/Rendering/RaytracingDemoShaderPipelineController.h
         include/RenderGraph/RaytracingDemoRenderGraphBuilder.h
         include/PathTracing/PathTracingSceneBindings.h
@@ -38,6 +39,7 @@ set(SOURCE_FILES
         src/RaytracingDemoCamera.cpp
         src/RaytracingDemo.cpp
         src/RaytracingDemoUI.cpp
+        src/Rendering/MeshletCullingStatisticsController.cpp
         src/Rendering/RaytracingDemoShaderPipelineController.cpp
         src/UI/DemoLightEditor.cpp
         src/RenderGraph/RaytracingDemoRenderGraphBuilder.cpp
@@ -151,6 +153,8 @@ list(APPEND SHADERS_HEADER_FILES
         )
 
 set(SHADER_FILES_COMPUTE
+        shaders/GBuffer/MeshletInstanceCull.cs.hlsl
+        shaders/GBuffer/MeshletCandidateExpand.cs.hlsl
         shaders/GBuffer/MeshletCull.cs.hlsl
         shaders/PathTracing/CompactInlineDispatchFinalize.cs.hlsl
         shaders/PathTracing/CompactDxrDispatchFinalize.cs.hlsl

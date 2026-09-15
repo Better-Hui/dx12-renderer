@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-08-26 by Hui
+//Modify Begin:2026-09-15 by Hui
 #include <Automation/RuntimeAutomationController.h>
 #include <Passes/RaytracingDemoPassResources.h>
 #include <PathTracing/PathTracingPipelineController.h>
@@ -47,10 +47,12 @@ namespace RaytracingDemoAutomation
         VerifyDynamicRayTracingUpdate,
         VerifyDynamicSkinnedMeshCapability,
         Denoiser,
+        SVGFAtrousIterations,
         OIDNStaticSpp,
         VerifyOIDNResult,
         OIDNCameraMotion,
         VerifyOIDNInvalidated,
+        GBufferCameraMotion,
         CaptureScreenshot,
         MatrixCase,
     };

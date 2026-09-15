@@ -13,6 +13,7 @@
 #include <atomic>
 #include <cfloat>
 #include <exception>
+#include <limits>
 #include <mutex>
 #include <ranges>
 #include <stdexcept>
@@ -21,7 +22,7 @@
 
 using namespace DirectX;
 
-//Modify Begin:2026-08-25 by Hui
+//Modify Begin:2026-09-15 by Hui
 namespace
 {
     void CopyFloat3(XMFLOAT3& destination, const float source[3])
@@ -188,14 +189,20 @@ MeshletBuildResult MeshletBuilder::Build(const MeshPrototype& meshPrototype, con
 }
 //Modify End
 
-//Modify Begin:2026-08-25 by Hui
+//Modify Begin:2026-09-15 by Hui
 MeshletGeometrySet::MeshletGeometrySet()
     : m_VertexBuffer(L"MeshletGeometrySet Vertices")
     , m_IndexBuffer(L"MeshletGeometrySet Indices")
     , m_MeshletBuffer(L"MeshletGeometrySet Meshlets")
     , m_TransformBuffer(L"MeshletGeometrySet Transforms")
-    , m_InstanceBuffer(L"MeshletGeometrySet Instances")
+    , m_DrawBuffer(L"MeshletGeometrySet Draws")
+    , m_VisibleDrawIndexBuffer(L"MeshletGeometrySet Visible Draw Indices")
+    , m_CandidateInstanceBuffer(L"MeshletGeometrySet Candidate Instances")
+    , m_VisibleInstanceBuffer(L"MeshletGeometrySet Visible Instances")
     , m_IndirectCommandBuffer(L"MeshletGeometrySet Indirect Commands")
+    , m_CandidateExpandDispatchArguments(L"MeshletGeometrySet Candidate Expand Dispatch Arguments")
+    , m_FineCullDispatchArguments(L"MeshletGeometrySet Fine Cull Dispatch Arguments")
+    , m_MeshDispatchArguments(L"MeshletGeometrySet Mesh Dispatch Arguments")
 {
 }
 
@@ -205,15 +212,22 @@ void MeshletGeometrySet::Clear()
     m_IndexBuffer = ByteAddressBuffer(L"MeshletGeometrySet Indices");
     m_MeshletBuffer = StructuredBuffer(L"MeshletGeometrySet Meshlets");
     m_TransformBuffer = StructuredBuffer(L"MeshletGeometrySet Transforms");
-    m_InstanceBuffer = StructuredBuffer(L"MeshletGeometrySet Instances");
+    m_DrawBuffer = StructuredBuffer(L"MeshletGeometrySet Draws");
+    m_VisibleDrawIndexBuffer = StructuredBuffer(L"MeshletGeometrySet Visible Draw Indices");
+    m_CandidateInstanceBuffer = StructuredBuffer(L"MeshletGeometrySet Candidate Instances");
+    m_VisibleInstanceBuffer = StructuredBuffer(L"MeshletGeometrySet Visible Instances");
     m_IndirectCommandBuffer = StructuredBuffer(L"MeshletGeometrySet Indirect Commands");
+    m_CandidateExpandDispatchArguments = ByteAddressBuffer(L"MeshletGeometrySet Candidate Expand Dispatch Arguments");
+    m_FineCullDispatchArguments = ByteAddressBuffer(L"MeshletGeometrySet Fine Cull Dispatch Arguments");
+    m_MeshDispatchArguments = ByteAddressBuffer(L"MeshletGeometrySet Mesh Dispatch Arguments");
     m_Vertices.clear();
     m_Indices.clear();
     m_Meshlets.clear();
     m_GeometryEntries.clear();
     m_Draws.clear();
     m_Transforms.clear();
-    m_Instances.clear();
+    m_DrawData.clear();
+    m_CandidateCapacity = 0;
     m_GeometryDataDirty = true;
     m_IndexDataDirty = true;
     m_InstanceDataDirty = true;
@@ -223,7 +237,8 @@ void MeshletGeometrySet::ClearDraws()
 {
     m_Draws.clear();
     m_Transforms.clear();
-    m_Instances.clear();
+    m_DrawData.clear();
+    m_CandidateCapacity = 0;
     m_InstanceDataDirty = true;
 }
 
@@ -387,8 +402,8 @@ void MeshletGeometrySet::Upload(CommandList& commandList)
         return;
     }
 
-    BuildInstances();
-    if (m_Instances.empty())
+    BuildDrawData();
+    if (m_DrawData.empty())
     {
         m_InstanceDataDirty = false;
         return;
@@ -405,42 +420,101 @@ void MeshletGeometrySet::Upload(CommandList& commandList)
     {
         uploader.UploadStructuredBuffer(commandList, m_TransformBuffer, m_Transforms);
     }
-    const bool instanceBufferCanCopy =
-        m_InstanceBuffer.GetD3D12Resource() != nullptr &&
-        m_InstanceBuffer.GetD3D12ResourceDesc().Width >= m_Instances.size() * sizeof(MeshletInstanceData);
-    if (instanceBufferCanCopy)
+    const bool drawBufferCanCopy =
+        m_DrawBuffer.GetD3D12Resource() != nullptr &&
+        m_DrawBuffer.GetD3D12ResourceDesc().Width >= m_DrawData.size() * sizeof(MeshletDrawData);
+    if (drawBufferCanCopy)
     {
-        uploader.CopyStructuredBuffer(commandList, m_InstanceBuffer, m_Instances);
+        uploader.CopyStructuredBuffer(commandList, m_DrawBuffer, m_DrawData);
     }
     else
     {
-        uploader.UploadStructuredBuffer(commandList, m_InstanceBuffer, m_Instances);
+        uploader.UploadStructuredBuffer(commandList, m_DrawBuffer, m_DrawData);
     }
 
-    const uint64_t requiredCommandBufferSize = sizeof(MeshletIndirectCommand) * m_Instances.size();
-    const D3D12_RESOURCE_DESC currentCommandBufferDesc = m_IndirectCommandBuffer.GetD3D12ResourceDesc();
-    if (m_IndirectCommandBuffer.GetD3D12Resource() == nullptr ||
-        currentCommandBufferDesc.Width < requiredCommandBufferSize)
+    const auto ensureStructuredUav = [&commandList](
+        StructuredBuffer& buffer,
+        const size_t elementCount,
+        const size_t elementSize,
+        const wchar_t* name)
     {
-        if (m_IndirectCommandBuffer.GetD3D12Resource() != nullptr)
+        const uint64_t requiredSize = static_cast<uint64_t>(elementCount) * elementSize;
+        if (buffer.GetD3D12Resource() == nullptr ||
+            buffer.GetD3D12ResourceDesc().Width < requiredSize ||
+            !buffer.SupportsUnorderedAccess())
         {
-            CommandListInternalAccess::TrackResourceLifetime(commandList, m_IndirectCommandBuffer);
+            if (buffer.GetD3D12Resource() != nullptr)
+            {
+                CommandListInternalAccess::TrackResourceLifetime(commandList, buffer);
+            }
+            const D3D12_RESOURCE_DESC description = CD3DX12_RESOURCE_DESC::Buffer(
+                requiredSize,
+                D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+            buffer = StructuredBuffer(
+                description,
+                elementCount,
+                elementSize,
+                name,
+                commandList.GetDeviceContext());
+            return;
         }
+        buffer.CreateViews(elementCount, elementSize);
+    };
 
-        const D3D12_RESOURCE_DESC commandBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(
-            requiredCommandBufferSize,
-            D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-        m_IndirectCommandBuffer = StructuredBuffer(
-            commandBufferDesc,
-            m_Instances.size(),
-            sizeof(MeshletIndirectCommand),
-            L"MeshletGeometrySet Indirect Commands",
-            commandList.GetDeviceContext());
-    }
-    else
+    const auto ensureRawUav = [&commandList](ByteAddressBuffer& buffer, const wchar_t* name)
     {
-        m_IndirectCommandBuffer.CreateViews(m_Instances.size(), sizeof(MeshletIndirectCommand));
-    }
+        constexpr uint64_t dispatchArgumentSize = sizeof(D3D12_DISPATCH_ARGUMENTS);
+        if (buffer.GetD3D12Resource() == nullptr ||
+            buffer.GetD3D12ResourceDesc().Width < dispatchArgumentSize ||
+            !buffer.SupportsUnorderedAccess())
+        {
+            if (buffer.GetD3D12Resource() != nullptr)
+            {
+                CommandListInternalAccess::TrackResourceLifetime(commandList, buffer);
+            }
+            const D3D12_RESOURCE_DESC description = CD3DX12_RESOURCE_DESC::Buffer(
+                dispatchArgumentSize,
+                D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+            buffer = ByteAddressBuffer(
+                description,
+                1u,
+                dispatchArgumentSize,
+                name,
+                commandList.GetDeviceContext());
+            return;
+        }
+        buffer.CreateViews(1u, dispatchArgumentSize);
+    };
+
+    ensureStructuredUav(
+        m_VisibleDrawIndexBuffer,
+        m_DrawData.size(),
+        sizeof(uint32_t),
+        L"MeshletGeometrySet Visible Draw Indices");
+    ensureStructuredUav(
+        m_CandidateInstanceBuffer,
+        m_CandidateCapacity,
+        sizeof(MeshletInstanceData),
+        L"MeshletGeometrySet Candidate Instances");
+    ensureStructuredUav(
+        m_VisibleInstanceBuffer,
+        m_CandidateCapacity,
+        sizeof(MeshletInstanceData),
+        L"MeshletGeometrySet Visible Instances");
+    ensureStructuredUav(
+        m_IndirectCommandBuffer,
+        m_CandidateCapacity,
+        sizeof(MeshletIndirectCommand),
+        L"MeshletGeometrySet Indirect Commands");
+    ensureRawUav(
+        m_CandidateExpandDispatchArguments,
+        L"MeshletGeometrySet Candidate Expand Dispatch Arguments");
+    ensureRawUav(
+        m_FineCullDispatchArguments,
+        L"MeshletGeometrySet Fine Cull Dispatch Arguments");
+    ensureRawUav(
+        m_MeshDispatchArguments,
+        L"MeshletGeometrySet Mesh Dispatch Arguments");
     m_InstanceDataDirty = false;
 }
 
@@ -451,35 +525,67 @@ MeshletGpuResources MeshletGeometrySet::GetGpuResources()
         &m_IndexBuffer,
         &m_MeshletBuffer,
         &m_TransformBuffer,
-        &m_InstanceBuffer,
+        &m_DrawBuffer,
+        &m_VisibleDrawIndexBuffer,
+        &m_CandidateInstanceBuffer,
+        &m_VisibleInstanceBuffer,
         &m_IndirectCommandBuffer,
-        static_cast<uint32_t>(m_Instances.size()),
+        &m_CandidateExpandDispatchArguments,
+        &m_FineCullDispatchArguments,
+        &m_MeshDispatchArguments,
+        static_cast<uint32_t>(m_DrawData.size()),
+        m_CandidateCapacity,
     };
 }
 
-void MeshletGeometrySet::BuildInstances()
+void MeshletGeometrySet::BuildDrawData()
 {
     m_Transforms.clear();
-    m_Instances.clear();
+    m_DrawData.clear();
+    m_CandidateCapacity = 0;
     m_Transforms.reserve(m_Draws.size());
+    m_DrawData.reserve(m_Draws.size());
+
+    uint64_t candidateCapacity = 0;
 
     for (const MeshletDraw& draw : m_Draws)
     {
+        Assert(
+            draw.MeshletOffset + draw.MeshletCount <= m_Meshlets.size(),
+            "Meshlet draw range is invalid.");
         MeshletTransformData transform;
         transform.Model = draw.WorldMatrix;
         transform.InverseTransposeModel = XMMatrixTranspose(XMMatrixInverse(nullptr, draw.WorldMatrix));
         const uint32_t transformIndex = static_cast<uint32_t>(m_Transforms.size());
         m_Transforms.push_back(transform);
 
+        XMVECTOR minimum = XMVectorReplicate(FLT_MAX);
+        XMVECTOR maximum = XMVectorReplicate(-FLT_MAX);
         for (uint32_t meshletIndex = 0; meshletIndex < draw.MeshletCount; ++meshletIndex)
         {
-            MeshletInstanceData instance;
-            instance.MeshletIndex = draw.MeshletOffset + meshletIndex;
-            instance.TransformIndex = transformIndex;
-            instance.MaterialIndex = draw.MaterialIndex;
-            m_Instances.push_back(instance);
+            const MeshletBounds& bounds = m_Meshlets[draw.MeshletOffset + meshletIndex].Bounds;
+            const XMVECTOR center = XMLoadFloat3(&bounds.AabbCenter);
+            const XMVECTOR halfSize = XMLoadFloat3(&bounds.AabbHalfSize);
+            minimum = XMVectorMin(minimum, center - halfSize);
+            maximum = XMVectorMax(maximum, center + halfSize);
         }
+
+        const XMVECTOR halfSize = (maximum - minimum) * 0.5f;
+        MeshletDrawData drawData;
+        drawData.MeshletOffset = draw.MeshletOffset;
+        drawData.MeshletCount = draw.MeshletCount;
+        drawData.TransformIndex = transformIndex;
+        drawData.MaterialIndex = draw.MaterialIndex;
+        XMStoreFloat3(&drawData.BoundsCenter, minimum + halfSize);
+        drawData.BoundsRadius = XMVectorGetX(XMVector3Length(halfSize));
+        m_DrawData.push_back(drawData);
+        candidateCapacity += draw.MeshletCount;
     }
+
+    Assert(
+        candidateCapacity <= (std::numeric_limits<uint32_t>::max)(),
+        "Meshlet candidate capacity exceeds the 32-bit GPU index range.");
+    m_CandidateCapacity = static_cast<uint32_t>(candidateCapacity);
 }
 
 void MeshletSceneResources::Clear()

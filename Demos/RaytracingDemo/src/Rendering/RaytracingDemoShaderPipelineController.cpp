@@ -8,6 +8,7 @@
 #include <Framework/Rendering/Pipeline/ShaderTargetProfile.h>
 
 #include <stdexcept>
+#include <array>
 #include <utility>
 
 namespace
@@ -143,6 +144,24 @@ void RaytracingDemoShaderPipelineController::CreateGeometryPipelines()
 
     CreatePipeline("MeshletCull", [this]()
     {
+        const auto instanceCullBlob = LoadShaderVariant(
+            L"MeshletInstanceCull.cs.cso",
+            L"Demos/RaytracingDemo/shaders/GBuffer/MeshletInstanceCull.cs.hlsl",
+            ShaderTargetProfile::Compute());
+        m_MeshletInstanceCullShader = std::make_shared<ComputeShader>(
+            m_DeviceContext,
+            *instanceCullBlob,
+            ComputePipelineDescBuilder::ReflectedDefault(*instanceCullBlob).Build());
+
+        const auto candidateExpandBlob = LoadShaderVariant(
+            L"MeshletCandidateExpand.cs.cso",
+            L"Demos/RaytracingDemo/shaders/GBuffer/MeshletCandidateExpand.cs.hlsl",
+            ShaderTargetProfile::Compute());
+        m_MeshletCandidateExpandShader = std::make_shared<ComputeShader>(
+            m_DeviceContext,
+            *candidateExpandBlob,
+            ComputePipelineDescBuilder::ReflectedDefault(*candidateExpandBlob).Build());
+
         const auto shaderBlob = LoadShaderVariant(
             L"MeshletCull.cs.cso",
             L"Demos/RaytracingDemo/shaders/GBuffer/MeshletCull.cs.hlsl",
@@ -155,6 +174,24 @@ void RaytracingDemoShaderPipelineController::CreateGeometryPipelines()
             "MeshletDrawCBuffer",
             sizeof(MeshletIndirectCommand),
             IndirectArgumentType::DrawIndexed);
+        constexpr std::array dispatchArguments = {
+            IndirectArgumentDesc{ .Type = IndirectArgumentType::Dispatch },
+        };
+        m_MeshletComputeDispatchCommandSignature = std::make_unique<IndirectCommandSignature>(
+            m_DeviceContext,
+            IndirectCommandSignatureDesc{
+                .Arguments = dispatchArguments,
+                .ByteStride = sizeof(D3D12_DISPATCH_ARGUMENTS),
+            });
+        constexpr std::array meshDispatchArguments = {
+            IndirectArgumentDesc{ .Type = IndirectArgumentType::DispatchMesh },
+        };
+        m_MeshletDispatchMeshCommandSignature = std::make_unique<IndirectCommandSignature>(
+            m_DeviceContext,
+            IndirectCommandSignatureDesc{
+                .Arguments = meshDispatchArguments,
+                .ByteStride = sizeof(D3D12_DISPATCH_ARGUMENTS),
+            });
     });
 }
 
@@ -323,7 +360,11 @@ void RaytracingDemoShaderPipelineController::Reset()
     m_DisplayCompositeShader.reset();
     m_GBufferTaskMeshShader.reset();
     m_MeshletDrawCommandSignature.reset();
+    m_MeshletDispatchMeshCommandSignature.reset();
+    m_MeshletComputeDispatchCommandSignature.reset();
     m_MeshletCullShader.reset();
+    m_MeshletCandidateExpandShader.reset();
+    m_MeshletInstanceCullShader.reset();
     m_GBufferMeshletIndirectShader.reset();
     m_GBufferShader.reset();
     m_ShaderVariants.Clear();

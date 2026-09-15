@@ -501,7 +501,7 @@ bool RaytracingDemoSceneResources::LoadScene(
     LoadSceneObjects(commandList, scene, materialIndexMap, defaultMaterial);
     AddDynamicSceneAutomationEmitter(commandList, whiteTexture);
     m_StressTestSpheresEnabled = enableStressTestSpheres;
-    AddStressTestSpheres(commandList, whiteTexture);
+    AddStressTestSpheres(commandList, whiteTexture, scene.GetRuntimeCamera());
     InitializeMeshletSceneResources();
     UploadMeshletBuffers(commandList);
 
@@ -752,7 +752,10 @@ void RaytracingDemoSceneResources::InitializeMeshletSceneResources()
         m_StressTestSpheresEnabled);
 }
 
-void RaytracingDemoSceneResources::AddStressTestSpheres(CommandList& commandList, const uint32_t whiteTextureIndex)
+void RaytracingDemoSceneResources::AddStressTestSpheres(
+    CommandList& commandList,
+    const uint32_t whiteTextureIndex,
+    const Camera& camera)
 {
     m_StressTestSphereObjects.clear();
     m_StressTestSphereObjectStart = m_GeometryResources.GetObjects().size();
@@ -760,7 +763,8 @@ void RaytracingDemoSceneResources::AddStressTestSpheres(CommandList& commandList
         commandList,
         m_TextureMaterialResources,
         m_GeometryResources,
-        whiteTextureIndex);
+        whiteTextureIndex,
+        camera);
     m_StressTestSphereMaterialIndex = stressTestScene.MaterialIndex;
     m_StressTestSphereObjects = std::move(stressTestScene.Objects);
 
@@ -777,7 +781,28 @@ bool RaytracingDemoSceneResources::SetStressTestSpheresEnabled(CommandList& comm
         return false;
     }
 
-    Assert(!m_StressTestSphereObjects.empty(), "Stress test sphere objects have not been initialized.");
+    constexpr size_t ExpectedStressSphereCount = 64u * 24u * 8u;
+    Assert(
+        m_StressTestSphereObjects.size() == ExpectedStressSphereCount,
+        "Stress test sphere object count does not match the configured stress workload.");
+
+    const size_t objectCountBefore = m_GeometryResources.GetObjects().size();
+    const MeshletGpuResources meshletResourcesBefore = m_MeshletResources.GetGpuResources();
+    const uint32_t rayTracingInstanceCountBefore =
+        m_RayTracingResources.GetAccelerationStructure().GetInstanceCount();
+
+    if (!enabled)
+    {
+        Assert(objectCountBefore >= ExpectedStressSphereCount, "Stress object count underflow.");
+        Assert(meshletResourcesBefore.DrawCount >= ExpectedStressSphereCount, "Stress meshlet draw count underflow.");
+        Assert(
+            meshletResourcesBefore.CandidateCapacity >= ExpectedStressSphereCount,
+            "Stress meshlet candidate capacity underflow.");
+        Assert(
+            rayTracingInstanceCountBefore >= ExpectedStressSphereCount,
+            "Stress ray tracing instance count underflow.");
+    }
+
     if (enabled)
     {
         m_StressTestSphereObjectStart = m_GeometryResources.GetObjects().size();
@@ -800,6 +825,41 @@ bool RaytracingDemoSceneResources::SetStressTestSpheresEnabled(CommandList& comm
     m_StressTestSpheresEnabled = enabled;
     UploadMeshletBuffers(commandList);
     m_RayTracingResources.Update(commandList, m_TextureMaterialResources.GetBindlessDescriptorHeap());
+
+    const size_t objectCountAfter = m_GeometryResources.GetObjects().size();
+    const MeshletGpuResources meshletResourcesAfter = m_MeshletResources.GetGpuResources();
+    const uint32_t rayTracingInstanceCountAfter =
+        m_RayTracingResources.GetAccelerationStructure().GetInstanceCount();
+    if (enabled)
+    {
+        Assert(
+            objectCountAfter == objectCountBefore + ExpectedStressSphereCount,
+            "Stress objects were not appended to the raster scene.");
+        Assert(
+            meshletResourcesAfter.DrawCount == meshletResourcesBefore.DrawCount + ExpectedStressSphereCount,
+            "Stress instances were not appended to the meshlet draw workload.");
+        Assert(
+            meshletResourcesAfter.CandidateCapacity > meshletResourcesBefore.CandidateCapacity,
+            "Stress instances did not increase the meshlet candidate workload.");
+        Assert(
+            rayTracingInstanceCountAfter == rayTracingInstanceCountBefore + ExpectedStressSphereCount,
+            "Stress instances were not appended to the ray tracing acceleration structure.");
+    }
+    else
+    {
+        Assert(
+            objectCountAfter + ExpectedStressSphereCount == objectCountBefore,
+            "Stress objects were not removed from the raster scene.");
+        Assert(
+            meshletResourcesAfter.DrawCount + ExpectedStressSphereCount == meshletResourcesBefore.DrawCount,
+            "Stress instances were not removed from the meshlet draw workload.");
+        Assert(
+            meshletResourcesAfter.CandidateCapacity < meshletResourcesBefore.CandidateCapacity,
+            "Stress instances did not reduce the meshlet candidate workload.");
+        Assert(
+            rayTracingInstanceCountAfter + ExpectedStressSphereCount == rayTracingInstanceCountBefore,
+            "Stress instances were not removed from the ray tracing acceleration structure.");
+    }
     return true;
 }
 

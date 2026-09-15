@@ -27,8 +27,12 @@ public:
 
     [[nodiscard]] const std::shared_ptr<Shader>& GetGBufferShader() const { return m_GBufferShader; }
     [[nodiscard]] const std::shared_ptr<Shader>& GetMeshletIndirectGBufferShader() const { return m_GBufferMeshletIndirectShader; }
+    [[nodiscard]] const std::shared_ptr<ComputeShader>& GetMeshletInstanceCullShader() const { return m_MeshletInstanceCullShader; }
+    [[nodiscard]] const std::shared_ptr<ComputeShader>& GetMeshletCandidateExpandShader() const { return m_MeshletCandidateExpandShader; }
     [[nodiscard]] const std::shared_ptr<ComputeShader>& GetMeshletCullShader() const { return m_MeshletCullShader; }
     [[nodiscard]] IndirectCommandSignature* GetMeshletDrawCommandSignature() { return m_MeshletDrawCommandSignature.get(); }
+    [[nodiscard]] IndirectCommandSignature* GetMeshletComputeDispatchCommandSignature() { return m_MeshletComputeDispatchCommandSignature.get(); }
+    [[nodiscard]] IndirectCommandSignature* GetMeshletDispatchMeshCommandSignature() { return m_MeshletDispatchMeshCommandSignature.get(); }
     [[nodiscard]] const std::shared_ptr<MeshShader>& GetTaskMeshGBufferShader() const { return m_GBufferTaskMeshShader; }
     [[nodiscard]] const std::shared_ptr<Shader>& GetDisplayCompositeShader() const { return m_DisplayCompositeShader; }
     [[nodiscard]] const std::shared_ptr<Shader>& GetHdr10PresentationShader() const { return m_Hdr10PresentationShader; }
@@ -51,8 +55,12 @@ private:
     ShaderVariantManager m_ShaderVariants;
     std::shared_ptr<Shader> m_GBufferShader;
     std::shared_ptr<Shader> m_GBufferMeshletIndirectShader;
+    std::shared_ptr<ComputeShader> m_MeshletInstanceCullShader;
+    std::shared_ptr<ComputeShader> m_MeshletCandidateExpandShader;
     std::shared_ptr<ComputeShader> m_MeshletCullShader;
     std::unique_ptr<IndirectCommandSignature> m_MeshletDrawCommandSignature;
+    std::unique_ptr<IndirectCommandSignature> m_MeshletComputeDispatchCommandSignature;
+    std::unique_ptr<IndirectCommandSignature> m_MeshletDispatchMeshCommandSignature;
     std::shared_ptr<MeshShader> m_GBufferTaskMeshShader;
     std::shared_ptr<Shader> m_DisplayCompositeShader;
     std::shared_ptr<Shader> m_Hdr10PresentationShader;

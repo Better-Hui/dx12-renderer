@@ -47,13 +47,14 @@ void main(
     out vertices MeshletVertexOutput vertices[MeshletMaxVertices],
     out indices uint3 primitives[MeshletMaxPrimitives])
 {
-    const uint instanceIndex = payload.MeshletInstanceIndices[groupId];
+    const bool validMeshlet = groupId < payload.MeshletCount;
+    const uint instanceIndex = validMeshlet ? payload.MeshletInstanceIndices[groupId] : 0u;
     const MeshletInstanceData instance = MeshletInstances[instanceIndex];
     const Meshlet meshlet = Meshlets[instance.MeshletIndex];
     const MeshletTransformData transform = MeshletTransforms[instance.TransformIndex];
 
-    const uint vertexCount = meshlet.VertexCount;
-    const uint primitiveCount = meshlet.IndexCount / 3;
+    const uint vertexCount = validMeshlet ? meshlet.VertexCount : 0u;
+    const uint primitiveCount = validMeshlet ? meshlet.IndexCount / 3u : 0u;
     SetMeshOutputCounts(vertexCount, primitiveCount);
 
     if (groupThreadId < vertexCount)

@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-08-25 by Hui
+//Modify Begin:2026-09-15 by Hui
 
 #include <DX12Library/ByteAddressBuffer.h>
 #include <DX12Library/StructuredBuffer.h>
@@ -103,6 +103,16 @@ struct MeshletIndirectCommand
     D3D12_DRAW_INDEXED_ARGUMENTS DrawArguments = {};
 };
 
+struct MeshletDrawData
+{
+    uint32_t MeshletOffset = 0;
+    uint32_t MeshletCount = 0;
+    uint32_t TransformIndex = 0;
+    uint32_t MaterialIndex = 0;
+    DirectX::XMFLOAT3 BoundsCenter = { 0.0f, 0.0f, 0.0f };
+    float BoundsRadius = 0.0f;
+};
+
 static_assert(offsetof(MeshletIndirectCommand, DrawArguments) == 16u);
 static_assert(sizeof(MeshletIndirectCommand) == 36u);
 
@@ -112,9 +122,16 @@ struct MeshletGpuResources
     const ByteAddressBuffer* Indices = nullptr;
     const StructuredBuffer* Meshlets = nullptr;
     const StructuredBuffer* Transforms = nullptr;
-    const StructuredBuffer* Instances = nullptr;
+    const StructuredBuffer* Draws = nullptr;
+    StructuredBuffer* VisibleDrawIndices = nullptr;
+    StructuredBuffer* CandidateInstances = nullptr;
+    StructuredBuffer* VisibleInstances = nullptr;
     StructuredBuffer* IndirectCommands = nullptr;
-    uint32_t InstanceCount = 0;
+    ByteAddressBuffer* CandidateExpandDispatchArguments = nullptr;
+    ByteAddressBuffer* FineCullDispatchArguments = nullptr;
+    ByteAddressBuffer* MeshDispatchArguments = nullptr;
+    uint32_t DrawCount = 0;
+    uint32_t CandidateCapacity = 0;
 
     bool IsValid() const
     {
@@ -122,9 +139,16 @@ struct MeshletGpuResources
             Indices != nullptr &&
             Meshlets != nullptr &&
             Transforms != nullptr &&
-            Instances != nullptr &&
+            Draws != nullptr &&
+            VisibleDrawIndices != nullptr &&
+            CandidateInstances != nullptr &&
+            VisibleInstances != nullptr &&
             IndirectCommands != nullptr &&
-            InstanceCount > 0;
+            CandidateExpandDispatchArguments != nullptr &&
+            FineCullDispatchArguments != nullptr &&
+            MeshDispatchArguments != nullptr &&
+            DrawCount > 0 &&
+            CandidateCapacity > 0;
     }
 };
 
@@ -158,14 +182,20 @@ private:
         std::vector<uint32_t> CompactToSourceVertexIndices;
     };
 
-    void BuildInstances();
+    void BuildDrawData();
 
     StructuredBuffer m_VertexBuffer;
     ByteAddressBuffer m_IndexBuffer;
     StructuredBuffer m_MeshletBuffer;
     StructuredBuffer m_TransformBuffer;
-    StructuredBuffer m_InstanceBuffer;
+    StructuredBuffer m_DrawBuffer;
+    StructuredBuffer m_VisibleDrawIndexBuffer;
+    StructuredBuffer m_CandidateInstanceBuffer;
+    StructuredBuffer m_VisibleInstanceBuffer;
     StructuredBuffer m_IndirectCommandBuffer;
+    ByteAddressBuffer m_CandidateExpandDispatchArguments;
+    ByteAddressBuffer m_FineCullDispatchArguments;
+    ByteAddressBuffer m_MeshDispatchArguments;
 
     std::vector<VertexAttributes> m_Vertices;
     std::vector<uint16_t> m_Indices;
@@ -173,7 +203,8 @@ private:
     std::vector<GeometryEntry> m_GeometryEntries;
     std::vector<MeshletDraw> m_Draws;
     std::vector<MeshletTransformData> m_Transforms;
-    std::vector<MeshletInstanceData> m_Instances;
+    std::vector<MeshletDrawData> m_DrawData;
+    uint32_t m_CandidateCapacity = 0;
     bool m_GeometryDataDirty = true;
     bool m_IndexDataDirty = true;
     bool m_InstanceDataDirty = true;

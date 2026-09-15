@@ -31,6 +31,7 @@ void RaytracingDemo::OnUpdate(UpdateEventArgs& e)
     }
     const auto directCommandQueue = m_FrameworkDeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
     m_ActivePixels.CollectCountReadback(*directCommandQueue);
+    m_MeshletCullingStatistics.CollectLatestCompleted(*directCommandQueue);
     m_Denoisers.PollOIDN(*directCommandQueue);
     m_DiagnosticsImageCapture.Poll();
     UpdateRuntimeAutomation(e.TotalTime);
@@ -231,7 +232,14 @@ void RaytracingDemo::OnKeyReleased(KeyEventArgs& e)
 {
     if (e.Key == KeyCode::F10 && m_ShowreelEnabled)
     {
-        StartShowreelPlayback();
+        if (!m_ShowreelPaused && !m_ShowreelCompleted)
+        {
+            m_ShowreelPaused = true;
+        }
+        else
+        {
+            StartShowreelPlayback();
+        }
         return;
     }
 

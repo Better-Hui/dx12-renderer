@@ -88,6 +88,11 @@ namespace RaytracingDemoRenderGraph
         static inline const RenderGraph::ResourceId SceneResourcesReadyToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.SceneResourcesReady");
         static inline const RenderGraph::ResourceId MeshletCounterResetToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.MeshletCounterReset");
         static inline const RenderGraph::ResourceId MeshletCullFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.MeshletCullFinished");
+        static inline const RenderGraph::ResourceId MeshletCandidateExpandFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.MeshletCandidateExpandFinished");
+        static inline const RenderGraph::ResourceId MeshletFineCullFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.MeshletFineCullFinished");
+//Modify Begin:2026-09-15 by Hui
+        static inline const RenderGraph::ResourceId MeshletStatisticsReadbackFinishedToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.MeshletStatisticsReadbackFinished");
+//Modify End
         static inline const RenderGraph::ResourceId DirectLightingIndirectArgumentsReadyToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.DirectLightingIndirectArgumentsReady");
         static inline const RenderGraph::ResourceId IndirectLightingIndirectArgumentsReadyToken = RenderGraph::ResourceIds::GetResourceId(L"RaytracingDemo.IndirectLightingIndirectArgumentsReady");
 //Modify Begin:2026-08-20 by Hui
