@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-28 by Hui
+//Modify Begin:2026-09-13 by Hui
 #include <ShaderLibrary/Common/RootSignature.hlsli>
 
 Texture2D<float4> SceneColor : register(t0, space0);
@@ -11,7 +11,8 @@ cbuffer HDR10PresentationConstants : register(b0)
 
 float3 ToneMapToDisplayNits(const float3 color)
 {
-    const float3 positiveColor = max(color, 0.0f);
+    const float3 finiteColor = all(isfinite(color)) ? color : 65504.0f;
+    const float3 positiveColor = min(max(finiteColor, 0.0f), 65504.0f);
     return (positiveColor / (positiveColor + 1.0f)) * PeakNits;
 }
 

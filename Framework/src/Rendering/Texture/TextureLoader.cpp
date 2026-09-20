@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-09-13 by Hui
 #include <Framework/Rendering/Texture/TextureLoader.h>
 
 #include <DX12Library/CommandList.h>
@@ -7,11 +7,14 @@
 #include <DX12Library/Texture.h>
 
 #include <DirectXTex.h>
-#include <OpenEXR/ImfRgbaFile.h>
+#include <OpenEXR/ImfChannelList.h>
+#include <OpenEXR/ImfFrameBuffer.h>
+#include <OpenEXR/ImfInputFile.h>
 
 #include <cstring>
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
 #include <ranges>
 #include <stdexcept>
 #include <vector>
@@ -33,25 +36,52 @@ namespace
     {
         using namespace OPENEXR_IMF_NAMESPACE;
 
-        RgbaInputFile input(path.string().c_str());
-        const IMATH_NAMESPACE::Box2i& dataWindow = input.dataWindow();
+        InputFile input(path.string().c_str());
+        const IMATH_NAMESPACE::Box2i& dataWindow = input.header().dataWindow();
         const int width = dataWindow.max.x - dataWindow.min.x + 1;
         const int height = dataWindow.max.y - dataWindow.min.y + 1;
         Assert(width > 0 && height > 0, "OpenEXR image has an invalid data window.");
 
-        std::vector<Rgba> pixels(static_cast<size_t>(width) * static_cast<size_t>(height));
-        input.setFrameBuffer(ComputeBasePointer(pixels.data(), dataWindow), 1u, static_cast<size_t>(width));
+        const size_t pixelCount = static_cast<size_t>(width) * static_cast<size_t>(height);
+        std::vector<float> red(pixelCount, 0.0f);
+        std::vector<float> green(pixelCount, 0.0f);
+        std::vector<float> blue(pixelCount, 0.0f);
+        std::vector<float> alpha(pixelCount, 1.0f);
+
+        const size_t rowStride = static_cast<size_t>(width) * sizeof(float);
+        const auto makeSlice = [&](std::vector<float>& channel, const double fillValue)
+        {
+            char* base = reinterpret_cast<char*>(channel.data());
+            base -= static_cast<std::ptrdiff_t>(dataWindow.min.x) * static_cast<std::ptrdiff_t>(sizeof(float));
+            base -= static_cast<std::ptrdiff_t>(dataWindow.min.y) * static_cast<std::ptrdiff_t>(rowStride);
+            return Slice(OPENEXR_IMF_NAMESPACE::FLOAT, base, sizeof(float), rowStride, 1, 1, fillValue);
+        };
+
+        FrameBuffer frameBuffer;
+        frameBuffer.insert("R", makeSlice(red, 0.0));
+        frameBuffer.insert("G", makeSlice(green, 0.0));
+        frameBuffer.insert("B", makeSlice(blue, 0.0));
+        frameBuffer.insert("A", makeSlice(alpha, 1.0));
+        input.setFrameBuffer(frameBuffer);
         input.readPixels(dataWindow.min.y, dataWindow.max.y);
 
         DirectX::ScratchImage image;
-        ThrowIfFailed(image.Initialize2D(DXGI_FORMAT_R16G16B16A16_FLOAT, width, height, 1u, 1u));
+        ThrowIfFailed(image.Initialize2D(DXGI_FORMAT_R32G32B32A32_FLOAT, width, height, 1u, 1u));
         const DirectX::Image* destination = image.GetImage(0u, 0u, 0u);
         for (int row = 0; row < height; ++row)
         {
-            std::memcpy(
-                destination->pixels + static_cast<size_t>(row) * destination->rowPitch,
-                pixels.data() + static_cast<size_t>(row) * static_cast<size_t>(width),
-                static_cast<size_t>(width) * sizeof(Rgba));
+            auto* destinationPixels = reinterpret_cast<float*>(
+                destination->pixels + static_cast<size_t>(row) * destination->rowPitch);
+            const size_t rowOffset = static_cast<size_t>(row) * static_cast<size_t>(width);
+            for (int column = 0; column < width; ++column)
+            {
+                const size_t pixel = rowOffset + static_cast<size_t>(column);
+                const size_t destinationOffset = static_cast<size_t>(column) * 4u;
+                destinationPixels[destinationOffset + 0u] = red[pixel];
+                destinationPixels[destinationOffset + 1u] = green[pixel];
+                destinationPixels[destinationOffset + 2u] = blue[pixel];
+                destinationPixels[destinationOffset + 3u] = alpha[pixel];
+            }
         }
 
         metadata = image.GetMetadata();

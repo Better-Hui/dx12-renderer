@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-28 by Hui
+//Modify Begin:2026-09-13 by Hui
 Texture2D<float4> SourceColor;
 Texture2D<float> AdaptedLuminance;
 RWTexture2D<float4> OutputColor;
@@ -21,7 +21,12 @@ cbuffer AutoExposureConstants
 
 float3 ToneMap(float3 color)
 {
-    color = max(color, 0.0f);
+    if (!all(isfinite(color)))
+    {
+        color = 65504.0f;
+    }
+
+    color = min(max(color, 0.0f), 65504.0f);
     color = color / (color + 1.0f);
     return pow(saturate(color), 1.0f / 2.2f);
 }
