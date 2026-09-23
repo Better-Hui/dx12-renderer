@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-09-23 by Hui
 #include <Framework/Rendering/Lighting/ReSTIRGIPass.h>
 
 #include <DX12Library/CommandList.h>
@@ -645,7 +645,8 @@ uint32_t ReSTIRGIPass::GetStageVariantKey(
         break;
 
     case ReSTIRGIStage::Spatial:
-        featureKey = variantConfig.EnableRayTracedSpatialBiasCorrection ? 1u : 0u;
+        featureKey = (variantConfig.EnableRayTracedSpatialBiasCorrection ? 1u : 0u) |
+            (variantConfig.EnableSpatialResampling ? 2u : 0u);
         break;
     }
 
@@ -688,6 +689,7 @@ std::vector<ShaderVariantDefine> ReSTIRGIPass::GetStageVariantDefines(
 
     case ReSTIRGIStage::Spatial:
         defines = {
+            booleanDefine("RESTIR_GI_USE_SPATIAL_REUSE", variantConfig.EnableSpatialResampling),
             booleanDefine(
                 "RESTIR_GI_USE_RAY_TRACED_SPATIAL_BIAS_CORRECTION",
                 variantConfig.EnableRayTracedSpatialBiasCorrection),

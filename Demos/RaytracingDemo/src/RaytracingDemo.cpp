@@ -413,7 +413,7 @@ namespace
     };
 //Modify End
 
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-09-23 by Hui
     std::filesystem::path GetScenePath()
     {
         char* scenePath = nullptr;
@@ -446,7 +446,7 @@ namespace
         std::free(scenePath);
 
         constexpr const char* DefaultSceneRelativePath =
-            "Assets/Scenes/LowPolyStreet/LowPolyStreet.fbx";
+            "Assets/Scenes/Sponza.unity";
         std::filesystem::path searchDirectory = std::filesystem::current_path();
         while (!searchDirectory.empty())
         {
@@ -464,7 +464,7 @@ namespace
             searchDirectory = parentDirectory;
         }
 
-        throw std::runtime_error("Default LowPolyStreet scene file does not exist. Set RAYTRACING_DEMO_SCENE to a .json, .unity, .fbx, or Mitsuba .xml file.");
+        throw std::runtime_error("Default Sponza scene file does not exist. Set RAYTRACING_DEMO_SCENE to a .json, .unity, .fbx, or Mitsuba .xml file.");
     }
 //Modify End
 

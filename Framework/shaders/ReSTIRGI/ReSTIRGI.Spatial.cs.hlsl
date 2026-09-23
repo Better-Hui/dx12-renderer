@@ -1,3 +1,4 @@
+//Modify Begin:2026-09-23 by Hui
 #include "ReSTIRGI/ReSTIRGISceneContract.hlsli"
 #include "ReSTIRGI/ReSTIRGI.hlsli"
 #include "ReSTIRGI/ReSTIRGIConstants.hlsli"
@@ -26,9 +27,17 @@ bool ReSTIRGIIsSpatiallyCompatible(
     const ReSTIRGI_Surface receiver,
     const ReSTIRGI_Surface neighbor)
 {
+    const float3 positionDelta = neighbor.PositionWs - receiver.PositionWs;
     return neighbor.Valid &&
         dot(receiver.NormalWs, neighbor.NormalWs) >= ReSTIRGI_SpatialNormalSimilarityThreshold &&
-        length(receiver.PositionWs - neighbor.PositionWs) <= ReSTIRGI_SpatialPositionSimilarityThreshold;
+        abs(dot(positionDelta, receiver.NormalWs)) <= ReSTIRGI_SpatialPositionSimilarityThreshold;
+}
+
+float2 ReSTIRGIGetSpatialOffset(const uint offsetIndex)
+{
+    const float2 offset = ReSTIRGISpatialOffsets[offsetIndex & 15u];
+    const float offsetLengthSquared = dot(offset, offset);
+    return offsetLengthSquared > 1.0f ? offset * rsqrt(offsetLengthSquared) : offset;
 }
 
 [numthreads(
@@ -46,6 +55,20 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     {
         return;
     }
+
+#if !RESTIR_GI_USE_SPATIAL_REUSE
+    ReSTIRGIWriteReservoir(
+        ReSTIRGIHistoryCreation,
+        ReSTIRGIHistoryHit,
+        ReSTIRGIHistoryLight,
+        pixel,
+        ReSTIRGIReadReservoir(
+            ReSTIRGITemporalCreation,
+            ReSTIRGITemporalHit,
+            ReSTIRGITemporalLight,
+            pixel));
+    return;
+#endif
 
     ReSTIRGIReservoir result = ReSTIRGIEmptyReservoir();
     const ReSTIRGI_Surface surface = ReSTIRGI_LoadSurface(pixel);
@@ -85,7 +108,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         [loop]
         for (uint sampleIndex = 0u; sampleIndex < ReSTIRGI_SpatialNeighborCount; ++sampleIndex)
         {
-            const float2 offset = ReSTIRGISpatialOffsets[(offsetStart + sampleIndex) & 15u];
+            const float2 offset = ReSTIRGIGetSpatialOffset(offsetStart + sampleIndex);
             const int2 neighborPixel = clamp(
                 int2(pixel) + int2(round(offset * ReSTIRGI_SpatialSamplingRadius)),
                 int2(0, 0),
@@ -159,7 +182,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
                     continue;
                 }
 
-                const float2 offset = ReSTIRGISpatialOffsets[(offsetStart + sampleIndex) & 15u];
+                const float2 offset = ReSTIRGIGetSpatialOffset(offsetStart + sampleIndex);
                 const int2 neighborPixel = clamp(
                     int2(pixel) + int2(round(offset * ReSTIRGI_SpatialSamplingRadius)),
                     int2(0, 0),

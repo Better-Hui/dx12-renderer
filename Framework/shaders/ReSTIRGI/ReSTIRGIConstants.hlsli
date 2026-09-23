@@ -1,13 +1,17 @@
 #ifndef FRAMEWORK_RESTIR_GI_CONSTANTS_HLSLI
 #define FRAMEWORK_RESTIR_GI_CONSTANTS_HLSLI
 
-//Modify Begin:2026-08-11 by Hui
+//Modify Begin:2026-09-23 by Hui
 #ifndef RESTIR_GI_USE_TEMPORAL_REUSE
 #define RESTIR_GI_USE_TEMPORAL_REUSE 1
 #endif
 
 #ifndef RESTIR_GI_USE_RAY_TRACED_SPATIAL_BIAS_CORRECTION
 #define RESTIR_GI_USE_RAY_TRACED_SPATIAL_BIAS_CORRECTION 0
+#endif
+
+#ifndef RESTIR_GI_USE_SPATIAL_REUSE
+#define RESTIR_GI_USE_SPATIAL_REUSE 1
 #endif
 
 #ifndef RESTIR_GI_USE_TEMPORAL_JACOBIAN
@@ -19,7 +23,7 @@
 #endif
 //Modify End
 
-//Modify Begin:2026-08-10 by Hui
+//Modify Begin:2026-09-23 by Hui
 cbuffer ReSTIRGIConstants : register(b1)
 {
     uint ReSTIRGI_Width;
