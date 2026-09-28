@@ -56,11 +56,6 @@ namespace RaytracingDemoPasses
             RenderGraph::RenderGraphBuilder& renderGraphBuilder,
             const RaytracingDemoPassResources& resources,
             const RaytracingDemoPassConfig& config);
-        static void AddPostDenoiseAccumulationPass(
-            RenderGraph::RenderGraphBuilder& renderGraphBuilder,
-            const RaytracingDemoPassResources& resources,
-            const RaytracingDemoPassConfig& config,
-            RenderGraph::ResourceId sceneReadyToken);
         static void AddDebugTexturePass(
             RenderGraph::RenderGraphBuilder& renderGraphBuilder,
             const RaytracingDemoPassResources& resources,

@@ -68,20 +68,6 @@ namespace
         PathTracingCompositeFeatures Features = {};
     };
 
-    struct PostDenoiseAccumulationPassData
-    {
-        RaytracingDemoPassResourcesSnapshot Resources;
-        RaytracingDemoPassConfig Config = {};
-    };
-
-    struct PostDenoiseAccumulationConstants
-    {
-        uint32_t Width = 1u;
-        uint32_t Height = 1u;
-        uint32_t PreviousSampleCount = 0u;
-        uint32_t Padding = 0u;
-    };
-
     struct ClearUavPassData
     {
         RenderGraph::ResourceId Resource = 0;
@@ -125,7 +111,6 @@ namespace
     }
 //Modify End
 }
-
 //Modify Begin:2026-08-24 by Hui
 void RaytracingDemoPasses::Builder::AddActivePixelCompactionPasses(
     RenderGraph::RenderGraphBuilder& renderGraphBuilder,
@@ -751,57 +736,3 @@ void RaytracingDemoPasses::Builder::AddLightingCompositePass(
 //Modify End
         });
 }
-
-//Modify Begin:2026-09-10 by Hui
-void RaytracingDemoPasses::Builder::AddPostDenoiseAccumulationPass(
-    RenderGraph::RenderGraphBuilder& renderGraphBuilder,
-    const RaytracingDemoPassResources& resources,
-    const RaytracingDemoPassConfig& config,
-    const RenderGraph::ResourceId sceneReadyToken)
-{
-    using namespace RenderGraph;
-    renderGraphBuilder.AddPass<PostDenoiseAccumulationPassData>(
-        L"Post-Denoise Accumulation",
-        [&resources, config, sceneReadyToken](
-            RenderGraphPassBuilder& passBuilder,
-            PostDenoiseAccumulationPassData& passData)
-        {
-            passData.Resources.emplace(resources);
-            passData.Config = config;
-            passBuilder.ReadToken(sceneReadyToken);
-            // The token orders the in-place SceneColor update after the denoiser.
-            // Declaring the UAVs as graph outputs avoids creating an SSA-style
-            // read/write cycle for resources that are intentionally updated in place.
-            passBuilder.WriteUav(DemoResourceIds::SceneColor);
-            passBuilder.WriteUav(DemoResourceIds::HistoryColor);
-            passBuilder.WriteToken(DemoResourceIds::AccumulationFinishedToken);
-        },
-        [](const PostDenoiseAccumulationPassData& passData, const RenderContext& context, CommandList& commandList)
-        {
-            const RaytracingDemoFrameState& frameState = *passData.Config.FrameState;
-            const PostDenoiseAccumulationConstants constants = {
-                frameState.Width,
-                frameState.Height,
-                frameState.AccumulationFrameIndex,
-                0u,
-            };
-            ComputeShader& shader = *passData.Resources->PostDenoiseAccumulationShader;
-            CommandContext commandContext(commandList);
-            commandContext.SetConstantBuffer(shader, "PostDenoiseAccumulationConstants", constants);
-            commandContext.SetUnorderedAccessView(
-                shader,
-                "SceneColor",
-                UnorderedAccessView(context.GetTexture(DemoResourceIds::SceneColor)));
-            commandContext.SetUnorderedAccessView(
-                shader,
-                "HistoryColor",
-                UnorderedAccessView(context.GetTexture(DemoResourceIds::HistoryColor)));
-            commandContext.BindPipeline(shader);
-            commandContext.BindDescriptorSet(shader.GetDescriptorSet());
-            commandContext.Dispatch(
-                Math::DivideByMultiple(frameState.Width, 8u),
-                Math::DivideByMultiple(frameState.Height, 8u),
-                1u);
-        });
-}
-//Modify End

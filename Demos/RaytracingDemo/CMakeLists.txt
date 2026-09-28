@@ -170,7 +170,6 @@ set(SHADER_FILES_COMPUTE
         shaders/PathTracing/DirectLighting.softshadow.cs.hlsl
         shaders/PathTracing/IndirectLighting.softshadow.cs.hlsl
         shaders/PathTracing/LightingComposite.cs.hlsl
-        shaders/PathTracing/PostDenoiseAccumulation.cs.hlsl
         shaders/Upscaling/DLSSRayReconstructionPrepare.cs.hlsl
         shaders/Diagnostics/CopyQueueValidation.cs.hlsl
         shaders/Skybox/Skybox.cs.hlsl

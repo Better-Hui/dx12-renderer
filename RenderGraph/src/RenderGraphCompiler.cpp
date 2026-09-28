@@ -73,9 +73,35 @@ namespace
         return reachable[consumerIndex] != 0u;
     }
 
+    bool DependsOnEarlierDeclaredPass(
+        const std::span<const std::unique_ptr<RenderPass>> renderPasses,
+        const RenderPass& pass,
+        const RenderPass& potentialProducer)
+    {
+        const auto passIt = std::ranges::find_if(
+            renderPasses,
+            [&pass](const std::unique_ptr<RenderPass>& candidate)
+            {
+                return candidate.get() == &pass;
+            });
+        const auto producerIt = std::ranges::find_if(
+            renderPasses,
+            [&potentialProducer](const std::unique_ptr<RenderPass>& candidate)
+            {
+                return candidate.get() == &potentialProducer;
+            });
+        if (passIt == renderPasses.end() || producerIt == renderPasses.end() || producerIt >= passIt)
+        {
+            return false;
+        }
+        return DirectlyDependsOn(pass, potentialProducer);
+    }
+
     std::vector<std::vector<RenderPass*>> TopologicallySort(
         std::span<const std::unique_ptr<RenderPass>> renderPasses)
     {
+        // Resource IDs represent the current graph version. For an in-place read/write pass,
+        // bind the input to the nearest producer declared before it and never to a future writer.
         std::vector<RenderPass*> unresolvedPasses;
         unresolvedPasses.reserve(renderPasses.size());
         for (const std::unique_ptr<RenderPass>& renderPass : renderPasses)
@@ -91,9 +117,10 @@ namespace
             {
                 const bool hasDependency = std::ranges::any_of(
                     unresolvedPasses,
-                    [renderPass](const RenderPass* otherPass)
+                    [renderPass, renderPasses](const RenderPass* otherPass)
                     {
-                        return renderPass != otherPass && DirectlyDependsOn(*renderPass, *otherPass);
+                        return renderPass != otherPass &&
+                            DependsOnEarlierDeclaredPass(renderPasses, *renderPass, *otherPass);
                     });
                 if (!hasDependency)
                 {

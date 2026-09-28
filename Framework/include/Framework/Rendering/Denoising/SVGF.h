@@ -19,6 +19,8 @@ namespace RenderGraph
     class RenderGraphBuilder;
 }
 
+class SVGFGraphPass;
+
 class SVGF
 {
 public:
@@ -62,6 +64,7 @@ public:
     void AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs inputs);
 
 private:
+    friend class SVGFGraphPass;
     struct TemporalConstants
     {
         uint32_t Width = 1;

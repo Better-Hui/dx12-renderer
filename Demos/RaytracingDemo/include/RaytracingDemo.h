@@ -96,6 +96,7 @@ public:
 //Modify Begin:2026-08-19 by Hui
     RaytracingDemoPassResources CreatePassResources();
     RaytracingDemoPassConfig CreatePassConfig() const;
+    FrameworkDeviceContext& GetFrameworkDeviceContext() noexcept { return m_FrameworkDeviceContext; }
     //Modify End
 //Modify Begin:2026-08-26 by Hui
     const std::shared_ptr<Texture>& GetRayTracingEnvironmentTexture() const;

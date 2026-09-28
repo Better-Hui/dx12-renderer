@@ -306,17 +306,6 @@ void RaytracingDemoShaderPipelineController::CreatePostProcessPipelines()
             ComputePipelineDescBuilder::ReflectedDefault(*shaderBlob).Build());
     });
 
-    CreatePipeline("PostDenoiseAccumulation", [this]()
-    {
-        const auto shaderBlob = LoadShaderVariant(
-            L"PostDenoiseAccumulation.cs.cso",
-            L"Demos/RaytracingDemo/shaders/PathTracing/PostDenoiseAccumulation.cs.hlsl",
-            ShaderTargetProfile::Compute());
-        m_PostDenoiseAccumulationShader = std::make_shared<ComputeShader>(
-            m_DeviceContext,
-            *shaderBlob,
-            ComputePipelineDescBuilder::ReflectedDefault(*shaderBlob).Build());
-    });
 }
 
 void RaytracingDemoShaderPipelineController::CreateLightingPipelines()
@@ -350,7 +339,6 @@ void RaytracingDemoShaderPipelineController::CreateLightingPipelines()
 void RaytracingDemoShaderPipelineController::Reset()
 {
     m_LightBillboardShader.reset();
-    m_PostDenoiseAccumulationShader.reset();
     m_CopyQueueValidationShader.reset();
     m_DLSSRayReconstructionPrepareShader.reset();
     m_SkyboxCubemapStripComputeShader.reset();

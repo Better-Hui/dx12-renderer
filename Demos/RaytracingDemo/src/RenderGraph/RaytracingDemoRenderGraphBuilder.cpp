@@ -4,6 +4,7 @@
 #include <RenderGraph/RaytracingDemoGraphResources.h>
 #include <Passes/RaytracingDemoPasses.h>
 #include <RaytracingDemo.h>
+#include <Framework/Rendering/PostProcess/AccumulationPass.h>
 #include <RenderGraph/RenderGraphBuilder.h>
 
 #include <utility>
@@ -161,11 +162,21 @@ std::unique_ptr<RenderGraph::RenderGraphRoot> RaytracingDemoRenderGraphBuilder::
         }
         if (frameState.UsesPostDenoiseAccumulation())
         {
-            RaytracingDemoPasses::Builder::AddPostDenoiseAccumulationPass(
-                renderGraphBuilder,
-                resources,
-                config,
-                sceneReadyToken);
+            const auto accumulationFrameState = config.FrameState;
+            renderGraphBuilder.AddPass(std::make_unique<AccumulationPass>(
+                demo.GetFrameworkDeviceContext(),
+                AccumulationPass::Inputs{
+                    .SceneColor = RaytracingDemoRenderGraph::ResourceIds::SceneColor,
+                    .HistoryColor = RaytracingDemoRenderGraph::ResourceIds::HistoryColor,
+                    .InputToken = sceneReadyToken,
+                    .OutputToken = RaytracingDemoRenderGraph::ResourceIds::AccumulationFinishedToken,
+                    .Width = frameState.Width,
+                    .Height = frameState.Height,
+                    .ResolvePreviousSampleCount = [accumulationFrameState]()
+                    {
+                        return accumulationFrameState->AccumulationFrameIndex;
+                    },
+                }));
             sceneReadyToken = RaytracingDemoRenderGraph::ResourceIds::AccumulationFinishedToken;
         }
     }

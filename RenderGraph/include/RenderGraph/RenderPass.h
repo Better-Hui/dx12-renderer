@@ -175,6 +175,9 @@ namespace RenderGraph
         virtual ~RenderPass() = default;
 
     protected:
+//Modify Begin:2026-09-28 by Hui
+        RenderPass() = default;
+//Modify End
         virtual void InitImpl(CommandList& commandList) = 0;
         virtual void ExecuteImpl(const RenderContext& context, CommandList& commandList) = 0;
 //Modify Begin:2026-07-28 by Hui

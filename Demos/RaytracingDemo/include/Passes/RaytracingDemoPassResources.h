@@ -154,7 +154,6 @@ struct RaytracingDemoPassResources
     DLSS& Dlss;
     std::shared_ptr<ComputeShader> DLSSRayReconstructionPrepareShader;
     std::shared_ptr<ComputeShader> CopyQueueValidationShader;
-    std::shared_ptr<ComputeShader> PostDenoiseAccumulationShader;
     DenoiserController& Denoisers;
     BloomController& Bloom;
     AutoExposure& Exposure;

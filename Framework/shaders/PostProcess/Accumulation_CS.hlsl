@@ -1,4 +1,4 @@
-//Modify Begin:2026-09-10 by Hui
+//Modify Begin:2026-09-28 by Hui
 RWTexture2D<float4> SceneColor;
 RWTexture2D<float4> HistoryColor;
 

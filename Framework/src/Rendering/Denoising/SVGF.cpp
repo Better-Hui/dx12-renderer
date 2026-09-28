@@ -38,33 +38,177 @@ namespace
             ComputePipelineDescBuilder::ReflectedDefault(shader).Build());
     }
 
-    struct SvgfTemporalPassData
+}
+
+class SVGFGraphPass final : public RenderGraph::RenderPass
+{
+public:
+    enum class Kind
     {
-        SVGF* Feature = nullptr;
-        std::shared_ptr<const SVGF::GraphInputs> Inputs;
-        RenderGraph::ResourceId TemporalColor = 0;
-        RenderGraph::ResourceId TemporalMoments = 0;
-        RenderGraph::ResourceId Variance = 0;
+        Temporal,
+        Atrous,
+        Composite,
     };
 
-    struct SvgfAtrousPassData
+    struct Desc
     {
-        SVGF* Feature = nullptr;
+        Kind PassKind = Kind::Temporal;
         std::shared_ptr<const SVGF::GraphInputs> Inputs;
+        const wchar_t* PassName = L"SVGF";
         RenderGraph::ResourceId Source = 0;
         RenderGraph::ResourceId Destination = 0;
         RenderGraph::ResourceId Variance = 0;
-        uint32_t StepSize = 1;
-        uint32_t Direction = 0;
+        RenderGraph::ResourceId TemporalColor = 0;
+        RenderGraph::ResourceId TemporalMoments = 0;
+        RenderGraph::ResourceId OutputToken = 0;
+        uint32_t StepSize = 1u;
+        uint32_t Direction = 0u;
+        RenderGraph::ImportedResourceHandle HistoryColorRead;
+        RenderGraph::ImportedResourceHandle HistoryColorWrite;
+        RenderGraph::ImportedResourceHandle HistoryMomentsRead;
+        RenderGraph::ImportedResourceHandle HistoryMomentsWrite;
     };
 
-    struct SvgfCompositePassData
+    SVGFGraphPass(SVGF& feature, Desc desc)
+        : m_Kind(desc.PassKind)
+        , m_Feature(feature)
+        , m_Inputs(std::move(desc.Inputs))
+        , m_Source(desc.Source)
+        , m_Destination(desc.Destination)
+        , m_Variance(desc.Variance)
+        , m_TemporalColor(desc.TemporalColor)
+        , m_TemporalMoments(desc.TemporalMoments)
+        , m_OutputToken(desc.OutputToken)
+        , m_StepSize(desc.StepSize)
+        , m_Direction(desc.Direction)
     {
-        SVGF* Feature = nullptr;
-        std::shared_ptr<const SVGF::GraphInputs> Inputs;
-        RenderGraph::ResourceId Source = 0;
-    };
-}
+        SetPassName(desc.PassName);
+        if (m_Kind == Kind::Temporal)
+        {
+            RegisterInput({ m_Inputs->InputToken, RenderGraph::InputType::Token });
+            RegisterInput({ m_Inputs->NoisyRadiance, RenderGraph::InputType::NonPixelShaderResource });
+            RegisterInput({ m_Inputs->GBufferNormal, RenderGraph::InputType::NonPixelShaderResource });
+            RegisterInput({ m_Inputs->GBufferPosition, RenderGraph::InputType::NonPixelShaderResource });
+            RegisterInput({ m_Inputs->MotionVector, RenderGraph::InputType::NonPixelShaderResource });
+            RegisterInput({ m_Inputs->Depth, RenderGraph::InputType::NonPixelShaderResource });
+            RegisterInput({ desc.HistoryColorRead.GetId(), RenderGraph::InputType::ExternalAccess });
+            RegisterInput({ desc.HistoryMomentsRead.GetId(), RenderGraph::InputType::ExternalAccess });
+            RegisterOutput({ m_TemporalColor, RenderGraph::OutputType::UnorderedAccess });
+            RegisterOutput({ m_TemporalMoments, RenderGraph::OutputType::UnorderedAccess });
+            RegisterOutput({ m_Variance, RenderGraph::OutputType::UnorderedAccess });
+            RegisterOutput({ desc.HistoryColorWrite.GetId(), RenderGraph::OutputType::ExternalAccess });
+            RegisterOutput({ desc.HistoryMomentsWrite.GetId(), RenderGraph::OutputType::ExternalAccess });
+            RegisterOutput({ m_OutputToken, RenderGraph::OutputType::Token });
+            AddImportedResourceAccess(
+                desc.HistoryColorRead,
+                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                RenderGraph::ExternalResourceAccessMode::Read,
+                false);
+            AddImportedResourceAccess(
+                desc.HistoryMomentsRead,
+                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                RenderGraph::ExternalResourceAccessMode::Read,
+                false);
+            AddImportedResourceAccess(
+                desc.HistoryColorWrite,
+                D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                RenderGraph::ExternalResourceAccessMode::Write,
+                false);
+            AddImportedResourceAccess(
+                desc.HistoryMomentsWrite,
+                D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                RenderGraph::ExternalResourceAccessMode::Write,
+                false);
+        }
+        else if (m_Kind == Kind::Atrous)
+        {
+            RegisterInput({ m_Inputs->InputToken, RenderGraph::InputType::Token });
+            RegisterInput({ m_Source, RenderGraph::InputType::NonPixelShaderResource });
+            RegisterInput({ m_Variance, RenderGraph::InputType::NonPixelShaderResource });
+            RegisterInput({ m_Inputs->GBufferNormal, RenderGraph::InputType::NonPixelShaderResource });
+            RegisterInput({ m_Inputs->GBufferPosition, RenderGraph::InputType::NonPixelShaderResource });
+            RegisterInput({ m_Inputs->Depth, RenderGraph::InputType::NonPixelShaderResource });
+            RegisterOutput({ m_Destination, RenderGraph::OutputType::UnorderedAccess });
+            RegisterOutput({ m_OutputToken, RenderGraph::OutputType::Token });
+        }
+        else
+        {
+            RegisterInput({ m_Inputs->InputToken, RenderGraph::InputType::Token });
+            RegisterInput({ m_Source, RenderGraph::InputType::NonPixelShaderResource });
+            RegisterInput({ m_Inputs->Depth, RenderGraph::InputType::NonPixelShaderResource });
+            RegisterOutput({ m_Inputs->Output, RenderGraph::OutputType::UnorderedAccess });
+            RegisterOutput({ m_OutputToken, RenderGraph::OutputType::Token });
+        }
+    }
+
+protected:
+    void InitImpl(CommandList&) override {}
+
+    void ExecuteImpl(const RenderGraph::RenderContext& context, CommandList& commandList) override
+    {
+        const uint32_t width = context.GetMetadata().m_ScreenWidth;
+        const uint32_t height = context.GetMetadata().m_ScreenHeight;
+        if (m_Kind == Kind::Temporal)
+        {
+            const uint32_t readIndex = static_cast<uint32_t>(m_Inputs->ResolveFrameIndex() & 1ull);
+            const uint32_t writeIndex = 1u - readIndex;
+            m_Feature.RecordTemporal(
+                commandList,
+                context.GetTexture(m_Inputs->NoisyRadiance),
+                context.GetTexture(m_Inputs->GBufferNormal),
+                context.GetTexture(m_Inputs->GBufferPosition),
+                context.GetTexture(m_Inputs->MotionVector),
+                context.GetTexture(m_Inputs->Depth),
+                m_Feature.m_HistoryColor[readIndex],
+                m_Feature.m_HistoryMoments[readIndex],
+                context.GetTexture(m_TemporalColor),
+                context.GetTexture(m_TemporalMoments),
+                context.GetTexture(m_Variance),
+                m_Feature.m_HistoryColor[writeIndex],
+                m_Feature.m_HistoryMoments[writeIndex],
+                width,
+                height);
+        }
+        else if (m_Kind == Kind::Atrous)
+        {
+            m_Feature.RecordAtrous(
+                commandList,
+                context.GetTexture(m_Source),
+                context.GetTexture(m_Destination),
+                context.GetTexture(m_Variance),
+                context.GetTexture(m_Inputs->GBufferNormal),
+                context.GetTexture(m_Inputs->GBufferPosition),
+                context.GetTexture(m_Inputs->Depth),
+                width,
+                height,
+                m_StepSize,
+                m_Direction);
+        }
+        else
+        {
+            m_Feature.RecordComposite(
+                commandList,
+                context.GetTexture(m_Source),
+                context.GetTexture(m_Inputs->Depth),
+                context.GetTexture(m_Inputs->Output),
+                width,
+                height);
+        }
+    }
+
+private:
+    Kind m_Kind;
+    SVGF& m_Feature;
+    std::shared_ptr<const SVGF::GraphInputs> m_Inputs;
+    RenderGraph::ResourceId m_Source = 0;
+    RenderGraph::ResourceId m_Destination = 0;
+    RenderGraph::ResourceId m_Variance = 0;
+    RenderGraph::ResourceId m_TemporalColor = 0;
+    RenderGraph::ResourceId m_TemporalMoments = 0;
+    RenderGraph::ResourceId m_OutputToken = 0;
+    uint32_t m_StepSize = 1u;
+    uint32_t m_Direction = 0u;
+};
 
 SVGF::SVGF(FrameworkDeviceContext& deviceContext)
     : m_TemporalShader(CreateReflectedComputeShader(
@@ -186,54 +330,21 @@ void SVGF::AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs input
     const std::wstring temporalTokenName = sharedInputs->DiagnosticNamePrefix + L".TemporalFinished";
     const RenderGraph::ResourceId temporalToken = builder.CreateToken(temporalTokenName.c_str());
 
-    builder.AddPass<SvgfTemporalPassData>(
-        L"SVGF Temporal",
-        [this, sharedInputs, historyColorRead, historyColorWrite, historyMomentsRead, historyMomentsWrite,
-            temporalColor, temporalMoments, variance, temporalToken](
-            RenderGraph::RenderGraphPassBuilder& passBuilder,
-            SvgfTemporalPassData& passData)
-        {
-            passData.Feature = this;
-            passData.Inputs = sharedInputs;
-            passData.TemporalColor = temporalColor;
-            passData.TemporalMoments = temporalMoments;
-            passData.Variance = variance;
-            passBuilder.ReadToken(sharedInputs->InputToken);
-            passBuilder.ReadBuffer(sharedInputs->NoisyRadiance);
-            passBuilder.ReadBuffer(sharedInputs->GBufferNormal);
-            passBuilder.ReadBuffer(sharedInputs->GBufferPosition);
-            passBuilder.ReadBuffer(sharedInputs->MotionVector);
-            passBuilder.ReadBuffer(sharedInputs->Depth);
-            passBuilder.ReadImported(historyColorRead, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-            passBuilder.ReadImported(historyMomentsRead, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-            passBuilder.WriteUav(temporalColor);
-            passBuilder.WriteUav(temporalMoments);
-            passBuilder.WriteUav(variance);
-            passBuilder.WriteImported(historyColorWrite, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-            passBuilder.WriteImported(historyMomentsWrite, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-            passBuilder.WriteToken(temporalToken);
-        },
-        [](const SvgfTemporalPassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
-        {
-            const uint32_t readIndex = static_cast<uint32_t>(passData.Inputs->ResolveFrameIndex() & 1ull);
-            const uint32_t writeIndex = 1u - readIndex;
-            passData.Feature->RecordTemporal(
-                commandList,
-                context.GetTexture(passData.Inputs->NoisyRadiance),
-                context.GetTexture(passData.Inputs->GBufferNormal),
-                context.GetTexture(passData.Inputs->GBufferPosition),
-                context.GetTexture(passData.Inputs->MotionVector),
-                context.GetTexture(passData.Inputs->Depth),
-                passData.Feature->m_HistoryColor[readIndex],
-                passData.Feature->m_HistoryMoments[readIndex],
-                context.GetTexture(passData.TemporalColor),
-                context.GetTexture(passData.TemporalMoments),
-                context.GetTexture(passData.Variance),
-                passData.Feature->m_HistoryColor[writeIndex],
-                passData.Feature->m_HistoryMoments[writeIndex],
-                context.GetMetadata().m_ScreenWidth,
-                context.GetMetadata().m_ScreenHeight);
-        });
+    builder.AddPass(std::make_unique<SVGFGraphPass>(
+        *this,
+        SVGFGraphPass::Desc{
+            .PassKind = SVGFGraphPass::Kind::Temporal,
+            .Inputs = sharedInputs,
+            .PassName = L"SVGF Temporal",
+            .Variance = variance,
+            .TemporalColor = temporalColor,
+            .TemporalMoments = temporalMoments,
+            .OutputToken = temporalToken,
+            .HistoryColorRead = historyColorRead,
+            .HistoryColorWrite = historyColorWrite,
+            .HistoryMomentsRead = historyMomentsRead,
+            .HistoryMomentsWrite = historyMomentsWrite,
+        }));
 
     RenderGraph::ResourceId filtered = temporalColor;
     RenderGraph::ResourceId previousAtrousToken = temporalToken;
@@ -255,86 +366,47 @@ void SVGF::AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs input
             (sharedInputs->DiagnosticNamePrefix + L".AtrousHorizontalFinished." + std::to_wstring(iteration)).c_str());
         const RenderGraph::ResourceId verticalToken = builder.CreateToken(
             (sharedInputs->DiagnosticNamePrefix + L".AtrousVerticalFinished." + std::to_wstring(iteration)).c_str());
-        const auto addAtrousPass = [this, &builder, sharedInputs, variance, stepSize](
-            const wchar_t* passName,
-            const RenderGraph::ResourceId source,
-            const RenderGraph::ResourceId destination,
-            const uint32_t direction,
-            const RenderGraph::ResourceId inputToken,
-            const RenderGraph::ResourceId outputToken)
-        {
-            builder.AddPass<SvgfAtrousPassData>(
-                passName,
-                [this, sharedInputs, source, destination, variance, stepSize, direction, inputToken, outputToken](
-                    RenderGraph::RenderGraphPassBuilder& passBuilder,
-                    SvgfAtrousPassData& passData)
-                {
-                    passData.Feature = this;
-                    passData.Inputs = sharedInputs;
-                    passData.Source = source;
-                    passData.Destination = destination;
-                    passData.Variance = variance;
-                    passData.StepSize = stepSize;
-                    passData.Direction = direction;
-                    passBuilder.ReadToken(inputToken);
-                    passBuilder.ReadBuffer(source);
-                    passBuilder.ReadBuffer(variance);
-                    passBuilder.ReadBuffer(sharedInputs->GBufferNormal);
-                    passBuilder.ReadBuffer(sharedInputs->GBufferPosition);
-                    passBuilder.ReadBuffer(sharedInputs->Depth);
-                    passBuilder.WriteUav(destination);
-                    passBuilder.WriteToken(outputToken);
-                },
-                [](const SvgfAtrousPassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
-                {
-                    passData.Feature->RecordAtrous(
-                        commandList,
-                        context.GetTexture(passData.Source),
-                        context.GetTexture(passData.Destination),
-                        context.GetTexture(passData.Variance),
-                        context.GetTexture(passData.Inputs->GBufferNormal),
-                        context.GetTexture(passData.Inputs->GBufferPosition),
-                        context.GetTexture(passData.Inputs->Depth),
-                        context.GetMetadata().m_ScreenWidth,
-                        context.GetMetadata().m_ScreenHeight,
-                        passData.StepSize,
-                        passData.Direction);
-                });
-        };
-
         const std::wstring horizontalName = L"SVGF A-Trous Horizontal " + std::to_wstring(iteration);
         const std::wstring verticalName = L"SVGF A-Trous Vertical " + std::to_wstring(iteration);
-        addAtrousPass(horizontalName.c_str(), filtered, horizontalOutput, 0u, previousAtrousToken, horizontalToken);
-        addAtrousPass(verticalName.c_str(), horizontalOutput, verticalOutput, 1u, horizontalToken, verticalToken);
+        builder.AddPass(std::make_unique<SVGFGraphPass>(
+            *this,
+            SVGFGraphPass::Desc{
+                .PassKind = SVGFGraphPass::Kind::Atrous,
+                .Inputs = sharedInputs,
+                .PassName = horizontalName.c_str(),
+                .Source = filtered,
+                .Destination = horizontalOutput,
+                .Variance = variance,
+                .OutputToken = horizontalToken,
+                .StepSize = stepSize,
+                .Direction = 0u,
+            }));
+        builder.AddPass(std::make_unique<SVGFGraphPass>(
+            *this,
+            SVGFGraphPass::Desc{
+                .PassKind = SVGFGraphPass::Kind::Atrous,
+                .Inputs = sharedInputs,
+                .PassName = verticalName.c_str(),
+                .Source = horizontalOutput,
+                .Destination = verticalOutput,
+                .Variance = variance,
+                .OutputToken = verticalToken,
+                .StepSize = stepSize,
+                .Direction = 1u,
+            }));
         filtered = verticalOutput;
         previousAtrousToken = verticalToken;
     }
 
-    builder.AddPass<SvgfCompositePassData>(
-        L"SVGF Composite",
-        [this, sharedInputs, filtered, previousAtrousToken](
-            RenderGraph::RenderGraphPassBuilder& passBuilder,
-            SvgfCompositePassData& passData)
-        {
-            passData.Feature = this;
-            passData.Inputs = sharedInputs;
-            passData.Source = filtered;
-            passBuilder.ReadToken(previousAtrousToken);
-            passBuilder.ReadBuffer(filtered);
-            passBuilder.ReadBuffer(sharedInputs->Depth);
-            passBuilder.WriteUav(sharedInputs->Output);
-            passBuilder.WriteToken(sharedInputs->OutputToken);
-        },
-        [](const SvgfCompositePassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
-        {
-            passData.Feature->RecordComposite(
-                commandList,
-                context.GetTexture(passData.Source),
-                context.GetTexture(passData.Inputs->Depth),
-                context.GetTexture(passData.Inputs->Output),
-                context.GetMetadata().m_ScreenWidth,
-                context.GetMetadata().m_ScreenHeight);
-        });
+    builder.AddPass(std::make_unique<SVGFGraphPass>(
+        *this,
+        SVGFGraphPass::Desc{
+            .PassKind = SVGFGraphPass::Kind::Composite,
+            .Inputs = sharedInputs,
+            .PassName = L"SVGF Composite",
+            .Source = filtered,
+            .OutputToken = sharedInputs->OutputToken,
+        }));
 }
 
 void SVGF::RecordTemporal(

@@ -3504,7 +3504,6 @@ RaytracingDemoPassResources RaytracingDemo::CreatePassResources()
         m_DLSS,
         m_ShaderPipelineBootstrap.GetDLSSRayReconstructionPrepareShader(),
         m_ShaderPipelineBootstrap.GetCopyQueueValidationShader(),
-        m_ShaderPipelineBootstrap.GetPostDenoiseAccumulationShader(),
         m_Denoisers,
         m_Bloom,
         m_AutoExposure,
