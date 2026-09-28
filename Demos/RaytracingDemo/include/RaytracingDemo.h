@@ -189,7 +189,16 @@ private:
         DenoisersAndDLSS,
         AllHistory,
     };
-    void ResetAccumulation(AccumulationResetScope scope = AccumulationResetScope::DenoisersAndDLSS);
+    enum class RenderPipelineUpdate
+    {
+        None,
+        RebuildPipelines,
+        RebuildPipelinesAndRebindResources,
+    };
+    void ResetAccumulation(AccumulationResetScope scope);
+    void ApplyRenderStateChange(
+        AccumulationResetScope scope,
+        RenderPipelineUpdate pipelineUpdate);
 //Modify End
 //Modify Begin:2026-08-25 by Hui
     bool IsDenoiserEnabled() const { return m_Denoisers.UsesRenderGraphPasses() && !(m_DLSS.IsEnabled() && m_DLSS.IsRayReconstructionEnabled()); }

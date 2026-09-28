@@ -285,7 +285,7 @@ CMake 生成的工程会保持各 target 的真实源码目录。`DX12Library`�
 
 - [架构总览](Docs/ArchitectureOverview.zh-CN.md)：按 DX12Library、Framework、RenderGraph、RaytracingDemo 分层说明职责、数据流和当前技术边界。
 - [RaytracingDemo API 说明（英文）](Docs/RaytracingSampleApi.md)：介绍 Framework 用法、RenderGraph、profiling 和功能边界。
-- [Framework Diagnostics](Docs/FrameworkDiagnosticsPlan.zh-CN.md)：说明已落地的机器可读 capture、确定性自动化、AI 证据查询、约束检查、复现与 profiler 契约，以及仍待实现的 DRED/readback/retention 能力。
+- [Framework Diagnostics](Docs/FrameworkDiagnosticsPlan.zh-CN.md)：说明已落地的机器可读 capture、确定性自动化、AI 证据查询、DRED/readback 约束检查、复现与 profiler 契约，以及仍待实现的完整 session 归档、压缩与 retention policy。
 - 使用或再分发本仓库前，请保留上游与第三方组件的声明，并审阅对应的许可证文件。
 - 本 README 不引入替代性的仓库级许可证。
 - `External/DLSS/`、`External/NRI/`、`External/NRD/` 以及 `External/Streamline/` 中的 NVIDIA 组件均保留上游条款；[OIDN](https://github.com/OpenImageDenoise/oidn) 的上游许可证是 Apache License 2.0，须保留 `External/OIDN/LICENSE.txt`。Git submodule 链接不会转移或替换这些条款。SDK 放在 `External/` 不代表它变成开源，也不代表本仓库向任何人授予 NVIDIA SDK 的再许可；请保留全部 notice 与 license，不要把本仓库当作可独立分发的 SDK 镜像。在公开源码、再分发二进制或包含这些组件的商业发布前，应单独完成法务/许可证审查。

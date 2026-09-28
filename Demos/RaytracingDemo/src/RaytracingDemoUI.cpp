@@ -373,7 +373,7 @@ void RaytracingDemo::OnImGui()
     if (ImGui::Combo("Direct Lighting", &directLightingTechnique, directLightingTechniqueNames, IM_ARRAYSIZE(directLightingTechniqueNames)))
     {
         m_DirectLightingTechnique = static_cast<RaytracingDemoLightingTechnique>(directLightingTechnique);
-        ResetAccumulation();
+        ApplyRenderStateChange(AccumulationResetScope::AllHistory, RenderPipelineUpdate::None);
     }
     if (!RaytracingDemoFrameState::SupportsDirectLighting(
         m_PathTracingBackend,
@@ -523,7 +523,7 @@ void RaytracingDemo::OnImGui()
                 spatialTargetHistoryLength < 0 ? 0 : spatialTargetHistoryLength);
             restirSettings.FinalVisibilityMaxAge = static_cast<uint32_t>(finalVisibilityMaxAge < 0 ? 0 : finalVisibilityMaxAge);
             m_DirectLightingReSTIRDI.SetSettings(restirSettings);
-            ResetAccumulation(AccumulationResetScope::ReSTIRAndOIDN);
+            ApplyRenderStateChange(AccumulationResetScope::ReSTIRAndOIDN, RenderPipelineUpdate::None);
         }
     }
     const char* indirectLightingTechniqueNames[] = { "None", "PathTracing", "ReSTIR GI" };
@@ -555,7 +555,7 @@ void RaytracingDemo::OnImGui()
             m_IndirectLightingTechnique = RaytracingDemoLightingTechnique::None;
             break;
         }
-        ResetAccumulation();
+        ApplyRenderStateChange(AccumulationResetScope::AllHistory, RenderPipelineUpdate::None);
     }
     if (!RaytracingDemoFrameState::SupportsIndirectLighting(
         m_PathTracingBackend,
@@ -664,8 +664,9 @@ void RaytracingDemo::OnImGui()
             restirSettings.SpatialNeighborCount = static_cast<uint32_t>(
                 spatialNeighborCount < 1 ? 1 : spatialNeighborCount);
             m_IndirectLightingReSTIRGI.SetSettings(restirSettings);
-            EnsureRayTracingPipelines();
-            ResetAccumulation();
+            ApplyRenderStateChange(
+                AccumulationResetScope::ReSTIRAndOIDN,
+                RenderPipelineUpdate::RebuildPipelinesAndRebindResources);
         }
     }
     }
@@ -677,12 +678,13 @@ void RaytracingDemo::OnImGui()
         {
             m_Denoisers.SetAlgorithm(DenoiserController::Algorithm::Off);
         }
-        ResetAccumulation();
+        ApplyRenderStateChange(AccumulationResetScope::DenoisersAndDLSS, RenderPipelineUpdate::None);
     }
     if (ImGui::Checkbox("Enable Soft Shadows", &m_SoftShadowsEnabled))
     {
-        EnsureRayTracingPipelines();
-        ResetAccumulation();
+        ApplyRenderStateChange(
+            AccumulationResetScope::AllHistory,
+            RenderPipelineUpdate::RebuildPipelinesAndRebindResources);
     }
     ImGui::TextDisabled("Directional and point lights use soft-shadow variants; area lights already sample their surface.");
     bool stressTestSpheresEnabled = m_SceneRuntime.AreStressTestSpheresEnabled();
@@ -706,7 +708,7 @@ void RaytracingDemo::OnImGui()
         lightingDebugTargetNames,
         5))
     {
-        ResetAccumulation();
+        ApplyRenderStateChange(AccumulationResetScope::SampleCountOnly, RenderPipelineUpdate::None);
     }
     if (m_DebugLightingTextureTarget >= 3 && !m_Denoisers.IsNRDEnabled())
     {
@@ -714,11 +716,11 @@ void RaytracingDemo::OnImGui()
     }
     if (ImGui::Checkbox("Use Meshlet GBuffer", &m_UseMeshletGBuffer))
     {
-        ResetAccumulation();
+        ApplyRenderStateChange(AccumulationResetScope::AllHistory, RenderPipelineUpdate::None);
     }
     if (m_UseMeshletGBuffer && ImGui::Checkbox("Instance Coarse Culling", &m_UseMeshletInstanceCull))
     {
-        ResetAccumulation();
+        ApplyRenderStateChange(AccumulationResetScope::AllHistory, RenderPipelineUpdate::None);
     }
     if (m_UseMeshletGBuffer)
     {
@@ -730,7 +732,7 @@ void RaytracingDemo::OnImGui()
         {
             m_UseMeshletGBuffer = true;
         }
-        ResetAccumulation();
+        ApplyRenderStateChange(AccumulationResetScope::AllHistory, RenderPipelineUpdate::None);
     }
     ImGui::TextDisabled("Shows the selected intermediate GBuffer target before lighting and post processing.");
     if (m_DebugMeshletClusters)
@@ -773,7 +775,7 @@ void RaytracingDemo::OnImGui()
         };
         if (ImGui::Combo("GBuffer Debug Target", &m_DebugTextureTarget, debugTargetNames, 7))
         {
-            ResetAccumulation();
+            ApplyRenderStateChange(AccumulationResetScope::AllHistory, RenderPipelineUpdate::None);
         }
     }
     const char* meshletBackendNames[] = { "Task Shader", "Compute Indirect" };
@@ -782,7 +784,7 @@ void RaytracingDemo::OnImGui()
     {
         m_UseTaskShaderMeshlets = selectedMeshletBackend == 0;
         m_UseMeshletGBuffer = true;
-        ResetAccumulation();
+        ApplyRenderStateChange(AccumulationResetScope::AllHistory, RenderPipelineUpdate::None);
     }
     }
 //Modify End
@@ -795,7 +797,7 @@ void RaytracingDemo::OnImGui()
             m_SoftShadowsEnabled,
             m_AutoExposure.GetSettings().Enabled))
         {
-            ResetAccumulation();
+            ApplyRenderStateChange(AccumulationResetScope::DenoisersAndDLSS, RenderPipelineUpdate::None);
         }
     }
 //Modify End
@@ -808,7 +810,7 @@ void RaytracingDemo::OnImGui()
         if (ImGui::Combo("DLSS Super Resolution", &dlssMode, dlssModeNames, IM_ARRAYSIZE(dlssModeNames)))
         {
             m_DLSS.SetMode(static_cast<DLSSMode>(dlssMode));
-            ResetAccumulation();
+            ApplyRenderStateChange(AccumulationResetScope::DenoisersAndDLSS, RenderPipelineUpdate::None);
         }
 
         if (!m_DLSS.IsSupported())
@@ -823,7 +825,7 @@ void RaytracingDemo::OnImGui()
                 if (ImGui::Checkbox("DLSS Ray Reconstruction", &rayReconstructionEnabled))
                 {
                     m_DLSS.SetRayReconstructionEnabled(rayReconstructionEnabled);
-                    ResetAccumulation();
+                    ApplyRenderStateChange(AccumulationResetScope::DenoisersAndDLSS, RenderPipelineUpdate::None);
                 }
             }
             else
@@ -840,7 +842,7 @@ void RaytracingDemo::OnImGui()
                 if (ImGui::Checkbox("DLSS Frame Generation", &frameGenerationEnabled))
                 {
                     m_DLSS.SetFrameGenerationEnabled(frameGenerationEnabled);
-                    ResetAccumulation();
+                    ApplyRenderStateChange(AccumulationResetScope::AllHistory, RenderPipelineUpdate::None);
                 }
             }
             else if (m_Hdr10OutputEnabled)
@@ -881,7 +883,7 @@ void RaytracingDemo::OnImGui()
             {
                 m_AccumulationEnabled = false;
             }
-            ResetAccumulation();
+            ApplyRenderStateChange(AccumulationResetScope::DenoisersAndDLSS, RenderPipelineUpdate::None);
         }
     }
     if (ImGui::CollapsingHeader("Post-Processing"))
@@ -894,7 +896,7 @@ void RaytracingDemo::OnImGui()
         static_cast<uint32_t>((std::max)(m_Height, 1))))
     {
         ResetProfilerDisplay();
-        ResetAccumulation(AccumulationResetScope::OIDN);
+        ApplyRenderStateChange(AccumulationResetScope::OIDN, RenderPipelineUpdate::None);
     }
 //Modify Begin:2026-08-23 by Hui
     DrawAutoExposureControls(m_AutoExposure);
@@ -955,7 +957,7 @@ void RaytracingDemo::OnImGui()
         {
             m_OpenDxrCompatibilityPopup = true;
         }
-        ResetAccumulation();
+        ApplyRenderStateChange(AccumulationResetScope::AllHistory, RenderPipelineUpdate::None);
     }
 
     dxrCompatibilityIssues = GetDxrCompatibilityIssues(
@@ -978,7 +980,7 @@ void RaytracingDemo::OnImGui()
     if (ImGui::Combo("Ray-Traced Pixel Dispatch", &selectedDispatchMode, dispatchModeNames, IM_ARRAYSIZE(dispatchModeNames)))
     {
         m_PathTracingDispatchMode = static_cast<PathTracingDispatchMode>(selectedDispatchMode);
-        ResetAccumulation();
+        ApplyRenderStateChange(AccumulationResetScope::AllHistory, RenderPipelineUpdate::None);
     }
     const bool rayTracedDirectLighting = m_RenderGraphFrameState->UsesDirectLighting();
     const bool rayTracedIndirectLighting = m_RenderGraphFrameState->UsesIndirectLighting();
@@ -1106,7 +1108,7 @@ void RaytracingDemo::OnImGui()
         if (ImGui::Button("Switch to Inline Ray Query"))
         {
             m_PathTracingBackend = PathTracingBackend::InlineRayQuery;
-            ResetAccumulation();
+            ApplyRenderStateChange(AccumulationResetScope::AllHistory, RenderPipelineUpdate::None);
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
@@ -1126,11 +1128,11 @@ void RaytracingDemo::OnImGui()
     {
         const float aspectRatio = static_cast<float>(m_Width) / static_cast<float>(m_Height);
         GetSceneCamera().SetProjection(m_CameraFov, aspectRatio, m_CameraNearClipPlane, m_CameraFarClipPlane);
-        ResetAccumulation();
+        ApplyRenderStateChange(AccumulationResetScope::AllHistory, RenderPipelineUpdate::None);
     }
     if (rotateSpeedChanged || panSpeedChanged || dollySpeedChanged || wheelSpeedChanged)
     {
-        ResetAccumulation();
+        ApplyRenderStateChange(AccumulationResetScope::SampleCountOnly, RenderPipelineUpdate::None);
     }
     ImGui::End();
 }

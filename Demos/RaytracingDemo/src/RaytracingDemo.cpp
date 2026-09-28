@@ -2526,8 +2526,9 @@ void RaytracingDemo::ApplyRuntimeAutomationMatrixCase(const uint32_t caseIndex)
     m_DebugLightingTextureTarget = 0;
     m_DebugTextureTarget = 0;
     m_DebugSerializeAsyncCompute = false;
-    EnsureRayTracingPipelines();
-    ResetAccumulation();
+    ApplyRenderStateChange(
+        AccumulationResetScope::AllHistory,
+        RenderPipelineUpdate::RebuildPipelinesAndRebindResources);
 }
 
 bool RaytracingDemo::ApplyTopologyRuntimeAutomationAction(
@@ -2543,12 +2544,12 @@ bool RaytracingDemo::ApplyTopologyRuntimeAutomationAction(
         return true;
     case RuntimeAutomationAction::MeshletGBuffer:
         m_UseMeshletGBuffer = enabled;
-        ResetAccumulation();
+        ApplyRenderStateChange(AccumulationResetScope::AllHistory, RenderPipelineUpdate::None);
         return true;
     case RuntimeAutomationAction::MeshletTaskShader:
         m_UseTaskShaderMeshlets = enabled;
         m_UseMeshletGBuffer = true;
-        ResetAccumulation();
+        ApplyRenderStateChange(AccumulationResetScope::AllHistory, RenderPipelineUpdate::None);
         return true;
     case RuntimeAutomationAction::PathTracingBackend:
         m_PathTracingBackend = static_cast<PathTracingBackend>(value);
@@ -2556,23 +2557,23 @@ bool RaytracingDemo::ApplyTopologyRuntimeAutomationAction(
         {
             m_AsyncComputeEnabled = false;
         }
-        ResetAccumulation();
+        ApplyRenderStateChange(AccumulationResetScope::AllHistory, RenderPipelineUpdate::None);
         return true;
     case RuntimeAutomationAction::DirectLighting:
         m_DirectLightingTechnique = static_cast<RaytracingDemoLightingTechnique>(value);
-        ResetAccumulation();
+        ApplyRenderStateChange(AccumulationResetScope::AllHistory, RenderPipelineUpdate::None);
         return true;
     case RuntimeAutomationAction::IndirectLighting:
         m_IndirectLightingTechnique = static_cast<RaytracingDemoLightingTechnique>(value);
-        ResetAccumulation();
+        ApplyRenderStateChange(AccumulationResetScope::AllHistory, RenderPipelineUpdate::None);
         return true;
     case RuntimeAutomationAction::CopyQueueValidation:
         m_CopyQueueValidationEnabled = enabled;
-        ResetAccumulation();
+        ApplyRenderStateChange(AccumulationResetScope::AllHistory, RenderPipelineUpdate::None);
         return true;
     case RuntimeAutomationAction::DynamicRayTracingUpdate:
         m_SceneResources.SetDynamicRayTracingUpdatesEnabled(enabled);
-        ResetAccumulation();
+        ApplyRenderStateChange(AccumulationResetScope::AllHistory, RenderPipelineUpdate::None);
         return true;
     case RuntimeAutomationAction::Denoiser:
         if (value > static_cast<uint32_t>(DenoiserController::Algorithm::OIDN))
@@ -2584,7 +2585,7 @@ bool RaytracingDemo::ApplyTopologyRuntimeAutomationAction(
         {
             m_AccumulationEnabled = false;
         }
-        ResetAccumulation();
+        ApplyRenderStateChange(AccumulationResetScope::DenoisersAndDLSS, RenderPipelineUpdate::None);
         return true;
 //Modify Begin:2026-09-15 by Hui
     case RuntimeAutomationAction::SVGFAtrousIterations:
@@ -2592,17 +2593,17 @@ bool RaytracingDemo::ApplyTopologyRuntimeAutomationAction(
         SVGF::Settings settings = m_Denoisers.GetSVGFSettings();
         settings.AtrousIterations = std::clamp(value, 1u, 8u);
         m_Denoisers.SetSVGFSettings(settings);
-        ResetAccumulation();
+        ApplyRenderStateChange(AccumulationResetScope::DenoisersAndDLSS, RenderPipelineUpdate::None);
         return true;
     }
 //Modify End
     case RuntimeAutomationAction::DLSS:
         m_DLSS.SetMode(static_cast<DLSSMode>(value));
-        ResetAccumulation();
+        ApplyRenderStateChange(AccumulationResetScope::DenoisersAndDLSS, RenderPipelineUpdate::None);
         return true;
     case RuntimeAutomationAction::Skybox:
         m_SkyboxEnabled = enabled;
-        ResetAccumulation();
+        ApplyRenderStateChange(AccumulationResetScope::AllHistory, RenderPipelineUpdate::None);
         return true;
     default:
         return false;
@@ -2621,9 +2622,9 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
     {
     case RuntimeAutomationAction::SoftShadows:
         m_SoftShadowsEnabled = enabled;
-        EnsureRayTracingPipelines();
-        BindRayTracingShaderResources();
-        ResetAccumulation();
+        ApplyRenderStateChange(
+            AccumulationResetScope::AllHistory,
+            RenderPipelineUpdate::RebuildPipelinesAndRebindResources);
         break;
     case RuntimeAutomationAction::MaxBounces:
         SetMaxBounces(static_cast<int>(value));
@@ -2940,7 +2941,7 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
     }
     case RuntimeAutomationAction::OIDNStaticSpp:
         m_Denoisers.SetOIDNStaticSpp(value);
-        ResetAccumulation();
+        ApplyRenderStateChange(AccumulationResetScope::OIDN, RenderPipelineUpdate::None);
         break;
 //Modify Begin:2026-09-28 by Hui
     case RuntimeAutomationAction::VerifyOIDNResult:
@@ -2977,7 +2978,7 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
     {
         m_OIDNGenerationBeforeCameraMotion = m_Denoisers.GetOIDNGeneration();
         GetSceneCamera().Translate(DirectX::XMVectorSet(0.0f, 0.0f, 0.05f, 0.0f), Space::Local);
-        ResetAccumulation(AccumulationResetScope::OIDN);
+        ApplyRenderStateChange(AccumulationResetScope::OIDN, RenderPipelineUpdate::None);
         m_OIDNGenerationAfterCameraMotion = m_Denoisers.GetOIDNGeneration();
         const bool passed =
             m_OIDNGenerationAfterCameraMotion > m_OIDNGenerationBeforeCameraMotion &&
@@ -3039,7 +3040,7 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         if (m_PathTracingBackend == PathTracingBackend::InlineRayQuery)
         {
             m_AsyncComputeEnabled = enabled;
-            ResetAccumulation();
+            ApplyRenderStateChange(AccumulationResetScope::AllHistory, RenderPipelineUpdate::None);
         }
         break;
     case RuntimeAutomationAction::ParallelDirectCommandRecording:
@@ -3051,7 +3052,7 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         {
             m_Denoisers.SetAlgorithm(DenoiserController::Algorithm::Off);
         }
-        ResetAccumulation();
+        ApplyRenderStateChange(AccumulationResetScope::DenoisersAndDLSS, RenderPipelineUpdate::None);
         break;
     case RuntimeAutomationAction::GpuTiming:
         m_GpuTimingEnabled = enabled;
@@ -3093,8 +3094,9 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
             break;
         }
         m_IndirectLightingReSTIRGI.SetSettings(restirGISettings);
-        EnsureRayTracingPipelines();
-        ResetAccumulation();
+        ApplyRenderStateChange(
+            AccumulationResetScope::ReSTIRAndOIDN,
+            RenderPipelineUpdate::RebuildPipelinesAndRebindResources);
         break;
     }
     case RuntimeAutomationAction::DumpTiming:
@@ -3124,8 +3126,9 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         settings.DiscardInvisibleFinalSamples = settings.EnableFinalVisibility &&
             ((value & (1u << 9u)) != 0u);
         m_DirectLightingReSTIRDI.SetSettings(settings);
-        EnsureRayTracingPipelines();
-        ResetAccumulation(AccumulationResetScope::ReSTIRAndOIDN);
+        ApplyRenderStateChange(
+            AccumulationResetScope::ReSTIRAndOIDN,
+            RenderPipelineUpdate::RebuildPipelinesAndRebindResources);
         break;
     }
 //Modify Begin:2026-09-28 by Hui
@@ -3140,7 +3143,7 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         GetSceneCamera().Translate(
             DirectX::XMVectorSet(0.025f, 0.0f, 0.0f, 0.0f),
             Space::Local);
-        ResetAccumulation(AccumulationResetScope::OIDN);
+        ApplyRenderStateChange(AccumulationResetScope::OIDN, RenderPipelineUpdate::None);
         break;
 //Modify End
     case RuntimeAutomationAction::MatrixCase:
@@ -3562,10 +3565,6 @@ void RaytracingDemo::EnsureRayTracingPipelines()
             m_MaterialShadingModel,
             compactedDispatchEnabled);
     }
-    if (m_SceneResources.GetRayTracingAccelerationStructure().GetInstanceCount() > 0)
-    {
-        BindRayTracingShaderResources();
-    }
 //Modify End
 }
 
@@ -3578,11 +3577,11 @@ void RaytracingDemo::SetMaterialShadingModel(const MaterialShadingModel shadingM
     }
 
     m_MaterialShadingModel = shadingModel;
-    if (m_RenderPipeline.HasRenderGraph())
-    {
-        EnsureRayTracingPipelines();
-    }
-    ResetAccumulation();
+    ApplyRenderStateChange(
+        AccumulationResetScope::AllHistory,
+        m_RenderPipeline.HasRenderGraph()
+            ? RenderPipelineUpdate::RebuildPipelinesAndRebindResources
+            : RenderPipelineUpdate::None);
 }
 //Modify End
 
@@ -3599,10 +3598,11 @@ void RaytracingDemo::SetMaxBounces(const int maxBounces)
     if (m_RenderPipeline.HasRenderGraph())
     {
         EnsureRayTracingPipelines();
+        BindRayTracingShaderResources();
         UpdateRenderGraphFrameState();
         EnsureRenderGraphTopology();
     }
-    ResetAccumulation();
+    ResetAccumulation(AccumulationResetScope::AllHistory);
 }
 //Modify End
 
@@ -3748,7 +3748,7 @@ bool RaytracingDemo::ApplyHdr10Output(const bool enabled)
 
     m_RenderPipeline.Reset();
     m_RenderGraphTimingHistory.Clear();
-    ResetAccumulation();
+    ResetAccumulation(AccumulationResetScope::AllHistory);
 
     if (m_ImGui != nullptr)
     {
@@ -3782,6 +3782,7 @@ void RaytracingDemo::RebuildRenderGraph()
     ResetProfilerDisplay();
     UpdateRenderGraphFrameState();
     EnsureRayTracingPipelines();
+    BindRayTracingShaderResources();
 
     if (!m_RenderPipeline.HasRenderGraph())
     {
@@ -3849,22 +3850,66 @@ void RaytracingDemo::EnsureRenderGraphTopology()
 //Modify Begin:2026-09-28 by Hui
 void RaytracingDemo::ResetAccumulation(const AccumulationResetScope scope)
 {
+    bool resetReSTIRHistory = false;
+    bool resetDenoiserHistory = false;
+    bool resetOIDNHistory = false;
+    switch (scope)
+    {
+    case AccumulationResetScope::SampleCountOnly:
+        break;
+    case AccumulationResetScope::OIDN:
+        resetOIDNHistory = true;
+        break;
+    case AccumulationResetScope::ReSTIRAndOIDN:
+        resetReSTIRHistory = true;
+        resetOIDNHistory = true;
+        break;
+    case AccumulationResetScope::DenoisersAndDLSS:
+        resetDenoiserHistory = true;
+        break;
+    case AccumulationResetScope::AllHistory:
+        resetReSTIRHistory = true;
+        resetDenoiserHistory = true;
+        resetOIDNHistory = true;
+        break;
+    default:
+        Assert(false, "Unknown accumulation reset scope.");
+        break;
+    }
+
     m_AccumulationFrameIndex = 0;
-    if (scope == AccumulationResetScope::ReSTIRAndOIDN || scope == AccumulationResetScope::AllHistory)
+    if (resetReSTIRHistory)
     {
         m_ReSTIRDIHistoryValid = false;
         m_ReSTIRGIHistoryValid = false;
     }
-    if (scope == AccumulationResetScope::DenoisersAndDLSS || scope == AccumulationResetScope::AllHistory)
+    if (resetDenoiserHistory)
     {
         m_Denoisers.ResetHistory();
         m_DLSS.InvalidateHistory();
         m_HasPreviousViewProjection = false;
     }
-    else if (scope == AccumulationResetScope::OIDN || scope == AccumulationResetScope::ReSTIRAndOIDN)
+    else if (resetOIDNHistory)
     {
         m_Denoisers.ResetOIDNHistory();
     }
+}
+//Modify End
+
+//Modify Begin:2026-09-28 by Hui
+void RaytracingDemo::ApplyRenderStateChange(
+    const AccumulationResetScope scope,
+    const RenderPipelineUpdate pipelineUpdate)
+{
+    if (pipelineUpdate != RenderPipelineUpdate::None)
+    {
+        EnsureRayTracingPipelines();
+    }
+    if (pipelineUpdate == RenderPipelineUpdate::RebuildPipelinesAndRebindResources)
+    {
+        BindRayTracingShaderResources();
+    }
+    ResetAccumulation(scope);
 }
 //Modify End
 
@@ -4153,7 +4198,7 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
             m_RuntimeAutomation.AppendDiagnosticLog("Stress transition: rebuild render graph.");
             RebuildRenderGraph();
             m_RenderGraphTimingHistory.Clear();
-            ResetAccumulation();
+            ResetAccumulation(AccumulationResetScope::AllHistory);
             m_RuntimeAutomation.AppendDiagnosticLog("Stress transition: complete.");
         }
     }
