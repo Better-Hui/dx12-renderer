@@ -16,6 +16,13 @@ public:
         UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
         bool flushBarriers = false);
 
+    static void TransitionBarrierFromState(
+        CommandList& commandList,
+        ID3D12Resource* resource,
+        D3D12_RESOURCE_STATES stateBefore,
+        D3D12_RESOURCE_STATES stateAfter,
+        bool flushBarriers = false);
+
     static void TransitionBarrier(
         CommandList& commandList,
         Microsoft::WRL::ComPtr<ID3D12Resource> resource,
@@ -71,6 +78,9 @@ public:
     {
         commandList.FlushResourceBarriers();
     }
+
+    static void NotifyResourceState(
+        CommandList& commandList, ID3D12Resource* resource, D3D12_RESOURCE_STATES state);
 
     static void TrackResourceState(
         CommandList& commandList,

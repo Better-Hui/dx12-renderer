@@ -523,7 +523,7 @@ void RaytracingDemo::OnImGui()
                 spatialTargetHistoryLength < 0 ? 0 : spatialTargetHistoryLength);
             restirSettings.FinalVisibilityMaxAge = static_cast<uint32_t>(finalVisibilityMaxAge < 0 ? 0 : finalVisibilityMaxAge);
             m_DirectLightingReSTIRDI.SetSettings(restirSettings);
-            ResetAccumulation(false, true);
+            ResetAccumulation(AccumulationResetScope::ReSTIRAndOIDN);
         }
     }
     const char* indirectLightingTechniqueNames[] = { "None", "PathTracing", "ReSTIR GI" };
@@ -894,7 +894,7 @@ void RaytracingDemo::OnImGui()
         static_cast<uint32_t>((std::max)(m_Height, 1))))
     {
         ResetProfilerDisplay();
-        ResetAccumulation(false);
+        ResetAccumulation(AccumulationResetScope::OIDN);
     }
 //Modify Begin:2026-08-23 by Hui
     DrawAutoExposureControls(m_AutoExposure);

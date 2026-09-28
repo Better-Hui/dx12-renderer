@@ -99,7 +99,7 @@ RenderPass 声明
 - `ClearUnorderedAccessUint` 只录制 clear，不隐式追加 UAV barrier。同一资源后续继续写入时，clear 与写入必须拆成不同 pass 或通过声明形成显式 WAW 依赖，由 Compiler 安排 UAV 顺序。
 - copy-compatible pass 可通过 `AddCopyPass()` 进入编译计划、Executor、QueueScheduler、Profiler 和 transient retirement 路径；受维护的 `Copy Queue Validation` 路径为 Direct HDR producer -> Copy queue -> Async Compute consumer -> Direct consumer，并通过 Diagnostics 断言 planned state、producer fence/wait、submission 和 retirement fence。
 - Compiler 会把 queue 相同且 direct preamble/aliasing 关系兼容的连续 Async Compute/Copy pass 合并为 non-direct batch；不兼容的资源交接会形成新的 batch。
-- transient resource 按本帧实际的 Direct/Compute/Copy fence 延迟退休。aliasing 目前是保守的：仅复用可证明在同一 queue 上的 lifetime，跨 queue aliasing 仍禁用。
+- transient resource 按本帧实际的 Direct/Compute/Copy fence 延迟退休。两个不重叠、各自仅使用一条 queue 的 lifetime，仅在 Compiler 证明生产者到消费者存在依赖路径时允许跨 queue aliasing；Direct queue 负责等待 producer、录制 alias barrier，后续非 Direct consumer 再等待 Direct preamble fence。跨多条 queue 使用的单个 lifetime 不参与 aliasing。
 
 ### Active Pixel Compaction
 

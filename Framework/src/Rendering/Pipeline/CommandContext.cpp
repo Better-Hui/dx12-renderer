@@ -954,6 +954,28 @@ void CommandContext::Dispatch(const uint32_t numGroupsX, const uint32_t numGroup
     m_CommandList.Dispatch(numGroupsX, numGroupsY, numGroupsZ);
 }
 
+//Modify Begin:2026-09-24 by Hui
+void CommandContext::BindExternalComputePipeline(
+    ID3D12RootSignature* rootSignature, ID3D12PipelineState* pipelineState) const
+{
+    m_BoundPipelineBindPoint = PipelineBindPoint::Compute;
+    m_HasBoundPipeline = true;
+    m_CommandList.SetExternalComputePipeline(rootSignature, pipelineState);
+}
+
+void CommandContext::SetExternalComputeRootDescriptorTable(
+    const uint32_t rootParameterIndex, const D3D12_GPU_DESCRIPTOR_HANDLE descriptorHandle) const
+{
+    m_CommandList.SetComputeRootDescriptorTable(rootParameterIndex, descriptorHandle);
+}
+
+void CommandContext::SetExternalCompute32BitConstants(
+    const uint32_t rootParameterIndex, const uint32_t numConstants, const void* constants) const
+{
+    m_CommandList.SetCompute32BitConstants(rootParameterIndex, numConstants, constants);
+}
+//Modify End
+
 void CommandContext::BindDescriptorSet(const RayTracingBindingSet& bindingSet) const
 {
     const RayTracingShader& shader = bindingSet.GetShader();

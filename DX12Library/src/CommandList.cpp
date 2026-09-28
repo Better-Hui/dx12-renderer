@@ -64,6 +64,38 @@ CommandList::CommandList(
 }
 //Modify End
 
+//Modify Begin:2026-09-24 by Hui
+CommandList::CommandList(
+    const D3D12_COMMAND_LIST_TYPE type,
+    std::shared_ptr<D3D12DeviceContext> deviceContext,
+    ID3D12GraphicsCommandList2* externalCommandList)
+    : m_D3d12CommandListType(type)
+    , m_StableId(g_NextCommandListStableId.fetch_add(1u, std::memory_order_relaxed))
+    , m_DeviceContext(std::move(deviceContext))
+    , m_Device(m_DeviceContext != nullptr ? m_DeviceContext->GetDevice() : nullptr)
+    , m_ResourceStateRegistry(m_DeviceContext != nullptr ? m_DeviceContext->GetResourceStateRegistry() : nullptr)
+    , m_ExternalCommandList(true)
+{
+    Assert(m_DeviceContext != nullptr, "D3D12 device context is null.");
+    Assert(m_Device != nullptr, "D3D12 device is null.");
+    Assert(m_ResourceStateRegistry != nullptr, "Resource state registry is null.");
+    Assert(externalCommandList != nullptr, "External command list is null.");
+    m_D3d12CommandList = externalCommandList;
+    ThrowIfFailed(m_D3d12CommandList.As(&m_D3d12CommandList5));
+    ThrowIfFailed(m_D3d12CommandList.As(&m_D3d12CommandList6));
+    m_PUploadBuffer = std::make_unique<UploadBuffer>(m_Device);
+    m_PResourceStateTracker = std::make_unique<ResourceStateTracker>(m_ResourceStateRegistry);
+    for (int i = 0; i < D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES; ++i)
+    {
+        const uint32_t numDescriptorsPerHeap =
+            i == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV ? 8192u : 1024u;
+        m_DynamicDescriptorHeaps[i] = std::make_unique<DynamicDescriptorHeap>(
+            m_Device, static_cast<D3D12_DESCRIPTOR_HEAP_TYPE>(i), numDescriptorsPerHeap);
+        m_DescriptorHeaps[i] = nullptr;
+    }
+}
+//Modify End
+
 CommandList::~CommandList() = default;
 
 //Modify Begin:2026-08-24 by Hui
@@ -782,6 +814,7 @@ bool CommandList::Close(
     CommandList& pendingCommandList,
     ResourceStateRegistry::SubmissionScope& submissionScope)
 {
+    Assert(!m_ExternalCommandList, "External command lists cannot be closed by DX12Renderer.");
     // Flush any remaining barriers.
     FlushResourceBarriers();
 
@@ -799,12 +832,14 @@ bool CommandList::Close(
 
 void CommandList::Close()
 {
+    Assert(!m_ExternalCommandList, "External command lists cannot be closed by DX12Renderer.");
     FlushResourceBarriers();
     m_D3d12CommandList->Close();
 }
 
 void CommandList::Reset()
 {
+    Assert(!m_ExternalCommandList, "External command lists cannot be reset by DX12Renderer.");
     ThrowIfFailed(m_D3d12CommandAllocator->Reset());
     ThrowIfFailed(m_D3d12CommandList->Reset(m_D3d12CommandAllocator.Get(), nullptr));
 
@@ -914,6 +949,19 @@ void CommandList::SetComputeRootDescriptorTable(UINT rootParameterIndex, D3D12_G
 {
     m_D3d12CommandList->SetComputeRootDescriptorTable(rootParameterIndex, descriptorHandle);
 }
+
+//Modify Begin:2026-09-24 by Hui
+void CommandList::SetExternalComputePipeline(
+    ID3D12RootSignature* rootSignature, ID3D12PipelineState* pipelineState)
+{
+    Assert(m_ExternalCommandList, "External compute pipeline binding requires an external command list.");
+    Assert(rootSignature != nullptr && pipelineState != nullptr, "External compute pipeline is incomplete.");
+    m_ComputeRootSignature = rootSignature;
+    m_D3d12CommandList->SetComputeRootSignature(rootSignature);
+    m_D3d12CommandList->SetPipelineState(pipelineState);
+}
+
+//Modify End
 
 void CommandList::SetAutomaticViewportAndScissorRect(const RenderTarget& renderTarget, const UINT mipLevel)
 {

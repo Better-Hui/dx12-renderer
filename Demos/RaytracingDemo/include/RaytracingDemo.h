@@ -180,12 +180,16 @@ private:
     void UpdateRenderGraphFrameState();
     void PresentDisplayOutput();
 //Modify End
-//Modify Begin:2026-08-19 by Hui
-    void ResetAccumulation(
-        bool resetDenoiserHistory = true,
-        // ReSTIR reservoirs are temporal state, not multi-SPP accumulation; callers opt in explicitly.
-        bool resetReSTIRHistory = false,
-        bool resetOIDNHistory = true);
+//Modify Begin:2026-09-28 by Hui
+    enum class AccumulationResetScope
+    {
+        SampleCountOnly,
+        OIDN,
+        ReSTIRAndOIDN,
+        DenoisersAndDLSS,
+        AllHistory,
+    };
+    void ResetAccumulation(AccumulationResetScope scope = AccumulationResetScope::DenoisersAndDLSS);
 //Modify End
 //Modify Begin:2026-08-25 by Hui
     bool IsDenoiserEnabled() const { return m_Denoisers.UsesRenderGraphPasses() && !(m_DLSS.IsEnabled() && m_DLSS.IsRayReconstructionEnabled()); }

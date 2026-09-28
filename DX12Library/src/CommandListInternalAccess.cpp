@@ -48,6 +48,30 @@ void CommandListInternalAccess::UavBarrier(
     UavBarrier(commandList, resource.GetD3D12Resource().Get(), flushBarriers);
 }
 
+//Modify Begin:2026-09-24 by Hui
+void CommandListInternalAccess::TransitionBarrierFromState(
+    CommandList& commandList, ID3D12Resource* resource,
+    const D3D12_RESOURCE_STATES stateBefore,
+    const D3D12_RESOURCE_STATES stateAfter,
+    const bool flushBarriers)
+{
+    Assert(resource != nullptr, "Cannot transition a null D3D12 resource.");
+    commandList.m_PResourceStateTracker->ResourceBarrier(
+        CD3DX12_RESOURCE_BARRIER::Transition(resource, stateBefore, stateAfter));
+    if (flushBarriers)
+        FlushResourceBarriers(commandList);
+}
+//Modify End
+
+//Modify Begin:2026-09-24 by Hui
+void CommandListInternalAccess::NotifyResourceState(
+    CommandList& commandList, ID3D12Resource* resource, const D3D12_RESOURCE_STATES state)
+{
+    Assert(resource != nullptr, "Cannot notify a null D3D12 resource state.");
+    commandList.m_PResourceStateTracker->NotifyResourceState(resource, state);
+}
+//Modify End
+
 void CommandListInternalAccess::UavBarrier(
     CommandList& commandList,
     ID3D12Resource* resource,

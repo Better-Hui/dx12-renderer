@@ -83,6 +83,12 @@ public:
     CommandList(
         D3D12_COMMAND_LIST_TYPE type,
         std::shared_ptr<D3D12DeviceContext> deviceContext);
+    // Wrap a command list owned by an external renderer (for example Unity).
+    // The wrapper never resets or closes the external list.
+    CommandList(
+        D3D12_COMMAND_LIST_TYPE type,
+        std::shared_ptr<D3D12DeviceContext> deviceContext,
+        ID3D12GraphicsCommandList2* externalCommandList);
 //Modify End
     virtual ~CommandList();
 
@@ -105,6 +111,8 @@ public:
     {
         return m_D3d12CommandList;
     }
+
+    bool IsExternalCommandList() const noexcept { return m_ExternalCommandList; }
 
 //Modify Begin:2026-07-30 by Hui
     /**
@@ -560,6 +568,7 @@ public:
     void SetGraphicsRootDescriptorTable(UINT rootParameterIndex, D3D12_GPU_DESCRIPTOR_HANDLE descriptorHandle);
 //Modify End
     void SetComputeRootDescriptorTable(UINT rootParameterIndex, D3D12_GPU_DESCRIPTOR_HANDLE descriptorHandle);
+    void SetExternalComputePipeline(ID3D12RootSignature* rootSignature, ID3D12PipelineState* pipelineState);
 
     void SetAutomaticViewportAndScissorRect(const RenderTarget& renderTarget, UINT mipLevel = 0);
     void SetInfiniteScrissorRect();
@@ -626,6 +635,7 @@ private:
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList6> m_D3d12CommandList6;
 //Modify End
     Microsoft::WRL::ComPtr<ID3D12CommandAllocator> m_D3d12CommandAllocator;
+    bool m_ExternalCommandList = false;
 
 //Modify Begin:2026-08-20 by Hui
     // Graphics and compute root signatures are independent D3D12 state.

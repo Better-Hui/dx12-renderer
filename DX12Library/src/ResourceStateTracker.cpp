@@ -111,6 +111,13 @@ void ResourceStateTracker::UavBarrier(const Resource* resource)
 	ResourceBarrier(CD3DX12_RESOURCE_BARRIER::UAV(pResource));
 }
 
+//Modify Begin:2026-09-24 by Hui
+void ResourceStateTracker::UavBarrier(ID3D12Resource* resource)
+{
+    ResourceBarrier(CD3DX12_RESOURCE_BARRIER::UAV(resource));
+}
+//Modify End
+
 void ResourceStateTracker::AliasBarrier(const Resource* beforeResource, const Resource* afterResource)
 {
 	ID3D12Resource* pResourceBefore = beforeResource != nullptr ? beforeResource->GetD3D12Resource().Get() : nullptr;

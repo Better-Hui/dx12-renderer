@@ -99,7 +99,7 @@ The dependency direction is `DX12Library <- RenderGraph <- Framework <- Raytraci
 - `ClearUnorderedAccessUint` records only the clear and never appends a hidden UAV barrier. A later write to the same resource must be a separate pass or otherwise form an explicit graph WAW dependency so the compiler owns UAV ordering.
 - `AddCopyPass()` routes copy-compatible passes through the compiled plan, executor, queue scheduler, profiler, and transient retirement path. `Copy Queue Validation` is the maintained sample path: Direct HDR producer -> Copy queue -> Async Compute consumer -> Direct consumer, with Diagnostics assertions for planned states, producer fence/waits, submissions, and retirement fences.
 - The compiler merges consecutive same-queue Async Compute/Copy passes into a non-direct batch when their Direct preambles and aliasing relationships are compatible; incompatible resource handoffs start a new batch.
-- Transient resources retire against the actual Direct/Compute/Copy fence values of the frame. Aliasing is intentionally conservative: only same-queue lifetimes are reused; cross-queue aliasing remains disabled.
+- Transient resources retire against the actual Direct/Compute/Copy fence values of the frame. Two non-overlapping lifetimes, each confined to one queue, may alias across queues only when the compiler proves a dependency path from producer to consumer. The Direct queue waits for the producer and records the alias barrier; a non-Direct consumer then waits for the Direct preamble fence. A single lifetime used on multiple queues is not eligible for aliasing.
 
 ### Active-pixel compaction
 

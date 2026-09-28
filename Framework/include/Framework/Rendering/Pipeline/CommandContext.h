@@ -140,6 +140,12 @@ public:
     void ClearUnorderedAccessUint(const Resource& resource, const UINT values[4]) const;
     void DispatchMesh(uint32_t numGroupsX, uint32_t numGroupsY = 1, uint32_t numGroupsZ = 1) const;
     void Dispatch(uint32_t numGroupsX, uint32_t numGroupsY = 1, uint32_t numGroupsZ = 1) const;
+    void BindExternalComputePipeline(ID3D12RootSignature* rootSignature,
+        ID3D12PipelineState* pipelineState) const;
+    void SetExternalComputeRootDescriptorTable(uint32_t rootParameterIndex,
+        D3D12_GPU_DESCRIPTOR_HANDLE descriptorHandle) const;
+    void SetExternalCompute32BitConstants(uint32_t rootParameterIndex, uint32_t numConstants,
+        const void* constants) const;
     void BindDescriptorSet(const RayTracingBindingSet& bindingSet) const;
     void DispatchRays(const RayTracingDispatchDesc& dispatchDesc) const;
 

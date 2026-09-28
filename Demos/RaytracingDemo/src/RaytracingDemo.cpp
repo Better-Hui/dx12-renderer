@@ -1050,7 +1050,7 @@ void RaytracingDemo::ResetCameraToInitialSceneState()
     m_CameraController.Yaw = m_InitialSceneCameraYaw;
     m_CameraController.Pitch = m_InitialSceneCameraPitch;
     m_HasPreviousViewProjection = false;
-    ResetAccumulation(true, true, true);
+    ResetAccumulation(AccumulationResetScope::AllHistory);
 }
 
 void RaytracingDemo::LoadStartupConfiguration()
@@ -2427,7 +2427,7 @@ void RaytracingDemo::ApplyShowreelStage(const uint32_t stage)
     m_Bloom.SetEnabled(stage >= 5u);
 
     m_AccumulationEnabled = false;
-    ResetAccumulation(true, true, true);
+    ResetAccumulation(AccumulationResetScope::AllHistory);
     if (m_Diagnostics.IsEnabled())
     {
         static constexpr const char* stageNames[] = {
@@ -2977,7 +2977,7 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
     {
         m_OIDNGenerationBeforeCameraMotion = m_Denoisers.GetOIDNGeneration();
         GetSceneCamera().Translate(DirectX::XMVectorSet(0.0f, 0.0f, 0.05f, 0.0f), Space::Local);
-        ResetAccumulation(false, false, true);
+        ResetAccumulation(AccumulationResetScope::OIDN);
         m_OIDNGenerationAfterCameraMotion = m_Denoisers.GetOIDNGeneration();
         const bool passed =
             m_OIDNGenerationAfterCameraMotion > m_OIDNGenerationBeforeCameraMotion &&
@@ -3125,7 +3125,7 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
             ((value & (1u << 9u)) != 0u);
         m_DirectLightingReSTIRDI.SetSettings(settings);
         EnsureRayTracingPipelines();
-        ResetAccumulation(false, true);
+        ResetAccumulation(AccumulationResetScope::ReSTIRAndOIDN);
         break;
     }
 //Modify Begin:2026-09-28 by Hui
@@ -3140,7 +3140,7 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         GetSceneCamera().Translate(
             DirectX::XMVectorSet(0.025f, 0.0f, 0.0f, 0.0f),
             Space::Local);
-        ResetAccumulation(false, false, true);
+        ResetAccumulation(AccumulationResetScope::OIDN);
         break;
 //Modify End
     case RuntimeAutomationAction::MatrixCase:
@@ -3840,31 +3840,28 @@ void RaytracingDemo::EnsureRenderGraphTopology()
         RaytracingDemoRenderPipelineController::BuildConfiguration(*m_RenderGraphFrameState)))
     {
         RebuildRenderGraph();
-        ResetAccumulation(true, true, true);
+        ResetAccumulation(AccumulationResetScope::AllHistory);
     }
 }
 
 //Modify End
 
-//Modify Begin:2026-08-25 by Hui
-void RaytracingDemo::ResetAccumulation(
-    const bool resetDenoiserHistory,
-    const bool resetReSTIRHistory,
-    const bool resetOIDNHistory)
+//Modify Begin:2026-09-28 by Hui
+void RaytracingDemo::ResetAccumulation(const AccumulationResetScope scope)
 {
     m_AccumulationFrameIndex = 0;
-    if (resetReSTIRHistory)
+    if (scope == AccumulationResetScope::ReSTIRAndOIDN || scope == AccumulationResetScope::AllHistory)
     {
         m_ReSTIRDIHistoryValid = false;
         m_ReSTIRGIHistoryValid = false;
     }
-    if (resetDenoiserHistory)
+    if (scope == AccumulationResetScope::DenoisersAndDLSS || scope == AccumulationResetScope::AllHistory)
     {
         m_Denoisers.ResetHistory();
         m_DLSS.InvalidateHistory();
         m_HasPreviousViewProjection = false;
     }
-    else if (resetOIDNHistory)
+    else if (scope == AccumulationResetScope::OIDN || scope == AccumulationResetScope::ReSTIRAndOIDN)
     {
         m_Denoisers.ResetOIDNHistory();
     }

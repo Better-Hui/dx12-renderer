@@ -97,7 +97,10 @@ namespace
         passBuilder.ReadExternal(*meshletResources.Vertices, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
         passBuilder.ReadExternal(*meshletResources.Indices, D3D12_RESOURCE_STATE_INDEX_BUFFER);
         passBuilder.ReadExternal(*meshletResources.Transforms, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-        passBuilder.ReadExternal(*meshletResources.VisibleInstances, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        // StructuredBuffer recursively declares its counter, which is also used by DrawIndirect.
+        passBuilder.ReadExternal(
+            *meshletResources.VisibleInstances,
+            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
     }
 
     MeshletCullConstants BuildMeshletCullConstants(
@@ -619,7 +622,7 @@ namespace
                 DeclareMeshletIndirectDrawResources(passBuilder, meshletResources);
                 passBuilder.ReadExternal(
                     meshletResources.VisibleInstances->GetCounterBuffer(),
-                    D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
                 passBuilder.ReadIndirectArgument(*meshletResources.IndirectCommands);
                 passBuilder.WriteToken(DemoResourceIds::BaseResourcesFinishedToken);
             },

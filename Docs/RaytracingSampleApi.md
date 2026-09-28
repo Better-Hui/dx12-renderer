@@ -207,7 +207,7 @@ The current soft variant uses four shadow samples. This is a sample-quality fixe
 - Soft-shadow quality is currently fixed at four samples; no runtime quality presets or adaptive sampling are available.
 - RenderGraph supports explicit Direct/Async Compute/Copy queue placement but no automatic queue selection. The maintained `Copy Queue Validation` path covers Direct HDR -> Copy -> Async Compute -> Direct and validates the required producer fences, GPU waits, state plan, batches, and retirement fences.
 - `RenderGraphRoot::Execute` is now a graph entry point. `RenderGraphCommandExecutor` owns pass recording/submission, while `RenderGraphProfiler` owns optional per-queue timestamp lifetime and markers.
-- Transient resources are retired from actual Direct/Async Compute fence values. Aliasing is conservative and only combines lifetimes that are proven to use the same queue; cross-queue aliasing is intentionally disabled.
+- Transient resources are retired from actual Direct/Async Compute/Copy fence values. Two non-overlapping single-queue lifetimes may share a heap across queues when the compiler proves a producer-to-consumer dependency; the Direct queue records an ordered alias barrier, and retirement covers all queues that used the heap.
 - Raster Bloom scratch participates in transient aliasing. Repeated headless rebuild stress validates the first-use alias activation/state ordering.
 - Pass construction uses explicit `RaytracingDemoPassResources` and `RaytracingDemoPassConfig` rather than capturing `RaytracingDemo&` or using friend access.
 - Scene-to-GPU conversion is organized by four builders: texture/material, geometry, meshlet, and RTAS. `RaytracingDemoSceneResources` remains the sample-facing facade.

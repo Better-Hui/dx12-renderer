@@ -48,7 +48,7 @@ void RaytracingDemo::OnUpdate(UpdateEventArgs& e)
         m_CameraController.Down != 0.0f;
     if (movedByKeyboard)
     {
-        ResetAccumulation(false, false, true);
+        ResetAccumulation(AccumulationResetScope::OIDN);
     }
 
     const XMVECTOR cameraTranslate = XMVectorSet(
@@ -94,7 +94,7 @@ void RaytracingDemo::OnUpdate(UpdateEventArgs& e)
                 1.0f)));
         }
         // Keep ReSTIR history across scene motion; temporal compatibility tests handle reprojection.
-        ResetAccumulation(false, false, true);
+        ResetAccumulation(AccumulationResetScope::OIDN);
     }
 }
 
@@ -259,7 +259,7 @@ void RaytracingDemo::OnKeyReleased(KeyEventArgs& e)
                     { "trigger", "F11" },
                 });
         }
-        ResetAccumulation(false, true);
+        ResetAccumulation(AccumulationResetScope::ReSTIRAndOIDN);
         return;
     }
 
@@ -293,7 +293,7 @@ void RaytracingDemo::OnKeyReleased(KeyEventArgs& e)
                 });
         }
         // Toggling script control does not invalidate ReSTIR or OIDN history.
-        ResetAccumulation(false, false, false);
+        ResetAccumulation(AccumulationResetScope::SampleCountOnly);
         return;
     }
 
@@ -370,7 +370,7 @@ void RaytracingDemo::OnMouseMoved(MouseMotionEventArgs& e)
             m_LeftMouseDragSincePress = true;
             m_CameraController.Pitch = ClampCameraValue(m_CameraController.Pitch + e.RelY * m_MouseRotateSpeed, -90.0f, 90.0f);
             m_CameraController.Yaw += e.RelX * m_MouseRotateSpeed;
-            ResetAccumulation(false, false, true);
+            ResetAccumulation(AccumulationResetScope::OIDN);
         }
         return;
     }
@@ -385,7 +385,7 @@ void RaytracingDemo::OnMouseMoved(MouseMotionEventArgs& e)
                 0.0f,
                 0.0f);
             GetSceneCamera().Translate(cameraPan, Space::Local);
-            ResetAccumulation(false, false, true);
+            ResetAccumulation(AccumulationResetScope::OIDN);
         }
         return;
     }
@@ -400,7 +400,7 @@ void RaytracingDemo::OnMouseMoved(MouseMotionEventArgs& e)
                 static_cast<float>(e.RelX) * m_MouseDollySpeed,
                 0.0f);
             GetSceneCamera().Translate(cameraForward, Space::Local);
-            ResetAccumulation(false, false, true);
+            ResetAccumulation(AccumulationResetScope::OIDN);
         }
     }
 }
@@ -469,7 +469,7 @@ void RaytracingDemo::OnMouseWheel(MouseWheelEventArgs& e)
             e.WheelDelta * m_MouseWheelDollySpeed,
             0.0f);
         GetSceneCamera().Translate(cameraForward, Space::Local);
-        ResetAccumulation(false, false, true);
+        ResetAccumulation(AccumulationResetScope::OIDN);
     }
 }
 

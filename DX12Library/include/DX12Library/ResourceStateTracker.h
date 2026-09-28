@@ -37,6 +37,7 @@ public:
 //Modify End
 
     void UavBarrier(const Resource* resource = nullptr);
+    void UavBarrier(ID3D12Resource* resource);
     void AliasBarrier(const Resource* beforeResource = nullptr, const Resource* afterResource = nullptr);
 //Modify Begin:2026-08-10 by Hui
     void QueueAliasingBarrier(const Resource* beforeResource = nullptr, const Resource* afterResource = nullptr);
