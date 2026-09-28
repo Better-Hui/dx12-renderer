@@ -2942,7 +2942,7 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         m_Denoisers.SetOIDNStaticSpp(value);
         ResetAccumulation();
         break;
-//Modify Begin:2026-08-25 by Hui
+//Modify Begin:2026-09-28 by Hui
     case RuntimeAutomationAction::VerifyOIDNResult:
     {
         const bool passed =
@@ -2977,7 +2977,7 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
     {
         m_OIDNGenerationBeforeCameraMotion = m_Denoisers.GetOIDNGeneration();
         GetSceneCamera().Translate(DirectX::XMVectorSet(0.0f, 0.0f, 0.05f, 0.0f), Space::Local);
-        ResetAccumulation(false, false, false);
+        ResetAccumulation(false, false, true);
         m_OIDNGenerationAfterCameraMotion = m_Denoisers.GetOIDNGeneration();
         const bool passed =
             m_OIDNGenerationAfterCameraMotion > m_OIDNGenerationBeforeCameraMotion &&
@@ -3128,7 +3128,7 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         ResetAccumulation(false, true);
         break;
     }
-//Modify Begin:2026-08-26 by Hui
+//Modify Begin:2026-09-28 by Hui
     case RuntimeAutomationAction::CaptureScreenshot:
         if (value > static_cast<uint32_t>(RaytracingDemoAutomation::ScreenshotCapture::ReSTIRDIAndGI))
         {
@@ -3140,7 +3140,7 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         GetSceneCamera().Translate(
             DirectX::XMVectorSet(0.025f, 0.0f, 0.0f, 0.0f),
             Space::Local);
-        ResetAccumulation(false, false, false);
+        ResetAccumulation(false, false, true);
         break;
 //Modify End
     case RuntimeAutomationAction::MatrixCase:

@@ -290,8 +290,8 @@ private:
     DirectX::XMMATRIX m_PreviousViewProjection = DirectX::XMMatrixIdentity();
     uint32_t m_FrameIndex = 0;
     uint32_t m_AccumulationFrameIndex = 0;
-//Modify Begin:2026-08-25 by Hui
-    int m_MaxBounces = 3;
+//Modify Begin:2026-09-28 by Hui
+    int m_MaxBounces = 4;
     bool m_AccumulationEnabled = false;
     uint64_t m_OIDNGenerationBeforeCameraMotion = 0u;
     uint64_t m_OIDNGenerationAfterCameraMotion = 0u;
