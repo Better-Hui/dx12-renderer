@@ -35,8 +35,11 @@ set(SOURCE_FILES
         src/Denoising/DenoiserController.cpp
         src/Automation/RuntimeAutomationController.cpp
         src/Automation/RaytracingDemoAutomation.cpp
+        src/Automation/RaytracingDemoAutomationActions.cpp
+        src/Automation/RaytracingDemoAutomationVerification.cpp
         src/Profiling/ProfilerDisplayController.cpp
         src/Profiling/RenderGraphTimingHistory.cpp
+        src/RaytracingDemoFrameLifecycle.cpp
         src/RaytracingDemoCamera.cpp
         src/RaytracingDemo.cpp
         src/RaytracingDemoUI.cpp

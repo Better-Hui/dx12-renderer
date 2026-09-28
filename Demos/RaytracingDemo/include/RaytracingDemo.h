@@ -178,6 +178,9 @@ private:
     void ResetProfilerDisplay();
     void SetProfilerDisplayRefreshIntervalSeconds(double refreshIntervalSeconds);
     void UpdateRenderGraphFrameState();
+    void UpdateFrameTelemetry(double totalTime);
+    bool ApplyPendingSceneRuntimeChanges();
+    void FinalizeRenderedFrame();
     void PresentDisplayOutput();
 //Modify End
 //Modify Begin:2026-09-28 by Hui
@@ -234,6 +237,12 @@ private:
     void ApplyRuntimeAutomationAction(uint32_t action, uint32_t value);
     bool ApplyTopologyRuntimeAutomationAction(uint32_t action, uint32_t value);
     void ApplyRuntimeAutomationMatrixCase(uint32_t caseIndex);
+    void VerifyActiveRayTracedPixelCount();
+    void VerifyCopyQueueValidation();
+    void VerifyDynamicRayTracingUpdate(uint32_t value);
+    void VerifyDynamicSkinnedMeshCapability();
+    void VerifyOIDNResult();
+    void VerifyOIDNInvalidated();
     void CapturePendingAutomationScreenshot();
     void SaveCurrentScene();
     void SaveCurrentCameraToUnityScene();
