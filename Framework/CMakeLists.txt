@@ -124,6 +124,7 @@ add_custom_command(TARGET ${TARGET_NAME} PRE_BUILD
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/tools/VerifyRenderGraphOwnership.cmake
         VERBATIM)
 dx12_renderer_add_oidn_prebuild(${TARGET_NAME})
+dx12_renderer_add_third_party_prebuild(${TARGET_NAME})
 
 # Dear ImGui is compiled into Framework so every ImGui::Slider* call shares the same double-click input behavior.
 set(DX12_RENDERER_IMGUI_SOURCES
@@ -180,23 +181,8 @@ target_link_libraries(${TARGET_NAME}
 
 target_link_libraries(${TARGET_NAME} PRIVATE d3d12 dxgi dxguid imm32 xmllite shlwapi)
 
-if (NOT TARGET meshoptimizer::meshoptimizer)
-        find_package(meshoptimizer CONFIG REQUIRED)
-endif()
 target_link_libraries(${TARGET_NAME} PUBLIC meshoptimizer::meshoptimizer)
 
-if (NOT TARGET assimp::assimp)
-        find_package(assimp CONFIG REQUIRED)
-endif()
-if (NOT TARGET Microsoft::DirectXTex)
-        find_package(directxtex CONFIG REQUIRED)
-endif()
-if (NOT TARGET OpenEXR::OpenEXR)
-        find_package(OpenEXR CONFIG REQUIRED)
-endif()
-if (NOT TARGET Microsoft::DirectXMesh)
-        find_package(directxmesh CONFIG REQUIRED)
-endif()
 target_link_libraries(${TARGET_NAME}
         PRIVATE assimp::assimp
         PRIVATE Microsoft::DirectXTex

@@ -42,3 +42,6 @@ packages/*
 !External/Streamline/bin/x64/development/reflex.license.txt
 !External/Streamline/bin/x64/development/sl.dlss.dll
 !External/Streamline/bin/x64/development/sl.reflex.dll
+
+# ISPC is a locally provisioned release package, not a repository submodule.
+External/ispc-v1.30.0-windows/

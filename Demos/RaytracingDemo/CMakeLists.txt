@@ -194,9 +194,6 @@ set_source_files_properties(${SHADER_FILES_RAYTRACING} PROPERTIES HEADER_FILE_ON
 set_source_files_properties(${SHADER_FILES_MESH} PROPERTIES HEADER_FILE_ONLY TRUE)
 set_source_files_properties(shaders/CUDA/CudaBloom.cu PROPERTIES HEADER_FILE_ONLY TRUE)
 
-if (NOT TARGET Microsoft::DirectXTex)
-        find_package(directxtex CONFIG REQUIRED)
-endif()
 target_link_libraries(${TARGET_NAME}
         PUBLIC Framework
         PRIVATE "${DX12_RENDERER_DLSS_LIBRARY}"
@@ -224,6 +221,7 @@ add_custom_command(TARGET ${TARGET_NAME} PRE_BUILD
 
 # Build NRI and NRD in their own generated solution before shaders or linking need their artifacts.
 dx12_renderer_add_third_party_prebuild(${TARGET_NAME})
+dx12_renderer_add_external_runtime_copy(${TARGET_NAME})
 
 target_compile_options(${TARGET_NAME} PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 

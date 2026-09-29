@@ -19,6 +19,79 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${DX12_RENDERER_THIRD_PARTY_OUTPUT_DIRECTORY
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${DX12_RENDERER_THIRD_PARTY_OUTPUT_DIRECTORY}")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${DX12_RENDERER_THIRD_PARTY_OUTPUT_DIRECTORY}")
 
+# The renderer consumes these libraries through imported targets from the
+# parent project. Keep all vendored implementation projects in this isolated
+# build tree so they cannot become projects in the renderer solution.
+set(BUILD_SHARED_LIBS ON CACHE BOOL "Build shared third-party libraries." FORCE)
+
+set(MESHOPT_BUILD_DEMO OFF CACHE BOOL "" FORCE)
+set(MESHOPT_BUILD_GLTFPACK OFF CACHE BOOL "" FORCE)
+set(MESHOPT_BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
+set(MESHOPT_INSTALL OFF CACHE BOOL "" FORCE)
+add_subdirectory("${DX12_RENDERER_SOURCE_ROOT}/External/meshoptimizer"
+        "${CMAKE_BINARY_DIR}/meshoptimizer" EXCLUDE_FROM_ALL)
+
+set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_ASSIMP_TOOLS OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(ASSIMP_INSTALL OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_ZLIB ON CACHE BOOL "" FORCE)
+add_subdirectory("${DX12_RENDERER_SOURCE_ROOT}/External/assimp"
+        "${CMAKE_BINARY_DIR}/assimp" EXCLUDE_FROM_ALL)
+
+set(BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+set(BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
+set(BUILD_SAMPLE OFF CACHE BOOL "" FORCE)
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(BUILD_DX11 OFF CACHE BOOL "" FORCE)
+set(BUILD_DX12 ON CACHE BOOL "" FORCE)
+set(ENABLE_OPENEXR_SUPPORT OFF CACHE BOOL "" FORCE)
+add_subdirectory("${DX12_RENDERER_SOURCE_ROOT}/External/DirectXTex"
+        "${CMAKE_BINARY_DIR}/DirectXTex" EXCLUDE_FROM_ALL)
+add_subdirectory("${DX12_RENDERER_SOURCE_ROOT}/External/DirectXMesh"
+        "${CMAKE_BINARY_DIR}/DirectXMesh" EXCLUDE_FROM_ALL)
+
+set(IMATH_INSTALL ON CACHE BOOL "" FORCE)
+set(IMATH_INSTALL_PKG_CONFIG OFF CACHE BOOL "" FORCE)
+set(PYTHON OFF CACHE BOOL "" FORCE)
+set(PYBIND11 OFF CACHE BOOL "" FORCE)
+add_subdirectory("${DX12_RENDERER_SOURCE_ROOT}/External/Imath"
+        "${CMAKE_BINARY_DIR}/Imath" EXCLUDE_FROM_ALL)
+
+# OpenEXR can consume the Imath target directly in this unified isolated build.
+if (TARGET Imath AND NOT TARGET Imath::Imath)
+        add_library(Imath::Imath ALIAS Imath)
+endif()
+if (TARGET ImathConfig AND NOT TARGET Imath::Config)
+        add_library(Imath::Config ALIAS ImathConfig)
+endif()
+
+# OpenEXR uses the local Imath target and its vendored compression sources.
+# This avoids a network package lookup while preserving the pinned submodules.
+set(OPENEXR_FORCE_INTERNAL_IMATH ON CACHE BOOL "" FORCE)
+set(OPENEXR_FORCE_INTERNAL_DEFLATE ON CACHE BOOL "" FORCE)
+set(OPENEXR_FORCE_INTERNAL_ZSTD ON CACHE BOOL "" FORCE)
+set(OPENEXR_FORCE_INTERNAL_OPENJPH ON CACHE BOOL "" FORCE)
+set(OPENEXR_INSTALL OFF CACHE BOOL "" FORCE)
+set(OPENEXR_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+set(OPENEXR_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(OPENEXR_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(OPENEXR_BUILD_PYTHON_LIBS OFF CACHE BOOL "" FORCE)
+add_subdirectory("${DX12_RENDERER_SOURCE_ROOT}/External/OpenEXR"
+        "${CMAKE_BINARY_DIR}/OpenEXR" EXCLUDE_FROM_ALL)
+
+# OpenEXR main currently uses the older Imath namespace macro names while the
+# pinned Imath checkout exposes the shorter aliases.
+foreach(DX12_RENDERER_OPENEXR_TARGET OpenEXR OpenEXRCore Iex IlmThread)
+        if (TARGET ${DX12_RENDERER_OPENEXR_TARGET})
+                target_compile_definitions(${DX12_RENDERER_OPENEXR_TARGET}
+                        PRIVATE
+                        IMATH_INTERNAL_NAMESPACE_HEADER_ENTER=IMATH_INTERNAL_NS_ENTER
+                        IMATH_INTERNAL_NAMESPACE_HEADER_EXIT=IMATH_INTERNAL_NS_EXIT)
+        endif()
+endforeach()
+
 set(NRI_STATIC_LIBRARY OFF CACHE BOOL "Build NRI as a shared library." FORCE)
 set(NRI_ENABLE_NVTX_SUPPORT OFF CACHE BOOL "Disable unused NRI NVTX support." FORCE)
 set(NRI_ENABLE_NONE_SUPPORT OFF CACHE BOOL "Disable unused NRI NONE backend." FORCE)
@@ -51,3 +124,15 @@ add_custom_target(DX12RendererNRI)
 add_dependencies(DX12RendererNRI NRI)
 add_custom_target(DX12RendererNRD)
 add_dependencies(DX12RendererNRD NRD)
+
+add_custom_target(DX12RendererExternal)
+add_dependencies(DX12RendererExternal
+        meshoptimizer
+        assimp
+        DirectXTex
+        DirectXMesh
+        Imath
+        OpenEXR
+        OpenEXRCore
+        Iex
+        IlmThread)

@@ -14,6 +14,7 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${RENDERER_DIAGNOSTICS_TOO
 target_compile_options(RendererDiagnostics PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 target_compile_features(RendererDiagnostics PRIVATE cxx_std_20)
 target_link_libraries(RendererDiagnostics PRIVATE Framework)
+dx12_renderer_add_external_runtime_copy(RendererDiagnostics)
 set_target_properties(RendererDiagnostics PROPERTIES FOLDER "Tools")
 
 add_executable(UnitySceneDump "UnitySceneDump.cpp")
@@ -21,4 +22,5 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES "UnitySceneDump.cpp")
 target_compile_options(UnitySceneDump PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 target_compile_features(UnitySceneDump PRIVATE cxx_std_20)
 target_link_libraries(UnitySceneDump PRIVATE Framework)
+dx12_renderer_add_external_runtime_copy(UnitySceneDump)
 set_target_properties(UnitySceneDump PROPERTIES FOLDER "Tools")
