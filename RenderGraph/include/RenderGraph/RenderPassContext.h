@@ -4,6 +4,7 @@
 
 #include <DX12Library/BarrierContext.h>
 #include <DX12Library/CommandList.h>
+#include <DX12Library/RenderTarget.h>
 
 class CommandList;
 class Resource;
@@ -73,6 +74,34 @@ namespace RenderGraph
         void AliasingBeforeFirstUse(const Resource& resource)
         {
             m_BarrierContext.AliasingBeforeFirstUse(resource);
+        }
+
+        void SetRenderTarget(
+            const RenderTarget& renderTarget,
+            bool readonlyDepth = false)
+        {
+            const auto& textures = renderTarget.GetTextures();
+            for (size_t textureIndex = 0; textureIndex < NumAttachmentPoints - 1u; ++textureIndex)
+            {
+                const auto& texture = textures[textureIndex];
+                if (texture != nullptr && texture->IsValid())
+                {
+                    m_BarrierContext.PrepareResource(
+                        *texture, D3D12_RESOURCE_STATE_RENDER_TARGET, false);
+                }
+            }
+
+            const auto& depthTexture = renderTarget.GetTexture(DepthStencil);
+            if (depthTexture != nullptr && depthTexture->IsValid())
+            {
+                m_BarrierContext.PrepareResource(
+                    *depthTexture,
+                    readonlyDepth ? D3D12_RESOURCE_STATE_DEPTH_READ : D3D12_RESOURCE_STATE_DEPTH_WRITE,
+                    false);
+            }
+
+            m_BarrierContext.Flush();
+            m_CommandList.SetRenderTarget(renderTarget, -1, 0, true, readonlyDepth);
         }
 
         void FlushBarriers()

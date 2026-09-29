@@ -2,6 +2,10 @@
 
 #include "CommandList.h"
 
+//Modify Begin:2026-09-29 by Hui
+#include "BarrierContext.h"
+//Modify End
+
 #include "ConstantBuffer.h"
 #include "D3D12DeviceContext.h"
 #include "DynamicDescriptorHeap.h"
@@ -214,6 +218,11 @@ void CommandList::CommitStagedDescriptorsForDispatch()
 //Modify Begin:2026-08-24 by Hui
 void CommandList::CopyResource(const Resource& dstRes, const Resource& srcRes)
 {
+    if (m_ActiveBarrierContext != nullptr)
+    {
+        m_ActiveBarrierContext->PrepareResource(srcRes, D3D12_RESOURCE_STATE_COPY_SOURCE, false);
+        m_ActiveBarrierContext->PrepareResource(dstRes, D3D12_RESOURCE_STATE_COPY_DEST, false);
+    }
     CopyResource(dstRes.GetD3D12Resource(), srcRes.GetD3D12Resource());
 }
 
@@ -282,6 +291,13 @@ void CommandList::CopyBufferToReadback(
 void CommandList::ResolveSubresource(const Resource& dstRes, const Resource& srcRes, const uint32_t dstSubresource,
     const uint32_t srcSubresource)
 {
+    if (m_ActiveBarrierContext != nullptr)
+    {
+        m_ActiveBarrierContext->PrepareResource(
+            srcRes, D3D12_RESOURCE_STATE_RESOLVE_SOURCE, false, srcSubresource);
+        m_ActiveBarrierContext->PrepareResource(
+            dstRes, D3D12_RESOURCE_STATE_RESOLVE_DEST, false, dstSubresource);
+    }
     FlushResourceBarriers();
 
     m_D3d12CommandList->ResolveSubresource(dstRes.GetD3D12Resource().Get(), dstSubresource,
@@ -326,6 +342,11 @@ void CommandList::SetPrimitiveTopology(const D3D_PRIMITIVE_TOPOLOGY primitiveTop
 //Modify Begin:2026-08-24 by Hui
 void CommandList::ClearTexture(const Texture& texture, const float clearColor[4])
 {
+    if (m_ActiveBarrierContext != nullptr)
+    {
+        m_ActiveBarrierContext->PrepareResource(texture, D3D12_RESOURCE_STATE_RENDER_TARGET, false);
+        m_ActiveBarrierContext->Flush();
+    }
     m_D3d12CommandList->ClearRenderTargetView(texture.GetRenderTargetView(), clearColor, 0, nullptr);
 
     TrackResource(texture);
@@ -341,6 +362,11 @@ void CommandList::ClearTexture(const Texture& texture, const ClearValue& clearVa
 void CommandList::ClearDepthStencilTexture(const Texture& texture, const D3D12_CLEAR_FLAGS clearFlags,
     const float depth, const uint8_t stencil)
 {
+    if (m_ActiveBarrierContext != nullptr)
+    {
+        m_ActiveBarrierContext->PrepareResource(texture, D3D12_RESOURCE_STATE_DEPTH_WRITE, false);
+        m_ActiveBarrierContext->Flush();
+    }
     m_D3d12CommandList->ClearDepthStencilView(texture.GetDepthStencilView(), clearFlags, depth, stencil, 0, nullptr);
 
     TrackResource(texture);
@@ -379,6 +405,11 @@ void CommandList::SetCompute32BitConstants(const uint32_t rootParameterIndex, co
 //Modify Begin:2026-08-24 by Hui
 void CommandList::SetVertexBuffer(const uint32_t slot, const VertexBuffer& vertexBuffer)
 {
+    if (m_ActiveBarrierContext != nullptr)
+    {
+        m_ActiveBarrierContext->PrepareResource(
+            vertexBuffer, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, false);
+    }
     const auto vertexBufferView = vertexBuffer.GetVertexBufferView();
 
     m_D3d12CommandList->IASetVertexBuffers(slot, 1, &vertexBufferView);
@@ -391,12 +422,21 @@ void CommandList::SetVertexBufferView(
     const D3D12_VERTEX_BUFFER_VIEW& vertexBufferView,
     const Resource& resource)
 {
+    if (m_ActiveBarrierContext != nullptr)
+    {
+        m_ActiveBarrierContext->PrepareResource(
+            resource, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, false);
+    }
     m_D3d12CommandList->IASetVertexBuffers(slot, 1, &vertexBufferView);
     TrackResource(resource);
 }
 
 void CommandList::SetIndexBuffer(const IndexBuffer& indexBuffer)
 {
+    if (m_ActiveBarrierContext != nullptr)
+    {
+        m_ActiveBarrierContext->PrepareResource(indexBuffer, D3D12_RESOURCE_STATE_INDEX_BUFFER, false);
+    }
     const auto indexBufferView = indexBuffer.GetIndexBufferView();
 
     m_D3d12CommandList->IASetIndexBuffer(&indexBufferView);
@@ -408,6 +448,10 @@ void CommandList::SetIndexBufferView(
     const D3D12_INDEX_BUFFER_VIEW& indexBufferView,
     const Resource& resource)
 {
+    if (m_ActiveBarrierContext != nullptr)
+    {
+        m_ActiveBarrierContext->PrepareResource(resource, D3D12_RESOURCE_STATE_INDEX_BUFFER, false);
+    }
     m_D3d12CommandList->IASetIndexBuffer(&indexBufferView);
     TrackResource(resource);
 }
@@ -528,6 +572,24 @@ void CommandList::SetShaderResourceView(const uint32_t rootParameterIndex, const
     const UINT firstSubresource, const UINT numSubresources,
     const D3D12_SHADER_RESOURCE_VIEW_DESC* srv)
 {
+    if (m_ActiveBarrierContext != nullptr)
+    {
+        if (numSubresources == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
+        {
+            m_ActiveBarrierContext->PrepareResource(
+                resource, D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE, false,
+                D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
+        }
+        else
+        {
+            for (UINT subresource = 0u; subresource < numSubresources; ++subresource)
+            {
+                m_ActiveBarrierContext->PrepareResource(
+                    resource, D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE, false,
+                    firstSubresource + subresource);
+            }
+        }
+    }
     m_DynamicDescriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->StageDescriptors(
         rootParameterIndex, descriptorOffset, 1, resource.GetShaderResourceView(srv));
     TrackResource(resource);
@@ -541,6 +603,24 @@ void CommandList::SetUnorderedAccessView(const uint32_t rootParameterIndex, cons
     const D3D12_UNORDERED_ACCESS_VIEW_DESC* uavDesc)
 {
     Assert(resource.SupportsUnorderedAccess(), "Cannot bind a resource without unordered-access usage as a UAV.");
+    if (m_ActiveBarrierContext != nullptr)
+    {
+        if (numSubresources == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
+        {
+            m_ActiveBarrierContext->PrepareResource(
+                resource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true,
+                D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
+        }
+        else
+        {
+            for (UINT subresource = 0u; subresource < numSubresources; ++subresource)
+            {
+                m_ActiveBarrierContext->PrepareResource(
+                    resource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true,
+                    firstSubresource + subresource);
+            }
+        }
+    }
     const auto uav = resource.GetUnorderedAccessView(uavDesc);
     m_DynamicDescriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->StageDescriptors(
         rootParameterIndex, descriptorOffset, 1, uav);
@@ -606,6 +686,27 @@ void CommandList::SetStencilRef(UINT8 stencilRef)
 //Modify Begin:2026-08-24 by Hui
 void CommandList::SetRenderTarget(const RenderTarget& renderTarget, UINT texArrayIndex /*= -1*/, UINT mipLevel /*= 0*/, bool useDepth /*= true*/, bool readonlyDepth)
 {
+    if (m_ActiveBarrierContext != nullptr)
+    {
+        const auto& textures = renderTarget.GetTextures();
+        for (size_t textureIndex = 0; textureIndex < NumAttachmentPoints - 1u; ++textureIndex)
+        {
+            if (textures[textureIndex] != nullptr && textures[textureIndex]->IsValid())
+            {
+                m_ActiveBarrierContext->PrepareResource(
+                    *textures[textureIndex], D3D12_RESOURCE_STATE_RENDER_TARGET, false);
+            }
+        }
+        const auto& depthTexture = renderTarget.GetTexture(DepthStencil);
+        if (useDepth && depthTexture != nullptr && depthTexture->IsValid())
+        {
+            m_ActiveBarrierContext->PrepareResource(
+                *depthTexture,
+                readonlyDepth ? D3D12_RESOURCE_STATE_DEPTH_READ : D3D12_RESOURCE_STATE_DEPTH_WRITE,
+                false);
+        }
+        m_ActiveBarrierContext->Flush();
+    }
     std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> renderTargetDescriptors;
     renderTargetDescriptors.reserve(NumAttachmentPoints);
 
@@ -712,6 +813,14 @@ void CommandList::ExecuteIndirect(
     Assert(pCommandSignature != nullptr, "Indirect command signature is null.");
     Assert(argumentBuffer.IsValid(), "Indirect argument buffer is not initialized.");
     Assert(countBuffer == nullptr || countBuffer->IsValid(), "Indirect count buffer is not initialized.");
+    if (m_ActiveBarrierContext != nullptr)
+    {
+        m_ActiveBarrierContext->PrepareResource(argumentBuffer, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT, false);
+        if (countBuffer != nullptr)
+        {
+            m_ActiveBarrierContext->PrepareResource(*countBuffer, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT, false);
+        }
+    }
     FlushResourceBarriers();
 
     switch (executionArgumentType)
@@ -749,6 +858,12 @@ void CommandList::ClearUnorderedAccessUint(const Resource& resource, const UINT 
     Assert(resource.IsValid(), "Unordered-access clear resource is not initialized.");
     Assert(resource.SupportsUnorderedAccess(), "Unordered-access clear requires an unordered-access resource.");
     Assert(values != nullptr, "Unordered-access clear values are null.");
+
+    if (m_ActiveBarrierContext != nullptr)
+    {
+        m_ActiveBarrierContext->PrepareResource(resource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
+        m_ActiveBarrierContext->Flush();
+    }
 
     const D3D12_CPU_DESCRIPTOR_HANDLE cpuDescriptor = resource.GetUnorderedAccessView(nullptr);
     const D3D12_GPU_DESCRIPTOR_HANDLE gpuDescriptor =

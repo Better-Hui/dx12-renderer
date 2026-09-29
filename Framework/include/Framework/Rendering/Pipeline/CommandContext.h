@@ -220,11 +220,13 @@ private:
     void PrepareResource(
         const Resource& resource,
         D3D12_RESOURCE_STATES stateAfter,
-        bool uavWrite) const;
+        bool uavWrite,
+        UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES) const;
     void PrepareResource(
         ID3D12Resource* resource,
         D3D12_RESOURCE_STATES stateAfter,
-        bool uavWrite) const;
+        bool uavWrite,
+        UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES) const;
 
     void SetPipelineLayout(PipelineBindPoint bindPoint, const PipelineLayout& pipelineLayout) const;
     void SetDescriptorSet(PipelineBindPoint bindPoint, const PipelineDescriptorSetBindDesc& descriptorSetDesc) const;

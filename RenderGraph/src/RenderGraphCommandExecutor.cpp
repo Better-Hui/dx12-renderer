@@ -1013,40 +1013,12 @@ void RenderGraph::RenderGraphCommandExecutor::RecordPassBoundaryBarriers(
     {
         const RenderTargetInfo& renderTargetInfo = renderTargetIt->second;
         context.SetRenderTargetInfo(renderTargetInfo);
-        const auto& renderTarget = renderTargetInfo.m_RenderTarget;
-        const auto& textures = renderTarget->GetTextures();
-        for (uint32_t textureIndex = 0u; textureIndex < 8u; ++textureIndex)
-        {
-            if (textures[textureIndex] != nullptr && textures[textureIndex]->IsValid())
-            {
-                recorder.Transition(
-                    *textures[textureIndex],
-                    D3D12_RESOURCE_STATE_RENDER_TARGET);
-            }
-        }
-
-        const auto& depthStencil = renderTarget->GetTexture(DepthStencil);
-        if (depthStencil != nullptr && depthStencil->IsValid())
-        {
-            recorder.Transition(
-                *depthStencil,
-                renderTargetInfo.m_ReadonlyDepth
-                    ? D3D12_RESOURCE_STATE_DEPTH_READ
-                    : D3D12_RESOURCE_STATE_DEPTH_WRITE);
-        }
+        passContext.SetRenderTarget(
+            *renderTargetInfo.m_RenderTarget,
+            renderTargetInfo.m_ReadonlyDepth);
     }
 
     recorder.Flush();
-
-    if (renderTargetIt != renderTargets.end())
-    {
-        commandList.SetRenderTarget(
-            *renderTargetIt->second.m_RenderTarget,
-            -1,
-            0,
-            true,
-            renderTargetIt->second.m_ReadonlyDepth);
-    }
 
     for (const ResourceId outputId : resourceStatePlan.InitOutputs)
     {
