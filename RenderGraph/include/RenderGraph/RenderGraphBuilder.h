@@ -68,6 +68,7 @@ namespace RenderGraph
         std::unique_ptr<RenderPass> Build(
             const wchar_t* passName,
             RenderPass::ExecuteFuncT executeFunc);
+        void ApplyTo(RenderPass& renderPass) const;
         std::unique_ptr<RenderPass> BuildExternal(
             const wchar_t* passName,
             RenderPass::ExternalExecuteFuncT executeFunc);
@@ -207,9 +208,35 @@ namespace RenderGraph
             using ExecuteT = std::decay_t<ExecuteFuncT>;
             auto execute = [passData, executeFunc = ExecuteT(std::forward<ExecuteFuncT>(executeFunc))](
                 const RenderContext& context,
-                CommandList& commandList) mutable
+                RenderPassContext& passContext) mutable
             {
-                std::invoke(executeFunc, static_cast<const PassDataT&>(*passData), context, commandList);
+                if constexpr (std::is_invocable_v<
+                                  ExecuteT&,
+                                  const PassDataT&,
+                                  const RenderContext&,
+                                  RenderPassContext&>)
+                {
+                    std::invoke(
+                        executeFunc,
+                        static_cast<const PassDataT&>(*passData),
+                        context,
+                        passContext);
+                }
+                else
+                {
+                    static_assert(
+                        std::is_invocable_v<
+                            ExecuteT&,
+                            const PassDataT&,
+                            const RenderContext&,
+                            CommandList&>,
+                        "RenderGraph execute callback must accept RenderPassContext& or CommandList&.");
+                    std::invoke(
+                        executeFunc,
+                        static_cast<const PassDataT&>(*passData),
+                        context,
+                        passContext.GetCommandList());
+                }
             };
             AddPass(passBuilder.Build(passName, std::move(execute)));
         }

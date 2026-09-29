@@ -177,6 +177,20 @@ namespace RenderGraph
         return renderPass;
     }
 
+    void RenderGraphPassBuilder::ApplyTo(RenderPass& renderPass) const
+    {
+        Assert(!m_Built, "Cannot apply declarations after a render pass builder was built.");
+        for (const Input& input : m_Inputs)
+        {
+            renderPass.RegisterInput(input);
+        }
+        for (const Output& output : m_Outputs)
+        {
+            renderPass.RegisterOutput(output);
+        }
+        ApplyExternalAccesses(renderPass);
+    }
+
     std::unique_ptr<RenderPass> RenderGraphPassBuilder::BuildExternal(
         const wchar_t* passName,
         RenderPass::ExternalExecuteFuncT executeFunc)

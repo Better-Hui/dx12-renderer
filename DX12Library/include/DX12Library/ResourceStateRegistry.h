@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-12 by Hui
+//Modify Begin:2026-09-29 by Hui
 #pragma once
 
 #include "Helpers.h"
@@ -36,8 +36,11 @@ class ResourceStateRegistry final : public std::enable_shared_from_this<Resource
 public:
     struct ResourceState
     {
-        explicit ResourceState(const D3D12_RESOURCE_STATES state = D3D12_RESOURCE_STATE_COMMON)
+        ResourceState() = default;
+
+        explicit ResourceState(const D3D12_RESOURCE_STATES state)
             : State(state)
+            , HasAllSubresourcesState(true)
         {
         }
 
@@ -47,11 +50,19 @@ public:
             {
                 State = state;
                 SubresourceStates.clear();
+                HasAllSubresourcesState = true;
             }
             else
             {
                 SubresourceStates[subresource] = state;
             }
+        }
+
+        bool HasKnownState(const UINT subresource) const
+        {
+            return subresource == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES
+                ? HasAllSubresourcesState
+                : HasAllSubresourcesState || SubresourceStates.contains(subresource);
         }
 
         D3D12_RESOURCE_STATES GetSubresourceState(const UINT subresource) const
@@ -61,6 +72,7 @@ public:
         }
 
         D3D12_RESOURCE_STATES State;
+        bool HasAllSubresourcesState = false;
         std::unordered_map<UINT, D3D12_RESOURCE_STATES> SubresourceStates;
     };
 
@@ -111,6 +123,37 @@ public:
             new ResourceStateRegistration(weak_from_this(), resource));
         m_Registrations[resource] = registration;
         return registration;
+    }
+
+    // An external renderer owns the resource lifetime and supplies the actual
+    // state at the point where the plugin begins recording. Keep the existing
+    // registration alive, but replace the cached state with that explicit
+    // entry state.
+    void SetResourceState(
+        ID3D12Resource* resource,
+        D3D12_RESOURCE_STATES state,
+        UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
+    {
+        Assert(resource != nullptr, "Cannot set a null D3D12 resource state.");
+        std::lock_guard lock(m_Mutex);
+        m_States[resource].SetSubresourceState(subresource, state);
+    }
+
+    /**
+     * Forget state supplied by an external renderer after it destroys a resource.
+     * An internally owned registration always wins and is left untouched.
+     */
+    void ForgetExternalResource(ID3D12Resource* resource)
+    {
+        Assert(resource != nullptr, "Cannot forget a null external D3D12 resource state.");
+        std::lock_guard lock(m_Mutex);
+        const auto registration = m_Registrations.find(resource);
+        if (registration != m_Registrations.end() && !registration->second.expired())
+        {
+            return;
+        }
+        m_States.erase(resource);
+        m_Registrations.erase(resource);
     }
 
 private:

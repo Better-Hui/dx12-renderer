@@ -16,6 +16,7 @@
 #include <Framework/Rendering/Texture/UnorderedAccessView.h>
 #include <RenderGraph/RenderContext.h>
 #include <RenderGraph/RenderGraphBuilder.h>
+#include <RenderGraph/RenderPass.h>
 
 #include <algorithm>
 #include <array>
@@ -80,12 +81,111 @@ namespace
         return constants;
     }
 
-    struct AutoExposurePassData
-    {
-        AutoExposure* Exposure = nullptr;
-        std::shared_ptr<const AutoExposure::GraphInputs> Inputs;
-    };
 }
+
+class AutoExposureGraphPass final : public RenderGraph::RenderPass
+{
+public:
+    enum class Kind
+    {
+        Prepare,
+        BuildHistogram,
+        AverageHistogram,
+        Apply,
+    };
+
+    struct Desc
+    {
+        Kind PassKind = Kind::Prepare;
+        AutoExposure* Feature = nullptr;
+        std::shared_ptr<const AutoExposure::GraphInputs> Inputs;
+        std::wstring PassName;
+        RenderGraph::ResourceId TokenBefore = 0;
+        RenderGraph::ResourceId TokenAfter = 0;
+        RenderGraph::ImportedResourceHandle ResourceA;
+        RenderGraph::ImportedResourceHandle ResourceB;
+    };
+
+    explicit AutoExposureGraphPass(Desc desc)
+        : m_Kind(desc.PassKind)
+        , m_Feature(*desc.Feature)
+        , m_Inputs(std::move(desc.Inputs))
+        , m_TokenBefore(desc.TokenBefore)
+        , m_TokenAfter(desc.TokenAfter)
+        , m_ResourceA(std::move(desc.ResourceA))
+        , m_ResourceB(std::move(desc.ResourceB))
+    {
+        Assert(desc.Feature != nullptr && m_Inputs != nullptr, "Auto exposure graph pass requires feature inputs.");
+        SetPassName(desc.PassName);
+        switch (m_Kind)
+        {
+        case Kind::Prepare:
+            RegisterInput({ m_Inputs->InputToken, RenderGraph::InputType::Token });
+            RegisterOutput({ m_ResourceA.GetId(), RenderGraph::OutputType::ExternalAccess });
+            RegisterOutput({ m_ResourceB.GetId(), RenderGraph::OutputType::ExternalAccess });
+            RegisterOutput({ m_TokenAfter, RenderGraph::OutputType::Token });
+            AddImportedResourceAccess(m_ResourceA, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, RenderGraph::ExternalResourceAccessMode::Write, false);
+            AddImportedResourceAccess(m_ResourceB, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, RenderGraph::ExternalResourceAccessMode::Write, false);
+            break;
+        case Kind::BuildHistogram:
+            RegisterInput({ m_TokenBefore, RenderGraph::InputType::Token });
+            RegisterInput({ m_Inputs->Source, RenderGraph::InputType::ShaderResource });
+            RegisterOutput({ m_ResourceA.GetId(), RenderGraph::OutputType::ExternalAccess });
+            RegisterOutput({ m_TokenAfter, RenderGraph::OutputType::Token });
+            AddImportedResourceAccess(m_ResourceA, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, RenderGraph::ExternalResourceAccessMode::Write, true);
+            break;
+        case Kind::AverageHistogram:
+            RegisterInput({ m_TokenBefore, RenderGraph::InputType::Token });
+            RegisterOutput({ m_ResourceA.GetId(), RenderGraph::OutputType::ExternalAccess });
+            RegisterOutput({ m_ResourceB.GetId(), RenderGraph::OutputType::ExternalAccess });
+            RegisterOutput({ m_TokenAfter, RenderGraph::OutputType::Token });
+            AddImportedResourceAccess(m_ResourceA, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, RenderGraph::ExternalResourceAccessMode::Write, true);
+            AddImportedResourceAccess(m_ResourceB, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, RenderGraph::ExternalResourceAccessMode::Write, true);
+            break;
+        case Kind::Apply:
+            RegisterInput({ m_TokenBefore, RenderGraph::InputType::Token });
+            RegisterInput({ m_Inputs->Source, RenderGraph::InputType::ShaderResource });
+            RegisterInput({ m_ResourceA.GetId(), RenderGraph::InputType::ExternalAccess });
+            RegisterOutput({ m_Inputs->Output, RenderGraph::OutputType::UnorderedAccess });
+            RegisterOutput({ m_Inputs->OutputToken, RenderGraph::OutputType::Token });
+            AddImportedResourceAccess(m_ResourceA, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, RenderGraph::ExternalResourceAccessMode::Read, false);
+            break;
+        }
+    }
+
+protected:
+    void InitImpl(CommandList&) override {}
+
+    void ExecuteImpl(const RenderGraph::RenderContext& context, RenderGraph::RenderPassContext& passContext) override
+    {
+        CommandList& commandList = passContext.GetCommandList();
+        const AutoExposure::FrameInputs frameInputs = m_Inputs->ResolveFrameInputs(context);
+        switch (m_Kind)
+        {
+        case Kind::Prepare:
+            m_Feature.RecordPrepare(commandList, frameInputs);
+            break;
+        case Kind::BuildHistogram:
+            m_Feature.RecordBuildHistogram(commandList, frameInputs);
+            break;
+        case Kind::AverageHistogram:
+            m_Feature.RecordAverageHistogram(commandList, frameInputs);
+            break;
+        case Kind::Apply:
+            m_Feature.RecordApply(commandList, frameInputs);
+            break;
+        }
+    }
+
+private:
+    Kind m_Kind;
+    AutoExposure& m_Feature;
+    std::shared_ptr<const AutoExposure::GraphInputs> m_Inputs;
+    RenderGraph::ResourceId m_TokenBefore = 0;
+    RenderGraph::ResourceId m_TokenAfter = 0;
+    RenderGraph::ImportedResourceHandle m_ResourceA;
+    RenderGraph::ImportedResourceHandle m_ResourceB;
+};
 
 void AutoExposure::SetSettings(const Settings& settings)
 {
@@ -212,78 +312,42 @@ void AutoExposure::AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInpu
         L"Framework.AutoExposure.AdaptedLuminance.Apply",
         [this]() -> const Resource& { return *m_AdaptedLuminance; });
 
-    builder.AddPass<AutoExposurePassData>(
-        L"Auto Exposure Prepare",
-        [this, sharedInputs, prepareFinished, histogramPrepare, adaptedPrepare](
-            RenderGraph::RenderGraphPassBuilder& passBuilder,
-            AutoExposurePassData& passData)
-        {
-            passData.Exposure = this;
-            passData.Inputs = sharedInputs;
-            passBuilder.ReadToken(sharedInputs->InputToken);
-            passBuilder.WriteImported(histogramPrepare, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-            passBuilder.WriteImported(adaptedPrepare, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-            passBuilder.WriteToken(prepareFinished);
-        },
-        [](const AutoExposurePassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
-        {
-            passData.Exposure->RecordPrepare(commandList, passData.Inputs->ResolveFrameInputs(context));
-        });
-
-    builder.AddPass<AutoExposurePassData>(
-        L"Auto Exposure Build Histogram",
-        [this, sharedInputs, prepareFinished, histogramFinished, histogramBuild](
-            RenderGraph::RenderGraphPassBuilder& passBuilder,
-            AutoExposurePassData& passData)
-        {
-            passData.Exposure = this;
-            passData.Inputs = sharedInputs;
-            passBuilder.ReadToken(prepareFinished);
-            passBuilder.ReadTexture(sharedInputs->Source);
-            passBuilder.WriteImported(histogramBuild, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
-            passBuilder.WriteToken(histogramFinished);
-        },
-        [](const AutoExposurePassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
-        {
-            passData.Exposure->RecordBuildHistogram(commandList, passData.Inputs->ResolveFrameInputs(context));
-        });
-
-    builder.AddPass<AutoExposurePassData>(
-        L"Auto Exposure Average Histogram",
-        [this, sharedInputs, histogramFinished, averageFinished, histogramAverage, adaptedAverage](
-            RenderGraph::RenderGraphPassBuilder& passBuilder,
-            AutoExposurePassData& passData)
-        {
-            passData.Exposure = this;
-            passData.Inputs = sharedInputs;
-            passBuilder.ReadToken(histogramFinished);
-            passBuilder.WriteImported(histogramAverage, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
-            passBuilder.WriteImported(adaptedAverage, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
-            passBuilder.WriteToken(averageFinished);
-        },
-        [](const AutoExposurePassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
-        {
-            passData.Exposure->RecordAverageHistogram(commandList, passData.Inputs->ResolveFrameInputs(context));
-        });
-
-    builder.AddPass<AutoExposurePassData>(
-        L"Auto Exposure Apply",
-        [this, sharedInputs, averageFinished, adaptedApply](
-            RenderGraph::RenderGraphPassBuilder& passBuilder,
-            AutoExposurePassData& passData)
-        {
-            passData.Exposure = this;
-            passData.Inputs = sharedInputs;
-            passBuilder.ReadToken(averageFinished);
-            passBuilder.ReadTexture(sharedInputs->Source);
-            passBuilder.ReadImported(adaptedApply, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-            passBuilder.WriteUav(sharedInputs->Output);
-            passBuilder.WriteToken(sharedInputs->OutputToken);
-        },
-        [](const AutoExposurePassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
-        {
-            passData.Exposure->RecordApply(commandList, passData.Inputs->ResolveFrameInputs(context));
-        });
+    builder.AddPass(std::make_unique<AutoExposureGraphPass>(AutoExposureGraphPass::Desc{
+        .PassKind = AutoExposureGraphPass::Kind::Prepare,
+        .Feature = this,
+        .Inputs = sharedInputs,
+        .PassName = L"Auto Exposure Prepare",
+        .TokenAfter = prepareFinished,
+        .ResourceA = histogramPrepare,
+        .ResourceB = adaptedPrepare,
+    }));
+    builder.AddPass(std::make_unique<AutoExposureGraphPass>(AutoExposureGraphPass::Desc{
+        .PassKind = AutoExposureGraphPass::Kind::BuildHistogram,
+        .Feature = this,
+        .Inputs = sharedInputs,
+        .PassName = L"Auto Exposure Build Histogram",
+        .TokenBefore = prepareFinished,
+        .TokenAfter = histogramFinished,
+        .ResourceA = histogramBuild,
+    }));
+    builder.AddPass(std::make_unique<AutoExposureGraphPass>(AutoExposureGraphPass::Desc{
+        .PassKind = AutoExposureGraphPass::Kind::AverageHistogram,
+        .Feature = this,
+        .Inputs = sharedInputs,
+        .PassName = L"Auto Exposure Average Histogram",
+        .TokenBefore = histogramFinished,
+        .TokenAfter = averageFinished,
+        .ResourceA = histogramAverage,
+        .ResourceB = adaptedAverage,
+    }));
+    builder.AddPass(std::make_unique<AutoExposureGraphPass>(AutoExposureGraphPass::Desc{
+        .PassKind = AutoExposureGraphPass::Kind::Apply,
+        .Feature = this,
+        .Inputs = sharedInputs,
+        .PassName = L"Auto Exposure Apply",
+        .TokenBefore = averageFinished,
+        .ResourceA = adaptedApply,
+    }));
 }
 
 void AutoExposure::RecordPrepare(CommandList& commandList, const FrameInputs& inputs)

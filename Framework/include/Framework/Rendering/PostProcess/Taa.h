@@ -23,6 +23,8 @@ namespace RenderGraph
     class RenderGraphBuilder;
 }
 
+class TaaGraphPass;
+
 class TAA final
 {
 public:
@@ -56,6 +58,8 @@ public:
     void OnRenderedFrame(const DirectX::XMMATRIX& viewProjectionMatrix);
 
 private:
+    friend class TaaGraphPass;
+
     bool EnsureCreated(uint32_t width, uint32_t height);
     void RecordResolve(
         CommandList& commandList,

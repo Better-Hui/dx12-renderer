@@ -21,6 +21,7 @@ class CommandContext;
 class ComputeShader;
 class FrameworkDeviceContext;
 class Texture;
+class ReSTIRDIGraphPass;
 
 struct ReSTIRDIFrameState
 {
@@ -91,6 +92,8 @@ public:
         ReSTIRDIGraphInputs inputs);
 
 private:
+    friend class ReSTIRDIGraphPass;
+
     enum class ReSTIRDIStage : uint8_t
     {
         RIS,

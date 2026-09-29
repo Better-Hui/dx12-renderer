@@ -52,6 +52,7 @@
 class CommandListInternalAccess;
 class CommandQueue;
 class ConstantBuffer;
+class BarrierContext;
 //Modify Begin:2026-08-12 by Hui
 class D3D12DeviceContext;
 //Modify End
@@ -114,6 +115,11 @@ public:
 
     bool IsExternalCommandList() const noexcept { return m_ExternalCommandList; }
 
+//Modify Begin:2026-09-29 by Hui
+    BarrierContext* SetActiveBarrierContext(BarrierContext* context) noexcept;
+    BarrierContext* GetActiveBarrierContext() const noexcept { return m_ActiveBarrierContext; }
+//Modify End
+
 //Modify Begin:2026-07-30 by Hui
     /**
      * Execute a third-party command-recording callback against the native D3D12
@@ -122,6 +128,9 @@ public:
      */
     void ExecuteExternalCommandRecording(
         const std::function<void(ID3D12GraphicsCommandList2&)>& recordCommands);
+
+    // Resolve and commit barriers for an external list without closing it.
+    void FlushExternalResourceBarriers(ResourceStateRegistry::SubmissionScope& submissionScope);
 //Modify End
 
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList5> GetGraphicsCommandList5() const
@@ -636,6 +645,10 @@ private:
 //Modify End
     Microsoft::WRL::ComPtr<ID3D12CommandAllocator> m_D3d12CommandAllocator;
     bool m_ExternalCommandList = false;
+
+//Modify Begin:2026-09-29 by Hui
+    BarrierContext* m_ActiveBarrierContext = nullptr;
+//Modify End
 
 //Modify Begin:2026-08-20 by Hui
     // Graphics and compute root signatures are independent D3D12 state.

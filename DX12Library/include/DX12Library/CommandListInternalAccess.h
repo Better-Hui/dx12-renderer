@@ -80,7 +80,10 @@ public:
     }
 
     static void NotifyResourceState(
-        CommandList& commandList, ID3D12Resource* resource, D3D12_RESOURCE_STATES state);
+        CommandList& commandList,
+        ID3D12Resource* resource,
+        D3D12_RESOURCE_STATES state,
+        UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
 
     static void TrackResourceState(
         CommandList& commandList,

@@ -31,9 +31,9 @@ namespace RenderGraph
         void InitImpl(CommandList& commandList) override
         {}
 
-        void ExecuteImpl(const RenderContext& context, CommandList& commandList) override
+        void ExecuteImpl(const RenderContext& context, RenderPassContext& passContext) override
         {
-            m_ExecuteFunc(context, commandList);
+            m_ExecuteFunc(context, passContext);
         }
 
     private:
@@ -69,7 +69,7 @@ namespace RenderGraph
         void InitImpl(CommandList& commandList) override
         {}
 
-        void ExecuteImpl(const RenderContext& context, CommandList& commandList) override
+        void ExecuteImpl(const RenderContext& context, RenderPassContext&) override
         {
             Assert(false, "External render passes must be executed through ExecuteExternal.");
         }
@@ -118,9 +118,9 @@ void RenderGraph::RenderPass::Init(CommandList& commandList)
     InitImpl(commandList);
 }
 
-void RenderGraph::RenderPass::Execute(const RenderContext& context, CommandList& commandList)
+void RenderGraph::RenderPass::Execute(const RenderContext& context, RenderPassContext& passContext)
 {
-    ExecuteImpl(context, commandList);
+    ExecuteImpl(context, passContext);
 }
 
 //Modify Begin:2026-07-28 by Hui

@@ -27,6 +27,8 @@ namespace RenderGraph
     class RenderGraphBuilder;
 }
 
+class OidnGraphPass;
+
 class OIDNDenoiser final
 {
 public:
@@ -64,6 +66,8 @@ public:
     void AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs inputs);
 
 private:
+    friend class OidnGraphPass;
+
     struct CudaResources;
 
     struct Job

@@ -98,7 +98,16 @@ CommandList::CommandList(
 
 CommandList::~CommandList() = default;
 
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-09-29 by Hui
+BarrierContext* CommandList::SetActiveBarrierContext(BarrierContext* const context) noexcept
+{
+    BarrierContext* previous = m_ActiveBarrierContext;
+    m_ActiveBarrierContext = context;
+    return previous;
+}
+//Modify End
+
+//Modify Begin:2026-09-29 by Hui
 void CommandList::ExecuteExternalCommandRecording(
     const std::function<void(ID3D12GraphicsCommandList2&)>& recordCommands)
 {
@@ -122,6 +131,18 @@ void CommandList::ExecuteExternalCommandRecording(
 void CommandList::FlushResourceBarriers()
 {
     m_PResourceStateTracker->FlushResourceBarriers(*this);
+}
+
+void CommandList::FlushExternalResourceBarriers(
+    ResourceStateRegistry::SubmissionScope& submissionScope)
+{
+    Assert(m_ExternalCommandList, "Only external command lists can flush external resource barriers.");
+    // External callers provide the host-owned entry state through BarrierContext.
+    // Resolve any first-use transitions here, after all declarations have been
+    // registered, instead of rejecting the pending list before resolution.
+    m_PResourceStateTracker->FlushPendingResourceBarriers(*this, submissionScope);
+    m_PResourceStateTracker->FlushResourceBarriers(*this);
+    m_PResourceStateTracker->CommitFinalResourceStates(submissionScope);
 }
 //Modify End
 

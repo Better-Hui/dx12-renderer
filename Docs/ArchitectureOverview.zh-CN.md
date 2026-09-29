@@ -89,7 +89,26 @@ RenderPass 声明
 
 编译阶段负责 pass culling、依赖排序、resource-state plan、transient lifetime plan 和 execution batch；`RenderGraphCommandExecutor` 负责录制和提交；`RenderGraphProfiler` 负责可选的 Direct/Compute timestamp 与 CSV history。
 
-模块依赖方向是 `DX12Library <- RenderGraph <- Framework <- RaytracingDemo`。Framework 可以注册可复用子图，但 RenderGraph 不反向依赖 Framework。`VerifyRenderGraphOwnership` 会在 Framework 构建前扫描 DX12Library、RenderGraph、Framework 与 Demos 的一方源码，禁止普通算法直接 barrier、上层访问 `ResourceStateTracker`、Demo 引入内部桥、descriptor binding 携带资源状态、恢复已删除的 auto-barrier 机制，以及 Framework 保存 Builder 引用或指针。barrier bridge 白名单只保留 9 个明确文件边界，`CommandList.cpp`、`CommandContext.cpp` 和 NRD 均不在其中。
+模块依赖方向是 `DX12Library <- RenderGraph <- Framework <- RaytracingDemo`。Framework 可以注册可复用子图，但 RenderGraph 不反向依赖 Framework。`VerifyRenderGraphOwnership` 会在 Framework 构建前扫描 DX12Library、RenderGraph、Framework 与 Demos 的一方源码，禁止普通算法直接 barrier、上层访问 `ResourceStateTracker`、Demo 引入内部桥、descriptor binding 携带资源状态、恢复已删除的 auto-barrier 机制，以及 Framework 保存 Builder 引用或指针。barrier bridge 白名单仅限 DX12Library 的底层编码器、`BarrierContext` 与初始化、上传、mip、读回、窗口等基础设施路径；RenderGraph 和 Framework 的普通 pass 路径均不在白名单中。
+
+### 状态转换职责与外部 command list
+
+本项目采用 Falcor 式的分层状态模型：RenderGraph 编译 pass 顺序和依赖、transient 生命周期与 aliasing、跨 queue ownership/fence，以及每个 pass 的入口状态计划。`RenderGraphCommandExecutor` 只通过 `RenderPassContext`/`BarrierContext` 录制 pass 边界 barrier；`CommandContext`/`BarrierContext` 在 pass 内为 copy、resolve、RTV、DSV、SRV、UAV、vertex/index、indirect、RTAS、dispatch、draw 和 ray dispatch 准备资源状态及 UAV ordering。`ResourceStateTracker` 将伪 `COMMON` before-state 对齐到 registry 或当前 command list 的真实状态，批量提交 native barrier，并在提交时合并最终状态。pass 不直接操作 tracker。
+
+```text
+RenderGraphCompiler
+    pass 顺序、生命周期、aliasing、queue ownership、每个 pass 的入口状态计划
+        -> RenderGraphCommandExecutor / RenderPassContext
+            录制 pass 边界 barrier
+        -> CommandContext / BarrierContext
+            资源绑定前的局部 transition 与 UAV ordering
+        -> ResourceStateTracker
+            解析 before-state、提交 native barrier、合并最终状态
+```
+
+Unity 或其他外部 renderer 不进入 RenderGraph。调用方须在录制前对每个资源显式声明 `InitialState`、`FirstState`、`FinalState`、`FirstAccessWrites`、`FinalAccessWrites`；`InitialState` 是调用方已知的真实入口状态，不由插件从 Unity 猜测。`DeclareResources` 先整批检查重复或重叠契约，完全相同的重复声明可复用，`ALL_SUBRESOURCES` 与单独 subresource 的重叠声明会被拒绝。声明录制入口 transition；`CommandContext(ExternalCommandContext&)` 封口声明阶段并共用其 `BarrierContext`。`End()` 将每个已声明资源收束到 `FinalState`，提交最终 registry 状态并提供给 Unity host tracker；`Abort()`、异常或遗忘的 context 尝试恢复 `InitialState`。恢复失败会明确标记失败，不会宣称 host 状态已恢复。首尾写入标志在状态为 UAV 时参与 UAV ordering/host 通知；其他写状态由对应 transition 保证顺序。
+
+外部 context 只包装 Unity 当前 command list，绝不 reset、close、submit 它，也不接管 allocator。Unity v8 的 `RequestResourceState/NotifyResourceState` 只同步 Unity 自己的 host tracker，不能替代显式 `InitialState`。Unity interop 只接受 `ALL_SUBRESOURCES`；底层 `ExternalCommandContext` 可分别声明互不重叠的 subresource，tracker 会保留未触及 subresource 的 registry 状态。外部资源从 UAV 状态进入并以 UAV 状态首次访问时，即使状态未变化也会录制保守的入口 UAV barrier。`ResourceStateTracker` 在提交时解析每条 list 的 pending first-use transition；即使局部记录以伪 `COMMON` 开始，也不会把它当作资源真实状态。
 
 ### Queue 与同步
 
@@ -98,7 +117,7 @@ RenderPass 声明
 - `PassResourceStatePlan` 保存不可变的 per-pass transition、UAV、aliasing、初始化和 async handoff 工作。Executor 将该计划录入拥有该 pass 的 command list；各 list 在最终提交顺序中关闭时，`CommandList` 通过共享 `ResourceStateRegistry` 解析 transition 的初始状态。
 - `ClearUnorderedAccessUint` 只录制 clear，不隐式追加 UAV barrier。同一资源后续继续写入时，clear 与写入必须拆成不同 pass 或通过声明形成显式 WAW 依赖，由 Compiler 安排 UAV 顺序。
 - copy-compatible pass 可通过 `AddCopyPass()` 进入编译计划、Executor、QueueScheduler、Profiler 和 transient retirement 路径；受维护的 `Copy Queue Validation` 路径为 Direct HDR producer -> Copy queue -> Async Compute consumer -> Direct consumer，并通过 Diagnostics 断言 planned state、producer fence/wait、submission 和 retirement fence。
-- Compiler 会把 queue 相同且 direct preamble/aliasing 关系兼容的连续 Async Compute/Copy pass 合并为 non-direct batch；不兼容的资源交接会形成新的 batch。
+- Compiler 会把 queue 相同且 direct preamble/aliasing 关系兼容的连续 Async Compute/Copy pass 合并为 non-direct batch；不兼容的资源交接会形成新的 batch。Executor 在查询 non-direct producer fence 前先提交已有 Direct 工作，再执行 Direct preamble 和 consumer wait。Direct pass 若首次使用 aliased heap，也会与前序 list 分开，避免 pending alias barrier 被前置到旧资源最后一次使用之前。
 - transient resource 按本帧实际的 Direct/Compute/Copy fence 延迟退休。两个不重叠、各自仅使用一条 queue 的 lifetime，仅在 Compiler 证明生产者到消费者存在依赖路径时允许跨 queue aliasing；Direct queue 负责等待 producer、录制 alias barrier，后续非 Direct consumer 再等待 Direct preamble fence。跨多条 queue 使用的单个 lifetime 不参与 aliasing。
 
 ### Active Pixel Compaction

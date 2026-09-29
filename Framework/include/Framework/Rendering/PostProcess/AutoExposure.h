@@ -20,6 +20,8 @@ namespace RenderGraph
     class RenderGraphBuilder;
 }
 
+class AutoExposureGraphPass;
+
 class AutoExposure final
 {
 public:
@@ -70,6 +72,8 @@ public:
     void ResetHistory();
 
 private:
+    friend class AutoExposureGraphPass;
+
     void EnsureResources(uint32_t outputWidth, uint32_t outputHeight);
     void RecordPrepare(CommandList& commandList, const FrameInputs& inputs);
     void RecordBuildHistogram(CommandList& commandList, const FrameInputs& inputs);

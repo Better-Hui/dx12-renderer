@@ -85,6 +85,8 @@ public:
 
     bool IsBuilt() const;
     D3D12_GPU_VIRTUAL_ADDRESS GetGpuVirtualAddress() const;
+    /** Underlying TLAS resource used by state-aware descriptor binding. */
+    ID3D12Resource* GetResource() const;
     const std::vector<std::shared_ptr<Mesh>>& GetMeshes() const;
     const std::vector<RayTracingGeometryData>& GetGeometryData() const;
     const std::vector<RayTracingInstanceDesc>& GetInstances() const;

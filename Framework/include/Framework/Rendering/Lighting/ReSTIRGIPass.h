@@ -20,6 +20,7 @@ class CommandContext;
 class ComputeShader;
 class FrameworkDeviceContext;
 class Texture;
+class ReSTIRGIGraphPass;
 
 struct ReSTIRGIFrameState
 {
@@ -86,6 +87,8 @@ public:
     void AddPasses(RenderGraph::RenderGraphBuilder& builder, ReSTIRGIGraphInputs inputs);
 
 private:
+    friend class ReSTIRGIGraphPass;
+
     enum class ReSTIRGIStage : uint8_t
     {
         Initial,

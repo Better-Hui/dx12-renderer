@@ -144,8 +144,9 @@ public:
 protected:
     void InitImpl(CommandList&) override {}
 
-    void ExecuteImpl(const RenderGraph::RenderContext& context, CommandList& commandList) override
+    void ExecuteImpl(const RenderGraph::RenderContext& context, RenderGraph::RenderPassContext& passContext) override
     {
+        CommandList& commandList = passContext.GetCommandList();
         const uint32_t width = context.GetMetadata().m_ScreenWidth;
         const uint32_t height = context.GetMetadata().m_ScreenHeight;
         if (m_Kind == Kind::Temporal)

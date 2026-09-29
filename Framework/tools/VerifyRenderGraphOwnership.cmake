@@ -31,17 +31,20 @@ list(REMOVE_DUPLICATES POLICY_SOURCE_FILES)
 
 set(BARRIER_BRIDGE_ALLOWLIST
     "DX12Library/src/CommandListInternalAccess.cpp"
+    # The single public state-context implementation that reaches the native
+    # tracker for ordinary transitions and UAV ordering.
+    "DX12Library/src/BarrierContext.cpp"
     # Initializes Cubemap-owned render targets before they enter a RenderGraph.
     "DX12Library/src/Cubemap.cpp"
     "DX12Library/src/GpuReadbackBuffer.cpp"
     "DX12Library/src/GpuReadbackTexture.cpp"
     "DX12Library/src/MipGenerator.cpp"
     "DX12Library/src/ResourceUploader.cpp"
-    "DX12Library/src/Window.cpp"
-    "RenderGraph/src/RenderGraphCommandExecutor.cpp"
-    "RenderGraph/src/RenderGraphRoot.cpp"
-    "Framework/src/Rendering/Pipeline/SharedUploadBuffer.cpp"
-    "Framework/src/Rendering/RayTracing/RayTracingAccelerationStructure.cpp")
+    "DX12Library/src/Window.cpp")
+
+set(LOCAL_STATE_POLICY_ALLOWLIST
+    "Framework/include/Framework/Rendering/Pipeline/CommandContext.h"
+    "Framework/src/Rendering/Pipeline/CommandContext.cpp")
 
 set(LOW_LEVEL_BARRIER_ENCODER_ALLOWLIST
     "DX12Library/src/CommandListInternalAccess.cpp"
@@ -59,10 +62,6 @@ foreach(source_file IN LISTS POLICY_SOURCE_FILES)
     math(EXPR checked_source_count "${checked_source_count} + 1")
     file(READ "${source_file}" source_text)
 
-    if (source_text MATCHES "([.]|->)(TransitionBarrier|UavBarrier|AliasingBarrier|AliasingBarrierBeforeFirstUse)[ \t\r\n]*\\(")
-        list(APPEND violations "${relative_file}: direct CommandList barrier call")
-    endif()
-
     if (source_text MATCHES "([.]|->)ResourceBarrier[ \t\r\n]*\\(")
         list(FIND LOW_LEVEL_BARRIER_ENCODER_ALLOWLIST "${relative_file}" encoder_allowlist_index)
         if (encoder_allowlist_index EQUAL -1)
@@ -70,7 +69,7 @@ foreach(source_file IN LISTS POLICY_SOURCE_FILES)
         endif()
     endif()
 
-    if (source_text MATCHES "([.]|->)(TransitionResource|UavBarrier|AliasBarrier|QueueAliasingBarrier)[ \t\r\n]*\\(")
+    if (source_text MATCHES "(ResourceStateTracker::|m_PResourceStateTracker->)(TransitionResource|UavBarrier|AliasBarrier|QueueAliasingBarrier|ResourceBarrier)[ \t\r\n]*\\(")
         list(FIND LOW_LEVEL_BARRIER_ENCODER_ALLOWLIST "${relative_file}" tracker_allowlist_index)
         if (tracker_allowlist_index EQUAL -1)
             list(APPEND violations "${relative_file}: ResourceStateTracker barrier API used outside the low-level encoder")
@@ -93,8 +92,7 @@ foreach(source_file IN LISTS POLICY_SOURCE_FILES)
         list(APPEND violations "${relative_file}: upper layer includes the low-level resource-state tracker")
     endif()
 
-    if ((relative_file STREQUAL "DX12Library/include/DX12Library/CommandList.h" OR
-         relative_file STREQUAL "Framework/include/Framework/Rendering/Pipeline/CommandContext.h") AND
+    if (relative_file STREQUAL "DX12Library/include/DX12Library/CommandList.h" AND
         source_text MATCHES "(TransitionBarrier|UavBarrier|AliasingBarrier|AliasingBarrierBeforeFirstUse)")
         list(APPEND violations "${relative_file}: public command API exposes barrier recording")
     endif()
@@ -107,10 +105,18 @@ foreach(source_file IN LISTS POLICY_SOURCE_FILES)
         list(APPEND violations "${relative_file}: legacy per-pass queue selection API was reintroduced")
     endif()
 
-    if ((relative_file MATCHES "^Framework/include/Framework/Rendering/Pipeline/(CommandContext|ComputeShader|PipelineDescriptorSet)" OR
-         relative_file MATCHES "^Framework/src/Rendering/Pipeline/(CommandContext|ComputeShader|PipelineDescriptorSet)") AND
+    if ((relative_file MATCHES "^Framework/include/Framework/Rendering/Pipeline/(ComputeShader|PipelineDescriptorSet)" OR
+         relative_file MATCHES "^Framework/src/Rendering/Pipeline/(ComputeShader|PipelineDescriptorSet)") AND
         source_text MATCHES "D3D12_RESOURCE_STATES")
         list(APPEND violations "${relative_file}: descriptor binding API carries a resource-state policy")
+    endif()
+
+    if (relative_file MATCHES "^Framework/(include|src)/Rendering/Pipeline/" AND
+        source_text MATCHES "D3D12_RESOURCE_STATES")
+        list(FIND LOCAL_STATE_POLICY_ALLOWLIST "${relative_file}" local_state_allowlist_index)
+        if (local_state_allowlist_index EQUAL -1)
+            list(APPEND violations "${relative_file}: local resource-state policy is outside the CommandContext boundary")
+        endif()
     endif()
 
     if (relative_file MATCHES "^Framework/" AND
@@ -128,6 +134,12 @@ foreach(allowlisted_file IN LISTS BARRIER_BRIDGE_ALLOWLIST LOW_LEVEL_BARRIER_ENC
     endif()
 endforeach()
 
+foreach(allowlisted_file IN LISTS LOCAL_STATE_POLICY_ALLOWLIST)
+    if (NOT EXISTS "${REPOSITORY_ROOT}/${allowlisted_file}")
+        list(APPEND violations "${allowlisted_file}: local-state policy allowlist entry does not exist")
+    endif()
+endforeach()
+
 set(RENDER_GRAPH_ROOT_HEADER "${REPOSITORY_ROOT}/RenderGraph/include/RenderGraph/RenderGraphRoot.h")
 file(READ "${RENDER_GRAPH_ROOT_HEADER}" render_graph_root_api)
 if (render_graph_root_api MATCHES "(CopyTexture|DrawToTexture|DrawToGraphOutput)[ \\t\\r\\n]*\\(")
@@ -141,7 +153,7 @@ if (violations)
         "RenderGraph ownership policy failed:\n"
         "  - ${formatted_violations}\n"
         "Ordinary Framework algorithms and Demos must declare pass resource access through RenderGraphBuilder. "
-        "Only the exact renderer/system boundaries in this file may encode barriers.")
+        "Only the exact renderer/system boundaries and CommandContext local-state boundary in this file may encode barriers.")
 endif()
 
 list(LENGTH BARRIER_BRIDGE_ALLOWLIST bridge_boundary_count)

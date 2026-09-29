@@ -1,7 +1,8 @@
-//Modify Begin:2026-09-01 by Hui
+//Modify Begin:2026-09-28 by Hui
 #pragma once
 
 #include "RenderGraphExecutionPlan.h"
+#include "RenderGraphBarrierRecorder.h"
 #include "RenderPass.h"
 #include "RenderGraphTaskScheduler.h"
 #include "RenderTargetInfo.h"
@@ -45,8 +46,8 @@ namespace RenderGraph
         void SetDiagnosticTelemetrySink(DiagnosticTelemetrySink* sink) noexcept;
 
     private:
-        void PrepareResourcesForRenderPass(
-            CommandList& commandList,
+        void RecordPassBoundaryBarriers(
+            RenderPassContext& passContext,
             const RenderPass& renderPass,
             RenderContext& context,
             const std::map<const RenderPass*, RenderTargetInfo>& renderTargets,
@@ -82,7 +83,7 @@ namespace RenderGraph
             const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
         CommandQueue& GetCommandQueue(RenderPassQueue queue) const;
         static void ApplyExternalResourceTransitions(
-            CommandList& commandList,
+            RenderPassContext& passContext,
             std::span<const PassExternalResourceTransition> transitions);
         void EmitTelemetry(DiagnosticTelemetryEvent event) const noexcept;
         [[nodiscard]] bool HasDiagnosticTelemetrySink() const noexcept { return m_DiagnosticTelemetrySink != nullptr; }

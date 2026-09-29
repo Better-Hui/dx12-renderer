@@ -5,7 +5,9 @@ project("DX12Library")
 set(HEADER_FILES
         include/DX12Library/Application.h
         include/DX12Library/ApplicationResources.h
+        include/DX12Library/BarrierContext.h
         include/DX12Library/Buffer.h
+        include/DX12Library/ExternalCommandContext.h
         include/DX12Library/ByteAddressBuffer.h
         include/DX12Library/Camera.h
         include/DX12Library/CommandList.h
@@ -63,7 +65,9 @@ set(HEADER_FILES
 set(SOURCE_FILES
         
         src/Application.cpp
+        src/BarrierContext.cpp
         src/Buffer.cpp
+        src/ExternalCommandContext.cpp
         src/ByteAddressBuffer.cpp
         src/Camera.cpp
         src/CommandList.cpp

@@ -4,6 +4,7 @@
 #include <Framework/Blit_VS.h>
 #include <Framework/Bloom_Composite_PS.h>
 #include <Framework/Geometry/Mesh.h>
+#include <Framework/Rendering/Pipeline/CommandContext.h>
 
 #include <DX12Library/Helpers.h>
 #include <DirectXMath.h>
@@ -69,7 +70,8 @@ void BloomUpsample::ExecuteInternal(
     const std::shared_ptr<Texture>& bloom,
     const RenderTarget& destination)
 {
-    commandList.SetRenderTarget(destination);
+    CommandContext commandContext(commandList);
+    commandContext.SetRenderTarget(destination);
     commandList.SetAutomaticViewportAndScissorRect(destination);
 
     m_Material->SetShaderResourceView("sourceColorTexture", ShaderResourceView(sourceColor));

@@ -69,6 +69,59 @@ endif()
 if (NOT EXISTS "${DX12_RENDERER_OIDN_ISPC_EXECUTABLE}")
         message(FATAL_ERROR "OIDN requires ISPC 1.30.0 at ${DX12_RENDERER_OIDN_ISPC_EXECUTABLE}.")
 endif()
+
+# OIDN is configured as an isolated project, so the in-tree oneTBB target is
+# not visible to its find_package(TBB CONFIG) call.  Build and install the
+# GitHub oneTBB source into the generated third-party directory when a vcpkg
+# installation is unavailable.
+if (NOT EXISTS "${DX12_RENDERER_OIDN_TBB_CONFIG_DIRECTORY}/TBBConfig.cmake")
+        set(DX12_RENDERER_OIDN_TBB_SOURCE_DIRECTORY "${DX12_RENDERER_SOURCE_ROOT}/External/oneTBB")
+        if (NOT EXISTS "${DX12_RENDERER_OIDN_TBB_SOURCE_DIRECTORY}/CMakeLists.txt")
+                message(FATAL_ERROR "OIDN requires External/oneTBB or an installed oneTBB package.")
+        endif()
+        set(DX12_RENDERER_OIDN_TBB_BUILD_DIRECTORY "${DX12_RENDERER_OIDN_BUILD_DIRECTORY}/../oneTBB")
+        set(DX12_RENDERER_OIDN_TBB_INSTALL_ROOT "${DX12_RENDERER_OIDN_BUILD_DIRECTORY}/../oneTBB-install")
+        set(DX12_RENDERER_OIDN_TBB_CONFIGURE_COMMAND
+                "${CMAKE_COMMAND}"
+                -S "${DX12_RENDERER_OIDN_TBB_SOURCE_DIRECTORY}"
+                -B "${DX12_RENDERER_OIDN_TBB_BUILD_DIRECTORY}"
+                -G "${DX12_RENDERER_GENERATOR}"
+                "-DCMAKE_BUILD_TYPE=${DX12_RENDERER_CONFIGURATION}"
+                "-DCMAKE_INSTALL_PREFIX=${DX12_RENDERER_OIDN_TBB_INSTALL_ROOT}"
+                "-DBUILD_SHARED_LIBS=ON"
+                "-DTBB_INSTALL=ON"
+                "-DTBB_TEST=OFF"
+                "-DTBB_EXAMPLES=OFF"
+                "-DTBBMALLOC_BUILD=OFF")
+        if (DX12_RENDERER_GENERATOR_PLATFORM)
+                list(APPEND DX12_RENDERER_OIDN_TBB_CONFIGURE_COMMAND -A "${DX12_RENDERER_GENERATOR_PLATFORM}")
+        endif()
+        if (DX12_RENDERER_GENERATOR_TOOLSET)
+                list(APPEND DX12_RENDERER_OIDN_TBB_CONFIGURE_COMMAND -T "${DX12_RENDERER_GENERATOR_TOOLSET}")
+        endif()
+        message(STATUS "Building project-local oneTBB package for OIDN")
+        execute_process(COMMAND ${DX12_RENDERER_OIDN_TBB_CONFIGURE_COMMAND}
+                RESULT_VARIABLE DX12_RENDERER_OIDN_TBB_CONFIGURE_RESULT)
+        if (NOT DX12_RENDERER_OIDN_TBB_CONFIGURE_RESULT EQUAL 0)
+                message(FATAL_ERROR "Failed to configure project-local oneTBB for OIDN.")
+        endif()
+        execute_process(
+                COMMAND "${CMAKE_COMMAND}" --build "${DX12_RENDERER_OIDN_TBB_BUILD_DIRECTORY}"
+                        --config "${DX12_RENDERER_CONFIGURATION}" --target tbb
+                RESULT_VARIABLE DX12_RENDERER_OIDN_TBB_BUILD_RESULT)
+        if (NOT DX12_RENDERER_OIDN_TBB_BUILD_RESULT EQUAL 0)
+                message(FATAL_ERROR "Failed to build project-local oneTBB for OIDN.")
+        endif()
+        execute_process(
+                COMMAND "${CMAKE_COMMAND}" --install "${DX12_RENDERER_OIDN_TBB_BUILD_DIRECTORY}"
+                        --config "${DX12_RENDERER_CONFIGURATION}"
+                RESULT_VARIABLE DX12_RENDERER_OIDN_TBB_INSTALL_RESULT)
+        if (NOT DX12_RENDERER_OIDN_TBB_INSTALL_RESULT EQUAL 0)
+                message(FATAL_ERROR "Failed to install project-local oneTBB for OIDN.")
+        endif()
+        set(DX12_RENDERER_OIDN_TBB_ROOT "${DX12_RENDERER_OIDN_TBB_INSTALL_ROOT}")
+        set(DX12_RENDERER_OIDN_TBB_CONFIG_DIRECTORY "${DX12_RENDERER_OIDN_TBB_INSTALL_ROOT}/lib/cmake/tbb")
+endif()
 if (NOT EXISTS "${DX12_RENDERER_OIDN_TBB_CONFIG_DIRECTORY}/TBBConfig.cmake")
         message(FATAL_ERROR "OIDN requires oneTBB at ${DX12_RENDERER_OIDN_TBB_ROOT}. Install tbb:x64-windows with vcpkg.")
 endif()
@@ -121,8 +174,28 @@ endif()
 if (DX12_RENDERER_GENERATOR_TOOLSET)
         list(APPEND DX12_RENDERER_OIDN_CONFIGURE_COMMAND -T "${DX12_RENDERER_GENERATOR_TOOLSET}")
 endif()
-if (DX12_RENDERER_TOOLCHAIN_FILE)
-        list(APPEND DX12_RENDERER_OIDN_CONFIGURE_COMMAND "-DCMAKE_TOOLCHAIN_FILE=${DX12_RENDERER_TOOLCHAIN_FILE}")
+# Do not forward the project's optional wrapper into the isolated OIDN build.
+# Only a real vcpkg toolchain is useful there; forwarding a stale wrapper/cache
+# can make CMake include a deleted vcpkg.cmake from an older build.
+set(DX12_RENDERER_OIDN_FORWARD_TOOLCHAIN "")
+if (DX12_RENDERER_TOOLCHAIN_FILE AND EXISTS "${DX12_RENDERER_TOOLCHAIN_FILE}")
+        get_filename_component(DX12_RENDERER_TOOLCHAIN_NAME
+                "${DX12_RENDERER_TOOLCHAIN_FILE}" NAME)
+        if (NOT DX12_RENDERER_TOOLCHAIN_NAME STREQUAL "OptionalVcpkgToolchain.cmake")
+                set(DX12_RENDERER_OIDN_FORWARD_TOOLCHAIN "${DX12_RENDERER_TOOLCHAIN_FILE}")
+        elseif (DEFINED ENV{VCPKG_ROOT} AND NOT "$ENV{VCPKG_ROOT}" STREQUAL "")
+                file(TO_CMAKE_PATH "$ENV{VCPKG_ROOT}" DX12_RENDERER_ENV_VCPKG_ROOT)
+                set(DX12_RENDERER_ENV_VCPKG_TOOLCHAIN
+                        "${DX12_RENDERER_ENV_VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
+                if (EXISTS "${DX12_RENDERER_ENV_VCPKG_TOOLCHAIN}")
+                        set(DX12_RENDERER_OIDN_FORWARD_TOOLCHAIN
+                                "${DX12_RENDERER_ENV_VCPKG_TOOLCHAIN}")
+                endif()
+        endif()
+endif()
+if (DX12_RENDERER_OIDN_FORWARD_TOOLCHAIN)
+        list(APPEND DX12_RENDERER_OIDN_CONFIGURE_COMMAND
+                "-DCMAKE_TOOLCHAIN_FILE=${DX12_RENDERER_OIDN_FORWARD_TOOLCHAIN}")
 endif()
 
 message(STATUS "Building isolated Open Image Denoise CPU and CUDA dependencies")

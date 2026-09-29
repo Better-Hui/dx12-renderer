@@ -47,6 +47,7 @@ public:
     uint32_t FlushPendingResourceBarriers(
         const CommandList& commandList,
         ResourceStateRegistry::SubmissionScope& submissionScope);
+    bool HasPendingResourceBarriers() const noexcept;
 //Modify End
     void FlushResourceBarriers(const CommandList& commandList);
 //Modify Begin:2026-07-30 by Hui

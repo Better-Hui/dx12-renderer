@@ -22,6 +22,8 @@ namespace RenderGraph
     class RenderGraphBuilder;
 }
 
+class NrdGraphPass;
+
 class NRD
 {
 public:
@@ -115,6 +117,8 @@ public:
     void AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs inputs);
 
 private:
+    friend class NrdGraphPass;
+
     struct PrepareConstants
     {
         DirectX::XMMATRIX WorldToView = DirectX::XMMatrixIdentity();

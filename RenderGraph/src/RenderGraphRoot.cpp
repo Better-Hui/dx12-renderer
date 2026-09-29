@@ -14,6 +14,8 @@
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Texture.h>
 
+#include "RenderGraphBarrierRecorder.h"
+
 //Modify Begin:2026-08-21 by Hui
 #include <string>
 
@@ -186,20 +188,20 @@ void RenderGraph::RenderGraphRoot::Present(const std::shared_ptr<Window>& pWindo
 
         if (pTexture->GetD3D12ResourceDesc().SampleDesc.Count > 1)
         {
-            CommandListInternalAccess::TransitionBarrier(
+            RenderGraphBarrierRecorder::Transition(
                 *pCommandList,
                 *pTexture,
                 D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
         }
         else
         {
-            CommandListInternalAccess::TransitionBarrier(
+            RenderGraphBarrierRecorder::Transition(
                 *pCommandList,
                 *pTexture,
                 D3D12_RESOURCE_STATE_COPY_SOURCE);
         }
 
-        CommandListInternalAccess::FlushResourceBarriers(*pCommandList);
+        RenderGraphBarrierRecorder::Flush(*pCommandList);
     }
 
     m_QueueScheduler.TrackExternalResource(resourceId, RenderPassQueue::Direct);
@@ -236,19 +238,19 @@ void RenderGraph::RenderGraphRoot::PresentWithOverlay(
 
         if (pTexture->GetD3D12ResourceDesc().SampleDesc.Count > 1)
         {
-            CommandListInternalAccess::TransitionBarrier(
+            RenderGraphBarrierRecorder::Transition(
                 commandList,
                 *pTexture,
                 D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
         }
         else
         {
-            CommandListInternalAccess::TransitionBarrier(
+            RenderGraphBarrierRecorder::Transition(
                 commandList,
                 *pTexture,
                 D3D12_RESOURCE_STATE_COPY_SOURCE);
         }
-        CommandListInternalAccess::FlushResourceBarriers(commandList);
+        RenderGraphBarrierRecorder::Flush(commandList);
 
         const RenderTarget& backBufferRenderTarget = pWindow->GetRenderTarget();
         const std::shared_ptr<Texture>& backBuffer = backBufferRenderTarget.GetTexture(Color0);
@@ -290,30 +292,30 @@ void RenderGraph::RenderGraphRoot::PresentWithExternalFrameProcessor(
     {
         PIXScope(*commandList, L"Render Graph: Prepare External Frame Processor");
 
-        CommandListInternalAccess::TransitionBarrier(
+        RenderGraphBarrierRecorder::Transition(
             *commandList,
             *displayTexture,
             D3D12_RESOURCE_STATE_COPY_SOURCE);
         for (const ResourceId resourceId : processorResourceIds)
         {
             Assert(resourceId != displayResourceId, "Display resource must not be duplicated in external processor resources.");
-            CommandListInternalAccess::TransitionBarrier(
+            RenderGraphBarrierRecorder::Transition(
                 *commandList,
                 m_ResourcePool->GetResource(resourceId),
                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         }
-        CommandListInternalAccess::FlushResourceBarriers(*commandList);
+        RenderGraphBarrierRecorder::Flush(*commandList);
 
         const RenderTarget& backBufferRenderTarget = pWindow->GetRenderTarget();
         const std::shared_ptr<Texture>& backBuffer = backBufferRenderTarget.GetTexture(Color0);
         pWindow->PrepareBackBufferForCopyDestination(*commandList);
         commandList->CopyResource(*backBuffer, *displayTexture);
 
-        CommandListInternalAccess::TransitionBarrier(
+        RenderGraphBarrierRecorder::Transition(
             *commandList,
             *displayTexture,
             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-        CommandListInternalAccess::FlushResourceBarriers(*commandList);
+        RenderGraphBarrierRecorder::Flush(*commandList);
 
         processor.Process(*commandList, displayTexture);
         if (overlayCallback)
@@ -351,11 +353,11 @@ void RenderGraph::RenderGraphRoot::PresentWithOverlayBlit(
     {
         PIXScope(commandList, L"Render Graph: Prepare Display Blit");
 
-        CommandListInternalAccess::TransitionBarrier(
+        RenderGraphBarrierRecorder::Transition(
             commandList,
             *pTexture,
             D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-        CommandListInternalAccess::FlushResourceBarriers(commandList);
+        RenderGraphBarrierRecorder::Flush(commandList);
 
         const RenderTarget& backBufferRenderTarget = pWindow->GetRenderTarget();
         pWindow->PrepareBackBufferForRenderTarget(commandList);
@@ -389,11 +391,11 @@ void RenderGraph::RenderGraphRoot::ReadbackTexture(
 
     auto commandList = m_DirectCommandQueue->GetCommandList();
     const auto& source = m_ResourcePool->GetTexture(sourceId);
-    CommandListInternalAccess::TransitionBarrier(
+    RenderGraphBarrierRecorder::Transition(
         *commandList,
         *source,
         D3D12_RESOURCE_STATE_COPY_SOURCE);
-    CommandListInternalAccess::FlushResourceBarriers(*commandList);
+    RenderGraphBarrierRecorder::Flush(*commandList);
 
     const CD3DX12_TEXTURE_COPY_LOCATION sourceLocation(source->GetD3D12Resource().Get(), 0u);
     const CD3DX12_TEXTURE_COPY_LOCATION destinationLocation(destination.Get(), destinationFootprint);

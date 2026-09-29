@@ -4,6 +4,7 @@
 
 #include <DX12Library/Helpers.h>
 #include <DX12Library/CommandListInternalAccess.h>
+#include <Framework/Rendering/Pipeline/CommandContext.h>
 //Modify Begin:2026-08-19 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
 //Modify End
@@ -24,26 +25,21 @@ void SharedUploadBuffer::Upload(CommandList& commandList, const Resource& destin
     uint8_t* pUploadPtr = SuballocateFromBuffer(bufferInfo, sizeInBytes, alignment);
     memcpy(pUploadPtr, pData, sizeInBytes);
 
+    CommandContext commandContext(commandList);
+
 //Modify Begin:2026-08-24 by Hui
-    CommandListInternalAccess::TransitionBarrier(
-        commandList,
-        destination,
-        D3D12_RESOURCE_STATE_COPY_DEST,
-        D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
-        true);
+    commandContext.TransitionResource(destination, D3D12_RESOURCE_STATE_COPY_DEST);
+    // The upload source is persistently GENERIC_READ and is not owned by a
+    // Resource wrapper. The destination transition remains pass-local here.
     commandList.CopyBufferRegion(
         destination,
         destinationOffset,
         bufferInfo.m_Buffer.Get(),
         pUploadPtr - bufferInfo.m_DataBegin,
         sizeInBytes);
-    CommandListInternalAccess::TransitionBarrier(
-        commandList,
-        destination,
-        D3D12_RESOURCE_STATE_GENERIC_READ);
+    commandContext.TransitionResource(destination, D3D12_RESOURCE_STATE_GENERIC_READ);
     //Modify End
 }
-//Modify End
 
 SharedUploadBuffer::BufferInfo& SharedUploadBuffer::GetBufferInfoForFrame(const uint64_t frameCount)
 {

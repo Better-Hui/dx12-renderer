@@ -1,9 +1,11 @@
 #pragma once
 
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-09-28 by Hui
 
 #include <d3d12.h>
 #include <wrl.h>
+
+#include <DX12Library/BarrierContext.h>
 
 #include <Framework/Rendering/Pipeline/CommandContextDescriptorAllocator.h>
 
@@ -13,15 +15,22 @@
 #include <memory>
 #include <span>
 #include <string_view>
+#include <unordered_map>
 
 class CommandList;
+class ExternalCommandContext;
 class BindlessDescriptorHeap;
 class ComputeShader;
 class IndirectCommandSignature;
+class IndexBuffer;
 class MeshShader;
 class PipelineDescriptorPool;
 class PipelineDescriptorSet;
 class PipelineLayout;
+class RenderTarget;
+class Texture;
+class VertexBuffer;
+class ClearValue;
 struct PipelineDescriptorRangeDesc;
 struct PipelineBoundResource;
 class RayTracingBindingSet;
@@ -69,13 +78,71 @@ class CommandContext final
 public:
     static constexpr uint32_t MaxDescriptorSetSlots = 16;
     explicit CommandContext(CommandList& commandList);
+    CommandContext(CommandList& commandList, BarrierContext& barrierContext);
+    explicit CommandContext(ExternalCommandContext& externalContext);
 
     CommandList& GetCommandList() const { return m_CommandList; }
+
+    /**
+     * Exposes the pass-local state recorder. RenderGraph owns pass-boundary
+     * plans; pass implementations use this object for internal phase changes.
+     */
+    BarrierContext& GetBarrierContext() const { return *m_BarrierContext; }
+
+    void TransitionResource(
+        const Resource& resource,
+        D3D12_RESOURCE_STATES stateAfter,
+        bool uavBefore = false,
+        UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES) const;
+    void TransitionResource(
+        ID3D12Resource* resource,
+        D3D12_RESOURCE_STATES stateAfter,
+        bool uavBefore = false,
+        UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES) const;
+    void UavBarrier(const Resource& resource) const;
+    void UavBarrier(ID3D12Resource* resource) const;
+    void FlushBarriers() const;
+
+    // Pass-local copy/resolve and render-target operations. RenderGraph owns
+    // pass-boundary plans; these helpers own the state needed by the operation.
+    void CopyResource(const Resource& destination, const Resource& source) const;
+    void ResolveSubresource(
+        const Resource& destination,
+        const Resource& source,
+        uint32_t destinationSubresource = 0,
+        uint32_t sourceSubresource = 0) const;
+    void SetRenderTarget(
+        const RenderTarget& renderTarget,
+        UINT textureArrayIndex = static_cast<UINT>(-1),
+        UINT mipLevel = 0,
+        bool useDepth = true,
+        bool readonlyDepth = false) const;
+    void ClearRenderTarget(
+        const RenderTarget& renderTarget,
+        const float clearColor[4],
+        D3D12_CLEAR_FLAGS clearFlags) const;
+    void ClearRenderTarget(
+        const RenderTarget& renderTarget,
+        const ClearValue& clearColor,
+        D3D12_CLEAR_FLAGS clearFlags) const;
+    void SetVertexBuffer(uint32_t slot, const VertexBuffer& vertexBuffer) const;
+    void SetVertexBufferView(
+        uint32_t slot,
+        const D3D12_VERTEX_BUFFER_VIEW& vertexBufferView,
+        const Resource& resource) const;
+    void SetIndexBuffer(const IndexBuffer& indexBuffer) const;
+    void SetIndexBufferView(
+        const D3D12_INDEX_BUFFER_VIEW& indexBufferView,
+        const Resource& resource) const;
 
     void BindPipeline(Shader& shader) const;
     void BindPipeline(MeshShader& shader) const;
     void BindPipeline(const ComputeShader& shader) const;
     void BindPipeline(const RayTracingShader& shader) const;
+    /** Bind a shader-visible heap supplied by an external renderer. */
+    void BindExternalDescriptorHeap(
+        D3D12_DESCRIPTOR_HEAP_TYPE heapType,
+        ID3D12DescriptorHeap* heap) const;
     void BindBindlessDescriptorHeap(BindlessDescriptorHeap& bindlessDescriptorHeap) const;
     void BindDescriptorSet(const PipelineDescriptorSetBindDesc& descriptorSetDesc) const;
     void BindDescriptorSet(const PipelineDescriptorSet& descriptorSet) const;
@@ -150,6 +217,15 @@ public:
     void DispatchRays(const RayTracingDispatchDesc& dispatchDesc) const;
 
 private:
+    void PrepareResource(
+        const Resource& resource,
+        D3D12_RESOURCE_STATES stateAfter,
+        bool uavWrite) const;
+    void PrepareResource(
+        ID3D12Resource* resource,
+        D3D12_RESOURCE_STATES stateAfter,
+        bool uavWrite) const;
+
     void SetPipelineLayout(PipelineBindPoint bindPoint, const PipelineLayout& pipelineLayout) const;
     void SetDescriptorSet(PipelineBindPoint bindPoint, const PipelineDescriptorSetBindDesc& descriptorSetDesc) const;
     void SetDescriptorSet(PipelineBindPoint bindPoint, const PipelineDescriptorSet& descriptorSet) const;
@@ -185,6 +261,8 @@ private:
     void SetDescriptorPool(const PipelineDescriptorPool& descriptorPool) const;
 
     CommandList& m_CommandList;
+    mutable std::unique_ptr<BarrierContext> m_OwnedBarrierContext;
+    mutable BarrierContext* m_BarrierContext = nullptr;
     mutable CommandContextDescriptorAllocator m_DescriptorAllocator;
     mutable const PipelineDescriptorPool* m_DescriptorPool = nullptr;
     mutable std::array<const PipelineDescriptorSet*, MaxDescriptorSetSlots> m_DescriptorSets = {};

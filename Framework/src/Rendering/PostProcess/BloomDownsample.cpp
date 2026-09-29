@@ -3,6 +3,7 @@
 #include <Framework/Blit_VS.h>
 #include <Framework/Bloom_Downsample_PS.h>
 #include <Framework/Geometry/Mesh.h>
+#include <Framework/Rendering/Pipeline/CommandContext.h>
 #include <DirectXMath.h>
 #include <DX12Library/Helpers.h>
 
@@ -41,7 +42,8 @@ void BloomDownsample::Execute(CommandList& commandList, const BloomParameters& p
 {
 	PIXScope(commandList, "Bloom Downsample");
 
-	commandList.SetRenderTarget(destination);
+	CommandContext commandContext(commandList);
+	commandContext.SetRenderTarget(destination);
 	commandList.SetAutomaticViewportAndScissorRect(destination);
 
 	m_Material->SetShaderResourceView("sourceColorTexture", ShaderResourceView(source));

@@ -1,6 +1,6 @@
 #include <Framework/Rendering/Lighting/ReSTIRDIPass.h>
 
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-09-29 by Hui
 #include <DX12Library/CommandList.h>
 #include <DX12Library/ByteAddressBuffer.h>
 #include <DX12Library/Helpers.h>
@@ -17,6 +17,7 @@
 #include <Framework/Rendering/Texture/UnorderedAccessView.h>
 #include <RenderGraph/RenderContext.h>
 #include <RenderGraph/RenderGraphBuilder.h>
+#include <RenderGraph/RenderPass.h>
 
 #include <iterator>
 #include <unordered_map>
@@ -106,17 +107,6 @@ namespace
             1u);
     }
 
-    struct ReSTIRDIGraphPassData
-    {
-        ReSTIRDIPass* Pass = nullptr;
-        std::shared_ptr<const ReSTIRDIGraphInputs> Inputs;
-    };
-
-    struct ReSTIRDIOutputClearPassData
-    {
-        RenderGraph::ResourceId Output = 0;
-    };
-
     void DeclareReSTIRDISharedResources(
         RenderGraph::RenderGraphPassBuilder& passBuilder,
         const ReSTIRDIGraphInputs& inputs)
@@ -126,6 +116,270 @@ namespace
         inputs.DeclareSharedResources(passBuilder);
     }
 }
+
+class ReSTIRDIGraphPass final : public RenderGraph::RenderPass
+{
+public:
+    enum class Kind
+    {
+        OutputClear,
+        Initial,
+        Temporal,
+        BoilingFilter,
+        Spatial,
+        Shade,
+    };
+
+    struct Desc
+    {
+        Kind PassKind = Kind::Initial;
+        ReSTIRDIPass* Pass = nullptr;
+        std::shared_ptr<const ReSTIRDIGraphInputs> Inputs;
+        std::wstring PassName;
+        RenderGraph::ResourceId TokenBefore = 0;
+        RenderGraph::ResourceId TokenAfter = 0;
+        RenderGraph::ImportedResourceHandle InitialReservoir;
+        RenderGraph::ImportedResourceHandle InitialReservoirState;
+        RenderGraph::ImportedResourceHandle TemporalReservoir;
+        RenderGraph::ImportedResourceHandle TemporalReservoirState;
+        RenderGraph::ImportedResourceHandle SpatialReservoir;
+        RenderGraph::ImportedResourceHandle SpatialReservoirState;
+        RenderGraph::ImportedResourceHandle FinalReservoir;
+        RenderGraph::ImportedResourceHandle FinalReservoirState;
+        RenderGraph::ImportedResourceHandle HistoryReadReservoir;
+        RenderGraph::ImportedResourceHandle HistoryReadReservoirState;
+        RenderGraph::ImportedResourceHandle HistoryReadPosition;
+        RenderGraph::ImportedResourceHandle HistoryReadNormalRoughness;
+        RenderGraph::ImportedResourceHandle HistoryReadDiffuseMetallic;
+        RenderGraph::ImportedResourceHandle HistoryReadSpecularOcclusion;
+        RenderGraph::ImportedResourceHandle HistoryWriteReservoir;
+        RenderGraph::ImportedResourceHandle HistoryWriteReservoirState;
+        RenderGraph::ImportedResourceHandle HistoryWritePosition;
+        RenderGraph::ImportedResourceHandle HistoryWriteNormalRoughness;
+        RenderGraph::ImportedResourceHandle HistoryWriteDiffuseMetallic;
+        RenderGraph::ImportedResourceHandle HistoryWriteSpecularOcclusion;
+    };
+
+    explicit ReSTIRDIGraphPass(Desc desc)
+        : m_Kind(desc.PassKind)
+        , m_Pass(*desc.Pass)
+        , m_Inputs(std::move(desc.Inputs))
+        , m_TokenBefore(desc.TokenBefore)
+        , m_TokenAfter(desc.TokenAfter)
+        , m_InitialReservoir(std::move(desc.InitialReservoir))
+        , m_InitialReservoirState(std::move(desc.InitialReservoirState))
+        , m_TemporalReservoir(std::move(desc.TemporalReservoir))
+        , m_TemporalReservoirState(std::move(desc.TemporalReservoirState))
+        , m_SpatialReservoir(std::move(desc.SpatialReservoir))
+        , m_SpatialReservoirState(std::move(desc.SpatialReservoirState))
+        , m_FinalReservoir(std::move(desc.FinalReservoir))
+        , m_FinalReservoirState(std::move(desc.FinalReservoirState))
+        , m_HistoryReadReservoir(std::move(desc.HistoryReadReservoir))
+        , m_HistoryReadReservoirState(std::move(desc.HistoryReadReservoirState))
+        , m_HistoryReadPosition(std::move(desc.HistoryReadPosition))
+        , m_HistoryReadNormalRoughness(std::move(desc.HistoryReadNormalRoughness))
+        , m_HistoryReadDiffuseMetallic(std::move(desc.HistoryReadDiffuseMetallic))
+        , m_HistoryReadSpecularOcclusion(std::move(desc.HistoryReadSpecularOcclusion))
+        , m_HistoryWriteReservoir(std::move(desc.HistoryWriteReservoir))
+        , m_HistoryWriteReservoirState(std::move(desc.HistoryWriteReservoirState))
+        , m_HistoryWritePosition(std::move(desc.HistoryWritePosition))
+        , m_HistoryWriteNormalRoughness(std::move(desc.HistoryWriteNormalRoughness))
+        , m_HistoryWriteDiffuseMetallic(std::move(desc.HistoryWriteDiffuseMetallic))
+        , m_HistoryWriteSpecularOcclusion(std::move(desc.HistoryWriteSpecularOcclusion))
+    {
+        Assert(desc.Pass != nullptr && m_Inputs != nullptr, "ReSTIR DI graph pass requires pass inputs.");
+        SetPassName(desc.PassName);
+        if (m_Kind == Kind::OutputClear)
+        {
+            RegisterOutput({ m_Inputs->DirectLighting, RenderGraph::OutputType::UnorderedAccess });
+            return;
+        }
+
+        if (m_Kind != Kind::BoilingFilter)
+        {
+            RenderGraph::RenderGraphPassBuilder sharedResourceBuilder(RenderGraph::RenderPassQueue::Direct);
+            DeclareReSTIRDISharedResources(sharedResourceBuilder, *m_Inputs);
+            sharedResourceBuilder.ApplyTo(*this);
+        }
+
+        if (m_Kind == Kind::Initial)
+        {
+            RegisterOutput({ m_InitialReservoir.GetId(), RenderGraph::OutputType::ExternalAccess });
+            RegisterOutput({ m_InitialReservoirState.GetId(), RenderGraph::OutputType::ExternalAccess });
+            RegisterOutput({ m_TokenAfter, RenderGraph::OutputType::Token });
+            AddImportedResourceAccess(m_InitialReservoir, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, RenderGraph::ExternalResourceAccessMode::Write, false);
+            AddImportedResourceAccess(m_InitialReservoirState, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, RenderGraph::ExternalResourceAccessMode::Write, false);
+        }
+        else if (m_Kind == Kind::Temporal)
+        {
+            RegisterInput({ m_TokenBefore, RenderGraph::InputType::Token });
+            RegisterInput({ m_InitialReservoir.GetId(), RenderGraph::InputType::ExternalAccess });
+            RegisterInput({ m_InitialReservoirState.GetId(), RenderGraph::InputType::ExternalAccess });
+            RegisterInput({ m_HistoryReadReservoir.GetId(), RenderGraph::InputType::ExternalAccess });
+            RegisterInput({ m_HistoryReadReservoirState.GetId(), RenderGraph::InputType::ExternalAccess });
+            RegisterInput({ m_HistoryReadPosition.GetId(), RenderGraph::InputType::ExternalAccess });
+            RegisterInput({ m_HistoryReadNormalRoughness.GetId(), RenderGraph::InputType::ExternalAccess });
+            RegisterInput({ m_HistoryReadDiffuseMetallic.GetId(), RenderGraph::InputType::ExternalAccess });
+            RegisterInput({ m_HistoryReadSpecularOcclusion.GetId(), RenderGraph::InputType::ExternalAccess });
+            RegisterOutput({ m_TemporalReservoir.GetId(), RenderGraph::OutputType::ExternalAccess });
+            RegisterOutput({ m_TemporalReservoirState.GetId(), RenderGraph::OutputType::ExternalAccess });
+            RegisterOutput({ m_TokenAfter, RenderGraph::OutputType::Token });
+            AddImportedResourceAccess(m_InitialReservoir, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, RenderGraph::ExternalResourceAccessMode::Read, false);
+            AddImportedResourceAccess(m_InitialReservoirState, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, RenderGraph::ExternalResourceAccessMode::Read, false);
+            AddImportedResourceAccess(m_HistoryReadReservoir, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, RenderGraph::ExternalResourceAccessMode::Read, false);
+            AddImportedResourceAccess(m_HistoryReadReservoirState, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, RenderGraph::ExternalResourceAccessMode::Read, false);
+            AddImportedResourceAccess(m_HistoryReadPosition, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, RenderGraph::ExternalResourceAccessMode::Read, false);
+            AddImportedResourceAccess(m_HistoryReadNormalRoughness, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, RenderGraph::ExternalResourceAccessMode::Read, false);
+            AddImportedResourceAccess(m_HistoryReadDiffuseMetallic, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, RenderGraph::ExternalResourceAccessMode::Read, false);
+            AddImportedResourceAccess(m_HistoryReadSpecularOcclusion, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, RenderGraph::ExternalResourceAccessMode::Read, false);
+            AddImportedResourceAccess(m_TemporalReservoir, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, RenderGraph::ExternalResourceAccessMode::Write, false);
+            AddImportedResourceAccess(m_TemporalReservoirState, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, RenderGraph::ExternalResourceAccessMode::Write, false);
+        }
+        else if (m_Kind == Kind::BoilingFilter)
+        {
+            RegisterInput({ m_TokenBefore, RenderGraph::InputType::Token });
+            RegisterOutput({ m_TemporalReservoir.GetId(), RenderGraph::OutputType::ExternalAccess });
+            RegisterOutput({ m_TemporalReservoirState.GetId(), RenderGraph::OutputType::ExternalAccess });
+            RegisterOutput({ m_TokenAfter, RenderGraph::OutputType::Token });
+            AddImportedResourceAccess(m_TemporalReservoir, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, RenderGraph::ExternalResourceAccessMode::Write, true);
+            AddImportedResourceAccess(m_TemporalReservoirState, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, RenderGraph::ExternalResourceAccessMode::Write, true);
+        }
+        else if (m_Kind == Kind::Spatial)
+        {
+            RegisterInput({ m_TokenBefore, RenderGraph::InputType::Token });
+            RegisterInput({ m_FinalReservoir.GetId(), RenderGraph::InputType::ExternalAccess });
+            RegisterInput({ m_FinalReservoirState.GetId(), RenderGraph::InputType::ExternalAccess });
+            RegisterOutput({ m_SpatialReservoir.GetId(), RenderGraph::OutputType::ExternalAccess });
+            RegisterOutput({ m_SpatialReservoirState.GetId(), RenderGraph::OutputType::ExternalAccess });
+            RegisterOutput({ m_TokenAfter, RenderGraph::OutputType::Token });
+            AddImportedResourceAccess(m_FinalReservoir, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, RenderGraph::ExternalResourceAccessMode::Read, false);
+            AddImportedResourceAccess(m_FinalReservoirState, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, RenderGraph::ExternalResourceAccessMode::Read, false);
+            AddImportedResourceAccess(m_SpatialReservoir, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, RenderGraph::ExternalResourceAccessMode::Write, false);
+            AddImportedResourceAccess(m_SpatialReservoirState, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, RenderGraph::ExternalResourceAccessMode::Write, false);
+        }
+        else
+        {
+            RegisterInput({ m_TokenBefore, RenderGraph::InputType::Token });
+            RegisterInput({ m_FinalReservoir.GetId(), RenderGraph::InputType::ExternalAccess });
+            RegisterInput({ m_FinalReservoirState.GetId(), RenderGraph::InputType::ExternalAccess });
+            RegisterOutput({ m_HistoryWriteReservoir.GetId(), RenderGraph::OutputType::ExternalAccess });
+            RegisterOutput({ m_HistoryWriteReservoirState.GetId(), RenderGraph::OutputType::ExternalAccess });
+            RegisterOutput({ m_HistoryWritePosition.GetId(), RenderGraph::OutputType::ExternalAccess });
+            RegisterOutput({ m_HistoryWriteNormalRoughness.GetId(), RenderGraph::OutputType::ExternalAccess });
+            RegisterOutput({ m_HistoryWriteDiffuseMetallic.GetId(), RenderGraph::OutputType::ExternalAccess });
+            RegisterOutput({ m_HistoryWriteSpecularOcclusion.GetId(), RenderGraph::OutputType::ExternalAccess });
+            if (m_Inputs->UseCompactedDispatch)
+            {
+                RegisterInput({ m_Inputs->DirectLighting, RenderGraph::InputType::UnorderedAccess });
+            }
+            RegisterOutput({ m_Inputs->DirectLighting, RenderGraph::OutputType::UnorderedAccess });
+            RegisterOutput({ m_Inputs->OutputToken, RenderGraph::OutputType::Token });
+            AddImportedResourceAccess(m_FinalReservoir, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, RenderGraph::ExternalResourceAccessMode::Read, false);
+            AddImportedResourceAccess(m_FinalReservoirState, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, RenderGraph::ExternalResourceAccessMode::Read, false);
+            AddImportedResourceAccess(m_HistoryWriteReservoir, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, RenderGraph::ExternalResourceAccessMode::Write, false);
+            AddImportedResourceAccess(m_HistoryWriteReservoirState, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, RenderGraph::ExternalResourceAccessMode::Write, false);
+            AddImportedResourceAccess(m_HistoryWritePosition, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, RenderGraph::ExternalResourceAccessMode::Write, false);
+            AddImportedResourceAccess(m_HistoryWriteNormalRoughness, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, RenderGraph::ExternalResourceAccessMode::Write, false);
+            AddImportedResourceAccess(m_HistoryWriteDiffuseMetallic, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, RenderGraph::ExternalResourceAccessMode::Write, false);
+            AddImportedResourceAccess(m_HistoryWriteSpecularOcclusion, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, RenderGraph::ExternalResourceAccessMode::Write, false);
+        }
+    }
+
+protected:
+    void InitImpl(CommandList&) override {}
+
+    void ExecuteImpl(const RenderGraph::RenderContext& context, RenderGraph::RenderPassContext& passContext) override
+    {
+        CommandList& commandList = passContext.GetCommandList();
+        if (m_Kind == Kind::OutputClear)
+        {
+            const UINT clearValues[4] = {};
+            CommandContext commandContext(commandList);
+            commandContext.ClearUnorderedAccessUint(context.GetResource(m_Inputs->DirectLighting), clearValues);
+            return;
+        }
+
+        ReSTIRDIExecutionInputs inputs = m_Inputs->ResolveFrameInputs(context);
+        ReSTIRDIPass::PipelineSet& pipelines = m_Pass.GetPipelines(
+            inputs.FrameState.UseSoftShadowVariant,
+            inputs.FrameState.EnvironmentProjectionVariant);
+        CommandContext commandContext(commandList);
+        if (inputs.PrepareCommandContext)
+        {
+            inputs.PrepareCommandContext(commandContext);
+        }
+        if (m_Kind == Kind::Initial)
+        {
+            m_Pass.ExecuteInitialSampling(commandContext, inputs, pipelines);
+        }
+        else if (m_Kind == Kind::Temporal)
+        {
+            m_Pass.ExecuteTemporalResampling(commandContext, inputs, pipelines);
+        }
+        else if (m_Kind == Kind::BoilingFilter)
+        {
+            if (inputs.FrameState.Constants.TemporalResamplingEnabled != 0u &&
+                inputs.FrameState.Constants.BoilingFilterEnabled != 0u)
+            {
+                m_Pass.ExecuteBoilingFilter(commandContext, inputs, pipelines);
+            }
+        }
+        else if (m_Kind == Kind::Spatial)
+        {
+            const bool useTemporal = m_Inputs->EnableTemporalResampling;
+            const std::shared_ptr<Texture>& inputReservoir = useTemporal
+                ? m_Pass.m_Resources->TemporalReservoir
+                : m_Pass.m_Resources->InitialReservoir;
+            const std::shared_ptr<Texture>& inputReservoirState = useTemporal
+                ? m_Pass.m_Resources->TemporalReservoirState
+                : m_Pass.m_Resources->InitialReservoirState;
+            m_Pass.ExecuteSpatialResampling(commandContext, inputs, pipelines, inputReservoir, inputReservoirState);
+        }
+        else
+        {
+            std::shared_ptr<Texture> reservoir = m_Pass.m_Resources->InitialReservoir;
+            std::shared_ptr<Texture> reservoirState = m_Pass.m_Resources->InitialReservoirState;
+            if (m_Inputs->EnableTemporalResampling)
+            {
+                reservoir = m_Pass.m_Resources->TemporalReservoir;
+                reservoirState = m_Pass.m_Resources->TemporalReservoirState;
+            }
+            if (m_Inputs->EnableSpatialResampling)
+            {
+                reservoir = m_Pass.m_Resources->SpatialReservoir;
+                reservoirState = m_Pass.m_Resources->SpatialReservoirState;
+            }
+            m_Pass.ExecuteFinalShading(commandContext, inputs, pipelines, reservoir, reservoirState);
+        }
+    }
+
+private:
+    Kind m_Kind;
+    ReSTIRDIPass& m_Pass;
+    std::shared_ptr<const ReSTIRDIGraphInputs> m_Inputs;
+    RenderGraph::ResourceId m_TokenBefore = 0;
+    RenderGraph::ResourceId m_TokenAfter = 0;
+    RenderGraph::ImportedResourceHandle m_InitialReservoir;
+    RenderGraph::ImportedResourceHandle m_InitialReservoirState;
+    RenderGraph::ImportedResourceHandle m_TemporalReservoir;
+    RenderGraph::ImportedResourceHandle m_TemporalReservoirState;
+    RenderGraph::ImportedResourceHandle m_SpatialReservoir;
+    RenderGraph::ImportedResourceHandle m_SpatialReservoirState;
+    RenderGraph::ImportedResourceHandle m_FinalReservoir;
+    RenderGraph::ImportedResourceHandle m_FinalReservoirState;
+    RenderGraph::ImportedResourceHandle m_HistoryReadReservoir;
+    RenderGraph::ImportedResourceHandle m_HistoryReadReservoirState;
+    RenderGraph::ImportedResourceHandle m_HistoryReadPosition;
+    RenderGraph::ImportedResourceHandle m_HistoryReadNormalRoughness;
+    RenderGraph::ImportedResourceHandle m_HistoryReadDiffuseMetallic;
+    RenderGraph::ImportedResourceHandle m_HistoryReadSpecularOcclusion;
+    RenderGraph::ImportedResourceHandle m_HistoryWriteReservoir;
+    RenderGraph::ImportedResourceHandle m_HistoryWriteReservoirState;
+    RenderGraph::ImportedResourceHandle m_HistoryWritePosition;
+    RenderGraph::ImportedResourceHandle m_HistoryWriteNormalRoughness;
+    RenderGraph::ImportedResourceHandle m_HistoryWriteDiffuseMetallic;
+    RenderGraph::ImportedResourceHandle m_HistoryWriteSpecularOcclusion;
+};
 
 ReSTIRDIPass::ReSTIRDIPass(
     FrameworkDeviceContext& deviceContext,
@@ -294,131 +548,65 @@ void ReSTIRDIPass::AddPasses(
 
     if (graphInputs->UseCompactedDispatch)
     {
-        builder.AddPass<ReSTIRDIOutputClearPassData>(
-            L"ReSTIR DI Output Clear",
-            [graphInputs](
-                RenderGraph::RenderGraphPassBuilder& passBuilder,
-                ReSTIRDIOutputClearPassData& passData)
-            {
-                passData.Output = graphInputs->DirectLighting;
-                passBuilder.WriteUav(graphInputs->DirectLighting);
-            },
-            [](const ReSTIRDIOutputClearPassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
-            {
-                const UINT clearValues[4] = {};
-                commandList.ClearUnorderedAccessUint(context.GetResource(passData.Output), clearValues);
-            });
+        ReSTIRDIGraphPass::Desc desc;
+        desc.PassKind = ReSTIRDIGraphPass::Kind::OutputClear;
+        desc.Pass = this;
+        desc.Inputs = graphInputs;
+        desc.PassName = L"ReSTIR DI Output Clear";
+        builder.AddPass(std::make_unique<ReSTIRDIGraphPass>(std::move(desc)));
     }
 
-    builder.AddPass<ReSTIRDIGraphPassData>(
-        L"ReSTIR DI Initial Sampling",
-        [this, graphInputs, initialFinished, initialReservoir, initialReservoirState](
-            RenderGraph::RenderGraphPassBuilder& passBuilder,
-            ReSTIRDIGraphPassData& passData)
-        {
-            passData.Pass = this;
-            passData.Inputs = graphInputs;
-            DeclareReSTIRDISharedResources(passBuilder, *graphInputs);
-            passBuilder.WriteImported(initialReservoir, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-            passBuilder.WriteImported(initialReservoirState, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-            passBuilder.WriteToken(initialFinished);
-        },
-        [](const ReSTIRDIGraphPassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
-        {
-            ReSTIRDIExecutionInputs inputs = passData.Inputs->ResolveFrameInputs(context);
-            PipelineSet& pipelines = passData.Pass->GetPipelines(
-                inputs.FrameState.UseSoftShadowVariant,
-                inputs.FrameState.EnvironmentProjectionVariant);
-            CommandContext commandContext(commandList);
-            if (inputs.PrepareCommandContext)
-            {
-                inputs.PrepareCommandContext(commandContext);
-            }
-            passData.Pass->ExecuteInitialSampling(commandContext, inputs, pipelines);
-        });
+    {
+        ReSTIRDIGraphPass::Desc desc;
+        desc.PassKind = ReSTIRDIGraphPass::Kind::Initial;
+        desc.Pass = this;
+        desc.Inputs = graphInputs;
+        desc.PassName = L"ReSTIR DI Initial Sampling";
+        desc.TokenAfter = initialFinished;
+        desc.InitialReservoir = initialReservoir;
+        desc.InitialReservoirState = initialReservoirState;
+        builder.AddPass(std::make_unique<ReSTIRDIGraphPass>(std::move(desc)));
+    }
 
     RenderGraph::ResourceId previousToken = initialFinished;
     RenderGraph::ImportedResourceHandle finalReservoir = initialReservoir;
     RenderGraph::ImportedResourceHandle finalReservoirState = initialReservoirState;
     if (graphInputs->EnableTemporalResampling)
     {
-        builder.AddPass<ReSTIRDIGraphPassData>(
-            L"ReSTIR DI Temporal Resampling",
-            [this, graphInputs, previousToken, temporalFinished, initialReservoir, initialReservoirState,
-                historyReadReservoir, historyReadReservoirState, historyReadPosition,
-                historyReadNormalRoughness, historyReadDiffuseMetallic, historyReadSpecularOcclusion,
-                temporalReservoir, temporalReservoirState](
-                RenderGraph::RenderGraphPassBuilder& passBuilder,
-                ReSTIRDIGraphPassData& passData)
-            {
-                passData.Pass = this;
-                passData.Inputs = graphInputs;
-                DeclareReSTIRDISharedResources(passBuilder, *graphInputs);
-                passBuilder.ReadToken(previousToken);
-                passBuilder.ReadImported(initialReservoir, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-                passBuilder.ReadImported(initialReservoirState, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-                passBuilder.ReadImported(historyReadReservoir, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-                passBuilder.ReadImported(historyReadReservoirState, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-                passBuilder.ReadImported(historyReadPosition, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-                passBuilder.ReadImported(historyReadNormalRoughness, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-                passBuilder.ReadImported(historyReadDiffuseMetallic, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-                passBuilder.ReadImported(historyReadSpecularOcclusion, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-                passBuilder.WriteImported(temporalReservoir, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-                passBuilder.WriteImported(temporalReservoirState, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-                passBuilder.WriteToken(temporalFinished);
-            },
-            [](const ReSTIRDIGraphPassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
-            {
-                ReSTIRDIExecutionInputs inputs = passData.Inputs->ResolveFrameInputs(context);
-                PipelineSet& pipelines = passData.Pass->GetPipelines(
-                    inputs.FrameState.UseSoftShadowVariant,
-                    inputs.FrameState.EnvironmentProjectionVariant);
-                CommandContext commandContext(commandList);
-                if (inputs.PrepareCommandContext)
-                {
-                    inputs.PrepareCommandContext(commandContext);
-                }
-                passData.Pass->ExecuteTemporalResampling(commandContext, inputs, pipelines);
-            });
+        ReSTIRDIGraphPass::Desc desc;
+        desc.PassKind = ReSTIRDIGraphPass::Kind::Temporal;
+        desc.Pass = this;
+        desc.Inputs = graphInputs;
+        desc.PassName = L"ReSTIR DI Temporal Resampling";
+        desc.TokenBefore = previousToken;
+        desc.TokenAfter = temporalFinished;
+        desc.InitialReservoir = initialReservoir;
+        desc.InitialReservoirState = initialReservoirState;
+        desc.TemporalReservoir = temporalReservoir;
+        desc.TemporalReservoirState = temporalReservoirState;
+        desc.HistoryReadReservoir = historyReadReservoir;
+        desc.HistoryReadReservoirState = historyReadReservoirState;
+        desc.HistoryReadPosition = historyReadPosition;
+        desc.HistoryReadNormalRoughness = historyReadNormalRoughness;
+        desc.HistoryReadDiffuseMetallic = historyReadDiffuseMetallic;
+        desc.HistoryReadSpecularOcclusion = historyReadSpecularOcclusion;
+        builder.AddPass(std::make_unique<ReSTIRDIGraphPass>(std::move(desc)));
         previousToken = temporalFinished;
         finalReservoir = temporalReservoir;
         finalReservoirState = temporalReservoirState;
 
         if (graphInputs->EnableBoilingFilter)
         {
-            builder.AddPass<ReSTIRDIGraphPassData>(
-                L"ReSTIR DI Boiling Filter",
-                [this, graphInputs, previousToken, boilingFinished, temporalReservoir, temporalReservoirState](
-                    RenderGraph::RenderGraphPassBuilder& passBuilder,
-                    ReSTIRDIGraphPassData& passData)
-                {
-                    passData.Pass = this;
-                    passData.Inputs = graphInputs;
-                    passBuilder.ReadToken(previousToken);
-                    passBuilder.ReadWriteImported(
-                        temporalReservoir,
-                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                        true);
-                    passBuilder.ReadWriteImported(
-                        temporalReservoirState,
-                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                        true);
-                    passBuilder.WriteToken(boilingFinished);
-                },
-                [](const ReSTIRDIGraphPassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
-                {
-                    ReSTIRDIExecutionInputs inputs = passData.Inputs->ResolveFrameInputs(context);
-                    if (inputs.FrameState.Constants.TemporalResamplingEnabled == 0u ||
-                        inputs.FrameState.Constants.BoilingFilterEnabled == 0u)
-                    {
-                        return;
-                    }
-                    PipelineSet& pipelines = passData.Pass->GetPipelines(
-                        inputs.FrameState.UseSoftShadowVariant,
-                        inputs.FrameState.EnvironmentProjectionVariant);
-                    CommandContext commandContext(commandList);
-                    passData.Pass->ExecuteBoilingFilter(commandContext, inputs, pipelines);
-                });
+            ReSTIRDIGraphPass::Desc desc;
+            desc.PassKind = ReSTIRDIGraphPass::Kind::BoilingFilter;
+            desc.Pass = this;
+            desc.Inputs = graphInputs;
+            desc.PassName = L"ReSTIR DI Boiling Filter";
+            desc.TokenBefore = previousToken;
+            desc.TokenAfter = boilingFinished;
+            desc.TemporalReservoir = temporalReservoir;
+            desc.TemporalReservoirState = temporalReservoirState;
+            builder.AddPass(std::make_unique<ReSTIRDIGraphPass>(std::move(desc)));
             previousToken = boilingFinished;
         }
     }
@@ -427,105 +615,40 @@ void ReSTIRDIPass::AddPasses(
     {
         const auto spatialInputReservoir = finalReservoir;
         const auto spatialInputReservoirState = finalReservoirState;
-        builder.AddPass<ReSTIRDIGraphPassData>(
-            L"ReSTIR DI Spatial Resampling",
-            [this, graphInputs, previousToken, spatialFinished, spatialInputReservoir,
-                spatialInputReservoirState, spatialReservoir, spatialReservoirState](
-                RenderGraph::RenderGraphPassBuilder& passBuilder,
-                ReSTIRDIGraphPassData& passData)
-            {
-                passData.Pass = this;
-                passData.Inputs = graphInputs;
-                DeclareReSTIRDISharedResources(passBuilder, *graphInputs);
-                passBuilder.ReadToken(previousToken);
-                passBuilder.ReadImported(spatialInputReservoir, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-                passBuilder.ReadImported(spatialInputReservoirState, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-                passBuilder.WriteImported(spatialReservoir, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-                passBuilder.WriteImported(spatialReservoirState, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-                passBuilder.WriteToken(spatialFinished);
-            },
-            [](const ReSTIRDIGraphPassData& passData,
-                const RenderGraph::RenderContext& context,
-                CommandList& commandList)
-            {
-                ReSTIRDIExecutionInputs inputs = passData.Inputs->ResolveFrameInputs(context);
-                PipelineSet& pipelines = passData.Pass->GetPipelines(
-                    inputs.FrameState.UseSoftShadowVariant,
-                    inputs.FrameState.EnvironmentProjectionVariant);
-                CommandContext commandContext(commandList);
-                if (inputs.PrepareCommandContext)
-                {
-                    inputs.PrepareCommandContext(commandContext);
-                }
-                const std::shared_ptr<Texture>& inputReservoir = passData.Inputs->EnableTemporalResampling
-                    ? passData.Pass->m_Resources->TemporalReservoir
-                    : passData.Pass->m_Resources->InitialReservoir;
-                const std::shared_ptr<Texture>& inputReservoirState = passData.Inputs->EnableTemporalResampling
-                    ? passData.Pass->m_Resources->TemporalReservoirState
-                    : passData.Pass->m_Resources->InitialReservoirState;
-                passData.Pass->ExecuteSpatialResampling(
-                    commandContext, inputs, pipelines, inputReservoir, inputReservoirState);
-            });
+        ReSTIRDIGraphPass::Desc desc;
+        desc.PassKind = ReSTIRDIGraphPass::Kind::Spatial;
+        desc.Pass = this;
+        desc.Inputs = graphInputs;
+        desc.PassName = L"ReSTIR DI Spatial Resampling";
+        desc.TokenBefore = previousToken;
+        desc.TokenAfter = spatialFinished;
+        desc.FinalReservoir = spatialInputReservoir;
+        desc.FinalReservoirState = spatialInputReservoirState;
+        desc.SpatialReservoir = spatialReservoir;
+        desc.SpatialReservoirState = spatialReservoirState;
+        builder.AddPass(std::make_unique<ReSTIRDIGraphPass>(std::move(desc)));
         previousToken = spatialFinished;
         finalReservoir = spatialReservoir;
         finalReservoirState = spatialReservoirState;
     }
 
-    builder.AddPass<ReSTIRDIGraphPassData>(
-        L"ReSTIR DI Shade",
-        [this, graphInputs, previousToken, finalReservoir, finalReservoirState,
-            historyWriteReservoir, historyWriteReservoirState, historyWritePosition,
-            historyWriteNormalRoughness, historyWriteDiffuseMetallic, historyWriteSpecularOcclusion](
-            RenderGraph::RenderGraphPassBuilder& passBuilder,
-            ReSTIRDIGraphPassData& passData)
-        {
-            passData.Pass = this;
-            passData.Inputs = graphInputs;
-            DeclareReSTIRDISharedResources(passBuilder, *graphInputs);
-            passBuilder.ReadToken(previousToken);
-            passBuilder.ReadImported(finalReservoir, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-            passBuilder.ReadImported(finalReservoirState, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-            passBuilder.WriteImported(historyWriteReservoir, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-            passBuilder.WriteImported(historyWriteReservoirState, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-            passBuilder.WriteImported(historyWritePosition, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-            passBuilder.WriteImported(historyWriteNormalRoughness, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-            passBuilder.WriteImported(historyWriteDiffuseMetallic, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-            passBuilder.WriteImported(historyWriteSpecularOcclusion, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-            if (graphInputs->UseCompactedDispatch)
-            {
-                passBuilder.ReadWriteUav(graphInputs->DirectLighting);
-            }
-            else
-            {
-                passBuilder.WriteUav(graphInputs->DirectLighting);
-            }
-            passBuilder.WriteToken(graphInputs->OutputToken);
-        },
-        [](const ReSTIRDIGraphPassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
-        {
-            ReSTIRDIExecutionInputs inputs = passData.Inputs->ResolveFrameInputs(context);
-            PipelineSet& pipelines = passData.Pass->GetPipelines(
-                inputs.FrameState.UseSoftShadowVariant,
-                inputs.FrameState.EnvironmentProjectionVariant);
-            CommandContext commandContext(commandList);
-            if (inputs.PrepareCommandContext)
-            {
-                inputs.PrepareCommandContext(commandContext);
-            }
-            std::shared_ptr<Texture> reservoir = passData.Pass->m_Resources->InitialReservoir;
-            std::shared_ptr<Texture> reservoirState = passData.Pass->m_Resources->InitialReservoirState;
-            if (passData.Inputs->EnableTemporalResampling)
-            {
-                reservoir = passData.Pass->m_Resources->TemporalReservoir;
-                reservoirState = passData.Pass->m_Resources->TemporalReservoirState;
-            }
-            if (passData.Inputs->EnableSpatialResampling)
-            {
-                reservoir = passData.Pass->m_Resources->SpatialReservoir;
-                reservoirState = passData.Pass->m_Resources->SpatialReservoirState;
-            }
-            passData.Pass->ExecuteFinalShading(commandContext, inputs, pipelines, reservoir, reservoirState);
-        });
+    {
+        ReSTIRDIGraphPass::Desc desc;
+        desc.PassKind = ReSTIRDIGraphPass::Kind::Shade;
+        desc.Pass = this;
+        desc.Inputs = graphInputs;
+        desc.PassName = L"ReSTIR DI Shade";
+        desc.TokenBefore = previousToken;
+        desc.FinalReservoir = finalReservoir;
+        desc.FinalReservoirState = finalReservoirState;
+        desc.HistoryWriteReservoir = historyWriteReservoir;
+        desc.HistoryWriteReservoirState = historyWriteReservoirState;
+        desc.HistoryWritePosition = historyWritePosition;
+        desc.HistoryWriteNormalRoughness = historyWriteNormalRoughness;
+        desc.HistoryWriteDiffuseMetallic = historyWriteDiffuseMetallic;
+        desc.HistoryWriteSpecularOcclusion = historyWriteSpecularOcclusion;
+        builder.AddPass(std::make_unique<ReSTIRDIGraphPass>(std::move(desc)));
+    }
 }
 
 void ReSTIRDIPass::EnsureResources(const uint32_t width, const uint32_t height)

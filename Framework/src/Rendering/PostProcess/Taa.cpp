@@ -12,11 +12,13 @@
 #include <Framework/Geometry/Mesh.h>
 #include <Framework/Rendering/Pipeline/Shader.h>
 #include <Framework/Rendering/Pipeline/ShaderBlob.h>
+#include <Framework/Rendering/Pipeline/CommandContext.h>
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <Framework/Scene/Material.h>
 #include <Framework/TAA_Resolve_PS.h>
 #include <RenderGraph/RenderContext.h>
 #include <RenderGraph/RenderGraphBuilder.h>
+#include <RenderGraph/RenderPass.h>
 
 #include <algorithm>
 #include <utility>
@@ -29,18 +31,6 @@ namespace
         float ModulationFactor = 0.0f;
     };
 
-    struct TaaResolvePassData
-    {
-        TAA* Feature = nullptr;
-        std::shared_ptr<const TAA::GraphInputs> Inputs;
-    };
-
-    struct TaaHistoryPassData
-    {
-        TAA* Feature = nullptr;
-        std::shared_ptr<const TAA::GraphInputs> Inputs;
-    };
-
     const RenderTarget& GetPassRenderTarget(const RenderGraph::RenderContext& context)
     {
         const std::shared_ptr<RenderTarget>& renderTarget = context.GetRenderTargetInfo().m_RenderTarget;
@@ -48,6 +38,97 @@ namespace
         return *renderTarget;
     }
 }
+
+class TaaGraphPass final : public RenderGraph::RenderPass
+{
+public:
+    enum class Kind
+    {
+        Resolve,
+        CaptureHistory,
+    };
+
+    struct Desc
+    {
+        Kind PassKind = Kind::Resolve;
+        TAA* Feature = nullptr;
+        std::shared_ptr<const TAA::GraphInputs> Inputs;
+        std::wstring PassName;
+        RenderGraph::ImportedResourceHandle HistoryRead;
+        RenderGraph::ImportedResourceHandle HistoryWrite;
+    };
+
+    explicit TaaGraphPass(Desc desc)
+        : m_Kind(desc.PassKind)
+        , m_Feature(*desc.Feature)
+        , m_Inputs(std::move(desc.Inputs))
+        , m_HistoryRead(std::move(desc.HistoryRead))
+        , m_HistoryWrite(std::move(desc.HistoryWrite))
+    {
+        Assert(desc.Feature != nullptr && m_Inputs != nullptr, "TAA graph pass requires feature inputs.");
+        SetPassName(desc.PassName);
+        if (m_Kind == Kind::Resolve)
+        {
+            RegisterInput({ m_Inputs->InputToken, RenderGraph::InputType::Token });
+            RegisterInput({ m_Inputs->CurrentColor, RenderGraph::InputType::ShaderResource });
+            RegisterInput({ m_HistoryRead.GetId(), RenderGraph::InputType::ExternalAccess });
+            RegisterInput({ m_Inputs->Velocity, RenderGraph::InputType::ShaderResource });
+            RegisterOutput({ m_Inputs->Output, RenderGraph::OutputType::RenderTarget });
+            AddImportedResourceAccess(
+                m_HistoryRead,
+                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+                RenderGraph::ExternalResourceAccessMode::Read,
+                false);
+        }
+        else
+        {
+            RegisterInput({ m_Inputs->Output, RenderGraph::InputType::CopySource });
+            RegisterOutput({ m_HistoryWrite.GetId(), RenderGraph::OutputType::ExternalAccess });
+            RegisterOutput({ m_Inputs->OutputToken, RenderGraph::OutputType::Token });
+            AddImportedResourceAccess(
+                m_HistoryWrite,
+                D3D12_RESOURCE_STATE_COPY_DEST,
+                RenderGraph::ExternalResourceAccessMode::Write,
+                false);
+        }
+    }
+
+protected:
+    void InitImpl(CommandList&) override {}
+
+    void ExecuteImpl(const RenderGraph::RenderContext& context, RenderGraph::RenderPassContext& passContext) override
+    {
+        CommandList& commandList = passContext.GetCommandList();
+        if (m_Kind == Kind::Resolve)
+        {
+            m_Feature.RecordResolve(
+                commandList,
+                context.GetTexture(m_Inputs->CurrentColor),
+                m_Feature.m_HistoryBuffers[m_Feature.m_HistoryIndex],
+                context.GetTexture(m_Inputs->Velocity),
+                GetPassRenderTarget(context),
+                m_Feature.m_HistoryValid ? m_Inputs->ResolveModulationFactor() : 0.0f,
+                context.GetMetadata().m_ScreenWidth,
+                context.GetMetadata().m_ScreenHeight);
+            return;
+        }
+
+        const uint32_t writeIndex = 1u - m_Feature.m_HistoryIndex;
+        CommandContext commandContext(commandList);
+        commandContext.CopyResource(
+            *m_Feature.m_HistoryBuffers[writeIndex],
+            *context.GetTexture(m_Inputs->Output));
+        m_Feature.m_HistoryValid = true;
+        m_Feature.m_HistoryCapturePending = true;
+    }
+
+private:
+    Kind m_Kind;
+    TAA& m_Feature;
+    std::shared_ptr<const TAA::GraphInputs> m_Inputs;
+    RenderGraph::ImportedResourceHandle m_HistoryRead;
+    RenderGraph::ImportedResourceHandle m_HistoryWrite;
+};
 
 TAA::TAA(
     FrameworkDeviceContext& deviceContext,
@@ -126,55 +207,21 @@ void TAA::AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs inputs
         historyWriteName.c_str(),
         [this]() -> const Resource& { return *m_HistoryBuffers[1u - m_HistoryIndex]; });
 
-    builder.AddPass<TaaResolvePassData>(
-        L"TAA Resolve",
-        [this, sharedInputs, historyRead](
-            RenderGraph::RenderGraphPassBuilder& passBuilder,
-            TaaResolvePassData& passData)
-        {
-            passData.Feature = this;
-            passData.Inputs = sharedInputs;
-            passBuilder.ReadToken(sharedInputs->InputToken);
-            passBuilder.ReadTexture(sharedInputs->CurrentColor);
-            passBuilder.ReadImported(historyRead, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-            passBuilder.ReadTexture(sharedInputs->Velocity);
-            passBuilder.WriteTexture(sharedInputs->Output);
-        },
-        [](const TaaResolvePassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
-        {
-            const TAA::GraphInputs& inputs = *passData.Inputs;
-            passData.Feature->RecordResolve(
-                commandList,
-                context.GetTexture(inputs.CurrentColor),
-                passData.Feature->m_HistoryBuffers[passData.Feature->m_HistoryIndex],
-                context.GetTexture(inputs.Velocity),
-                GetPassRenderTarget(context),
-                passData.Feature->m_HistoryValid ? inputs.ResolveModulationFactor() : 0.0f,
-                context.GetMetadata().m_ScreenWidth,
-                context.GetMetadata().m_ScreenHeight);
-        });
+    builder.AddPass(std::make_unique<TaaGraphPass>(TaaGraphPass::Desc{
+        .PassKind = TaaGraphPass::Kind::Resolve,
+        .Feature = this,
+        .Inputs = sharedInputs,
+        .PassName = L"TAA Resolve",
+        .HistoryRead = historyRead,
+    }));
 
-    builder.AddPass<TaaHistoryPassData>(
-        L"TAA Capture History",
-        [this, sharedInputs, historyWrite](
-            RenderGraph::RenderGraphPassBuilder& passBuilder,
-            TaaHistoryPassData& passData)
-        {
-            passData.Feature = this;
-            passData.Inputs = sharedInputs;
-            passBuilder.ReadCopySource(sharedInputs->Output);
-            passBuilder.WriteImported(historyWrite, D3D12_RESOURCE_STATE_COPY_DEST);
-            passBuilder.WriteToken(sharedInputs->OutputToken);
-        },
-        [](const TaaHistoryPassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
-        {
-            const uint32_t writeIndex = 1u - passData.Feature->m_HistoryIndex;
-            commandList.CopyResource(
-                *passData.Feature->m_HistoryBuffers[writeIndex],
-                *context.GetTexture(passData.Inputs->Output));
-            passData.Feature->m_HistoryValid = true;
-            passData.Feature->m_HistoryCapturePending = true;
-        });
+    builder.AddPass(std::make_unique<TaaGraphPass>(TaaGraphPass::Desc{
+        .PassKind = TaaGraphPass::Kind::CaptureHistory,
+        .Feature = this,
+        .Inputs = sharedInputs,
+        .PassName = L"TAA Capture History",
+        .HistoryWrite = historyWrite,
+    }));
 }
 
 void TAA::RecordResolve(

@@ -9,6 +9,7 @@
 #include <DX12Library/Helpers.h>
 
 #include "RenderContext.h"
+#include "RenderPassContext.h"
 #include "ResourceId.h"
 
 class Resource;
@@ -118,7 +119,7 @@ namespace RenderGraph
     class RenderPass
     {
     public:
-        using ExecuteFuncT = std::function<void(const RenderContext&, CommandList&)>;
+        using ExecuteFuncT = std::function<void(const RenderContext&, RenderPassContext&)>;
 //Modify Begin:2026-07-28 by Hui
         using ExternalExecuteFuncT = std::function<void(const RenderContext&)>;
 //Modify End
@@ -141,7 +142,7 @@ namespace RenderGraph
 
         void Init(CommandList& commandList);
 
-        void Execute(const RenderContext& context, CommandList& commandList);
+        void Execute(const RenderContext& context, RenderPassContext& passContext);
 //Modify Begin:2026-07-28 by Hui
         void ExecuteExternal(const RenderContext& context);
         virtual bool IsExternal() const { return false; }
@@ -175,11 +176,13 @@ namespace RenderGraph
         virtual ~RenderPass() = default;
 
     protected:
+        friend class RenderGraphPassBuilder;
+
 //Modify Begin:2026-09-28 by Hui
         RenderPass() = default;
 //Modify End
         virtual void InitImpl(CommandList& commandList) = 0;
-        virtual void ExecuteImpl(const RenderContext& context, CommandList& commandList) = 0;
+        virtual void ExecuteImpl(const RenderContext& context, RenderPassContext& passContext) = 0;
 //Modify Begin:2026-07-28 by Hui
         virtual void ExecuteExternalImpl(const RenderContext& context);
 //Modify End

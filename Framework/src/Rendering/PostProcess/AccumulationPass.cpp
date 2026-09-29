@@ -58,8 +58,9 @@ void AccumulationPass::InitImpl(CommandList&)
 
 void AccumulationPass::ExecuteImpl(
     const RenderGraph::RenderContext& context,
-    CommandList& commandList)
+    RenderGraph::RenderPassContext& passContext)
 {
+    CommandList& commandList = passContext.GetCommandList();
     const AccumulationConstants constants = {
         m_Inputs.Width,
         m_Inputs.Height,

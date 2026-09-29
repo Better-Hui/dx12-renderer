@@ -1,4 +1,4 @@
-//Modify Begin:2026-09-01 by Hui
+//Modify Begin:2026-09-29 by Hui
 #include "RenderGraphCommandExecutor.h"
 
 #include "RenderGraphProfiler.h"
@@ -7,7 +7,6 @@
 #include "ResourcePool.h"
 
 #include <DX12Library/CommandList.h>
-#include <DX12Library/CommandListInternalAccess.h>
 #include <DX12Library/CommandQueue.h>
 #include <DX12Library/DiagnosticRenderScope.h>
 #include <DX12Library/DiagnosticTelemetry.h>
@@ -438,6 +437,16 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
                 std::span<RenderPass* const>(&renderPass, 1u),
                 directCommandList,
                 resourceStatePlans);
+            const auto statePlan = resourceStatePlans.find(renderPass);
+            Assert(statePlan != resourceStatePlans.end(),
+                "Direct render pass has no resource state plan.");
+            if (!statePlan->second.AliasingOutputs.empty())
+            {
+                // A pending alias barrier is emitted before its command list.
+                // Keep a prior pass that may own the same heap on an earlier
+                // list, so the barrier cannot move ahead of that pass.
+                m_QueueScheduler.SubmitDirect(directCommandList);
+            }
             if (directCommandList == nullptr)
             {
                 directCommandList = m_DirectCommandQueue->GetCommandList();
@@ -456,13 +465,15 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
             {
                 {
                     PIXScope(commandList, renderPass->GetPassName().c_str());
-                    PrepareResourcesForRenderPass(
-                        commandList,
+                    RenderPassContext passContext(commandList);
+                    RecordPassBoundaryBarriers(
+                        passContext,
                         *renderPass,
                         context,
                         renderTargets,
                         resourceStatePlans);
                     RecordLocalAliasingBarriers(*renderPass, resourceStatePlans);
+                    passContext.Finish();
                     m_Profiler.WriteMarker(
                         RenderPassQueue::Direct,
                         commandList,
@@ -488,8 +499,9 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
                 PIXScope(commandList, renderPass->GetPassName().c_str());
                 try
                 {
-                    PrepareResourcesForRenderPass(
-                        commandList,
+                    RenderPassContext passContext(commandList);
+                    RecordPassBoundaryBarriers(
+                        passContext,
                         *renderPass,
                         context,
                         renderTargets,
@@ -497,7 +509,8 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
                     RecordLocalAliasingBarriers(*renderPass, resourceStatePlans);
                     const std::unique_ptr<DX12Diagnostics::DiagnosticRenderPassScope> diagnosticScope =
                         CreateDiagnosticRenderPassScope(*renderPass, renderMetadata.m_FrameIndex);
-                    renderPass->Execute(context, commandList);
+                    renderPass->Execute(context, passContext);
+                    passContext.Finish();
                     if (diagnosticScope != nullptr)
                     {
                         EmitShaderAccessValidation(*diagnosticScope);
@@ -582,8 +595,9 @@ void RenderGraph::RenderGraphCommandExecutor::ExecuteParallelDirectBatch(
 
                 try
                 {
-                    PrepareResourcesForRenderPass(
-                        *commandList,
+                    RenderPassContext passContext(*commandList);
+                    RecordPassBoundaryBarriers(
+                        passContext,
                         *renderPass,
                         context,
                         renderTargets,
@@ -591,7 +605,8 @@ void RenderGraph::RenderGraphCommandExecutor::ExecuteParallelDirectBatch(
                     const std::unique_ptr<DX12Diagnostics::DiagnosticRenderPassScope> diagnosticScope =
                         CreateDiagnosticRenderPassScope(*renderPass, renderMetadata.m_FrameIndex);
                     PIXScope(*commandList, renderPass->GetPassName().c_str());
-                    renderPass->Execute(context, *commandList);
+                    renderPass->Execute(context, passContext);
+                    passContext.Finish();
                     if (diagnosticScope != nullptr)
                     {
                         EmitShaderAccessValidation(*diagnosticScope);
@@ -743,8 +758,9 @@ void RenderGraph::RenderGraphCommandExecutor::ExecuteNonDirectBatch(
         context.SetRenderTargetInfo({});
         try
         {
-            PrepareResourcesForRenderPass(
-                *commandList,
+            RenderPassContext passContext(*commandList);
+            RecordPassBoundaryBarriers(
+                passContext,
                 *pass,
                 context,
                 renderTargets,
@@ -752,7 +768,8 @@ void RenderGraph::RenderGraphCommandExecutor::ExecuteNonDirectBatch(
             const std::unique_ptr<DX12Diagnostics::DiagnosticRenderPassScope> diagnosticScope =
                 CreateDiagnosticRenderPassScope(*pass, renderMetadata.m_FrameIndex);
             PIXScope(*commandList, pass->GetPassName().c_str());
-            pass->Execute(context, *commandList);
+            pass->Execute(context, passContext);
+            passContext.Finish();
             if (diagnosticScope != nullptr)
             {
                 EmitShaderAccessValidation(*diagnosticScope);
@@ -798,6 +815,11 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareNonDirectBatchDependencies(
 {
     Assert(!batch.Passes.empty(), "Non-direct dependency preparation requires at least one pass.");
     Assert(batch.Queue != RenderPassQueue::Direct, "Non-direct dependency preparation cannot target the direct queue.");
+
+    // Finalize earlier direct producers before querying their fence values.
+    // The preamble is a separate direct submission, which also prevents its
+    // pending alias barriers from moving ahead of earlier direct pass work.
+    m_QueueScheduler.SubmitDirect(directCommandList);
 
     RenderGraphQueueFenceValues producerFences;
     for (const RenderPass* pass : batch.Passes)
@@ -864,50 +886,37 @@ void RenderGraph::RenderGraphCommandExecutor::ApplyDirectQueuePreamble(
     Assert(planIt != resourceStatePlans.end(), "Render pass resource state plan was not built.");
     Assert(planIt->second.DirectPreamble.has_value(), "Non-direct render pass has no direct-queue preamble plan.");
     const PassResourceStatePlan::NonDirectQueuePreamble& directPreamble = *planIt->second.DirectPreamble;
+    RenderPassContext passContext(commandList);
+    RenderGraphBarrierRecorder recorder(passContext);
 
     for (const PassResourceTransition& transition : directPreamble.CrossQueueInputTransitions)
     {
         const auto& resource = m_ResourcePool->GetResource(transition.Id);
-        resource.ForEachResourceRecursive([&commandList, &transition](const Resource& nestedResource)
-        {
-            CommandListInternalAccess::TransitionBarrier(
-                commandList,
-                nestedResource,
-                transition.StateAfter);
-            if (transition.InsertUavBarrier)
-            {
-                CommandListInternalAccess::UavBarrier(commandList, nestedResource);
-            }
-        });
+        recorder.Transition(
+            resource,
+            transition.StateAfter,
+            transition.InsertUavBarrier);
     }
 
-    ApplyExternalResourceTransitions(commandList, directPreamble.ExternalResourceTransitions);
+    ApplyExternalResourceTransitions(passContext, directPreamble.ExternalResourceTransitions);
 
     for (const PassAliasingTransition& transition : directPreamble.AliasingOutputs)
     {
         const auto& resource = m_ResourcePool->GetResource(transition.AfterId);
-        resource.ForEachResourceRecursive([&commandList](const Resource& nestedResource)
-        {
-            CommandListInternalAccess::AliasingBarrierBeforeFirstUse(commandList, nestedResource);
-        });
+        recorder.AliasingBeforeFirstUse(resource);
         m_QueueScheduler.RecordAliasingBarrier(transition);
     }
 
     for (const PassResourceTransition& transition : directPreamble.OutputTransitions)
     {
         const auto& resource = m_ResourcePool->GetResource(transition.Id);
-        resource.ForEachResourceRecursive([&commandList, &transition](const Resource& nestedResource)
-        {
-            CommandListInternalAccess::TransitionBarrier(
-                commandList,
-                nestedResource,
-                transition.StateAfter);
-            if (transition.InsertUavBarrier)
-            {
-                CommandListInternalAccess::UavBarrier(commandList, nestedResource);
-            }
-        });
+        recorder.Transition(
+            resource,
+            transition.StateAfter,
+            transition.InsertUavBarrier);
     }
+
+    passContext.Finish();
 
     m_Profiler.WriteMarker(
         RenderPassQueue::Direct,
@@ -944,32 +953,31 @@ CommandQueue& RenderGraph::RenderGraphCommandExecutor::GetCommandQueue(const Ren
 }
 
 void RenderGraph::RenderGraphCommandExecutor::ApplyExternalResourceTransitions(
-    CommandList& commandList,
+    RenderPassContext& passContext,
     const std::span<const PassExternalResourceTransition> transitions)
 {
+    RenderGraphBarrierRecorder recorder(passContext);
     for (const PassExternalResourceTransition& transition : transitions)
     {
         Assert(transition.Access != nullptr,
             "Render pass external resource transition must reference an access declaration.");
         const Resource& resource = transition.Access->Resolve();
-        resource.ForEachResourceRecursive([&commandList, &transition](const Resource& nestedResource)
-        {
-            CommandListInternalAccess::TransitionBarrier(commandList, nestedResource, transition.StateAfter);
-            if (transition.InsertUavBarrier)
-            {
-                CommandListInternalAccess::UavBarrier(commandList, nestedResource);
-            }
-        });
+        recorder.Transition(
+            resource,
+            transition.StateAfter,
+            transition.InsertUavBarrier);
     }
 }
 
-void RenderGraph::RenderGraphCommandExecutor::PrepareResourcesForRenderPass(
-    CommandList& commandList,
+void RenderGraph::RenderGraphCommandExecutor::RecordPassBoundaryBarriers(
+    RenderPassContext& passContext,
     const RenderPass& renderPass,
     RenderContext& context,
     const std::map<const RenderPass*, RenderTargetInfo>& renderTargets,
     const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans)
 {
+    CommandList& commandList = passContext.GetCommandList();
+    RenderGraphBarrierRecorder recorder(passContext);
     const auto planIt = resourceStatePlans.find(&renderPass);
     Assert(planIt != resourceStatePlans.end(), "Render pass resource state plan was not built.");
     const PassResourceStatePlan& resourceStatePlan = planIt->second;
@@ -977,41 +985,27 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareResourcesForRenderPass(
     for (const PassResourceTransition& transition : resourceStatePlan.InputTransitions)
     {
         const auto& resource = m_ResourcePool->GetResource(transition.Id);
-        resource.ForEachResourceRecursive([&commandList, &renderPass, &transition](const Resource& nestedResource)
-        {
-            CommandListInternalAccess::TransitionBarrier(
-                commandList,
-                nestedResource,
-                transition.StateAfter);
-            if (transition.InsertUavBarrier)
-            {
-                CommandListInternalAccess::UavBarrier(commandList, nestedResource);
-            }
-        });
+        recorder.Transition(
+            resource,
+            transition.StateAfter,
+            transition.InsertUavBarrier);
     }
 
-    ApplyExternalResourceTransitions(commandList, resourceStatePlan.ExternalResourceTransitions);
+    ApplyExternalResourceTransitions(passContext, resourceStatePlan.ExternalResourceTransitions);
 
     for (const PassAliasingTransition& transition : resourceStatePlan.AliasingOutputs)
     {
         const auto& resource = m_ResourcePool->GetResource(transition.AfterId);
-        resource.ForEachResourceRecursive([&commandList](const Resource& nestedResource)
-        {
-            CommandListInternalAccess::AliasingBarrierBeforeFirstUse(commandList, nestedResource);
-        });
+        recorder.AliasingBeforeFirstUse(resource);
     }
 
     for (const PassResourceTransition& transition : resourceStatePlan.OutputTransitions)
     {
         const auto& resource = m_ResourcePool->GetResource(transition.Id);
-        resource.ForEachResourceRecursive([&commandList, &transition](const Resource& nestedResource)
-        {
-            CommandListInternalAccess::TransitionBarrier(commandList, nestedResource, transition.StateAfter);
-            if (transition.InsertUavBarrier)
-            {
-                CommandListInternalAccess::UavBarrier(commandList, nestedResource);
-            }
-        });
+        recorder.Transition(
+            resource,
+            transition.StateAfter,
+            transition.InsertUavBarrier);
     }
 
     const auto renderTargetIt = renderTargets.find(&renderPass);
@@ -1025,8 +1019,7 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareResourcesForRenderPass(
         {
             if (textures[textureIndex] != nullptr && textures[textureIndex]->IsValid())
             {
-                CommandListInternalAccess::TransitionBarrier(
-                    commandList,
+                recorder.Transition(
                     *textures[textureIndex],
                     D3D12_RESOURCE_STATE_RENDER_TARGET);
             }
@@ -1035,8 +1028,7 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareResourcesForRenderPass(
         const auto& depthStencil = renderTarget->GetTexture(DepthStencil);
         if (depthStencil != nullptr && depthStencil->IsValid())
         {
-            CommandListInternalAccess::TransitionBarrier(
-                commandList,
+            recorder.Transition(
                 *depthStencil,
                 renderTargetInfo.m_ReadonlyDepth
                     ? D3D12_RESOURCE_STATE_DEPTH_READ
@@ -1044,7 +1036,7 @@ void RenderGraph::RenderGraphCommandExecutor::PrepareResourcesForRenderPass(
         }
     }
 
-    CommandListInternalAccess::FlushResourceBarriers(commandList);
+    recorder.Flush();
 
     if (renderTargetIt != renderTargets.end())
     {

@@ -32,7 +32,7 @@ public:
 
 protected:
     void InitImpl(CommandList& commandList) override;
-    void ExecuteImpl(const RenderGraph::RenderContext& context, CommandList& commandList) override;
+    void ExecuteImpl(const RenderGraph::RenderContext& context, RenderGraph::RenderPassContext& passContext) override;
 
 private:
     FrameworkDeviceContext& m_DeviceContext;

@@ -15,6 +15,7 @@
 #include <Framework/Rendering/Texture/UnorderedAccessView.h>
 #include <RenderGraph/RenderContext.h>
 #include <RenderGraph/RenderGraphBuilder.h>
+#include <RenderGraph/RenderPass.h>
 
 #include <NRD.h>
 #include <NRDDescs.h>
@@ -187,25 +188,129 @@ namespace
             ComputePipelineDescBuilder::ReflectedDefault(shader).Build());
     }
 
-    struct NrdPreparePassData
-    {
-        NRD* Feature = nullptr;
-        std::shared_ptr<const NRD::GraphInputs> Inputs;
-    };
-
-    struct NrdDenoisePassData
-    {
-        NRD* Feature = nullptr;
-        std::shared_ptr<const NRD::GraphInputs> Inputs;
-    };
-
-    struct NrdCompositePassData
-    {
-        NRD* Feature = nullptr;
-        std::shared_ptr<const NRD::GraphInputs> Inputs;
-    };
-
 }
+
+class NrdGraphPass final : public RenderGraph::RenderPass
+{
+public:
+    enum class Kind
+    {
+        Prepare,
+        Denoise,
+        Composite,
+    };
+
+    struct Desc
+    {
+        Kind PassKind = Kind::Prepare;
+        NRD* Feature = nullptr;
+        std::shared_ptr<const NRD::GraphInputs> Inputs;
+        std::wstring PassName;
+        RenderGraph::ResourceId TokenBefore = 0;
+        RenderGraph::ResourceId TokenAfter = 0;
+    };
+
+    explicit NrdGraphPass(Desc desc)
+        : m_Kind(desc.PassKind)
+        , m_Feature(*desc.Feature)
+        , m_Inputs(std::move(desc.Inputs))
+        , m_TokenBefore(desc.TokenBefore)
+        , m_TokenAfter(desc.TokenAfter)
+    {
+        Assert(desc.Feature != nullptr && m_Inputs != nullptr, "NRD graph pass requires feature inputs.");
+        SetPassName(desc.PassName);
+        if (m_Kind == Kind::Prepare)
+        {
+            RegisterInput({ m_Inputs->InputToken, RenderGraph::InputType::Token });
+            RegisterInput({ m_Inputs->GBufferSpecularSmoothness, RenderGraph::InputType::NonPixelShaderResource });
+            RegisterInput({ m_Inputs->GBufferNormal, RenderGraph::InputType::NonPixelShaderResource });
+            RegisterInput({ m_Inputs->GBufferPosition, RenderGraph::InputType::NonPixelShaderResource });
+            RegisterInput({ m_Inputs->Depth, RenderGraph::InputType::NonPixelShaderResource });
+            RegisterInput({ m_Inputs->MotionVector, RenderGraph::InputType::NonPixelShaderResource });
+            RegisterOutput({ m_Inputs->NormalRoughness, RenderGraph::OutputType::UnorderedAccess });
+            RegisterOutput({ m_Inputs->ViewZ, RenderGraph::OutputType::UnorderedAccess });
+            RegisterOutput({ m_Inputs->Motion, RenderGraph::OutputType::UnorderedAccess });
+            RegisterOutput({ m_TokenAfter, RenderGraph::OutputType::Token });
+        }
+        else if (m_Kind == Kind::Denoise)
+        {
+            RegisterInput({ m_TokenBefore, RenderGraph::InputType::Token });
+            RegisterInput({ m_Inputs->NoisyRadiance, RenderGraph::InputType::NonPixelShaderResource });
+            RegisterInput({ m_Inputs->NormalRoughness, RenderGraph::InputType::NonPixelShaderResource });
+            RegisterInput({ m_Inputs->ViewZ, RenderGraph::InputType::NonPixelShaderResource });
+            RegisterInput({ m_Inputs->Motion, RenderGraph::InputType::NonPixelShaderResource });
+            RegisterOutput({ m_Inputs->DenoisedRadiance, RenderGraph::OutputType::UnorderedAccess });
+            RegisterOutput({ m_TokenAfter, RenderGraph::OutputType::Token });
+        }
+        else
+        {
+            RegisterInput({ m_TokenBefore, RenderGraph::InputType::Token });
+            RegisterInput({ m_Inputs->DenoisedRadiance, RenderGraph::InputType::NonPixelShaderResource });
+            RegisterInput({ m_Inputs->Depth, RenderGraph::InputType::NonPixelShaderResource });
+            RegisterInput({ m_Inputs->GBufferAlbedoOcclusion, RenderGraph::InputType::NonPixelShaderResource });
+            RegisterInput({ m_Inputs->GBufferEmissionMetallic, RenderGraph::InputType::NonPixelShaderResource });
+            RegisterOutput({ m_Inputs->Output, RenderGraph::OutputType::UnorderedAccess });
+            RegisterOutput({ m_Inputs->OutputToken, RenderGraph::OutputType::Token });
+        }
+    }
+
+protected:
+    void InitImpl(CommandList&) override {}
+
+    void ExecuteImpl(const RenderGraph::RenderContext& context, RenderGraph::RenderPassContext& passContext) override
+    {
+        CommandList& commandList = passContext.GetCommandList();
+        const NRD::GraphInputs& inputs = *m_Inputs;
+        if (m_Kind == Kind::Prepare)
+        {
+            m_Feature.PrepareInputs(
+                commandList,
+                inputs.ResolveFrameMatrices(),
+                context.GetTexture(inputs.GBufferSpecularSmoothness),
+                context.GetTexture(inputs.GBufferNormal),
+                context.GetTexture(inputs.GBufferPosition),
+                context.GetTexture(inputs.Depth),
+                context.GetTexture(inputs.MotionVector),
+                context.GetTexture(inputs.NormalRoughness),
+                context.GetTexture(inputs.ViewZ),
+                context.GetTexture(inputs.Motion),
+                context.GetMetadata().m_ScreenWidth,
+                context.GetMetadata().m_ScreenHeight);
+        }
+        else if (m_Kind == Kind::Denoise)
+        {
+            m_Feature.Denoise(
+                commandList,
+                inputs.ResolveFrameMatrices(),
+                context.GetTexture(inputs.NoisyRadiance),
+                context.GetTexture(inputs.NormalRoughness),
+                context.GetTexture(inputs.ViewZ),
+                context.GetTexture(inputs.Motion),
+                context.GetTexture(inputs.DenoisedRadiance),
+                context.GetMetadata().m_ScreenWidth,
+                context.GetMetadata().m_ScreenHeight);
+        }
+        else
+        {
+            m_Feature.Composite(
+                commandList,
+                context.GetTexture(inputs.DenoisedRadiance),
+                context.GetTexture(inputs.Depth),
+                context.GetTexture(inputs.GBufferAlbedoOcclusion),
+                context.GetTexture(inputs.GBufferEmissionMetallic),
+                context.GetTexture(inputs.Output),
+                context.GetMetadata().m_ScreenWidth,
+                context.GetMetadata().m_ScreenHeight);
+        }
+    }
+
+private:
+    Kind m_Kind;
+    NRD& m_Feature;
+    std::shared_ptr<const NRD::GraphInputs> m_Inputs;
+    RenderGraph::ResourceId m_TokenBefore = 0;
+    RenderGraph::ResourceId m_TokenAfter = 0;
+};
 
 NRD::NRD(FrameworkDeviceContext& deviceContext)
     : m_DeviceContext(deviceContext)
@@ -254,103 +359,28 @@ void NRD::AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs inputs
     const RenderGraph::ResourceId prepareToken = builder.CreateToken(prepareTokenName.c_str());
     const RenderGraph::ResourceId denoiseToken = builder.CreateToken(denoiseTokenName.c_str());
 
-    builder.AddPass<NrdPreparePassData>(
-        L"NRD Prepare Inputs",
-        [this, sharedInputs, prepareToken](
-            RenderGraph::RenderGraphPassBuilder& passBuilder,
-            NrdPreparePassData& passData)
-        {
-            passData.Feature = this;
-            passData.Inputs = sharedInputs;
-            passBuilder.ReadToken(sharedInputs->InputToken);
-            passBuilder.ReadBuffer(sharedInputs->GBufferSpecularSmoothness);
-            passBuilder.ReadBuffer(sharedInputs->GBufferNormal);
-            passBuilder.ReadBuffer(sharedInputs->GBufferPosition);
-            passBuilder.ReadBuffer(sharedInputs->Depth);
-            passBuilder.ReadBuffer(sharedInputs->MotionVector);
-            passBuilder.WriteUav(sharedInputs->NormalRoughness);
-            passBuilder.WriteUav(sharedInputs->ViewZ);
-            passBuilder.WriteUav(sharedInputs->Motion);
-            passBuilder.WriteToken(prepareToken);
-        },
-        [](const NrdPreparePassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
-        {
-            const NRD::GraphInputs& inputs = *passData.Inputs;
-            passData.Feature->PrepareInputs(
-                commandList,
-                inputs.ResolveFrameMatrices(),
-                context.GetTexture(inputs.GBufferSpecularSmoothness),
-                context.GetTexture(inputs.GBufferNormal),
-                context.GetTexture(inputs.GBufferPosition),
-                context.GetTexture(inputs.Depth),
-                context.GetTexture(inputs.MotionVector),
-                context.GetTexture(inputs.NormalRoughness),
-                context.GetTexture(inputs.ViewZ),
-                context.GetTexture(inputs.Motion),
-                context.GetMetadata().m_ScreenWidth,
-                context.GetMetadata().m_ScreenHeight);
-        });
-
-    builder.AddPass<NrdDenoisePassData>(
-        L"NRD Native Denoise",
-        [this, sharedInputs, prepareToken, denoiseToken](
-            RenderGraph::RenderGraphPassBuilder& passBuilder,
-            NrdDenoisePassData& passData)
-        {
-            passData.Feature = this;
-            passData.Inputs = sharedInputs;
-            passBuilder.ReadToken(prepareToken);
-            passBuilder.ReadBuffer(sharedInputs->NoisyRadiance);
-            passBuilder.ReadBuffer(sharedInputs->NormalRoughness);
-            passBuilder.ReadBuffer(sharedInputs->ViewZ);
-            passBuilder.ReadBuffer(sharedInputs->Motion);
-            passBuilder.WriteUav(sharedInputs->DenoisedRadiance);
-            passBuilder.WriteToken(denoiseToken);
-        },
-        [](const NrdDenoisePassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
-        {
-            const NRD::GraphInputs& inputs = *passData.Inputs;
-            passData.Feature->Denoise(
-                commandList,
-                inputs.ResolveFrameMatrices(),
-                context.GetTexture(inputs.NoisyRadiance),
-                context.GetTexture(inputs.NormalRoughness),
-                context.GetTexture(inputs.ViewZ),
-                context.GetTexture(inputs.Motion),
-                context.GetTexture(inputs.DenoisedRadiance),
-                context.GetMetadata().m_ScreenWidth,
-                context.GetMetadata().m_ScreenHeight);
-        });
-
-    builder.AddPass<NrdCompositePassData>(
-        L"NRD Composite",
-        [this, sharedInputs, denoiseToken](
-            RenderGraph::RenderGraphPassBuilder& passBuilder,
-            NrdCompositePassData& passData)
-        {
-            passData.Feature = this;
-            passData.Inputs = sharedInputs;
-            passBuilder.ReadToken(denoiseToken);
-            passBuilder.ReadBuffer(sharedInputs->DenoisedRadiance);
-            passBuilder.ReadBuffer(sharedInputs->Depth);
-            passBuilder.ReadBuffer(sharedInputs->GBufferAlbedoOcclusion);
-            passBuilder.ReadBuffer(sharedInputs->GBufferEmissionMetallic);
-            passBuilder.WriteUav(sharedInputs->Output);
-            passBuilder.WriteToken(sharedInputs->OutputToken);
-        },
-        [](const NrdCompositePassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
-        {
-            const NRD::GraphInputs& inputs = *passData.Inputs;
-            passData.Feature->Composite(
-                commandList,
-                context.GetTexture(inputs.DenoisedRadiance),
-                context.GetTexture(inputs.Depth),
-                context.GetTexture(inputs.GBufferAlbedoOcclusion),
-                context.GetTexture(inputs.GBufferEmissionMetallic),
-                context.GetTexture(inputs.Output),
-                context.GetMetadata().m_ScreenWidth,
-                context.GetMetadata().m_ScreenHeight);
-        });
+    builder.AddPass(std::make_unique<NrdGraphPass>(NrdGraphPass::Desc{
+        .PassKind = NrdGraphPass::Kind::Prepare,
+        .Feature = this,
+        .Inputs = sharedInputs,
+        .PassName = L"NRD Prepare Inputs",
+        .TokenAfter = prepareToken,
+    }));
+    builder.AddPass(std::make_unique<NrdGraphPass>(NrdGraphPass::Desc{
+        .PassKind = NrdGraphPass::Kind::Denoise,
+        .Feature = this,
+        .Inputs = sharedInputs,
+        .PassName = L"NRD Native Denoise",
+        .TokenBefore = prepareToken,
+        .TokenAfter = denoiseToken,
+    }));
+    builder.AddPass(std::make_unique<NrdGraphPass>(NrdGraphPass::Desc{
+        .PassKind = NrdGraphPass::Kind::Composite,
+        .Feature = this,
+        .Inputs = sharedInputs,
+        .PassName = L"NRD Composite",
+        .TokenBefore = denoiseToken,
+    }));
 }
 
 bool NRD::EnsureCreated(const uint32_t width, const uint32_t height)

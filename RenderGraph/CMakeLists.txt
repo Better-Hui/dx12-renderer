@@ -5,6 +5,7 @@ project("RenderGraph")
 set(HEADER_FILES
         include/RenderGraph/RenderContext.h
         include/RenderGraph/RenderGraphBuilder.h
+        include/RenderGraph/RenderGraphBarrierRecorder.h
         include/RenderGraph/RenderGraphCommandExecutor.h
         include/RenderGraph/RenderGraphCompiler.h
         include/RenderGraph/RenderGraphExecutionPlan.h
@@ -15,6 +16,7 @@ set(HEADER_FILES
         include/RenderGraph/RenderGraphRoot.h
         include/RenderGraph/RenderMetadata.h
         include/RenderGraph/RenderPass.h
+        include/RenderGraph/RenderPassContext.h
         include/RenderGraph/RenderTargetInfo.h
         include/RenderGraph/ResourceDescription.h
         include/RenderGraph/ResourceId.h
@@ -25,6 +27,7 @@ set(HEADER_FILES
 set(SOURCE_FILES
         src/RenderContext.cpp
         src/RenderGraphBuilder.cpp
+        src/RenderGraphBarrierRecorder.cpp
         src/RenderGraphCommandExecutor.cpp
         src/RenderGraphTaskScheduler.cpp
         src/RenderGraphCompiler.cpp

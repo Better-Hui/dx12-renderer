@@ -4,6 +4,7 @@
 #include <DX12Library/Helpers.h>
 #include <RenderGraph/RenderContext.h>
 #include <RenderGraph/RenderGraphBuilder.h>
+#include <RenderGraph/RenderPass.h>
 
 #include <algorithm>
 #include <memory>
@@ -14,37 +15,6 @@ namespace
 {
     constexpr FLOAT BloomClearColor[] = { 0.0f, 0.0f, 0.0f, 0.0f };
     constexpr bool BloomScratchUsesDedicatedResources = false;
-
-    struct BloomPrefilterPassData
-    {
-        Bloom* Feature = nullptr;
-        std::shared_ptr<const Bloom::GraphInputs> Inputs;
-        RenderGraph::ResourceId Destination = 0;
-    };
-
-    struct BloomDownsamplePassData
-    {
-        Bloom* Feature = nullptr;
-        std::shared_ptr<const Bloom::GraphInputs> Inputs;
-        RenderGraph::ResourceId Source = 0;
-        RenderGraph::ResourceId Destination = 0;
-    };
-
-    struct BloomUpsamplePassData
-    {
-        Bloom* Feature = nullptr;
-        std::shared_ptr<const Bloom::GraphInputs> Inputs;
-        RenderGraph::ResourceId LowResolutionSource = 0;
-        RenderGraph::ResourceId HighResolutionSource = 0;
-        RenderGraph::ResourceId Destination = 0;
-    };
-
-    struct BloomCompositePassData
-    {
-        Bloom* Feature = nullptr;
-        std::shared_ptr<const Bloom::GraphInputs> Inputs;
-        RenderGraph::ResourceId BloomTexture = 0;
-    };
 
     const RenderTarget& GetPassRenderTarget(const RenderGraph::RenderContext& context)
     {
@@ -68,6 +38,120 @@ namespace
         };
     }
 }
+
+class BloomGraphPass final : public RenderGraph::RenderPass
+{
+public:
+    enum class Kind
+    {
+        Prefilter,
+        Downsample,
+        Upsample,
+        Composite,
+    };
+
+    struct Desc
+    {
+        Kind PassKind = Kind::Prefilter;
+        Bloom* Feature = nullptr;
+        std::shared_ptr<const Bloom::GraphInputs> Inputs;
+        std::wstring PassName;
+        RenderGraph::ResourceId Source = 0;
+        RenderGraph::ResourceId LowResolutionSource = 0;
+        RenderGraph::ResourceId HighResolutionSource = 0;
+        RenderGraph::ResourceId Destination = 0;
+        RenderGraph::ResourceId BloomTexture = 0;
+    };
+
+    explicit BloomGraphPass(Desc desc)
+        : m_Kind(desc.PassKind)
+        , m_Feature(*desc.Feature)
+        , m_Inputs(std::move(desc.Inputs))
+        , m_Source(desc.Source)
+        , m_Destination(desc.Destination)
+        , m_LowResolutionSource(desc.LowResolutionSource)
+        , m_HighResolutionSource(desc.HighResolutionSource)
+        , m_BloomTexture(desc.BloomTexture)
+    {
+        Assert(desc.Feature != nullptr && m_Inputs != nullptr, "Bloom graph pass requires feature inputs.");
+        SetPassName(desc.PassName);
+        switch (m_Kind)
+        {
+        case Kind::Prefilter:
+            RegisterInput({ m_Inputs->InputToken, RenderGraph::InputType::Token });
+            RegisterInput({ m_Inputs->Source, RenderGraph::InputType::ShaderResource });
+            RegisterOutput({ m_Destination, RenderGraph::OutputType::RenderTarget });
+            break;
+        case Kind::Downsample:
+            RegisterInput({ m_Source, RenderGraph::InputType::ShaderResource });
+            RegisterOutput({ m_Destination, RenderGraph::OutputType::RenderTarget });
+            break;
+        case Kind::Upsample:
+            RegisterInput({ m_LowResolutionSource, RenderGraph::InputType::ShaderResource });
+            RegisterInput({ m_HighResolutionSource, RenderGraph::InputType::ShaderResource });
+            RegisterOutput({ m_Destination, RenderGraph::OutputType::RenderTarget });
+            break;
+        case Kind::Composite:
+            RegisterInput({ m_Inputs->Source, RenderGraph::InputType::ShaderResource });
+            RegisterInput({ m_BloomTexture, RenderGraph::InputType::ShaderResource });
+            RegisterOutput({ m_Inputs->Output, RenderGraph::OutputType::RenderTarget });
+            RegisterOutput({ m_Inputs->OutputToken, RenderGraph::OutputType::Token });
+            break;
+        }
+    }
+
+protected:
+    void InitImpl(CommandList&) override {}
+
+    void ExecuteImpl(const RenderGraph::RenderContext& context, RenderGraph::RenderPassContext& passContext) override
+    {
+        CommandList& commandList = passContext.GetCommandList();
+        const BloomParameters parameters = m_Inputs->ResolveParameters();
+        switch (m_Kind)
+        {
+        case Kind::Prefilter:
+            m_Feature.RecordPrefilter(
+                commandList,
+                parameters,
+                context.GetTexture(m_Inputs->Source),
+                GetPassRenderTarget(context));
+            break;
+        case Kind::Downsample:
+            m_Feature.RecordDownsample(
+                commandList,
+                parameters,
+                context.GetTexture(m_Source),
+                GetPassRenderTarget(context));
+            break;
+        case Kind::Upsample:
+            m_Feature.RecordUpsample(
+                commandList,
+                parameters,
+                context.GetTexture(m_LowResolutionSource),
+                context.GetTexture(m_HighResolutionSource),
+                GetPassRenderTarget(context));
+            break;
+        case Kind::Composite:
+            m_Feature.RecordComposite(
+                commandList,
+                parameters,
+                context.GetTexture(m_Inputs->Source),
+                context.GetTexture(m_BloomTexture),
+                GetPassRenderTarget(context));
+            break;
+        }
+    }
+
+private:
+    Kind m_Kind;
+    Bloom& m_Feature;
+    std::shared_ptr<const Bloom::GraphInputs> m_Inputs;
+    RenderGraph::ResourceId m_Source = 0;
+    RenderGraph::ResourceId m_Destination = 0;
+    RenderGraph::ResourceId m_LowResolutionSource = 0;
+    RenderGraph::ResourceId m_HighResolutionSource = 0;
+    RenderGraph::ResourceId m_BloomTexture = 0;
+};
 
 Bloom::Bloom(FrameworkDeviceContext& deviceContext, CommandList& commandList)
     : m_Prefilter(deviceContext, commandList)
@@ -107,54 +191,27 @@ void Bloom::AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs inpu
             BloomScratchUsesDedicatedResources);
     }
 
-    builder.AddPass<BloomPrefilterPassData>(
-        L"Bloom Prefilter",
-        [this, sharedInputs, destination = downsampleLevels.front()](
-            RenderGraph::RenderGraphPassBuilder& passBuilder,
-            BloomPrefilterPassData& passData)
-        {
-            passData.Feature = this;
-            passData.Inputs = sharedInputs;
-            passData.Destination = destination;
-            passBuilder.ReadToken(sharedInputs->InputToken);
-            passBuilder.ReadTexture(sharedInputs->Source);
-            passBuilder.WriteTexture(destination);
-        },
-        [](const BloomPrefilterPassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
-        {
-            passData.Feature->RecordPrefilter(
-                commandList,
-                passData.Inputs->ResolveParameters(),
-                context.GetTexture(passData.Inputs->Source),
-                GetPassRenderTarget(context));
-        });
+    builder.AddPass(std::make_unique<BloomGraphPass>(BloomGraphPass::Desc{
+        .PassKind = BloomGraphPass::Kind::Prefilter,
+        .Feature = this,
+        .Inputs = sharedInputs,
+        .PassName = L"Bloom Prefilter",
+        .Destination = downsampleLevels.front(),
+    }));
 
     for (size_t level = 1; level < sharedInputs->PyramidLevels; ++level)
     {
         const std::wstring passName = L"Bloom Downsample " + std::to_wstring(level);
         const RenderGraph::ResourceId source = downsampleLevels[level - 1u];
         const RenderGraph::ResourceId destination = downsampleLevels[level];
-        builder.AddPass<BloomDownsamplePassData>(
-            passName.c_str(),
-            [this, sharedInputs, source, destination](
-                RenderGraph::RenderGraphPassBuilder& passBuilder,
-                BloomDownsamplePassData& passData)
-            {
-                passData.Feature = this;
-                passData.Inputs = sharedInputs;
-                passData.Source = source;
-                passData.Destination = destination;
-                passBuilder.ReadTexture(source);
-                passBuilder.WriteTexture(destination);
-            },
-            [](const BloomDownsamplePassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
-            {
-                passData.Feature->RecordDownsample(
-                    commandList,
-                    passData.Inputs->ResolveParameters(),
-                    context.GetTexture(passData.Source),
-                    GetPassRenderTarget(context));
-            });
+        builder.AddPass(std::make_unique<BloomGraphPass>(BloomGraphPass::Desc{
+            .PassKind = BloomGraphPass::Kind::Downsample,
+            .Feature = this,
+            .Inputs = sharedInputs,
+            .PassName = passName,
+            .Source = source,
+            .Destination = destination,
+        }));
     }
 
     for (size_t level = sharedInputs->PyramidLevels - 1u; level > 0u; --level)
@@ -180,58 +237,27 @@ void Bloom::AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs inpu
             : upsampleLevels[level];
         const RenderGraph::ResourceId highResolutionSource = downsampleLevels[highResolutionLevel];
         const std::wstring passName = L"Bloom Upsample " + std::to_wstring(highResolutionLevel);
-        builder.AddPass<BloomUpsamplePassData>(
-            passName.c_str(),
-            [this, sharedInputs, lowResolutionSource, highResolutionSource, destination](
-                RenderGraph::RenderGraphPassBuilder& passBuilder,
-                BloomUpsamplePassData& passData)
-            {
-                passData.Feature = this;
-                passData.Inputs = sharedInputs;
-                passData.LowResolutionSource = lowResolutionSource;
-                passData.HighResolutionSource = highResolutionSource;
-                passData.Destination = destination;
-                passBuilder.ReadTexture(lowResolutionSource);
-                passBuilder.ReadTexture(highResolutionSource);
-                passBuilder.WriteTexture(destination);
-            },
-            [](const BloomUpsamplePassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
-            {
-                passData.Feature->RecordUpsample(
-                    commandList,
-                    passData.Inputs->ResolveParameters(),
-                    context.GetTexture(passData.LowResolutionSource),
-                    context.GetTexture(passData.HighResolutionSource),
-                    GetPassRenderTarget(context));
-            });
+        builder.AddPass(std::make_unique<BloomGraphPass>(BloomGraphPass::Desc{
+            .PassKind = BloomGraphPass::Kind::Upsample,
+            .Feature = this,
+            .Inputs = sharedInputs,
+            .PassName = passName,
+            .LowResolutionSource = lowResolutionSource,
+            .HighResolutionSource = highResolutionSource,
+            .Destination = destination,
+        }));
     }
 
     const RenderGraph::ResourceId bloomTexture = sharedInputs->PyramidLevels == 1u
         ? downsampleLevels.front()
         : upsampleLevels.front();
-    builder.AddPass<BloomCompositePassData>(
-        L"Bloom Composite",
-        [this, sharedInputs, bloomTexture](
-            RenderGraph::RenderGraphPassBuilder& passBuilder,
-            BloomCompositePassData& passData)
-        {
-            passData.Feature = this;
-            passData.Inputs = sharedInputs;
-            passData.BloomTexture = bloomTexture;
-            passBuilder.ReadTexture(sharedInputs->Source);
-            passBuilder.ReadTexture(bloomTexture);
-            passBuilder.WriteTexture(sharedInputs->Output);
-            passBuilder.WriteToken(sharedInputs->OutputToken);
-        },
-        [](const BloomCompositePassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
-        {
-            passData.Feature->RecordComposite(
-                commandList,
-                passData.Inputs->ResolveParameters(),
-                context.GetTexture(passData.Inputs->Source),
-                context.GetTexture(passData.BloomTexture),
-                GetPassRenderTarget(context));
-        });
+    builder.AddPass(std::make_unique<BloomGraphPass>(BloomGraphPass::Desc{
+        .PassKind = BloomGraphPass::Kind::Composite,
+        .Feature = this,
+        .Inputs = sharedInputs,
+        .PassName = L"Bloom Composite",
+        .BloomTexture = bloomTexture,
+    }));
 }
 
 void Bloom::RecordPrefilter(

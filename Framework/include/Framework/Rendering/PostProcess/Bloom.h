@@ -18,6 +18,8 @@ namespace RenderGraph
     class RenderGraphBuilder;
 }
 
+class BloomGraphPass;
+
 class Bloom final
 {
 public:
@@ -40,6 +42,8 @@ public:
     void AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs inputs);
 
 private:
+    friend class BloomGraphPass;
+
     void RecordPrefilter(
         CommandList& commandList,
         const BloomParameters& parameters,

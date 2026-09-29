@@ -18,64 +18,87 @@ ResourceStateTracker::ResourceStateTracker(std::shared_ptr<ResourceStateRegistry
 
 ResourceStateTracker::~ResourceStateTracker() = default;
 
+//Modify Begin:2026-09-29 by Hui
+namespace
+{
+    UINT GetSubresourceCount(ID3D12Resource* const resource)
+    {
+        const D3D12_RESOURCE_DESC desc = resource->GetDesc();
+        if (desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
+        {
+            return 1u;
+        }
+
+        Assert(desc.MipLevels != 0u, "Cannot enumerate a texture with no mip levels.");
+        Microsoft::WRL::ComPtr<ID3D12Device> device;
+        ThrowIfFailed(resource->GetDevice(IID_PPV_ARGS(&device)));
+        D3D12_FEATURE_DATA_FORMAT_INFO formatInfo = { desc.Format, 0u };
+        ThrowIfFailed(device->CheckFeatureSupport(
+            D3D12_FEATURE_FORMAT_INFO, &formatInfo, sizeof(formatInfo)));
+        const uint64_t arraySize = desc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D
+            ? 1u
+            : desc.DepthOrArraySize;
+        const uint64_t count = static_cast<uint64_t>(desc.MipLevels) * arraySize * formatInfo.PlaneCount;
+        Assert(count > 0u && count < D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+            "D3D12 resource subresource count is invalid.");
+        return static_cast<UINT>(count);
+    }
+}
+
 void ResourceStateTracker::ResourceBarrier(const D3D12_RESOURCE_BARRIER& barrier)
 {
-	if (barrier.Type == D3D12_RESOURCE_BARRIER_TYPE_TRANSITION)
-	{
-		const D3D12_RESOURCE_TRANSITION_BARRIER& transitionBarrier = barrier.Transition;
+    if (barrier.Type != D3D12_RESOURCE_BARRIER_TYPE_TRANSITION)
+    {
+        m_ResourceBarriers.push_back(barrier);
+        return;
+    }
 
-		// First check if there is already a known "final" state for the given resource.
-		// If there is, the resource has been used on the command list before and
-		// already has a known state within the command list execution.
-		const auto iter = m_FinalResourceStates.find(transitionBarrier.pResource);
-		if (iter != m_FinalResourceStates.end())
-		{
-			const auto& resourceState = iter->second;
-			// If the known final state of the resource is different...
-			if (transitionBarrier.Subresource == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES &&
-				!resourceState.SubresourceStates.empty())
-			{
-				// First transition all of the subresources if they are different than the StateAfter.
-				for (const auto subresourceState : resourceState.SubresourceStates)
-				{
-					if (transitionBarrier.StateAfter != subresourceState.second)
-					{
-						D3D12_RESOURCE_BARRIER newBarrier = barrier;
-						newBarrier.Transition.Subresource = subresourceState.first;
-						newBarrier.Transition.StateBefore = subresourceState.second;
-						m_ResourceBarriers.push_back(newBarrier);
-					}
-				}
-			}
-			else
-			{
-				const auto finalState = resourceState.GetSubresourceState(transitionBarrier.Subresource);
-				if (transitionBarrier.StateAfter != finalState)
-				{
-					// Push a new transition barrier with the correct before state.
-					D3D12_RESOURCE_BARRIER newBarrier = barrier;
-					newBarrier.Transition.StateBefore = finalState;
-					m_ResourceBarriers.push_back(newBarrier);
-				}
-			}
-		}
-		else // In this case, the resource is being used on the command list for the first time. 
-		{
-			// Add a pending barrier. The pending barriers will be resolved
-			// before the command list is executed on the command queue.
-			m_PendingResourceBarriers.push_back(barrier);
-		}
+    const auto& transition = barrier.Transition;
+    const auto known = m_FinalResourceStates.find(transition.pResource);
+    if (known == m_FinalResourceStates.end())
+    {
+        m_PendingResourceBarriers.push_back(barrier);
+    }
+    else
+    {
+        const auto& state = known->second;
+        const auto append = [&](const UINT subresource)
+        {
+            D3D12_RESOURCE_BARRIER resolved = barrier;
+            resolved.Transition.Subresource = subresource;
+            if (!state.HasKnownState(subresource))
+            {
+                // The COMMON value in a partially known command-list state is
+                // only a placeholder. Resolve this before-state at submission.
+                m_PendingResourceBarriers.push_back(resolved);
+                return;
+            }
+            resolved.Transition.StateBefore = state.GetSubresourceState(subresource);
+            if (resolved.Transition.StateBefore != transition.StateAfter)
+            {
+                m_ResourceBarriers.push_back(resolved);
+            }
+        };
 
-		// Push the final known state (possibly replacing the previously known state for the subresource).
-		m_FinalResourceStates[transitionBarrier.pResource].SetSubresourceState(
-			transitionBarrier.Subresource, transitionBarrier.StateAfter);
-	}
-	else
-	{
-		// Just push non-transition barriers to the resource barriers array.
-		m_ResourceBarriers.push_back(barrier);
-	}
+        if (transition.Subresource == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES &&
+            (!state.SubresourceStates.empty() || !state.HasAllSubresourcesState))
+        {
+            const UINT count = GetSubresourceCount(transition.pResource);
+            for (UINT subresource = 0u; subresource < count; ++subresource)
+            {
+                append(subresource);
+            }
+        }
+        else
+        {
+            append(transition.Subresource);
+        }
+    }
+
+    m_FinalResourceStates[transition.pResource].SetSubresourceState(
+        transition.Subresource, transition.StateAfter);
 }
+//Modify End
 
 void ResourceStateTracker::TransitionResource(ID3D12Resource* resource, const D3D12_RESOURCE_STATES stateAfter,
 	const UINT subResource)
@@ -147,7 +170,7 @@ void ResourceStateTracker::FlushResourceBarriers(const CommandList& commandList)
 	m_ResourceBarriers.clear();
 }
 
-//Modify Begin:2026-08-10 by Hui
+//Modify Begin:2026-09-29 by Hui
 uint32_t ResourceStateTracker::FlushPendingResourceBarriers(
     const CommandList& commandList,
     ResourceStateRegistry::SubmissionScope& submissionScope)
@@ -172,37 +195,32 @@ uint32_t ResourceStateTracker::FlushPendingResourceBarriers(
                 iter != resourceStates.end(),
                 "D3D12 resource state was not registered before its first transition.");
 
-			// If all subresources are being transitioned, and there are multiple
-				// subresources of the resource that are in a different state...
-
-                auto& resourceState = iter->second;
-				if (pendingTransition.Subresource == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES &&
-					!resourceState.SubresourceStates.empty()
-					)
-				{
-					// Transition all subresources
-					for (const auto subresourceState : resourceState.SubresourceStates)
-					{
-						if (pendingTransition.StateAfter != subresourceState.second)
-						{
-							D3D12_RESOURCE_BARRIER newBarrier = pendingBarrier;
-							newBarrier.Transition.Subresource = subresourceState.first;
-							newBarrier.Transition.StateBefore = subresourceState.second;
-							resourceBarriers.push_back(newBarrier);
-						}
-					}
-				}
-				else
-				{
-					// No (sub)resources need to be transitioned. Just add a single transition barrier (if needed).
-					const auto globalState = resourceState.GetSubresourceState(pendingTransition.Subresource);
-					if (pendingTransition.StateAfter != globalState)
-					{
-						// Fix-up the before state based on current global state of the resource.
-						pendingBarrier.Transition.StateBefore = globalState;
-						resourceBarriers.push_back(pendingBarrier);
-					}
-				}
+            const auto& resourceState = iter->second;
+            const auto append = [&](const UINT subresource)
+            {
+                Assert(resourceState.HasKnownState(subresource),
+                    "The true D3D12 before-state was not registered for this subresource.");
+                D3D12_RESOURCE_BARRIER resolved = pendingBarrier;
+                resolved.Transition.Subresource = subresource;
+                resolved.Transition.StateBefore = resourceState.GetSubresourceState(subresource);
+                if (resolved.Transition.StateBefore != pendingTransition.StateAfter)
+                {
+                    resourceBarriers.push_back(resolved);
+                }
+            };
+            if (pendingTransition.Subresource == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES &&
+                (!resourceState.SubresourceStates.empty() || !resourceState.HasAllSubresourcesState))
+            {
+                const UINT count = GetSubresourceCount(pendingTransition.pResource);
+                for (UINT subresource = 0u; subresource < count; ++subresource)
+                {
+                    append(subresource);
+                }
+            }
+            else
+            {
+                append(pendingTransition.Subresource);
+            }
 		}
 	}
 
@@ -218,6 +236,11 @@ uint32_t ResourceStateTracker::FlushPendingResourceBarriers(
 	return numBarriers;
 }
 
+bool ResourceStateTracker::HasPendingResourceBarriers() const noexcept
+{
+    return !m_PendingResourceBarriers.empty();
+}
+
 void ResourceStateTracker::CommitFinalResourceStates(
     ResourceStateRegistry::SubmissionScope& submissionScope)
 {
@@ -228,7 +251,20 @@ void ResourceStateTracker::CommitFinalResourceStates(
         Assert(
             iter != resourceStates.end(),
             "D3D12 resource state was not registered before its final state was committed.");
-        iter->second = resourceState.second;
+        const auto& finalState = resourceState.second;
+        if (finalState.HasAllSubresourcesState)
+        {
+            iter->second = finalState;
+        }
+        else
+        {
+            // A per-subresource recording must preserve untouched registry
+            // states, including the registry's default for other subresources.
+            for (const auto& [subresource, state] : finalState.SubresourceStates)
+            {
+                iter->second.SetSubresourceState(subresource, state);
+            }
+        }
 	}
 
 	m_FinalResourceStates.clear();

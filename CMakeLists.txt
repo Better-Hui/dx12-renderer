@@ -12,6 +12,14 @@ cmake_policy(SET CMP0079 NEW)
 
 project(LearningDirectX12 LANGUAGES CXX)
 
+# Keep every in-tree and GitHub third-party target on the same CRT as the
+# renderer.  ProjectBase repeats this policy in individual project folders,
+# but External targets are created from the root before those folders enter
+# their own directory scope.
+if (MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif ()
+
 option(
         DX12_RENDERER_ENABLE_PERFORMANCE_SCOPES
         "Compile Debug CPU performance scopes into an explicit developer profiling build."
@@ -21,6 +29,11 @@ option(
         DX12_RENDERER_ENABLE_FULL_PERFORMANCE_SCOPES
         "Enable scopes and use allocation-heavy rich CPU telemetry instead of the lightweight scope ring."
         OFF)
+
+option(
+        DX12_RENDERER_BUILD_FRAMEWORK
+        "Build Framework and RaytracingDemo in addition to DX12Library and RenderGraph."
+        ON)
 
 set(DX12_RENDERER_SHADER_MODEL_VERSION "6.8")
 string(REPLACE "." "_" DX12_RENDERER_SHADER_MODEL_SUFFIX "${DX12_RENDERER_SHADER_MODEL_VERSION}")
@@ -96,20 +109,21 @@ foreach(DX12_RENDERER_STREAMLINE_FILE
         endif()
 endforeach()
 
-# Keep third-party targets out of the primary solution while retaining source builds.
-include(${CMAKE_SOURCE_DIR}/CMakeIncludes/ThirdPartyDependencies.cmake)
-include(${CMAKE_SOURCE_DIR}/CMakeIncludes/ImGui.cmake)
-
 # Libraries
 add_subdirectory(DX12Library)
 # Ray tracing framework code is built through Framework instead of a standalone DXR target.
 add_subdirectory(RenderGraph)
-add_subdirectory(Framework)
+if (DX12_RENDERER_BUILD_FRAMEWORK)
+    # Keep third-party targets out of the primary solution while retaining source builds.
+    include(${CMAKE_SOURCE_DIR}/CMakeIncludes/ThirdPartyDependencies.cmake)
+    include(${CMAKE_SOURCE_DIR}/CMakeIncludes/ImGui.cmake)
+    add_subdirectory(Framework)
 
-# Demo
-add_subdirectory(Demos/RaytracingDemo)
+    # Demo
+    add_subdirectory(Demos/RaytracingDemo)
 
-# Set the startup project.
-set_directory_properties(PROPERTIES
-        VS_STARTUP_PROJECT RaytracingDemo
-        )
+    # Set the startup project.
+    set_directory_properties(PROPERTIES
+            VS_STARTUP_PROJECT RaytracingDemo
+            )
+endif ()

@@ -59,8 +59,29 @@ endif()
 if (DX12_RENDERER_GENERATOR_TOOLSET)
         list(APPEND DX12_RENDERER_THIRD_PARTY_CONFIGURE_COMMAND -T "${DX12_RENDERER_GENERATOR_TOOLSET}")
 endif()
-if (DX12_RENDERER_TOOLCHAIN_FILE)
-        list(APPEND DX12_RENDERER_THIRD_PARTY_CONFIGURE_COMMAND "-DCMAKE_TOOLCHAIN_FILE=${DX12_RENDERER_TOOLCHAIN_FILE}")
+# Forward only a usable external vcpkg toolchain. The optional wrapper belongs
+# to the parent configure and must not poison this isolated cache with a stale
+# vcpkg.cmake path from an older machine.
+set(DX12_RENDERER_THIRD_PARTY_FORWARD_TOOLCHAIN "")
+if (DX12_RENDERER_TOOLCHAIN_FILE AND EXISTS "${DX12_RENDERER_TOOLCHAIN_FILE}")
+        get_filename_component(DX12_RENDERER_THIRD_PARTY_TOOLCHAIN_NAME
+                "${DX12_RENDERER_TOOLCHAIN_FILE}" NAME)
+        if (NOT DX12_RENDERER_THIRD_PARTY_TOOLCHAIN_NAME STREQUAL "OptionalVcpkgToolchain.cmake")
+                set(DX12_RENDERER_THIRD_PARTY_FORWARD_TOOLCHAIN
+                        "${DX12_RENDERER_TOOLCHAIN_FILE}")
+        elseif (DEFINED ENV{VCPKG_ROOT} AND NOT "$ENV{VCPKG_ROOT}" STREQUAL "")
+                file(TO_CMAKE_PATH "$ENV{VCPKG_ROOT}" DX12_RENDERER_ENV_VCPKG_ROOT)
+                set(DX12_RENDERER_ENV_VCPKG_TOOLCHAIN
+                        "${DX12_RENDERER_ENV_VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
+                if (EXISTS "${DX12_RENDERER_ENV_VCPKG_TOOLCHAIN}")
+                        set(DX12_RENDERER_THIRD_PARTY_FORWARD_TOOLCHAIN
+                                "${DX12_RENDERER_ENV_VCPKG_TOOLCHAIN}")
+                endif()
+        endif()
+endif()
+if (DX12_RENDERER_THIRD_PARTY_FORWARD_TOOLCHAIN)
+        list(APPEND DX12_RENDERER_THIRD_PARTY_CONFIGURE_COMMAND
+                "-DCMAKE_TOOLCHAIN_FILE=${DX12_RENDERER_THIRD_PARTY_FORWARD_TOOLCHAIN}")
 endif()
 
 message(STATUS "Building isolated NRI and NRD dependencies")

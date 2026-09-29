@@ -13,3 +13,24 @@
 [submodule "External/OIDN"]
 	path = External/OIDN
 	url = https://github.com/OpenImageDenoise/oidn.git
+[submodule "External/meshoptimizer"]
+	path = External/meshoptimizer
+	url = https://github.com/zeux/meshoptimizer.git
+[submodule "External/assimp"]
+	path = External/assimp
+	url = https://github.com/assimp/assimp.git
+[submodule "External/DirectXTex"]
+	path = External/DirectXTex
+	url = https://github.com/microsoft/DirectXTex.git
+[submodule "External/DirectXMesh"]
+	path = External/DirectXMesh
+	url = https://github.com/microsoft/DirectXMesh.git
+[submodule "External/oneTBB"]
+	path = External/oneTBB
+	url = https://github.com/oneapi-src/oneTBB.git
+[submodule "External/Imath"]
+	path = External/Imath
+	url = https://github.com/AcademySoftwareFoundation/Imath.git
+[submodule "External/OpenEXR"]
+	path = External/OpenEXR
+	url = https://github.com/AcademySoftwareFoundation/openexr.git

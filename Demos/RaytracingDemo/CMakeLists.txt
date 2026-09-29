@@ -194,7 +194,9 @@ set_source_files_properties(${SHADER_FILES_RAYTRACING} PROPERTIES HEADER_FILE_ON
 set_source_files_properties(${SHADER_FILES_MESH} PROPERTIES HEADER_FILE_ONLY TRUE)
 set_source_files_properties(shaders/CUDA/CudaBloom.cu PROPERTIES HEADER_FILE_ONLY TRUE)
 
-find_package(directxtex CONFIG REQUIRED)
+if (NOT TARGET Microsoft::DirectXTex)
+        find_package(directxtex CONFIG REQUIRED)
+endif()
 target_link_libraries(${TARGET_NAME}
         PUBLIC Framework
         PRIVATE "${DX12_RENDERER_DLSS_LIBRARY}"

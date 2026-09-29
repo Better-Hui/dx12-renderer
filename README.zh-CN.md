@@ -53,8 +53,10 @@ builder.AddComputePass<PassData>(
         pass.ReadTexture(inputId);
         pass.WriteUav(outputId);
     },
-    [](const PassData&, const RenderGraph::RenderContext& context, CommandList& commandList) {
-        // Record through Framework and resolve resources from the context.
+    [](const PassData&, const RenderGraph::RenderContext& context,
+       RenderGraph::RenderPassContext& passContext) {
+        CommandContext commands(passContext.GetCommandList(), passContext.GetBarrierContext());
+        // Resolve resources from context, then record through commands.
     });
 ```
 
@@ -62,9 +64,13 @@ builder.AddComputePass<PassData>(
 
 当前 queue 提交、last-writer 和跨 queue fence 由 `RenderGraphQueueScheduler` 管理。Compiler 为每个 pass 生成不可变的 transition/aliasing 计划，Executor 把它录入所属的 command list；`CommandList` 在最终提交顺序中通过共享 `ResourceStateRegistry` 解析每条 list 的初始状态。因此 CPU 录制先后不会改变 GPU 的资源状态与执行顺序。
 
+状态职责分为三层：RenderGraph 编译 pass 顺序/依赖、transient 生命周期与 aliasing、跨 queue fence/ownership 和入口状态计划，Executor 仅经 `RenderPassContext`/`BarrierContext` 录制 pass 边界 barrier；`CommandContext`/`BarrierContext` 负责 pass 内绑定前 transition 与 UAV ordering；`ResourceStateTracker` 解析伪 `COMMON` 所代表的真实 `before` 状态，批量提交 native barrier，并在提交时按 subresource 合并最终 registry 状态。
+
+Unity 插件不使用 RenderGraph。调用方必须在录制前为每个资源显式给出 `InitialState`、`FirstState`、`FinalState`、`FirstAccessWrites`、`FinalAccessWrites`，并通过 `ExternalCommandContext + CommandContext` 包装 Unity 当前 command list。`End()` 收束到 `FinalState`；`Abort()` 或异常尝试恢复 `InitialState`，恢复失败会被标记。声明不可重叠，Unity interop 仅接受 `ALL_SUBRESOURCES`，底层 context 可支持独立 subresource。插件不会 reset、close、submit Unity 的 list，也不接管 allocator；Unity v8 `RequestResourceState/NotifyResourceState` 仅同步 host tracker，不能替代显式 `InitialState`。
+
 `RenderGraphRoot` 的 device 和 queue 由应用组合根显式注入。执行路径已经拆为 `RenderGraphCommandExecutor`（pass 录制与提交）和 `RenderGraphProfiler`（可选的 Direct/Async Compute GPU timing）。`RaytracingDemo` 也遵循同一边界：`RaytracingDemoPassResources` 提供 pass 所需对象，`RaytracingDemoPassConfig` 提供显式运行时配置，因此 pass lambda 不再捕获整个 Demo，也不依赖 `friend` 访问私有成员。
 
-可复用 Framework 功能通过 `AddPasses(RenderGraphBuilder&, Inputs)` 注册一组子 pass。Auto Exposure、ReSTIR DI/GI、Raster Bloom、NRD、SVGF、OIDN 和 TAA 都使用该模式；Builder 只在构图调用期间存在，Framework 不保存它。Framework-owned persistent resource（包括 SVGF/TAA ping-pong history）通过不同的 imported logical read/write ID 接入图；物理双缓冲按帧解析，但图拓扑保持稳定。构图期 scratch texture 使用 `RenderGraphBuilder::CreateTexture()` 与 `Discard`。`CommandList` 与 `CommandContext` 不再暴露手写 barrier API，构建期 ownership 检查会扫描 DX12Library、RenderGraph、Framework 与 Demos 的一方源码，阻止普通算法绕开 RG。
+可复用 Framework 功能通过 `AddPasses(RenderGraphBuilder&, Inputs)` 注册一组子 pass。Auto Exposure、ReSTIR DI/GI、Raster Bloom、NRD、SVGF、OIDN 和 TAA 都使用该模式；Builder 只在构图调用期间存在，Framework 不保存它。Framework-owned persistent resource（包括 SVGF/TAA ping-pong history）通过不同的 imported logical read/write ID 接入图；物理双缓冲按帧解析，但图拓扑保持稳定。构图期 scratch texture 使用 `RenderGraphBuilder::CreateTexture()` 与 `Discard`。普通 pass 不直接使用 `CommandListInternalAccess` 录制 barrier；确有 pass 内状态阶段切换时，经 `CommandContext::TransitionResource`/`UavBarrier` 进入同一 `BarrierContext`。构建期 ownership 检查会扫描 DX12Library、RenderGraph、Framework 与 Demos 的一方源码。
 
 NRD 在图中展开为 `Prepare Inputs`、`Native Denoise` 和 `Composite`。native NRI/NRD recording 允许管理 SDK 内部临时状态，但图资源进入和离开 native 段时保持 RG 声明的 SRV/UAV 状态，NRD 不在 barrier 白名单中。SVGF 展开为 imported 奇偶 temporal history、逐次水平/垂直 A-Trous 与 Composite；TAA 围绕 imported ping-pong history 展开为 Resolve 和 History Copy，同一次图执行期间固定物理读写映射，只在 rendered-frame 边界推进。UAV clear 本身不再偷偷追加 barrier；clear 后继续写同一 UAV 时必须拆 pass 或显式形成 WAW 图依赖。
 

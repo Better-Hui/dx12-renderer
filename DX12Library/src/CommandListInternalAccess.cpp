@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-25 by Hui
+//Modify Begin:2026-09-29 by Hui
 #include "DX12LibPCH.h"
 
 #include "CommandListInternalAccess.h"
@@ -48,7 +48,6 @@ void CommandListInternalAccess::UavBarrier(
     UavBarrier(commandList, resource.GetD3D12Resource().Get(), flushBarriers);
 }
 
-//Modify Begin:2026-09-24 by Hui
 void CommandListInternalAccess::TransitionBarrierFromState(
     CommandList& commandList, ID3D12Resource* resource,
     const D3D12_RESOURCE_STATES stateBefore,
@@ -61,16 +60,16 @@ void CommandListInternalAccess::TransitionBarrierFromState(
     if (flushBarriers)
         FlushResourceBarriers(commandList);
 }
-//Modify End
 
-//Modify Begin:2026-09-24 by Hui
 void CommandListInternalAccess::NotifyResourceState(
-    CommandList& commandList, ID3D12Resource* resource, const D3D12_RESOURCE_STATES state)
+    CommandList& commandList,
+    ID3D12Resource* resource,
+    const D3D12_RESOURCE_STATES state,
+    const UINT subresource)
 {
     Assert(resource != nullptr, "Cannot notify a null D3D12 resource state.");
-    commandList.m_PResourceStateTracker->NotifyResourceState(resource, state);
+    commandList.m_PResourceStateTracker->NotifyResourceState(resource, state, subresource);
 }
-//Modify End
 
 void CommandListInternalAccess::UavBarrier(
     CommandList& commandList,

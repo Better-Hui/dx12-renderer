@@ -179,13 +179,23 @@ target_link_libraries(${TARGET_NAME}
 
 target_link_libraries(${TARGET_NAME} PRIVATE d3d12 dxgi dxguid imm32 xmllite shlwapi)
 
-find_package(meshoptimizer CONFIG REQUIRED)
+if (NOT TARGET meshoptimizer::meshoptimizer)
+        find_package(meshoptimizer CONFIG REQUIRED)
+endif()
 target_link_libraries(${TARGET_NAME} PUBLIC meshoptimizer::meshoptimizer)
 
-find_package(assimp CONFIG REQUIRED)
-find_package(directxtex CONFIG REQUIRED)
-find_package(OpenEXR CONFIG REQUIRED)
-find_package(directxmesh CONFIG REQUIRED)
+if (NOT TARGET assimp::assimp)
+        find_package(assimp CONFIG REQUIRED)
+endif()
+if (NOT TARGET Microsoft::DirectXTex)
+        find_package(directxtex CONFIG REQUIRED)
+endif()
+if (NOT TARGET OpenEXR::OpenEXR)
+        find_package(OpenEXR CONFIG REQUIRED)
+endif()
+if (NOT TARGET Microsoft::DirectXMesh)
+        find_package(directxmesh CONFIG REQUIRED)
+endif()
 target_link_libraries(${TARGET_NAME}
         PRIVATE assimp::assimp
         PRIVATE Microsoft::DirectXTex

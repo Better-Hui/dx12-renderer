@@ -21,6 +21,7 @@
 #include <OpenImageDenoise/oidn.hpp>
 #include <RenderGraph/RenderContext.h>
 #include <RenderGraph/RenderGraphBuilder.h>
+#include <RenderGraph/RenderPass.h>
 
 #include <Windows.h>
 #include <d3dx12/d3dx12.h>
@@ -125,23 +126,6 @@ namespace
         return semaphore;
     }
 
-    struct OidnReadbackPassData
-    {
-        OIDNDenoiser* Feature = nullptr;
-        std::shared_ptr<const OIDNDenoiser::GraphInputs> Inputs;
-    };
-
-    struct OidnUploadPassData
-    {
-        OIDNDenoiser* Feature = nullptr;
-    };
-
-    struct OidnCompositePassData
-    {
-        OIDNDenoiser* Feature = nullptr;
-        std::shared_ptr<const OIDNDenoiser::GraphInputs> Inputs;
-    };
-
     std::unique_ptr<ComputeShader> CreateOidnCompositeShader(FrameworkDeviceContext& deviceContext)
     {
         const ShaderBlob shader(ShaderBytecode_OIDNComposite_CS, sizeof ShaderBytecode_OIDNComposite_CS);
@@ -151,6 +135,125 @@ namespace
             ComputePipelineDescBuilder::ReflectedDefault(shader).Build());
     }
 }
+
+class OidnGraphPass final : public RenderGraph::RenderPass
+{
+public:
+    enum class Kind
+    {
+        Readback,
+        Upload,
+        Composite,
+    };
+
+    struct Desc
+    {
+        Kind PassKind = Kind::Readback;
+        OIDNDenoiser* Feature = nullptr;
+        std::shared_ptr<const OIDNDenoiser::GraphInputs> Inputs;
+        std::wstring PassName;
+        RenderGraph::ResourceId TokenBefore = 0;
+        RenderGraph::ResourceId TokenBefore2 = 0;
+        RenderGraph::ResourceId TokenAfter = 0;
+        RenderGraph::ImportedResourceHandle CudaInput;
+        RenderGraph::ImportedResourceHandle CudaOutput;
+        RenderGraph::ImportedResourceHandle Output;
+    };
+
+    explicit OidnGraphPass(Desc desc)
+        : m_Kind(desc.PassKind)
+        , m_Feature(*desc.Feature)
+        , m_Inputs(std::move(desc.Inputs))
+        , m_TokenBefore(desc.TokenBefore)
+        , m_TokenBefore2(desc.TokenBefore2)
+        , m_TokenAfter(desc.TokenAfter)
+        , m_CudaInput(std::move(desc.CudaInput))
+        , m_CudaOutput(std::move(desc.CudaOutput))
+        , m_Output(std::move(desc.Output))
+    {
+        Assert(desc.Feature != nullptr && m_Inputs != nullptr, "OIDN graph pass requires feature inputs.");
+        SetPassName(desc.PassName);
+        if (m_Kind == Kind::Readback)
+        {
+            RegisterInput({ m_Inputs->InputToken, RenderGraph::InputType::Token });
+            RegisterInput({ m_Inputs->ReadbackSource, RenderGraph::InputType::CopySource });
+            if (m_CudaInput.IsValid())
+            {
+                RegisterOutput({ m_CudaInput.GetId(), RenderGraph::OutputType::ExternalAccess });
+                AddImportedResourceAccess(
+                    m_CudaInput,
+                    D3D12_RESOURCE_STATE_COPY_DEST,
+                    RenderGraph::ExternalResourceAccessMode::Write,
+                    false);
+            }
+            RegisterOutput({ m_TokenAfter, RenderGraph::OutputType::Token });
+        }
+        else if (m_Kind == Kind::Upload)
+        {
+            if (m_CudaOutput.IsValid())
+            {
+                RegisterInput({ m_CudaOutput.GetId(), RenderGraph::InputType::ExternalAccess });
+                AddImportedResourceAccess(
+                    m_CudaOutput,
+                    D3D12_RESOURCE_STATE_COPY_SOURCE,
+                    RenderGraph::ExternalResourceAccessMode::Read,
+                    false);
+            }
+            RegisterOutput({ m_Output.GetId(), RenderGraph::OutputType::ExternalAccess });
+            RegisterOutput({ m_TokenAfter, RenderGraph::OutputType::Token });
+            AddImportedResourceAccess(
+                m_Output,
+                D3D12_RESOURCE_STATE_COPY_DEST,
+                RenderGraph::ExternalResourceAccessMode::Write,
+                false);
+        }
+        else
+        {
+            RegisterInput({ m_Inputs->InputToken, RenderGraph::InputType::Token });
+            RegisterInput({ m_TokenBefore, RenderGraph::InputType::Token });
+            RegisterInput({ m_TokenBefore2, RenderGraph::InputType::Token });
+            RegisterInput({ m_Output.GetId(), RenderGraph::InputType::ExternalAccess });
+            RegisterOutput({ m_Inputs->Output, RenderGraph::OutputType::UnorderedAccess });
+            RegisterOutput({ m_Inputs->OutputToken, RenderGraph::OutputType::Token });
+            AddImportedResourceAccess(
+                m_Output,
+                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                RenderGraph::ExternalResourceAccessMode::Read,
+                false);
+        }
+    }
+
+protected:
+    void InitImpl(CommandList&) override {}
+
+    void ExecuteImpl(const RenderGraph::RenderContext& context, RenderGraph::RenderPassContext& passContext) override
+    {
+        CommandList& commandList = passContext.GetCommandList();
+        if (m_Kind == Kind::Readback)
+        {
+            m_Feature.RecordReadback(commandList, context.GetTexture(m_Inputs->ReadbackSource));
+        }
+        else if (m_Kind == Kind::Upload)
+        {
+            m_Feature.RecordUpload(commandList);
+        }
+        else
+        {
+            m_Feature.RecordComposite(commandList, context.GetTexture(m_Inputs->Output));
+        }
+    }
+
+private:
+    Kind m_Kind;
+    OIDNDenoiser& m_Feature;
+    std::shared_ptr<const OIDNDenoiser::GraphInputs> m_Inputs;
+    RenderGraph::ResourceId m_TokenBefore = 0;
+    RenderGraph::ResourceId m_TokenBefore2 = 0;
+    RenderGraph::ResourceId m_TokenAfter = 0;
+    RenderGraph::ImportedResourceHandle m_CudaInput;
+    RenderGraph::ImportedResourceHandle m_CudaOutput;
+    RenderGraph::ImportedResourceHandle m_Output;
+};
 
 struct OIDNDenoiser::CudaResources
 {
@@ -697,61 +800,31 @@ void OIDNDenoiser::AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInpu
     const RenderGraph::ResourceId readbackFinished = builder.CreateToken(readbackTokenName.c_str());
     const RenderGraph::ResourceId uploadFinished = builder.CreateToken(uploadTokenName.c_str());
 
-    builder.AddPass<OidnReadbackPassData>(
-        L"OIDN HDR Readback",
-        [this, sharedInputs, cudaInput, readbackFinished](RenderGraph::RenderGraphPassBuilder& passBuilder, OidnReadbackPassData& passData)
-        {
-            passData.Feature = this;
-            passData.Inputs = sharedInputs;
-            passBuilder.ReadToken(sharedInputs->InputToken);
-            passBuilder.ReadCopySource(sharedInputs->ReadbackSource);
-            if (cudaInput.IsValid())
-            {
-                passBuilder.WriteImported(cudaInput, D3D12_RESOURCE_STATE_COPY_DEST);
-            }
-            passBuilder.WriteToken(readbackFinished);
-        },
-        [](const OidnReadbackPassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
-        {
-            passData.Feature->RecordReadback(commandList, context.GetTexture(passData.Inputs->ReadbackSource));
-        });
-
-    builder.AddPass<OidnUploadPassData>(
-        L"OIDN Result Upload",
-        [this, cudaOutput, output, uploadFinished](RenderGraph::RenderGraphPassBuilder& passBuilder, OidnUploadPassData& passData)
-        {
-            passData.Feature = this;
-            if (cudaOutput.IsValid())
-            {
-                passBuilder.ReadImported(cudaOutput, D3D12_RESOURCE_STATE_COPY_SOURCE);
-            }
-            passBuilder.WriteImported(output, D3D12_RESOURCE_STATE_COPY_DEST);
-            passBuilder.WriteToken(uploadFinished);
-        },
-        [](const OidnUploadPassData& passData, const RenderGraph::RenderContext&, CommandList& commandList)
-        {
-            passData.Feature->RecordUpload(commandList);
-        });
-
-    builder.AddPass<OidnCompositePassData>(
-        L"OIDN Composite",
-        [this, sharedInputs, output, readbackFinished, uploadFinished](
-            RenderGraph::RenderGraphPassBuilder& passBuilder,
-            OidnCompositePassData& passData)
-        {
-            passData.Feature = this;
-            passData.Inputs = sharedInputs;
-            passBuilder.ReadToken(sharedInputs->InputToken);
-            passBuilder.ReadToken(readbackFinished);
-            passBuilder.ReadToken(uploadFinished);
-            passBuilder.ReadImported(output, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-            passBuilder.WriteUav(sharedInputs->Output);
-            passBuilder.WriteToken(sharedInputs->OutputToken);
-        },
-        [](const OidnCompositePassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
-        {
-            passData.Feature->RecordComposite(commandList, context.GetTexture(passData.Inputs->Output));
-        });
+    builder.AddPass(std::make_unique<OidnGraphPass>(OidnGraphPass::Desc{
+        .PassKind = OidnGraphPass::Kind::Readback,
+        .Feature = this,
+        .Inputs = sharedInputs,
+        .PassName = L"OIDN HDR Readback",
+        .TokenAfter = readbackFinished,
+        .CudaInput = cudaInput,
+    }));
+    builder.AddPass(std::make_unique<OidnGraphPass>(OidnGraphPass::Desc{
+        .PassKind = OidnGraphPass::Kind::Upload,
+        .Feature = this,
+        .PassName = L"OIDN Result Upload",
+        .TokenAfter = uploadFinished,
+        .CudaOutput = cudaOutput,
+        .Output = output,
+    }));
+    builder.AddPass(std::make_unique<OidnGraphPass>(OidnGraphPass::Desc{
+        .PassKind = OidnGraphPass::Kind::Composite,
+        .Feature = this,
+        .Inputs = sharedInputs,
+        .PassName = L"OIDN Composite",
+        .TokenBefore = uploadFinished,
+        .TokenBefore2 = readbackFinished,
+        .Output = output,
+    }));
 }
 
 void OIDNDenoiser::WorkerLoop(const std::stop_token stopToken)
