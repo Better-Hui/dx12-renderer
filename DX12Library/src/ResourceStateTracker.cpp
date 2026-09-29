@@ -277,4 +277,13 @@ void ResourceStateTracker::Reset()
 	m_ResourceBarriers.clear();
 	m_FinalResourceStates.clear();
 }
+
+bool ResourceStateTracker::TryGetResourceState(
+    ID3D12Resource* resource, const UINT subresource, D3D12_RESOURCE_STATES& state) const
+{
+    const auto found = m_FinalResourceStates.find(resource);
+    if (found == m_FinalResourceStates.end() || !found->second.HasKnownState(subresource)) return false;
+    state = found->second.GetSubresourceState(subresource);
+    return true;
+}
 //Modify End

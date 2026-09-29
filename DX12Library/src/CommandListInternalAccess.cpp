@@ -6,6 +6,12 @@
 #include "Resource.h"
 #include "ResourceStateTracker.h"
 
+bool CommandListInternalAccess::TryGetResourceState(const CommandList& commandList, ID3D12Resource* resource,
+    const UINT subresource, D3D12_RESOURCE_STATES& state)
+{
+    return commandList.m_PResourceStateTracker->TryGetResourceState(resource, subresource, state);
+}
+
 void CommandListInternalAccess::TransitionBarrier(
     CommandList& commandList,
     const Resource& resource,
@@ -29,6 +35,7 @@ void CommandListInternalAccess::TransitionBarrier(
     const bool flushBarriers)
 {
     Assert(resource != nullptr, "Cannot transition a null D3D12 resource.");
+    commandList.TrackObject(resource);
     commandList.m_PResourceStateTracker->ResourceBarrier(CD3DX12_RESOURCE_BARRIER::Transition(
         resource.Get(),
         D3D12_RESOURCE_STATE_COMMON,

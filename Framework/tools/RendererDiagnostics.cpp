@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-09-29 by Hui
 #include "RendererDiagnosticsCommands.h"
 #include "RendererDiagnosticsJson.h"
 
@@ -61,6 +61,7 @@ void RendererDiagnosticsTool::PrintUsage()
         << "  diff <baseline> <current> [--regression-percent N] [--min-ms N]\n"
         << "  reproduce <capture> [--exe <path>] [--output <dir>] [--execute] [--timeout-seconds N] [--max-events N]\n"
         << "  selftest\n"
+        << "  barrier-selftest (WARP GPU resource-state regression without RenderGraph)\n"
         << "Exit codes: 0 clean, 10 findings, 11 regression, 12 incomplete capture, 20-24 automation failure.\n";
 }
 
@@ -113,6 +114,11 @@ int wmain(const int argc, wchar_t** argv)
         {
             ValidateArguments(command, arguments, {}, {}, 0u, 0u);
             return SelfTestCommand();
+        }
+        if (command == "barrier-selftest")
+        {
+            ValidateArguments(command, arguments, {}, {}, 0u, 0u);
+            return BarrierSelfTestCommand();
         }
         PrintUsage();
         return 2;

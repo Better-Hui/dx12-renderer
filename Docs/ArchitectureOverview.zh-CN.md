@@ -33,7 +33,7 @@ DX12Library
 `DX12Library/` 保留 D3D12 的原生概念，主要包含：
 
 - `D3D12DeviceContext`、`CommandQueue`、`CommandList`：封装 device，以及 Direct、Compute、Copy 三类 command queue。
-- `CommandList` 只保留普通命令录制、descriptor staging 与 command-list 生命周期跟踪，不再声明 transition/UAV/aliasing barrier 方法。barrier 编码位于 renderer-internal 的 `CommandListInternalAccess`，仅供 RenderGraph 和经过审计的 upload、readback、mip、swapchain/present、shared upload 与 RTAS 边界使用。`ResourceUploader` 负责 staging upload 和资源替换，`MipGenerator` 负责可复用的 mip 生成 pipeline。
+- `CommandList` 自带默认 `BarrierContext`。普通 command API 会在真实 copy、view、draw、dispatch、ray dispatch 或 indirect 使用点准备 transition 和 UAV ordering，因此独立使用 `CommandList`/`CommandContext` 不要求先创建 RenderGraph。`RenderGraph` 仍可在 pass 入口写入边界计划；`CommandListInternalAccess` 只用于底层 barrier 编码和经过审计的 upload、readback、mip、swapchain/present、shared upload 与 RTAS 边界。`ResourceUploader` 负责 staging upload 和资源替换，`MipGenerator` 负责可复用的 mip 生成 pipeline。
 - `Resource`、`Texture`、`Buffer`、structured/raw buffer、upload buffer 与 RTAS backing resource：管理原生 D3D12 allocation 和 resource view。
 - `DescriptorAllocator`、`DynamicDescriptorHeap`、`FrameResourceRing`：管理 descriptor 以及逐帧资源寿命。GPU 可见 descriptor table 在此层完成，而不是由 demo 手写。
 - `ResourceStateRegistry`、`ResourceStateTracker`：记录 transition、UAV 与 aliasing barrier。
@@ -89,7 +89,7 @@ RenderPass 声明
 
 编译阶段负责 pass culling、依赖排序、resource-state plan、transient lifetime plan 和 execution batch；`RenderGraphCommandExecutor` 负责录制和提交；`RenderGraphProfiler` 负责可选的 Direct/Compute timestamp 与 CSV history。
 
-模块依赖方向是 `DX12Library <- RenderGraph <- Framework <- RaytracingDemo`。Framework 可以注册可复用子图，但 RenderGraph 不反向依赖 Framework。`VerifyRenderGraphOwnership` 会在 Framework 构建前扫描 DX12Library、RenderGraph、Framework 与 Demos 的一方源码，禁止普通算法直接 barrier、上层访问 `ResourceStateTracker`、Demo 引入内部桥、descriptor binding 携带资源状态、恢复已删除的 auto-barrier 机制，以及 Framework 保存 Builder 引用或指针。barrier bridge 白名单仅限 DX12Library 的底层编码器、`BarrierContext` 与初始化、上传、mip、读回、窗口等基础设施路径；RenderGraph 和 Framework 的普通 pass 路径均不在白名单中。
+模块依赖方向是 `DX12Library <- RenderGraph <- Framework <- RaytracingDemo`。Framework 可以注册可复用子图，但 RenderGraph 不反向依赖 Framework。`VerifyRenderGraphOwnership` 会在 Framework 构建前扫描 DX12Library、RenderGraph、Framework 与 Demos 的一方源码，禁止普通算法直接编码 native barrier、上层访问 `ResourceStateTracker`、Demo 引入内部桥、descriptor binding 携带资源状态、恢复旧的隐式 auto-barrier 机制，以及 Framework 保存 Builder 引用或指针。普通资源状态策略只能经过 `CommandContext`/`BarrierContext`，底层 bridge 白名单仅限实现这些状态上下文和初始化、上传、mip、读回、窗口等基础设施路径。
 
 ### 状态转换职责与外部 command list
 

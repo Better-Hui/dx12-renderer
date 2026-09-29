@@ -43,6 +43,7 @@ ExternalCommandContext::~ExternalCommandContext() noexcept
 
 CommandList& ExternalCommandContext::GetCommandList() const
 {
+    Assert(!m_Ended, "Cannot record through a finished external context.");
     return *m_CommandList;
 }
 
@@ -198,6 +199,7 @@ void ExternalCommandContext::DeclareResources(const std::span<const ResourceAcce
                     previous.FirstAccessWrites == access.FirstAccessWrites &&
                     previous.FinalAccessWrites == access.FinalAccessWrites,
                 "An external resource was declared with a conflicting access contract.");
+            continue;
         }
         for (const auto& [declaredKey, previous] : m_ResourceAccesses)
         {
@@ -235,6 +237,26 @@ void ExternalCommandContext::ValidateResourceAccess(const ResourceAccess& access
     Assert(!m_RecordingStarted,
         "External resources must be declared before external recording begins.");
     Assert(access.Resource != nullptr, "External resource access must reference a resource.");
+    const auto desc = access.Resource->GetDesc();
+    if (access.Subresource != D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
+    {
+        D3D12_FEATURE_DATA_FORMAT_INFO info{ desc.Format, 1 };
+        if (desc.Dimension != D3D12_RESOURCE_DIMENSION_BUFFER)
+            ThrowIfFailed(m_CommandList->GetDeviceContext()->GetDevice()->CheckFeatureSupport(
+                D3D12_FEATURE_FORMAT_INFO, &info, sizeof(info)));
+        const UINT count = desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER ? 1u : desc.MipLevels *
+            (desc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D ? 1u : desc.DepthOrArraySize) * info.PlaneCount;
+        Assert(access.Subresource < count, "External declaration subresource is out of range.");
+    }
+    const auto type = m_CommandList->GetCommandListType();
+    const UINT allowed = type == D3D12_COMMAND_LIST_TYPE_COPY
+        ? D3D12_RESOURCE_STATE_COPY_SOURCE | D3D12_RESOURCE_STATE_COPY_DEST
+        : D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER | D3D12_RESOURCE_STATE_UNORDERED_ACCESS |
+          D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT |
+          D3D12_RESOURCE_STATE_COPY_SOURCE | D3D12_RESOURCE_STATE_COPY_DEST | D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
+    if (type != D3D12_COMMAND_LIST_TYPE_DIRECT)
+        Assert(((access.InitialState | access.FirstState | access.FinalState) & ~allowed) == 0,
+            "External states require a transition on a different queue before recording.");
 }
 
 void ExternalCommandContext::BeginRecording()

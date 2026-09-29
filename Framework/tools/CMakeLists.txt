@@ -7,6 +7,7 @@ set(RENDERER_DIAGNOSTICS_TOOL_FILES
         "RendererDiagnosticsJson.h"
         "RendererDiagnosticsRun.cpp"
         "RendererDiagnosticsSelfTest.cpp")
+list(APPEND RENDERER_DIAGNOSTICS_TOOL_FILES "RendererBarrierSelfTest.cpp")
 
 add_executable(RendererDiagnostics ${RENDERER_DIAGNOSTICS_TOOL_FILES})
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${RENDERER_DIAGNOSTICS_TOOL_FILES})

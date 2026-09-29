@@ -19,7 +19,7 @@
 
 #include <d3d12.h>
 
-//Modify Begin:2026-08-25 by Hui
+//Modify Begin:2026-09-29 by Hui
 namespace
 {
     std::atomic_uint64_t g_NextCommandListStableId = 1u;
@@ -54,6 +54,8 @@ CommandList::CommandList(
     m_PUploadBuffer = std::make_unique<UploadBuffer>(m_Device);
 
     m_PResourceStateTracker = std::make_unique<ResourceStateTracker>(m_ResourceStateRegistry);
+    m_DefaultBarrierContext = std::make_unique<BarrierContext>(*this);
+    m_ActiveBarrierContext = m_DefaultBarrierContext.get();
 
     for (int i = 0; i < D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES; ++i)
     {
@@ -68,7 +70,7 @@ CommandList::CommandList(
 }
 //Modify End
 
-//Modify Begin:2026-09-24 by Hui
+//Modify Begin:2026-09-29 by Hui
 CommandList::CommandList(
     const D3D12_COMMAND_LIST_TYPE type,
     std::shared_ptr<D3D12DeviceContext> deviceContext,
@@ -84,11 +86,15 @@ CommandList::CommandList(
     Assert(m_Device != nullptr, "D3D12 device is null.");
     Assert(m_ResourceStateRegistry != nullptr, "Resource state registry is null.");
     Assert(externalCommandList != nullptr, "External command list is null.");
+    Assert(externalCommandList->GetType() == type,
+        "The declared external queue type does not match the native command list.");
     m_D3d12CommandList = externalCommandList;
     ThrowIfFailed(m_D3d12CommandList.As(&m_D3d12CommandList5));
     ThrowIfFailed(m_D3d12CommandList.As(&m_D3d12CommandList6));
     m_PUploadBuffer = std::make_unique<UploadBuffer>(m_Device);
     m_PResourceStateTracker = std::make_unique<ResourceStateTracker>(m_ResourceStateRegistry);
+    m_DefaultBarrierContext = std::make_unique<BarrierContext>(*this);
+    m_ActiveBarrierContext = m_DefaultBarrierContext.get();
     for (int i = 0; i < D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES; ++i)
     {
         const uint32_t numDescriptorsPerHeap =
@@ -109,6 +115,124 @@ BarrierContext* CommandList::SetActiveBarrierContext(BarrierContext* const conte
     m_ActiveBarrierContext = context;
     return previous;
 }
+
+BarrierContext& CommandList::GetBarrierContext() const
+{
+    Assert(m_ActiveBarrierContext != nullptr, "Command recording requires an active barrier context.");
+    Assert(!m_ExternalCommandList || m_ActiveBarrierContext != m_DefaultBarrierContext.get(),
+        "Host-owned lists require an active ExternalCommandContext with explicit entry states.");
+    return *m_ActiveBarrierContext;
+}
+
+void CommandList::TrackAccess(const ResourceAccess& access)
+{
+    Assert(access.NativeResource != nullptr, "A resource binding requires a native resource.");
+    TrackObject(access.NativeResource);
+    if (access.Registration != nullptr)
+        m_TrackedResourceStateRegistrations.push_back(access.Registration);
+    for (const auto& dependency : access.Dependencies) TrackAccess(dependency);
+}
+
+CommandList::ResourceAccess CommandList::ResourceAccess::Uav(
+    const Resource& resource, const UINT first, const UINT count)
+{
+    ResourceAccess access{ resource.GetD3D12Resource(), resource.GetStateRegistration(),
+        D3D12_RESOURCE_STATE_UNORDERED_ACCESS, first, count, true };
+    resource.ForEachResourceRecursive([&](const Resource& dependency)
+    {
+        if (dependency.GetD3D12Resource() != resource.GetD3D12Resource())
+            access.Dependencies.push_back({ dependency.GetD3D12Resource(), dependency.GetStateRegistration(),
+                D3D12_RESOURCE_STATE_UNORDERED_ACCESS, 0, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, true });
+    });
+    return access;
+}
+
+void CommandList::SetResourceBindings(
+    const BindingPoint point, const UINT rootParameter, const std::span<const ResourceAccess> accesses)
+{
+    auto& bindings = point == BindingPoint::Graphics ? m_GraphicsResourceBindings : m_ComputeResourceBindings;
+    std::erase_if(bindings, [rootParameter](const auto& entry) { return entry.first.first == rootParameter; });
+    for (UINT i = 0; i < accesses.size(); ++i)
+        SetResourceBinding(point, rootParameter, i, accesses[i]);
+}
+
+void CommandList::SetResourceBinding(
+    const BindingPoint point, const UINT rootParameter, const UINT offset, ResourceAccess access)
+{
+    TrackAccess(access);
+    auto& bindings = point == BindingPoint::Graphics ? m_GraphicsResourceBindings : m_ComputeResourceBindings;
+    bindings[{ rootParameter, offset }] = std::move(access);
+}
+
+void CommandList::PrepareBoundResources(const BindingPoint point,
+    const std::span<const ResourceAccess> extraAccesses, const bool inputAssembler, const bool indexed)
+{
+    struct AccessState { D3D12_RESOURCE_STATES State; bool UavWrite; };
+    std::map<ID3D12Resource*, std::map<UINT, AccessState>> resources;
+    const auto merge = [](AccessState& target, const AccessState incoming)
+    {
+        if (target.State != incoming.State)
+        {
+            constexpr UINT writeStates = D3D12_RESOURCE_STATE_RENDER_TARGET |
+                D3D12_RESOURCE_STATE_UNORDERED_ACCESS | D3D12_RESOURCE_STATE_DEPTH_WRITE |
+                D3D12_RESOURCE_STATE_COPY_DEST | D3D12_RESOURCE_STATE_RESOLVE_DEST;
+            Assert(((target.State | incoming.State) & writeStates) == 0,
+                "One GPU operation binds overlapping subresources for incompatible read/write access.");
+            target.State |= incoming.State;
+        }
+        target.UavWrite |= incoming.UavWrite;
+    };
+    const std::function<void(const ResourceAccess&)> add = [&](const ResourceAccess& access)
+    {
+        for (const auto& dependency : access.Dependencies) add(dependency);
+        auto& states = resources[access.NativeResource.Get()];
+        const auto addSubresource = [&](const UINT subresource)
+        {
+            const AccessState incoming{ access.State, access.UavWrite };
+            auto [it, inserted] = states.try_emplace(subresource, incoming);
+            if (!inserted) merge(it->second, incoming);
+        };
+        if (access.NumSubresources == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
+            addSubresource(D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
+        else
+            for (UINT i = 0; i < access.NumSubresources; ++i)
+                addSubresource(access.FirstSubresource + i);
+    };
+    const auto& bindings = point == BindingPoint::Graphics ? m_GraphicsResourceBindings : m_ComputeResourceBindings;
+    for (const auto& [key, access] : bindings) add(access);
+    if (point == BindingPoint::Graphics)
+    {
+        for (const auto& access : m_RenderTargetResourceBindings) add(access);
+        if (inputAssembler)
+            for (const auto& [key, access] : m_GraphicsFixedBindings)
+                if (key != 200u || indexed) add(access);
+    }
+    for (const auto& access : extraAccesses) add(access);
+
+    for (auto& [resource, states] : resources)
+    {
+        // ALL plus an exact view must be merged before any transition is queued.
+        const auto all = states.find(D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
+        if (all != states.end() && states.size() > 1)
+        {
+            const AccessState base = all->second;
+            const D3D12_RESOURCE_DESC desc = resource->GetDesc();
+            D3D12_FEATURE_DATA_FORMAT_INFO info{ desc.Format, 1 };
+            if (desc.Dimension != D3D12_RESOURCE_DIMENSION_BUFFER)
+                ThrowIfFailed(m_Device->CheckFeatureSupport(D3D12_FEATURE_FORMAT_INFO, &info, sizeof(info)));
+            const UINT count = desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER ? 1u :
+                desc.MipLevels * (desc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D ? 1u : desc.DepthOrArraySize) * info.PlaneCount;
+            states.erase(all);
+            for (UINT i = 0; i < count; ++i)
+            {
+                auto [it, inserted] = states.try_emplace(i, base);
+                if (!inserted) merge(it->second, base);
+            }
+        }
+        for (const auto& [subresource, access] : states)
+            GetBarrierContext().PrepareResource(resource, access.State, access.UavWrite, subresource);
+    }
+}
 //Modify End
 
 //Modify Begin:2026-09-29 by Hui
@@ -125,15 +249,19 @@ void CommandList::ExecuteExternalCommandRecording(
     }
     catch (...)
     {
+        GetBarrierContext().NotifyCommandRecorded();
         InvalidateCachedNativeState();
         throw;
     }
 
+    GetBarrierContext().NotifyCommandRecorded();
     InvalidateCachedNativeState();
 }
 
 void CommandList::FlushResourceBarriers()
 {
+    Assert(!m_ExternalCommandList || !m_PResourceStateTracker->HasPendingResourceBarriers(),
+        "External resources need a declared before-state before recording GPU work.");
     m_PResourceStateTracker->FlushResourceBarriers(*this);
 }
 
@@ -215,14 +343,11 @@ void CommandList::CommitStagedDescriptorsForDispatch()
 }
 //Modify End
 
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-09-29 by Hui
 void CommandList::CopyResource(const Resource& dstRes, const Resource& srcRes)
 {
-    if (m_ActiveBarrierContext != nullptr)
-    {
-        m_ActiveBarrierContext->PrepareResource(srcRes, D3D12_RESOURCE_STATE_COPY_SOURCE, false);
-        m_ActiveBarrierContext->PrepareResource(dstRes, D3D12_RESOURCE_STATE_COPY_DEST, false);
-    }
+    TrackResource(dstRes);
+    TrackResource(srcRes);
     CopyResource(dstRes.GetD3D12Resource(), srcRes.GetD3D12Resource());
 }
 
@@ -232,6 +357,8 @@ void CommandList::CopyResource(
 {
     Assert(dstRes != nullptr, "Copy destination resource must not be null.");
     Assert(srcRes != nullptr, "Copy source resource must not be null.");
+    GetBarrierContext().PrepareResource(srcRes.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE);
+    GetBarrierContext().PrepareResource(dstRes.Get(), D3D12_RESOURCE_STATE_COPY_DEST);
     FlushResourceBarriers();
 
     m_D3d12CommandList->CopyResource(dstRes.Get(), srcRes.Get());
@@ -241,7 +368,7 @@ void CommandList::CopyResource(
 }
 //Modify End
 
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-09-29 by Hui
 void CommandList::CopyBufferRegion(
     const Resource& destination,
     const uint64_t destinationOffset,
@@ -251,6 +378,8 @@ void CommandList::CopyBufferRegion(
 {
     Assert(source != nullptr, "Copy source buffer must not be null.");
     Assert(destination.GetD3D12Resource() != nullptr, "Copy destination buffer must not be null.");
+    GetBarrierContext().PrepareResource(source.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE);
+    GetBarrierContext().PrepareResource(destination, D3D12_RESOURCE_STATE_COPY_DEST);
 
     FlushResourceBarriers();
 
@@ -273,6 +402,8 @@ void CommandList::CopyBufferToReadback(
 {
     Assert(source.GetD3D12Resource() != nullptr, "Copy source buffer must not be null.");
     Assert(destination != nullptr, "Readback destination buffer must not be null.");
+    GetBarrierContext().PrepareResource(source, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    GetBarrierContext().PrepareResource(destination.Get(), D3D12_RESOURCE_STATE_COPY_DEST);
 
     FlushResourceBarriers();
 
@@ -313,6 +444,10 @@ void CommandList::ResolveSubresource(const Resource& dstRes, const Resource& src
 void CommandList::SetShadingRateImage(const Resource& resource)
 {
     const auto d3d12Resource = resource.GetD3D12Resource();
+    //Modify Begin:2026-09-29 by Hui
+    GetBarrierContext().PrepareResource(resource, D3D12_RESOURCE_STATE_SHADING_RATE_SOURCE);
+    FlushResourceBarriers();
+    //Modify End
     TrackObject(d3d12Resource);
 
     m_D3d12CommandList5->RSSetShadingRateImage(d3d12Resource.Get());
@@ -402,14 +537,11 @@ void CommandList::SetCompute32BitConstants(const uint32_t rootParameterIndex, co
     m_D3d12CommandList->SetComputeRoot32BitConstants(rootParameterIndex, numConstants, constants, 0);
 }
 
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-09-29 by Hui
 void CommandList::SetVertexBuffer(const uint32_t slot, const VertexBuffer& vertexBuffer)
 {
-    if (m_ActiveBarrierContext != nullptr)
-    {
-        m_ActiveBarrierContext->PrepareResource(
-            vertexBuffer, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, false);
-    }
+    m_GraphicsFixedBindings[100u + slot] = { vertexBuffer.GetD3D12Resource(),
+        vertexBuffer.GetStateRegistration(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER };
     const auto vertexBufferView = vertexBuffer.GetVertexBufferView();
 
     m_D3d12CommandList->IASetVertexBuffers(slot, 1, &vertexBufferView);
@@ -422,21 +554,16 @@ void CommandList::SetVertexBufferView(
     const D3D12_VERTEX_BUFFER_VIEW& vertexBufferView,
     const Resource& resource)
 {
-    if (m_ActiveBarrierContext != nullptr)
-    {
-        m_ActiveBarrierContext->PrepareResource(
-            resource, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, false);
-    }
+    m_GraphicsFixedBindings[100u + slot] = { resource.GetD3D12Resource(),
+        resource.GetStateRegistration(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER };
     m_D3d12CommandList->IASetVertexBuffers(slot, 1, &vertexBufferView);
     TrackResource(resource);
 }
 
 void CommandList::SetIndexBuffer(const IndexBuffer& indexBuffer)
 {
-    if (m_ActiveBarrierContext != nullptr)
-    {
-        m_ActiveBarrierContext->PrepareResource(indexBuffer, D3D12_RESOURCE_STATE_INDEX_BUFFER, false);
-    }
+    m_GraphicsFixedBindings[200u] = { indexBuffer.GetD3D12Resource(),
+        indexBuffer.GetStateRegistration(), D3D12_RESOURCE_STATE_INDEX_BUFFER };
     const auto indexBufferView = indexBuffer.GetIndexBufferView();
 
     m_D3d12CommandList->IASetIndexBuffer(&indexBufferView);
@@ -448,10 +575,8 @@ void CommandList::SetIndexBufferView(
     const D3D12_INDEX_BUFFER_VIEW& indexBufferView,
     const Resource& resource)
 {
-    if (m_ActiveBarrierContext != nullptr)
-    {
-        m_ActiveBarrierContext->PrepareResource(resource, D3D12_RESOURCE_STATE_INDEX_BUFFER, false);
-    }
+    m_GraphicsFixedBindings[200u] = { resource.GetD3D12Resource(),
+        resource.GetStateRegistration(), D3D12_RESOURCE_STATE_INDEX_BUFFER };
     m_D3d12CommandList->IASetIndexBuffer(&indexBufferView);
     TrackResource(resource);
 }
@@ -496,9 +621,10 @@ void CommandList::SetPipelineState(const ComPtr<ID3D12PipelineState>& pipelineSt
     TrackObject(pipelineState);
 }
 
-//Modify Begin:2026-08-20 by Hui
+//Modify Begin:2026-09-29 by Hui
 void CommandList::SetGraphicsRootSignature(const RootSignature& rootSignature)
 {
+    m_DescriptorBindingPoint = BindingPoint::Graphics;
     const auto d3d12RootSignature = rootSignature.GetRootSignature().Get();
     if (m_DescriptorTableRootSignature != d3d12RootSignature)
     {
@@ -511,6 +637,7 @@ void CommandList::SetGraphicsRootSignature(const RootSignature& rootSignature)
 
     if (m_GraphicsRootSignature != d3d12RootSignature)
     {
+        m_GraphicsResourceBindings.clear();
         m_GraphicsRootSignature = d3d12RootSignature;
         m_D3d12CommandList->SetGraphicsRootSignature(m_GraphicsRootSignature);
 
@@ -520,6 +647,7 @@ void CommandList::SetGraphicsRootSignature(const RootSignature& rootSignature)
 
 void CommandList::SetComputeRootSignature(const RootSignature& rootSignature)
 {
+    m_DescriptorBindingPoint = BindingPoint::Compute;
     const auto d3d12RootSignature = rootSignature.GetRootSignature().Get();
     if (m_DescriptorTableRootSignature != d3d12RootSignature)
     {
@@ -532,6 +660,7 @@ void CommandList::SetComputeRootSignature(const RootSignature& rootSignature)
 
     if (m_ComputeRootSignature != d3d12RootSignature)
     {
+        m_ComputeResourceBindings.clear();
         m_ComputeRootSignature = d3d12RootSignature;
         m_D3d12CommandList->SetComputeRootSignature(m_ComputeRootSignature);
 
@@ -541,6 +670,7 @@ void CommandList::SetComputeRootSignature(const RootSignature& rootSignature)
 
 void CommandList::SetGraphicsAndComputeRootSignature(const RootSignature& rootSignature)
 {
+    m_DescriptorBindingPoint = BindingPoint::Graphics;
     const auto d3d12RootSignature = rootSignature.GetRootSignature().Get();
     if (m_DescriptorTableRootSignature != d3d12RootSignature)
     {
@@ -553,11 +683,13 @@ void CommandList::SetGraphicsAndComputeRootSignature(const RootSignature& rootSi
 
     if (m_GraphicsRootSignature != d3d12RootSignature)
     {
+        m_GraphicsResourceBindings.clear();
         m_GraphicsRootSignature = d3d12RootSignature;
         m_D3d12CommandList->SetGraphicsRootSignature(m_GraphicsRootSignature);
     }
     if (m_ComputeRootSignature != d3d12RootSignature)
     {
+        m_ComputeResourceBindings.clear();
         m_ComputeRootSignature = d3d12RootSignature;
         m_D3d12CommandList->SetComputeRootSignature(m_ComputeRootSignature);
     }
@@ -566,61 +698,31 @@ void CommandList::SetGraphicsAndComputeRootSignature(const RootSignature& rootSi
 }
 //Modify End
 
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-09-29 by Hui
 void CommandList::SetShaderResourceView(const uint32_t rootParameterIndex, const uint32_t descriptorOffset,
     const Resource& resource,
     const UINT firstSubresource, const UINT numSubresources,
     const D3D12_SHADER_RESOURCE_VIEW_DESC* srv)
 {
-    if (m_ActiveBarrierContext != nullptr)
-    {
-        if (numSubresources == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
-        {
-            m_ActiveBarrierContext->PrepareResource(
-                resource, D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE, false,
-                D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
-        }
-        else
-        {
-            for (UINT subresource = 0u; subresource < numSubresources; ++subresource)
-            {
-                m_ActiveBarrierContext->PrepareResource(
-                    resource, D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE, false,
-                    firstSubresource + subresource);
-            }
-        }
-    }
+    const auto state = m_DescriptorBindingPoint == BindingPoint::Graphics ?
+        D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE : D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+    SetResourceBinding(m_DescriptorBindingPoint, rootParameterIndex, descriptorOffset,
+        { resource.GetD3D12Resource(), resource.GetStateRegistration(), state, firstSubresource, numSubresources });
     m_DynamicDescriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->StageDescriptors(
         rootParameterIndex, descriptorOffset, 1, resource.GetShaderResourceView(srv));
     TrackResource(resource);
 }
 //Modify End
 
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-09-29 by Hui
 void CommandList::SetUnorderedAccessView(const uint32_t rootParameterIndex, const uint32_t descriptorOffset,
     const Resource& resource,
     const UINT firstSubresource, const UINT numSubresources,
     const D3D12_UNORDERED_ACCESS_VIEW_DESC* uavDesc)
 {
     Assert(resource.SupportsUnorderedAccess(), "Cannot bind a resource without unordered-access usage as a UAV.");
-    if (m_ActiveBarrierContext != nullptr)
-    {
-        if (numSubresources == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
-        {
-            m_ActiveBarrierContext->PrepareResource(
-                resource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true,
-                D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
-        }
-        else
-        {
-            for (UINT subresource = 0u; subresource < numSubresources; ++subresource)
-            {
-                m_ActiveBarrierContext->PrepareResource(
-                    resource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true,
-                    firstSubresource + subresource);
-            }
-        }
-    }
+    SetResourceBinding(m_DescriptorBindingPoint, rootParameterIndex, descriptorOffset,
+        ResourceAccess::Uav(resource, firstSubresource, numSubresources));
     const auto uav = resource.GetUnorderedAccessView(uavDesc);
     m_DynamicDescriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->StageDescriptors(
         rootParameterIndex, descriptorOffset, 1, uav);
@@ -683,29 +785,39 @@ void CommandList::SetStencilRef(UINT8 stencilRef)
     m_D3d12CommandList->OMSetStencilRef(stencilRef);
 }
 
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-09-29 by Hui
 void CommandList::SetRenderTarget(const RenderTarget& renderTarget, UINT texArrayIndex /*= -1*/, UINT mipLevel /*= 0*/, bool useDepth /*= true*/, bool readonlyDepth)
 {
-    if (m_ActiveBarrierContext != nullptr)
+    m_RenderTargetResourceBindings.clear();
+    const auto addAttachment = [&](const Texture& texture, const D3D12_RESOURCE_STATES state, const bool depth)
+    {
+        const auto desc = texture.GetD3D12Resource()->GetDesc();
+        D3D12_FEATURE_DATA_FORMAT_INFO info{ desc.Format, 1 };
+        if (depth) ThrowIfFailed(m_Device->CheckFeatureSupport(D3D12_FEATURE_FORMAT_INFO, &info, sizeof(info)));
+        const UINT arrays = desc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D ? 1u : desc.DepthOrArraySize;
+        const UINT firstArray = texArrayIndex == UINT(-1) ? 0u : texArrayIndex;
+        const UINT endArray = texArrayIndex == UINT(-1) ? arrays : texArrayIndex + 1;
+        const UINT mip = texArrayIndex == UINT(-1) ? 0u : mipLevel;
+        for (UINT plane = 0; plane < info.PlaneCount; ++plane)
+            for (UINT array = firstArray; array < endArray; ++array)
+                m_RenderTargetResourceBindings.push_back({ texture.GetD3D12Resource(), texture.GetStateRegistration(),
+                    state, D3D12CalcSubresource(mip, array, plane, desc.MipLevels, arrays), 1u });
+    };
     {
         const auto& textures = renderTarget.GetTextures();
         for (size_t textureIndex = 0; textureIndex < NumAttachmentPoints - 1u; ++textureIndex)
         {
             if (textures[textureIndex] != nullptr && textures[textureIndex]->IsValid())
             {
-                m_ActiveBarrierContext->PrepareResource(
-                    *textures[textureIndex], D3D12_RESOURCE_STATE_RENDER_TARGET, false);
+                addAttachment(*textures[textureIndex], D3D12_RESOURCE_STATE_RENDER_TARGET, false);
             }
         }
         const auto& depthTexture = renderTarget.GetTexture(DepthStencil);
         if (useDepth && depthTexture != nullptr && depthTexture->IsValid())
         {
-            m_ActiveBarrierContext->PrepareResource(
-                *depthTexture,
-                readonlyDepth ? D3D12_RESOURCE_STATE_DEPTH_READ : D3D12_RESOURCE_STATE_DEPTH_WRITE,
-                false);
+            addAttachment(*depthTexture,
+                readonlyDepth ? D3D12_RESOURCE_STATE_DEPTH_READ : D3D12_RESOURCE_STATE_DEPTH_WRITE, true);
         }
-        m_ActiveBarrierContext->Flush();
     }
     std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> renderTargetDescriptors;
     renderTargetDescriptors.reserve(NumAttachmentPoints);
@@ -779,27 +891,33 @@ void CommandList::DiscardResource(const Resource& resource)
     m_D3d12CommandList->DiscardResource(resource.GetD3D12Resource().Get(), nullptr);
 }
 
+//Modify Begin:2026-09-29 by Hui
 void CommandList::Draw(const uint32_t vertexCount, const uint32_t instanceCount, const uint32_t startVertex,
     const uint32_t startInstance)
 {
+    PrepareBoundResources(BindingPoint::Graphics, {}, true, false);
     FlushResourceBarriers();
 
     CommitStagedDescriptorsForDraw();
 
     m_D3d12CommandList->DrawInstanced(vertexCount, instanceCount, startVertex, startInstance);
+    GetBarrierContext().NotifyCommandRecorded();
 }
 
 void CommandList::DrawIndexed(const uint32_t indexCount, const uint32_t instanceCount, const uint32_t startIndex,
     const int32_t baseVertex,
     const uint32_t startInstance)
 {
+    PrepareBoundResources(BindingPoint::Graphics);
     FlushResourceBarriers();
 
     CommitStagedDescriptorsForDraw();
 
     m_D3d12CommandList->DrawIndexedInstanced(indexCount, instanceCount, startIndex, baseVertex, startInstance);
+    GetBarrierContext().NotifyCommandRecorded();
 }
-//Modify Begin:2026-08-24 by Hui
+//Modify End
+//Modify Begin:2026-09-29 by Hui
 void CommandList::ExecuteIndirect(
     const ComPtr<ID3D12CommandSignature>& pCommandSignature,
     const D3D12_INDIRECT_ARGUMENT_TYPE executionArgumentType,
@@ -813,14 +931,18 @@ void CommandList::ExecuteIndirect(
     Assert(pCommandSignature != nullptr, "Indirect command signature is null.");
     Assert(argumentBuffer.IsValid(), "Indirect argument buffer is not initialized.");
     Assert(countBuffer == nullptr || countBuffer->IsValid(), "Indirect count buffer is not initialized.");
-    if (m_ActiveBarrierContext != nullptr)
-    {
-        m_ActiveBarrierContext->PrepareResource(argumentBuffer, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT, false);
-        if (countBuffer != nullptr)
-        {
-            m_ActiveBarrierContext->PrepareResource(*countBuffer, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT, false);
-        }
-    }
+    const ResourceAccess indirectAccesses[]{
+        { argumentBuffer.GetD3D12Resource(), argumentBuffer.GetStateRegistration(), D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT },
+        { countBuffer ? countBuffer->GetD3D12Resource() : nullptr,
+          countBuffer ? countBuffer->GetStateRegistration() : nullptr, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT }
+    };
+    PrepareBoundResources(executionArgumentType == D3D12_INDIRECT_ARGUMENT_TYPE_DRAW ||
+        executionArgumentType == D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED ||
+        executionArgumentType == D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH_MESH
+        ? BindingPoint::Graphics : BindingPoint::Compute,
+        std::span<const ResourceAccess>(indirectAccesses, countBuffer ? 2u : 1u),
+        executionArgumentType != D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH_MESH,
+        executionArgumentType == D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED);
     FlushResourceBarriers();
 
     switch (executionArgumentType)
@@ -846,6 +968,7 @@ void CommandList::ExecuteIndirect(
         argumentBufferOffset,
         countBuffer != nullptr ? countBuffer->GetD3D12Resource().Get() : nullptr,
         countBufferOffset);
+    GetBarrierContext().NotifyCommandRecorded();
     TrackResource(argumentBuffer);
     if (countBuffer != nullptr)
     {
@@ -876,31 +999,38 @@ void CommandList::ClearUnorderedAccessUint(const Resource& resource, const UINT 
         values,
         0u,
         nullptr);
+    GetBarrierContext().NotifyCommandRecorded();
     TrackResource(resource);
 }
 //Modify End
 
+//Modify Begin:2026-09-29 by Hui
 void CommandList::Dispatch(const uint32_t numGroupsX, const uint32_t numGroupsY, const uint32_t numGroupsZ)
 {
+    PrepareBoundResources(BindingPoint::Compute);
     FlushResourceBarriers();
 
     CommitStagedDescriptorsForDispatch();
 
     m_D3d12CommandList->Dispatch(numGroupsX, numGroupsY, numGroupsZ);
+    GetBarrierContext().NotifyCommandRecorded();
 }
+//Modify End
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-09-29 by Hui
 void CommandList::DispatchMesh(const uint32_t numGroupsX, const uint32_t numGroupsY, const uint32_t numGroupsZ)
 {
+    PrepareBoundResources(BindingPoint::Graphics, {}, false);
     FlushResourceBarriers();
 
     CommitStagedDescriptorsForDraw();
 
     m_D3d12CommandList6->DispatchMesh(numGroupsX, numGroupsY, numGroupsZ);
+    GetBarrierContext().NotifyCommandRecorded();
 }
 //Modify End
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-09-29 by Hui
 void CommandList::SetRaytracingPipelineState(const ComPtr<ID3D12StateObject>& stateObject)
 {
     m_D3d12CommandList5->SetPipelineState1(stateObject.Get());
@@ -909,11 +1039,13 @@ void CommandList::SetRaytracingPipelineState(const ComPtr<ID3D12StateObject>& st
 
 void CommandList::DispatchRays(const D3D12_DISPATCH_RAYS_DESC& dispatchRaysDesc)
 {
+    PrepareBoundResources(BindingPoint::Compute);
     FlushResourceBarriers();
 
     CommitStagedDescriptorsForDispatch();
 
     m_D3d12CommandList5->DispatchRays(&dispatchRaysDesc);
+    GetBarrierContext().NotifyCommandRecorded();
 }
 
 void CommandList::BuildRaytracingAccelerationStructure(const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC& buildDesc)
@@ -976,10 +1108,21 @@ void CommandList::Close()
 void CommandList::Reset()
 {
     Assert(!m_ExternalCommandList, "External command lists cannot be reset by DX12Renderer.");
+//Modify Begin:2026-09-29 by Hui
+    Assert(m_ActiveBarrierContext == m_DefaultBarrierContext.get(),
+        "Cannot reset a command list while another recording context is attached.");
+//Modify End
     ThrowIfFailed(m_D3d12CommandAllocator->Reset());
     ThrowIfFailed(m_D3d12CommandList->Reset(m_D3d12CommandAllocator.Get(), nullptr));
 
     m_PResourceStateTracker->Reset();
+//Modify Begin:2026-09-29 by Hui
+    m_DefaultBarrierContext->Reset();
+    m_GraphicsResourceBindings.clear();
+    m_ComputeResourceBindings.clear();
+    m_GraphicsFixedBindings.clear();
+    m_RenderTargetResourceBindings.clear();
+//Modify End
     m_PUploadBuffer->Reset();
 
     ReleaseTrackedObjects();
@@ -1042,9 +1185,13 @@ void CommandList::SetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE heapType, ID3D12D
     }
 }
 
-//Modify Begin:2026-08-20 by Hui
+//Modify Begin:2026-09-29 by Hui
 void CommandList::InvalidateCachedNativeState()
 {
+    m_GraphicsResourceBindings.clear();
+    m_ComputeResourceBindings.clear();
+    m_GraphicsFixedBindings.clear();
+    m_RenderTargetResourceBindings.clear();
     m_GraphicsRootSignature = nullptr;
     m_ComputeRootSignature = nullptr;
     m_DescriptorTableRootSignature = nullptr;
@@ -1055,9 +1202,12 @@ void CommandList::InvalidateCachedNativeState()
 }
 //Modify End
 
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-09-29 by Hui
 void CommandList::SetComputeRootUnorderedAccessView(UINT rootParameterIndex, const Resource& resource)
 {
+    SetResourceBinding(BindingPoint::Compute, rootParameterIndex, 0,
+        { resource.GetD3D12Resource(), resource.GetStateRegistration(),
+          D3D12_RESOURCE_STATE_UNORDERED_ACCESS, 0, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, true });
     auto d3d12Resource = resource.GetD3D12Resource();
     m_D3d12CommandList->SetComputeRootUnorderedAccessView(rootParameterIndex, d3d12Resource->GetGPUVirtualAddress());
     TrackObject(d3d12Resource);
@@ -1086,12 +1236,14 @@ void CommandList::SetComputeRootDescriptorTable(UINT rootParameterIndex, D3D12_G
     m_D3d12CommandList->SetComputeRootDescriptorTable(rootParameterIndex, descriptorHandle);
 }
 
-//Modify Begin:2026-09-24 by Hui
+//Modify Begin:2026-09-29 by Hui
 void CommandList::SetExternalComputePipeline(
     ID3D12RootSignature* rootSignature, ID3D12PipelineState* pipelineState)
 {
     Assert(m_ExternalCommandList, "External compute pipeline binding requires an external command list.");
     Assert(rootSignature != nullptr && pipelineState != nullptr, "External compute pipeline is incomplete.");
+    m_DescriptorBindingPoint = BindingPoint::Compute;
+    if (m_ComputeRootSignature != rootSignature) m_ComputeResourceBindings.clear();
     m_ComputeRootSignature = rootSignature;
     m_D3d12CommandList->SetComputeRootSignature(rootSignature);
     m_D3d12CommandList->SetPipelineState(pipelineState);

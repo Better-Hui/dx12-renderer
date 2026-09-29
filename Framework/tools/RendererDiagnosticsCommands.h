@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-21 by Hui
+//Modify Begin:2026-09-29 by Hui
 #pragma once
 
 #include <string>
@@ -12,6 +12,7 @@ namespace RendererDiagnosticsTool
     int RunCommand(const std::vector<std::string>& arguments);
     int ReproduceCommand(const std::vector<std::string>& arguments);
     int SelfTestCommand();
+    int BarrierSelfTestCommand();
     void PrintUsage();
 }
 //Modify End

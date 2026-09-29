@@ -1,4 +1,4 @@
-//Modify Begin:2026-09-15 by Hui
+//Modify Begin:2026-09-29 by Hui
 #include <Framework/Rendering/Denoising/SVGF.h>
 
 #include <DX12Library/CommandList.h>
@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <utility>
+#include <unordered_set>
 
 namespace
 {
@@ -168,7 +169,9 @@ protected:
                 m_Feature.m_HistoryColor[writeIndex],
                 m_Feature.m_HistoryMoments[writeIndex],
                 width,
-                height);
+                height,
+                m_Feature.m_HistoryValid);
+            m_Feature.m_HistoryValid = true;
         }
         else if (m_Kind == Kind::Atrous)
         {
@@ -410,6 +413,52 @@ void SVGF::AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs input
         }));
 }
 
+void SVGF::Record(CommandContext& context, const RecordingResources& resources)
+{
+    if (!m_Enabled) return;
+    const std::shared_ptr<Texture> textures[]{
+        resources.NoisyRadiance, resources.GBufferNormal, resources.GBufferPosition, resources.MotionVector, resources.Depth,
+        resources.HistoryColorRead, resources.HistoryMomentsRead, resources.Output,
+        resources.HistoryColorWrite, resources.HistoryMomentsWrite, resources.TemporalColor,
+        resources.TemporalMoments, resources.Variance, resources.Ping, resources.Pong
+    };
+    Assert(resources.NoisyRadiance && resources.NoisyRadiance->IsValid(), "SVGF requires noisy radiance.");
+    const auto extent = resources.NoisyRadiance->GetD3D12Resource()->GetDesc();
+    std::unordered_set<ID3D12Resource*> identities;
+    for (size_t i = 0; i < std::size(textures); ++i)
+    {
+        const auto& texture = textures[i];
+        Assert(texture && texture->IsValid(), "SVGF recording resources must be allocated before recording.");
+        const auto desc = texture->GetD3D12Resource()->GetDesc();
+        Assert(desc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE2D && desc.MipLevels == 1 &&
+            desc.DepthOrArraySize == 1 && desc.SampleDesc.Count == 1 &&
+            desc.Width == extent.Width && desc.Height == extent.Height,
+            "SVGF recording requires equally sized single-mip, single-sample 2D textures.");
+        Assert(identities.insert(texture->GetD3D12Resource().Get()).second,
+            "SVGF inputs, histories, and scratch textures must not alias each other.");
+        Assert(i < 7 || texture->SupportsUnorderedAccess(), "SVGF outputs require UAV usage.");
+    }
+    const auto width = static_cast<uint32_t>(extent.Width);
+    const auto height = extent.Height;
+    auto& cmd = context.GetCommandList();
+    RecordTemporal(cmd, resources.NoisyRadiance, resources.GBufferNormal, resources.GBufferPosition,
+        resources.MotionVector, resources.Depth, resources.HistoryColorRead, resources.HistoryMomentsRead,
+        resources.TemporalColor, resources.TemporalMoments, resources.Variance,
+        resources.HistoryColorWrite, resources.HistoryMomentsWrite, width, height, resources.HistoryValid);
+    auto filtered = resources.TemporalColor;
+    const uint32_t iterations = std::clamp(m_Settings.AtrousIterations, 1u, 8u);
+    for (uint32_t iteration = 0; iteration < iterations; ++iteration)
+    {
+        const uint32_t step = 1u << iteration;
+        RecordAtrous(cmd, filtered, resources.Ping, resources.Variance, resources.GBufferNormal,
+            resources.GBufferPosition, resources.Depth, width, height, step, 0u);
+        RecordAtrous(cmd, resources.Ping, resources.Pong, resources.Variance, resources.GBufferNormal,
+            resources.GBufferPosition, resources.Depth, width, height, step, 1u);
+        filtered = resources.Pong;
+    }
+    RecordComposite(cmd, filtered, resources.Depth, resources.Output, width, height);
+}
+
 void SVGF::RecordTemporal(
     CommandList& commandList,
     const std::shared_ptr<Texture>& noisyRadiance,
@@ -425,12 +474,13 @@ void SVGF::RecordTemporal(
     const std::shared_ptr<Texture>& outputHistoryColor,
     const std::shared_ptr<Texture>& outputHistoryMoments,
     const uint32_t width,
-    const uint32_t height)
+    const uint32_t height,
+    const bool historyValid)
 {
     TemporalConstants constants = {};
     constants.Width = width;
     constants.Height = height;
-    constants.ResetHistory = m_HistoryValid ? 0u : 1u;
+    constants.ResetHistory = historyValid ? 0u : 1u;
     constants.TemporalAlpha = std::clamp(m_Settings.TemporalAlpha, 0.001f, 1.0f);
     constants.MomentsAlpha = std::clamp(m_Settings.MomentsAlpha, 0.001f, 1.0f);
     constants.PhiNormal = m_Settings.PhiNormal;
@@ -453,7 +503,6 @@ void SVGF::RecordTemporal(
     commandContext.BindPipeline(*m_TemporalShader);
     commandContext.BindDescriptorSet(m_TemporalShader->GetDescriptorSet());
     commandContext.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
-    m_HistoryValid = true;
 }
 
 void SVGF::RecordAtrous(

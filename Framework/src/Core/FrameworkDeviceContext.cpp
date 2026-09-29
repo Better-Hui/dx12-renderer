@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-09-29 by Hui
 #include <Framework/Core/FrameworkDeviceContext.h>
 
 #include <DX12Library/CommandQueue.h>
@@ -11,9 +11,7 @@ FrameworkDeviceContext::FrameworkDeviceContext(FrameworkDeviceContextDesc desc)
     : m_Desc(std::move(desc))
 {
     Assert(m_Desc.DeviceContext != nullptr, "Framework device context requires a D3D12 device context.");
-    Assert(m_Desc.DirectQueue != nullptr, "Framework device context requires a direct queue.");
-    Assert(m_Desc.ComputeQueue != nullptr, "Framework device context requires a compute queue.");
-    Assert(m_Desc.CopyQueue != nullptr, "Framework device context requires a copy queue.");
+    // Queues are optional for host-owned command recording (for example Unity).
 }
 
 std::shared_ptr<CommandQueue> FrameworkDeviceContext::GetCommandQueue(
@@ -22,10 +20,13 @@ std::shared_ptr<CommandQueue> FrameworkDeviceContext::GetCommandQueue(
     switch (type)
     {
     case D3D12_COMMAND_LIST_TYPE_DIRECT:
+        Assert(m_Desc.DirectQueue != nullptr, "No direct submission queue was provided by the host.");
         return m_Desc.DirectQueue;
     case D3D12_COMMAND_LIST_TYPE_COMPUTE:
+        Assert(m_Desc.ComputeQueue != nullptr, "No compute submission queue was provided by the host.");
         return m_Desc.ComputeQueue;
     case D3D12_COMMAND_LIST_TYPE_COPY:
+        Assert(m_Desc.CopyQueue != nullptr, "No copy submission queue was provided by the host.");
         return m_Desc.CopyQueue;
     default:
         throw std::invalid_argument("Unsupported framework command queue type.");
@@ -34,15 +35,19 @@ std::shared_ptr<CommandQueue> FrameworkDeviceContext::GetCommandQueue(
 
 void FrameworkDeviceContext::Flush() const
 {
-    m_Desc.DirectQueue->Flush();
-    m_Desc.ComputeQueue->Flush();
-    m_Desc.CopyQueue->Flush();
+    Assert(m_Desc.DirectQueue || m_Desc.ComputeQueue || m_Desc.CopyQueue,
+        "Recording-only contexts cannot wait for host-owned GPU work.");
+    if (m_Desc.DirectQueue) m_Desc.DirectQueue->Flush();
+    if (m_Desc.ComputeQueue) m_Desc.ComputeQueue->Flush();
+    if (m_Desc.CopyQueue) m_Desc.CopyQueue->Flush();
 }
 
 bool FrameworkDeviceContext::FlushWithTimeout(const uint32_t timeoutMilliseconds) const
 {
-    return m_Desc.DirectQueue->FlushWithTimeout(timeoutMilliseconds) &&
-        m_Desc.ComputeQueue->FlushWithTimeout(timeoutMilliseconds) &&
-        m_Desc.CopyQueue->FlushWithTimeout(timeoutMilliseconds);
+    Assert(m_Desc.DirectQueue || m_Desc.ComputeQueue || m_Desc.CopyQueue,
+        "Recording-only contexts cannot wait for host-owned GPU work.");
+    return (!m_Desc.DirectQueue || m_Desc.DirectQueue->FlushWithTimeout(timeoutMilliseconds)) &&
+        (!m_Desc.ComputeQueue || m_Desc.ComputeQueue->FlushWithTimeout(timeoutMilliseconds)) &&
+        (!m_Desc.CopyQueue || m_Desc.CopyQueue->FlushWithTimeout(timeoutMilliseconds));
 }
 //Modify End

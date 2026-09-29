@@ -43,6 +43,10 @@
 #include <memory> // for std::unique_ptr
 #include <string>
 #include <vector> // for std::vector
+//Modify Begin:2026-09-29 by Hui
+#include <map>
+#include <span>
+//Modify End
 
 #include "ClearValue.h"
 #include "RenderTargetState.h"
@@ -118,6 +122,26 @@ public:
 //Modify Begin:2026-09-29 by Hui
     BarrierContext* SetActiveBarrierContext(BarrierContext* context) noexcept;
     BarrierContext* GetActiveBarrierContext() const noexcept { return m_ActiveBarrierContext; }
+    BarrierContext& GetBarrierContext() const;
+
+    enum class BindingPoint { Graphics, Compute };
+    struct ResourceAccess
+    {
+        Microsoft::WRL::ComPtr<ID3D12Resource> NativeResource;
+        std::shared_ptr<ResourceStateRegistration> Registration;
+        D3D12_RESOURCE_STATES State = D3D12_RESOURCE_STATE_COMMON;
+        UINT FirstSubresource = 0;
+        UINT NumSubresources = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        bool UavWrite = false;
+        std::vector<ResourceAccess> Dependencies;
+        static ResourceAccess Uav(const Resource& resource, UINT first = 0,
+            UINT count = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
+    };
+
+    // Binding stores access metadata. Each GPU execution prepares it again,
+    // including repeated dispatches that do not rebind their descriptors.
+    void SetResourceBindings(BindingPoint point, UINT rootParameter, std::span<const ResourceAccess> accesses);
+    void SetResourceBinding(BindingPoint point, UINT rootParameter, UINT offset, ResourceAccess access);
 //Modify End
 
 //Modify Begin:2026-07-30 by Hui
@@ -151,9 +175,9 @@ public:
     }
 //Modify End
 
-//Modify Begin:2026-08-24 by Hui
-    // Resource barriers are intentionally absent from the public command-recording API.
-    // RenderGraph and explicitly approved renderer infrastructure own barrier encoding.
+//Modify Begin:2026-09-29 by Hui
+    // Resource-aware commands prepare their own states, with or without a graph.
+    // The graph owns scheduling, lifetime, aliasing, and cross-queue dependencies.
 //Modify End
 
     /**
@@ -647,7 +671,18 @@ private:
     bool m_ExternalCommandList = false;
 
 //Modify Begin:2026-09-29 by Hui
+    std::unique_ptr<BarrierContext> m_DefaultBarrierContext;
     BarrierContext* m_ActiveBarrierContext = nullptr;
+    using BindingKey = std::pair<UINT, UINT>;
+    using ResourceBindings = std::map<BindingKey, ResourceAccess>;
+    ResourceBindings m_GraphicsResourceBindings;
+    ResourceBindings m_ComputeResourceBindings;
+    std::map<UINT, ResourceAccess> m_GraphicsFixedBindings;
+    std::vector<ResourceAccess> m_RenderTargetResourceBindings;
+    BindingPoint m_DescriptorBindingPoint = BindingPoint::Graphics;
+    void PrepareBoundResources(BindingPoint point, std::span<const ResourceAccess> extraAccesses = {},
+        bool inputAssembler = true, bool indexed = true);
+    void TrackAccess(const ResourceAccess& access);
 //Modify End
 
 //Modify Begin:2026-08-20 by Hui

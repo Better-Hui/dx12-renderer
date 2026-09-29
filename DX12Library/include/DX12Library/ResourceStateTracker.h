@@ -54,6 +54,9 @@ public:
     void CommitFinalResourceStates(ResourceStateRegistry::SubmissionScope& submissionScope);
 //Modify End
     void Reset();
+//Modify Begin:2026-09-29 by Hui
+    bool TryGetResourceState(ID3D12Resource* resource, UINT subresource, D3D12_RESOURCE_STATES& state) const;
+//Modify End
 
 private:
     using ResourceBarriersType = std::vector<D3D12_RESOURCE_BARRIER>;

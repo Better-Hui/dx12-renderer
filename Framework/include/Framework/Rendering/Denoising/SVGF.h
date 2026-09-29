@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-09-29 by Hui
 #pragma once
 
 #include <RenderGraph/ResourceDescription.h>
@@ -10,6 +10,7 @@
 #include <string>
 
 class CommandList;
+class CommandContext;
 class ComputeShader;
 class FrameworkDeviceContext;
 class Texture;
@@ -63,6 +64,21 @@ public:
 
     void AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs inputs);
 
+    // Graphless recording owns no allocation, submission, or history rotation.
+    // The caller supplies distinct, equally sized single-mip 2D textures,
+    // declares all of them before external recording, and retires them by fence.
+    struct RecordingResources
+    {
+        std::shared_ptr<Texture> NoisyRadiance, GBufferNormal, GBufferPosition, MotionVector, Depth;
+        std::shared_ptr<Texture> Output;
+        std::shared_ptr<Texture> HistoryColorRead, HistoryMomentsRead;
+        std::shared_ptr<Texture> HistoryColorWrite, HistoryMomentsWrite;
+        std::shared_ptr<Texture> TemporalColor, TemporalMoments, Variance, Ping, Pong;
+        // Set true only after the preceding history-producing recording is accepted.
+        bool HistoryValid = false;
+    };
+    void Record(CommandContext& context, const RecordingResources& resources);
+
 private:
     friend class SVGFGraphPass;
     struct TemporalConstants
@@ -114,7 +130,8 @@ private:
         const std::shared_ptr<Texture>& outputHistoryColor,
         const std::shared_ptr<Texture>& outputHistoryMoments,
         uint32_t width,
-        uint32_t height);
+        uint32_t height,
+        bool historyValid);
     void RecordAtrous(
         CommandList& commandList,
         const std::shared_ptr<Texture>& input,

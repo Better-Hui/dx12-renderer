@@ -24,17 +24,11 @@ namespace RenderGraph
     public:
         explicit RenderPassContext(CommandList& commandList)
             : m_CommandList(commandList)
-            , m_BarrierContext(commandList)
-            , m_PreviousBarrierContext(commandList.SetActiveBarrierContext(&m_BarrierContext))
+            , m_BarrierContext(commandList.GetBarrierContext())
         {
         }
 
-        ~RenderPassContext()
-        {
-            // Destruction only detaches the context. Barrier submission is an
-            // explicit operation so a failure cannot be silently swallowed.
-            m_CommandList.SetActiveBarrierContext(m_PreviousBarrierContext);
-        }
+        ~RenderPassContext() = default;
 
         RenderPassContext(const RenderPassContext&) = delete;
         RenderPassContext& operator=(const RenderPassContext&) = delete;
@@ -126,8 +120,7 @@ namespace RenderGraph
 
     private:
         CommandList& m_CommandList;
-        BarrierContext m_BarrierContext;
-        BarrierContext* m_PreviousBarrierContext = nullptr;
+        BarrierContext& m_BarrierContext;
         bool m_Finished = false;
     };
 }

@@ -15,6 +15,7 @@ set(DX12_RENDERER_IDE_ONLY_FILES
         "tools/RendererDiagnosticsJson.h"
         "tools/RendererDiagnosticsRun.cpp"
         "tools/RendererDiagnosticsSelfTest.cpp"
+        "tools/RendererBarrierSelfTest.cpp"
         "tools/UnitySceneDump.cpp"
         "tools/VerifyRenderGraphOwnership.cmake"
         )

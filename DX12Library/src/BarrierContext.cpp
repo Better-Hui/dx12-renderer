@@ -23,6 +23,7 @@ void BarrierContext::PrepareResource(
     const UINT subresource)
 {
     Assert(resource.IsValid(), "BarrierContext cannot prepare an invalid resource.");
+    CommandListInternalAccess::TrackResourceLifetime(m_CommandList, resource);
     PrepareResource(resource.GetD3D12Resource().Get(), stateAfter, uavWrite, subresource);
 }
 
@@ -33,10 +34,17 @@ void BarrierContext::PrepareResource(
     const UINT subresource)
 {
     Assert(resource != nullptr, "BarrierContext cannot prepare a null resource.");
-    const LocalResourceState* previous = FindLocalResourceState(resource, subresource);
-    if (previous != nullptr && previous->UavWrite && previous->State == stateAfter)
+    if (m_CommandList.IsExternalCommandList())
+        Assert(HasExternalDeclaration(resource, subresource), "Resource access is outside the external declaration.");
+    if (stateAfter == D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
     {
-        Uav(resource);
+        const auto previous = m_UavAccesses.find(resource);
+        // A command list's first UAV use may follow writes in a previous list.
+        if (previous == m_UavAccesses.end() ||
+            (previous->second.Operation != m_OperationSerial && previous->second.Writes))
+            Uav(resource);
+        auto& access = m_UavAccesses[resource];
+        access = { m_OperationSerial, uavWrite || (access.Operation == m_OperationSerial && access.Writes) };
     }
 
     Transition(resource, stateAfter, false, subresource);
@@ -50,6 +58,7 @@ void BarrierContext::Transition(
     const UINT subresource)
 {
     Assert(resource.IsValid(), "BarrierContext cannot transition an invalid resource.");
+    CommandListInternalAccess::TrackResourceLifetime(m_CommandList, resource);
     Transition(resource.GetD3D12Resource().Get(), stateAfter, uavBefore, subresource);
 }
 
@@ -60,6 +69,7 @@ void BarrierContext::Transition(
     const UINT subresource)
 {
     Assert(resource != nullptr, "BarrierContext cannot transition a null resource.");
+    Assert(m_CommandList.GetActiveBarrierContext() == this, "Cannot use an inactive barrier context.");
     if (m_CommandList.IsExternalCommandList())
     {
         Assert(
@@ -70,20 +80,30 @@ void BarrierContext::Transition(
     {
         Uav(resource);
     }
+    D3D12_HEAP_PROPERTIES heap{};
+    D3D12_HEAP_FLAGS flags{};
+    if (SUCCEEDED(resource->GetHeapProperties(&heap, &flags)))
+    {
+        if (heap.Type == D3D12_HEAP_TYPE_UPLOAD)
+        {
+            Assert((stateAfter & ~D3D12_RESOURCE_STATE_GENERIC_READ) == 0, "Upload memory has a fixed GENERIC_READ state.");
+            SetLocalResourceState(resource, subresource, { D3D12_RESOURCE_STATE_GENERIC_READ, false });
+            return;
+        }
+        if (heap.Type == D3D12_HEAP_TYPE_READBACK)
+        {
+            Assert(stateAfter == D3D12_RESOURCE_STATE_COPY_DEST, "Readback memory has a fixed COPY_DEST state.");
+            SetLocalResourceState(resource, subresource, { D3D12_RESOURCE_STATE_COPY_DEST, false });
+            return;
+        }
+    }
     CommandListInternalAccess::TransitionBarrier(
         m_CommandList,
         Microsoft::WRL::ComPtr<ID3D12Resource>(resource),
         stateAfter,
         subresource);
-    // ResourceStateTracker resolves the real before-state and records the
-    // command-list final state. Notify explicitly as well so this adapter's
-    // contract remains correct if the low-level transition implementation is
-    // changed to defer final-state publication.
-    CommandListInternalAccess::NotifyResourceState(
-        m_CommandList,
-        resource,
-        stateAfter,
-        subresource);
+    // The transition updates the tracker's command-list state exactly once.
+    // This cache describes local access intent, not a second final-state owner.
     SetLocalResourceState(resource, subresource, { stateAfter, false });
 }
 
@@ -150,6 +170,9 @@ void BarrierContext::Uav(const Resource& resource)
 void BarrierContext::Uav(ID3D12Resource* const resource)
 {
     Assert(resource != nullptr, "BarrierContext cannot add a UAV barrier for a null resource.");
+    Assert(m_CommandList.GetActiveBarrierContext() == this, "Cannot use an inactive barrier context.");
+    Assert(m_CommandList.GetCommandListType() != D3D12_COMMAND_LIST_TYPE_COPY,
+        "UAV ordering requires a direct or compute command list.");
     if (m_CommandList.IsExternalCommandList())
     {
         Assert(
@@ -158,6 +181,7 @@ void BarrierContext::Uav(ID3D12Resource* const resource)
             "External resources must be declared before recording a UAV barrier.");
     }
     CommandListInternalAccess::UavBarrier(m_CommandList, resource);
+    m_UavAccesses[resource] = { m_OperationSerial, false };
 }
 
 void BarrierContext::AliasingBeforeFirstUse(const Resource& resource)
@@ -169,6 +193,14 @@ void BarrierContext::AliasingBeforeFirstUse(const Resource& resource)
 void BarrierContext::Flush()
 {
     CommandListInternalAccess::FlushResourceBarriers(m_CommandList);
+}
+
+void BarrierContext::Reset()
+{
+    m_LocalResourceStates.clear();
+    m_ExternalInitialStates.clear();
+    m_UavAccesses.clear();
+    m_OperationSerial = 0;
 }
 
 void BarrierContext::CommitExternalResourceStates()
@@ -194,7 +226,8 @@ bool BarrierContext::TryGetTrackedResourceState(
         return false;
     }
 
-    state = tracked->State;
+    if (!CommandListInternalAccess::TryGetResourceState(m_CommandList, resource, subresource, state))
+        return false;
     uavWrite = tracked->UavWrite;
     return true;
 }

@@ -4,11 +4,13 @@
 
 #include <utility>
 
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-09-29 by Hui
 // This bridge is reserved for renderer infrastructure, not demo-level pass code.
 class CommandListInternalAccess
 {
 public:
+    static bool TryGetResourceState(const CommandList& commandList, ID3D12Resource* resource,
+        UINT subresource, D3D12_RESOURCE_STATES& state);
     static void TransitionBarrier(
         CommandList& commandList,
         const Resource& resource,

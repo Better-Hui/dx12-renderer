@@ -66,6 +66,8 @@ public:
 
     /** Flush barriers already resolved on this command list. */
     void Flush();
+    void Reset();
+    void NotifyCommandRecorded() noexcept { ++m_OperationSerial; }
 
     /**
      * Finalize an external command-list recording without closing or submitting
@@ -120,6 +122,9 @@ private:
         LocalResourceState state);
 
     CommandList& m_CommandList;
+    struct UavAccess { uint64_t Operation; bool Writes; };
+    uint64_t m_OperationSerial = 0;
+    std::unordered_map<ID3D12Resource*, UavAccess> m_UavAccesses;
     std::unordered_map<ResourceSubresourceKey, LocalResourceState, ResourceSubresourceKeyHash>
         m_LocalResourceStates;
     // External callers provide the state owned by the host renderer. Keep the

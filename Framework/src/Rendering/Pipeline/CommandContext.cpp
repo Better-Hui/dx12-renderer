@@ -219,12 +219,7 @@ namespace
 
 CommandContext::CommandContext(CommandList& commandList)
     : m_CommandList(commandList)
-    , m_OwnedBarrierContext(commandList.GetActiveBarrierContext() == nullptr
-        ? std::make_unique<BarrierContext>(commandList)
-        : nullptr)
-    , m_BarrierContext(commandList.GetActiveBarrierContext() != nullptr
-        ? commandList.GetActiveBarrierContext()
-        : m_OwnedBarrierContext.get())
+    , m_BarrierContext(&commandList.GetBarrierContext())
 {
 }
 
@@ -232,6 +227,8 @@ CommandContext::CommandContext(CommandList& commandList, BarrierContext& barrier
     : m_CommandList(commandList)
     , m_BarrierContext(&barrierContext)
 {
+    Assert(&barrierContext == &commandList.GetBarrierContext(),
+        "CommandContext must share the command list's active state context.");
 }
 
 CommandContext::CommandContext(ExternalCommandContext& externalContext)
@@ -241,31 +238,6 @@ CommandContext::CommandContext(ExternalCommandContext& externalContext)
         "Cannot create a CommandContext for a finished external recording.");
     externalContext.BeginRecording();
 }
-
-//Modify Begin:2026-09-29 by Hui
-void CommandContext::PrepareResource(
-    const Resource& resource,
-    const D3D12_RESOURCE_STATES stateAfter,
-    const bool uavWrite,
-    const UINT subresource) const
-{
-    Assert(resource.IsValid(), "CommandContext cannot prepare an invalid resource.");
-    m_BarrierContext->PrepareResource(resource, stateAfter, uavWrite, subresource);
-}
-
-//Modify End
-
-//Modify Begin:2026-09-29 by Hui
-void CommandContext::PrepareResource(
-    ID3D12Resource* const resource,
-    const D3D12_RESOURCE_STATES stateAfter,
-    const bool uavWrite,
-    const UINT subresource) const
-{
-    Assert(resource != nullptr, "CommandContext cannot prepare a null resource.");
-    m_BarrierContext->PrepareResource(resource, stateAfter, uavWrite, subresource);
-}
-//Modify End
 
 void CommandContext::TransitionResource(
     const Resource& resource,
@@ -303,8 +275,6 @@ void CommandContext::FlushBarriers() const
 //Modify Begin:2026-09-29 by Hui
 void CommandContext::CopyResource(const Resource& destination, const Resource& source) const
 {
-    PrepareResource(source, D3D12_RESOURCE_STATE_COPY_SOURCE, false);
-    PrepareResource(destination, D3D12_RESOURCE_STATE_COPY_DEST, false);
     m_CommandList.CopyResource(destination, source);
 }
 
@@ -314,10 +284,6 @@ void CommandContext::ResolveSubresource(
     const uint32_t destinationSubresource,
     const uint32_t sourceSubresource) const
 {
-    m_BarrierContext->PrepareResource(
-        source, D3D12_RESOURCE_STATE_RESOLVE_SOURCE, false, sourceSubresource);
-    m_BarrierContext->PrepareResource(
-        destination, D3D12_RESOURCE_STATE_RESOLVE_DEST, false, destinationSubresource);
     m_CommandList.ResolveSubresource(destination, source, destinationSubresource, sourceSubresource);
 }
 
@@ -328,28 +294,6 @@ void CommandContext::SetRenderTarget(
     const bool useDepth,
     const bool readonlyDepth) const
 {
-    const auto& textures = renderTarget.GetTextures();
-    // RenderTarget::GetTextures() also contains the depth attachment. Keep it
-    // out of the RTV transition set; depth is prepared separately below.
-    for (size_t textureIndex = 0; textureIndex < NumAttachmentPoints - 1u; ++textureIndex)
-    {
-        const auto& texture = textures[textureIndex];
-        if (texture != nullptr && texture->IsValid())
-        {
-            PrepareResource(*texture, D3D12_RESOURCE_STATE_RENDER_TARGET, false);
-        }
-    }
-
-    const auto& depthTexture = renderTarget.GetTexture(DepthStencil);
-    if (useDepth && depthTexture != nullptr && depthTexture->IsValid())
-    {
-        PrepareResource(
-            *depthTexture,
-            readonlyDepth ? D3D12_RESOURCE_STATE_DEPTH_READ : D3D12_RESOURCE_STATE_DEPTH_WRITE,
-            false);
-    }
-
-    m_BarrierContext->Flush();
     m_CommandList.SetRenderTarget(renderTarget, textureArrayIndex, mipLevel, useDepth, readonlyDepth);
 }
 
@@ -373,7 +317,6 @@ void CommandContext::ClearRenderTarget(
 
 void CommandContext::SetVertexBuffer(const uint32_t slot, const VertexBuffer& vertexBuffer) const
 {
-    PrepareResource(vertexBuffer, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, false);
     m_CommandList.SetVertexBuffer(slot, vertexBuffer);
 }
 
@@ -382,13 +325,11 @@ void CommandContext::SetVertexBufferView(
     const D3D12_VERTEX_BUFFER_VIEW& vertexBufferView,
     const Resource& resource) const
 {
-    PrepareResource(resource, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, false);
     m_CommandList.SetVertexBufferView(slot, vertexBufferView, resource);
 }
 
 void CommandContext::SetIndexBuffer(const IndexBuffer& indexBuffer) const
 {
-    PrepareResource(indexBuffer, D3D12_RESOURCE_STATE_INDEX_BUFFER, false);
     m_CommandList.SetIndexBuffer(indexBuffer);
 }
 
@@ -396,7 +337,6 @@ void CommandContext::SetIndexBufferView(
     const D3D12_INDEX_BUFFER_VIEW& indexBufferView,
     const Resource& resource) const
 {
-    PrepareResource(resource, D3D12_RESOURCE_STATE_INDEX_BUFFER, false);
     m_CommandList.SetIndexBufferView(indexBufferView, resource);
 }
 //Modify End
@@ -840,8 +780,63 @@ bool CommandContext::TryApplyDescriptorTableBinding(
 }
 
 //Modify Begin:2026-09-29 by Hui
+void CommandContext::RecordResourceBindings(
+    const PipelineBindPoint bindPoint, const PipelineDescriptorSet& descriptorSet, const UINT rootParameterIndex) const
+{
+    const auto point = bindPoint == PipelineBindPoint::Graphics ?
+        CommandList::BindingPoint::Graphics : CommandList::BindingPoint::Compute;
+    m_CommandList.SetResourceBindings(point, rootParameterIndex, {});
+    const auto* range = descriptorSet.GetLayout().FindRangeByRootParameterIndex(rootParameterIndex);
+    const auto* bound = descriptorSet.FindBoundResource(rootParameterIndex);
+    Assert(range != nullptr, "Resource access metadata requires a pipeline range.");
+    if (bound == nullptr) return;
+    const auto add = [&](const Resource& resource, const D3D12_RESOURCE_STATES state,
+        const UINT offset, const UINT first = 0, const UINT count = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, const bool write = false)
+    {
+        m_CommandList.SetResourceBinding(point, rootParameterIndex, offset,
+            { resource.GetD3D12Resource(), resource.GetStateRegistration(), state, first, count, write });
+    };
+    if (range->Kind == DescriptorBindingKind::ShaderResourceView)
+    {
+        const auto state = point == CommandList::BindingPoint::Graphics ?
+            D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE : D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+        if (range->BindingMode == PipelineDescriptorBindingMode::RootDescriptor)
+        {
+            Assert(bound->StructuredBufferResource != nullptr, "Root SRV has no resource metadata.");
+            add(*bound->StructuredBufferResource, state, 0);
+        }
+        else
+        {
+            for (UINT i = 0; i < bound->ShaderResources.size(); ++i)
+                if (const auto& view = bound->ShaderResources[i]; view.has_value() && view->Resource != nullptr)
+                    add(*view->Resource, state, i, view->FirstSubresource, view->NumSubresources);
+        }
+    }
+    else if (range->Kind == DescriptorBindingKind::UnorderedAccessView)
+    {
+        Assert(bound->UnorderedAccessView.has_value(), "UAV has no resource metadata.");
+        const auto& view = *bound->UnorderedAccessView;
+        Assert(view.m_Resource != nullptr, "UAV resource is null.");
+        m_CommandList.SetResourceBinding(point, rootParameterIndex, 0,
+            CommandList::ResourceAccess::Uav(*view.m_Resource, view.m_FirstSubresource, view.m_NumSubresources));
+    }
+    else if (range->Kind == DescriptorBindingKind::AccelerationStructure)
+    {
+        const auto* accelerationStructure = bound->AccelerationStructure != nullptr ?
+            bound->AccelerationStructure : descriptorSet.GetAccelerationStructure();
+        Assert(accelerationStructure != nullptr && accelerationStructure->IsBuilt(), "RTAS is not built.");
+        m_CommandList.SetResourceBinding(point, rootParameterIndex, 0,
+            { Microsoft::WRL::ComPtr<ID3D12Resource>(accelerationStructure->GetResource()), {},
+              D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE });
+    }
+}
+
+//Modify End
+
+//Modify Begin:2026-09-29 by Hui
 void CommandContext::ApplyGraphicsBinding(const PipelineDescriptorSet& descriptorSet, const UINT rootParameterIndex) const
 {
+    RecordResourceBindings(PipelineBindPoint::Graphics, descriptorSet, rootParameterIndex);
     const PipelineLayout& layout = descriptorSet.GetLayout();
     const PipelineDescriptorRangeDesc* range = layout.FindRangeByRootParameterIndex(rootParameterIndex);
     Assert(range != nullptr, "Pipeline descriptor set binding was not found.");
@@ -871,32 +866,6 @@ void CommandContext::ApplyGraphicsBinding(const PipelineDescriptorSet& descripto
     if (range->Kind == DescriptorBindingKind::ShaderResourceView)
     {
         Assert(range->BindingMode == PipelineDescriptorBindingMode::DescriptorTable, "Graphics root SRV bindings are not supported yet.");
-
-        for (const auto& shaderResource : boundResource->ShaderResources)
-        {
-            if (shaderResource.has_value() && shaderResource->Resource != nullptr)
-            {
-                if (shaderResource->NumSubresources == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
-                {
-                    PrepareResource(
-                        *shaderResource->Resource,
-                        D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE,
-                        false,
-                        D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
-                }
-                else
-                {
-                    for (UINT subresource = 0u; subresource < shaderResource->NumSubresources; ++subresource)
-                    {
-                        PrepareResource(
-                            *shaderResource->Resource,
-                            D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE,
-                            false,
-                            shaderResource->FirstSubresource + subresource);
-                    }
-                }
-            }
-        }
 
         if (TryApplyDescriptorTableBinding(
                 PipelineBindPoint::Graphics,
@@ -935,25 +904,6 @@ void CommandContext::ApplyGraphicsBinding(const PipelineDescriptorSet& descripto
         Assert(boundResource->UnorderedAccessView.has_value(), "Pipeline UAV resource is not bound.");
         const UnorderedAccessView& unorderedAccessView = *boundResource->UnorderedAccessView;
         Assert(unorderedAccessView.m_Resource != nullptr, "Pipeline UAV resource is not bound.");
-        if (unorderedAccessView.m_NumSubresources == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
-        {
-            PrepareResource(
-                *unorderedAccessView.m_Resource,
-                D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                true,
-                D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
-        }
-        else
-        {
-            for (UINT subresource = 0u; subresource < unorderedAccessView.m_NumSubresources; ++subresource)
-            {
-                PrepareResource(
-                    *unorderedAccessView.m_Resource,
-                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                    true,
-                    unorderedAccessView.m_FirstSubresource + subresource);
-            }
-        }
         if (TryApplyDescriptorTableBinding(
                 PipelineBindPoint::Graphics,
                 descriptorSet,
@@ -978,6 +928,7 @@ void CommandContext::ApplyGraphicsBinding(const PipelineDescriptorSet& descripto
 //Modify Begin:2026-09-29 by Hui
 void CommandContext::ApplyComputeBinding(const PipelineDescriptorSet& descriptorSet, const UINT rootParameterIndex) const
 {
+    RecordResourceBindings(PipelineBindPoint::Compute, descriptorSet, rootParameterIndex);
     const PipelineLayout& layout = descriptorSet.GetLayout();
     const PipelineDescriptorRangeDesc* range = layout.FindRangeByRootParameterIndex(rootParameterIndex);
     Assert(range != nullptr, "Pipeline descriptor set binding was not found.");
@@ -1011,10 +962,6 @@ void CommandContext::ApplyComputeBinding(const PipelineDescriptorSet& descriptor
             descriptorSet.GetAccelerationStructure();
         Assert(accelerationStructure != nullptr && accelerationStructure->IsBuilt(), "Pipeline acceleration structure is not bound.");
         Assert(accelerationStructure->GetResource() != nullptr, "Pipeline acceleration structure has no backing resource.");
-        PrepareResource(
-            accelerationStructure->GetResource(),
-            D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
-            false);
         m_CommandList.SetComputeRootShaderResourceView(rootParameterIndex, accelerationStructure->GetGpuVirtualAddress());
         return;
     }
@@ -1024,40 +971,10 @@ void CommandContext::ApplyComputeBinding(const PipelineDescriptorSet& descriptor
         if (range->BindingMode == PipelineDescriptorBindingMode::RootDescriptor)
         {
             Assert(boundResource->StructuredBufferResource != nullptr, "Pipeline root SRV structured buffer is not bound.");
-            PrepareResource(
-                *boundResource->StructuredBufferResource,
-                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-                false);
             m_CommandList.SetComputeRootShaderResourceView(
                 rootParameterIndex,
                 boundResource->StructuredBufferResource->GetD3D12Resource()->GetGPUVirtualAddress());
             return;
-        }
-
-        for (const auto& shaderResource : boundResource->ShaderResources)
-        {
-            if (shaderResource.has_value() && shaderResource->Resource != nullptr)
-            {
-                if (shaderResource->NumSubresources == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
-                {
-                    PrepareResource(
-                        *shaderResource->Resource,
-                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-                        false,
-                        D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
-                }
-                else
-                {
-                    for (UINT subresource = 0u; subresource < shaderResource->NumSubresources; ++subresource)
-                    {
-                        PrepareResource(
-                            *shaderResource->Resource,
-                            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-                            false,
-                            shaderResource->FirstSubresource + subresource);
-                    }
-                }
-            }
         }
 
         if (TryApplyDescriptorTableBinding(
@@ -1097,25 +1014,6 @@ void CommandContext::ApplyComputeBinding(const PipelineDescriptorSet& descriptor
         Assert(boundResource->UnorderedAccessView.has_value(), "Pipeline UAV resource is not bound.");
         const UnorderedAccessView& unorderedAccessView = *boundResource->UnorderedAccessView;
         Assert(unorderedAccessView.m_Resource != nullptr, "Pipeline UAV resource is not bound.");
-        if (unorderedAccessView.m_NumSubresources == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
-        {
-            PrepareResource(
-                *unorderedAccessView.m_Resource,
-                D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                true,
-                D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
-        }
-        else
-        {
-            for (UINT subresource = 0u; subresource < unorderedAccessView.m_NumSubresources; ++subresource)
-            {
-                PrepareResource(
-                    *unorderedAccessView.m_Resource,
-                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                    true,
-                    unorderedAccessView.m_FirstSubresource + subresource);
-            }
-        }
         if (TryApplyDescriptorTableBinding(
                 PipelineBindPoint::Compute,
                 descriptorSet,
@@ -1172,17 +1070,6 @@ void CommandContext::ExecuteIndirect(
 {
     Assert(executionDesc.ArgumentBuffer != nullptr, "Indirect execution requires an argument buffer.");
     Assert(executionDesc.MaxCommandCount > 0u, "Indirect execution requires a positive maximum command count.");
-    PrepareResource(
-        *executionDesc.ArgumentBuffer,
-        D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT,
-        false);
-    if (executionDesc.CountBuffer != nullptr)
-    {
-        PrepareResource(
-            *executionDesc.CountBuffer,
-            D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT,
-            false);
-    }
     m_CommandList.ExecuteIndirect(
         commandSignature.GetD3D12CommandSignature(),
         commandSignature.GetD3D12ExecutionArgumentType(),
@@ -1250,7 +1137,6 @@ D3D12_DISPATCH_RAYS_DESC CommandContext::BuildDispatchRaysArguments(
 
 void CommandContext::ClearUnorderedAccessUint(const Resource& resource, const UINT values[4]) const
 {
-    PrepareResource(resource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
     m_CommandList.ClearUnorderedAccessUint(resource, values);
 }
 

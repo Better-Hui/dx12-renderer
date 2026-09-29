@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-09-28 by Hui
+//Modify Begin:2026-09-29 by Hui
 
 #include <d3d12.h>
 #include <wrl.h>
@@ -217,17 +217,6 @@ public:
     void DispatchRays(const RayTracingDispatchDesc& dispatchDesc) const;
 
 private:
-    void PrepareResource(
-        const Resource& resource,
-        D3D12_RESOURCE_STATES stateAfter,
-        bool uavWrite,
-        UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES) const;
-    void PrepareResource(
-        ID3D12Resource* resource,
-        D3D12_RESOURCE_STATES stateAfter,
-        bool uavWrite,
-        UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES) const;
-
     void SetPipelineLayout(PipelineBindPoint bindPoint, const PipelineLayout& pipelineLayout) const;
     void SetDescriptorSet(PipelineBindPoint bindPoint, const PipelineDescriptorSetBindDesc& descriptorSetDesc) const;
     void SetDescriptorSet(PipelineBindPoint bindPoint, const PipelineDescriptorSet& descriptorSet) const;
@@ -254,6 +243,7 @@ private:
         UINT rootParameterIndex) const;
     void ApplyGraphicsBinding(const PipelineDescriptorSet& descriptorSet, UINT rootParameterIndex) const;
     void ApplyComputeBinding(const PipelineDescriptorSet& descriptorSet, UINT rootParameterIndex) const;
+    void RecordResourceBindings(PipelineBindPoint bindPoint, const PipelineDescriptorSet& descriptorSet, UINT rootParameterIndex) const;
     void StageDynamicDescriptors(
         D3D12_DESCRIPTOR_HEAP_TYPE descriptorHeapType,
         UINT rootParameterIndex,
@@ -263,7 +253,6 @@ private:
     void SetDescriptorPool(const PipelineDescriptorPool& descriptorPool) const;
 
     CommandList& m_CommandList;
-    mutable std::unique_ptr<BarrierContext> m_OwnedBarrierContext;
     mutable BarrierContext* m_BarrierContext = nullptr;
     mutable CommandContextDescriptorAllocator m_DescriptorAllocator;
     mutable const PipelineDescriptorPool* m_DescriptorPool = nullptr;

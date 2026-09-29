@@ -87,7 +87,7 @@ std::unique_ptr<ExternalCommandContext> UnityD3D12Interop::CreateExternalCommand
         return nullptr;
 
     return std::make_unique<ExternalCommandContext>(
-        D3D12_COMMAND_LIST_TYPE_DIRECT,
+        commandList->GetType(),
         deviceContext,
         commandList.Get());
 }
@@ -258,7 +258,7 @@ std::unique_ptr<CommandList> UnityD3D12Interop::WrapCurrentCommandList() const
     if (FAILED(current->QueryInterface(IID_PPV_ARGS(&commandList))))
         return nullptr;
     return std::make_unique<CommandList>(
-        D3D12_COMMAND_LIST_TYPE_DIRECT, deviceContext, commandList.Get());
+        commandList->GetType(), deviceContext, commandList.Get());
 }
 
 bool UnityD3D12Interop::RecordExternalCommandRecording(
