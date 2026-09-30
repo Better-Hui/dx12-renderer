@@ -6,24 +6,12 @@
 #include <Common/BlueNoise.hlsli>
 //Modify End
 
-uint Hash(uint value)
-{
-    value ^= value >> 17;
-    value *= 0xed5ad4bbu;
-    value ^= value >> 11;
-    value *= 0xac4c1b51u;
-    value ^= value >> 15;
-    value *= 0x31848babu;
-    value ^= value >> 14;
-    return value;
-}
-
 //Modify Begin:2026-09-30 by Hui
 float Random01(inout uint state)
 {
     // The state stores a 128x128 STBN pixel, a 64-frame STBN slice, and a
-    // dimension cursor. Every dimension remains STBN-driven; there is no
-    // pseudo-random fallback for later dimensions.
+    // dimension cursor. Every dimension remains STBN-driven, including
+    // dimensions beyond the first three.
     const uint2 pixel = uint2(
         state & (FrameworkBlueNoiseTileSize - 1u),
         (state >> 7u) & (FrameworkBlueNoiseTileSize - 1u));
@@ -34,11 +22,6 @@ float Random01(inout uint state)
     return FrameworkSampleStbnScalar(pixel, frameIndex, dimensionSalt);
 }
 //Modify End
-
-float HashToFloat(uint value)
-{
-    return float(Hash(value) & 0x00ffffffu) / 16777216.0f;
-}
 
 float InterleavedGradientNoise(float2 pixel)
 {
