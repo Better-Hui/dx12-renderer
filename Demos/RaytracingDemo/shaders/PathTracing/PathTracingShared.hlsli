@@ -77,20 +77,28 @@ bool IsVisibleAlongRay(float3 origin, float3 direction, float tMax)
     return shadowPayload.Hit == 0u;
 }
 
-//Modify Begin:2026-07-30 by Hui
-float3 SampleDirectionalShadowDirection(float3 axis, float angularRadius, inout uint rngState)
+//Modify Begin:2026-09-30 by Hui
+float3 SampleDirectionalShadowDirection(float3 axis, float angularRadius, const float2 sample)
 {
     float3 tangent;
     float3 bitangent;
     BuildOrthonormalBasis(axis, tangent, bitangent);
     const float clampedRadius = min(max(0.0f, angularRadius), 1.5707963f);
-    const float cosTheta = lerp(1.0f, cos(clampedRadius), Random01(rngState));
+    const float cosTheta = lerp(1.0f, cos(clampedRadius), sample.x);
     const float sinTheta = sqrt(max(0.0f, 1.0f - cosTheta * cosTheta));
-    const float phi = 2.0f * PI * Random01(rngState);
+    const float phi = 2.0f * PI * sample.y;
     return normalize(
         axis * cosTheta +
         tangent * (cos(phi) * sinTheta) +
         bitangent * (sin(phi) * sinTheta));
+}
+
+float3 SampleDirectionalShadowDirection(float3 axis, float angularRadius, inout uint rngState)
+{
+    return SampleDirectionalShadowDirection(
+        axis,
+        angularRadius,
+        float2(Random01(rngState), Random01(rngState)));
 }
 
 float2 SampleUniformDisk(inout uint rngState)
@@ -702,11 +710,10 @@ PathTracingDirectLightSample SamplePathTracingDirectLight(
     {
         const DirectionalLightData light = DirectionalLights[index];
 #if RAYTRACING_DEMO_SOFT_SHADOWS
-        uint sampleRandomState = asuint(sampleUv.x * 65535.0f) ^ (asuint(sampleUv.y * 65535.0f) << 16u);
         sample.DirectionWs = SampleDirectionalShadowDirection(
             normalize(light.DirectionAndAngularRadius.xyz),
             light.DirectionAndAngularRadius.w,
-            sampleRandomState);
+            sampleUv);
 #else
         sample.DirectionWs = normalize(light.DirectionAndAngularRadius.xyz);
 #endif

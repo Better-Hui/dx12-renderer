@@ -18,38 +18,22 @@ uint Hash(uint value)
     return value;
 }
 
+//Modify Begin:2026-09-30 by Hui
 float Random01(inout uint state)
 {
-    // The first three dimensions of every pixel stream come directly from the
-    // spatiotemporal blue-noise masks. The packed state uses 10 bits per
-    // dimension, matching the effective precision of the imported 8-bit masks
-    // while retaining the existing uint state footprint.
-    const uint blueNoisePhase = state >> 30u;
-    if (blueNoisePhase == 3u)
-    {
-        const uint x = (state >> 20u) & 0x3ffu;
-        state = (state & 0x000fffffu) | 0x80000000u;
-        return (float(x) + 0.5f) / 1024.0f;
-    }
-    if (blueNoisePhase == 2u)
-    {
-        const uint y = (state >> 10u) & 0x3ffu;
-        state = (state & 0x000003ffu) | 0x40000000u;
-        return (float(y) + 0.5f) / 1024.0f;
-    }
-    if (blueNoisePhase == 1u)
-    {
-        const uint scalar = state & 0x3ffu;
-        state = Hash(scalar) & 0x3fffffffu;
-        return (float(scalar) + 0.5f) / 1024.0f;
-    }
-//Modify Begin:2026-07-30 by Hui
-    state = (state * 747796405u + 2891336453u) & 0x3fffffffu;
-    uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
-    word = (word >> 22u) ^ word;
-    return (float(word) + 0.5f) / 4294967296.0f;
-//Modify End
+    // The state stores a 128x128 STBN pixel, a 64-frame STBN slice, and a
+    // dimension cursor. Every dimension remains STBN-driven; there is no
+    // pseudo-random fallback for later dimensions.
+    const uint2 pixel = uint2(
+        state & (FrameworkBlueNoiseTileSize - 1u),
+        (state >> 7u) & (FrameworkBlueNoiseTileSize - 1u));
+    const uint frameIndex = (state >> 14u) & (FrameworkBlueNoiseFrameCount - 1u);
+    const uint dimension = state >> 20u;
+    const uint dimensionSalt = 0x9e3779b9u ^ (dimension * 0x85ebca6bu);
+    state = (state & 0x000fffffu) | (((dimension + 1u) & 0xfffu) << 20u);
+    return FrameworkSampleStbnScalar(pixel, frameIndex, dimensionSalt);
 }
+//Modify End
 
 float HashToFloat(uint value)
 {
@@ -68,14 +52,14 @@ float AnimatedInterleavedGradientNoise(uint2 pixel, uint frameIndex)
 
 uint InitializeRandomState(uint2 pixel, uint width, uint frameIndex, uint salt)
 {
-//Modify Begin:2026-08-06 by Hui
+//Modify Begin:2026-09-30 by Hui
     (void)width;
-    const float2 blueNoiseVec2 = FrameworkSampleStbnVec2(pixel, frameIndex, salt);
-    const float blueNoiseScalar = FrameworkSampleStbnScalar(pixel, frameIndex, salt ^ 0x68bc21ebu);
-    const uint blueNoiseX = min(uint(saturate(blueNoiseVec2.x) * 1023.0f), 1023u);
-    const uint blueNoiseY = min(uint(saturate(blueNoiseVec2.y) * 1023.0f), 1023u);
-    const uint blueNoiseZ = min(uint(saturate(blueNoiseScalar) * 1023.0f), 1023u);
-    return 0xc0000000u | (blueNoiseX << 20u) | (blueNoiseY << 10u) | blueNoiseZ;
+    const uint2 saltedPixel = pixel + FrameworkBlueNoiseSaltPixelOffset(salt);
+    const uint saltedFrame = frameIndex + FrameworkBlueNoiseSaltFrameOffset(salt);
+    return
+        (saltedPixel.x & (FrameworkBlueNoiseTileSize - 1u)) |
+        ((saltedPixel.y & (FrameworkBlueNoiseTileSize - 1u)) << 7u) |
+        ((saltedFrame & (FrameworkBlueNoiseFrameCount - 1u)) << 14u);
 //Modify End
 }
 
