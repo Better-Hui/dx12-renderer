@@ -10,6 +10,8 @@ cbuffer PipelineCBuffer : register(b0, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE)
     matrix g_Pipeline_InverseProjection;
     float2 g_Pipeline_ScreenResolution;
     float2 g_Pipeline_ScreenTexelSize;
+    matrix g_Pipeline_UnjitteredViewProjection;
+    matrix g_Pipeline_PreviousUnjitteredViewProjection;
 };
 
 cbuffer ModelCBuffer : register(b0, COMMON_ROOT_SIGNATURE_MODEL_SPACE)
@@ -54,8 +56,8 @@ VertexShaderOutput main(VertexAttributes IN)
     OUT.BitangentWs = normalize(mul((float3x3)g_Model_Model, IN.BitangentOs));
     OUT.Uv = IN.Uv;
     OUT.PositionCs = mul(g_Model_ModelViewProjection, float4(IN.PositionOs, 1.0f));
-    OUT.CurrentPositionCs = OUT.PositionCs;
-    OUT.PreviousPositionCs = mul(g_Model_PreviousModelViewProjection, float4(IN.PositionOs, 1.0f));
+    OUT.CurrentPositionCs = mul(g_Pipeline_UnjitteredViewProjection, positionWs);
+    OUT.PreviousPositionCs = mul(g_Pipeline_PreviousUnjitteredViewProjection, positionWs);
 //Modify Begin:2026-07-30 by Hui
     OUT.MeshletDebugId = 0;
 //Modify End

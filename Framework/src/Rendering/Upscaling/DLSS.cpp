@@ -196,7 +196,7 @@ namespace
         constants.depthInverted = sl::Boolean::eFalse;
         constants.cameraMotionIncluded = sl::Boolean::eTrue;
         constants.motionVectors3D = sl::Boolean::eFalse;
-        constants.motionVectorsJittered = sl::Boolean::eTrue;
+        constants.motionVectorsJittered = sl::Boolean::eFalse;
         constants.reset = reset ? sl::Boolean::eTrue : sl::Boolean::eFalse;
         return constants;
     }
@@ -885,7 +885,6 @@ bool DLSS::EnsureFeature(CommandList& commandList, const DLSSExecutionInputs& in
     createParams.InFeatureCreateFlags =
         NVSDK_NGX_DLSS_Feature_Flags_IsHDR |
         NVSDK_NGX_DLSS_Feature_Flags_MVLowRes |
-        NVSDK_NGX_DLSS_Feature_Flags_MVJittered |
         NVSDK_NGX_DLSS_Feature_Flags_AutoExposure;
 
     NVSDK_NGX_Handle* createdFeature = nullptr;

@@ -93,6 +93,8 @@ struct RaytracingDemoPipelineConstants
     DirectX::XMMATRIX InverseProjection = DirectX::XMMatrixIdentity();
     DirectX::XMFLOAT2 ScreenResolution = { 1.0f, 1.0f };
     DirectX::XMFLOAT2 ScreenTexelSize = { 1.0f, 1.0f };
+    DirectX::XMMATRIX UnjitteredViewProjection = DirectX::XMMatrixIdentity();
+    DirectX::XMMATRIX PreviousUnjitteredViewProjection = DirectX::XMMatrixIdentity();
     DirectX::XMMATRIX PreviousViewProjection = DirectX::XMMatrixIdentity();
     uint32_t DebugMeshletClusters = 0;
     uint32_t PipelinePadding0 = 0;

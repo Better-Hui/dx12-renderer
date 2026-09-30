@@ -28,7 +28,7 @@ Path tracing and all ReSTIR DI/GI stages bind these resources through the
 shared `RaytracingDemoPassBindings` helper rather than owning separate noise
 textures or hash-noise implementations.
 
-Path tracing seeds its existing `Random01` stream with three STBN dimensions
-per pixel (the vec2 X/Y channels plus the scalar channel). Later dimensions
-continue through the existing compact PCG state so the current shader APIs and
-reservoir layouts remain unchanged.
+Path tracing seeds its `Random01` stream from the STBN pixel/frame coordinate
+and advances every dimension through `FrameworkSampleStbnScalar`; there is no
+PCG fallback for later dimensions. ReSTIR and other temporal stages use the
+same STBN coordinate contract directly.

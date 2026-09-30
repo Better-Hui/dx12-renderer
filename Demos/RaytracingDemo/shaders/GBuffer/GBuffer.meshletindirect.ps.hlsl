@@ -13,6 +13,8 @@ cbuffer PipelineCBuffer : register(b0, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE)
     matrix g_Pipeline_InverseProjection;
     float2 g_Pipeline_ScreenResolution;
     float2 g_Pipeline_ScreenTexelSize;
+    matrix g_Pipeline_UnjitteredViewProjection;
+    matrix g_Pipeline_PreviousUnjitteredViewProjection;
     matrix g_Pipeline_PreviousViewProjection;
     uint g_Pipeline_DebugMeshletClusters;
     uint3 g_Pipeline_Padding0;

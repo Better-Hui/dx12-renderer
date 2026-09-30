@@ -27,6 +27,8 @@ cbuffer PipelineCBuffer : register(b0, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE)
     matrix g_Pipeline_InverseProjection;
     float2 g_Pipeline_ScreenResolution;
     float2 g_Pipeline_ScreenTexelSize;
+    matrix g_Pipeline_UnjitteredViewProjection;
+    matrix g_Pipeline_PreviousUnjitteredViewProjection;
     matrix g_Pipeline_PreviousViewProjection;
     uint g_Pipeline_DebugMeshletClusters;
     uint3 g_Pipeline_Padding0;
@@ -68,8 +70,8 @@ void main(
         output.BitangentWs = normalize(mul(input.Bitangent.xyz, (float3x3)transform.Model));
         output.Uv = input.Uv.xy;
         output.PositionCs = mul(g_Pipeline_ViewProjection, positionWs);
-        output.CurrentPositionCs = output.PositionCs;
-        output.PreviousPositionCs = mul(g_Pipeline_PreviousViewProjection, positionWs);
+        output.CurrentPositionCs = mul(g_Pipeline_UnjitteredViewProjection, positionWs);
+        output.PreviousPositionCs = mul(g_Pipeline_PreviousUnjitteredViewProjection, positionWs);
         output.MeshletDebugId = instance.MeshletIndex;
         output.MaterialIndex = instance.MaterialIndex;
         output.DebugMeshletClusters = g_Pipeline_DebugMeshletClusters;

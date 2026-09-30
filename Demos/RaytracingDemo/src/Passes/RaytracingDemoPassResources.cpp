@@ -56,6 +56,10 @@ RaytracingDemoPipelineConstants BuildPassPipelineConstants(
         static_cast<float>(frameState.Height)
     };
     pipeline.ScreenTexelSize = { 1.0f / pipeline.ScreenResolution.x, 1.0f / pipeline.ScreenResolution.y };
+    pipeline.UnjitteredViewProjection = frameState.UnjitteredViewProjection;
+    pipeline.PreviousUnjitteredViewProjection = frameState.HasPreviousViewProjection
+        ? frameState.PreviousUnjitteredViewProjection
+        : pipeline.UnjitteredViewProjection;
     pipeline.PreviousViewProjection = frameState.HasPreviousViewProjection
         ? frameState.PreviousViewProjection
         : pipeline.ViewProjection;
