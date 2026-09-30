@@ -138,19 +138,7 @@ void BarrierContext::Transition(
     }
     D3D12_HEAP_PROPERTIES heap{};
     D3D12_HEAP_FLAGS flags{};
-#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
-    const bool measureHeapProperties = DX12Diagnostics::ActiveRecordingScope.Sink != nullptr;
-    const auto heapPropertiesStart = measureHeapProperties ? std::chrono::steady_clock::now() :
-        std::chrono::steady_clock::time_point{};
-#endif
-    const HRESULT heapPropertiesResult = resource->GetHeapProperties(&heap, &flags);
-#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
-    if (measureHeapProperties)
-    {
-        m_HeapPropertiesDuration += std::chrono::steady_clock::now() - heapPropertiesStart;
-    }
-#endif
-    if (SUCCEEDED(heapPropertiesResult))
+    if (SUCCEEDED(resource->GetHeapProperties(&heap, &flags)))
     {
         if (heap.Type == D3D12_HEAP_TYPE_UPLOAD)
         {
@@ -266,11 +254,9 @@ void BarrierContext::Flush()
     {
         DX12Diagnostics::RecordAccumulatedRecordingStage("barrier.track_lifetime", m_TrackLifetimeDuration);
         DX12Diagnostics::RecordAccumulatedRecordingStage("barrier.prepare_resource", m_PrepareResourceDuration);
-        DX12Diagnostics::RecordAccumulatedRecordingStage("barrier.heap_properties", m_HeapPropertiesDuration);
     }
     m_TrackLifetimeDuration = {};
     m_PrepareResourceDuration = {};
-    m_HeapPropertiesDuration = {};
 #endif
 }
 
@@ -284,7 +270,6 @@ void BarrierContext::Reset()
 #if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
     m_TrackLifetimeDuration = {};
     m_PrepareResourceDuration = {};
-    m_HeapPropertiesDuration = {};
 #endif
 }
 
