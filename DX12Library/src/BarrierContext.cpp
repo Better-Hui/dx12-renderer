@@ -60,7 +60,8 @@ void BarrierContext::PrepareResource(
 {
     Assert(resource != nullptr, "BarrierContext cannot prepare a null resource.");
     if (m_CommandList.IsExternalCommandList())
-        Assert(HasExternalDeclaration(resource, subresource), "Resource access is outside the external declaration.");
+        Assert(HasExternalDeclaration(resource, subresource),
+            "External resource access has no attribution; declare the resource before bindless or raw native use.");
     if (stateAfter == D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
     {
         const auto previous = m_UavAccesses.find(resource);
@@ -99,7 +100,7 @@ void BarrierContext::Transition(
     {
         Assert(
             HasExternalDeclaration(resource, subresource),
-            "The external transition is not covered by a resource declaration.");
+            "External transition has no resource attribution; declare the resource before bindless or raw native use.");
     }
     if (uavBefore)
     {

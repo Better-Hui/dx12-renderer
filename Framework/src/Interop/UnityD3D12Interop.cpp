@@ -246,21 +246,6 @@ void UnityD3D12Interop::ForgetExternalResource(ID3D12Resource* const resource) c
     }
 }
 
-std::unique_ptr<CommandList> UnityD3D12Interop::WrapCurrentCommandList() const
-{
-    if (!IsValid())
-        return nullptr;
-    ID3D12GraphicsCommandList* current = GetCurrentCommandList();
-    const std::shared_ptr<D3D12DeviceContext> deviceContext = GetDeviceContext();
-    if (current == nullptr || deviceContext == nullptr)
-        return nullptr;
-    Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList2> commandList;
-    if (FAILED(current->QueryInterface(IID_PPV_ARGS(&commandList))))
-        return nullptr;
-    return std::make_unique<CommandList>(
-        commandList->GetType(), deviceContext, commandList.Get());
-}
-
 bool UnityD3D12Interop::RecordExternalCommandRecording(
     ExternalCommandContext& context,
     const std::function<void(ID3D12GraphicsCommandList&)>& recordCommands) const

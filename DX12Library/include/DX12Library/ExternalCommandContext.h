@@ -73,7 +73,6 @@ public:
     bool WereEntryStatesRestored() const noexcept { return m_EntryStatesRestored; }
     bool IsRecordingStarted() const noexcept { return m_RecordingStarted; }
 
-    void RegisterResource(ID3D12Resource* resource, D3D12_RESOURCE_STATES initialState);
     void DeclareResource(
         ID3D12Resource* resource,
         D3D12_RESOURCE_STATES initialState,
@@ -144,6 +143,7 @@ private:
     };
 
     void ValidateResourceAccess(const ResourceAccess& access) const;
+    void DeclareResourceInternal(const ResourceAccess& access);
     bool RestoreEntryStatesNoThrow() noexcept;
     void DetachBarrierContext() noexcept;
 

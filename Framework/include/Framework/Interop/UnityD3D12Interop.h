@@ -2,7 +2,6 @@
 
 //Modify Begin:2026-09-29 by Hui
 #include <DX12Library/D3D12RenderContext.h>
-#include <DX12Library/CommandList.h>
 #include <DX12Library/ExternalCommandContext.h>
 
 #include <d3d12.h>
@@ -44,7 +43,6 @@ public:
     void RetireExternalCommandContext(std::unique_ptr<ExternalCommandContext> context) const;
     void CollectRetiredExternalCommandContexts() const;
     void ForgetExternalResource(ID3D12Resource* resource) const;
-    std::unique_ptr<CommandList> WrapCurrentCommandList() const;
     ID3D12Resource* TextureFromNativeTexture(UnityTextureID texture) const;
 
     bool RecordExternalCommandRecording(

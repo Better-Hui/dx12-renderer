@@ -6,13 +6,17 @@
 #include <DX12Library/D3D12DeviceContext.h>
 #include <DX12Library/ExternalCommandContext.h>
 #include <DX12Library/RootSignature.h>
+#include <DX12Library/RenderTarget.h>
 #include <DX12Library/StructuredBuffer.h>
 #include <DX12Library/Texture.h>
 #include <Framework/Core/FrameworkDeviceContext.h>
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
+#include <Framework/Rendering/Pipeline/BindlessDescriptorHeap.h>
+#include <Framework/Rendering/Pipeline/Shader.h>
 #include <Framework/Rendering/Denoising/SVGF.h>
 #include <Framework/Rendering/Texture/RenderTexture.h>
+#include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <Framework/Rendering/Texture/UnorderedAccessView.h>
 #include <d3d12sdklayers.h>
 #include <dxgi1_6.h>
@@ -30,12 +34,12 @@ namespace
     constexpr UINT ByteCount = ElementCount * sizeof(UINT);
     constexpr UINT Iterations = 8;
 
-    ComPtr<IDxcBlob> Compile(const char* source)
+    ComPtr<IDxcBlob> Compile(const char* source, const wchar_t* profile = L"cs_6_0")
     {
         ComPtr<IDxcCompiler3> compiler;
         ThrowIfFailed(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&compiler)));
         const DxcBuffer buffer{ source, std::strlen(source), DXC_CP_UTF8 };
-        const wchar_t* args[]{ L"-E", L"main", L"-T", L"cs_6_0", L"-O0" };
+        const wchar_t* args[]{ L"-E", L"main", L"-T", profile, L"-O0" };
         ComPtr<IDxcResult> result;
         ThrowIfFailed(compiler->Compile(&buffer, args, static_cast<UINT>(std::size(args)), nullptr, IID_PPV_ARGS(&result)));
         HRESULT status;
@@ -179,7 +183,13 @@ int RendererDiagnosticsTool::BarrierSelfTestCommand()
         ExternalCommandContext external(D3D12_COMMAND_LIST_TYPE_DIRECT, deviceContext, native.Get());
         external.DeclareResource({ a.GetD3D12Resource().Get(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
             D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE, true, false });
-        external.RegisterResource(a.GetCounterBuffer().GetD3D12Resource().Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        external.DeclareResource({ a.GetCounterBuffer().GetD3D12Resource().Get(),
+            D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+            D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+            D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+            D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+            true,
+            true });
         {
             CommandContext ctx(external);
             resetBuffer(ctx);
@@ -263,6 +273,137 @@ int RendererDiagnosticsTool::BarrierSelfTestCommand()
         queue->WaitForFenceValue(queue->Signal());
     }
 
+    // Bindless and raw-native accesses have no descriptor reflection. They
+    // therefore require the same explicit external attribution before use.
+    {
+        ComPtr<ID3D12CommandAllocator> allocator;
+        ComPtr<ID3D12GraphicsCommandList2> native;
+        ThrowIfFailed(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator)));
+        ThrowIfFailed(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator.Get(), nullptr, IID_PPV_ARGS(&native)));
+        ExternalCommandContext external(D3D12_COMMAND_LIST_TYPE_DIRECT, deviceContext, native.Get());
+        external.DeclareResource({ b.GetD3D12Resource().Get(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+            D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+            D3D12_RESOURCE_STATE_COPY_SOURCE, false, false });
+        CommandContext context(external);
+        BindlessDescriptorHeap bindless(*device.Get());
+        bindless.AddShaderResourceView(a);
+        CommandQueue asyncCompute(D3D12_COMMAND_LIST_TYPE_COMPUTE, deviceContext);
+        bindless.BeginFrame(*queue, asyncCompute);
+        context.BindBindlessDescriptorHeap(bindless);
+        ExpectRejected(
+            [&] { context.UseResource(a, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, ResourceUse::Read); },
+            "Undeclared bindless/raw resource access was accepted.");
+        context.UseResource(b, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, ResourceUse::Read);
+        external.RecordNativeCommands([](ID3D12GraphicsCommandList2&) {});
+        external.End();
+        ThrowIfFailed(native->Close());
+        ID3D12CommandList* lists[]{ native.Get() };
+        queue->GetD3D12CommandQueue()->ExecuteCommandLists(1, lists);
+        const UINT64 fenceValue = queue->Signal();
+        queue->WaitForFenceValue(fenceValue);
+        bindless.EndFrame(fenceValue, 0);
+    }
+
+    // External graphics recording covers pixel SRV, render-target, depth-write,
+    // and depth-read state through the same CommandContext.
+    {
+        const auto input = RenderTexture::CreateUav2D(framework, DXGI_FORMAT_R32_UINT, 8, 8, L"External raster input");
+        const auto color = RenderTexture::Create2D(framework, DXGI_FORMAT_R8G8B8A8_UNORM, 8, 8,
+            L"External raster color", D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
+        const auto depth = RenderTexture::Create2D(framework, DXGI_FORMAT_D32_FLOAT, 8, 8,
+            L"External raster depth", D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL);
+        RenderTarget target;
+        target.AttachTexture(Color0, color);
+        target.AttachTexture(DepthStencil, depth);
+
+        auto setup = queue->GetCommandList();
+        CommandContext setupContext(*setup);
+        const UINT inputValue[4]{ 7, 0, 0, 0 };
+        setupContext.ClearUnorderedAccessUint(*input, inputValue);
+        setupContext.UseResource(*input, D3D12_RESOURCE_STATE_COPY_SOURCE, ResourceUse::Read);
+        setupContext.UseResource(*color, D3D12_RESOURCE_STATE_COPY_SOURCE, ResourceUse::Read);
+        setupContext.UseResource(*depth, D3D12_RESOURCE_STATE_COPY_SOURCE, ResourceUse::Read);
+        queue->WaitForFenceValue(queue->ExecuteCommandList(setup));
+
+        const auto vertex = Compile(
+            "struct V { float4 Position : SV_POSITION; };"
+            "V main(uint id : SV_VertexID) { float2 p[3] = { float2(-1,-1), float2(-1,3), float2(3,-1) };"
+            "V v; v.Position = float4(p[id], 0, 1); return v; }", L"vs_6_0");
+        const auto pixel = Compile(
+            "Texture2D<uint> Input : register(t0); float4 main(float4 p : SV_POSITION) : SV_TARGET "
+            "{ return Input.Load(int3(0,0,0)) == 7 ? float4(0.2,0.4,0.6,1) : float4(1,0,1,1); }", L"ps_6_0");
+        const ShaderBlob vertexBlob(vertex->GetBufferPointer(), vertex->GetBufferSize());
+        const ShaderBlob pixelBlob(pixel->GetBufferPointer(), pixel->GetBufferSize());
+        Shader depthWriteShader(framework, vertexBlob, pixelBlob,
+            [](RasterPipelineStateBuilder& builder) { builder.WithNoCull(); });
+        Shader depthReadShader(framework, vertexBlob, pixelBlob,
+            [](RasterPipelineStateBuilder& builder)
+            {
+                builder.WithNoCull().WithDepthTestNoWrite();
+            });
+
+        ComPtr<ID3D12CommandAllocator> allocator;
+        ComPtr<ID3D12GraphicsCommandList2> native;
+        ThrowIfFailed(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator)));
+        ThrowIfFailed(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator.Get(), nullptr, IID_PPV_ARGS(&native)));
+        ExternalCommandContext external(D3D12_COMMAND_LIST_TYPE_DIRECT, deviceContext, native.Get());
+        const ExternalCommandContext::ResourceAccess accesses[] = {
+            { input->GetD3D12Resource().Get(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+                D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+                D3D12_RESOURCE_STATE_COPY_SOURCE, false, false },
+            { color->GetD3D12Resource().Get(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+                D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET,
+                D3D12_RESOURCE_STATE_COPY_SOURCE, false, false },
+            { depth->GetD3D12Resource().Get(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+                D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_DEPTH_WRITE,
+                D3D12_RESOURCE_STATE_COPY_SOURCE, true, false },
+        };
+        external.DeclareResources(accesses);
+        CommandContext context(external);
+        context.SetRenderTarget(target, static_cast<UINT>(-1), 0, true, false);
+        context.GetCommandList().SetAutomaticViewportAndScissorRect(target);
+        const float clearColor[4]{ 0.2f, 0.4f, 0.6f, 1.0f };
+        context.ClearRenderTarget(target, clearColor, D3D12_CLEAR_FLAG_DEPTH);
+        context.SetTexture(depthWriteShader, "Input", ShaderResourceView(input));
+        context.BindPipeline(depthWriteShader);
+        context.BindDescriptorSet(depthWriteShader.GetDescriptorSet());
+        context.GetCommandList().SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        context.Draw(3);
+
+        context.SetRenderTarget(target, static_cast<UINT>(-1), 0, true, true);
+        context.GetCommandList().SetAutomaticViewportAndScissorRect(target);
+        context.SetTexture(depthReadShader, "Input", ShaderResourceView(input));
+        context.BindPipeline(depthReadShader);
+        context.BindDescriptorSet(depthReadShader.GetDescriptorSet());
+        context.GetCommandList().SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        context.Draw(3);
+        external.End();
+
+        D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint{};
+        UINT64 size = 0;
+        const auto outputDesc = color->GetD3D12Resource()->GetDesc();
+        device->GetCopyableFootprints(&outputDesc, 0, 1, 0, &footprint, nullptr, nullptr, &size);
+        ComPtr<ID3D12Resource> textureReadback;
+        const auto bufferDesc = CD3DX12_RESOURCE_DESC::Buffer(size);
+        ThrowIfFailed(device->CreateCommittedResource(&readbackHeap, D3D12_HEAP_FLAG_NONE, &bufferDesc,
+            D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&textureReadback)));
+        const CD3DX12_TEXTURE_COPY_LOCATION dst(textureReadback.Get(), footprint);
+        const CD3DX12_TEXTURE_COPY_LOCATION src(color->GetD3D12Resource().Get(), 0);
+        native->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+        ThrowIfFailed(native->Close());
+        ID3D12CommandList* lists[]{ native.Get() };
+        queue->GetD3D12CommandQueue()->ExecuteCommandLists(1, lists);
+        queue->WaitForFenceValue(queue->Signal());
+        const D3D12_RANGE range{ 0, static_cast<SIZE_T>(size) };
+        unsigned char* pixels = nullptr;
+        ThrowIfFailed(textureReadback->Map(0, &range, reinterpret_cast<void**>(&pixels)));
+        Expect(pixels[0] >= 48 && pixels[0] <= 54 && pixels[1] >= 99 && pixels[1] <= 104 &&
+            pixels[2] >= 150 && pixels[2] <= 155 && pixels[3] == 255,
+            "External raster recording did not preserve pixel-SRV output.");
+        const D3D12_RANGE written{ 0, 0 };
+        textureReadback->Unmap(0, &written);
+    }
+
     // The real multi-stage SVGF algorithm records into a host-owned list.
     {
         SVGF svgf(framework);
@@ -318,7 +459,19 @@ int RendererDiagnosticsTool::BarrierSelfTestCommand()
         ThrowIfFailed(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator)));
         ThrowIfFailed(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator.Get(), nullptr, IID_PPV_ARGS(&native)));
         ExternalCommandContext external(D3D12_COMMAND_LIST_TYPE_DIRECT, deviceContext, native.Get());
-        for (const auto& item : textures) external.RegisterResource(item->GetD3D12Resource().Get(), D3D12_RESOURCE_STATE_COPY_SOURCE);
+        std::vector<ExternalCommandContext::ResourceAccess> svgfAccesses;
+        svgfAccesses.reserve(std::size(textures));
+        for (const auto& item : textures)
+        {
+            svgfAccesses.push_back({ item->GetD3D12Resource().Get(),
+                D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+                D3D12_RESOURCE_STATE_COPY_SOURCE,
+                D3D12_RESOURCE_STATE_COPY_SOURCE,
+                D3D12_RESOURCE_STATE_COPY_SOURCE,
+                false,
+                false });
+        }
+        external.DeclareResources(svgfAccesses);
         CommandContext context(external);
         svgf.Record(context, resources);
         std::swap(resources.HistoryColorRead, resources.HistoryColorWrite);
@@ -373,7 +526,7 @@ int RendererDiagnosticsTool::BarrierSelfTestCommand()
         }
     }
     Expect(errors == 0, "D3D12 validation reported resource-state errors.");
-    std::cout << "{\"barrier_selftest\":\"pass\",\"adapter\":\"WARP\",\"gpu_validation\":true,\"cases\":8,\"iterations\":8,\"svgf_frames\":2,\"debug_errors\":0}\n";
+    std::cout << "{\"barrier_selftest\":\"pass\",\"adapter\":\"WARP\",\"gpu_validation\":true,\"cases\":10,\"iterations\":8,\"svgf_frames\":2,\"debug_errors\":0}\n";
     return 0;
 }
 //Modify End

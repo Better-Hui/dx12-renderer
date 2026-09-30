@@ -52,24 +52,6 @@ ID3D12GraphicsCommandList2* ExternalCommandContext::GetNativeCommandList() const
     return m_CommandList->GetGraphicsCommandList().Get();
 }
 
-void ExternalCommandContext::RegisterResource(
-    ID3D12Resource* const resource,
-    const D3D12_RESOURCE_STATES initialState)
-{
-    // Keep the legacy registration entry point with an explicit round-trip
-    // contract. End() restores the host's entry state even if local commands
-    // temporarily transition the resource to another state.
-    DeclareResource(ResourceAccess{
-        .Resource = resource,
-        .Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
-        .InitialState = initialState,
-        .FirstState = initialState,
-        .FinalState = initialState,
-        .FirstAccessWrites = false,
-        .FinalAccessWrites = false,
-    });
-}
-
 void ExternalCommandContext::DeclareResource(
     ID3D12Resource* const resource,
     const D3D12_RESOURCE_STATES initialState,
@@ -118,20 +100,20 @@ void ExternalCommandContext::DeclareResource(const ResourceAccess& access)
         Assert(!overlaps, "Overlapping external resource declarations are not allowed.");
     }
 
+    DeclareResourceInternal(access);
+    m_BarrierContext.Flush();
+}
+
+void ExternalCommandContext::DeclareResourceInternal(const ResourceAccess& access)
+{
+    const ResourceAccessKey key{ access.Resource, access.Subresource };
     m_BarrierContext.DeclareExternalResource(
         access.Resource,
         access.InitialState,
         access.FirstState,
         access.FirstAccessWrites && access.FirstState == D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
         access.Subresource);
-    m_BarrierContext.Flush();
-    if (std::ranges::find_if(
-            m_DeclaredResources,
-            [&key](const ResourceAccessKey& declaredKey) { return declaredKey == key; }) ==
-        m_DeclaredResources.end())
-    {
-        m_DeclaredResources.push_back(key);
-    }
+    m_DeclaredResources.push_back(key);
     const auto existing = std::find_if(
         m_FinalResourceStates.begin(),
         m_FinalResourceStates.end(),
@@ -170,6 +152,8 @@ void ExternalCommandContext::DeclareResources(const std::span<const ResourceAcce
     // atomic from the caller's perspective.
     std::unordered_map<ResourceAccessKey, ResourceAccess, ResourceAccessKeyHash> batch;
     batch.reserve(accesses.size());
+    std::vector<ResourceAccess> pending;
+    pending.reserve(accesses.size());
     for (const ResourceAccess& access : accesses)
     {
         ValidateResourceAccess(access);
@@ -220,15 +204,12 @@ void ExternalCommandContext::DeclareResources(const std::span<const ResourceAcce
             Assert(!overlaps, "Overlapping external resource declarations conflict within one batch.");
         }
         batch.emplace(key, access);
+        pending.push_back(access);
     }
 
-    for (const ResourceAccess& access : accesses)
-    {
-        if (!m_ResourceAccesses.contains({ access.Resource, access.Subresource }))
-        {
-            DeclareResource(access);
-        }
-    }
+    for (const ResourceAccess& access : pending)
+        DeclareResourceInternal(access);
+    m_BarrierContext.Flush();
 }
 
 void ExternalCommandContext::ValidateResourceAccess(const ResourceAccess& access) const
@@ -251,12 +232,22 @@ void ExternalCommandContext::ValidateResourceAccess(const ResourceAccess& access
     const auto type = m_CommandList->GetCommandListType();
     const UINT allowed = type == D3D12_COMMAND_LIST_TYPE_COPY
         ? D3D12_RESOURCE_STATE_COPY_SOURCE | D3D12_RESOURCE_STATE_COPY_DEST
-        : D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER | D3D12_RESOURCE_STATE_UNORDERED_ACCESS |
-          D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT |
-          D3D12_RESOURCE_STATE_COPY_SOURCE | D3D12_RESOURCE_STATE_COPY_DEST | D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
-    if (type != D3D12_COMMAND_LIST_TYPE_DIRECT)
-        Assert(((access.InitialState | access.FirstState | access.FinalState) & ~allowed) == 0,
-            "External states require a transition on a different queue before recording.");
+        : type == D3D12_COMMAND_LIST_TYPE_COMPUTE
+            ? D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER | D3D12_RESOURCE_STATE_INDEX_BUFFER |
+              D3D12_RESOURCE_STATE_UNORDERED_ACCESS | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE |
+              D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT | D3D12_RESOURCE_STATE_COPY_SOURCE |
+              D3D12_RESOURCE_STATE_COPY_DEST | D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE
+            : D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER | D3D12_RESOURCE_STATE_INDEX_BUFFER |
+              D3D12_RESOURCE_STATE_RENDER_TARGET | D3D12_RESOURCE_STATE_UNORDERED_ACCESS |
+              D3D12_RESOURCE_STATE_DEPTH_READ | D3D12_RESOURCE_STATE_DEPTH_WRITE |
+              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE |
+              D3D12_RESOURCE_STATE_STREAM_OUT | D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT |
+              D3D12_RESOURCE_STATE_COPY_SOURCE | D3D12_RESOURCE_STATE_COPY_DEST |
+              D3D12_RESOURCE_STATE_RESOLVE_SOURCE | D3D12_RESOURCE_STATE_RESOLVE_DEST |
+              D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE |
+              D3D12_RESOURCE_STATE_SHADING_RATE_SOURCE | D3D12_RESOURCE_STATE_PREDICATION;
+    Assert(((access.InitialState | access.FirstState | access.FinalState) & ~allowed) == 0,
+        "External resource state is not supported by this command-list queue type.");
 }
 
 void ExternalCommandContext::BeginRecording()
