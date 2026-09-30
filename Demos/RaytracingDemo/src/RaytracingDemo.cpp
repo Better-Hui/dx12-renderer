@@ -3388,6 +3388,31 @@ void RaytracingDemo::EnsureRenderGraphTopology()
 //Modify Begin:2026-09-28 by Hui
 void RaytracingDemo::ResetAccumulation(const AccumulationResetScope scope)
 {
+    const auto getResetScopeName = [](const AccumulationResetScope resetScope)
+    {
+        switch (resetScope)
+        {
+        case AccumulationResetScope::SampleCountOnly: return "sample_count_only";
+        case AccumulationResetScope::OIDN: return "oidn";
+        case AccumulationResetScope::ReSTIRAndOIDN: return "restir_and_oidn";
+        case AccumulationResetScope::DenoisersAndDLSS: return "denoisers_and_dlss";
+        case AccumulationResetScope::AllHistory: return "all_history";
+        default: return "unknown";
+        }
+    };
+    if (m_Diagnostics.IsEnabled())
+    {
+        m_Diagnostics.Record(
+            "raytracing.accumulation",
+            "reset",
+            DiagnosticTelemetrySeverity::Info,
+            {
+                { "scope", std::string(getResetScopeName(scope)) },
+                { "sample_count_before_reset", static_cast<uint64_t>(m_AccumulationFrameIndex) },
+                { "manual_enabled", m_AccumulationEnabled },
+                { "effective_enabled", IsAccumulationActive() },
+            });
+    }
     bool resetReSTIRHistory = false;
     bool resetDenoiserHistory = false;
     bool resetOIDNHistory = false;
@@ -3605,6 +3630,23 @@ void RaytracingDemo::UpdateRenderGraphFrameState()
     state.ReSTIRGIStageTimingEnabled = m_GpuTimingEnabled && m_ReSTIRGIStageTimingEnabled;
     state.HasPreviousViewProjection = m_HasPreviousViewProjection;
     state.PreviousViewProjection = m_PreviousViewProjection;
+    if (m_Diagnostics.IsEnabled() &&
+        (m_FrameIndex == 0u || m_AccumulationFrameIndex == 0u || (m_FrameIndex % 60u) == 0u))
+    {
+        m_Diagnostics.Record(
+            "raytracing.accumulation",
+            "state",
+            DiagnosticTelemetrySeverity::Info,
+            {
+                { "manual_enabled", state.ManualAccumulationEnabled },
+                { "effective_enabled", state.AccumulationEnabled },
+                { "sample_count_before_frame", static_cast<uint64_t>(state.AccumulationFrameIndex) },
+                { "restir_di_history_valid", state.ReSTIRDIHistoryValid },
+                { "restir_gi_history_valid", state.ReSTIRGIHistoryValid },
+                { "denoiser_enabled", state.DenoiserEnabled },
+                { "frame_index", static_cast<uint64_t>(state.FrameIndex) },
+            });
+    }
 }
 //Modify End
 
