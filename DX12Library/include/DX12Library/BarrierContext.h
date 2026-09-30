@@ -167,6 +167,7 @@ private:
 #if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
     std::chrono::steady_clock::duration m_TrackLifetimeDuration{};
     std::chrono::steady_clock::duration m_PrepareResourceDuration{};
+    std::chrono::steady_clock::duration m_HeapPropertiesDuration{};
 #endif
 };
 
