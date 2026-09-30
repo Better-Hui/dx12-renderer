@@ -190,6 +190,7 @@ public:
         }
         else if (m_Kind == Kind::Upload)
         {
+            RegisterInput({ m_TokenBefore, RenderGraph::InputType::Token });
             if (m_CudaOutput.IsValid())
             {
                 RegisterInput({ m_CudaOutput.GetId(), RenderGraph::InputType::ExternalAccess });
@@ -811,7 +812,9 @@ void OIDNDenoiser::AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInpu
     builder.AddPass(std::make_unique<OidnGraphPass>(OidnGraphPass::Desc{
         .PassKind = OidnGraphPass::Kind::Upload,
         .Feature = this,
+        .Inputs = sharedInputs,
         .PassName = L"OIDN Result Upload",
+        .TokenBefore = readbackFinished,
         .TokenAfter = uploadFinished,
         .CudaOutput = cudaOutput,
         .Output = output,
