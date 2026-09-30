@@ -94,6 +94,12 @@ void BarrierContext::PrepareResource(
     }
 
     const LocalResourceState* previousState = FindLocalResourceState(resource, subresource);
+    if (previousState != nullptr &&
+        previousState->State == stateAfter &&
+        previousState->UavWrite == uavWrite)
+    {
+        return;
+    }
     if (previousState == nullptr || previousState->State != stateAfter)
     {
         Transition(resource, stateAfter, false, subresource);
