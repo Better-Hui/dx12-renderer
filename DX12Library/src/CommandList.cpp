@@ -5,6 +5,9 @@
 //Modify Begin:2026-09-29 by Hui
 #include "BarrierContext.h"
 //Modify End
+//Modify Begin:2026-09-30 by Hui
+#include "PerformanceScope.h"
+//Modify End
 
 #include "ConstantBuffer.h"
 #include "D3D12DeviceContext.h"
@@ -167,6 +170,7 @@ void CommandList::SetResourceBinding(
 void CommandList::PrepareBoundResources(const BindingPoint point,
     const std::span<const ResourceAccess> extraAccesses, const bool inputAssembler, const bool indexed)
 {
+    DX12_CPU_RECORDING_SCOPE("access.prepare");
     struct AccessState { D3D12_RESOURCE_STATES State; bool UavWrite; };
     std::map<ID3D12Resource*, std::map<UINT, AccessState>> resources;
     const auto merge = [](AccessState& target, const AccessState incoming)
@@ -265,6 +269,7 @@ void CommandList::ExecuteExternalCommandRecording(
 
 void CommandList::FlushResourceBarriers()
 {
+    DX12_CPU_RECORDING_SCOPE("barrier.flush");
     Assert(!m_ExternalCommandList || !m_PResourceStateTracker->HasPendingResourceBarriers(),
         "External resources need a declared before-state before recording GPU work.");
     m_PResourceStateTracker->FlushResourceBarriers(*this);
@@ -1013,6 +1018,7 @@ void CommandList::ClearUnorderedAccessUint(const Resource& resource, const UINT 
 //Modify Begin:2026-09-29 by Hui
 void CommandList::Dispatch(const uint32_t numGroupsX, const uint32_t numGroupsY, const uint32_t numGroupsZ)
 {
+    DX12_CPU_RECORDING_SCOPE("dispatch.record");
     PrepareBoundResources(BindingPoint::Compute);
     FlushResourceBarriers();
 

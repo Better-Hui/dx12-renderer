@@ -1,9 +1,10 @@
 #include <Framework/Rendering/Pipeline/PipelineDescriptorSet.h>
 
-//Modify Begin:2026-08-07 by Hui
+//Modify Begin:2026-09-30 by Hui
 
 #include <DX12Library/CommandList.h>
 #include <DX12Library/Helpers.h>
+#include <DX12Library/PerformanceScope.h>
 #include <Framework/Core/FrameworkDeviceContext.h>
 #include <DX12Library/StructuredBuffer.h>
 #include <Framework/Rendering/Pipeline/PipelineDescriptorPool.h>
@@ -172,6 +173,7 @@ UINT PipelineDescriptorSet::SetShaderResourceViews(
     std::string_view name,
     std::span<const ShaderResourceView> shaderResourceViews)
 {
+    DX12_CPU_RECORDING_SCOPE("descriptor_set.array_update");
     const DescriptorBindingInfo& binding = GetBinding(name, DescriptorBindingKind::ShaderResourceView);
     if (!shaderResourceViews.empty())
     {

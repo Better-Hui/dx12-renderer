@@ -5,6 +5,9 @@
 #include <DX12Library/ExternalCommandContext.h>
 #include <DX12Library/DiagnosticRenderScope.h>
 #include <DX12Library/Helpers.h>
+//Modify Begin:2026-09-30 by Hui
+#include <DX12Library/PerformanceScope.h>
+//Modify End
 #include <DX12Library/Resource.h>
 #include <DX12Library/RenderTarget.h>
 #include <DX12Library/ClearValue.h>
@@ -387,6 +390,9 @@ void CommandContext::SetDescriptorSet(
 
 void CommandContext::SetDescriptorSet(const PipelineBindPoint bindPoint, const PipelineDescriptorSet& descriptorSet) const
 {
+//Modify Begin:2026-09-30 by Hui
+    DX12_CPU_RECORDING_SCOPE("descriptor_set.bind");
+//Modify End
     EmitDescriptorSetTelemetry(bindPoint, descriptorSet);
     std::set<UINT> appliedRootParameters;
     for (const auto& [rootParameterIndex, boundResource] : descriptorSet.GetBoundResources())
@@ -781,10 +787,11 @@ bool CommandContext::TryApplyDescriptorTableBinding(
     return true;
 }
 
-//Modify Begin:2026-09-29 by Hui
+//Modify Begin:2026-09-30 by Hui
 void CommandContext::RecordResourceBindings(
     const PipelineBindPoint bindPoint, const PipelineDescriptorSet& descriptorSet, const UINT rootParameterIndex) const
 {
+    DX12_CPU_RECORDING_SCOPE("access.bind");
     const auto point = bindPoint == PipelineBindPoint::Graphics ?
         CommandList::BindingPoint::Graphics : CommandList::BindingPoint::Compute;
     m_CommandList.SetResourceBindings(point, rootParameterIndex, {});

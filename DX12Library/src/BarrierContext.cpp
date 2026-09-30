@@ -74,7 +74,10 @@ void BarrierContext::PrepareResource(
     }
 
     Transition(resource, stateAfter, false, subresource);
-    SetLocalResourceState(resource, subresource, { stateAfter, uavWrite });
+    const auto localState = m_LocalResourceStates.find({ resource, subresource });
+    Assert(localState != m_LocalResourceStates.end(),
+        "Transition must establish the resource's local state.");
+    localState->second.UavWrite = uavWrite;
 }
 
 void BarrierContext::Transition(
@@ -224,6 +227,7 @@ void BarrierContext::Flush()
 void BarrierContext::Reset()
 {
     m_LocalResourceStates.clear();
+    m_ExactSubresourcesByResource.clear();
     m_ExternalInitialStates.clear();
     m_UavAccesses.clear();
     m_OperationSerial = 0;
@@ -297,9 +301,19 @@ void BarrierContext::SetLocalResourceState(
 {
     if (subresource == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
     {
-        std::erase_if(
-            m_LocalResourceStates,
-            [resource](const auto& entry) { return entry.first.Resource == resource; });
+        if (const auto exact = m_ExactSubresourcesByResource.find(resource);
+            exact != m_ExactSubresourcesByResource.end())
+        {
+            for (const UINT index : exact->second)
+            {
+                m_LocalResourceStates.erase({ resource, index });
+            }
+            m_ExactSubresourcesByResource.erase(exact);
+        }
+    }
+    else
+    {
+        m_ExactSubresourcesByResource[resource].insert(subresource);
     }
     m_LocalResourceStates[{ resource, subresource }] = state;
 }

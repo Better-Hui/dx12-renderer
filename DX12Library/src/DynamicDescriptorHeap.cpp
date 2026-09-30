@@ -7,6 +7,9 @@
 #include "CommandList.h"
 
 #include "RootSignature.h"
+//Modify Begin:2026-09-30 by Hui
+#include "PerformanceScope.h"
+//Modify End
 
 //Modify Begin:2026-08-19 by Hui
 DynamicDescriptorHeap::DynamicDescriptorHeap(
@@ -152,6 +155,9 @@ void DynamicDescriptorHeap::CommitStagedDescriptors(CommandList& commandList,
 	std::function<void(ID3D12GraphicsCommandList*, UINT,
 		D3D12_GPU_DESCRIPTOR_HANDLE)> setFunc)
 {
+//Modify Begin:2026-09-30 by Hui
+    DX12_CPU_RECORDING_SCOPE("descriptor_heap.commit");
+//Modify End
 	uint32_t numDescriptorsToCommit = ComputeStaleDescriptorCount();
 
 	if (numDescriptorsToCommit > 0)

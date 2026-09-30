@@ -2,6 +2,9 @@
 
 #include <DX12Library/CommandList.h>
 #include <DX12Library/Helpers.h>
+//Modify Begin:2026-09-30 by Hui
+#include <DX12Library/PerformanceScope.h>
+//Modify End
 #include <DX12Library/ByteAddressBuffer.h>
 #include <DX12Library/StructuredBuffer.h>
 #include <Framework/Rendering/Pipeline/ComputeShader.h>
@@ -17,7 +20,7 @@
 
 #include <vector>
 
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-09-30 by Hui
 RaytracingDemoCameraConstants RaytracingDemoPassBindings::BuildPassCameraConstants(
     const RaytracingDemoPassResources& resources,
     const RaytracingDemoPassConfig& config,
@@ -107,6 +110,7 @@ void RaytracingDemoPassBindings::BindInlinePathTracingInputs(
     const StructuredBuffer* activeRayPixelIndices,
     const ByteAddressBuffer* activeRayPixelCount)
 {
+    DX12_CPU_RECORDING_SCOPE("scene_inputs.bind");
     const RayTracingAccelerationStructure& accelerationStructure = resources.Scene.GetRayTracingAccelerationStructure();
 
     if (shader.HasConstantBuffer("CameraConstants"))

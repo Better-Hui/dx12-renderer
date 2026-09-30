@@ -1,4 +1,4 @@
-//Modify Begin:2026-09-29 by Hui
+//Modify Begin:2026-09-30 by Hui
 #include "RenderGraphCommandExecutor.h"
 
 #include "RenderGraphProfiler.h"
@@ -24,6 +24,7 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <utility>
 
 namespace
@@ -184,7 +185,9 @@ RenderGraph::RenderGraphCommandExecutor::CreateDiagnosticRenderPassScope(
     desc.FrameIndex = frameIndex;
     desc.PassName = NarrowDiagnosticName(pass.GetPassName());
     desc.QueueName = GetDiagnosticQueueName(pass.GetQueue());
-    const auto addResource = [&desc](
+    std::unordered_map<ID3D12Resource*, size_t> declaredResourceIndices;
+    declaredResourceIndices.reserve(pass.GetExternalResourceAccesses().size());
+    const auto addResource = [&desc, &declaredResourceIndices](
         const Resource& resource,
         const ResourceId resourceId,
         std::string resourceName,
@@ -194,22 +197,19 @@ RenderGraph::RenderGraphCommandExecutor::CreateDiagnosticRenderPassScope(
         {
             return;
         }
-        resource.ForEachResourceRecursive([&desc, resourceId, &resourceName, access](const Resource& nestedResource)
+        resource.ForEachResourceRecursive([&desc, &declaredResourceIndices, resourceId, &resourceName, access](const Resource& nestedResource)
         {
             ID3D12Resource* resourceIdentity = nestedResource.GetD3D12Resource().Get();
             if (resourceIdentity == nullptr)
             {
                 return;
             }
-            const auto existing = std::ranges::find_if(
-                desc.DeclaredResources,
-                [resourceIdentity](const DX12Diagnostics::DiagnosticDeclaredResource& candidate)
-                {
-                    return candidate.ResourceIdentity == resourceIdentity;
-                });
-            if (existing != desc.DeclaredResources.end())
+            const auto [existing, inserted] = declaredResourceIndices.try_emplace(
+                resourceIdentity, desc.DeclaredResources.size());
+            if (!inserted)
             {
-                existing->Access = existing->Access | access;
+                auto& declared = desc.DeclaredResources[existing->second];
+                declared.Access = declared.Access | access;
                 return;
             }
             desc.DeclaredResources.push_back({
@@ -461,6 +461,9 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
                 GetDiagnosticQueueName(RenderPassQueue::Direct),
                 GetPassCorrelationId(*renderPass),
                 renderPass->IsExternal() ? "render_graph_external_pass" : "render_graph_pass");
+            DX12_CPU_RECORDING_PASS(
+                m_DiagnosticTelemetrySink, renderMetadata.m_FrameIndex,
+                GetPassCorrelationId(*renderPass), GetDiagnosticQueueName(RenderPassQueue::Direct));
             if (renderPass->IsExternal())
             {
                 {
@@ -500,19 +503,28 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
                 try
                 {
                     RenderPassContext passContext(commandList);
-                    RecordPassBoundaryBarriers(
-                        passContext,
-                        *renderPass,
-                        context,
-                        renderTargets,
-                        resourceStatePlans);
+                    {
+                        DX12_CPU_RECORDING_SCOPE("rg.boundary");
+                        RecordPassBoundaryBarriers(
+                            passContext, *renderPass, context, renderTargets, resourceStatePlans);
+                    }
                     RecordLocalAliasingBarriers(*renderPass, resourceStatePlans);
-                    const std::unique_ptr<DX12Diagnostics::DiagnosticRenderPassScope> diagnosticScope =
-                        CreateDiagnosticRenderPassScope(*renderPass, renderMetadata.m_FrameIndex);
-                    renderPass->Execute(context, passContext);
-                    passContext.Finish();
+                    std::unique_ptr<DX12Diagnostics::DiagnosticRenderPassScope> diagnosticScope;
+                    {
+                        DX12_CPU_RECORDING_SCOPE("rg.diagnostic_setup");
+                        diagnosticScope = CreateDiagnosticRenderPassScope(*renderPass, renderMetadata.m_FrameIndex);
+                    }
+                    {
+                        DX12_CPU_RECORDING_SCOPE("rg.execute");
+                        renderPass->Execute(context, passContext);
+                    }
+                    {
+                        DX12_CPU_RECORDING_SCOPE("rg.finish");
+                        passContext.Finish();
+                    }
                     if (diagnosticScope != nullptr)
                     {
+                        DX12_CPU_RECORDING_SCOPE("rg.validation");
                         EmitShaderAccessValidation(*diagnosticScope);
                     }
                 }
@@ -585,6 +597,9 @@ void RenderGraph::RenderGraphCommandExecutor::ExecuteParallelDirectBatch(
                     GetDiagnosticQueueName(RenderPassQueue::Direct),
                     GetPassCorrelationId(*renderPass),
                     "render_graph_pass_parallel");
+                DX12_CPU_RECORDING_PASS(
+                    m_DiagnosticTelemetrySink, renderMetadata.m_FrameIndex,
+                    GetPassCorrelationId(*renderPass), GetDiagnosticQueueName(RenderPassQueue::Direct));
                 auto commandList = m_DirectCommandQueue->GetCommandList();
                 FrameContext context(m_ResourcePool, renderMetadata);
                 const auto renderTargetIt = renderTargets.find(renderPass);
@@ -596,19 +611,28 @@ void RenderGraph::RenderGraphCommandExecutor::ExecuteParallelDirectBatch(
                 try
                 {
                     RenderPassContext passContext(*commandList);
-                    RecordPassBoundaryBarriers(
-                        passContext,
-                        *renderPass,
-                        context,
-                        renderTargets,
-                        resourceStatePlans);
-                    const std::unique_ptr<DX12Diagnostics::DiagnosticRenderPassScope> diagnosticScope =
-                        CreateDiagnosticRenderPassScope(*renderPass, renderMetadata.m_FrameIndex);
+                    {
+                        DX12_CPU_RECORDING_SCOPE("rg.boundary");
+                        RecordPassBoundaryBarriers(
+                            passContext, *renderPass, context, renderTargets, resourceStatePlans);
+                    }
+                    std::unique_ptr<DX12Diagnostics::DiagnosticRenderPassScope> diagnosticScope;
+                    {
+                        DX12_CPU_RECORDING_SCOPE("rg.diagnostic_setup");
+                        diagnosticScope = CreateDiagnosticRenderPassScope(*renderPass, renderMetadata.m_FrameIndex);
+                    }
                     PIXScope(*commandList, renderPass->GetPassName().c_str());
-                    renderPass->Execute(context, passContext);
-                    passContext.Finish();
+                    {
+                        DX12_CPU_RECORDING_SCOPE("rg.execute");
+                        renderPass->Execute(context, passContext);
+                    }
+                    {
+                        DX12_CPU_RECORDING_SCOPE("rg.finish");
+                        passContext.Finish();
+                    }
                     if (diagnosticScope != nullptr)
                     {
+                        DX12_CPU_RECORDING_SCOPE("rg.validation");
                         EmitShaderAccessValidation(*diagnosticScope);
                     }
                 }
@@ -755,23 +779,35 @@ void RenderGraph::RenderGraphCommandExecutor::ExecuteNonDirectBatch(
             GetDiagnosticQueueName(batch.Queue),
             GetPassCorrelationId(*pass),
             "render_graph_pass");
+        DX12_CPU_RECORDING_PASS(
+            m_DiagnosticTelemetrySink, renderMetadata.m_FrameIndex,
+            GetPassCorrelationId(*pass), GetDiagnosticQueueName(batch.Queue));
         context.SetRenderTargetInfo({});
         try
         {
             RenderPassContext passContext(*commandList);
-            RecordPassBoundaryBarriers(
-                passContext,
-                *pass,
-                context,
-                renderTargets,
-                resourceStatePlans);
-            const std::unique_ptr<DX12Diagnostics::DiagnosticRenderPassScope> diagnosticScope =
-                CreateDiagnosticRenderPassScope(*pass, renderMetadata.m_FrameIndex);
+            {
+                DX12_CPU_RECORDING_SCOPE("rg.boundary");
+                RecordPassBoundaryBarriers(
+                    passContext, *pass, context, renderTargets, resourceStatePlans);
+            }
+            std::unique_ptr<DX12Diagnostics::DiagnosticRenderPassScope> diagnosticScope;
+            {
+                DX12_CPU_RECORDING_SCOPE("rg.diagnostic_setup");
+                diagnosticScope = CreateDiagnosticRenderPassScope(*pass, renderMetadata.m_FrameIndex);
+            }
             PIXScope(*commandList, pass->GetPassName().c_str());
-            pass->Execute(context, passContext);
-            passContext.Finish();
+            {
+                DX12_CPU_RECORDING_SCOPE("rg.execute");
+                pass->Execute(context, passContext);
+            }
+            {
+                DX12_CPU_RECORDING_SCOPE("rg.finish");
+                passContext.Finish();
+            }
             if (diagnosticScope != nullptr)
             {
+                DX12_CPU_RECORDING_SCOPE("rg.validation");
                 EmitShaderAccessValidation(*diagnosticScope);
             }
         }
@@ -958,6 +994,7 @@ void RenderGraph::RenderGraphCommandExecutor::ApplyExternalResourceTransitions(
     RenderPassContext& passContext,
     const std::span<const PassExternalResourceTransition> transitions)
 {
+    DX12_CPU_RECORDING_SCOPE("rg.external_transitions");
     RenderGraphBarrierRecorder recorder(passContext);
     for (const PassExternalResourceTransition& transition : transitions)
     {

@@ -1,4 +1,4 @@
-//Modify Begin:2026-09-15 by Hui
+//Modify Begin:2026-09-30 by Hui
 #include <Automation/RaytracingDemoAutomation.h>
 
 #include <utility>
@@ -505,6 +505,28 @@ DemoAutomation::TestSuites RaytracingDemoAutomation::CreateTestSuites()
         makeStep(Action::DumpTiming, 1u, "timingdump=bounces5"),
         makeStep(Action::ReSTIRGIStageTiming, 0u, "restirgi-stage-timing=0"),
         makeStep(Action::GpuTiming, 0u, "timing=0"),
+    };
+    testSuites.RecordingProfile = {
+        makeStep(Action::GpuTiming, 1u, "recording-timing=1"),
+        makeStep(Action::DLSS, static_cast<uint32_t>(DLSSMode::Disabled), "recording-dlss=off"),
+        makeStep(Action::Denoiser, static_cast<uint32_t>(DenoiserController::Algorithm::Off), "recording-denoiser=off"),
+        makeStep(Action::PathTracingBackend, static_cast<uint32_t>(PathTracingBackend::InlineRayQuery), "recording-backend=inline"),
+        makeStep(Action::AsyncCompute, 0u, "recording-async=off"),
+        makeStep(Action::ParallelDirectCommandRecording, 0u, "recording-parallel=off"),
+        makeStep(Action::MaxBounces, 1u, "recording-bounces=1"),
+        makeStep(Action::IndirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::None), "recording-indirect=none"),
+        makeStep(Action::DirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::PathTracing), "recording-direct=pt"),
+        makeStep(Action::Wait, 0u, "recording-pt-warmup"),
+        makeStep(Action::Wait, 0u, "recording-pt-sample-1"),
+        makeStep(Action::Wait, 0u, "recording-pt-sample-2"),
+        makeStep(Action::Wait, 0u, "recording-pt-sample-3"),
+        makeStep(Action::Wait, 0u, "recording-pt-sample-4"),
+        makeStep(Action::DirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::ReSTIRDI), "recording-direct=restirdi"),
+        makeStep(Action::Wait, 0u, "recording-restirdi-warmup"),
+        makeStep(Action::Wait, 0u, "recording-restirdi-sample-1"),
+        makeStep(Action::Wait, 0u, "recording-restirdi-sample-2"),
+        makeStep(Action::Wait, 0u, "recording-restirdi-sample-3"),
+        makeStep(Action::Wait, 0u, "recording-restirdi-sample-4"),
     };
     testSuites.ReSTIRGIVariants = {
         makeStep(Action::GpuTiming, 1u, "timing=1"),

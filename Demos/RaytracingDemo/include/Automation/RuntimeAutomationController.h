@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-09-15 by Hui
+//Modify Begin:2026-09-30 by Hui
 #include <Framework/Diagnostics/AutomationRunner.h>
 
 #include <cstddef>
@@ -36,6 +36,7 @@ namespace DemoAutomation
         std::vector<Step> ReSTIRGIProfile;
         std::vector<Step> ReSTIRGIVariants;
         std::vector<Step> ReSTIRDIVariants;
+        std::vector<Step> RecordingProfile;
         std::vector<Step> Visual;
     };
 

@@ -1,4 +1,4 @@
-//Modify Begin:2026-09-15 by Hui
+//Modify Begin:2026-09-30 by Hui
 #include <Automation/RuntimeAutomationController.h>
 
 #include <Framework/Diagnostics/DiagnosticsSession.h>
@@ -179,6 +179,14 @@ void DemoAutomation::RuntimeAutomationController::Initialize(
             steps.resize(maxCases);
         }
     }
+    else if (mode == "recording-profile")
+    {
+        steps = testSuites.RecordingProfile;
+        if (stepMilliseconds.empty())
+        {
+            m_StepIntervalSeconds = 0.5;
+        }
+    }
     else if (mode == "visual")
     {
         steps = testSuites.Visual;
@@ -186,7 +194,7 @@ void DemoAutomation::RuntimeAutomationController::Initialize(
     else
     {
         throw std::runtime_error(
-            "RAYTRACING_DEMO_AUTOTEST must be 'core', 'stress', 'meshlet-indirect', 'copy', 'rtas', 'dynamic-scene', 'oidn', 'svgf', 'raster-gbuffer-motion', 'matrix', 'restirgi-profile', 'restirgi-variants', 'restirdi-variants', or 'visual'.");
+            "RAYTRACING_DEMO_AUTOTEST must be 'core', 'stress', 'meshlet-indirect', 'copy', 'rtas', 'dynamic-scene', 'oidn', 'svgf', 'raster-gbuffer-motion', 'matrix', 'restirgi-profile', 'restirgi-variants', 'restirdi-variants', 'recording-profile', or 'visual'.");
     }
 
     const std::string stepTimeoutSeconds = GetEnvironmentVariable("RAYTRACING_DEMO_AUTOTEST_TIMEOUT_SECONDS");

@@ -1,4 +1,4 @@
-//Modify Begin:2026-09-09 by Hui
+//Modify Begin:2026-09-30 by Hui
 #pragma once
 
 #include "DiagnosticTelemetry.h"
@@ -20,6 +20,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -244,6 +245,60 @@ namespace DX12Diagnostics
         bool m_Active = false;
     };
 #endif
+
+    struct RecordingScopeContext
+    {
+        DiagnosticTelemetrySink* Sink = nullptr;
+        uint64_t FrameIndex = DiagnosticTelemetryEvent::NoFrame;
+        uint64_t CorrelationId = 0;
+        std::string_view QueueName;
+    };
+
+    inline thread_local RecordingScopeContext ActiveRecordingScope = {};
+
+    class ScopedRecordingPass final
+    {
+    public:
+        ScopedRecordingPass(
+            DiagnosticTelemetrySink* sink,
+            const uint64_t frameIndex,
+            const uint64_t correlationId,
+            const std::string_view queueName) noexcept
+            : m_Previous(ActiveRecordingScope)
+        {
+            ActiveRecordingScope = frameIndex % 32u == 0u
+                ? RecordingScopeContext{ sink, frameIndex, correlationId, queueName }
+                : RecordingScopeContext{};
+        }
+
+        ~ScopedRecordingPass() noexcept { ActiveRecordingScope = m_Previous; }
+        ScopedRecordingPass(const ScopedRecordingPass&) = delete;
+        ScopedRecordingPass& operator=(const ScopedRecordingPass&) = delete;
+
+    private:
+        RecordingScopeContext m_Previous;
+    };
+
+    class ScopedRecordingStage final
+    {
+    public:
+        explicit ScopedRecordingStage(const std::string_view name) noexcept
+        {
+            const RecordingScopeContext& context = ActiveRecordingScope;
+            if (context.Sink != nullptr)
+            {
+                m_Scope.emplace(
+                    context.Sink, context.FrameIndex, name, context.QueueName,
+                    context.CorrelationId, "recording_stage");
+            }
+        }
+
+        ScopedRecordingStage(const ScopedRecordingStage&) = delete;
+        ScopedRecordingStage& operator=(const ScopedRecordingStage&) = delete;
+
+    private:
+        std::optional<ScopedCpuPerformanceScope> m_Scope;
+    };
 }
 
 #define DX12_RENDERER_PERFORMANCE_SCOPE_CONCATENATE_IMPL(left, right) left##right
@@ -253,10 +308,19 @@ namespace DX12Diagnostics
     ::DX12Diagnostics::ScopedCpuPerformanceScope \
         DX12_RENDERER_PERFORMANCE_SCOPE_CONCATENATE(dx12CpuPerformanceScope_, __COUNTER__)( \
             sink, frameIndex, name, queueName, correlationId, scopeKind)
+#define DX12_CPU_RECORDING_SCOPE(name) \
+    ::DX12Diagnostics::ScopedRecordingStage \
+        DX12_RENDERER_PERFORMANCE_SCOPE_CONCATENATE(dx12RecordingScope_, __COUNTER__)(name)
+#define DX12_CPU_RECORDING_PASS(sink, frameIndex, correlationId, queueName) \
+    ::DX12Diagnostics::ScopedRecordingPass \
+        DX12_RENDERER_PERFORMANCE_SCOPE_CONCATENATE(dx12RecordingPass_, __COUNTER__)( \
+            sink, frameIndex, correlationId, queueName)
 
 #else
 
 #define DX12_CPU_PERFORMANCE_SCOPE(...) static_cast<void>(0)
+#define DX12_CPU_RECORDING_SCOPE(...) static_cast<void>(0)
+#define DX12_CPU_RECORDING_PASS(...) static_cast<void>(0)
 
 #endif
 //Modify End

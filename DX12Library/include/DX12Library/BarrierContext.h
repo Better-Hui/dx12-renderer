@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 class CommandList;
@@ -155,6 +156,7 @@ private:
     std::unordered_map<ID3D12Resource*, UavAccess> m_UavAccesses;
     std::unordered_map<ResourceSubresourceKey, LocalResourceState, ResourceSubresourceKeyHash>
         m_LocalResourceStates;
+    std::unordered_map<ID3D12Resource*, std::unordered_set<UINT>> m_ExactSubresourcesByResource;
     // External callers provide the state owned by the host renderer. Keep the
     // first declaration stable for the lifetime of this recording context.
     std::unordered_map<ResourceSubresourceKey, D3D12_RESOURCE_STATES, ResourceSubresourceKeyHash>
