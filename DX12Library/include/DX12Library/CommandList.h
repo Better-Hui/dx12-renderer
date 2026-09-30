@@ -46,6 +46,7 @@
 //Modify Begin:2026-09-29 by Hui
 #include <map>
 #include <span>
+#include <unordered_set>
 //Modify End
 
 #include "ClearValue.h"
@@ -717,6 +718,9 @@ private:
     // is stored. The referenced objects are released when the command list is
     // reset.
     TrackedObjectsType m_TrackedObjects;
+//Modify Begin:2026-09-30 by Hui
+    std::unordered_set<ID3D12Resource*> m_TrackedResourceIdentities;
+//Modify End
 //Modify Begin:2026-08-12 by Hui
     std::vector<std::shared_ptr<ResourceStateRegistration>> m_TrackedResourceStateRegistrations;
 //Modify End

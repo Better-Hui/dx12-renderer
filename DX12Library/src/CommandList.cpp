@@ -1178,13 +1178,23 @@ void CommandList::TrackObject(const ComPtr<ID3D12Object>& object)
 
 void CommandList::TrackResource(const Resource& res)
 {
-    TrackObject(res.GetD3D12Resource());
+//Modify Begin:2026-09-30 by Hui
+    const Microsoft::WRL::ComPtr<ID3D12Resource> nativeResource = res.GetD3D12Resource();
+    if (!m_TrackedResourceIdentities.insert(nativeResource.Get()).second)
+    {
+        return;
+    }
+    TrackObject(nativeResource);
     m_TrackedResourceStateRegistrations.push_back(res.GetStateRegistration());
+//Modify End
 }
 
 void CommandList::ReleaseTrackedObjects()
 {
     m_TrackedResourceStateRegistrations.clear();
+//Modify Begin:2026-09-30 by Hui
+    m_TrackedResourceIdentities.clear();
+//Modify End
     m_TrackedObjects.clear();
 }
 

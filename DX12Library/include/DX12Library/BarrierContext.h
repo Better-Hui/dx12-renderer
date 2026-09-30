@@ -2,8 +2,11 @@
 
 //Modify Begin:2026-09-30 by Hui
 
+#include "PerformanceScope.h"
+
 #include <d3d12.h>
 
+#include <chrono>
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
@@ -161,6 +164,10 @@ private:
     // first declaration stable for the lifetime of this recording context.
     std::unordered_map<ResourceSubresourceKey, D3D12_RESOURCE_STATES, ResourceSubresourceKeyHash>
         m_ExternalInitialStates;
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+    std::chrono::steady_clock::duration m_TrackLifetimeDuration{};
+    std::chrono::steady_clock::duration m_PrepareResourceDuration{};
+#endif
 };
 
 //Modify End

@@ -7,6 +7,7 @@
 #include "D3D12DeviceContext.h"
 #include "Resource.h"
 #include "ResourceStateRegistry.h"
+#include "PerformanceScope.h"
 
 #include <algorithm>
 
@@ -24,8 +25,27 @@ void BarrierContext::Use(
     const UINT subresource)
 {
     Assert(resource.IsValid(), "BarrierContext cannot use an invalid resource.");
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+    const bool measureComponents = DX12Diagnostics::ActiveRecordingScope.Sink != nullptr;
+    const auto trackStart = measureComponents ? std::chrono::steady_clock::now() :
+        std::chrono::steady_clock::time_point{};
+#endif
     CommandListInternalAccess::TrackResourceLifetime(m_CommandList, resource);
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+    if (measureComponents)
+    {
+        m_TrackLifetimeDuration += std::chrono::steady_clock::now() - trackStart;
+    }
+    const auto prepareStart = measureComponents ? std::chrono::steady_clock::now() :
+        std::chrono::steady_clock::time_point{};
+#endif
     Use(resource.GetD3D12Resource().Get(), state, use, forceUavBarrier, subresource);
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+    if (measureComponents)
+    {
+        m_PrepareResourceDuration += std::chrono::steady_clock::now() - prepareStart;
+    }
+#endif
 }
 
 void BarrierContext::Use(
@@ -73,11 +93,12 @@ void BarrierContext::PrepareResource(
         access = { m_OperationSerial, uavWrite || (access.Operation == m_OperationSerial && access.Writes) };
     }
 
-    Transition(resource, stateAfter, false, subresource);
-    const auto localState = m_LocalResourceStates.find({ resource, subresource });
-    Assert(localState != m_LocalResourceStates.end(),
-        "Transition must establish the resource's local state.");
-    localState->second.UavWrite = uavWrite;
+    const LocalResourceState* previousState = FindLocalResourceState(resource, subresource);
+    if (previousState == nullptr || previousState->State != stateAfter)
+    {
+        Transition(resource, stateAfter, false, subresource);
+    }
+    SetLocalResourceState(resource, subresource, { stateAfter, uavWrite });
 }
 
 void BarrierContext::Transition(
@@ -222,6 +243,15 @@ void BarrierContext::AliasingBeforeFirstUse(const Resource& resource)
 void BarrierContext::Flush()
 {
     CommandListInternalAccess::FlushResourceBarriers(m_CommandList);
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+    if (DX12Diagnostics::ActiveRecordingScope.Sink != nullptr)
+    {
+        DX12Diagnostics::RecordAccumulatedRecordingStage("barrier.track_lifetime", m_TrackLifetimeDuration);
+        DX12Diagnostics::RecordAccumulatedRecordingStage("barrier.prepare_resource", m_PrepareResourceDuration);
+    }
+    m_TrackLifetimeDuration = {};
+    m_PrepareResourceDuration = {};
+#endif
 }
 
 void BarrierContext::Reset()
@@ -231,6 +261,10 @@ void BarrierContext::Reset()
     m_ExternalInitialStates.clear();
     m_UavAccesses.clear();
     m_OperationSerial = 0;
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+    m_TrackLifetimeDuration = {};
+    m_PrepareResourceDuration = {};
+#endif
 }
 
 void BarrierContext::CommitExternalResourceStates()
