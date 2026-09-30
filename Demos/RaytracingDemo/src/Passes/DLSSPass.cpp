@@ -74,9 +74,12 @@ void RaytracingDemoPasses::Builder::AddDLSSPass(
             inputs.FrameIndex = frameState.FrameIndex;
             inputs.HasPreviousViewProjection = frameState.HasPreviousViewProjection;
             inputs.View = frameState.View;
+            inputs.UnjitteredProjection = frameState.UnjitteredProjection;
+            inputs.UnjitteredViewProjection = frameState.UnjitteredViewProjection;
             inputs.Projection = frameState.Projection;
             inputs.ViewProjection = frameState.ViewProjection;
             inputs.PreviousViewProjection = frameState.PreviousViewProjection;
+            inputs.PreviousUnjitteredViewProjection = frameState.PreviousUnjitteredViewProjection;
             resources.Dlss.Execute(commandList, inputs);
         });
 }

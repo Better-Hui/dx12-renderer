@@ -232,6 +232,8 @@ struct RaytracingDemoFrameState
     float DLSSSharpness = 0.0f;
     DirectX::XMFLOAT2 DLSSJitterOffset = { 0.0f, 0.0f };
     DirectX::XMMATRIX View = DirectX::XMMatrixIdentity();
+    DirectX::XMMATRIX UnjitteredProjection = DirectX::XMMatrixIdentity();
+    DirectX::XMMATRIX UnjitteredViewProjection = DirectX::XMMatrixIdentity();
     DirectX::XMMATRIX Projection = DirectX::XMMatrixIdentity();
     DirectX::XMMATRIX ViewProjection = DirectX::XMMatrixIdentity();
     bool ManualAccumulationEnabled = false;
@@ -243,6 +245,7 @@ struct RaytracingDemoFrameState
     bool ReSTIRGIStageTimingEnabled = false;
     bool HasPreviousViewProjection = false;
     DirectX::XMMATRIX PreviousViewProjection = DirectX::XMMatrixIdentity();
+    DirectX::XMMATRIX PreviousUnjitteredViewProjection = DirectX::XMMatrixIdentity();
 
     static constexpr bool SupportsDirectLighting(
         const PathTracingBackend backend,

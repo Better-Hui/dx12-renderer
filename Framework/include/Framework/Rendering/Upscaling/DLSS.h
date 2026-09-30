@@ -53,9 +53,12 @@ struct DLSSExecutionInputs
     uint32_t FrameIndex = 0;
     bool HasPreviousViewProjection = false;
     DirectX::XMMATRIX View = DirectX::XMMatrixIdentity();
+    DirectX::XMMATRIX UnjitteredProjection = DirectX::XMMatrixIdentity();
+    DirectX::XMMATRIX UnjitteredViewProjection = DirectX::XMMatrixIdentity();
     DirectX::XMMATRIX Projection = DirectX::XMMatrixIdentity();
     DirectX::XMMATRIX ViewProjection = DirectX::XMMatrixIdentity();
     DirectX::XMMATRIX PreviousViewProjection = DirectX::XMMatrixIdentity();
+    DirectX::XMMATRIX PreviousUnjitteredViewProjection = DirectX::XMMatrixIdentity();
 };
 
 struct DLSSFrameGenerationInputs
@@ -71,9 +74,12 @@ struct DLSSFrameGenerationInputs
     bool HasPreviousViewProjection = false;
     DirectX::XMFLOAT2 JitterOffset = { 0.0f, 0.0f };
     DirectX::XMMATRIX View = DirectX::XMMatrixIdentity();
+    DirectX::XMMATRIX UnjitteredProjection = DirectX::XMMatrixIdentity();
+    DirectX::XMMATRIX UnjitteredViewProjection = DirectX::XMMatrixIdentity();
     DirectX::XMMATRIX Projection = DirectX::XMMatrixIdentity();
     DirectX::XMMATRIX ViewProjection = DirectX::XMMatrixIdentity();
     DirectX::XMMATRIX PreviousViewProjection = DirectX::XMMatrixIdentity();
+    DirectX::XMMATRIX PreviousUnjitteredViewProjection = DirectX::XMMatrixIdentity();
 };
 
 class DLSS final

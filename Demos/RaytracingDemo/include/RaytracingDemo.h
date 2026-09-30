@@ -311,6 +311,9 @@ private:
 
     float m_DeltaTime = 0.0f;
     DirectX::XMMATRIX m_PreviousViewProjection = DirectX::XMMatrixIdentity();
+//Modify Begin:2026-09-30 by Hui
+    DirectX::XMMATRIX m_PreviousUnjitteredViewProjection = DirectX::XMMatrixIdentity();
+//Modify End
     uint32_t m_FrameIndex = 0;
     uint32_t m_AccumulationFrameIndex = 0;
 //Modify Begin:2026-09-28 by Hui

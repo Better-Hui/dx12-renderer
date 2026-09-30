@@ -174,15 +174,17 @@ namespace
     sl::Constants BuildStreamlineConstants(const Inputs& inputs, const bool reset)
     {
         const DirectX::XMMATRIX clipToPreviousClip = DirectX::XMMatrixMultiply(
-            DirectX::XMMatrixInverse(nullptr, inputs.ViewProjection),
-            inputs.HasPreviousViewProjection ? inputs.PreviousViewProjection : inputs.ViewProjection);
+            DirectX::XMMatrixInverse(nullptr, inputs.UnjitteredViewProjection),
+            inputs.HasPreviousViewProjection
+                ? inputs.PreviousUnjitteredViewProjection
+                : inputs.UnjitteredViewProjection);
         const DirectX::XMMATRIX inverseView = DirectX::XMMatrixInverse(nullptr, inputs.View);
         DirectX::XMFLOAT4X4 inverseViewValues{};
         DirectX::XMStoreFloat4x4(&inverseViewValues, inverseView);
 
         sl::Constants constants{};
-        constants.cameraViewToClip = GetStreamlineMatrix(inputs.Projection);
-        constants.clipToCameraView = GetStreamlineMatrix(DirectX::XMMatrixInverse(nullptr, inputs.Projection));
+        constants.cameraViewToClip = GetStreamlineMatrix(inputs.UnjitteredProjection);
+        constants.clipToCameraView = GetStreamlineMatrix(DirectX::XMMatrixInverse(nullptr, inputs.UnjitteredProjection));
         constants.clipToPrevClip = GetStreamlineMatrix(clipToPreviousClip);
         constants.prevClipToClip = GetStreamlineMatrix(DirectX::XMMatrixInverse(nullptr, clipToPreviousClip));
         constants.jitterOffset = { inputs.JitterOffset.x, inputs.JitterOffset.y };

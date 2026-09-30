@@ -134,6 +134,7 @@ void RaytracingDemo::FinalizeRenderedFrame()
         m_MaxBounces > 1;
 
     m_PreviousViewProjection = m_RenderGraphFrameState->ViewProjection;
+    m_PreviousUnjitteredViewProjection = m_RenderGraphFrameState->UnjitteredViewProjection;
     m_HasPreviousViewProjection = true;
 }
 //Modify End

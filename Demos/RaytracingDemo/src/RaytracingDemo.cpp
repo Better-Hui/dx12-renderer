@@ -1059,6 +1059,8 @@ void RaytracingDemo::LoadStartupConfiguration()
     const std::filesystem::path configurationPath = runtimeRoot / "Config" / "RaytracingDemo.ini";
     StartupIni configuration = StartupIni::Load(configurationPath);
     m_StartupConfigurationStatus = configuration.GetStatus();
+    int configurationVersion = 0;
+    configuration.TryGetInt("Config", "Version", configurationVersion);
 //Modify End
 
     auto applyBackend = [&](const char* section, const char* key)
@@ -1395,6 +1397,13 @@ void RaytracingDemo::LoadStartupConfiguration()
     if (configuration.TryGetBoolean("ReSTIRDI", "SpatialResampling", boolValue))
     {
         restirDISettings.EnableSpatialResampling = boolValue;
+    }
+    if (configurationVersion < 2)
+    {
+        // Version 1 deployments copied a stale runtime template with spatial
+        // DI disabled. Version 2 makes the framework default authoritative for
+        // that one-time migration; later saves preserve the user's choice.
+        restirDISettings.EnableSpatialResampling = true;
     }
     if (configuration.TryGetString("ReSTIRDI", "SpatialBiasCorrection", stringValue))
     {
@@ -1921,6 +1930,8 @@ void RaytracingDemo::SaveRuntimeConfiguration()
 
     stream << "; RaytracingDemo project settings.\n"
            << "; Saved by the ImGui settings action and loaded on the next launch.\n\n"
+           << "[Config]\n"
+           << "Version = 2\n\n"
            << "[Renderer]\n"
            << "PathTracingBackend = " << (m_PathTracingBackend == PathTracingBackend::ShaderTableDxr ? "dxr" : "inline") << '\n'
            << "PathTracingDispatch = " << (m_PathTracingDispatchMode == PathTracingDispatchMode::CompactedIndirect ? "compacted-indirect" : "full-resolution") << '\n'
@@ -3614,7 +3625,9 @@ void RaytracingDemo::UpdateRenderGraphFrameState()
     state.DLSSSharpness = dlssSettings.Sharpness;
     state.DLSSJitterOffset = m_DLSS.GetJitterOffset(m_FrameIndex);
     state.View = GetSceneCamera().GetViewMatrix();
-    state.Projection = GetSceneCamera().GetProjectionMatrix();
+    state.UnjitteredProjection = GetSceneCamera().GetProjectionMatrix();
+    state.UnjitteredViewProjection = state.View * state.UnjitteredProjection;
+    state.Projection = state.UnjitteredProjection;
     if (state.DLSSEnabled)
     {
         state.Projection.r[2].m128_f32[0] += 2.0f * state.DLSSJitterOffset.x / static_cast<float>(state.Width);
@@ -3630,6 +3643,9 @@ void RaytracingDemo::UpdateRenderGraphFrameState()
     state.ReSTIRGIStageTimingEnabled = m_GpuTimingEnabled && m_ReSTIRGIStageTimingEnabled;
     state.HasPreviousViewProjection = m_HasPreviousViewProjection;
     state.PreviousViewProjection = m_PreviousViewProjection;
+    state.PreviousUnjitteredViewProjection = m_HasPreviousViewProjection
+        ? m_PreviousUnjitteredViewProjection
+        : state.UnjitteredViewProjection;
     if (m_Diagnostics.IsEnabled() &&
         (m_FrameIndex == 0u || m_AccumulationFrameIndex == 0u || (m_FrameIndex % 60u) == 0u))
     {
@@ -3731,9 +3747,12 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
         m_FrameGenerationInputs.HasPreviousViewProjection = m_RenderGraphFrameState->HasPreviousViewProjection;
         m_FrameGenerationInputs.JitterOffset = m_RenderGraphFrameState->DLSSJitterOffset;
         m_FrameGenerationInputs.View = m_RenderGraphFrameState->View;
+        m_FrameGenerationInputs.UnjitteredProjection = m_RenderGraphFrameState->UnjitteredProjection;
+        m_FrameGenerationInputs.UnjitteredViewProjection = m_RenderGraphFrameState->UnjitteredViewProjection;
         m_FrameGenerationInputs.Projection = m_RenderGraphFrameState->Projection;
         m_FrameGenerationInputs.ViewProjection = m_RenderGraphFrameState->ViewProjection;
         m_FrameGenerationInputs.PreviousViewProjection = m_RenderGraphFrameState->PreviousViewProjection;
+        m_FrameGenerationInputs.PreviousUnjitteredViewProjection = m_RenderGraphFrameState->PreviousUnjitteredViewProjection;
         m_DLSS.PrepareFrameGeneration(m_FrameGenerationInputs);
     }
     renderGraph.SetGpuTimestampProfiler(m_GpuTimingEnabled ? &m_GpuTimestampProfiler : nullptr);
