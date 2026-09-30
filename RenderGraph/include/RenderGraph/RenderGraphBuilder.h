@@ -210,33 +210,18 @@ namespace RenderGraph
                 const RenderContext& context,
                 RenderPassContext& passContext) mutable
             {
-                if constexpr (std::is_invocable_v<
-                                  ExecuteT&,
-                                  const PassDataT&,
-                                  const RenderContext&,
-                                  RenderPassContext&>)
-                {
-                    std::invoke(
-                        executeFunc,
-                        static_cast<const PassDataT&>(*passData),
-                        context,
-                        passContext);
-                }
-                else
-                {
-                    static_assert(
-                        std::is_invocable_v<
-                            ExecuteT&,
-                            const PassDataT&,
-                            const RenderContext&,
-                            CommandList&>,
-                        "RenderGraph execute callback must accept RenderPassContext& or CommandList&.");
-                    std::invoke(
-                        executeFunc,
-                        static_cast<const PassDataT&>(*passData),
-                        context,
-                        passContext.GetCommandList());
-                }
+                static_assert(
+                    std::is_invocable_v<
+                        ExecuteT&,
+                        const PassDataT&,
+                        const RenderContext&,
+                        RenderPassContext&>,
+                    "RenderGraph execute callback must accept RenderPassContext&.");
+                std::invoke(
+                    executeFunc,
+                    static_cast<const PassDataT&>(*passData),
+                    context,
+                    passContext);
             };
             AddPass(passBuilder.Build(passName, std::move(execute)));
         }

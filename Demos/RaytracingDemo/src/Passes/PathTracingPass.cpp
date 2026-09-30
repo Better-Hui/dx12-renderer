@@ -87,8 +87,9 @@ namespace
                 passData.Resource = resource;
                 passBuilder.WriteUav(resource);
             },
-            [](const ClearUavPassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
+            [](const ClearUavPassData& passData, const RenderGraph::RenderContext& context, RenderGraph::RenderPassContext& passContext)
             {
+                CommandList& commandList = passContext.GetCommandList();
                 const UINT clearValues[4] = {};
                 commandList.ClearUnorderedAccessUint(context.GetResource(passData.Resource), clearValues);
             });
@@ -145,11 +146,12 @@ void RaytracingDemoPasses::Builder::AddActivePixelCompactionPasses(
             passBuilder.WriteUav(DemoResourceIds::ActiveRayPixelCount);
             passBuilder.WriteToken(DemoResourceIds::ActiveRayPixelCompactionFinishedToken);
         },
-        [](const PathTracingActivePixelCompactionPassData& passData, const RenderContext& context, CommandList& cmd)
+        [](const PathTracingActivePixelCompactionPassData& passData, const RenderContext& context, RenderGraph::RenderPassContext& passContext)
         {
+            CommandList& cmd = passContext.GetCommandList();
             const RaytracingDemoPassResources& resources = passData.Resources.value();
             ComputeShader& shader = resources.ActivePixels.GetCompactionShader();
-            CommandContext commandContext(cmd);
+            CommandContext commandContext(cmd, passContext.GetBarrierContext());
             commandContext.BindBindlessDescriptorHeap(resources.Scene.GetBindlessDescriptorHeap());
             const ActivePixelCompactionConstants compactionConstants = {
                 .Width = context.GetMetadata().m_ScreenWidth,
@@ -204,8 +206,9 @@ void RaytracingDemoPasses::Builder::AddActivePixelCompactionPasses(
                 }
                 passBuilder.WriteToken(DemoResourceIds::DxrCompactedDispatchTemplateFinishedToken);
             },
-            [](const PathTracingDxrCompactedDispatchTemplatePassData& passData, const RenderContext& context, CommandList& cmd)
+            [](const PathTracingDxrCompactedDispatchTemplatePassData& passData, const RenderContext& context, RenderGraph::RenderPassContext& passContext)
             {
+                CommandList& cmd = passContext.GetCommandList();
                 const RaytracingDemoPassResources& resources = passData.Resources.value();
                 if (passData.PrepareDirectLighting)
                 {
@@ -273,15 +276,16 @@ void RaytracingDemoPasses::Builder::AddActivePixelCompactionPasses(
                 passBuilder.WriteToken(DemoResourceIds::ActivePixelComputeDispatchReadyToken);
             }
         },
-        [](const PathTracingCompactDispatchFinalizePassData& passData, const RenderContext& context, CommandList& cmd)
+        [](const PathTracingCompactDispatchFinalizePassData& passData, const RenderContext& context, RenderGraph::RenderPassContext& passContext)
         {
+            CommandList& cmd = passContext.GetCommandList();
             const RaytracingDemoPassResources& resources = passData.Resources.value();
-            const auto finalize = [&resources, &context, &cmd](
+            const auto finalize = [&resources, &context, &cmd, &passContext](
                 ComputeShader& shader,
                 const UnorderedAccessView& indirectArguments,
                 const char* countBinding)
             {
-                CommandContext commandContext(cmd);
+                CommandContext commandContext(cmd, passContext.GetBarrierContext());
                 commandContext.BindBindlessDescriptorHeap(resources.Scene.GetBindlessDescriptorHeap());
                 commandContext.SetShaderResource(
                     shader,
@@ -348,8 +352,9 @@ void RaytracingDemoPasses::Builder::AddActivePixelCompactionPasses(
             passBuilder.ReadCopySource(DemoResourceIds::ActivePixelDispatchData);
             passBuilder.WriteToken(DemoResourceIds::ActiveRayPixelCountReadbackFinishedToken);
         },
-        [](const PathTracingActiveRayCountReadbackPassData& passData, const RenderContext& context, CommandList& cmd)
+        [](const PathTracingActiveRayCountReadbackPassData& passData, const RenderContext& context, RenderGraph::RenderPassContext& passContext)
         {
+            CommandList& cmd = passContext.GetCommandList();
             const RaytracingDemoPassResources& resources = passData.Resources.value();
             static_cast<void>(resources.ActivePixels.RecordCountReadback(
                 cmd,
@@ -415,8 +420,9 @@ void RaytracingDemoPasses::Builder::AddDirectLightingPass(
                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
             passBuilder.SetParallelRecordingEligible(backend == PathTracingBackend::InlineRayQuery);
         },
-        [](const PathTracingLightingPassData& passData, const RenderContext& context, CommandList& cmd)
+        [](const PathTracingLightingPassData& passData, const RenderContext& context, RenderGraph::RenderPassContext& passContext)
         {
+            CommandList& cmd = passContext.GetCommandList();
             const RaytracingDemoPassResources& resources = passData.Resources.value();
             const RaytracingDemoPassConfig& config = passData.Config;
             const PathTracingBackend backend = passData.Backend;
@@ -442,7 +448,7 @@ void RaytracingDemoPasses::Builder::AddDirectLightingPass(
             if (backend == PathTracingBackend::InlineRayQuery)
             {
                 ComputeShader& directLightingShader = resources.Pipelines.GetInlineDirectLightingShader();
-                CommandContext commandContext(cmd);
+                CommandContext commandContext(cmd, passContext.GetBarrierContext());
                 RaytracingDemoPassBindings::BindInlinePathTracingInputs(
                     resources,
                     commandContext,
@@ -490,7 +496,7 @@ void RaytracingDemoPasses::Builder::AddDirectLightingPass(
                 }
                 else
                 {
-                    CommandContext commandContext(cmd);
+                    CommandContext commandContext(cmd, passContext.GetBarrierContext());
                     commandContext.BindBindlessDescriptorHeap(resources.Scene.GetBindlessDescriptorHeap());
                     commandContext.BindPipeline(resources.Pipelines.GetRayTracingShader());
                     commandContext.BindDescriptorSet(directBindingSet);
@@ -566,8 +572,9 @@ void RaytracingDemoPasses::Builder::AddIndirectLightingPass(
     const auto executePass = [](
         const PathTracingLightingPassData& passData,
         const RenderContext& context,
-        CommandList& cmd)
+        RenderGraph::RenderPassContext& passContext)
     {
+            CommandList& cmd = passContext.GetCommandList();
             const RaytracingDemoPassResources& resources = passData.Resources.value();
             const RaytracingDemoPassConfig& config = passData.Config;
             const PathTracingBackend backend = passData.Backend;
@@ -593,7 +600,7 @@ void RaytracingDemoPasses::Builder::AddIndirectLightingPass(
             if (backend == PathTracingBackend::InlineRayQuery)
             {
                 ComputeShader& indirectLightingShader = resources.Pipelines.GetInlineIndirectLightingShader();
-                CommandContext commandContext(cmd);
+                CommandContext commandContext(cmd, passContext.GetBarrierContext());
                 RaytracingDemoPassBindings::BindInlinePathTracingInputs(
                     resources,
                     commandContext,
@@ -641,7 +648,7 @@ void RaytracingDemoPasses::Builder::AddIndirectLightingPass(
                 }
                 else
                 {
-                    CommandContext commandContext(cmd);
+                    CommandContext commandContext(cmd, passContext.GetBarrierContext());
                     commandContext.BindBindlessDescriptorHeap(resources.Scene.GetBindlessDescriptorHeap());
                     commandContext.BindPipeline(resources.Pipelines.GetRayTracingShader());
                     commandContext.BindDescriptorSet(indirectBindingSet);
@@ -714,8 +721,9 @@ void RaytracingDemoPasses::Builder::AddLightingCompositePass(
             passBuilder.SetParallelRecordingEligible(
                 config.FrameState->Backend == PathTracingBackend::InlineRayQuery);
         },
-        [](const LightingCompositePassData& passData, const RenderContext& context, CommandList& cmd)
+        [](const LightingCompositePassData& passData, const RenderContext& context, RenderGraph::RenderPassContext& passContext)
         {
+            CommandList& cmd = passContext.GetCommandList();
             const RaytracingDemoPassResources& resources = passData.Resources.value();
             const RaytracingDemoPassConfig& config = passData.Config;
             const PathTracingCompositeFeatures& features = passData.Features;
@@ -729,7 +737,7 @@ void RaytracingDemoPasses::Builder::AddLightingCompositePass(
                 camera,
                 features);
 //Modify Begin:2026-07-28 by Hui
-            CommandContext commandContext(cmd);
+             CommandContext commandContext(cmd, passContext.GetBarrierContext());
             commandContext.BindPipeline(compositeShader);
             commandContext.BindDescriptorSet(compositeShader.GetDescriptorSet());
             commandContext.Dispatch(Math::DivideByMultiple(camera.Width, 8u), Math::DivideByMultiple(camera.Height, 8u), 1u);

@@ -260,11 +260,12 @@ protected:
     void ExecuteImpl(const RenderGraph::RenderContext& context, RenderGraph::RenderPassContext& passContext) override
     {
         CommandList& commandList = passContext.GetCommandList();
+        CommandContext commandContext(commandList, passContext.GetBarrierContext());
         const NRD::GraphInputs& inputs = *m_Inputs;
         if (m_Kind == Kind::Prepare)
         {
             m_Feature.PrepareInputs(
-                commandList,
+                commandContext,
                 inputs.ResolveFrameMatrices(),
                 context.GetTexture(inputs.GBufferSpecularSmoothness),
                 context.GetTexture(inputs.GBufferNormal),
@@ -280,7 +281,7 @@ protected:
         else if (m_Kind == Kind::Denoise)
         {
             m_Feature.Denoise(
-                commandList,
+                commandContext,
                 inputs.ResolveFrameMatrices(),
                 context.GetTexture(inputs.NoisyRadiance),
                 context.GetTexture(inputs.NormalRoughness),
@@ -293,7 +294,7 @@ protected:
         else
         {
             m_Feature.Composite(
-                commandList,
+                commandContext,
                 context.GetTexture(inputs.DenoisedRadiance),
                 context.GetTexture(inputs.Depth),
                 context.GetTexture(inputs.GBufferAlbedoOcclusion),
@@ -435,7 +436,7 @@ bool NRD::EnsureCreated(const uint32_t width, const uint32_t height)
 }
 
 void NRD::PrepareInputs(
-    CommandList& commandList,
+    CommandContext& commandContext,
     const FrameMatrices& frameMatrices,
     const std::shared_ptr<Texture>& gBufferSpecularSmoothness,
     const std::shared_ptr<Texture>& gBufferNormal,
@@ -455,7 +456,6 @@ void NRD::PrepareInputs(
     constants.Width = width;
     constants.Height = height;
 
-    const CommandContext commandContext(commandList);
     commandContext.SetConstantBuffer(*m_PrepareShader, "NRDInputAdapterConstants", constants);
     commandContext.SetTexture(*m_PrepareShader, "GBufferSpecularSmoothness", ShaderResourceView(gBufferSpecularSmoothness));
     commandContext.SetTexture(*m_PrepareShader, "GBufferNormal", ShaderResourceView(gBufferNormal));
@@ -471,7 +471,7 @@ void NRD::PrepareInputs(
 }
 
 void NRD::Denoise(
-    CommandList& commandList,
+    CommandContext& commandContext,
     const FrameMatrices& frameMatrices,
     const std::shared_ptr<Texture>& noisyRadiance,
     const std::shared_ptr<Texture>& nrdNormalRoughness,
@@ -481,6 +481,7 @@ void NRD::Denoise(
     const uint32_t width,
     const uint32_t height)
 {
+    CommandList& commandList = commandContext.GetCommandList();
     nrd::CommonSettings commonSettings = {};
     const XMMATRIX currentView = frameMatrices.WorldToView;
     const XMMATRIX currentProjection = frameMatrices.ViewToClip;
@@ -602,7 +603,7 @@ void NRD::Denoise(
 }
 
 void NRD::Composite(
-    CommandList& commandList,
+    CommandContext& commandContext,
     const std::shared_ptr<Texture>& denoisedRadiance,
     const std::shared_ptr<Texture>& depthTexture,
     const std::shared_ptr<Texture>& gBufferAlbedoOcclusion,
@@ -616,7 +617,6 @@ void NRD::Composite(
     constants.Height = height;
     constants.DenoiserMode = static_cast<uint32_t>(m_Settings.Mode);
 
-    const CommandContext commandContext(commandList);
     commandContext.SetConstantBuffer(*m_CompositeShader, "NRDOutputCompositeConstants", constants);
     commandContext.SetTexture(*m_CompositeShader, "DenoisedRadiance", ShaderResourceView(denoisedRadiance));
     commandContext.SetTexture(*m_CompositeShader, "DepthTexture", ShaderResourceView::DepthAsFloat(depthTexture));

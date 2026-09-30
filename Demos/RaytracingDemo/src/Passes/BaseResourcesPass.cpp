@@ -431,11 +431,12 @@ namespace
                 passBuilder.WriteExternal(*meshletResources.MeshDispatchArguments, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
                 passBuilder.WriteToken(DemoResourceIds::MeshletCounterResetToken);
             },
-            [](const MeshletPassData& passData, const RenderGraph::RenderContext&, CommandList& commandList)
+             [](const MeshletPassData& passData, const RenderGraph::RenderContext&, RenderGraph::RenderPassContext& passContext)
             {
+                 CommandList& commandList = passContext.GetCommandList();
                 const MeshletGpuResources meshletResources = passData.Resources->Scene.GetMeshletGpuResources();
                 const UINT clearValues[4] = {};
-                CommandContext commandContext(commandList);
+                 CommandContext commandContext(commandList, passContext.GetBarrierContext());
                 commandContext.ClearUnorderedAccessUint(meshletResources.VisibleDrawIndices->GetCounterBuffer(), clearValues);
                 commandContext.ClearUnorderedAccessUint(*meshletResources.CandidateExpandDispatchArguments, clearValues);
                 commandContext.ClearUnorderedAccessUint(*meshletResources.FineCullDispatchArguments, clearValues);
@@ -466,8 +467,9 @@ namespace
                 passBuilder.WriteExternal(*meshletResources.CandidateExpandDispatchArguments, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
                 passBuilder.WriteToken(DemoResourceIds::MeshletCullFinishedToken);
             },
-            [](const MeshletPassData& passData, const RenderGraph::RenderContext&, CommandList& commandList)
+             [](const MeshletPassData& passData, const RenderGraph::RenderContext&, RenderGraph::RenderPassContext& passContext)
             {
+                 CommandList& commandList = passContext.GetCommandList();
                 const RaytracingDemoPassResources& resources = passData.Resources.value();
                 RecordMeshletInstanceCull(resources, commandList, resources.Scene.GetMeshletGpuResources(),
                     passData.Config.FrameState->UseMeshletInstanceCull);
@@ -495,8 +497,9 @@ namespace
                 passBuilder.WriteExternal(meshletResources.CandidateInstances->GetCounterBuffer(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
                 passBuilder.WriteToken(DemoResourceIds::MeshletCandidateExpandFinishedToken);
             },
-            [](const MeshletPassData& passData, const RenderGraph::RenderContext&, CommandList& commandList)
+             [](const MeshletPassData& passData, const RenderGraph::RenderContext&, RenderGraph::RenderPassContext& passContext)
             {
+                 CommandList& commandList = passContext.GetCommandList();
                 const RaytracingDemoPassResources& resources = passData.Resources.value();
                 RecordMeshletCandidateExpand(resources, commandList, resources.Scene.GetMeshletGpuResources());
             });
@@ -528,8 +531,9 @@ namespace
                 passBuilder.WriteExternal(*meshletResources.MeshDispatchArguments, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
                 passBuilder.WriteToken(DemoResourceIds::MeshletFineCullFinishedToken);
             },
-            [writeDrawCommands](const MeshletPassData& passData, const RenderGraph::RenderContext&, CommandList& commandList)
+             [writeDrawCommands](const MeshletPassData& passData, const RenderGraph::RenderContext&, RenderGraph::RenderPassContext& passContext)
             {
+                 CommandList& commandList = passContext.GetCommandList();
                 const RaytracingDemoPassResources& resources = passData.Resources.value();
                 RecordMeshletFineCull(resources, commandList, resources.Scene.GetMeshletGpuResources(), writeDrawCommands);
             });
@@ -558,8 +562,9 @@ namespace
                     D3D12_RESOURCE_STATE_COPY_SOURCE);
                 passBuilder.WriteToken(DemoResourceIds::MeshletStatisticsReadbackFinishedToken);
             },
-            [](const MeshletPassData& passData, const RenderGraph::RenderContext&, CommandList& commandList)
+             [](const MeshletPassData& passData, const RenderGraph::RenderContext&, RenderGraph::RenderPassContext& passContext)
             {
+                 CommandList& commandList = passContext.GetCommandList();
                 const RaytracingDemoPassResources& resources = passData.Resources.value();
                 const MeshletGpuResources meshletResources = resources.Scene.GetMeshletGpuResources();
                 resources.MeshletCullingStatistics.RecordReadback(
@@ -595,8 +600,9 @@ namespace
                 passBuilder.ReadIndirectArgument(*meshletResources.MeshDispatchArguments);
                 passBuilder.WriteToken(DemoResourceIds::BaseResourcesFinishedToken);
             },
-            [](const MeshletPassData& passData, const RenderGraph::RenderContext&, CommandList& commandList)
+             [](const MeshletPassData& passData, const RenderGraph::RenderContext&, RenderGraph::RenderPassContext& passContext)
             {
+                 CommandList& commandList = passContext.GetCommandList();
                 const RaytracingDemoPassResources& resources = passData.Resources.value();
                 RecordTaskMeshGBuffer(resources, passData.Config, commandList, resources.Scene.GetMeshletGpuResources());
             });
@@ -626,8 +632,9 @@ namespace
                 passBuilder.ReadIndirectArgument(*meshletResources.IndirectCommands);
                 passBuilder.WriteToken(DemoResourceIds::BaseResourcesFinishedToken);
             },
-            [](const MeshletPassData& passData, const RenderGraph::RenderContext&, CommandList& commandList)
+            [](const MeshletPassData& passData, const RenderGraph::RenderContext&, RenderGraph::RenderPassContext& passContext)
             {
+                CommandList& commandList = passContext.GetCommandList();
                 const RaytracingDemoPassResources& resources = passData.Resources.value();
                 RecordMeshletIndirectGBuffer(
                     resources,
@@ -676,8 +683,9 @@ void RaytracingDemoPasses::Builder::AddBaseResourcesPass(
             }
             passBuilder.WriteToken(DemoResourceIds::BaseResourcesFinishedToken);
         },
-        [](const BaseResourcesPassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
+         [](const BaseResourcesPassData& passData, const RenderGraph::RenderContext& context, RenderGraph::RenderPassContext& passContext)
         {
+             CommandList& commandList = passContext.GetCommandList();
             const RaytracingDemoPassResources& resources = passData.Resources.value();
             UpdateSceneGpuResources(resources, commandList, context);
             if (passData.UsesMeshletPipeline)

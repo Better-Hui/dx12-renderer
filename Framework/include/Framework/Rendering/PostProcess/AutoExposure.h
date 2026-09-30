@@ -8,7 +8,7 @@
 #include <RenderGraph/ResourceId.h>
 
 class ByteAddressBuffer;
-class CommandList;
+class CommandContext;
 class ComputeShader;
 class FrameworkDeviceContext;
 class Texture;
@@ -75,10 +75,10 @@ private:
     friend class AutoExposureGraphPass;
 
     void EnsureResources(uint32_t outputWidth, uint32_t outputHeight);
-    void RecordPrepare(CommandList& commandList, const FrameInputs& inputs);
-    void RecordBuildHistogram(CommandList& commandList, const FrameInputs& inputs);
-    void RecordAverageHistogram(CommandList& commandList, const FrameInputs& inputs);
-    void RecordApply(CommandList& commandList, const FrameInputs& inputs);
+    void RecordPrepare(CommandContext& commandContext, const FrameInputs& inputs);
+    void RecordBuildHistogram(CommandContext& commandContext, const FrameInputs& inputs);
+    void RecordAverageHistogram(CommandContext& commandContext, const FrameInputs& inputs);
+    void RecordApply(CommandContext& commandContext, const FrameInputs& inputs);
 
     FrameworkDeviceContext& m_DeviceContext;
     std::unique_ptr<ComputeShader> m_BuildHistogramShader;

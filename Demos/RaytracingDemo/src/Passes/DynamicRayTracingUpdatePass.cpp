@@ -42,8 +42,9 @@ void RaytracingDemoPasses::Builder::AddDynamicRayTracingUpdatePasses(
             passBuilder.WriteExternal(*meshletGpuResources.Draws, D3D12_RESOURCE_STATE_COPY_DEST);
             passBuilder.WriteToken(DemoResourceIds::DynamicRayTracingGeometryUploadedToken);
         },
-        [](const DynamicRayTracingUpdatePassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
+        [](const DynamicRayTracingUpdatePassData& passData, const RenderGraph::RenderContext& context, RenderGraph::RenderPassContext& passContext)
         {
+            CommandList& commandList = passContext.GetCommandList();
             const bool updated = passData.Resources->Scene.BeginDynamicRayTracingGeometryUpdate(
                 commandList,
                 context.GetMetadata().m_Time);
@@ -63,8 +64,9 @@ void RaytracingDemoPasses::Builder::AddDynamicRayTracingUpdatePasses(
             passBuilder.ReadExternal(dynamicIndexBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
             passBuilder.WriteToken(DemoResourceIds::DynamicRayTracingUpdatedToken);
         },
-        [](const DynamicRayTracingUpdatePassData& passData, const RenderGraph::RenderContext&, CommandList& commandList)
+        [](const DynamicRayTracingUpdatePassData& passData, const RenderGraph::RenderContext&, RenderGraph::RenderPassContext& passContext)
         {
+            CommandList& commandList = passContext.GetCommandList();
             RaytracingDemoSceneResources& scene = passData.Resources->Scene;
             const bool updated = scene.FinishDynamicRayTracingUpdate(commandList);
             Assert(updated, "Dynamic RTAS refit pass ran before the geometry upload pass.");

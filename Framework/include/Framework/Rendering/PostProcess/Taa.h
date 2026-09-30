@@ -12,6 +12,7 @@
 #include <string>
 
 class CommandList;
+class CommandContext;
 class FrameworkDeviceContext;
 class Material;
 class Mesh;
@@ -62,7 +63,7 @@ private:
 
     bool EnsureCreated(uint32_t width, uint32_t height);
     void RecordResolve(
-        CommandList& commandList,
+        CommandContext& commandContext,
         const std::shared_ptr<Texture>& currentBuffer,
         const std::shared_ptr<Texture>& historyBuffer,
         const std::shared_ptr<Texture>& velocityBuffer,

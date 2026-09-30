@@ -19,6 +19,7 @@ namespace RenderGraph
 }
 
 class BloomGraphPass;
+class CommandContext;
 
 class Bloom final
 {
@@ -45,23 +46,23 @@ private:
     friend class BloomGraphPass;
 
     void RecordPrefilter(
-        CommandList& commandList,
+        CommandContext& commandContext,
         const BloomParameters& parameters,
         const std::shared_ptr<Texture>& source,
         const RenderTarget& destination);
     void RecordDownsample(
-        CommandList& commandList,
+        CommandContext& commandContext,
         const BloomParameters& parameters,
         const std::shared_ptr<Texture>& source,
         const RenderTarget& destination);
     void RecordUpsample(
-        CommandList& commandList,
+        CommandContext& commandContext,
         const BloomParameters& parameters,
         const std::shared_ptr<Texture>& lowResolutionSource,
         const std::shared_ptr<Texture>& highResolutionSource,
         const RenderTarget& destination);
     void RecordComposite(
-        CommandList& commandList,
+        CommandContext& commandContext,
         const BloomParameters& parameters,
         const std::shared_ptr<Texture>& sourceColor,
         const std::shared_ptr<Texture>& bloom,

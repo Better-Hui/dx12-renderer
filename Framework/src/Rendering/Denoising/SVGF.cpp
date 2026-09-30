@@ -310,8 +310,7 @@ void SVGF::Record(CommandContext& context, const RecordingResources& resources)
     }
     const auto width = static_cast<uint32_t>(extent.Width);
     const auto height = extent.Height;
-    auto& cmd = context.GetCommandList();
-    RecordTemporal(cmd, resources.NoisyRadiance, resources.GBufferNormal, resources.GBufferPosition,
+    RecordTemporal(context, resources.NoisyRadiance, resources.GBufferNormal, resources.GBufferPosition,
         resources.MotionVector, resources.Depth, resources.HistoryColorRead, resources.HistoryMomentsRead,
         resources.TemporalColor, resources.TemporalMoments, resources.Variance,
         resources.HistoryColorWrite, resources.HistoryMomentsWrite, width, height, resources.HistoryValid);
@@ -320,17 +319,17 @@ void SVGF::Record(CommandContext& context, const RecordingResources& resources)
     for (uint32_t iteration = 0; iteration < iterations; ++iteration)
     {
         const uint32_t step = 1u << iteration;
-        RecordAtrous(cmd, filtered, resources.Ping, resources.Variance, resources.GBufferNormal,
+        RecordAtrous(context, filtered, resources.Ping, resources.Variance, resources.GBufferNormal,
             resources.GBufferPosition, resources.Depth, width, height, step, 0u);
-        RecordAtrous(cmd, resources.Ping, resources.Pong, resources.Variance, resources.GBufferNormal,
+        RecordAtrous(context, resources.Ping, resources.Pong, resources.Variance, resources.GBufferNormal,
             resources.GBufferPosition, resources.Depth, width, height, step, 1u);
         filtered = resources.Pong;
     }
-    RecordComposite(cmd, filtered, resources.Depth, resources.Output, width, height);
+    RecordComposite(context, filtered, resources.Depth, resources.Output, width, height);
 }
 
 void SVGF::RecordTemporal(
-    CommandList& commandList,
+    CommandContext& commandContext,
     const std::shared_ptr<Texture>& noisyRadiance,
     const std::shared_ptr<Texture>& gBufferNormal,
     const std::shared_ptr<Texture>& gBufferPosition,
@@ -356,7 +355,6 @@ void SVGF::RecordTemporal(
     constants.PhiNormal = m_Settings.PhiNormal;
     constants.PhiDepth = m_Settings.PhiDepth;
 
-    const CommandContext commandContext(commandList);
     commandContext.SetConstantBuffer(*m_TemporalShader, "SVGFTemporalConstants", constants);
     commandContext.SetTexture(*m_TemporalShader, "NoisyRadiance", ShaderResourceView(noisyRadiance));
     commandContext.SetTexture(*m_TemporalShader, "GBufferNormal", ShaderResourceView(gBufferNormal));
@@ -376,7 +374,7 @@ void SVGF::RecordTemporal(
 }
 
 void SVGF::RecordAtrous(
-    CommandList& commandList,
+    CommandContext& commandContext,
     const std::shared_ptr<Texture>& input,
     const std::shared_ptr<Texture>& output,
     const std::shared_ptr<Texture>& variance,
@@ -397,7 +395,6 @@ void SVGF::RecordAtrous(
     constants.PhiNormal = m_Settings.PhiNormal;
     constants.PhiDepth = m_Settings.PhiDepth;
 
-    const CommandContext commandContext(commandList);
     commandContext.SetConstantBuffer(*m_AtrousShader, "SVGFAtrousConstants", constants);
     commandContext.SetTexture(*m_AtrousShader, "InputColor", ShaderResourceView(input));
     commandContext.SetTexture(*m_AtrousShader, "Variance", ShaderResourceView(variance));
@@ -411,7 +408,7 @@ void SVGF::RecordAtrous(
 }
 
 void SVGF::RecordComposite(
-    CommandList& commandList,
+    CommandContext& commandContext,
     const std::shared_ptr<Texture>& input,
     const std::shared_ptr<Texture>& depthTexture,
     const std::shared_ptr<Texture>& output,
@@ -422,7 +419,6 @@ void SVGF::RecordComposite(
     constants.Width = width;
     constants.Height = height;
 
-    const CommandContext commandContext(commandList);
     commandContext.SetConstantBuffer(*m_CompositeShader, "SVGFCompositeConstants", constants);
     commandContext.SetTexture(*m_CompositeShader, "FilteredColor", ShaderResourceView(input));
     commandContext.SetTexture(*m_CompositeShader, "DepthTexture", ShaderResourceView::DepthAsFloat(depthTexture));

@@ -101,8 +101,9 @@ protected:
         CommandList& commandList = passContext.GetCommandList();
         if (m_Kind == Kind::Resolve)
         {
+            CommandContext commandContext(commandList, passContext.GetBarrierContext());
             m_Feature.RecordResolve(
-                commandList,
+                commandContext,
                 context.GetTexture(m_Inputs->CurrentColor),
                 m_Feature.m_HistoryBuffers[m_Feature.m_HistoryIndex],
                 context.GetTexture(m_Inputs->Velocity),
@@ -114,7 +115,7 @@ protected:
         }
 
         const uint32_t writeIndex = 1u - m_Feature.m_HistoryIndex;
-        CommandContext commandContext(commandList);
+        CommandContext commandContext(commandList, passContext.GetBarrierContext());
         commandContext.CopyResource(
             *m_Feature.m_HistoryBuffers[writeIndex],
             *context.GetTexture(m_Inputs->Output));
@@ -225,7 +226,7 @@ void TAA::AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs inputs
 }
 
 void TAA::RecordResolve(
-    CommandList& commandList,
+    CommandContext& commandContext,
     const std::shared_ptr<Texture>& currentBuffer,
     const std::shared_ptr<Texture>& historyBuffer,
     const std::shared_ptr<Texture>& velocityBuffer,
@@ -234,6 +235,7 @@ void TAA::RecordResolve(
     const uint32_t width,
     const uint32_t height)
 {
+    CommandList& commandList = commandContext.GetCommandList();
     PIXScope(commandList, "TAA Resolve");
     RootConstants rootConstants = {};
     rootConstants.TexelSize = {

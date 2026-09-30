@@ -106,8 +106,9 @@ void RaytracingDemoPasses::Builder::AddSkyboxPass(
             passBuilder.WriteUav(DemoResourceIds::SceneColor);
             passBuilder.WriteToken(DemoResourceIds::SkyboxFinishedToken);
         },
-        [](const SkyboxPassData& passData, const RenderContext& context, CommandList& cmd)
+        [](const SkyboxPassData& passData, const RenderContext& context, RenderGraph::RenderPassContext& passContext)
         {
+            CommandList& cmd = passContext.GetCommandList();
             const RaytracingDemoPassResources& resources = passData.Resources.value();
             const RaytracingDemoPassConfig& config = passData.Config;
             if (!config.FrameState->SkyboxEnabled)
@@ -125,7 +126,7 @@ void RaytracingDemoPasses::Builder::AddSkyboxPass(
 //Modify Begin:2026-08-23 by Hui
             const SkyboxSunConstants sun = BuildSkyboxSunConstants(resources);
 //Modify End
-            CommandContext commandContext(cmd);
+            CommandContext commandContext(cmd, passContext.GetBarrierContext());
 
             commandContext.SetConstantBuffer(skyboxShader, "CameraConstants", sizeof(camera), &camera);
 //Modify Begin:2026-08-23 by Hui

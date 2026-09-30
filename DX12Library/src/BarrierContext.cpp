@@ -10,7 +10,7 @@
 
 #include <algorithm>
 
-//Modify Begin:2026-09-29 by Hui
+//Modify Begin:2026-09-30 by Hui
 BarrierContext::BarrierContext(CommandList& commandList)
     : m_CommandList(commandList)
 {
@@ -132,7 +132,7 @@ void BarrierContext::Transition(
     SetLocalResourceState(resource, subresource, { stateAfter, false });
 }
 
-void BarrierContext::RegisterExternalResource(
+void BarrierContext::RegisterExternalInitialState(
     ID3D12Resource* const resource,
     const D3D12_RESOURCE_STATES initialState,
     const UINT subresource)
@@ -175,7 +175,7 @@ void BarrierContext::DeclareExternalResource(
     const bool uavWrite,
     const UINT subresource)
 {
-    RegisterExternalResource(resource, initialState, subresource);
+    RegisterExternalInitialState(resource, initialState, subresource);
     if (initialState == D3D12_RESOURCE_STATE_UNORDERED_ACCESS &&
         firstState == D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
     {

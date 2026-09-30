@@ -163,16 +163,28 @@ protected:
         switch (m_Kind)
         {
         case Kind::Prepare:
-            m_Feature.RecordPrepare(commandList, frameInputs);
+            {
+                CommandContext commandContext(commandList, passContext.GetBarrierContext());
+                m_Feature.RecordPrepare(commandContext, frameInputs);
+            }
             break;
         case Kind::BuildHistogram:
-            m_Feature.RecordBuildHistogram(commandList, frameInputs);
+            {
+                CommandContext commandContext(commandList, passContext.GetBarrierContext());
+                m_Feature.RecordBuildHistogram(commandContext, frameInputs);
+            }
             break;
         case Kind::AverageHistogram:
-            m_Feature.RecordAverageHistogram(commandList, frameInputs);
+            {
+                CommandContext commandContext(commandList, passContext.GetBarrierContext());
+                m_Feature.RecordAverageHistogram(commandContext, frameInputs);
+            }
             break;
         case Kind::Apply:
-            m_Feature.RecordApply(commandList, frameInputs);
+            {
+                CommandContext commandContext(commandList, passContext.GetBarrierContext());
+                m_Feature.RecordApply(commandContext, frameInputs);
+            }
             break;
         }
     }
@@ -350,14 +362,13 @@ void AutoExposure::AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInpu
     }));
 }
 
-void AutoExposure::RecordPrepare(CommandList& commandList, const FrameInputs& inputs)
+void AutoExposure::RecordPrepare(CommandContext& commandContext, const FrameInputs& inputs)
 {
     Assert(inputs.Source != nullptr && inputs.Source->IsValid(), "Auto exposure source texture is invalid.");
     Assert(inputs.Output != nullptr && inputs.Output->IsValid(), "Auto exposure output texture is invalid.");
     Assert(inputs.InputWidth > 0u && inputs.InputHeight > 0u, "Auto exposure input dimensions must be positive.");
     Assert(inputs.OutputWidth > 0u && inputs.OutputHeight > 0u, "Auto exposure output dimensions must be positive.");
     EnsureResources(inputs.OutputWidth, inputs.OutputHeight);
-    CommandContext commandContext(commandList);
     if (m_Settings.Enabled)
     {
         commandContext.ClearUnorderedAccessUint(*m_Histogram, std::array<UINT, 4>{ 0u, 0u, 0u, 0u }.data());
@@ -371,14 +382,13 @@ void AutoExposure::RecordPrepare(CommandList& commandList, const FrameInputs& in
     }
 }
 
-void AutoExposure::RecordBuildHistogram(CommandList& commandList, const FrameInputs& inputs)
+void AutoExposure::RecordBuildHistogram(CommandContext& commandContext, const FrameInputs& inputs)
 {
     if (!m_Settings.Enabled)
     {
         return;
     }
     const AutoExposureConstants constants = BuildConstants(inputs, m_Settings);
-    CommandContext commandContext(commandList);
     commandContext.SetConstantBuffer(*m_BuildHistogramShader, "AutoExposureConstants", constants);
     commandContext.SetTexture(*m_BuildHistogramShader, "SourceColor", ShaderResourceView(inputs.Source));
     commandContext.SetUnorderedAccessView(*m_BuildHistogramShader, "Histogram", UnorderedAccessView(m_Histogram));
@@ -387,14 +397,13 @@ void AutoExposure::RecordBuildHistogram(CommandList& commandList, const FrameInp
     commandContext.Dispatch((inputs.InputWidth + 15u) / 16u, (inputs.InputHeight + 15u) / 16u, 1u);
 }
 
-void AutoExposure::RecordAverageHistogram(CommandList& commandList, const FrameInputs& inputs)
+void AutoExposure::RecordAverageHistogram(CommandContext& commandContext, const FrameInputs& inputs)
 {
     if (!m_Settings.Enabled)
     {
         return;
     }
     const AutoExposureConstants constants = BuildConstants(inputs, m_Settings);
-    CommandContext commandContext(commandList);
     commandContext.SetConstantBuffer(*m_AverageHistogramShader, "AutoExposureConstants", constants);
     commandContext.SetUnorderedAccessView(*m_AverageHistogramShader, "Histogram", UnorderedAccessView(m_Histogram));
     commandContext.SetUnorderedAccessView(
@@ -406,10 +415,9 @@ void AutoExposure::RecordAverageHistogram(CommandList& commandList, const FrameI
     commandContext.Dispatch(1u, 1u, 1u);
 }
 
-void AutoExposure::RecordApply(CommandList& commandList, const FrameInputs& inputs)
+void AutoExposure::RecordApply(CommandContext& commandContext, const FrameInputs& inputs)
 {
     const AutoExposureConstants constants = BuildConstants(inputs, m_Settings);
-    CommandContext commandContext(commandList);
     commandContext.SetConstantBuffer(*m_ApplyShader, "AutoExposureConstants", constants);
     commandContext.SetTexture(*m_ApplyShader, "SourceColor", ShaderResourceView(inputs.Source));
     commandContext.SetTexture(*m_ApplyShader, "AdaptedLuminance", ShaderResourceView(m_AdaptedLuminance));

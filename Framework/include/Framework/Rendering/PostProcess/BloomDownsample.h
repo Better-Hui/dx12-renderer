@@ -9,6 +9,7 @@
 #include <Framework/Scene/Material.h>
 
 class Mesh;
+class CommandContext;
 //Modify Begin:2026-07-30 by Hui
 class FrameworkDeviceContext;
 //Modify End
@@ -20,7 +21,7 @@ public:
 	explicit BloomDownsample(FrameworkDeviceContext& deviceContext, CommandList& commandList);
 //Modify End
 
-	void Execute(CommandList& commandList,
+	void Execute(CommandContext& commandContext,
 		const BloomParameters& parameters,
 		const std::shared_ptr<Texture>& source,
 		const RenderTarget& destination);

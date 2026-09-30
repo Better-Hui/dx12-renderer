@@ -38,11 +38,11 @@ BloomDownsample::BloomDownsample(FrameworkDeviceContext& deviceContext, CommandL
 	m_Material = Material::Create(shader);
 }
 
-void BloomDownsample::Execute(CommandList& commandList, const BloomParameters& parameters, const std::shared_ptr<Texture>& source, const RenderTarget& destination)
+void BloomDownsample::Execute(CommandContext& commandContext, const BloomParameters& parameters, const std::shared_ptr<Texture>& source, const RenderTarget& destination)
 {
+	CommandList& commandList = commandContext.GetCommandList();
 	PIXScope(commandList, "Bloom Downsample");
 
-	CommandContext commandContext(commandList);
 	commandContext.SetRenderTarget(destination);
 	commandList.SetAutomaticViewportAndScissorRect(destination);
 

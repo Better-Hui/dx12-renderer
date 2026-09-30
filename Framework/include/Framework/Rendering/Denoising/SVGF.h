@@ -116,7 +116,7 @@ private:
     bool EnsureCreated(uint32_t width, uint32_t height);
 
     void RecordTemporal(
-        CommandList& commandList,
+        CommandContext& commandContext,
         const std::shared_ptr<Texture>& noisyRadiance,
         const std::shared_ptr<Texture>& gBufferNormal,
         const std::shared_ptr<Texture>& gBufferPosition,
@@ -133,7 +133,7 @@ private:
         uint32_t height,
         bool historyValid);
     void RecordAtrous(
-        CommandList& commandList,
+        CommandContext& commandContext,
         const std::shared_ptr<Texture>& input,
         const std::shared_ptr<Texture>& output,
         const std::shared_ptr<Texture>& variance,
@@ -145,7 +145,7 @@ private:
         uint32_t stepSize,
         uint32_t direction);
     void RecordComposite(
-        CommandList& commandList,
+        CommandContext& commandContext,
         const std::shared_ptr<Texture>& input,
         const std::shared_ptr<Texture>& depthTexture,
         const std::shared_ptr<Texture>& output,

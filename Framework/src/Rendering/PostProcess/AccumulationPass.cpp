@@ -68,7 +68,7 @@ void AccumulationPass::ExecuteImpl(
         0u,
     };
     ComputeShader& shader = *m_Shader;
-    CommandContext commandContext(commandList);
+    CommandContext commandContext(commandList, passContext.GetBarrierContext());
     commandContext.SetConstantBuffer(shader, "PostDenoiseAccumulationConstants", constants);
     commandContext.SetUnorderedAccessView(
         shader,

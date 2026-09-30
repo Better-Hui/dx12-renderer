@@ -76,12 +76,6 @@ private:
         UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
 
 public:
-    /** Register and prime a resource whose state is owned by an external renderer. */
-    void RegisterExternalResource(
-        ID3D12Resource* resource,
-        D3D12_RESOURCE_STATES initialState,
-        UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
-
     /** Register an external resource and prepare its first declared access. */
     void DeclareExternalResource(
         ID3D12Resource* resource,
@@ -146,6 +140,10 @@ private:
         ID3D12Resource* resource,
         UINT subresource) const noexcept;
     bool HasExternalDeclaration(ID3D12Resource* resource, UINT subresource) const noexcept;
+    void RegisterExternalInitialState(
+        ID3D12Resource* resource,
+        D3D12_RESOURCE_STATES initialState,
+        UINT subresource);
     void SetLocalResourceState(
         ID3D12Resource* resource,
         UINT subresource,

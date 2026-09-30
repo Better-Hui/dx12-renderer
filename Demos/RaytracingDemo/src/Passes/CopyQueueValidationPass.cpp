@@ -43,8 +43,9 @@ void RaytracingDemoPasses::Builder::AddCopyQueueValidationPass(
             passBuilder.WriteUav(DemoResourceIds::CopyQueueAliasDirectScratch);
             passBuilder.WriteToken(DemoResourceIds::CopyQueueAliasDirectReadyToken);
         },
-        [](const CopyQueueValidationDirectAliasPassData&, const RenderContext& context, CommandList& commandList)
+        [](const CopyQueueValidationDirectAliasPassData&, const RenderContext& context, RenderGraph::RenderPassContext& passContext)
         {
+            CommandList& commandList = passContext.GetCommandList();
             constexpr UINT clearValues[4] = { 0x12345678u, 0u, 0u, 0u };
             commandList.ClearUnorderedAccessUint(
                 context.GetResource(DemoResourceIds::CopyQueueAliasDirectScratch),
@@ -63,8 +64,9 @@ void RaytracingDemoPasses::Builder::AddCopyQueueValidationPass(
             passBuilder.WriteToken(DemoResourceIds::CopyQueueValidationFinishedToken);
             passBuilder.WriteToken(DemoResourceIds::CopyQueueAliasCopyReadyToken);
         },
-        [](const CopyQueueValidationCopyPassData& passData, const RenderContext& context, CommandList& commandList)
+        [](const CopyQueueValidationCopyPassData& passData, const RenderContext& context, RenderGraph::RenderPassContext& passContext)
         {
+            CommandList& commandList = passContext.GetCommandList();
             commandList.CopyResource(
                 *context.GetTexture(DemoResourceIds::CopyQueueValidationColor),
                 *context.GetTexture(passData.SourceColor));
@@ -82,14 +84,15 @@ void RaytracingDemoPasses::Builder::AddCopyQueueValidationPass(
             passBuilder.WriteUav(DemoResourceIds::CopyQueueAliasComputeScratch);
             passBuilder.WriteToken(DemoResourceIds::CopyQueueValidationComputeFinishedToken);
         },
-        [](const CopyQueueValidationComputePassData& passData, const RenderContext& context, CommandList& commandList)
+        [](const CopyQueueValidationComputePassData& passData, const RenderContext& context, RenderGraph::RenderPassContext& passContext)
         {
+            CommandList& commandList = passContext.GetCommandList();
             constexpr UINT clearValues[4] = { 0x87654321u, 0u, 0u, 0u };
             commandList.ClearUnorderedAccessUint(
                 context.GetResource(DemoResourceIds::CopyQueueAliasComputeScratch),
                 clearValues);
             ComputeShader& shader = *passData.Resources->CopyQueueValidationShader;
-            CommandContext commandContext(commandList);
+            CommandContext commandContext(commandList, passContext.GetBarrierContext());
             commandContext.SetTexture(
                 shader,
                 "Source",

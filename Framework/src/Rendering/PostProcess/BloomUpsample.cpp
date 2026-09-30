@@ -37,15 +37,16 @@ BloomUpsample::BloomUpsample(FrameworkDeviceContext& deviceContext, CommandList&
 }
 
 void BloomUpsample::Execute(
-    CommandList& commandList,
+    CommandContext& commandContext,
     const BloomParameters& parameters,
     const std::shared_ptr<Texture>& lowResolutionSource,
     const std::shared_ptr<Texture>& highResolutionSource,
     const RenderTarget& destination)
 {
+    CommandList& commandList = commandContext.GetCommandList();
     PIXScope(commandList, "Bloom Upsample");
     ExecuteInternal(
-        commandList,
+        commandContext,
         parameters,
         highResolutionSource,
         lowResolutionSource,
@@ -53,24 +54,25 @@ void BloomUpsample::Execute(
 }
 
 void BloomUpsample::ExecuteComposite(
-    CommandList& commandList,
+    CommandContext& commandContext,
     const BloomParameters& parameters,
     const std::shared_ptr<Texture>& sourceColor,
     const std::shared_ptr<Texture>& bloom,
     const RenderTarget& destination)
 {
+    CommandList& commandList = commandContext.GetCommandList();
     PIXScope(commandList, "Bloom Composite");
-    ExecuteInternal(commandList, parameters, sourceColor, bloom, destination);
+    ExecuteInternal(commandContext, parameters, sourceColor, bloom, destination);
 }
 
 void BloomUpsample::ExecuteInternal(
-    CommandList& commandList,
+    CommandContext& commandContext,
     const BloomParameters& parameters,
     const std::shared_ptr<Texture>& sourceColor,
     const std::shared_ptr<Texture>& bloom,
     const RenderTarget& destination)
 {
-    CommandContext commandContext(commandList);
+    CommandList& commandList = commandContext.GetCommandList();
     commandContext.SetRenderTarget(destination);
     commandList.SetAutomaticViewportAndScissorRect(destination);
 

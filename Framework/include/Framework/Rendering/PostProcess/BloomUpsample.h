@@ -7,6 +7,7 @@
 #include <memory>
 
 class CommandList;
+class CommandContext;
 class FrameworkDeviceContext;
 class Mesh;
 class RenderTarget;
@@ -18,14 +19,14 @@ public:
     BloomUpsample(FrameworkDeviceContext& deviceContext, CommandList& commandList);
 
     void Execute(
-        CommandList& commandList,
+        CommandContext& commandContext,
         const BloomParameters& parameters,
         const std::shared_ptr<Texture>& lowResolutionSource,
         const std::shared_ptr<Texture>& highResolutionSource,
         const RenderTarget& destination);
 
     void ExecuteComposite(
-        CommandList& commandList,
+        CommandContext& commandContext,
         const BloomParameters& parameters,
         const std::shared_ptr<Texture>& sourceColor,
         const std::shared_ptr<Texture>& bloom,
@@ -33,7 +34,7 @@ public:
 
 private:
     void ExecuteInternal(
-        CommandList& commandList,
+        CommandContext& commandContext,
         const BloomParameters& parameters,
         const std::shared_ptr<Texture>& sourceColor,
         const std::shared_ptr<Texture>& bloom,

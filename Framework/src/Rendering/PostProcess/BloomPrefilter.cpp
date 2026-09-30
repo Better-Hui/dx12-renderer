@@ -42,11 +42,12 @@ BloomPrefilter::BloomPrefilter(FrameworkDeviceContext& deviceContext, CommandLis
 	m_Material = Material::Create(shader);
 }
 
-void BloomPrefilter::Execute(CommandList& commandList, const BloomParameters& parameters, const std::shared_ptr<Texture>& source, const RenderTarget& destination)
+//Modify Begin:2026-09-30 by Hui
+void BloomPrefilter::Execute(CommandContext& commandContext, const BloomParameters& parameters, const std::shared_ptr<Texture>& source, const RenderTarget& destination)
 {
+	CommandList& commandList = commandContext.GetCommandList();
 	PIXScope(commandList, "Bloom Prefilter");
 
-	CommandContext commandContext(commandList);
 	commandContext.SetRenderTarget(destination);
 	commandList.SetAutomaticViewportAndScissorRect(destination);
 
@@ -65,3 +66,4 @@ void BloomPrefilter::Execute(CommandList& commandList, const BloomParameters& pa
 	m_Material->Bind(commandList);
 	m_BlitMesh->Draw(commandList);
 }
+//Modify End

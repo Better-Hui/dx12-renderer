@@ -48,8 +48,9 @@ void RaytracingDemoPasses::Builder::AddDLSSPass(
             passBuilder.WriteUav(DemoResourceIds::DLSSOutput);
             passBuilder.WriteToken(DemoResourceIds::DLSSFinishedToken);
         },
-        [](const DLSSPassData& passData, const RenderContext& context, CommandList& commandList)
+        [](const DLSSPassData& passData, const RenderContext& context, RenderGraph::RenderPassContext& passContext)
         {
+            CommandList& commandList = passContext.GetCommandList();
             const RaytracingDemoPassResources& resources = passData.Resources.value();
             const RaytracingDemoPassConfig& config = passData.Config;
             const RaytracingDemoFrameState& frameState = *config.FrameState;

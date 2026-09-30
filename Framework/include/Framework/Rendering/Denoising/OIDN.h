@@ -16,6 +16,7 @@
 #include <vector>
 
 class CommandList;
+class CommandContext;
 class CommandQueue;
 class ComputeShader;
 class FrameworkDeviceContext;
@@ -113,7 +114,7 @@ private:
     bool RecordCudaInput(CommandList& commandList, const std::shared_ptr<Texture>& source);
     void RecordCudaOutput(CommandList& commandList, const Job& job);
     void RecordUpload(CommandList& commandList);
-    void RecordComposite(CommandList& commandList, const std::shared_ptr<Texture>& output);
+    void RecordComposite(CommandContext& commandContext, const std::shared_ptr<Texture>& output);
 
     FrameworkDeviceContext& m_DeviceContext;
     std::unique_ptr<ComputeShader> m_CompositeShader;

@@ -1,5 +1,6 @@
 //Modify Begin:2026-08-24 by Hui
 #include <Framework/Rendering/PostProcess/Bloom.h>
+#include <Framework/Rendering/Pipeline/CommandContext.h>
 
 #include <DX12Library/Helpers.h>
 #include <RenderGraph/RenderContext.h>
@@ -106,26 +107,27 @@ protected:
     void ExecuteImpl(const RenderGraph::RenderContext& context, RenderGraph::RenderPassContext& passContext) override
     {
         CommandList& commandList = passContext.GetCommandList();
+        CommandContext commandContext(commandList, passContext.GetBarrierContext());
         const BloomParameters parameters = m_Inputs->ResolveParameters();
         switch (m_Kind)
         {
         case Kind::Prefilter:
             m_Feature.RecordPrefilter(
-                commandList,
+                commandContext,
                 parameters,
                 context.GetTexture(m_Inputs->Source),
                 GetPassRenderTarget(context));
             break;
         case Kind::Downsample:
             m_Feature.RecordDownsample(
-                commandList,
+                commandContext,
                 parameters,
                 context.GetTexture(m_Source),
                 GetPassRenderTarget(context));
             break;
         case Kind::Upsample:
             m_Feature.RecordUpsample(
-                commandList,
+                commandContext,
                 parameters,
                 context.GetTexture(m_LowResolutionSource),
                 context.GetTexture(m_HighResolutionSource),
@@ -133,7 +135,7 @@ protected:
             break;
         case Kind::Composite:
             m_Feature.RecordComposite(
-                commandList,
+                commandContext,
                 parameters,
                 context.GetTexture(m_Inputs->Source),
                 context.GetTexture(m_BloomTexture),
@@ -261,40 +263,40 @@ void Bloom::AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs inpu
 }
 
 void Bloom::RecordPrefilter(
-    CommandList& commandList,
+    CommandContext& commandContext,
     const BloomParameters& parameters,
     const std::shared_ptr<Texture>& source,
     const RenderTarget& destination)
 {
-    m_Prefilter.Execute(commandList, parameters, source, destination);
+    m_Prefilter.Execute(commandContext, parameters, source, destination);
 }
 
 void Bloom::RecordDownsample(
-    CommandList& commandList,
+    CommandContext& commandContext,
     const BloomParameters& parameters,
     const std::shared_ptr<Texture>& source,
     const RenderTarget& destination)
 {
-    m_Downsample.Execute(commandList, parameters, source, destination);
+    m_Downsample.Execute(commandContext, parameters, source, destination);
 }
 
 void Bloom::RecordUpsample(
-    CommandList& commandList,
+    CommandContext& commandContext,
     const BloomParameters& parameters,
     const std::shared_ptr<Texture>& lowResolutionSource,
     const std::shared_ptr<Texture>& highResolutionSource,
     const RenderTarget& destination)
 {
-    m_Upsample.Execute(commandList, parameters, lowResolutionSource, highResolutionSource, destination);
+    m_Upsample.Execute(commandContext, parameters, lowResolutionSource, highResolutionSource, destination);
 }
 
 void Bloom::RecordComposite(
-    CommandList& commandList,
+    CommandContext& commandContext,
     const BloomParameters& parameters,
     const std::shared_ptr<Texture>& sourceColor,
     const std::shared_ptr<Texture>& bloom,
     const RenderTarget& destination)
 {
-    m_Upsample.ExecuteComposite(commandList, parameters, sourceColor, bloom, destination);
+    m_Upsample.ExecuteComposite(commandContext, parameters, sourceColor, bloom, destination);
 }
 //Modify End

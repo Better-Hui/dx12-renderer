@@ -240,7 +240,8 @@ protected:
         }
         else
         {
-            m_Feature.RecordComposite(commandList, context.GetTexture(m_Inputs->Output));
+            CommandContext commandContext(commandList, passContext.GetBarrierContext());
+            m_Feature.RecordComposite(commandContext, context.GetTexture(m_Inputs->Output));
         }
     }
 
@@ -1102,7 +1103,7 @@ void OIDNDenoiser::RecordCudaFenceHandoff(
 }
 
 void OIDNDenoiser::RecordComposite(
-    CommandList& commandList,
+    CommandContext& commandContext,
     const std::shared_ptr<Texture>& output)
 {
     Assert(output != nullptr && m_Output != nullptr, "OIDN composite resources are invalid.");
@@ -1111,7 +1112,6 @@ void OIDNDenoiser::RecordComposite(
     constants.Height = m_Height;
     constants.ResultValid = m_HasUploadedResult.load(std::memory_order_acquire) ? 1u : 0u;
 
-    CommandContext commandContext(commandList);
     commandContext.SetConstantBuffer(*m_CompositeShader, "OIDNCompositeConstants", constants);
     commandContext.SetTexture(*m_CompositeShader, "DenoisedResult", ShaderResourceView(m_Output));
     commandContext.SetUnorderedAccessView(*m_CompositeShader, "SceneColor", UnorderedAccessView(output));

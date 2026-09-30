@@ -11,7 +11,7 @@
 #include <DirectXMath.h>
 #include <d3d12.h>
 
-class CommandList;
+class CommandContext;
 class ComputeShader;
 class FrameworkDeviceContext;
 class Resource;
@@ -139,7 +139,7 @@ private:
 
     bool EnsureCreated(uint32_t width, uint32_t height);
     void PrepareInputs(
-        CommandList& commandList,
+        CommandContext& commandContext,
         const FrameMatrices& frameMatrices,
         const std::shared_ptr<Texture>& gBufferSpecularSmoothness,
         const std::shared_ptr<Texture>& gBufferNormal,
@@ -152,7 +152,7 @@ private:
         uint32_t width,
         uint32_t height);
     void Denoise(
-        CommandList& commandList,
+        CommandContext& commandContext,
         const FrameMatrices& frameMatrices,
         const std::shared_ptr<Texture>& noisyRadiance,
         const std::shared_ptr<Texture>& nrdNormalRoughness,
@@ -162,7 +162,7 @@ private:
         uint32_t width,
         uint32_t height);
     void Composite(
-        CommandList& commandList,
+        CommandContext& commandContext,
         const std::shared_ptr<Texture>& denoisedRadiance,
         const std::shared_ptr<Texture>& depthTexture,
         const std::shared_ptr<Texture>& gBufferAlbedoOcclusion,

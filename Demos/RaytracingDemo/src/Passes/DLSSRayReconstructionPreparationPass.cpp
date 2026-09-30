@@ -36,11 +36,12 @@ void RaytracingDemoPasses::Builder::AddDLSSRayReconstructionPreparationPass(
             passBuilder.ReadBuffer(DemoResourceIds::DepthBuffer);
             passBuilder.WriteUav(DemoResourceIds::DLSSNormalRoughness);
         },
-        [](const DLSSRayReconstructionPreparationPassData& passData, const RenderContext& context, CommandList& commandList)
+        [](const DLSSRayReconstructionPreparationPassData& passData, const RenderContext& context, RenderGraph::RenderPassContext& passContext)
         {
+            CommandList& commandList = passContext.GetCommandList();
             const RaytracingDemoPassResources& resources = passData.Resources.value();
             ComputeShader& shader = *resources.DLSSRayReconstructionPrepareShader;
-            CommandContext commandContext(commandList);
+            CommandContext commandContext(commandList, passContext.GetBarrierContext());
             commandContext.SetTexture(
                 shader,
                 "GBufferNormal",

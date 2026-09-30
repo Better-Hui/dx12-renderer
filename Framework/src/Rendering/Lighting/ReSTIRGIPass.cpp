@@ -261,7 +261,7 @@ protected:
         if (m_Kind == Kind::OutputClear)
         {
             const UINT clearValues[4] = {};
-            CommandContext commandContext(commandList);
+            CommandContext commandContext(commandList, passContext.GetBarrierContext());
             commandContext.ClearUnorderedAccessUint(context.GetResource(m_Inputs->IndirectLighting), clearValues);
             return;
         }
@@ -272,7 +272,7 @@ protected:
         ReSTIRGIPass::PipelineSet& pipelines = m_Pass.GetPipelines(
             inputs.FrameState.UseSoftShadowVariant,
             inputs.FrameState.EnvironmentProjectionVariant);
-        CommandContext commandContext(commandList);
+        CommandContext commandContext(commandList, passContext.GetBarrierContext());
         if (inputs.PrepareCommandContext)
         {
             inputs.PrepareCommandContext(commandContext);

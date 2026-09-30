@@ -148,10 +148,11 @@ void RaytracingDemoPasses::Builder::AddFrameGenerationHudLessPass(
             passBuilder.WriteTexture(DemoResourceIds::FrameGenerationHudLess);
             passBuilder.WriteToken(DemoResourceIds::FrameGenerationHudLessFinishedToken);
         },
-        [](const FrameGenerationHudLessPassData& passData, const RenderGraph::RenderContext& context, CommandList& commandList)
+        [](const FrameGenerationHudLessPassData& passData, const RenderGraph::RenderContext& context, RenderGraph::RenderPassContext& passContext)
         {
+            CommandList& commandList = passContext.GetCommandList();
             const RaytracingDemoPassResources& resources = passData.Resources.value();
-            CommandContext commandContext(commandList);
+            CommandContext commandContext(commandList, passContext.GetBarrierContext());
             commandContext.SetTexture(
                 *resources.DisplayCompositeShader,
                 "SceneColor",

@@ -38,10 +38,11 @@ void RaytracingDemoPasses::Builder::AddDebugTexturePass(
             passBuilder.WriteTexture(DemoResourceIds::SceneColor);
             passBuilder.WriteToken(DemoResourceIds::DebugOutputFinishedToken);
         },
-        [](const DebugTexturePassData& passData, const RenderContext& context, CommandList& cmd)
+        [](const DebugTexturePassData& passData, const RenderContext& context, RenderGraph::RenderPassContext& passContext)
         {
+            CommandList& cmd = passContext.GetCommandList();
             const RaytracingDemoPassResources& resources = passData.Resources.value();
-            CommandContext commandContext(cmd);
+            CommandContext commandContext(cmd, passContext.GetBarrierContext());
             const auto debugTexture = context.GetTexture(passData.DebugTarget);
             const ShaderResourceView debugView = passData.DebugTarget == RaytracingDemoRenderGraph::ResourceIds::DepthBuffer
                 ? ShaderResourceView::DepthAsFloat(debugTexture)
