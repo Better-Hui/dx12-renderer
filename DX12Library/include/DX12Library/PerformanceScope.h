@@ -256,6 +256,25 @@ namespace DX12Diagnostics
 
     inline thread_local RecordingScopeContext ActiveRecordingScope = {};
 
+    inline void RecordAccumulatedRecordingStage(
+        const std::string_view name,
+        const std::chrono::steady_clock::duration duration) noexcept
+    {
+        const RecordingScopeContext& context = ActiveRecordingScope;
+        if (context.Sink == nullptr)
+        {
+            return;
+        }
+        context.Sink->RecordPerformanceScope({
+            .FrameIndex = context.FrameIndex,
+            .CorrelationId = context.CorrelationId,
+            .Name = name,
+            .QueueName = context.QueueName,
+            .ScopeKind = "recording_component",
+            .DurationMilliseconds = std::chrono::duration<double, std::milli>(duration).count(),
+        });
+    }
+
     class ScopedRecordingPass final
     {
     public:

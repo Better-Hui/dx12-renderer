@@ -996,17 +996,47 @@ void RenderGraph::RenderGraphCommandExecutor::ApplyExternalResourceTransitions(
 {
     DX12_CPU_RECORDING_SCOPE("rg.external_transitions");
     RenderGraphBarrierRecorder recorder(passContext);
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+    const bool measureComponents = DX12Diagnostics::ActiveRecordingScope.Sink != nullptr;
+    std::chrono::steady_clock::duration resolveDuration{};
+    std::chrono::steady_clock::duration useDuration{};
+#endif
     for (const PassExternalResourceTransition& transition : transitions)
     {
         Assert(transition.Access != nullptr,
             "Render pass external resource transition must reference an access declaration.");
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+        const auto resolveStart = measureComponents ? std::chrono::steady_clock::now() :
+            std::chrono::steady_clock::time_point{};
+#endif
         const Resource& resource = transition.Access->Resolve();
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+        if (measureComponents)
+        {
+            resolveDuration += std::chrono::steady_clock::now() - resolveStart;
+        }
+        const auto useStart = measureComponents ? std::chrono::steady_clock::now() :
+            std::chrono::steady_clock::time_point{};
+#endif
         recorder.Use(
             resource,
             transition.StateAfter,
             transition.Use,
             transition.InsertUavBarrier);
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+        if (measureComponents)
+        {
+            useDuration += std::chrono::steady_clock::now() - useStart;
+        }
+#endif
     }
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+    if (measureComponents)
+    {
+        DX12Diagnostics::RecordAccumulatedRecordingStage("rg.external_resolve", resolveDuration);
+        DX12Diagnostics::RecordAccumulatedRecordingStage("rg.external_use", useDuration);
+    }
+#endif
 }
 
 void RenderGraph::RenderGraphCommandExecutor::RecordPassBoundaryBarriers(
