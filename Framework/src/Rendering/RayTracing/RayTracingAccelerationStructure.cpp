@@ -362,8 +362,8 @@ RayTracingAccelerationStructure::BottomLevelAccelerationStructure RayTracingAcce
     const IndexBuffer& indexBuffer = mesh->GetIndexBuffer();
     CommandContext commandContext(commandList);
 
-    commandContext.TransitionResource(vertexBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    commandContext.TransitionResource(indexBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    commandContext.UseResource(vertexBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, ResourceUse::Read);
+    commandContext.UseResource(indexBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, ResourceUse::Read);
 
     D3D12_RAYTRACING_GEOMETRY_DESC geometryDesc = {};
     geometryDesc.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
@@ -625,7 +625,7 @@ void RayTracingAccelerationStructure::BuildTopLevelAccelerationStructure(
         update ? L"Ray Tracing TLAS Update Scratch" : L"Ray Tracing TLAS Scratch");
     CommandContext commandContext(commandList);
 
-    commandContext.TransitionResource(scratch.Resource.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    commandContext.UseResource(scratch.Resource.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, ResourceUse::Write);
 
     D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
     buildDesc.Inputs = inputs;

@@ -57,6 +57,7 @@ class CommandListInternalAccess;
 class CommandQueue;
 class ConstantBuffer;
 class BarrierContext;
+enum class ResourceUse;
 //Modify Begin:2026-08-12 by Hui
 class D3D12DeviceContext;
 //Modify End

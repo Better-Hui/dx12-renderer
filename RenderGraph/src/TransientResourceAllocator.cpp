@@ -215,9 +215,14 @@ std::map<ResourceId, TransientResourceAllocator::ResourceLifecycle> TransientRes
             const bool isPersistentHistory = resourceDescription != resourceDescriptions.end() &&
                 resourceDescription->second.m_DedicatedResource &&
                 resourceDescription->second.m_TextureDescription.m_InitAction == ResourceInitAction::Preserve;
+            //Modify Begin:2026-09-30 by Hui
+            const bool isPassLocalReadWrite = std::ranges::any_of(
+                pass.GetOutputs(),
+                [&input](const Output& output) { return output.m_Id == input.m_Id; });
             Assert(
-                lifecycle.m_BeginPassIndex != passIndex || isPersistentHistory,
+                lifecycle.m_BeginPassIndex != passIndex || isPersistentHistory || isPassLocalReadWrite,
                 "A transient resource's first usage cannot be as an input.");
+            //Modify End
 
             lifecycle.m_EndPassIndex = passIndex;
         }

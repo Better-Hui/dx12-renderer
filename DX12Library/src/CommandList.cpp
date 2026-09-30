@@ -230,7 +230,12 @@ void CommandList::PrepareBoundResources(const BindingPoint point,
             }
         }
         for (const auto& [subresource, access] : states)
-            GetBarrierContext().PrepareResource(resource, access.State, access.UavWrite, subresource);
+            GetBarrierContext().Use(
+                resource,
+                access.State,
+                access.UavWrite ? ResourceUse::Write : ResourceUse::Read,
+                false,
+                subresource);
     }
 }
 //Modify End
@@ -357,8 +362,8 @@ void CommandList::CopyResource(
 {
     Assert(dstRes != nullptr, "Copy destination resource must not be null.");
     Assert(srcRes != nullptr, "Copy source resource must not be null.");
-    GetBarrierContext().PrepareResource(srcRes.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE);
-    GetBarrierContext().PrepareResource(dstRes.Get(), D3D12_RESOURCE_STATE_COPY_DEST);
+    GetBarrierContext().Use(srcRes.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, ResourceUse::Read);
+    GetBarrierContext().Use(dstRes.Get(), D3D12_RESOURCE_STATE_COPY_DEST, ResourceUse::Write);
     FlushResourceBarriers();
 
     m_D3d12CommandList->CopyResource(dstRes.Get(), srcRes.Get());
@@ -378,8 +383,8 @@ void CommandList::CopyBufferRegion(
 {
     Assert(source != nullptr, "Copy source buffer must not be null.");
     Assert(destination.GetD3D12Resource() != nullptr, "Copy destination buffer must not be null.");
-    GetBarrierContext().PrepareResource(source.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE);
-    GetBarrierContext().PrepareResource(destination, D3D12_RESOURCE_STATE_COPY_DEST);
+    GetBarrierContext().Use(source.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, ResourceUse::Read);
+    GetBarrierContext().Use(destination, D3D12_RESOURCE_STATE_COPY_DEST, ResourceUse::Write);
 
     FlushResourceBarriers();
 
@@ -402,8 +407,8 @@ void CommandList::CopyBufferToReadback(
 {
     Assert(source.GetD3D12Resource() != nullptr, "Copy source buffer must not be null.");
     Assert(destination != nullptr, "Readback destination buffer must not be null.");
-    GetBarrierContext().PrepareResource(source, D3D12_RESOURCE_STATE_COPY_SOURCE);
-    GetBarrierContext().PrepareResource(destination.Get(), D3D12_RESOURCE_STATE_COPY_DEST);
+    GetBarrierContext().Use(source, D3D12_RESOURCE_STATE_COPY_SOURCE, ResourceUse::Read);
+    GetBarrierContext().Use(destination.Get(), D3D12_RESOURCE_STATE_COPY_DEST, ResourceUse::Write);
 
     FlushResourceBarriers();
 
@@ -424,10 +429,10 @@ void CommandList::ResolveSubresource(const Resource& dstRes, const Resource& src
 {
     if (m_ActiveBarrierContext != nullptr)
     {
-        m_ActiveBarrierContext->PrepareResource(
-            srcRes, D3D12_RESOURCE_STATE_RESOLVE_SOURCE, false, srcSubresource);
-        m_ActiveBarrierContext->PrepareResource(
-            dstRes, D3D12_RESOURCE_STATE_RESOLVE_DEST, false, dstSubresource);
+        m_ActiveBarrierContext->Use(
+            srcRes, D3D12_RESOURCE_STATE_RESOLVE_SOURCE, ResourceUse::Read, false, srcSubresource);
+        m_ActiveBarrierContext->Use(
+            dstRes, D3D12_RESOURCE_STATE_RESOLVE_DEST, ResourceUse::Write, false, dstSubresource);
     }
     FlushResourceBarriers();
 
@@ -445,7 +450,7 @@ void CommandList::SetShadingRateImage(const Resource& resource)
 {
     const auto d3d12Resource = resource.GetD3D12Resource();
     //Modify Begin:2026-09-29 by Hui
-    GetBarrierContext().PrepareResource(resource, D3D12_RESOURCE_STATE_SHADING_RATE_SOURCE);
+    GetBarrierContext().Use(resource, D3D12_RESOURCE_STATE_SHADING_RATE_SOURCE, ResourceUse::Read);
     FlushResourceBarriers();
     //Modify End
     TrackObject(d3d12Resource);
@@ -479,7 +484,7 @@ void CommandList::ClearTexture(const Texture& texture, const float clearColor[4]
 {
     if (m_ActiveBarrierContext != nullptr)
     {
-        m_ActiveBarrierContext->PrepareResource(texture, D3D12_RESOURCE_STATE_RENDER_TARGET, false);
+        m_ActiveBarrierContext->Use(texture, D3D12_RESOURCE_STATE_RENDER_TARGET, ResourceUse::Write);
         m_ActiveBarrierContext->Flush();
     }
     m_D3d12CommandList->ClearRenderTargetView(texture.GetRenderTargetView(), clearColor, 0, nullptr);
@@ -499,7 +504,7 @@ void CommandList::ClearDepthStencilTexture(const Texture& texture, const D3D12_C
 {
     if (m_ActiveBarrierContext != nullptr)
     {
-        m_ActiveBarrierContext->PrepareResource(texture, D3D12_RESOURCE_STATE_DEPTH_WRITE, false);
+        m_ActiveBarrierContext->Use(texture, D3D12_RESOURCE_STATE_DEPTH_WRITE, ResourceUse::Write);
         m_ActiveBarrierContext->Flush();
     }
     m_D3d12CommandList->ClearDepthStencilView(texture.GetDepthStencilView(), clearFlags, depth, stencil, 0, nullptr);
@@ -984,7 +989,8 @@ void CommandList::ClearUnorderedAccessUint(const Resource& resource, const UINT 
 
     if (m_ActiveBarrierContext != nullptr)
     {
-        m_ActiveBarrierContext->PrepareResource(resource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
+        m_ActiveBarrierContext->Use(
+            resource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, ResourceUse::Write, true);
         m_ActiveBarrierContext->Flush();
     }
 

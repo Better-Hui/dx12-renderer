@@ -892,9 +892,10 @@ void RenderGraph::RenderGraphCommandExecutor::ApplyDirectQueuePreamble(
     for (const PassResourceTransition& transition : directPreamble.CrossQueueInputTransitions)
     {
         const auto& resource = m_ResourcePool->GetResource(transition.Id);
-        recorder.Transition(
+        recorder.Use(
             resource,
             transition.StateAfter,
+            transition.Use,
             transition.InsertUavBarrier);
     }
 
@@ -910,9 +911,10 @@ void RenderGraph::RenderGraphCommandExecutor::ApplyDirectQueuePreamble(
     for (const PassResourceTransition& transition : directPreamble.OutputTransitions)
     {
         const auto& resource = m_ResourcePool->GetResource(transition.Id);
-        recorder.Transition(
+        recorder.Use(
             resource,
             transition.StateAfter,
+            transition.Use,
             transition.InsertUavBarrier);
     }
 
@@ -962,9 +964,10 @@ void RenderGraph::RenderGraphCommandExecutor::ApplyExternalResourceTransitions(
         Assert(transition.Access != nullptr,
             "Render pass external resource transition must reference an access declaration.");
         const Resource& resource = transition.Access->Resolve();
-        recorder.Transition(
+        recorder.Use(
             resource,
             transition.StateAfter,
+            transition.Use,
             transition.InsertUavBarrier);
     }
 }
@@ -985,9 +988,10 @@ void RenderGraph::RenderGraphCommandExecutor::RecordPassBoundaryBarriers(
     for (const PassResourceTransition& transition : resourceStatePlan.InputTransitions)
     {
         const auto& resource = m_ResourcePool->GetResource(transition.Id);
-        recorder.Transition(
+        recorder.Use(
             resource,
             transition.StateAfter,
+            transition.Use,
             transition.InsertUavBarrier);
     }
 
@@ -1002,9 +1006,10 @@ void RenderGraph::RenderGraphCommandExecutor::RecordPassBoundaryBarriers(
     for (const PassResourceTransition& transition : resourceStatePlan.OutputTransitions)
     {
         const auto& resource = m_ResourcePool->GetResource(transition.Id);
-        recorder.Transition(
+        recorder.Use(
             resource,
             transition.StateAfter,
+            transition.Use,
             transition.InsertUavBarrier);
     }
 

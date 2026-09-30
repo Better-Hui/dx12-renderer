@@ -246,9 +246,9 @@ int RendererDiagnosticsTool::BarrierSelfTestCommand()
         external.DeclareResources(duplicates);
         external.DeclareResources(duplicates);
         CommandContext ctx(external);
-        ExpectRejected([&] { ctx.TransitionResource(*mipTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS); },
+        ExpectRejected([&] { ctx.UseResource(*mipTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, ResourceUse::Write); },
             "An exact declaration incorrectly covered ALL subresources.");
-        ExpectRejected([&] { ctx.TransitionResource(*mipTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, false, 1); },
+        ExpectRejected([&] { ctx.UseResource(*mipTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, ResourceUse::Write, false, 1); },
             "An exact declaration incorrectly covered another mip.");
         external.End();
         {
@@ -307,10 +307,10 @@ int RendererDiagnosticsTool::BarrierSelfTestCommand()
         setupContext.BindPipeline(colorShader);
         setupContext.BindDescriptorSet(colorShader.GetDescriptorSet());
         setupContext.Dispatch(1);
-        setupContext.TransitionResource(*resources.Depth, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+        setupContext.UseResource(*resources.Depth, D3D12_RESOURCE_STATE_DEPTH_WRITE, ResourceUse::Write);
         setup->ClearDepthStencilTexture(*resources.Depth, D3D12_CLEAR_FLAG_DEPTH, 0.5f);
-        setupContext.TransitionResource(*resources.Depth, D3D12_RESOURCE_STATE_COPY_SOURCE);
-        for (const auto& item : textures) setupContext.TransitionResource(*item, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        setupContext.UseResource(*resources.Depth, D3D12_RESOURCE_STATE_COPY_SOURCE, ResourceUse::Read);
+        for (const auto& item : textures) setupContext.UseResource(*item, D3D12_RESOURCE_STATE_COPY_SOURCE, ResourceUse::Read);
         queue->WaitForFenceValue(queue->ExecuteCommandList(setup));
 
         ComPtr<ID3D12CommandAllocator> allocator;

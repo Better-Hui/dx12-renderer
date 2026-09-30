@@ -3,6 +3,8 @@
 
 #include <d3d12.h>
 
+#include <DX12Library/BarrierContext.h>
+
 #include <cstdint>
 #include <map>
 #include <optional>
@@ -23,6 +25,7 @@ namespace RenderGraph
     {
         ResourceId Id = 0;
         D3D12_RESOURCE_STATES StateAfter = D3D12_RESOURCE_STATE_COMMON;
+        ResourceUse Use = ResourceUse::Read;
         bool InsertUavBarrier = false;
     };
 
@@ -30,6 +33,7 @@ namespace RenderGraph
     {
         const ExternalResourceAccess* Access = nullptr;
         D3D12_RESOURCE_STATES StateAfter = D3D12_RESOURCE_STATE_COMMON;
+        ResourceUse Use = ResourceUse::Read;
         bool InsertUavBarrier = false;
     };
 

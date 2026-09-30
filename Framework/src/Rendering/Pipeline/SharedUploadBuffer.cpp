@@ -28,7 +28,7 @@ void SharedUploadBuffer::Upload(CommandList& commandList, const Resource& destin
     CommandContext commandContext(commandList);
 
 //Modify Begin:2026-08-24 by Hui
-    commandContext.TransitionResource(destination, D3D12_RESOURCE_STATE_COPY_DEST);
+    commandContext.UseResource(destination, D3D12_RESOURCE_STATE_COPY_DEST, ResourceUse::Write);
     // The upload source is persistently GENERIC_READ and is not owned by a
     // Resource wrapper. The destination transition remains pass-local here.
     commandList.CopyBufferRegion(
@@ -37,7 +37,7 @@ void SharedUploadBuffer::Upload(CommandList& commandList, const Resource& destin
         bufferInfo.m_Buffer.Get(),
         pUploadPtr - bufferInfo.m_DataBegin,
         sizeInBytes);
-    commandContext.TransitionResource(destination, D3D12_RESOURCE_STATE_GENERIC_READ);
+    commandContext.UseResource(destination, D3D12_RESOURCE_STATE_GENERIC_READ, ResourceUse::Read);
     //Modify End
 }
 

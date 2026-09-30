@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-09-29 by Hui
+//Modify Begin:2026-09-30 by Hui
 
 #include <d3d12.h>
 
@@ -11,6 +11,16 @@
 class CommandList;
 class Resource;
 class ResourceStateRegistration;
+
+// A resource-use intent is the common contract shared by graph passes,
+// CommandContext bindings, and external command-list integrations. The state
+// is still explicit because D3D12 states are queue and view specific.
+enum class ResourceUse
+{
+    Read,
+    Write,
+    ReadWrite,
+};
 
 /**
  * Records resource-state work for one command list.
@@ -24,6 +34,25 @@ class BarrierContext final
 public:
     explicit BarrierContext(CommandList& commandList);
 
+    /**
+     * Record one resource use in the command-list context. This is the
+     * canonical state entry point for all layers; it resolves transitions and
+     * UAV ordering from the context's current local state.
+     */
+    void Use(
+        const Resource& resource,
+        D3D12_RESOURCE_STATES state,
+        ResourceUse use = ResourceUse::Read,
+        bool forceUavBarrier = false,
+        UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
+    void Use(
+        ID3D12Resource* resource,
+        D3D12_RESOURCE_STATES state,
+        ResourceUse use = ResourceUse::Read,
+        bool forceUavBarrier = false,
+        UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
+
+private:
     void PrepareResource(
         const Resource& resource,
         D3D12_RESOURCE_STATES stateAfter,
@@ -46,6 +75,7 @@ public:
         bool uavBefore = false,
         UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
 
+public:
     /** Register and prime a resource whose state is owned by an external renderer. */
     void RegisterExternalResource(
         ID3D12Resource* resource,

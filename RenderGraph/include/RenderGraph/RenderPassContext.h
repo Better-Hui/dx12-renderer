@@ -37,22 +37,24 @@ namespace RenderGraph
         BarrierContext& GetBarrierContext() noexcept { return m_BarrierContext; }
         const BarrierContext& GetBarrierContext() const noexcept { return m_BarrierContext; }
 
-        void Transition(
+        void Use(
             const Resource& resource,
-            D3D12_RESOURCE_STATES stateAfter,
-            bool uavBefore = false,
+            D3D12_RESOURCE_STATES state,
+            ResourceUse use = ResourceUse::Read,
+            bool forceUavBarrier = false,
             UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
         {
-            m_BarrierContext.Transition(resource, stateAfter, uavBefore, subresource);
+            m_BarrierContext.Use(resource, state, use, forceUavBarrier, subresource);
         }
 
-        void Transition(
+        void Use(
             ID3D12Resource* resource,
-            D3D12_RESOURCE_STATES stateAfter,
-            bool uavBefore = false,
+            D3D12_RESOURCE_STATES state,
+            ResourceUse use = ResourceUse::Read,
+            bool forceUavBarrier = false,
             UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
         {
-            m_BarrierContext.Transition(resource, stateAfter, uavBefore, subresource);
+            m_BarrierContext.Use(resource, state, use, forceUavBarrier, subresource);
         }
 
         void Uav(const Resource& resource)
@@ -80,18 +82,18 @@ namespace RenderGraph
                 const auto& texture = textures[textureIndex];
                 if (texture != nullptr && texture->IsValid())
                 {
-                    m_BarrierContext.PrepareResource(
-                        *texture, D3D12_RESOURCE_STATE_RENDER_TARGET, false);
+                    m_BarrierContext.Use(
+                        *texture, D3D12_RESOURCE_STATE_RENDER_TARGET, ResourceUse::Write);
                 }
             }
 
             const auto& depthTexture = renderTarget.GetTexture(DepthStencil);
             if (depthTexture != nullptr && depthTexture->IsValid())
             {
-                m_BarrierContext.PrepareResource(
+                m_BarrierContext.Use(
                     *depthTexture,
                     readonlyDepth ? D3D12_RESOURCE_STATE_DEPTH_READ : D3D12_RESOURCE_STATE_DEPTH_WRITE,
-                    false);
+                    readonlyDepth ? ResourceUse::Read : ResourceUse::Write);
             }
 
             m_BarrierContext.Flush();

@@ -239,22 +239,24 @@ CommandContext::CommandContext(ExternalCommandContext& externalContext)
     externalContext.BeginRecording();
 }
 
-void CommandContext::TransitionResource(
+void CommandContext::UseResource(
     const Resource& resource,
     const D3D12_RESOURCE_STATES stateAfter,
-    const bool uavBefore,
+    const ResourceUse use,
+    const bool forceUavBarrier,
     const UINT subresource) const
 {
-    m_BarrierContext->Transition(resource, stateAfter, uavBefore, subresource);
+    m_BarrierContext->Use(resource, stateAfter, use, forceUavBarrier, subresource);
 }
 
-void CommandContext::TransitionResource(
+void CommandContext::UseResource(
     ID3D12Resource* const resource,
     const D3D12_RESOURCE_STATES stateAfter,
-    const bool uavBefore,
+    const ResourceUse use,
+    const bool forceUavBarrier,
     const UINT subresource) const
 {
-    m_BarrierContext->Transition(resource, stateAfter, uavBefore, subresource);
+    m_BarrierContext->Use(resource, stateAfter, use, forceUavBarrier, subresource);
 }
 
 void CommandContext::UavBarrier(const Resource& resource) const

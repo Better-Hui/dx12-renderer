@@ -91,9 +91,10 @@ public:
     void DeclareResources(std::span<const ResourceAccess> accesses);
     /** Seal resource declarations before CommandContext/native recording. */
     void BeginRecording();
-    void Transition(
+    void UseResource(
         ID3D12Resource* resource,
         D3D12_RESOURCE_STATES stateAfter,
+        ResourceUse use = ResourceUse::Read,
         bool uavBefore = false,
         UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
     void UavBarrier(ID3D12Resource* resource);

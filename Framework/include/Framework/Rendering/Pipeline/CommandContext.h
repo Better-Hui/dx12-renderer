@@ -89,15 +89,17 @@ public:
      */
     BarrierContext& GetBarrierContext() const { return *m_BarrierContext; }
 
-    void TransitionResource(
+    void UseResource(
         const Resource& resource,
         D3D12_RESOURCE_STATES stateAfter,
-        bool uavBefore = false,
+        ResourceUse use = ResourceUse::Read,
+        bool forceUavBarrier = false,
         UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES) const;
-    void TransitionResource(
+    void UseResource(
         ID3D12Resource* resource,
         D3D12_RESOURCE_STATES stateAfter,
-        bool uavBefore = false,
+        ResourceUse use = ResourceUse::Read,
+        bool forceUavBarrier = false,
         UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES) const;
     void UavBarrier(const Resource& resource) const;
     void UavBarrier(ID3D12Resource* resource) const;

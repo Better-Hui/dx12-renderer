@@ -232,6 +232,16 @@ namespace
         }
     }
 
+    ResourceUse GetInputUse(const InputType inputType)
+    {
+        return inputType == InputType::UnorderedAccess ? ResourceUse::ReadWrite : ResourceUse::Read;
+    }
+
+    ResourceUse GetOutputUse(const OutputType outputType)
+    {
+        return outputType == OutputType::ExternalAccess ? ResourceUse::Read : ResourceUse::Write;
+    }
+
     RenderTargetInfo CreateRenderTargetInfo(const RenderPass& renderPass, const ResourcePool& resourcePool)
     {
         RenderTargetInfo renderTargetInfo = {};
@@ -645,7 +655,11 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
                 stateAfter,
                 insertUavBarrier))
             {
-                resourceStatePlan.InputTransitions.push_back({ input.m_Id, stateAfter, insertUavBarrier });
+                resourceStatePlan.InputTransitions.push_back({
+                    input.m_Id,
+                    stateAfter,
+                    GetInputUse(input.m_Type),
+                    insertUavBarrier });
             }
         }
         for (const ExternalResourceAccess& access : renderPass->GetExternalResourceAccesses())
@@ -654,6 +668,9 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
             resourceStatePlan.ExternalResourceTransitions.push_back({
                 &access,
                 access.StateAfter,
+                access.Mode == ExternalResourceAccessMode::Write
+                    ? ResourceUse::Write
+                    : ResourceUse::Read,
                 access.InsertUavBarrier
             });
         }
@@ -709,7 +726,11 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
             bool insertUavBarrier = false;
             if (TryGetOutputTransition(output.m_Type, stateAfter, insertUavBarrier))
             {
-                resourceStatePlan.OutputTransitions.push_back({ output.m_Id, stateAfter, insertUavBarrier });
+                resourceStatePlan.OutputTransitions.push_back({
+                    output.m_Id,
+                    stateAfter,
+                    GetOutputUse(output.m_Type),
+                    insertUavBarrier });
             }
         }
 

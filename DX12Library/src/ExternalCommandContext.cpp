@@ -265,15 +265,21 @@ void ExternalCommandContext::BeginRecording()
     m_RecordingStarted = true;
 }
 
-void ExternalCommandContext::Transition(
+void ExternalCommandContext::UseResource(
     ID3D12Resource* const resource,
     const D3D12_RESOURCE_STATES stateAfter,
+    const ResourceUse use,
     const bool uavBefore,
     const UINT subresource)
 {
     Assert(!m_Ended, "ExternalCommandContext has already ended recording.");
     m_RecordingStarted = true;
-    m_BarrierContext.Transition(resource, stateAfter, uavBefore, subresource);
+    m_BarrierContext.Use(
+        resource,
+        stateAfter,
+        use,
+        uavBefore,
+        subresource);
     m_BarrierContext.Flush();
 }
 
@@ -316,9 +322,10 @@ bool ExternalCommandContext::RestoreEntryStatesNoThrow() noexcept
     {
         for (const auto& [key, access] : m_ResourceAccesses)
         {
-            m_BarrierContext.PrepareResource(
+            m_BarrierContext.Use(
                 key.Resource,
                 access.InitialState,
+                ResourceUse::Read,
                 false,
                 key.Subresource);
         }
@@ -354,10 +361,11 @@ void ExternalCommandContext::End()
     {
         for (const FinalResourceState& finalState : m_FinalResourceStates)
         {
-            m_BarrierContext.PrepareResource(
+            m_BarrierContext.Use(
                 finalState.Resource,
                 finalState.State,
-                finalState.UavAccess,
+                finalState.UavAccess ? ResourceUse::Write : ResourceUse::Read,
+                false,
                 finalState.Subresource);
         }
         m_BarrierContext.Flush();

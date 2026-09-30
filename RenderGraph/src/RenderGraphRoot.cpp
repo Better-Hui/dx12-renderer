@@ -188,14 +188,14 @@ void RenderGraph::RenderGraphRoot::Present(const std::shared_ptr<Window>& pWindo
 
         if (pTexture->GetD3D12ResourceDesc().SampleDesc.Count > 1)
         {
-            RenderGraphBarrierRecorder::Transition(
+            RenderGraphBarrierRecorder::Use(
                 *pCommandList,
                 *pTexture,
                 D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
         }
         else
         {
-            RenderGraphBarrierRecorder::Transition(
+            RenderGraphBarrierRecorder::Use(
                 *pCommandList,
                 *pTexture,
                 D3D12_RESOURCE_STATE_COPY_SOURCE);
@@ -238,14 +238,14 @@ void RenderGraph::RenderGraphRoot::PresentWithOverlay(
 
         if (pTexture->GetD3D12ResourceDesc().SampleDesc.Count > 1)
         {
-            RenderGraphBarrierRecorder::Transition(
+            RenderGraphBarrierRecorder::Use(
                 commandList,
                 *pTexture,
                 D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
         }
         else
         {
-            RenderGraphBarrierRecorder::Transition(
+            RenderGraphBarrierRecorder::Use(
                 commandList,
                 *pTexture,
                 D3D12_RESOURCE_STATE_COPY_SOURCE);
@@ -292,14 +292,14 @@ void RenderGraph::RenderGraphRoot::PresentWithExternalFrameProcessor(
     {
         PIXScope(*commandList, L"Render Graph: Prepare External Frame Processor");
 
-        RenderGraphBarrierRecorder::Transition(
+        RenderGraphBarrierRecorder::Use(
             *commandList,
             *displayTexture,
             D3D12_RESOURCE_STATE_COPY_SOURCE);
         for (const ResourceId resourceId : processorResourceIds)
         {
             Assert(resourceId != displayResourceId, "Display resource must not be duplicated in external processor resources.");
-            RenderGraphBarrierRecorder::Transition(
+            RenderGraphBarrierRecorder::Use(
                 *commandList,
                 m_ResourcePool->GetResource(resourceId),
                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -311,7 +311,7 @@ void RenderGraph::RenderGraphRoot::PresentWithExternalFrameProcessor(
         pWindow->PrepareBackBufferForCopyDestination(*commandList);
         commandList->CopyResource(*backBuffer, *displayTexture);
 
-        RenderGraphBarrierRecorder::Transition(
+        RenderGraphBarrierRecorder::Use(
             *commandList,
             *displayTexture,
             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -353,7 +353,7 @@ void RenderGraph::RenderGraphRoot::PresentWithOverlayBlit(
     {
         PIXScope(commandList, L"Render Graph: Prepare Display Blit");
 
-        RenderGraphBarrierRecorder::Transition(
+        RenderGraphBarrierRecorder::Use(
             commandList,
             *pTexture,
             D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
@@ -391,7 +391,7 @@ void RenderGraph::RenderGraphRoot::ReadbackTexture(
 
     auto commandList = m_DirectCommandQueue->GetCommandList();
     const auto& source = m_ResourcePool->GetTexture(sourceId);
-    RenderGraphBarrierRecorder::Transition(
+    RenderGraphBarrierRecorder::Use(
         *commandList,
         *source,
         D3D12_RESOURCE_STATE_COPY_SOURCE);

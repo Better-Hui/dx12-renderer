@@ -8,16 +8,16 @@
 
 namespace RenderGraph
 {
-    void RenderGraphBarrierRecorder::Transition(
+    void RenderGraphBarrierRecorder::Use(
         const Resource& resource,
         const D3D12_RESOURCE_STATES stateAfter,
+        const ResourceUse use,
         const bool insertUavBarrier)
     {
-        BarrierContext& barrierContext = m_PassContext.GetBarrierContext();
         resource.ForEachResourceRecursive(
-            [&barrierContext, stateAfter, insertUavBarrier](const Resource& nestedResource)
+            [this, stateAfter, use, insertUavBarrier](const Resource& nestedResource)
             {
-                barrierContext.Transition(nestedResource, stateAfter, insertUavBarrier);
+                m_PassContext.Use(nestedResource, stateAfter, use, insertUavBarrier);
             });
     }
 
@@ -46,15 +46,16 @@ namespace RenderGraph
         m_PassContext.GetBarrierContext().Flush();
     }
 
-    void RenderGraphBarrierRecorder::Transition(
+    void RenderGraphBarrierRecorder::Use(
         CommandList& commandList,
         const Resource& resource,
         const D3D12_RESOURCE_STATES stateAfter,
+        const ResourceUse use,
         const bool insertUavBarrier)
     {
         RenderPassContext passContext(commandList);
         RenderGraphBarrierRecorder recorder(passContext);
-        recorder.Transition(resource, stateAfter, insertUavBarrier);
+        recorder.Use(resource, stateAfter, use, insertUavBarrier);
         passContext.Finish();
     }
 

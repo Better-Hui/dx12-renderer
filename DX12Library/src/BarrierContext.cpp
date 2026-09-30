@@ -16,6 +16,31 @@ BarrierContext::BarrierContext(CommandList& commandList)
 {
 }
 
+void BarrierContext::Use(
+    const Resource& resource,
+    const D3D12_RESOURCE_STATES state,
+    const ResourceUse use,
+    const bool forceUavBarrier,
+    const UINT subresource)
+{
+    Assert(resource.IsValid(), "BarrierContext cannot use an invalid resource.");
+    CommandListInternalAccess::TrackResourceLifetime(m_CommandList, resource);
+    Use(resource.GetD3D12Resource().Get(), state, use, forceUavBarrier, subresource);
+}
+
+void BarrierContext::Use(
+    ID3D12Resource* const resource,
+    const D3D12_RESOURCE_STATES state,
+    const ResourceUse use,
+    const bool forceUavBarrier,
+    const UINT subresource)
+{
+    if (forceUavBarrier)
+        Uav(resource);
+    const bool uavWrite = use == ResourceUse::Write || use == ResourceUse::ReadWrite;
+    PrepareResource(resource, state, uavWrite, subresource);
+}
+
 void BarrierContext::PrepareResource(
     const Resource& resource,
     const D3D12_RESOURCE_STATES stateAfter,
