@@ -164,10 +164,9 @@ private:
     // first declaration stable for the lifetime of this recording context.
     std::unordered_map<ResourceSubresourceKey, D3D12_RESOURCE_STATES, ResourceSubresourceKeyHash>
         m_ExternalInitialStates;
-#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
     std::chrono::steady_clock::duration m_TrackLifetimeDuration{};
     std::chrono::steady_clock::duration m_PrepareResourceDuration{};
-#endif
+    std::chrono::steady_clock::duration m_HeapPropertiesDuration{};
 };
 
 //Modify End
