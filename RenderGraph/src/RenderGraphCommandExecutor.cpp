@@ -1,4 +1,4 @@
-//Modify Begin:2026-09-30 by Hui
+//Modify Begin:2026-10-01 by Hui
 #include "RenderGraphCommandExecutor.h"
 
 #include "RenderGraphProfiler.h"
@@ -231,6 +231,11 @@ RenderGraph::RenderGraphCommandExecutor::CreateDiagnosticRenderPassScope(
         });
     };
 
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+    const bool measureDiagnosticComponents = DX12Diagnostics::ActiveRecordingScope.Sink != nullptr;
+    const auto diagnosticInputsStart = measureDiagnosticComponents ? std::chrono::steady_clock::now() :
+        std::chrono::steady_clock::time_point{};
+#endif
     for (const Input& input : pass.GetInputs())
     {
         const DX12Diagnostics::DiagnosticResourceAccess access = GetDiagnosticAccess(input.m_Type);
@@ -244,6 +249,12 @@ RenderGraph::RenderGraphCommandExecutor::CreateDiagnosticRenderPassScope(
                 access);
         }
     }
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+    const auto diagnosticInputsDuration = measureDiagnosticComponents ?
+        std::chrono::steady_clock::now() - diagnosticInputsStart : std::chrono::steady_clock::duration{};
+    const auto diagnosticOutputsStart = measureDiagnosticComponents ? std::chrono::steady_clock::now() :
+        std::chrono::steady_clock::time_point{};
+#endif
     for (const Output& output : pass.GetOutputs())
     {
         const DX12Diagnostics::DiagnosticResourceAccess access = GetDiagnosticAccess(output.m_Type);
@@ -257,6 +268,12 @@ RenderGraph::RenderGraphCommandExecutor::CreateDiagnosticRenderPassScope(
                 access);
         }
     }
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+    const auto diagnosticOutputsDuration = measureDiagnosticComponents ?
+        std::chrono::steady_clock::now() - diagnosticOutputsStart : std::chrono::steady_clock::duration{};
+    const auto diagnosticExternalStart = measureDiagnosticComponents ? std::chrono::steady_clock::now() :
+        std::chrono::steady_clock::time_point{};
+#endif
     for (const ExternalResourceAccess& access : pass.GetExternalResourceAccesses())
     {
         addResource(
@@ -267,7 +284,24 @@ RenderGraph::RenderGraphCommandExecutor::CreateDiagnosticRenderPassScope(
                 ? DX12Diagnostics::DiagnosticResourceAccess::Read
                 : DX12Diagnostics::DiagnosticResourceAccess::Write);
     }
-
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+    if (measureDiagnosticComponents)
+    {
+        if (!pass.GetInputs().empty())
+        {
+            DX12Diagnostics::RecordAccumulatedRecordingStage("rg.diagnostic_inputs", diagnosticInputsDuration);
+        }
+        if (!pass.GetOutputs().empty())
+        {
+            DX12Diagnostics::RecordAccumulatedRecordingStage("rg.diagnostic_outputs", diagnosticOutputsDuration);
+        }
+        if (!pass.GetExternalResourceAccesses().empty())
+        {
+            DX12Diagnostics::RecordAccumulatedRecordingStage(
+                "rg.diagnostic_external", std::chrono::steady_clock::now() - diagnosticExternalStart);
+        }
+    }
+#endif
     return std::make_unique<DX12Diagnostics::DiagnosticRenderPassScope>(std::move(desc));
 }
 
@@ -1066,13 +1100,21 @@ void RenderGraph::RenderGraphCommandExecutor::ApplyExternalResourceTransitions(
     RenderPassContext& passContext,
     const std::span<const PassExternalResourceTransition> transitions)
 {
+    if (transitions.empty())
+    {
+        return;
+    }
     DX12_CPU_RECORDING_SCOPE("rg.external_transitions");
     RenderGraphBarrierRecorder recorder(passContext);
     passContext.GetBarrierContext().ReserveResourceUses(transitions.size());
+    const bool externalCommandList = passContext.GetCommandList().IsExternalCommandList();
 #if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
     const bool measureComponents = DX12Diagnostics::ActiveRecordingScope.Sink != nullptr;
     std::chrono::steady_clock::duration resolveDuration{};
     std::chrono::steady_clock::duration useDuration{};
+    std::chrono::steady_clock::duration attributionDuration{};
+    std::chrono::steady_clock::duration stableReadDuration{};
+    std::chrono::steady_clock::duration transitionDuration{};
 #endif
     for (const PassExternalResourceTransition& transition : transitions)
     {
@@ -1092,14 +1134,26 @@ void RenderGraph::RenderGraphCommandExecutor::ApplyExternalResourceTransitions(
             std::chrono::steady_clock::time_point{};
 #endif
         if (transition.AttributionOnly &&
-            !passContext.GetCommandList().IsExternalCommandList())
+            !externalCommandList)
         {
             passContext.UseAttributionOnly(resource, transition.StateAfter, transition.Use);
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+            if (measureComponents)
+            {
+                attributionDuration += std::chrono::steady_clock::now() - useStart;
+            }
+#endif
         }
         else if (transition.StableReadOnly &&
-            !passContext.GetCommandList().IsExternalCommandList())
+            !externalCommandList)
         {
             passContext.UseStableReadOnly(resource, transition.StateAfter);
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+            if (measureComponents)
+            {
+                stableReadDuration += std::chrono::steady_clock::now() - useStart;
+            }
+#endif
         }
         else if (transition.Access->StaticResource != nullptr)
         {
@@ -1109,6 +1163,12 @@ void RenderGraph::RenderGraphCommandExecutor::ApplyExternalResourceTransitions(
                 transition.StateAfter,
                 transition.Use,
                 transition.InsertUavBarrier);
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+            if (measureComponents)
+            {
+                transitionDuration += std::chrono::steady_clock::now() - useStart;
+            }
+#endif
         }
         else
         {
@@ -1117,6 +1177,12 @@ void RenderGraph::RenderGraphCommandExecutor::ApplyExternalResourceTransitions(
                 transition.StateAfter,
                 transition.Use,
                 transition.InsertUavBarrier);
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+            if (measureComponents)
+            {
+                transitionDuration += std::chrono::steady_clock::now() - useStart;
+            }
+#endif
         }
 #if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
         if (measureComponents)
@@ -1130,6 +1196,18 @@ void RenderGraph::RenderGraphCommandExecutor::ApplyExternalResourceTransitions(
     {
         DX12Diagnostics::RecordAccumulatedRecordingStage("rg.external_resolve", resolveDuration);
         DX12Diagnostics::RecordAccumulatedRecordingStage("rg.external_use", useDuration);
+        if (attributionDuration != std::chrono::steady_clock::duration{})
+        {
+            DX12Diagnostics::RecordAccumulatedRecordingStage("rg.external_attribution", attributionDuration);
+        }
+        if (stableReadDuration != std::chrono::steady_clock::duration{})
+        {
+            DX12Diagnostics::RecordAccumulatedRecordingStage("rg.external_stable_read", stableReadDuration);
+        }
+        if (transitionDuration != std::chrono::steady_clock::duration{})
+        {
+            DX12Diagnostics::RecordAccumulatedRecordingStage("rg.external_transition_use", transitionDuration);
+        }
     }
 #endif
 }

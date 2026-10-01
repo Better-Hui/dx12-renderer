@@ -11,13 +11,12 @@
 
 #include <algorithm>
 
-//Modify Begin:2026-09-30 by Hui
+//Modify Begin:2026-10-01 by Hui
 BarrierContext::BarrierContext(CommandList& commandList)
     : m_CommandList(commandList)
 {
 }
 
-//Modify Begin:2026-10-01 by Hui
 void BarrierContext::ReserveResourceUses(const size_t resourceCount)
 {
     if (resourceCount == 0u)
@@ -30,7 +29,6 @@ void BarrierContext::ReserveResourceUses(const size_t resourceCount)
     m_ExternalInitialStates.reserve(m_ExternalInitialStates.size() + resourceCount);
     CommandListInternalAccess::ReserveResourceTracking(m_CommandList, resourceCount);
 }
-//Modify End
 
 void BarrierContext::Use(
     const Resource& resource,
@@ -76,7 +74,6 @@ void BarrierContext::Use(
     PrepareResource(resource, state, uavWrite, subresource);
 }
 
-//Modify Begin:2026-10-01 by Hui
 void BarrierContext::UseAttributionOnly(
     const Resource& resource,
     const D3D12_RESOURCE_STATES state,
@@ -86,14 +83,18 @@ void BarrierContext::UseAttributionOnly(
     Assert(resource.IsValid(), "BarrierContext cannot attribute an invalid resource.");
     Assert(use == ResourceUse::Read, "Attribution-only resource uses must be read-only.");
     CommandListInternalAccess::TrackResourceLifetime(m_CommandList, resource);
+    ID3D12Resource* const nativeResource = resource.GetD3D12Resource().Get();
+    if (const LocalResourceState* previous = FindLocalResourceState(nativeResource, subresource);
+        previous != nullptr && previous->State == state && !previous->UavWrite)
+    {
+        return;
+    }
     SetLocalResourceState(
-        resource.GetD3D12Resource().Get(),
+        nativeResource,
         subresource,
         { state, false });
 }
-//Modify End
 
-//Modify Begin:2026-10-01 by Hui
 void BarrierContext::UseStableReadOnly(
     const Resource& resource,
     const D3D12_RESOURCE_STATES state,
@@ -101,23 +102,28 @@ void BarrierContext::UseStableReadOnly(
 {
     Assert(resource.IsValid(), "BarrierContext cannot use an invalid stable resource.");
     CommandListInternalAccess::TrackResourceLifetime(m_CommandList, resource);
+    ID3D12Resource* const nativeResource = resource.GetD3D12Resource().Get();
+    if (const LocalResourceState* previous = FindLocalResourceState(nativeResource, subresource);
+        previous != nullptr && previous->State == state && !previous->UavWrite)
+    {
+        return;
+    }
     D3D12_RESOURCE_STATES registeredState = D3D12_RESOURCE_STATE_COMMON;
     if (CommandListInternalAccess::TryGetRegisteredResourceState(
             m_CommandList,
-            resource.GetD3D12Resource().Get(),
+            nativeResource,
             subresource,
             registeredState) &&
         registeredState == state)
     {
         SetLocalResourceState(
-            resource.GetD3D12Resource().Get(),
+            nativeResource,
             subresource,
             { state, false });
         return;
     }
-    Use(resource, state, ResourceUse::Read, false, subresource);
+    Use(nativeResource, state, ResourceUse::Read, false, subresource);
 }
-//Modify End
 
 void BarrierContext::PrepareResource(
     const Resource& resource,
