@@ -35,6 +35,11 @@ namespace RenderGraph
         D3D12_RESOURCE_STATES StateAfter = D3D12_RESOURCE_STATE_COMMON;
         ResourceUse Use = ResourceUse::Read;
         bool InsertUavBarrier = false;
+        bool StableReadOnly = false;
+        // Later read-only uses of a graph-stable static resource only need
+        // attribution and lifetime tracking; the first use owns the state
+        // transition for the ordered direct-queue batch.
+        bool AttributionOnly = false;
     };
 
     struct PassAliasingTransition

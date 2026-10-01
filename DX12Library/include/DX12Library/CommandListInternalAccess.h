@@ -11,6 +11,12 @@ class CommandListInternalAccess
 public:
     static bool TryGetResourceState(const CommandList& commandList, ID3D12Resource* resource,
         UINT subresource, D3D12_RESOURCE_STATES& state);
+    static bool TryGetRegisteredResourceState(const CommandList& commandList, ID3D12Resource* resource,
+        UINT subresource, D3D12_RESOURCE_STATES& state)
+    {
+        return commandList.m_ResourceStateRegistry != nullptr &&
+            commandList.m_ResourceStateRegistry->TryGetResourceState(resource, state, subresource);
+    }
     static void TransitionBarrier(
         CommandList& commandList,
         const Resource& resource,
@@ -74,6 +80,11 @@ public:
     static void TrackResourceLifetime(CommandList& commandList, const Resource& resource)
     {
         commandList.TrackResource(resource);
+    }
+
+    static void ReserveResourceTracking(CommandList& commandList, size_t resourceCount)
+    {
+        commandList.ReserveResourceTracking(resourceCount);
     }
 
     static void FlushResourceBarriers(CommandList& commandList)

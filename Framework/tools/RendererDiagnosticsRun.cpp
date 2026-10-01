@@ -119,6 +119,7 @@ int RendererDiagnosticsTool::RunCommand(const std::vector<std::string>& argument
         { "RENDERER_DIAGNOSTICS_SESSION", *scenarioOption },
         { "RENDERER_DIAGNOSTICS_OUTPUT", std::filesystem::absolute(output).string() },
         { "RENDERER_DIAGNOSTICS_MAX_EVENTS", std::to_string(maximumEventCount) },
+        { "RENDERER_DIAGNOSTICS_MAX_PERFORMANCE_EVENTS", std::to_string(maximumEventCount) },
     };
     for (size_t index = 0; index + 1u < arguments.size(); ++index)
     {
@@ -179,6 +180,7 @@ int RendererDiagnosticsTool::ReproduceCommand(const std::vector<std::string>& ar
     const uint64_t maximumEventCount = GetUnsignedOption(arguments, "--max-events", 262144u);
     if (maximumEventCount == 0u) throw std::runtime_error("--max-events must be greater than zero.");
     environment["RENDERER_DIAGNOSTICS_MAX_EVENTS"] = std::to_string(maximumEventCount);
+    environment["RENDERER_DIAGNOSTICS_MAX_PERFORMANCE_EVENTS"] = std::to_string(maximumEventCount);
     const bool streamline = capture.Metadata.contains("command_line") &&
         capture.Metadata.at("command_line").find("--streamline-interposer") != std::string::npos;
 

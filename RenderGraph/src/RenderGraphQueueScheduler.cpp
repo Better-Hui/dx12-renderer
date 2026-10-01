@@ -1,6 +1,10 @@
 //Modify Begin:2026-08-24 by Hui
 #include "RenderGraphQueueScheduler.h"
 
+//Modify Begin:2026-10-01 by Hui
+#include <DX12Library/PerformanceScope.h>
+//Modify End
+
 #include <algorithm>
 #include <stdexcept>
 #include <utility>
@@ -126,6 +130,12 @@ namespace RenderGraph
         m_LastWriterQueues.clear();
         m_LastWriterFenceValues.clear();
         m_ExternalResourceUsages.clear();
+//Modify Begin:2026-10-01 by Hui
+        if (m_ExternalResourceUsages.bucket_count() < 1024u)
+        {
+            m_ExternalResourceUsages.reserve(1024u);
+        }
+//Modify End
         m_ResourceRetirements.clear();
         m_ReferencedGraphResources.clear();
         m_FrameSubmissionFences = {};
@@ -313,10 +323,12 @@ namespace RenderGraph
                 QueueFence(predecessorRetirement, transition.BeforeQueue));
         }
 
-        for (const ExternalResourceAccess& access : pass.GetExternalResourceAccesses())
+//Modify Begin:2026-10-01 by Hui
         {
-            access.Resolve().ForEachResourceRecursive(
-                [this, &access, &inspectFence](const Resource& resource)
+            DX12_CPU_RECORDING_SCOPE("rg.external_dependency_scan");
+            for (const ExternalResourceAccess& access : pass.GetExternalResourceAccesses())
+            {
+                const auto inspectResourceUsage = [this, &access, &inspectFence](const Resource& resource)
                 {
                     const auto usageIt = m_ExternalResourceUsages.find(&resource);
                     if (usageIt == m_ExternalResourceUsages.end())
@@ -343,8 +355,18 @@ namespace RenderGraph
                             }
                         }
                     }
-                });
+                };
+                if (access.StaticResource != nullptr)
+                {
+                    inspectResourceUsage(*access.StaticResource);
+                }
+                else
+                {
+                    access.Resolve().ForEachResourceRecursive(inspectResourceUsage);
+                }
+            }
         }
+//Modify End
         return dependencies;
     }
 
@@ -433,6 +455,13 @@ namespace RenderGraph
         const RenderPass& pass,
         const uint64_t fenceValue)
     {
+    DX12_CPU_PERFORMANCE_SCOPE(
+        m_DiagnosticTelemetrySink,
+        m_CurrentFrameIndex,
+        "RenderGraph.TrackPassResources",
+        GetQueueName(pass.GetQueue()),
+        0u,
+        "render_graph_resource_tracking");
         const auto trackResource = [this, &pass, fenceValue](const ResourceId resourceId)
         {
             m_ReferencedGraphResources.insert(resourceId);
@@ -463,10 +492,15 @@ namespace RenderGraph
                 m_LastWriterFenceValues[output.m_Id] = fenceValue;
             }
         }
-        for (const ExternalResourceAccess& access : pass.GetExternalResourceAccesses())
+//Modify Begin:2026-10-01 by Hui
         {
-            TrackExternalResourceAccess(access, pass.GetQueue(), fenceValue);
+            DX12_CPU_RECORDING_SCOPE("rg.external_usage_track");
+            for (const ExternalResourceAccess& access : pass.GetExternalResourceAccesses())
+            {
+                TrackExternalResourceAccess(access, pass.GetQueue(), fenceValue);
+            }
         }
+//Modify End
     }
 
     void RenderGraphQueueScheduler::ValidateDirectPassDependencies(
@@ -897,24 +931,31 @@ namespace RenderGraph
         const RenderPassQueue queue,
         const uint64_t fenceValue)
     {
-        access.Resolve().ForEachResourceRecursive(
-            [this, &access, queue, fenceValue](const Resource& resource)
+        const auto trackResource = [this, &access, queue, fenceValue](const Resource& resource)
+        {
+            ExternalResourceUsage& usage = m_ExternalResourceUsages[&resource];
+            if (access.Mode == ExternalResourceAccessMode::Write)
             {
-                ExternalResourceUsage& usage = m_ExternalResourceUsages[&resource];
-                if (access.Mode == ExternalResourceAccessMode::Write)
-                {
-                    usage.LastWriterQueue = queue;
-                    usage.LastWriterFenceValue = fenceValue;
-                    usage.HasWriter = true;
-                    usage.ReaderFenceValues = {};
-                    usage.HasReader = {};
-                    return;
-                }
+                usage.LastWriterQueue = queue;
+                usage.LastWriterFenceValue = fenceValue;
+                usage.HasWriter = true;
+                usage.ReaderFenceValues = {};
+                usage.HasReader = {};
+                return;
+            }
 
-                const size_t queueIndex = QueueIndex(queue);
-                usage.ReaderFenceValues[queueIndex] = fenceValue;
-                usage.HasReader[queueIndex] = true;
-            });
+            const size_t queueIndex = QueueIndex(queue);
+            usage.ReaderFenceValues[queueIndex] = fenceValue;
+            usage.HasReader[queueIndex] = true;
+        };
+        if (access.StaticResource != nullptr)
+        {
+            trackResource(*access.StaticResource);
+        }
+        else
+        {
+            access.Resolve().ForEachResourceRecursive(trackResource);
+        }
     }
 
     void RenderGraphQueueScheduler::TrackExternalResource(

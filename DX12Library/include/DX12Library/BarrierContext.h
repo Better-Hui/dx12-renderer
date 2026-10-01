@@ -55,6 +55,21 @@ public:
         ResourceUse use = ResourceUse::Read,
         bool forceUavBarrier = false,
         UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
+    /**
+     * Register a resource use whose state was established by an earlier
+     * ordered command list. This keeps lifetime and local state attribution
+     * without emitting another transition.
+     */
+    void UseAttributionOnly(
+        const Resource& resource,
+        D3D12_RESOURCE_STATES state,
+        ResourceUse use = ResourceUse::Read,
+        UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
+    void UseStableReadOnly(
+        const Resource& resource,
+        D3D12_RESOURCE_STATES state,
+        UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
+    void ReserveResourceUses(size_t resourceCount);
 
 private:
     void PrepareResource(

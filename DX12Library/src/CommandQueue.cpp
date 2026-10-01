@@ -6,6 +6,9 @@
 //Modify Begin:2026-08-07 by Hui
 #include "D3D12DeviceContext.h"
 //Modify End
+//Modify Begin:2026-10-01 by Hui
+#include "PerformanceScope.h"
+//Modify End
 
 //Modify Begin:2026-08-21 by Hui
 #include <fstream>
@@ -109,6 +112,11 @@ void CommandQueue::SetDiagnosticTelemetrySink(DiagnosticTelemetrySink* sink) noe
 	m_DiagnosticTelemetrySink.store(sink, std::memory_order_release);
 }
 
+void CommandQueue::SetDiagnosticFrameIndex(const uint64_t frameIndex) noexcept
+{
+	m_DiagnosticFrameIndex.store(frameIndex, std::memory_order_release);
+}
+
 void CommandQueue::EmitTelemetry(DiagnosticTelemetryEvent event) const noexcept
 {
 	if (DiagnosticTelemetrySink* sink = m_DiagnosticTelemetrySink.load(std::memory_order_acquire))
@@ -186,7 +194,16 @@ bool CommandQueue::IsFenceComplete(uint64_t fenceValue)
 	return m_D3d12Fence->GetCompletedValue() >= fenceValue;
 }
 
-void CommandQueue::WaitForFenceValue(uint64_t fenceValue)
+void CommandQueue::WaitForFenceValue(
+	const uint64_t fenceValue,
+	const std::string_view waitContext)
+{
+	WaitForFenceValueInternal(fenceValue, waitContext);
+}
+
+void CommandQueue::WaitForFenceValueInternal(
+	const uint64_t fenceValue,
+	const std::string_view waitContext)
 {
 	ThrowIfQueueFailed();
 	if (!IsFenceComplete(fenceValue))
@@ -253,10 +270,12 @@ void CommandQueue::WaitForFenceValue(uint64_t fenceValue)
 			EmitTelemetry({
 			.Category = "profiler.cpu",
 			.Name = "queue_fence_wait",
+			.FrameIndex = m_DiagnosticFrameIndex.load(std::memory_order_acquire),
 			.CorrelationId = MakeDiagnosticQueueFenceCorrelationId(GetQueueTypeName(m_CommandListType), fenceValue),
 			.Fields = {
 				{ "queue", std::string(GetQueueTypeName(m_CommandListType)) },
 				{ "fence", fenceValue },
+				{ "wait_context", std::string(waitContext) },
 				{ "cpu_duration_ms", durationMilliseconds },
 			},
 			});
@@ -329,6 +348,13 @@ bool CommandQueue::FlushWithTimeout(const uint32_t timeoutMilliseconds)
 
 std::shared_ptr<CommandList> CommandQueue::GetCommandList()
 {
+	DX12_CPU_PERFORMANCE_SCOPE(
+		m_DiagnosticTelemetrySink.load(std::memory_order_acquire),
+		m_DiagnosticFrameIndex.load(std::memory_order_acquire),
+		"CommandQueue.GetCommandList",
+		GetQueueTypeName(m_CommandListType),
+		0u,
+		"command_queue");
 	ThrowIfQueueFailed();
 	std::shared_ptr<CommandList> commandList;
 
@@ -430,8 +456,35 @@ uint64_t CommandQueue::ExecuteCommandLists(const std::vector<std::shared_ptr<Com
 	uint64_t pendingBarrierCommandListCount = 0;
 	for (auto commandList : commandLists)
 	{
-		auto pendingCommandList = GetCommandList();
-		bool hasPendingBarriers = commandList->Close(*pendingCommandList, submissionScope);
+		std::shared_ptr<CommandList> pendingCommandList;
+		{
+			DX12_CPU_PERFORMANCE_SCOPE(
+				m_DiagnosticTelemetrySink.load(std::memory_order_acquire),
+				m_DiagnosticFrameIndex.load(std::memory_order_acquire),
+				"CommandQueue.GetPendingCommandList",
+				GetQueueTypeName(m_CommandListType),
+				0u,
+				"command_queue_close");
+			pendingCommandList = GetCommandList();
+		}
+		bool hasPendingBarriers = false;
+		{
+			DX12_CPU_PERFORMANCE_SCOPE(
+				m_DiagnosticTelemetrySink.load(std::memory_order_acquire),
+				m_DiagnosticFrameIndex.load(std::memory_order_acquire),
+				"CommandQueue.CloseLogical",
+				GetQueueTypeName(m_CommandListType),
+				0u,
+				"command_queue_close");
+			hasPendingBarriers = commandList->Close(*pendingCommandList, submissionScope);
+		}
+		DX12_CPU_PERFORMANCE_SCOPE(
+			m_DiagnosticTelemetrySink.load(std::memory_order_acquire),
+			m_DiagnosticFrameIndex.load(std::memory_order_acquire),
+			"CommandQueue.PendingClose",
+			GetQueueTypeName(m_CommandListType),
+			0u,
+			"command_queue_close");
 		pendingCommandList->Close();
 		if (!commandList->TransitionLifecycle(CommandListLifecycle::Recording, CommandListLifecycle::Submitted) ||
 			!pendingCommandList->TransitionLifecycle(CommandListLifecycle::Recording, CommandListLifecycle::Submitted))
@@ -452,7 +505,21 @@ uint64_t CommandQueue::ExecuteCommandLists(const std::vector<std::shared_ptr<Com
 	}
 
 	UINT numCommandLists = static_cast<UINT>(d3d12CommandLists.size());
+	DX12_CPU_PERFORMANCE_SCOPE(
+		m_DiagnosticTelemetrySink.load(std::memory_order_acquire),
+		m_DiagnosticFrameIndex.load(std::memory_order_acquire),
+		"CommandQueue.ExecuteNative",
+		GetQueueTypeName(m_CommandListType),
+		0u,
+		"command_queue_submit");
 	m_D3d12CommandQueue->ExecuteCommandLists(numCommandLists, d3d12CommandLists.data());
+	DX12_CPU_PERFORMANCE_SCOPE(
+		m_DiagnosticTelemetrySink.load(std::memory_order_acquire),
+		m_DiagnosticFrameIndex.load(std::memory_order_acquire),
+		"CommandQueue.Signal",
+		GetQueueTypeName(m_CommandListType),
+		0u,
+		"command_queue_submit");
 	uint64_t fenceValue = Signal();
 	for (const std::shared_ptr<CommandList>& commandList : toBeQueued)
 	{
@@ -573,7 +640,7 @@ void CommandQueue::ProcessInFlightCommandLists()
 		stage = "wait for submitted fence";
 		try
 		{
-			WaitForFenceValue(fenceValue);
+			WaitForFenceValueInternal(fenceValue, "command_list_retirement");
 		}
 		catch (const std::exception& exception)
 		{

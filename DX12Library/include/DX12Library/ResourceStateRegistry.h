@@ -139,6 +139,22 @@ public:
         m_States[resource].SetSubresourceState(subresource, state);
     }
 
+    bool TryGetResourceState(
+        ID3D12Resource* resource,
+        D3D12_RESOURCE_STATES& state,
+        UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES) const
+    {
+        Assert(resource != nullptr, "Cannot query a null D3D12 resource state.");
+        std::lock_guard lock(m_Mutex);
+        const auto iterator = m_States.find(resource);
+        if (iterator == m_States.end() || !iterator->second.HasKnownState(subresource))
+        {
+            return false;
+        }
+        state = iterator->second.GetSubresourceState(subresource);
+        return true;
+    }
+
     /**
      * Forget state supplied by an external renderer after it destroys a resource.
      * An internally owned registration always wins and is left untouched.
@@ -166,7 +182,7 @@ private:
         m_Registrations.erase(resource);
     }
 
-    std::mutex m_Mutex;
+    mutable std::mutex m_Mutex;
     ResourceStateMap m_States;
     std::unordered_map<ID3D12Resource*, std::weak_ptr<ResourceStateRegistration>> m_Registrations;
 };

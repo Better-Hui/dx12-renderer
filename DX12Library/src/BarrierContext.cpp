@@ -17,6 +17,21 @@ BarrierContext::BarrierContext(CommandList& commandList)
 {
 }
 
+//Modify Begin:2026-10-01 by Hui
+void BarrierContext::ReserveResourceUses(const size_t resourceCount)
+{
+    if (resourceCount == 0u)
+    {
+        return;
+    }
+    m_UavAccesses.reserve(m_UavAccesses.size() + resourceCount);
+    m_LocalResourceStates.reserve(m_LocalResourceStates.size() + resourceCount);
+    m_ExactSubresourcesByResource.reserve(m_ExactSubresourcesByResource.size() + resourceCount);
+    m_ExternalInitialStates.reserve(m_ExternalInitialStates.size() + resourceCount);
+    CommandListInternalAccess::ReserveResourceTracking(m_CommandList, resourceCount);
+}
+//Modify End
+
 void BarrierContext::Use(
     const Resource& resource,
     const D3D12_RESOURCE_STATES state,
@@ -60,6 +75,49 @@ void BarrierContext::Use(
     const bool uavWrite = use == ResourceUse::Write || use == ResourceUse::ReadWrite;
     PrepareResource(resource, state, uavWrite, subresource);
 }
+
+//Modify Begin:2026-10-01 by Hui
+void BarrierContext::UseAttributionOnly(
+    const Resource& resource,
+    const D3D12_RESOURCE_STATES state,
+    const ResourceUse use,
+    const UINT subresource)
+{
+    Assert(resource.IsValid(), "BarrierContext cannot attribute an invalid resource.");
+    Assert(use == ResourceUse::Read, "Attribution-only resource uses must be read-only.");
+    CommandListInternalAccess::TrackResourceLifetime(m_CommandList, resource);
+    SetLocalResourceState(
+        resource.GetD3D12Resource().Get(),
+        subresource,
+        { state, false });
+}
+//Modify End
+
+//Modify Begin:2026-10-01 by Hui
+void BarrierContext::UseStableReadOnly(
+    const Resource& resource,
+    const D3D12_RESOURCE_STATES state,
+    const UINT subresource)
+{
+    Assert(resource.IsValid(), "BarrierContext cannot use an invalid stable resource.");
+    CommandListInternalAccess::TrackResourceLifetime(m_CommandList, resource);
+    D3D12_RESOURCE_STATES registeredState = D3D12_RESOURCE_STATE_COMMON;
+    if (CommandListInternalAccess::TryGetRegisteredResourceState(
+            m_CommandList,
+            resource.GetD3D12Resource().Get(),
+            subresource,
+            registeredState) &&
+        registeredState == state)
+    {
+        SetLocalResourceState(
+            resource.GetD3D12Resource().Get(),
+            subresource,
+            { state, false });
+        return;
+    }
+    Use(resource, state, ResourceUse::Read, false, subresource);
+}
+//Modify End
 
 void BarrierContext::PrepareResource(
     const Resource& resource,

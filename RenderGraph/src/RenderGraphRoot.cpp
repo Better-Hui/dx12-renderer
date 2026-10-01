@@ -555,6 +555,20 @@ void RenderGraph::RenderGraphRoot::EmitCompiledGraphSnapshot(const RenderMetadat
                 fields.push_back({ "state_plan.input_transition_count", static_cast<uint64_t>(plan.InputTransitions.size()) });
                 fields.push_back({ "state_plan.output_transition_count", static_cast<uint64_t>(plan.OutputTransitions.size()) });
                 fields.push_back({ "state_plan.external_transition_count", static_cast<uint64_t>(plan.ExternalResourceTransitions.size()) });
+                fields.push_back({ "state_plan.external_stable_read_only_count",
+                    static_cast<uint64_t>(std::ranges::count_if(
+                        plan.ExternalResourceTransitions,
+                        [](const PassExternalResourceTransition& transition)
+                        {
+                            return transition.StableReadOnly;
+                        })) });
+                fields.push_back({ "state_plan.external_attribution_only_count",
+                    static_cast<uint64_t>(std::ranges::count_if(
+                        plan.ExternalResourceTransitions,
+                        [](const PassExternalResourceTransition& transition)
+                        {
+                            return transition.AttributionOnly;
+                        })) });
                 fields.push_back({ "state_plan.aliasing_output_count", static_cast<uint64_t>(plan.AliasingOutputs.size()) });
                 fields.push_back({ "state_plan.init_output_count", static_cast<uint64_t>(plan.InitOutputs.size()) });
                 fields.push_back({ "state_plan.has_direct_preamble", plan.DirectPreamble.has_value() });

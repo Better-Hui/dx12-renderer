@@ -40,6 +40,7 @@
 #include <condition_variable>   // For std::condition_variable.
 #include <functional>
 #include <memory>
+#include <string_view>
 #include <vector>
 
 #include "CommandQueueFailure.h"
@@ -65,6 +66,7 @@ public:
 		ID3D12CommandQueue* externalCommandQueue);
 	void SetFatalErrorHandler(CommandQueueFailureHandler handler);
 	void SetDiagnosticTelemetrySink(DiagnosticTelemetrySink* sink) noexcept;
+	void SetDiagnosticFrameIndex(uint64_t frameIndex) noexcept;
 	[[nodiscard]] D3D12_COMMAND_LIST_TYPE GetCommandListType() const noexcept { return m_CommandListType; }
 	//Modify End
 	virtual ~CommandQueue();
@@ -79,7 +81,7 @@ public:
 
 	uint64_t Signal();
 	bool IsFenceComplete(uint64_t fenceValue);
-	void WaitForFenceValue(uint64_t fenceValue);
+	void WaitForFenceValue(uint64_t fenceValue, std::string_view waitContext = "explicit");
 	void Flush();
 	[[nodiscard]] bool FlushWithTimeout(uint32_t timeoutMilliseconds);
 
@@ -95,6 +97,7 @@ public:
 private:
 //Modify Begin:2026-08-21 by Hui
 	void InitializeFenceAndWorker();
+	void WaitForFenceValueInternal(uint64_t fenceValue, std::string_view waitContext);
 	void EmitTelemetry(DiagnosticTelemetryEvent event) const noexcept;
 	[[nodiscard]] bool HasDiagnosticTelemetrySink() const noexcept;
 	[[nodiscard]] bool HasFailure() const noexcept;
@@ -114,6 +117,7 @@ private:
 	std::shared_ptr<D3D12DeviceContext> m_DeviceContext;
 	CommandQueueFailureHandler m_FatalErrorHandler;
 	std::atomic<DiagnosticTelemetrySink*> m_DiagnosticTelemetrySink = nullptr;
+	std::atomic_uint64_t m_DiagnosticFrameIndex = DiagnosticTelemetryEvent::NoFrame;
 	mutable std::mutex m_FailureMutex;
 	std::string m_FailureMessage;
 	//Modify End

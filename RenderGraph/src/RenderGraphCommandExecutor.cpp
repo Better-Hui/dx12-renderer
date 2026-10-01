@@ -306,6 +306,9 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
         "CPU",
         0u,
         "render_graph_execute");
+    m_DirectCommandQueue->SetDiagnosticFrameIndex(renderMetadata.m_FrameIndex);
+    m_AsyncComputeCommandQueue->SetDiagnosticFrameIndex(renderMetadata.m_FrameIndex);
+    m_CopyCommandQueue->SetDiagnosticFrameIndex(renderMetadata.m_FrameIndex);
     const std::vector<RenderPass*>& renderPasses = compiledGraph.GetRenderPasses();
     const std::vector<RenderGraphRecordingBatch>& recordingBatches = compiledGraph.GetRecordingBatches();
     const std::map<const RenderPass*, RenderTargetInfo>& renderTargets = compiledGraph.GetRenderTargets();
@@ -573,6 +576,13 @@ void RenderGraph::RenderGraphCommandExecutor::ExecuteParallelDirectBatch(
     const std::map<const RenderPass*, RenderTargetInfo>& renderTargets,
     const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans)
 {
+    DX12_CPU_PERFORMANCE_SCOPE(
+        m_DiagnosticTelemetrySink,
+        renderMetadata.m_FrameIndex,
+        "RenderGraph.ParallelDirectBatch",
+        GetDiagnosticQueueName(RenderPassQueue::Direct),
+        0u,
+        "render_graph_parallel");
     Assert(batch.Passes.size() > 1u, "Parallel recording batches require at least two passes.");
     for (const RenderPass* renderPass : batch.Passes)
     {
@@ -584,67 +594,83 @@ void RenderGraph::RenderGraphCommandExecutor::ExecuteParallelDirectBatch(
 
     std::vector<std::future<std::shared_ptr<CommandList>>> recordingTasks;
     recordingTasks.reserve(batch.Passes.size());
-    for (uint32_t passOffset = 0u; passOffset < batch.Passes.size(); ++passOffset)
     {
-        RenderPass* renderPass = batch.Passes[passOffset];
-        recordingTasks.push_back(m_ParallelRecordingTaskScheduler.Enqueue(
-            [this, renderPass, &renderMetadata, &renderTargets, &resourceStatePlans]()
-            {
-                DX12_CPU_PERFORMANCE_SCOPE(
-                    m_DiagnosticTelemetrySink,
-                    renderMetadata.m_FrameIndex,
-                    RenderGraphProfiler::NarrowPassName(renderPass->GetPassName()),
-                    GetDiagnosticQueueName(RenderPassQueue::Direct),
-                    GetPassCorrelationId(*renderPass),
-                    "render_graph_pass_parallel");
-                DX12_CPU_RECORDING_PASS(
-                    m_DiagnosticTelemetrySink, renderMetadata.m_FrameIndex,
-                    GetPassCorrelationId(*renderPass), GetDiagnosticQueueName(RenderPassQueue::Direct));
-                auto commandList = m_DirectCommandQueue->GetCommandList();
-                FrameContext context(m_ResourcePool, renderMetadata);
-                const auto renderTargetIt = renderTargets.find(renderPass);
-                if (renderTargetIt != renderTargets.end())
+        DX12_CPU_PERFORMANCE_SCOPE(
+            m_DiagnosticTelemetrySink,
+            renderMetadata.m_FrameIndex,
+            "RenderGraph.ParallelEnqueue",
+            GetDiagnosticQueueName(RenderPassQueue::Direct),
+            0u,
+            "render_graph_parallel");
+        for (uint32_t passOffset = 0u; passOffset < batch.Passes.size(); ++passOffset)
+        {
+            RenderPass* renderPass = batch.Passes[passOffset];
+            recordingTasks.push_back(m_ParallelRecordingTaskScheduler.Enqueue(
+                [this, renderPass, &renderMetadata, &renderTargets, &resourceStatePlans]()
                 {
-                    context.SetRenderTargetInfo(renderTargetIt->second);
-                }
+                    DX12_CPU_PERFORMANCE_SCOPE(
+                        m_DiagnosticTelemetrySink,
+                        renderMetadata.m_FrameIndex,
+                        "RenderGraph.ParallelTaskExecution",
+                        GetDiagnosticQueueName(RenderPassQueue::Direct),
+                        GetPassCorrelationId(*renderPass),
+                        "render_graph_parallel");
+                    DX12_CPU_PERFORMANCE_SCOPE(
+                        m_DiagnosticTelemetrySink,
+                        renderMetadata.m_FrameIndex,
+                        RenderGraphProfiler::NarrowPassName(renderPass->GetPassName()),
+                        GetDiagnosticQueueName(RenderPassQueue::Direct),
+                        GetPassCorrelationId(*renderPass),
+                        "render_graph_pass_parallel");
+                    DX12_CPU_RECORDING_PASS(
+                        m_DiagnosticTelemetrySink, renderMetadata.m_FrameIndex,
+                        GetPassCorrelationId(*renderPass), GetDiagnosticQueueName(RenderPassQueue::Direct));
+                    auto commandList = m_DirectCommandQueue->GetCommandList();
+                    FrameContext context(m_ResourcePool, renderMetadata);
+                    const auto renderTargetIt = renderTargets.find(renderPass);
+                    if (renderTargetIt != renderTargets.end())
+                    {
+                        context.SetRenderTargetInfo(renderTargetIt->second);
+                    }
 
-                try
-                {
-                    RenderPassContext passContext(*commandList);
+                    try
                     {
-                        DX12_CPU_RECORDING_SCOPE("rg.boundary");
-                        RecordPassBoundaryBarriers(
-                            passContext, *renderPass, context, renderTargets, resourceStatePlans);
+                        RenderPassContext passContext(*commandList);
+                        {
+                            DX12_CPU_RECORDING_SCOPE("rg.boundary");
+                            RecordPassBoundaryBarriers(
+                                passContext, *renderPass, context, renderTargets, resourceStatePlans);
+                        }
+                        std::unique_ptr<DX12Diagnostics::DiagnosticRenderPassScope> diagnosticScope;
+                        {
+                            DX12_CPU_RECORDING_SCOPE("rg.diagnostic_setup");
+                            diagnosticScope = CreateDiagnosticRenderPassScope(*renderPass, renderMetadata.m_FrameIndex);
+                        }
+                        PIXScope(*commandList, renderPass->GetPassName().c_str());
+                        {
+                            DX12_CPU_RECORDING_SCOPE("rg.execute");
+                            renderPass->Execute(context, passContext);
+                        }
+                        {
+                            DX12_CPU_RECORDING_SCOPE("rg.finish");
+                            passContext.Finish();
+                        }
+                        if (diagnosticScope != nullptr)
+                        {
+                            DX12_CPU_RECORDING_SCOPE("rg.validation");
+                            EmitShaderAccessValidation(*diagnosticScope);
+                        }
                     }
-                    std::unique_ptr<DX12Diagnostics::DiagnosticRenderPassScope> diagnosticScope;
+                    catch (const std::exception& exception)
                     {
-                        DX12_CPU_RECORDING_SCOPE("rg.diagnostic_setup");
-                        diagnosticScope = CreateDiagnosticRenderPassScope(*renderPass, renderMetadata.m_FrameIndex);
+                        throw std::runtime_error(
+                            "RenderGraph parallel direct pass '" +
+                            RenderGraphProfiler::NarrowPassName(renderPass->GetPassName()) +
+                            "' execution failed: " + exception.what());
                     }
-                    PIXScope(*commandList, renderPass->GetPassName().c_str());
-                    {
-                        DX12_CPU_RECORDING_SCOPE("rg.execute");
-                        renderPass->Execute(context, passContext);
-                    }
-                    {
-                        DX12_CPU_RECORDING_SCOPE("rg.finish");
-                        passContext.Finish();
-                    }
-                    if (diagnosticScope != nullptr)
-                    {
-                        DX12_CPU_RECORDING_SCOPE("rg.validation");
-                        EmitShaderAccessValidation(*diagnosticScope);
-                    }
-                }
-                catch (const std::exception& exception)
-                {
-                    throw std::runtime_error(
-                        "RenderGraph parallel direct pass '" +
-                        RenderGraphProfiler::NarrowPassName(renderPass->GetPassName()) +
-                        "' execution failed: " + exception.what());
-                }
-                return commandList;
-            }));
+                    return commandList;
+                }));
+        }
     }
 
     std::vector<std::shared_ptr<CommandList>> recordedCommandLists;
@@ -655,11 +681,25 @@ void RenderGraph::RenderGraphCommandExecutor::ExecuteParallelDirectBatch(
     }
 
     std::exception_ptr recordingFailure;
+    DX12_CPU_PERFORMANCE_SCOPE(
+        m_DiagnosticTelemetrySink,
+        renderMetadata.m_FrameIndex,
+        "RenderGraph.ParallelCollect",
+        GetDiagnosticQueueName(RenderPassQueue::Direct),
+        0u,
+        "render_graph_parallel");
     for (uint32_t passOffset = 0; passOffset < recordingTasks.size(); ++passOffset)
     {
         std::shared_ptr<CommandList> commandList;
         try
         {
+            DX12_CPU_PERFORMANCE_SCOPE(
+                m_DiagnosticTelemetrySink,
+                renderMetadata.m_FrameIndex,
+                "RenderGraph.ParallelCollectWait",
+                GetDiagnosticQueueName(RenderPassQueue::Direct),
+                GetPassCorrelationId(*batch.Passes[passOffset]),
+                "render_graph_parallel");
             commandList = recordingTasks[passOffset].get();
         }
         catch (...)
@@ -687,7 +727,16 @@ void RenderGraph::RenderGraphCommandExecutor::ExecuteParallelDirectBatch(
         std::rethrow_exception(recordingFailure);
     }
 
-    m_QueueScheduler.SubmitDirect(recordedCommandLists);
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            m_DiagnosticTelemetrySink,
+            renderMetadata.m_FrameIndex,
+            "RenderGraph.ParallelSubmit",
+            GetDiagnosticQueueName(RenderPassQueue::Direct),
+            0u,
+            "render_graph_parallel");
+        m_QueueScheduler.SubmitDirect(recordedCommandLists);
+    }
 }
 
 void RenderGraph::RenderGraphCommandExecutor::PrepareDirectQueueDependencies(
@@ -996,6 +1045,7 @@ void RenderGraph::RenderGraphCommandExecutor::ApplyExternalResourceTransitions(
 {
     DX12_CPU_RECORDING_SCOPE("rg.external_transitions");
     RenderGraphBarrierRecorder recorder(passContext);
+    passContext.GetBarrierContext().ReserveResourceUses(transitions.size());
 #if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
     const bool measureComponents = DX12Diagnostics::ActiveRecordingScope.Sink != nullptr;
     std::chrono::steady_clock::duration resolveDuration{};
@@ -1018,11 +1068,33 @@ void RenderGraph::RenderGraphCommandExecutor::ApplyExternalResourceTransitions(
         const auto useStart = measureComponents ? std::chrono::steady_clock::now() :
             std::chrono::steady_clock::time_point{};
 #endif
-        recorder.Use(
-            resource,
-            transition.StateAfter,
-            transition.Use,
-            transition.InsertUavBarrier);
+        if (transition.AttributionOnly &&
+            !passContext.GetCommandList().IsExternalCommandList())
+        {
+            passContext.UseAttributionOnly(resource, transition.StateAfter, transition.Use);
+        }
+        else if (transition.StableReadOnly &&
+            !passContext.GetCommandList().IsExternalCommandList())
+        {
+            passContext.UseStableReadOnly(resource, transition.StateAfter);
+        }
+        else if (transition.Access->StaticResource != nullptr)
+        {
+            // Static external declarations are already flattened to leaf resources.
+            passContext.Use(
+                resource,
+                transition.StateAfter,
+                transition.Use,
+                transition.InsertUavBarrier);
+        }
+        else
+        {
+            recorder.Use(
+                resource,
+                transition.StateAfter,
+                transition.Use,
+                transition.InsertUavBarrier);
+        }
 #if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
         if (measureComponents)
         {

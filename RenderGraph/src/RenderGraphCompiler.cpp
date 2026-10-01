@@ -13,6 +13,8 @@
 #include <algorithm>
 #include <map>
 #include <set>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace
 {
@@ -630,6 +632,45 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
     m_ResourcePool->InitHeaps(compiledGraph.m_RenderPasses, m_Device, std::vector<ResourceId>(externalOutputIds.begin(), externalOutputIds.end()));
     m_ResourcePool->CreateResources();
 
+    // Static scene resources used by the direct queue as read-only bindless
+    // inputs stay in one state for the whole graph. The first access must
+    // transition them; later ordered command lists only need attribution.
+    struct StableExternalResource
+    {
+        D3D12_RESOURCE_STATES State = D3D12_RESOURCE_STATE_COMMON;
+        bool Stable = true;
+        bool DirectOnly = true;
+        bool Initialized = false;
+    };
+    std::unordered_map<const Resource*, StableExternalResource> stableExternalResources;
+    for (RenderPass* pass : compiledGraph.m_RenderPasses)
+    {
+        for (const ExternalResourceAccess& access : pass->GetExternalResourceAccesses())
+        {
+            if (access.StaticResource == nullptr)
+            {
+                continue;
+            }
+            StableExternalResource& stable = stableExternalResources[access.StaticResource];
+            stable.DirectOnly &= pass->GetQueue() == RenderPassQueue::Direct;
+            if (access.Mode != ExternalResourceAccessMode::Read)
+            {
+                stable.Stable = false;
+                continue;
+            }
+            if (!stable.Initialized)
+            {
+                stable.State = access.StateAfter;
+                stable.Initialized = true;
+            }
+            else if (stable.State != access.StateAfter)
+            {
+                stable.Stable = false;
+            }
+        }
+    }
+    std::unordered_set<const Resource*> attributedStableResources;
+
     std::map<ResourceId, RenderPassQueue> lastWriterQueues;
     for (uint32_t passIndex = 0; passIndex < compiledGraph.m_RenderPasses.size(); ++passIndex)
     {
@@ -665,13 +706,35 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
         for (const ExternalResourceAccess& access : renderPass->GetExternalResourceAccesses())
         {
             static_cast<void>(access.Resolve());
+            bool attributionOnly = false;
+            if (access.StaticResource != nullptr &&
+                access.Mode == ExternalResourceAccessMode::Read)
+            {
+                const auto stableIt = stableExternalResources.find(access.StaticResource);
+                if (stableIt != stableExternalResources.end() &&
+                    stableIt->second.Stable && stableIt->second.DirectOnly &&
+                    stableIt->second.State == access.StateAfter)
+                {
+                    attributionOnly = !attributedStableResources.insert(access.StaticResource).second;
+                }
+            }
             resourceStatePlan.ExternalResourceTransitions.push_back({
                 &access,
                 access.StateAfter,
                 access.Mode == ExternalResourceAccessMode::Write
                     ? ResourceUse::Write
                     : ResourceUse::Read,
-                access.InsertUavBarrier
+                access.InsertUavBarrier,
+                access.StaticResource != nullptr &&
+                    access.Mode == ExternalResourceAccessMode::Read &&
+                    [&stableExternalResources, &access]()
+                    {
+                        const auto stableIt = stableExternalResources.find(access.StaticResource);
+                        return stableIt != stableExternalResources.end() &&
+                            stableIt->second.Stable && stableIt->second.DirectOnly &&
+                            stableIt->second.State == access.StateAfter;
+                    }(),
+                attributionOnly
             });
         }
         for (const Output& output : renderPass->GetOutputs())

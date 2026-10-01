@@ -95,6 +95,11 @@ public:
         return m_DiagnosticTelemetrySink.load(std::memory_order_acquire) != nullptr;
     }
 
+    DiagnosticTelemetrySink* GetDiagnosticTelemetrySink() const noexcept
+    {
+        return m_DiagnosticTelemetrySink.load(std::memory_order_acquire);
+    }
+
     void RecordDiagnosticTelemetry(DiagnosticTelemetryEvent event) const noexcept
     {
         if (DiagnosticTelemetrySink* sink = m_DiagnosticTelemetrySink.load(std::memory_order_acquire))

@@ -57,6 +57,23 @@ namespace RenderGraph
             m_BarrierContext.Use(resource, state, use, forceUavBarrier, subresource);
         }
 
+        void UseAttributionOnly(
+            const Resource& resource,
+            D3D12_RESOURCE_STATES state,
+            ResourceUse use = ResourceUse::Read,
+            UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
+        {
+            m_BarrierContext.UseAttributionOnly(resource, state, use, subresource);
+        }
+
+        void UseStableReadOnly(
+            const Resource& resource,
+            D3D12_RESOURCE_STATES state,
+            UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
+        {
+            m_BarrierContext.UseStableReadOnly(resource, state, subresource);
+        }
+
         void Uav(const Resource& resource)
         {
             m_BarrierContext.Uav(resource);

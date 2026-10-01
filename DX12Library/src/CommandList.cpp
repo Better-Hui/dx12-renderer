@@ -309,6 +309,17 @@ void CommandList::TrackResourceState(
     m_TrackedResourceStateRegistrations.push_back(std::move(stateRegistration));
 }
 
+//Modify Begin:2026-10-01 by Hui
+void CommandList::ReserveResourceTracking(const size_t resourceCount)
+{
+    m_TrackedObjects.reserve(m_TrackedObjects.size() + resourceCount);
+    m_TrackedResourceIdentities.reserve(m_TrackedResourceIdentities.size() + resourceCount);
+    m_TrackedResourceStateRegistrations.reserve(
+        m_TrackedResourceStateRegistrations.size() + resourceCount);
+    m_PResourceStateTracker->ReserveResourceTracking(resourceCount);
+}
+//Modify End
+
 void CommandList::RetireResourceState(const ComPtr<ID3D12Resource> resource)
 {
     Assert(resource != nullptr, "Cannot retire a null D3D12 resource state.");

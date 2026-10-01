@@ -15,6 +15,9 @@
 #include "ResourceStateTracker.h"
 #include "Texture.h"
 #include "Helpers.h"
+//Modify Begin:2026-10-01 by Hui
+#include "PerformanceScope.h"
+//Modify End
 
 //Modify Begin:2026-08-19 by Hui
 #include <cwchar>
@@ -686,6 +689,13 @@ UINT Window::Present(const Texture& texture)
 		m_D3d12Context.DeviceContext->GetDescriptorRetirementFrame());
 	CurrentBackBufferIndex = DxgiSwapChain->GetCurrentBackBufferIndex();
 	FrameResources.SetCurrentIndex(CurrentBackBufferIndex);
+	DX12_CPU_PERFORMANCE_SCOPE(
+		m_D3d12Context.DeviceContext->GetDiagnosticTelemetrySink(),
+		m_D3d12Context.DeviceContext->GetDescriptorRetirementFrame(),
+		"Window.FrameResourceWait",
+		"Direct",
+		0u,
+		"frame_resource");
 	const uint64_t reusableFrame = FrameResources.WaitForSlot(*commandQueue, CurrentBackBufferIndex);
 	m_D3d12Context.DeviceContext->ReleaseStaleDescriptors(reusableFrame);
 //Modify End

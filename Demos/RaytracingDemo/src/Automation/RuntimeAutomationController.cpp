@@ -182,9 +182,37 @@ void DemoAutomation::RuntimeAutomationController::Initialize(
     else if (mode == "recording-profile")
     {
         steps = testSuites.RecordingProfile;
+        const bool parallelRecording = GetEnvironmentVariable("RAYTRACING_DEMO_AUTOTEST_RECORDING_PARALLEL") == "1";
+        const bool asyncCompute = GetEnvironmentVariable("RAYTRACING_DEMO_AUTOTEST_RECORDING_ASYNC") == "1";
+        for (Step& step : steps)
+        {
+            if (step.Control == "render_graph.parallel_direct_recording")
+            {
+                step.Value = parallelRecording ? 1u : 0u;
+                step.Name = parallelRecording ? "recording-parallel=on" : "recording-parallel=off";
+            }
+            else if (step.Control == "render_graph.async_compute")
+            {
+                step.Value = asyncCompute ? 1u : 0u;
+                step.Name = asyncCompute ? "recording-async=on" : "recording-async=off";
+            }
+        }
         if (stepMilliseconds.empty())
         {
             m_StepIntervalSeconds = 0.5;
+        }
+
+        const size_t startCase = GetEnvironmentSize("RAYTRACING_DEMO_AUTOTEST_START_CASE");
+        if (startCase > 0)
+        {
+            const size_t firstStep = std::min(startCase - 1, steps.size());
+            steps.erase(steps.begin(), steps.begin() + static_cast<std::ptrdiff_t>(firstStep));
+        }
+
+        const size_t maxCases = GetEnvironmentSize("RAYTRACING_DEMO_AUTOTEST_MAX_CASES");
+        if (maxCases > 0 && steps.size() > maxCases)
+        {
+            steps.resize(maxCases);
         }
     }
     else if (mode == "visual")

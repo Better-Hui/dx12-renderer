@@ -631,6 +631,7 @@ private:
     void TrackResourceState(
         Microsoft::WRL::ComPtr<ID3D12Resource> resource,
         std::shared_ptr<ResourceStateRegistration> stateRegistration);
+    void ReserveResourceTracking(size_t resourceCount);
     void RetireResourceState(Microsoft::WRL::ComPtr<ID3D12Resource> resource);
     void RetireResource(Resource& resource);
     void CommitStagedDescriptors();

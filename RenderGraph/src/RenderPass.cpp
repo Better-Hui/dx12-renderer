@@ -197,12 +197,12 @@ void RenderGraph::RenderPass::AddExternalResourceAccess(
         [this, stateAfter, mode, insertUavBarrier](const Resource& nestedResource)
         {
             Assert(nestedResource.IsValid(), "External render-pass resource must be initialized.");
-            const auto existingAccess = std::ranges::find_if(
-                m_ExternalResourceAccesses,
-                [&nestedResource](const ExternalResourceAccess& access)
-                {
-                    return access.StaticResource == &nestedResource;
-                });
+            const auto [indexIt, inserted] = m_ExternalStaticResourceIndices.try_emplace(
+                &nestedResource,
+                m_ExternalResourceAccesses.size());
+            const auto existingAccess = inserted
+                ? m_ExternalResourceAccesses.end()
+                : m_ExternalResourceAccesses.begin() + static_cast<std::ptrdiff_t>(indexIt->second);
             Assert(
                 existingAccess == m_ExternalResourceAccesses.end() ||
                     (existingAccess->StateAfter == stateAfter &&
@@ -229,12 +229,12 @@ void RenderGraph::RenderPass::AddImportedResourceAccess(
 {
     Assert(resource.IsValid(), "Imported render-pass resource handle is invalid.");
     const ResourceId resourceId = resource.GetId();
-    const auto existingAccess = std::ranges::find_if(
-        m_ExternalResourceAccesses,
-        [resourceId](const ExternalResourceAccess& access)
-        {
-            return access.Id == resourceId;
-        });
+    const auto [indexIt, inserted] = m_ExternalImportedResourceIndices.try_emplace(
+        resourceId,
+        m_ExternalResourceAccesses.size());
+    const auto existingAccess = inserted
+        ? m_ExternalResourceAccesses.end()
+        : m_ExternalResourceAccesses.begin() + static_cast<std::ptrdiff_t>(indexIt->second);
     Assert(
         existingAccess == m_ExternalResourceAccesses.end() ||
             (existingAccess->StateAfter == stateAfter &&

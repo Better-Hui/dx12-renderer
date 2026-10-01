@@ -2256,10 +2256,23 @@ void RaytracingDemo::InitializeDiagnostics()
     const bool automationEnabled = !automationModeValue.empty() &&
         automationModeValue != "0" && automationModeValue != "off";
 
+//Modify Begin:2026-10-01 by Hui
+    bool diagnosticsEnabled = automationEnabled;
+#if defined(_DEBUG)
+    diagnosticsEnabled = true;
+#endif
+    bool diagnosticsOverride = false;
+    if (!automationEnabled &&
+        TryGetEnvironmentBoolean("RAYTRACING_DEMO_DIAGNOSTICS", diagnosticsOverride))
+    {
+        diagnosticsEnabled = diagnosticsOverride;
+    }
+//Modify End
+
 //Modify Begin:2026-09-01 by Hui
     if (!m_Diagnostics.BeginFromEnvironment(
         "RaytracingDemo",
-        automationEnabled || DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES != 0))
+        diagnosticsEnabled))
     {
         if (automationEnabled)
         {
@@ -2271,8 +2284,10 @@ void RaytracingDemo::InitializeDiagnostics()
     m_Diagnostics.AddMetadata("diagnostics_schema", "1");
     m_Diagnostics.AddMetadata(
         "performance_scopes",
-        DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES != 0 ? "debug_enabled" : "compiled_out");
-    if (DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES != 0)
+        diagnosticsEnabled && DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES != 0
+            ? "debug_enabled"
+            : "disabled");
+    if (diagnosticsEnabled && DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES != 0)
     {
         m_GpuTimingEnabled = true;
     }
@@ -3761,16 +3776,6 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
     renderGraph.SetCopyGpuTimestampProfiler(
         m_GpuTimingEnabled ? &m_CopyGpuTimestampProfiler : nullptr);
     renderGraph.SetDebugSerializeAsyncCompute(m_DebugSerializeAsyncCompute);
-    DX12_CPU_PERFORMANCE_SCOPE(
-        m_Diagnostics.IsEnabled() ? &m_Diagnostics : nullptr,
-        m_FrameIndex,
-        "RaytracingDemo.RenderGraph.Execute",
-        "CPU",
-        0u,
-        "render_graph_execute");
-#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
-    const auto renderGraphCpuStart = std::chrono::steady_clock::now();
-#endif
     const bool readsCompactedRayTracedPixelCount =
         m_RenderGraphFrameState->UsesCompactedRayTracedPixelDispatch();
     const bool activeRayCountReadbackQueued =
@@ -3833,9 +3838,26 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
         m_Denoisers.EndOIDNReadback(renderGraph.GetFrameSubmissionFences().Direct);
         oidnReadbackEnded = true;
     };
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+    const auto renderGraphCpuStart = std::chrono::steady_clock::now();
+    double renderGraphCpuMilliseconds = 0.0;
+#endif
     try
     {
-        renderGraph.Execute(metadata);
+        {
+            DX12_CPU_PERFORMANCE_SCOPE(
+                m_Diagnostics.IsEnabled() ? &m_Diagnostics : nullptr,
+                m_FrameIndex,
+                "RaytracingDemo.RenderGraph.Execute",
+                "CPU",
+                0u,
+                "render_graph_execute");
+            renderGraph.Execute(metadata);
+        }
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+        renderGraphCpuMilliseconds = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - renderGraphCpuStart).count();
+#endif
         endBindlessFrame();
         endActiveRayCountReadback();
         endMeshletStatisticsReadback();
@@ -3875,8 +3897,6 @@ void RaytracingDemo::OnRender(RenderEventArgs& e)
         throw std::runtime_error(std::string("RaytracingDemo::OnRender RenderGraph.Execute failed: ") + exception.what());
     }
 #if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
-    const double renderGraphCpuMilliseconds = std::chrono::duration<double, std::milli>(
-        std::chrono::steady_clock::now() - renderGraphCpuStart).count();
     if (m_GpuTimingEnabled)
     {
         m_ProfilerDisplay.AccumulateRenderGraphCpuMilliseconds(renderGraphCpuMilliseconds);

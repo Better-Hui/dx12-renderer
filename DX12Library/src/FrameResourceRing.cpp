@@ -60,7 +60,7 @@ uint64_t FrameResourceRing::WaitForSlot(CommandQueue& commandQueue, const uint32
     Slot& slot = m_Slots[slotIndex];
     if (slot.FenceValue != 0)
     {
-        commandQueue.WaitForFenceValue(slot.FenceValue);
+        commandQueue.WaitForFenceValue(slot.FenceValue, "frame_resource");
     }
     for (auto& retireAction : slot.RetireActions)
     {

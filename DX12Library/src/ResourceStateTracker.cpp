@@ -286,4 +286,13 @@ bool ResourceStateTracker::TryGetResourceState(
     state = found->second.GetSubresourceState(subresource);
     return true;
 }
+
+//Modify Begin:2026-10-01 by Hui
+void ResourceStateTracker::ReserveResourceTracking(const size_t resourceCount)
+{
+    m_PendingResourceBarriers.reserve(resourceCount);
+    m_ResourceBarriers.reserve(resourceCount);
+    m_FinalResourceStates.reserve(resourceCount);
+}
+//Modify End
 //Modify End

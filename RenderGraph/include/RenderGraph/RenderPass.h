@@ -3,6 +3,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <DX12Library/CommandList.h>
@@ -205,6 +206,8 @@ namespace RenderGraph
 //Modify End
 //Modify Begin:2026-08-13 by Hui
         std::vector<ExternalResourceAccess> m_ExternalResourceAccesses;
+        std::unordered_map<const Resource*, size_t> m_ExternalStaticResourceIndices;
+        std::unordered_map<ResourceId, size_t> m_ExternalImportedResourceIndices;
 //Modify End
 //Modify Begin:2026-07-30 by Hui
         bool m_ParallelRecordingEligible = false;

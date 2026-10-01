@@ -9,6 +9,7 @@
 #include <span>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <DX12Library/DiagnosticTelemetry.h>
@@ -145,7 +146,7 @@ namespace RenderGraph
         DiagnosticTelemetrySink* m_DiagnosticTelemetrySink = nullptr;
         std::map<ResourceId, RenderPassQueue> m_LastWriterQueues;
         std::map<ResourceId, uint64_t> m_LastWriterFenceValues;
-        std::map<const Resource*, ExternalResourceUsage> m_ExternalResourceUsages;
+        std::unordered_map<const Resource*, ExternalResourceUsage> m_ExternalResourceUsages;
         std::map<ResourceId, RenderGraphQueueFenceValues> m_ResourceRetirements;
         std::set<ResourceId> m_ReferencedGraphResources;
         RenderGraphQueueFenceValues m_FrameSubmissionFences;
