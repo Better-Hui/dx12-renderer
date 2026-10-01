@@ -54,6 +54,12 @@ public:
 
     bool operator==(const RenderTargetFormats& other) const
     {
+//Modify Begin:2026-10-01 by Hui
+        if (GetDepthStencilFormat() != other.GetDepthStencilFormat())
+        {
+            return false;
+        }
+//Modify End
         if (GetCount() != other.GetCount())
         {
             return false;

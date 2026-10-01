@@ -488,12 +488,14 @@ void CommandContext::SetPipeline(MeshShader& shader) const
 
 void CommandContext::SetPipeline(const ComputeShader& shader) const
 {
+//Modify Begin:2026-10-01 by Hui
+    DX12_CPU_RECORDING_SCOPE("pipeline.compute_bind");
+//Modify End
     m_BoundPipelineBindPoint = PipelineBindPoint::Compute;
     m_HasBoundPipeline = true;
     m_BoundRayTracingShader = nullptr;
 
-    const auto& device = shader.GetDeviceContext().GetDevice();
-    const auto pipelineState = shader.GetPipelineState(device);
+    const auto& pipelineState = shader.GetPipelineState();
 
     if (shader.UsesReflectedRootSignature())
     {

@@ -288,7 +288,7 @@ void CommandList::FlushExternalResourceBarriers(
 }
 //Modify End
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-10-01 by Hui
 void CommandList::NotifyResourceState(
     const Resource& resource,
     const D3D12_RESOURCE_STATES state,
@@ -309,7 +309,6 @@ void CommandList::TrackResourceState(
     m_TrackedResourceStateRegistrations.push_back(std::move(stateRegistration));
 }
 
-//Modify Begin:2026-10-01 by Hui
 void CommandList::ReserveResourceTracking(const size_t resourceCount)
 {
     m_TrackedObjects.reserve(m_TrackedObjects.size() + resourceCount);
@@ -318,8 +317,6 @@ void CommandList::ReserveResourceTracking(const size_t resourceCount)
         m_TrackedResourceStateRegistrations.size() + resourceCount);
     m_PResourceStateTracker->ReserveResourceTracking(resourceCount);
 }
-//Modify End
-
 void CommandList::RetireResourceState(const ComPtr<ID3D12Resource> resource)
 {
     Assert(resource != nullptr, "Cannot retire a null D3D12 resource state.");
@@ -461,14 +458,12 @@ void CommandList::ResolveSubresource(const Resource& dstRes, const Resource& src
 }
 //Modify End
 
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-10-01 by Hui
 void CommandList::SetShadingRateImage(const Resource& resource)
 {
     const auto d3d12Resource = resource.GetD3D12Resource();
-    //Modify Begin:2026-09-29 by Hui
     GetBarrierContext().Use(resource, D3D12_RESOURCE_STATE_SHADING_RATE_SOURCE, ResourceUse::Read);
     FlushResourceBarriers();
-    //Modify End
     TrackObject(d3d12Resource);
 
     m_D3d12CommandList5->RSSetShadingRateImage(d3d12Resource.Get());
@@ -1026,7 +1021,7 @@ void CommandList::ClearUnorderedAccessUint(const Resource& resource, const UINT 
 }
 //Modify End
 
-//Modify Begin:2026-09-29 by Hui
+//Modify Begin:2026-10-01 by Hui
 void CommandList::Dispatch(const uint32_t numGroupsX, const uint32_t numGroupsY, const uint32_t numGroupsZ)
 {
     DX12_CPU_RECORDING_SCOPE("dispatch.record");
@@ -1095,6 +1090,14 @@ void CommandList::BindExternalDescriptorHeap(
     Assert(
         heapType == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV || heapType == D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER,
         "Only shader-visible descriptor heap types can be bound externally.");
+
+    // Rebinding the same external heap must preserve the dynamic descriptor state.
+    // Resetting it here only discards staged tables and forces needless CPU work.
+    if (m_DescriptorHeaps[heapType] == heap)
+    {
+        return;
+    }
+
     m_DynamicDescriptorHeaps[heapType]->Reset();
     SetDescriptorHeap(heapType, heap);
 }

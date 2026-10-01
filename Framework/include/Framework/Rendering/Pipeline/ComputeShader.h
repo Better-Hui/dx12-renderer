@@ -17,8 +17,6 @@
 #include <Framework/Rendering/Pipeline/PipelineDescriptorPool.h>
 #include <Framework/Rendering/Pipeline/PipelineDescriptorSet.h>
 #include <Framework/Rendering/Pipeline/PipelineLayout.h>
-#include <Framework/Rendering/Pipeline/PipelineStateCache.h>
-#include <Framework/Rendering/Pipeline/PipelineStateKey.h>
 //Modify End
 #include <Framework/Rendering/Pipeline/ShaderBlob.h>
 #include <Framework/Rendering/Pipeline/ShaderReflection.h>
@@ -92,10 +90,7 @@ public:
 
 
 private:
-//Modify Begin:2026-08-19 by Hui
-    FrameworkDeviceContext& GetDeviceContext() const { return m_DeviceContext; }
-//Modify End
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-10-01 by Hui
     friend class CommandContext;
     void SetConstantBuffer(CommandList& commandList, const std::string& variableName, size_t size, const void* data) const;
 
@@ -114,7 +109,7 @@ private:
     void SetTexture(CommandList& commandList, const std::string& variableName, const std::shared_ptr<Resource>& texture) const;
     void SetUnorderedAccessView(CommandList& commandList, const std::string& variableName, const UnorderedAccessView& unorderedAccessView) const;
     void SetAccelerationStructure(CommandList& commandList, const std::string& variableName, const RayTracingAccelerationStructure& accelerationStructure) const;
-    Microsoft::WRL::ComPtr<ID3D12PipelineState> GetPipelineState(const Microsoft::WRL::ComPtr<ID3D12Device2>& device) const;
+    const Microsoft::WRL::ComPtr<ID3D12PipelineState>& GetPipelineState() const { return m_PipelineState; }
     const RootSignature& GetRootSignature() const { return *m_RootSignature; }
     const PipelineLayout* GetPipelineLayout() const { return m_PipelineLayout.get(); }
     const PipelineDescriptorPool& GetDescriptorPool() const { return m_DescriptorPool; }
@@ -133,7 +128,6 @@ private:
     std::unique_ptr<PipelineBindingSet> m_BindingSet;
     std::unique_ptr<PipelineDescriptorSet> m_DescriptorSet;
     PipelineDescriptorPool m_DescriptorPool;
-    mutable PipelineStateCache<ComputePipelineStateKey, Microsoft::WRL::ComPtr<ID3D12PipelineState>> m_PipelineStateCache;
+    Microsoft::WRL::ComPtr<ID3D12PipelineState> m_PipelineState;
     //Modify End
 };
-//Modify End

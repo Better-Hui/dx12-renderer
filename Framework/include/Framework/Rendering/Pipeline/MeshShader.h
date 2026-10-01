@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-07-31 by Hui
+//Modify Begin:2026-10-01 by Hui
 
 #include <Framework/Rendering/Pipeline/PipelineBindingSet.h>
 #include <Framework/Rendering/Pipeline/PipelineDescriptorPool.h>
@@ -66,7 +66,7 @@ private:
     std::unique_ptr<PipelineDescriptorSet> m_DescriptorSet;
     PipelineDescriptorPool m_DescriptorPool;
     RasterPipelineStateBuilder m_PipelineStateBuilder;
-    PipelineStateCache<RasterPipelineStateKey, Microsoft::WRL::ComPtr<ID3D12PipelineState>> m_PipelineStateObjects;
+    PipelineStateCache<RenderTargetState, Microsoft::WRL::ComPtr<ID3D12PipelineState>> m_PipelineStateObjects;
 };
 
 //Modify End

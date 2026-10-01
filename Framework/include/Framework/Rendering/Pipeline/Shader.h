@@ -130,7 +130,7 @@ private:
 //Modify End
 
 	RasterPipelineStateBuilder m_PipelineStateBuilder;
-//Modify Begin:2026-07-27 by Hui
-	PipelineStateCache<RasterPipelineStateKey, Microsoft::WRL::ComPtr<ID3D12PipelineState>> m_PipelineStateObjects;
+//Modify Begin:2026-10-01 by Hui
+	PipelineStateCache<RenderTargetState, Microsoft::WRL::ComPtr<ID3D12PipelineState>> m_PipelineStateObjects;
 //Modify End
 };

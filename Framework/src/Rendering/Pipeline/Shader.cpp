@@ -227,20 +227,18 @@ void Shader::SetUnorderedAccessView(CommandList& commandList, const std::string&
 
 Microsoft::WRL::ComPtr<ID3D12PipelineState> Shader::GetPipelineState(const Microsoft::WRL::ComPtr<ID3D12Device2>& device, const RenderTargetState& renderTargetState)
 {
-//Modify Begin:2026-07-27 by Hui
-    const auto& formats = renderTargetState.GetFormats();
-    std::vector<DXGI_FORMAT> renderTargetFormats(formats.GetCount());
-    memcpy(renderTargetFormats.data(), formats.GetFormats(), sizeof(DXGI_FORMAT) * renderTargetFormats.size());
-    m_PipelineStateBuilder.WithRenderTargetFormats(renderTargetFormats, formats.GetDepthStencilFormat());
-    m_PipelineStateBuilder.WithSampleDesc(renderTargetState.GetSampleDesc());
-
-    const RasterPipelineStateKey pipelineStateKey = m_PipelineStateBuilder.CreateKey(renderTargetState);
+//Modify Begin:2026-10-01 by Hui
     return m_PipelineStateObjects.GetOrCreate(
-        pipelineStateKey,
-        [this, &device]()
-    {
-        return m_PipelineStateBuilder.Build(device);
-    });
+        renderTargetState,
+        [this, &device, &renderTargetState]()
+        {
+            const auto& formats = renderTargetState.GetFormats();
+            std::vector<DXGI_FORMAT> renderTargetFormats(formats.GetCount());
+            memcpy(renderTargetFormats.data(), formats.GetFormats(), sizeof(DXGI_FORMAT) * renderTargetFormats.size());
+            m_PipelineStateBuilder.WithRenderTargetFormats(renderTargetFormats, formats.GetDepthStencilFormat());
+            m_PipelineStateBuilder.WithSampleDesc(renderTargetState.GetSampleDesc());
+            return m_PipelineStateBuilder.Build(device);
+        });
 //Modify End
 }
 

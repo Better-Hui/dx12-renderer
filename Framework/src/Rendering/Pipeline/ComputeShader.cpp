@@ -9,7 +9,7 @@
 
 #include <algorithm>
 
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-10-01 by Hui
 ComputePipelineDescBuilder::ComputePipelineDescBuilder(ComputePipelineDesc desc)
     : m_Desc(std::move(desc))
 {
@@ -104,6 +104,7 @@ ComputeShader::ComputeShader(
     CollectShaderMetadata(m_Shader, &m_ShaderMetadata);
     BuildReflectedRootSignature(desc);
     m_PipelineStateBuilder.WithRootSignature(m_RootSignature).WithShader(m_Shader);
+    m_PipelineState = m_PipelineStateBuilder.Build(deviceContext.GetDevice());
 }
 //Modify End
 
@@ -205,19 +206,6 @@ void ComputeShader::SetAccelerationStructure(
     m_DescriptorSet->SetAccelerationStructure(variableName, accelerationStructure);
 }
 
-Microsoft::WRL::ComPtr<ID3D12PipelineState> ComputeShader::GetPipelineState(const Microsoft::WRL::ComPtr<ID3D12Device2>& device) const
-{
-//Modify Begin:2026-08-19 by Hui
-    const ComputePipelineStateKey pipelineStateKey = m_PipelineStateBuilder.CreateKey();
-    return m_PipelineStateCache.GetOrCreate(
-        pipelineStateKey,
-        [this, &device]()
-        {
-            return m_PipelineStateBuilder.Build(device);
-        });
-//Modify End
-}
-
 void ComputeShader::CollectShaderMetadata(const Microsoft::WRL::ComPtr<ID3DBlob>& shader, ShaderMetadata* outMetadata)
 {
     *outMetadata = ShaderReflection::CollectShader(shader);
@@ -264,7 +252,6 @@ void ComputeShader::BuildReflectedRootSignature(const ComputePipelineDesc& desc)
 
     PipelineRootSignatureBuildDesc rootSignatureBuildDesc;
     rootSignatureBuildDesc.Flags = desc.RootSignatureFlags;
-//Modify End
     m_RootSignature = m_PipelineLayout->CreateRootSignature(rootSignatureBuildDesc);
     m_PipelineLayout->SetRootSignature(m_RootSignature);
 //Modify Begin:2026-08-19 by Hui
