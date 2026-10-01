@@ -75,7 +75,10 @@ namespace RenderGraph
         void WaitForDependencies(RenderPassQueue waitingQueue, const RenderGraphQueueFenceValues& dependencies);
         void WaitForDirectSubmission(RenderPassQueue waitingQueue, uint64_t fenceValue);
 
-        void TrackPassResources(const RenderPass& pass, uint64_t fenceValue);
+        void TrackPassResources(
+            const RenderPass& pass,
+            uint64_t fenceValue,
+            bool trackExternalResources = true);
         void ValidateDirectPassDependencies(
             std::span<RenderPass* const> passes,
             const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans,

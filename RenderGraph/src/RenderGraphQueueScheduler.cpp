@@ -459,7 +459,8 @@ namespace RenderGraph
 
     void RenderGraphQueueScheduler::TrackPassResources(
         const RenderPass& pass,
-        const uint64_t fenceValue)
+        const uint64_t fenceValue,
+        const bool trackExternalResources)
     {
     DX12_CPU_PERFORMANCE_SCOPE(
         m_DiagnosticTelemetrySink,
@@ -499,6 +500,7 @@ namespace RenderGraph
             }
         }
 //Modify Begin:2026-10-01 by Hui
+        if (trackExternalResources)
         {
             DX12_CPU_RECORDING_SCOPE("rg.external_usage_track");
             for (const ExternalResourceAccess& access : pass.GetExternalResourceAccesses())

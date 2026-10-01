@@ -123,6 +123,16 @@ namespace
         std::lock_guard lock(mutex);
         return signatures[scopeDesc.CorrelationId].insert(signature).second;
     }
+
+    bool HasCrossQueueExternalDependencies(const RenderGraph::PassResourceStatePlan& statePlan)
+    {
+        return std::ranges::any_of(
+            statePlan.ExternalResourceTransitions,
+            [](const RenderGraph::PassExternalResourceTransition& transition)
+            {
+                return !transition.DirectOnly;
+            });
+    }
 }
 
 RenderGraph::RenderGraphCommandExecutor::RenderGraphCommandExecutor(
@@ -486,7 +496,7 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
                         "BeforeExternal." + RenderGraphProfiler::NarrowPassName(renderPass->GetPassName()));
                 }
 
-                m_QueueScheduler.TrackPassResources(*renderPass, 0u);
+                m_QueueScheduler.TrackPassResources(*renderPass, 0u, true);
                 m_QueueScheduler.SubmitDirect(directCommandList);
                 renderPass->ExecuteExternal(context);
 
@@ -539,7 +549,10 @@ void RenderGraph::RenderGraphCommandExecutor::Execute(
                         "' execution failed: " + exception.what());
                 }
                 m_Profiler.WritePassTimestamp(RenderPassQueue::Direct, commandList, renderPass->GetPassName());
-                m_QueueScheduler.TrackPassResources(*renderPass, 0u);
+                m_QueueScheduler.TrackPassResources(
+                    *renderPass,
+                    0u,
+                    HasCrossQueueExternalDependencies(statePlan->second));
             }
         }
     }
@@ -718,7 +731,12 @@ void RenderGraph::RenderGraphCommandExecutor::ExecuteParallelDirectBatch(
         RecordLocalAliasingBarriers(
             *batch.Passes[passOffset],
             resourceStatePlans);
-        m_QueueScheduler.TrackPassResources(*batch.Passes[passOffset], 0u);
+        const auto statePlan = resourceStatePlans.find(batch.Passes[passOffset]);
+        Assert(statePlan != resourceStatePlans.end(), "Parallel direct pass has no resource state plan.");
+        m_QueueScheduler.TrackPassResources(
+            *batch.Passes[passOffset],
+            0u,
+            HasCrossQueueExternalDependencies(statePlan->second));
         recordedCommandLists.push_back(std::move(commandList));
     }
 
@@ -885,7 +903,12 @@ void RenderGraph::RenderGraphCommandExecutor::ExecuteNonDirectBatch(
         : m_QueueScheduler.SubmitCopy(commandList, false);
     for (const RenderPass* pass : batch.Passes)
     {
-        m_QueueScheduler.TrackPassResources(*pass, fenceValue);
+        const auto statePlan = resourceStatePlans.find(pass);
+        Assert(statePlan != resourceStatePlans.end(), "Non-direct pass has no resource state plan.");
+        m_QueueScheduler.TrackPassResources(
+            *pass,
+            fenceValue,
+            HasCrossQueueExternalDependencies(statePlan->second));
     }
     if (containsLastQueuePass)
     {
