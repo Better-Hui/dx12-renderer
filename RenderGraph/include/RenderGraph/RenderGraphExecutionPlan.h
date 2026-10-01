@@ -40,6 +40,9 @@ namespace RenderGraph
         // attribution and lifetime tracking; the first use owns the state
         // transition for the ordered direct-queue batch.
         bool AttributionOnly = false;
+        // No cross-queue fence can be required when every leaf resource for
+        // this declaration is used only by the direct queue in this graph.
+        bool DirectOnly = false;
     };
 
     struct PassAliasingTransition

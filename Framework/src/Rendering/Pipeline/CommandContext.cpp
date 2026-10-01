@@ -394,11 +394,13 @@ void CommandContext::SetDescriptorSet(const PipelineBindPoint bindPoint, const P
     DX12_CPU_RECORDING_SCOPE("descriptor_set.bind");
 //Modify End
     EmitDescriptorSetTelemetry(bindPoint, descriptorSet);
-    std::set<UINT> appliedRootParameters;
+    constexpr size_t MaxRootParameters = 64u;
+    std::bitset<MaxRootParameters> appliedRootParameters;
     for (const auto& [rootParameterIndex, boundResource] : descriptorSet.GetBoundResources())
     {
         (void)boundResource;
-        appliedRootParameters.insert(rootParameterIndex);
+        Assert(rootParameterIndex < MaxRootParameters, "Descriptor root parameter exceeds D3D12 root signature limits.");
+        appliedRootParameters.set(rootParameterIndex);
         switch (bindPoint)
         {
         case PipelineBindPoint::Graphics:
@@ -416,8 +418,9 @@ void CommandContext::SetDescriptorSet(const PipelineBindPoint bindPoint, const P
 
     for (const PipelineDescriptorRangeDesc& range : descriptorSet.GetLayout().GetDesc().DescriptorRanges)
     {
+        Assert(range.RootParameterIndex < MaxRootParameters, "Descriptor root parameter exceeds D3D12 root signature limits.");
         if (range.BindingMode != PipelineDescriptorBindingMode::DescriptorTable ||
-            appliedRootParameters.find(range.RootParameterIndex) != appliedRootParameters.end())
+            appliedRootParameters.test(range.RootParameterIndex))
         {
             continue;
         }

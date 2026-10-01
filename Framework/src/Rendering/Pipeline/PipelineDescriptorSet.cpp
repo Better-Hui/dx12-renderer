@@ -183,13 +183,43 @@ UINT PipelineDescriptorSet::SetShaderResourceViews(
             static_cast<UINT>(shaderResourceViews.size() - 1u));
     }
 
+    PipelineBoundResource& boundResource = m_BoundResources[binding.RootParameterIndex];
+    if (boundResource.ShaderResources.size() == shaderResourceViews.size())
+    {
+        bool unchanged = true;
+        for (size_t i = 0; i < shaderResourceViews.size(); ++i)
+        {
+            const ShaderResourceView& shaderResourceView = shaderResourceViews[i];
+            Assert(shaderResourceView.m_Resource != nullptr, "Pipeline SRV resource must not be null.");
+            PipelineShaderResourceBinding resourceBinding = {};
+            resourceBinding.Resource = shaderResourceView.m_Resource.get();
+            resourceBinding.ResourceIdentity = GetD3D12ResourcePtr(resourceBinding.Resource);
+            resourceBinding.FirstSubresource = shaderResourceView.m_FirstSubresource;
+            resourceBinding.NumSubresources = shaderResourceView.m_NumSubresources;
+            resourceBinding.HasDesc = shaderResourceView.GetDescOrNullptr() != nullptr;
+            if (resourceBinding.HasDesc)
+            {
+                resourceBinding.Desc = *shaderResourceView.GetDescOrNullptr();
+            }
+            if (!boundResource.ShaderResources[i].has_value() ||
+                !IsSameShaderResourceBinding(*boundResource.ShaderResources[i], resourceBinding))
+            {
+                unchanged = false;
+                break;
+            }
+        }
+        if (unchanged)
+        {
+            return binding.RootParameterIndex;
+        }
+    }
+
     std::vector<std::optional<ShaderResourceView>> nextShaderResourceViews;
     std::vector<std::optional<PipelineShaderResourceBinding>> nextShaderResources;
     nextShaderResourceViews.resize(shaderResourceViews.size());
     nextShaderResources.resize(shaderResourceViews.size());
 
     bool descriptorChanged = false;
-    PipelineBoundResource& boundResource = m_BoundResources[binding.RootParameterIndex];
     if (boundResource.ShaderResources.size() != shaderResourceViews.size())
     {
         descriptorChanged = true;

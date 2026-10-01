@@ -10,6 +10,7 @@
 #include <Framework/Rendering/Pipeline/CommandContextDescriptorAllocator.h>
 
 #include <array>
+#include <bitset>
 #include <cstddef>
 #include <cstdint>
 #include <memory>

@@ -266,7 +266,7 @@ protected:
             return;
         }
 
-        ReSTIRGIExecutionInputs inputs = m_Inputs->ResolveFrameInputs(context);
+        ReSTIRGIExecutionInputs inputs = m_Inputs->ResolveCachedFrameInputs(context);
         inputs.FrameState.Constants.HistoryValid =
             inputs.FrameState.Constants.HistoryValid != 0u && m_Pass.m_HistoryValid ? 1u : 0u;
         ReSTIRGIPass::PipelineSet& pipelines = m_Pass.GetPipelines(

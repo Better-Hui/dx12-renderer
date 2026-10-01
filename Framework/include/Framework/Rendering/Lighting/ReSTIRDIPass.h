@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -70,6 +71,25 @@ struct ReSTIRDIGraphInputs
     std::function<uint32_t()> GetFrameIndex;
     std::function<void(RenderGraph::RenderGraphPassBuilder&)> DeclareSharedResources;
     std::function<ReSTIRDIExecutionInputs(const RenderGraph::RenderContext&)> ResolveFrameInputs;
+
+    // ReSTIR stages are token-ordered. Resolve the frame-owned resource set
+    // once and let every stage reuse it while keeping stage-local descriptor
+    // binding callbacks intact.
+    const ReSTIRDIExecutionInputs& ResolveCachedFrameInputs(
+        const RenderGraph::RenderContext& context) const
+    {
+        const uint32_t frameIndex = GetFrameIndex();
+        if (!m_CachedFrameInputs.has_value() || m_CachedFrameIndex != frameIndex)
+        {
+            m_CachedFrameInputs = ResolveFrameInputs(context);
+            m_CachedFrameIndex = frameIndex;
+        }
+        return *m_CachedFrameInputs;
+    }
+
+private:
+    mutable std::optional<ReSTIRDIExecutionInputs> m_CachedFrameInputs;
+    mutable uint32_t m_CachedFrameIndex = ~0u;
 };
 
 class ReSTIRDIPass final

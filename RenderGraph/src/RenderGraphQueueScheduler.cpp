@@ -324,6 +324,12 @@ namespace RenderGraph
         }
 
 //Modify Begin:2026-10-01 by Hui
+        if (std::ranges::any_of(
+                statePlan.ExternalResourceTransitions,
+                [](const PassExternalResourceTransition& transition)
+                {
+                    return !transition.DirectOnly;
+                }))
         {
             DX12_CPU_RECORDING_SCOPE("rg.external_dependency_scan");
             for (const ExternalResourceAccess& access : pass.GetExternalResourceAccesses())
@@ -945,6 +951,15 @@ namespace RenderGraph
             }
 
             const size_t queueIndex = QueueIndex(queue);
+            // Repeated reads on the same unsubmitted command list do not
+            // change lifetime or dependency state. Keep the first attribution
+            // and retain later submissions' larger fence values.
+            if (usage.HasReader[queueIndex] &&
+                ((fenceValue == 0u && usage.ReaderFenceValues[queueIndex] == 0u) ||
+                 (fenceValue != 0u && usage.ReaderFenceValues[queueIndex] >= fenceValue)))
+            {
+                return;
+            }
             usage.ReaderFenceValues[queueIndex] = fenceValue;
             usage.HasReader[queueIndex] = true;
         };

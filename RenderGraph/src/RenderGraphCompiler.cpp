@@ -671,6 +671,34 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
     }
     std::unordered_set<const Resource*> attributedStableResources;
 
+    // Cache queue ownership of imported resources in the compiled plan. A
+    // direct-only declaration cannot have a cross-queue fence dependency, so
+    // the runtime scheduler can skip its external dependency walk entirely.
+    std::unordered_map<const Resource*, bool> directOnlyExternalResources;
+    for (RenderPass* pass : compiledGraph.m_RenderPasses)
+    {
+        const bool directQueue = pass->GetQueue() == RenderPassQueue::Direct;
+        for (const ExternalResourceAccess& access : pass->GetExternalResourceAccesses())
+        {
+            const auto markResource = [&directOnlyExternalResources, directQueue](const Resource& resource)
+            {
+                auto [it, inserted] = directOnlyExternalResources.try_emplace(&resource, directQueue);
+                if (!inserted)
+                {
+                    it->second &= directQueue;
+                }
+            };
+            if (access.StaticResource != nullptr)
+            {
+                markResource(*access.StaticResource);
+            }
+            else
+            {
+                access.Resolve().ForEachResourceRecursive(markResource);
+            }
+        }
+    }
+
     std::map<ResourceId, RenderPassQueue> lastWriterQueues;
     for (uint32_t passIndex = 0; passIndex < compiledGraph.m_RenderPasses.size(); ++passIndex)
     {
@@ -705,7 +733,7 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
         }
         for (const ExternalResourceAccess& access : renderPass->GetExternalResourceAccesses())
         {
-            static_cast<void>(access.Resolve());
+            const Resource& resolvedResource = access.Resolve();
             bool attributionOnly = false;
             if (access.StaticResource != nullptr &&
                 access.Mode == ExternalResourceAccessMode::Read)
@@ -718,6 +746,24 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
                     attributionOnly = !attributedStableResources.insert(access.StaticResource).second;
                 }
             }
+            bool directOnly = true;
+            bool hasResolvedResource = false;
+            const auto inspectDirectOnly = [&directOnly, &hasResolvedResource,
+                &directOnlyExternalResources](const Resource& resource)
+            {
+                hasResolvedResource = true;
+                const auto directOnlyIt = directOnlyExternalResources.find(&resource);
+                directOnly &= directOnlyIt != directOnlyExternalResources.end() && directOnlyIt->second;
+            };
+            if (access.StaticResource != nullptr)
+            {
+                inspectDirectOnly(*access.StaticResource);
+            }
+            else
+            {
+                resolvedResource.ForEachResourceRecursive(inspectDirectOnly);
+            }
+            directOnly &= hasResolvedResource;
             resourceStatePlan.ExternalResourceTransitions.push_back({
                 &access,
                 access.StateAfter,
@@ -734,7 +780,8 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
                             stableIt->second.Stable && stableIt->second.DirectOnly &&
                             stableIt->second.State == access.StateAfter;
                     }(),
-                attributionOnly
+                attributionOnly,
+                directOnly
             });
         }
         for (const Output& output : renderPass->GetOutputs())

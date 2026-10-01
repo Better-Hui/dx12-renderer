@@ -299,7 +299,7 @@ protected:
             return;
         }
 
-        ReSTIRDIExecutionInputs inputs = m_Inputs->ResolveFrameInputs(context);
+        ReSTIRDIExecutionInputs inputs = m_Inputs->ResolveCachedFrameInputs(context);
         ReSTIRDIPass::PipelineSet& pipelines = m_Pass.GetPipelines(
             inputs.FrameState.UseSoftShadowVariant,
             inputs.FrameState.EnvironmentProjectionVariant);
