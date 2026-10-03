@@ -691,10 +691,15 @@ private:
     BarrierContext* m_ActiveBarrierContext = nullptr;
     using BindingKey = std::pair<UINT, UINT>;
     using ResourceBindings = std::map<BindingKey, ResourceAccess>;
+    using PreparedResourceBindings = std::vector<const ResourceAccess*>;
     ResourceBindings m_GraphicsResourceBindings;
     ResourceBindings m_ComputeResourceBindings;
     std::map<UINT, ResourceAccess> m_GraphicsFixedBindings;
     std::vector<ResourceAccess> m_RenderTargetResourceBindings;
+    PreparedResourceBindings m_PreparedGraphicsResourceBindings;
+    PreparedResourceBindings m_PreparedComputeResourceBindings;
+    bool m_GraphicsResourceBindingsDirty = true;
+    bool m_ComputeResourceBindingsDirty = true;
     BindingPoint m_DescriptorBindingPoint = BindingPoint::Graphics;
     void PrepareBoundResources(BindingPoint point, std::span<const ResourceAccess> extraAccesses = {},
         bool inputAssembler = true, bool indexed = true);

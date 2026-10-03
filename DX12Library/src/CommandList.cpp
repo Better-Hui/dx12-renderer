@@ -165,6 +165,10 @@ void CommandList::SetResourceBindings(
 {
     auto& bindings = point == BindingPoint::Graphics ? m_GraphicsResourceBindings : m_ComputeResourceBindings;
     std::erase_if(bindings, [rootParameter](const auto& entry) { return entry.first.first == rootParameter; });
+    if (point == BindingPoint::Graphics)
+        m_GraphicsResourceBindingsDirty = true;
+    else
+        m_ComputeResourceBindingsDirty = true;
     for (UINT i = 0; i < accesses.size(); ++i)
         SetResourceBinding(point, rootParameter, i, accesses[i]);
 }
@@ -175,6 +179,10 @@ void CommandList::SetResourceBinding(
     TrackAccess(access);
     auto& bindings = point == BindingPoint::Graphics ? m_GraphicsResourceBindings : m_ComputeResourceBindings;
     bindings[{ rootParameter, offset }] = std::move(access);
+    if (point == BindingPoint::Graphics)
+        m_GraphicsResourceBindingsDirty = true;
+    else
+        m_ComputeResourceBindingsDirty = true;
 }
 
 void CommandList::PrepareBoundResources(const BindingPoint point,
@@ -196,6 +204,33 @@ void CommandList::PrepareBoundResources(const BindingPoint point,
         }
         target.UavWrite |= incoming.UavWrite;
     };
+    const auto& bindings = point == BindingPoint::Graphics ? m_GraphicsResourceBindings : m_ComputeResourceBindings;
+    auto& preparedBindings = point == BindingPoint::Graphics
+        ? m_PreparedGraphicsResourceBindings
+        : m_PreparedComputeResourceBindings;
+    bool& bindingsDirty = point == BindingPoint::Graphics
+        ? m_GraphicsResourceBindingsDirty
+        : m_ComputeResourceBindingsDirty;
+    if (bindingsDirty)
+    {
+        //Modify Begin:2026-10-03 by Hui
+        // Binding metadata is immutable until the next SetResourceBinding call.
+        // Flatten it once so every execution only performs the state merge that
+        // must remain execution-local for UAV ordering.
+        preparedBindings.clear();
+        preparedBindings.reserve(bindings.size());
+        const auto append = [&](const auto& self, const ResourceAccess& access) -> void
+        {
+            for (const ResourceAccess& dependency : access.Dependencies)
+                self(self, dependency);
+            preparedBindings.push_back(&access);
+        };
+        for (const auto& [key, access] : bindings)
+            append(append, access);
+        bindingsDirty = false;
+        //Modify End
+    }
+
     const std::function<void(const ResourceAccess&)> add = [&](const ResourceAccess& access)
     {
         for (const auto& dependency : access.Dependencies) add(dependency);
@@ -212,15 +247,21 @@ void CommandList::PrepareBoundResources(const BindingPoint point,
             for (UINT i = 0; i < access.NumSubresources; ++i)
                 addSubresource(access.FirstSubresource + i);
     };
-    const auto& bindings = point == BindingPoint::Graphics ? m_GraphicsResourceBindings : m_ComputeResourceBindings;
-    resources.reserve(bindings.size() + m_RenderTargetResourceBindings.size() + extraAccesses.size());
-    for (const auto& [key, access] : bindings) add(access);
+    resources.reserve(preparedBindings.size() + extraAccesses.size());
+    for (const ResourceAccess* access : preparedBindings)
+        add(*access);
     if (point == BindingPoint::Graphics)
     {
-        for (const auto& access : m_RenderTargetResourceBindings) add(access);
+        for (const ResourceAccess& access : m_RenderTargetResourceBindings)
+            add(access);
         if (inputAssembler)
+        {
             for (const auto& [key, access] : m_GraphicsFixedBindings)
-                if (key != 200u || indexed) add(access);
+            {
+                if (key != 200u || indexed)
+                    add(access);
+            }
+        }
     }
     for (const auto& access : extraAccesses) add(access);
 
@@ -569,6 +610,7 @@ void CommandList::SetVertexBuffer(const uint32_t slot, const VertexBuffer& verte
 {
     m_GraphicsFixedBindings[100u + slot] = { vertexBuffer.GetD3D12Resource(),
         vertexBuffer.GetStateRegistration(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER };
+    m_GraphicsResourceBindingsDirty = true;
     const auto vertexBufferView = vertexBuffer.GetVertexBufferView();
 
     m_D3d12CommandList->IASetVertexBuffers(slot, 1, &vertexBufferView);
@@ -583,6 +625,7 @@ void CommandList::SetVertexBufferView(
 {
     m_GraphicsFixedBindings[100u + slot] = { resource.GetD3D12Resource(),
         resource.GetStateRegistration(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER };
+    m_GraphicsResourceBindingsDirty = true;
     m_D3d12CommandList->IASetVertexBuffers(slot, 1, &vertexBufferView);
     TrackResource(resource);
 }
@@ -591,6 +634,7 @@ void CommandList::SetIndexBuffer(const IndexBuffer& indexBuffer)
 {
     m_GraphicsFixedBindings[200u] = { indexBuffer.GetD3D12Resource(),
         indexBuffer.GetStateRegistration(), D3D12_RESOURCE_STATE_INDEX_BUFFER };
+    m_GraphicsResourceBindingsDirty = true;
     const auto indexBufferView = indexBuffer.GetIndexBufferView();
 
     m_D3d12CommandList->IASetIndexBuffer(&indexBufferView);
@@ -604,6 +648,7 @@ void CommandList::SetIndexBufferView(
 {
     m_GraphicsFixedBindings[200u] = { resource.GetD3D12Resource(),
         resource.GetStateRegistration(), D3D12_RESOURCE_STATE_INDEX_BUFFER };
+    m_GraphicsResourceBindingsDirty = true;
     m_D3d12CommandList->IASetIndexBuffer(&indexBufferView);
     TrackResource(resource);
 }
@@ -665,6 +710,7 @@ void CommandList::SetGraphicsRootSignature(const RootSignature& rootSignature)
     if (m_GraphicsRootSignature != d3d12RootSignature)
     {
         m_GraphicsResourceBindings.clear();
+        m_GraphicsResourceBindingsDirty = true;
         m_GraphicsRootSignature = d3d12RootSignature;
         m_D3d12CommandList->SetGraphicsRootSignature(m_GraphicsRootSignature);
 
@@ -688,6 +734,7 @@ void CommandList::SetComputeRootSignature(const RootSignature& rootSignature)
     if (m_ComputeRootSignature != d3d12RootSignature)
     {
         m_ComputeResourceBindings.clear();
+        m_ComputeResourceBindingsDirty = true;
         m_ComputeRootSignature = d3d12RootSignature;
         m_D3d12CommandList->SetComputeRootSignature(m_ComputeRootSignature);
 
@@ -711,12 +758,14 @@ void CommandList::SetGraphicsAndComputeRootSignature(const RootSignature& rootSi
     if (m_GraphicsRootSignature != d3d12RootSignature)
     {
         m_GraphicsResourceBindings.clear();
+        m_GraphicsResourceBindingsDirty = true;
         m_GraphicsRootSignature = d3d12RootSignature;
         m_D3d12CommandList->SetGraphicsRootSignature(m_GraphicsRootSignature);
     }
     if (m_ComputeRootSignature != d3d12RootSignature)
     {
         m_ComputeResourceBindings.clear();
+        m_ComputeResourceBindingsDirty = true;
         m_ComputeRootSignature = d3d12RootSignature;
         m_D3d12CommandList->SetComputeRootSignature(m_ComputeRootSignature);
     }
@@ -816,6 +865,7 @@ void CommandList::SetStencilRef(UINT8 stencilRef)
 void CommandList::SetRenderTarget(const RenderTarget& renderTarget, UINT texArrayIndex /*= -1*/, UINT mipLevel /*= 0*/, bool useDepth /*= true*/, bool readonlyDepth)
 {
     m_RenderTargetResourceBindings.clear();
+    m_GraphicsResourceBindingsDirty = true;
     const auto addAttachment = [&](const Texture& texture, const D3D12_RESOURCE_STATES state, const bool depth)
     {
         const auto desc = texture.GetD3D12Resource()->GetDesc();
@@ -1178,6 +1228,10 @@ void CommandList::Reset()
     m_ComputeResourceBindings.clear();
     m_GraphicsFixedBindings.clear();
     m_RenderTargetResourceBindings.clear();
+    m_PreparedGraphicsResourceBindings.clear();
+    m_PreparedComputeResourceBindings.clear();
+    m_GraphicsResourceBindingsDirty = true;
+    m_ComputeResourceBindingsDirty = true;
 //Modify End
     m_PUploadBuffer->Reset();
 
@@ -1307,6 +1361,10 @@ void CommandList::InvalidateCachedNativeState()
     m_ComputeResourceBindings.clear();
     m_GraphicsFixedBindings.clear();
     m_RenderTargetResourceBindings.clear();
+    m_PreparedGraphicsResourceBindings.clear();
+    m_PreparedComputeResourceBindings.clear();
+    m_GraphicsResourceBindingsDirty = true;
+    m_ComputeResourceBindingsDirty = true;
     m_GraphicsRootSignature = nullptr;
     m_ComputeRootSignature = nullptr;
     m_DescriptorTableRootSignature = nullptr;
@@ -1358,7 +1416,11 @@ void CommandList::SetExternalComputePipeline(
     Assert(m_ExternalCommandList, "External compute pipeline binding requires an external command list.");
     Assert(rootSignature != nullptr && pipelineState != nullptr, "External compute pipeline is incomplete.");
     m_DescriptorBindingPoint = BindingPoint::Compute;
-    if (m_ComputeRootSignature != rootSignature) m_ComputeResourceBindings.clear();
+    if (m_ComputeRootSignature != rootSignature)
+    {
+        m_ComputeResourceBindings.clear();
+        m_ComputeResourceBindingsDirty = true;
+    }
     m_ComputeRootSignature = rootSignature;
     m_D3d12CommandList->SetComputeRootSignature(rootSignature);
     m_D3d12CommandList->SetPipelineState(pipelineState);
