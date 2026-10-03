@@ -1,4 +1,4 @@
-//Modify Begin:2026-09-29 by Hui
+//Modify Begin:2026-10-04 by Hui
 #include <Framework/Rendering/Lighting/ReSTIRGIPass.h>
 
 #include <DX12Library/CommandList.h>
@@ -176,6 +176,9 @@ public:
     {
         Assert(desc.Pass != nullptr && m_Inputs != nullptr, "ReSTIR GI graph pass requires pass inputs.");
         SetPassName(desc.PassName);
+        // Every ReSTIR stage owns a distinct descriptor set and records only
+        // read-only scene inputs plus its stage-local UAVs.
+        SetParallelRecordingEligible(true);
         if (m_Kind == Kind::OutputClear)
         {
             RegisterOutput({ m_Inputs->IndirectLighting, RenderGraph::OutputType::UnorderedAccess });

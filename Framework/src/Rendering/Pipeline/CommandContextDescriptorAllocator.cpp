@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-10-04 by Hui
 
 #include <Framework/Rendering/Pipeline/CommandContextDescriptorAllocator.h>
 
@@ -31,6 +31,10 @@ void CommandContextDescriptorAllocator::ResetTransientBindings(const PipelineBin
 
 void CommandContextDescriptorAllocator::SetBindlessDescriptorHeap(BindlessDescriptorHeap* bindlessDescriptorHeap)
 {
+    if (m_BindlessDescriptorHeap == bindlessDescriptorHeap)
+    {
+        return;
+    }
     m_BindlessDescriptorHeap = bindlessDescriptorHeap;
     ResetTransientBindings();
 }

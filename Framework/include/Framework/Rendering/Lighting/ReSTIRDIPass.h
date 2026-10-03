@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-10-04 by Hui
 #include <Framework/Rendering/Lighting/ActivePixelList.h>
 #include <Framework/Rendering/Lighting/ReSTIRDI.h>
 #include <Framework/Rendering/Lighting/MaterialShadingModel.h>
@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -79,6 +80,7 @@ struct ReSTIRDIGraphInputs
         const RenderGraph::RenderContext& context) const
     {
         const uint32_t frameIndex = GetFrameIndex();
+        std::scoped_lock lock(*m_CacheMutex);
         if (!m_CachedFrameInputs.has_value() || m_CachedFrameIndex != frameIndex)
         {
             m_CachedFrameInputs = ResolveFrameInputs(context);
@@ -88,6 +90,7 @@ struct ReSTIRDIGraphInputs
     }
 
 private:
+    std::shared_ptr<std::mutex> m_CacheMutex = std::make_shared<std::mutex>();
     mutable std::optional<ReSTIRDIExecutionInputs> m_CachedFrameInputs;
     mutable uint32_t m_CachedFrameIndex = ~0u;
 };

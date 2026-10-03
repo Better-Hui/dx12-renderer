@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-10-04 by Hui
 #pragma once
 
 #include <Framework/Rendering/Lighting/ActivePixelList.h>
@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -76,6 +77,7 @@ struct ReSTIRGIGraphInputs
         const RenderGraph::RenderContext& context) const
     {
         const uint32_t frameIndex = GetFrameIndex();
+        std::scoped_lock lock(*m_CacheMutex);
         if (!m_CachedFrameInputs.has_value() || m_CachedFrameIndex != frameIndex)
         {
             m_CachedFrameInputs = ResolveFrameInputs(context);
@@ -85,6 +87,7 @@ struct ReSTIRGIGraphInputs
     }
 
 private:
+    std::shared_ptr<std::mutex> m_CacheMutex = std::make_shared<std::mutex>();
     mutable std::optional<ReSTIRGIExecutionInputs> m_CachedFrameInputs;
     mutable uint32_t m_CachedFrameIndex = ~0u;
 };
