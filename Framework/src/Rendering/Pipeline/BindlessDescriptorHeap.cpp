@@ -2,8 +2,6 @@
 #include <Framework/Rendering/Pipeline/BindlessDescriptorHeap.h>
 
 #include <DX12Library/CommandQueue.h>
-#include <DX12Library/CommandList.h>
-#include <DX12Library/BarrierContext.h>
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Resource.h>
 #include <DX12Library/Texture.h>
@@ -12,7 +10,6 @@
 //Modify End
 #include <Framework/Rendering/Pipeline/PipelineDescriptorSet.h>
 
-#include <algorithm>
 #include <string>
 
 BindlessDescriptorHeap::BindlessDescriptorHeap(ID3D12Device2& device, BindlessDescriptorHeapDesc desc)
@@ -39,7 +36,6 @@ void BindlessDescriptorHeap::Reset()
     Assert(!m_FrameActive, "Bindless descriptor heap cannot be reset while a frame is recording.");
     m_NextResourceDescriptorIndex = 0;
     m_DefaultShaderResourceDescriptors.clear();
-    m_Resources.clear();
     m_CachedDescriptorTables.clear();
     std::fill(m_ResourceDescriptorRevisions.begin(), m_ResourceDescriptorRevisions.end(), 0u);
     ++m_LayoutGeneration;
@@ -199,10 +195,6 @@ uint32_t BindlessDescriptorHeap::AddShaderResourceView(
 
     const uint32_t descriptorIndex = m_NextResourceDescriptorIndex++;
     UpdateShaderResourceViewLocked(descriptorIndex, resource, srvDesc);
-    if (std::find(m_Resources.begin(), m_Resources.end(), &resource) == m_Resources.end())
-    {
-        m_Resources.push_back(&resource);
-    }
     if (srvDesc == nullptr)
     {
         m_DefaultShaderResourceDescriptors.emplace(
@@ -211,28 +203,6 @@ uint32_t BindlessDescriptorHeap::AddShaderResourceView(
     }
     return descriptorIndex;
 }
-
-//Modify Begin:2026-10-03 by Hui
-void BindlessDescriptorHeap::PrepareShaderRead(CommandList& commandList) const
-{
-    std::lock_guard lock(m_Mutex);
-    if (m_Resources.empty())
-    {
-        return;
-    }
-
-    std::vector<BarrierContext::StableReadOnlyUse> uses;
-    uses.reserve(m_Resources.size());
-    for (const Resource* resource : m_Resources)
-    {
-        Assert(resource != nullptr && resource->IsValid(),
-            "Bindless descriptor heap contains an invalid resource.");
-        uses.push_back({ resource, D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE });
-    }
-    commandList.GetBarrierContext().ReserveResourceUses(uses.size());
-    commandList.GetBarrierContext().UseStableReadOnlyBatch(uses);
-}
-//Modify End
 
 void BindlessDescriptorHeap::UpdateShaderResourceView(
     const uint32_t descriptorIndex,
