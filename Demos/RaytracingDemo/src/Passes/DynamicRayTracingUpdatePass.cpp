@@ -5,6 +5,7 @@
 
 #include <DX12Library/CommandList.h>
 #include <DX12Library/IndexBuffer.h>
+#include <DX12Library/PerformanceScope.h>
 #include <DX12Library/VertexBuffer.h>
 #include <Framework/Diagnostics/DiagnosticsSession.h>
 #include <Framework/Rendering/RayTracing/RayTracingAccelerationStructure.h>
@@ -47,9 +48,20 @@ void RaytracingDemoPasses::Builder::AddDynamicRayTracingUpdatePasses(
             CommandList& commandList = passContext.GetCommandList();
             const bool updated = passData.Resources->Scene.BeginDynamicRayTracingGeometryUpdate(
                 commandList,
-                context.GetMetadata().m_Time);
+                context.GetMetadata().m_Time,
+                passData.Resources->Diagnostics,
+                context.GetMetadata().m_FrameIndex);
             Assert(updated, "Dynamic RTAS geometry upload pass was scheduled without pending scene work.");
-            passData.Resources->Scene.RefreshDynamicEmissiveMeshSurfaceEmitters(passData.Resources->Lights);
+            {
+                DX12_CPU_PERFORMANCE_SCOPE(
+                    passData.Resources->Diagnostics,
+                    context.GetMetadata().m_FrameIndex,
+                    "DynamicRTAS.RefreshEmissiveEmitters",
+                    "CPU",
+                    0u,
+                    "demo");
+                passData.Resources->Scene.RefreshDynamicEmissiveMeshSurfaceEmitters(passData.Resources->Lights);
+            }
         });
 
     renderGraphBuilder.AddPass<DynamicRayTracingUpdatePassData>(
@@ -64,11 +76,14 @@ void RaytracingDemoPasses::Builder::AddDynamicRayTracingUpdatePasses(
             passBuilder.ReadExternal(dynamicIndexBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
             passBuilder.WriteToken(DemoResourceIds::DynamicRayTracingUpdatedToken);
         },
-        [](const DynamicRayTracingUpdatePassData& passData, const RenderGraph::RenderContext&, RenderGraph::RenderPassContext& passContext)
+        [](const DynamicRayTracingUpdatePassData& passData, const RenderGraph::RenderContext& context, RenderGraph::RenderPassContext& passContext)
         {
             CommandList& commandList = passContext.GetCommandList();
             RaytracingDemoSceneResources& scene = passData.Resources->Scene;
-            const bool updated = scene.FinishDynamicRayTracingUpdate(commandList);
+            const bool updated = scene.FinishDynamicRayTracingUpdate(
+                commandList,
+                passData.Resources->Diagnostics,
+                context.GetMetadata().m_FrameIndex);
             Assert(updated, "Dynamic RTAS refit pass ran before the geometry upload pass.");
 
             FrameworkDiagnostics::DiagnosticsSession* diagnostics = passData.Resources->Diagnostics;

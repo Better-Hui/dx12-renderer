@@ -1,4 +1,4 @@
-//Modify Begin:2026-09-29 by Hui
+//Modify Begin:2026-10-02 by Hui
 #include <Framework/Rendering/RayTracing/RayTracingAccelerationStructure.h>
 
 #include <DX12Library/CommandList.h>
@@ -7,6 +7,7 @@
 #include <DX12Library/Helpers.h>
 #include <Framework/Rendering/Pipeline/CommandContext.h>
 #include <Framework/Geometry/Mesh.h>
+#include <DX12Library/PerformanceScope.h>
 
 #include <d3dx12/d3dx12.h>
 
@@ -154,19 +155,14 @@ void RayTracingAccelerationStructure::Build(CommandList& commandList, RayTracing
     {
         RetireResourceState(commandList, m_TopLevelAccelerationStructure.Resource);
     }
-    if (m_InstanceDescUpload)
-    {
-        RetireResourceState(commandList, m_InstanceDescUpload.Resource);
-    }
     m_BottomLevelAccelerationStructures.clear();
     m_TopLevelAccelerationStructure = {};
-    m_InstanceDescUpload = {};
     m_Meshes.clear();
     m_GeometryData.clear();
     m_DirtyBottomLevelMeshes.clear();
 
     const std::map<const Mesh*, uint32_t> meshToBlasIndex = BuildBottomLevelAccelerationStructures(commandList);
-    BuildTopLevelAccelerationStructure(commandList, meshToBlasIndex, false);
+    BuildTopLevelAccelerationStructure(commandList, meshToBlasIndex, false, nullptr, 0u);
     m_BuiltInstanceCount = static_cast<uint32_t>(m_Instances.size());
     m_InstanceMeshChanged = false;
 }
@@ -186,7 +182,10 @@ void RayTracingAccelerationStructure::Build(CommandList& commandList, const std:
     Build(commandList);
 }
 
-void RayTracingAccelerationStructure::Update(CommandList& commandList)
+void RayTracingAccelerationStructure::Update(
+    CommandList& commandList,
+    DiagnosticTelemetrySink* diagnostics,
+    const uint64_t frameIndex)
 {
     if (!m_LastBuildSettings.AllowUpdate || !m_TopLevelAccelerationStructure)
     {
@@ -195,15 +194,29 @@ void RayTracingAccelerationStructure::Update(CommandList& commandList)
     }
 
     Assert(!m_Instances.empty(), "Ray tracing acceleration structure requires at least one instance.");
-    if (m_InstanceDescUpload)
-    {
-        RetireResourceState(commandList, m_InstanceDescUpload.Resource);
-    }
-    m_InstanceDescUpload = {};
     m_GeometryData.clear();
     const size_t previousBottomLevelCount = m_BottomLevelAccelerationStructures.size();
-    const std::map<const Mesh*, uint32_t> meshToBlasIndex = BuildBottomLevelAccelerationStructures(commandList);
-    UpdateDirtyBottomLevelAccelerationStructures(commandList);
+    std::map<const Mesh*, uint32_t> meshToBlasIndex;
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics,
+            frameIndex,
+            "RTAS.BuildBottomLevelSet",
+            "CPU",
+            0u,
+            "framework");
+        meshToBlasIndex = BuildBottomLevelAccelerationStructures(commandList);
+    }
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics,
+            frameIndex,
+            "RTAS.UpdateDirtyBottomLevels",
+            "CPU",
+            0u,
+            "framework");
+        UpdateDirtyBottomLevelAccelerationStructures(commandList, diagnostics, frameIndex);
+    }
     const bool instanceCountChanged = m_BuiltInstanceCount != m_Instances.size();
     const bool bottomLevelSetChanged = previousBottomLevelCount != m_BottomLevelAccelerationStructures.size();
     const bool canPerformUpdate = !instanceCountChanged && !bottomLevelSetChanged && !m_InstanceMeshChanged;
@@ -213,7 +226,21 @@ void RayTracingAccelerationStructure::Update(CommandList& commandList)
         m_TopLevelAccelerationStructure = {};
     }
 
-    BuildTopLevelAccelerationStructure(commandList, meshToBlasIndex, canPerformUpdate);
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics,
+            frameIndex,
+            canPerformUpdate ? "RTAS.BuildTopLevelUpdate" : "RTAS.BuildTopLevelRebuild",
+            "CPU",
+            0u,
+            "framework");
+        BuildTopLevelAccelerationStructure(
+            commandList,
+            meshToBlasIndex,
+            canPerformUpdate,
+            diagnostics,
+            frameIndex);
+    }
     m_BuiltInstanceCount = static_cast<uint32_t>(m_Instances.size());
     m_InstanceMeshChanged = false;
 }
@@ -389,6 +416,10 @@ RayTracingAccelerationStructure::BottomLevelAccelerationStructure RayTracingAcce
     Assert(
         scratch.Resource->GetDesc().Width >= prebuildInfo.ScratchDataSizeInBytes,
         "BLAS scratch buffer is smaller than the required prebuild size.");
+    commandContext.UseResource(
+        scratch.Resource.Get(),
+        D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+        ResourceUse::Write);
 
     auto result = CreateAccelerationStructureBuffer(
         prebuildInfo.ResultDataMaxSizeInBytes,
@@ -436,11 +467,13 @@ std::map<const Mesh*, uint32_t> RayTracingAccelerationStructure::BuildBottomLeve
     ManagedRayTracingResource scratch;
     if (scratchBufferSize > 0)
     {
-        scratch = CreateAccelerationStructureBuffer(
+        const auto transientScratch = CommandListInternalAccess::GetOrCreateTransientUavBuffer(
+            commandList,
+            reinterpret_cast<uint64_t>(this) ^ 0x424C41535F425549ull,
             scratchBufferSize,
-            D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
             L"Ray Tracing BLAS Scratch");
-        CommandListInternalAccess::TrackResourceState(commandList, scratch.Resource, scratch.StateRegistration);
+        scratch = { transientScratch.Resource, transientScratch.StateRegistration };
+        CommandListInternalAccess::TrackObjectLifetime(commandList, scratch.Resource);
     }
 
     for (const auto& [meshPointer, mesh] : meshesToBuild)
@@ -455,83 +488,126 @@ std::map<const Mesh*, uint32_t> RayTracingAccelerationStructure::BuildBottomLeve
     return meshToBlasIndex;
 }
 
-void RayTracingAccelerationStructure::UpdateDirtyBottomLevelAccelerationStructures(CommandList& commandList)
+void RayTracingAccelerationStructure::UpdateDirtyBottomLevelAccelerationStructures(
+    CommandList& commandList,
+    DiagnosticTelemetrySink* diagnostics,
+    const uint64_t frameIndex)
 {
     if (m_DirtyBottomLevelMeshes.empty())
     {
         return;
     }
 
-    std::unordered_set<const Mesh*> knownMeshes;
     uint64_t scratchBufferSize = 0;
-    for (const BottomLevelAccelerationStructure& bottomLevel : m_BottomLevelAccelerationStructures)
     {
-        const Mesh* mesh = bottomLevel.Mesh.get();
-        knownMeshes.emplace(mesh);
-        if (!m_DirtyBottomLevelMeshes.contains(mesh))
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics,
+            frameIndex,
+            "RTAS.UpdateDirtyBottomLevels.Prebuild",
+            "CPU",
+            0u,
+            "framework");
+        std::unordered_set<const Mesh*> knownMeshes;
+        for (const BottomLevelAccelerationStructure& bottomLevel : m_BottomLevelAccelerationStructures)
         {
-            continue;
+            const Mesh* mesh = bottomLevel.Mesh.get();
+            knownMeshes.emplace(mesh);
+            if (!m_DirtyBottomLevelMeshes.contains(mesh))
+            {
+                continue;
+            }
+
+            scratchBufferSize = (std::max)(
+                scratchBufferSize,
+                GetBottomLevelPrebuildInfo(
+                    *bottomLevel.Mesh,
+                    m_LastBuildSettings.BottomLevelFlags |
+                        D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE)
+                    .ScratchDataSizeInBytes);
         }
 
-        scratchBufferSize = (std::max)(
-            scratchBufferSize,
-            GetBottomLevelPrebuildInfo(
-                *bottomLevel.Mesh,
-                m_LastBuildSettings.BottomLevelFlags |
-                    D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE)
-                .ScratchDataSizeInBytes);
-    }
-
-    for (const Mesh* mesh : m_DirtyBottomLevelMeshes)
-    {
-        Assert(knownMeshes.contains(mesh), "Ray tracing dirty BLAS mesh is not part of the current acceleration structure.");
+        for (const Mesh* mesh : m_DirtyBottomLevelMeshes)
+        {
+            Assert(knownMeshes.contains(mesh), "Ray tracing dirty BLAS mesh is not part of the current acceleration structure.");
+        }
     }
 
     Assert(scratchBufferSize > 0, "Ray tracing BLAS update requires non-zero scratch storage.");
-    const ManagedRayTracingResource scratch = CreateAccelerationStructureBuffer(
-        scratchBufferSize,
-        D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-        L"Ray Tracing BLAS Update Scratch");
+    ManagedRayTracingResource scratch;
+    {
+        const uint64_t scratchKey = reinterpret_cast<uint64_t>(this) ^ 0x424C41535F555044ull;
+        const bool scratchCacheMiss = !CommandListInternalAccess::HasTransientUavBuffer(
+            commandList,
+            scratchKey,
+            scratchBufferSize);
+        DX12Diagnostics::ScopedCpuPerformanceScope scratchScope(
+            scratchCacheMiss ? diagnostics : nullptr,
+            frameIndex,
+            "RTAS.UpdateDirtyBottomLevels.CreateScratch",
+            "CPU",
+            0u,
+            "framework");
+        const auto transientScratch = CommandListInternalAccess::GetOrCreateTransientUavBuffer(
+            commandList,
+            scratchKey,
+            scratchBufferSize,
+            L"Ray Tracing BLAS Update Scratch");
+        scratch = { transientScratch.Resource, transientScratch.StateRegistration };
+        CommandListInternalAccess::TrackObjectLifetime(commandList, scratch.Resource);
+    }
     CommandContext commandContext(commandList);
     CommandListInternalAccess::TrackResourceState(commandList, scratch.Resource, scratch.StateRegistration);
+    commandContext.UseResource(
+        scratch.Resource.Get(),
+        D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+        ResourceUse::Write);
 
-    for (BottomLevelAccelerationStructure& bottomLevel : m_BottomLevelAccelerationStructures)
     {
-        if (!m_DirtyBottomLevelMeshes.contains(bottomLevel.Mesh.get()))
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics,
+            frameIndex,
+            "RTAS.UpdateDirtyBottomLevels.RecordBuilds",
+            "CPU",
+            0u,
+            "framework");
+        for (BottomLevelAccelerationStructure& bottomLevel : m_BottomLevelAccelerationStructures)
         {
-            continue;
+            if (!m_DirtyBottomLevelMeshes.contains(bottomLevel.Mesh.get()))
+            {
+                continue;
+            }
+
+            const VertexBuffer& vertexBuffer = bottomLevel.Mesh->GetVertexBuffer();
+            const IndexBuffer& indexBuffer = bottomLevel.Mesh->GetIndexBuffer();
+            D3D12_RAYTRACING_GEOMETRY_DESC geometryDesc = {};
+            geometryDesc.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
+            geometryDesc.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
+            geometryDesc.Triangles.VertexBuffer.StartAddress = vertexBuffer.GetD3D12Resource()->GetGPUVirtualAddress();
+            geometryDesc.Triangles.VertexBuffer.StrideInBytes = vertexBuffer.GetVertexStride();
+            geometryDesc.Triangles.VertexCount = static_cast<UINT>(vertexBuffer.GetNumVertices());
+            geometryDesc.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
+            geometryDesc.Triangles.IndexBuffer = indexBuffer.GetD3D12Resource()->GetGPUVirtualAddress();
+            geometryDesc.Triangles.IndexCount = static_cast<UINT>(indexBuffer.GetNumIndices());
+            geometryDesc.Triangles.IndexFormat = indexBuffer.GetIndexFormat();
+
+            D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
+            inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
+            inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+            inputs.Flags = m_LastBuildSettings.BottomLevelFlags |
+                D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE;
+            inputs.NumDescs = 1;
+            inputs.pGeometryDescs = &geometryDesc;
+
+            D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
+            buildDesc.Inputs = inputs;
+            buildDesc.ScratchAccelerationStructureData = scratch.Resource->GetGPUVirtualAddress();
+            buildDesc.SourceAccelerationStructureData = bottomLevel.Resource.Resource->GetGPUVirtualAddress();
+            buildDesc.DestAccelerationStructureData = bottomLevel.Resource.Resource->GetGPUVirtualAddress();
+            commandList.BuildRaytracingAccelerationStructure(buildDesc);
+            commandContext.UavBarrier(bottomLevel.Resource.Resource.Get());
+            commandContext.UavBarrier(scratch.Resource.Get());
+            ++m_UpdateStatistics.BottomLevelUpdateCount;
         }
-
-        const VertexBuffer& vertexBuffer = bottomLevel.Mesh->GetVertexBuffer();
-        const IndexBuffer& indexBuffer = bottomLevel.Mesh->GetIndexBuffer();
-        D3D12_RAYTRACING_GEOMETRY_DESC geometryDesc = {};
-        geometryDesc.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
-        geometryDesc.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
-        geometryDesc.Triangles.VertexBuffer.StartAddress = vertexBuffer.GetD3D12Resource()->GetGPUVirtualAddress();
-        geometryDesc.Triangles.VertexBuffer.StrideInBytes = vertexBuffer.GetVertexStride();
-        geometryDesc.Triangles.VertexCount = static_cast<UINT>(vertexBuffer.GetNumVertices());
-        geometryDesc.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
-        geometryDesc.Triangles.IndexBuffer = indexBuffer.GetD3D12Resource()->GetGPUVirtualAddress();
-        geometryDesc.Triangles.IndexCount = static_cast<UINT>(indexBuffer.GetNumIndices());
-        geometryDesc.Triangles.IndexFormat = indexBuffer.GetIndexFormat();
-
-        D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
-        inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
-        inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
-        inputs.Flags = m_LastBuildSettings.BottomLevelFlags |
-            D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE;
-        inputs.NumDescs = 1;
-        inputs.pGeometryDescs = &geometryDesc;
-
-        D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
-        buildDesc.Inputs = inputs;
-        buildDesc.ScratchAccelerationStructureData = scratch.Resource->GetGPUVirtualAddress();
-        buildDesc.SourceAccelerationStructureData = bottomLevel.Resource.Resource->GetGPUVirtualAddress();
-        buildDesc.DestAccelerationStructureData = bottomLevel.Resource.Resource->GetGPUVirtualAddress();
-        commandList.BuildRaytracingAccelerationStructure(buildDesc);
-        commandContext.UavBarrier(bottomLevel.Resource.Resource.Get());
-        commandContext.UavBarrier(scratch.Resource.Get());
-        ++m_UpdateStatistics.BottomLevelUpdateCount;
     }
 
     m_DirtyBottomLevelMeshes.clear();
@@ -550,53 +626,73 @@ std::map<const Mesh*, uint32_t> RayTracingAccelerationStructure::CreateMeshToBla
 void RayTracingAccelerationStructure::BuildTopLevelAccelerationStructure(
     CommandList& commandList,
     const std::map<const Mesh*, uint32_t>& meshToBlasIndex,
-    const bool update)
+    const bool update,
+    DiagnosticTelemetrySink* diagnostics,
+    const uint64_t frameIndex)
 {
     const auto& device = m_Device;
 
-    std::vector<D3D12_RAYTRACING_INSTANCE_DESC> instanceDescs;
-    instanceDescs.reserve(m_Instances.size());
+    m_InstanceDescs.clear();
+    m_InstanceDescs.reserve(m_Instances.size());
     m_GeometryData.reserve(m_Instances.size());
 
-    for (uint32_t instanceIndex = 0; instanceIndex < m_Instances.size(); ++instanceIndex)
     {
-        const RayTracingInstanceDesc& instance = m_Instances[instanceIndex];
-        const uint32_t blasIndex = meshToBlasIndex.at(instance.Mesh.get());
-        const uint32_t instanceID = instance.InstanceID == UINT32_MAX ? instanceIndex : instance.InstanceID;
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics,
+            frameIndex,
+            "RTAS.BuildTopLevelUpdate.BuildInstanceDescs",
+            "CPU",
+            0u,
+            "framework");
+        for (uint32_t instanceIndex = 0; instanceIndex < m_Instances.size(); ++instanceIndex)
+        {
+            const RayTracingInstanceDesc& instance = m_Instances[instanceIndex];
+            const uint32_t blasIndex = meshToBlasIndex.at(instance.Mesh.get());
+            const uint32_t instanceID = instance.InstanceID == UINT32_MAX ? instanceIndex : instance.InstanceID;
 
-        D3D12_RAYTRACING_INSTANCE_DESC instanceDesc = {};
-        DirectX::XMStoreFloat3x4(reinterpret_cast<DirectX::XMFLOAT3X4*>(instanceDesc.Transform), instance.Transform);
-        instanceDesc.InstanceID = instanceID;
-        instanceDesc.InstanceMask = instance.Mask;
-        instanceDesc.InstanceContributionToHitGroupIndex = instance.InstanceContributionToHitGroupIndex;
-        instanceDesc.Flags = instance.Flags;
-        instanceDesc.AccelerationStructure =
-            m_BottomLevelAccelerationStructures[blasIndex].Resource.Resource->GetGPUVirtualAddress();
-        instanceDescs.push_back(instanceDesc);
+            D3D12_RAYTRACING_INSTANCE_DESC instanceDesc = {};
+            DirectX::XMStoreFloat3x4(reinterpret_cast<DirectX::XMFLOAT3X4*>(instanceDesc.Transform), instance.Transform);
+            instanceDesc.InstanceID = instanceID;
+            instanceDesc.InstanceMask = instance.Mask;
+            instanceDesc.InstanceContributionToHitGroupIndex = instance.InstanceContributionToHitGroupIndex;
+            instanceDesc.Flags = instance.Flags;
+            instanceDesc.AccelerationStructure =
+                m_BottomLevelAccelerationStructures[blasIndex].Resource.Resource->GetGPUVirtualAddress();
+            m_InstanceDescs.push_back(instanceDesc);
 
-        m_GeometryData.push_back({
-            blasIndex,
-            blasIndex,
-            instance.MaterialIndex,
-            0
-        });
+            m_GeometryData.push_back({
+                blasIndex,
+                blasIndex,
+                instance.MaterialIndex,
+                0
+            });
+        }
     }
 
-    if (m_InstanceDescUpload)
+    const size_t instanceDescSize = sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * m_InstanceDescs.size();
+    UploadBuffer::Allocation instanceDescUpload;
     {
-        RetireResourceState(commandList, m_InstanceDescUpload.Resource);
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics,
+            frameIndex,
+            "RTAS.BuildTopLevelUpdate.UploadInstanceDescs",
+            "CPU",
+            0u,
+            "framework");
+        instanceDescUpload = CommandListInternalAccess::AllocateTransientUpload(
+            commandList,
+            instanceDescSize,
+            16u);
+        std::memcpy(instanceDescUpload.Cpu, m_InstanceDescs.data(), instanceDescSize);
+        CommandListInternalAccess::TrackObjectLifetime(commandList, instanceDescUpload.Resource);
     }
-    m_InstanceDescUpload = CreateUploadBuffer(
-        instanceDescs.data(),
-        sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * instanceDescs.size(),
-        L"Ray Tracing Instance Descriptions");
 
     D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
     inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
     inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
     inputs.Flags = m_LastBuildSettings.TopLevelFlags;
-    inputs.NumDescs = static_cast<UINT>(instanceDescs.size());
-    inputs.InstanceDescs = m_InstanceDescUpload.Resource->GetGPUVirtualAddress();
+    inputs.NumDescs = static_cast<UINT>(m_InstanceDescs.size());
+    inputs.InstanceDescs = instanceDescUpload.Gpu;
 
     if (update)
     {
@@ -604,8 +700,17 @@ void RayTracingAccelerationStructure::BuildTopLevelAccelerationStructure(
     }
 
     D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo = {};
-    device->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &prebuildInfo);
-    Assert(prebuildInfo.ResultDataMaxSizeInBytes > 0, "Invalid TLAS prebuild info.");
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics,
+            frameIndex,
+            "RTAS.BuildTopLevelUpdate.Prebuild",
+            "CPU",
+            0u,
+            "framework");
+        device->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &prebuildInfo);
+        Assert(prebuildInfo.ResultDataMaxSizeInBytes > 0, "Invalid TLAS prebuild info.");
+    }
 
     if (!update)
     {
@@ -619,10 +724,28 @@ void RayTracingAccelerationStructure::BuildTopLevelAccelerationStructure(
             L"Ray Tracing Top Level Acceleration Structure");
     }
 
-    auto scratch = CreateAccelerationStructureBuffer(
-        prebuildInfo.ScratchDataSizeInBytes,
-        D3D12_RESOURCE_STATE_COMMON,
-        update ? L"Ray Tracing TLAS Update Scratch" : L"Ray Tracing TLAS Scratch");
+    ManagedRayTracingResource scratch;
+    {
+        const uint64_t scratchKey = reinterpret_cast<uint64_t>(this) ^ 0x544C41535F534352ull;
+        const bool scratchCacheMiss = !CommandListInternalAccess::HasTransientUavBuffer(
+            commandList,
+            scratchKey,
+            prebuildInfo.ScratchDataSizeInBytes);
+        DX12Diagnostics::ScopedCpuPerformanceScope scratchScope(
+            scratchCacheMiss ? diagnostics : nullptr,
+            frameIndex,
+            "RTAS.BuildTopLevelUpdate.CreateScratch",
+            "CPU",
+            0u,
+            "framework");
+        const auto transientScratch = CommandListInternalAccess::GetOrCreateTransientUavBuffer(
+            commandList,
+            scratchKey,
+            prebuildInfo.ScratchDataSizeInBytes,
+            update ? L"Ray Tracing TLAS Update Scratch" : L"Ray Tracing TLAS Scratch");
+        scratch = { transientScratch.Resource, transientScratch.StateRegistration };
+        CommandListInternalAccess::TrackObjectLifetime(commandList, scratch.Resource);
+    }
     CommandContext commandContext(commandList);
 
     commandContext.UseResource(scratch.Resource.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, ResourceUse::Write);
@@ -637,10 +760,6 @@ void RayTracingAccelerationStructure::BuildTopLevelAccelerationStructure(
     commandList.BuildRaytracingAccelerationStructure(buildDesc);
     commandContext.UavBarrier(m_TopLevelAccelerationStructure.Resource.Get());
     CommandListInternalAccess::TrackResourceState(commandList, scratch.Resource, scratch.StateRegistration);
-    CommandListInternalAccess::TrackResourceState(
-        commandList,
-        m_InstanceDescUpload.Resource,
-        m_InstanceDescUpload.StateRegistration);
     CommandListInternalAccess::TrackResourceState(
         commandList,
         m_TopLevelAccelerationStructure.Resource,

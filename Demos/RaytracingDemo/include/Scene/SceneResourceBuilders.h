@@ -25,6 +25,7 @@
 
 class CommandList;
 class D3D12DeviceContext;
+class DiagnosticTelemetrySink;
 class Model;
 class Resource;
 
@@ -123,7 +124,10 @@ public:
         uint32_t geometryIndex,
         uint32_t prototypeIndex,
         std::span<const VertexAttributes> vertices);
-    void Upload(CommandList& commandList);
+    void Upload(
+        CommandList& commandList,
+        DiagnosticTelemetrySink* diagnostics = nullptr,
+        uint64_t frameIndex = 0u);
     MeshletGpuResources GetGpuResources() { return m_Resources.GetGpuResources(); }
     const MeshletSceneUpdateStatistics& GetUpdateStatistics() const { return m_Resources.GetUpdateStatistics(); }
 
@@ -155,7 +159,10 @@ public:
     void RemoveStressInstances();
     void Update(CommandList& commandList, BindlessDescriptorHeap& bindlessDescriptorHeap);
     bool UpdateSceneObjectTransform(size_t objectIndex, const DirectX::XMMATRIX& worldMatrix);
-    void RefitDirtyGeometry(CommandList& commandList);
+    void RefitDirtyGeometry(
+        CommandList& commandList,
+        DiagnosticTelemetrySink* diagnostics = nullptr,
+        uint64_t frameIndex = 0u);
     void ForEachShaderResource(const std::function<void(const Resource&)>& action) const;
 
     const StructuredBuffer& GetGeometryBuffer() const { return m_GeometryBuffer; }

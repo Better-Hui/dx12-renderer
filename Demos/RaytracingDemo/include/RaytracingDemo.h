@@ -339,7 +339,9 @@ private:
     bool m_AsyncComputeEnabled = true;
     bool m_CopyQueueValidationEnabled = false;
     bool m_DebugSerializeAsyncCompute = false;
-    bool m_ParallelDirectCommandRecordingEnabled = true;
+//Modify Begin:2026-10-02 by Hui
+    bool m_ParallelDirectCommandRecordingEnabled = false;
+//Modify End
     int m_DebugLightingTextureTarget = 0;
     bool m_SoftShadowsEnabled = false;
     DirectX::XMFLOAT3 m_InitialSceneCameraTranslation = { 0.0f, 0.0f, 0.0f };

@@ -209,7 +209,7 @@ namespace RenderGraph
         std::unordered_map<const Resource*, size_t> m_ExternalStaticResourceIndices;
         std::unordered_map<ResourceId, size_t> m_ExternalImportedResourceIndices;
 //Modify End
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-10-02 by Hui
         bool m_ParallelRecordingEligible = false;
 //Modify End
     };

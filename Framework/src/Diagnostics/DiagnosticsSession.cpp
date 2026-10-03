@@ -1098,6 +1098,10 @@ void FrameworkDiagnostics::DiagnosticsSession::RecordPerformanceScope(
         sample.ScopeKindLength = CopyPerformanceScopeText(sample.ScopeKind, record.ScopeKind);
         ++buffer->NextIndex;
         buffer->PublishedIndex.store(buffer->NextIndex, std::memory_order_release);
+        if ((buffer->NextIndex & 1023u) == 0u)
+        {
+            m_PerformanceCollectorWake.notify_one();
+        }
     }
     catch (...)
     {
@@ -1143,9 +1147,7 @@ void FrameworkDiagnostics::DiagnosticsSession::PerformanceCollectorLoop(
     {
         m_PerformanceCollectorWake.wait_for(
             collectorLock,
-            stopToken,
-            std::chrono::milliseconds(50),
-            [] { return false; });
+            std::chrono::milliseconds(50));
         if (stopToken.stop_requested())
         {
             break;

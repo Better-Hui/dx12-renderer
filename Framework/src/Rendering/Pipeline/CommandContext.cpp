@@ -53,43 +53,17 @@ namespace
         }
     }
 
-    uint64_t HashDescriptorSet(const PipelineDescriptorSet& descriptorSet)
-    {
-        uint64_t hash = 14695981039346656037ull;
-        const auto combine = [&hash](const uint64_t value)
-        {
-            hash ^= value;
-            hash *= 1099511628211ull;
-        };
-        combine(descriptorSet.GetSetIndex());
-        for (const auto& [rootParameterIndex, boundResource] : descriptorSet.GetBoundResources())
-        {
-            combine(rootParameterIndex);
-            combine(boundResource.ConstantBufferData.size());
-            combine(reinterpret_cast<uintptr_t>(boundResource.UnorderedAccessViewResourceIdentity));
-            combine(reinterpret_cast<uintptr_t>(boundResource.AccelerationStructure));
-            for (const auto& shaderResource : boundResource.ShaderResources)
-            {
-                combine(shaderResource.has_value()
-                    ? reinterpret_cast<uintptr_t>(shaderResource->ResourceIdentity)
-                    : 0u);
-            }
-            if (const PipelineDescriptorTableAllocation* allocation =
-                descriptorSet.FindDescriptorTableAllocation(rootParameterIndex))
-            {
-                combine(allocation->GetRevision());
-            }
-        }
-        return hash;
-    }
-
     bool ShouldEmitDescriptorSetTelemetry(
         const PipelineBindPoint bindPoint,
         const PipelineDescriptorSet& descriptorSet)
     {
         static std::mutex mutex;
         static std::map<std::pair<uintptr_t, uint32_t>, uint64_t> revisions;
-        const uint64_t revision = HashDescriptorSet(descriptorSet);
+        //Modify Begin:2026-10-02 by Hui
+        // PipelineDescriptorSet already increments this revision for every resource,
+        // table, and allocation mutation. Re-hashing every bound SRV here was redundant.
+        const uint64_t revision = descriptorSet.GetResourceBindingRevision();
+        //Modify End
         std::lock_guard lock(mutex);
         const auto key = std::pair(
             reinterpret_cast<uintptr_t>(&descriptorSet),
@@ -118,6 +92,9 @@ namespace
         FrameworkDeviceContext& deviceContext,
         const PipelineDescriptorSet& descriptorSet)
     {
+        //Modify Begin:2026-10-02 by Hui
+        DX12_CPU_RECORDING_SCOPE("descriptor_set.validation");
+        //Modify End
         if (DX12Diagnostics::DiagnosticRenderPassScope::GetCurrent() == nullptr)
         {
             return;
@@ -150,6 +127,9 @@ namespace
         const PipelineBindPoint bindPoint,
         const PipelineDescriptorSet& descriptorSet)
     {
+        //Modify Begin:2026-10-02 by Hui
+        DX12_CPU_RECORDING_SCOPE("descriptor_set.telemetry");
+        //Modify End
         FrameworkDeviceContext& deviceContext = descriptorSet.GetLayout().GetDeviceContext();
         if (!deviceContext.HasDiagnosticTelemetrySink())
         {
@@ -157,7 +137,14 @@ namespace
         }
 
         ValidateDescriptorSetResourceAccesses(deviceContext, descriptorSet);
-        if (!ShouldEmitDescriptorSetTelemetry(bindPoint, descriptorSet))
+        bool shouldEmitTelemetry = false;
+        //Modify Begin:2026-10-02 by Hui
+        {
+            DX12_CPU_RECORDING_SCOPE("descriptor_set.telemetry.should_emit");
+            shouldEmitTelemetry = ShouldEmitDescriptorSetTelemetry(bindPoint, descriptorSet);
+        }
+        //Modify End
+        if (!shouldEmitTelemetry)
         {
             return;
         }
@@ -210,12 +197,17 @@ namespace
                 }
             }
         }
-        deviceContext.RecordDiagnosticTelemetry({
-            .Category = "descriptor.binding",
-            .Name = "set_descriptor_set",
-            .CorrelationId = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(&descriptorSet)),
-            .Fields = std::move(fields),
-        });
+        //Modify Begin:2026-10-02 by Hui
+        {
+            DX12_CPU_RECORDING_SCOPE("descriptor_set.telemetry.record");
+            deviceContext.RecordDiagnosticTelemetry({
+                .Category = "descriptor.binding",
+                .Name = "set_descriptor_set",
+                .CorrelationId = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(&descriptorSet)),
+                .Fields = std::move(fields),
+            });
+        }
+        //Modify End
     }
 
 }
@@ -241,6 +233,26 @@ CommandContext::CommandContext(ExternalCommandContext& externalContext)
         "Cannot create a CommandContext for a finished external recording.");
     externalContext.BeginRecording();
 }
+
+//Modify Begin:2026-10-02 by Hui
+void CommandContext::InvalidateDescriptorSetCache(const PipelineBindPoint bindPoint) const
+{
+    for (size_t setIndex = 0u; setIndex < MaxDescriptorSetSlots; ++setIndex)
+    {
+        const PipelineBindPoint cachedBindPoint = m_DescriptorSetBindPoints[setIndex];
+        const bool invalidate = bindPoint == PipelineBindPoint::Compute
+            ? cachedBindPoint == PipelineBindPoint::Compute || cachedBindPoint == PipelineBindPoint::RayTracing
+            : cachedBindPoint == bindPoint;
+        if (!invalidate)
+        {
+            continue;
+        }
+        m_DescriptorSets[setIndex] = nullptr;
+        m_DescriptorSetRevisions[setIndex] = 0u;
+        m_DescriptorSetResourceBindingRevisions[setIndex] = 0u;
+    }
+}
+//Modify End
 
 void CommandContext::UseResource(
     const Resource& resource,
@@ -359,7 +371,6 @@ void CommandContext::SetPipelineLayout(const PipelineBindPoint bindPoint, const 
     {
         SetComputeRootSignature(*rootSignature);
     }
-    m_DescriptorAllocator.ResetTransientBindings();
     (void)pipelineLayout;
 }
 
@@ -384,22 +395,52 @@ void CommandContext::SetDescriptorSet(
     Assert(
         descriptorSetDesc.SetIndex < MaxDescriptorSetSlots,
         "Pipeline descriptor set index exceeds CommandContext descriptor set slots.");
-    m_DescriptorSets[descriptorSetDesc.SetIndex] = &descriptorSet;
     SetDescriptorSet(bindPoint, descriptorSet);
 }
 
 void CommandContext::SetDescriptorSet(const PipelineBindPoint bindPoint, const PipelineDescriptorSet& descriptorSet) const
 {
+//Modify Begin:2026-10-01 by Hui
+    const uint32_t setIndex = descriptorSet.GetSetIndex();
+    Assert(setIndex < MaxDescriptorSetSlots, "Pipeline descriptor set index exceeds CommandContext descriptor set slots.");
+    if (m_DescriptorSets[setIndex] == &descriptorSet &&
+        m_DescriptorSetRevisions[setIndex] == descriptorSet.GetRevision() &&
+        m_DescriptorSetBindPoints[setIndex] == bindPoint)
+    {
+        return;
+    }
+    m_DescriptorSets[setIndex] = &descriptorSet;
+    m_DescriptorSetRevisions[setIndex] = descriptorSet.GetRevision();
+    const bool resourceBindingsChanged =
+        m_DescriptorSetResourceBindingRevisions[setIndex] != descriptorSet.GetResourceBindingRevision();
+    m_DescriptorSetResourceBindingRevisions[setIndex] = descriptorSet.GetResourceBindingRevision();
+    m_DescriptorSetBindPoints[setIndex] = bindPoint;
+//Modify End
 //Modify Begin:2026-09-30 by Hui
     DX12_CPU_RECORDING_SCOPE("descriptor_set.bind");
 //Modify End
-    EmitDescriptorSetTelemetry(bindPoint, descriptorSet);
+    if (resourceBindingsChanged)
+    {
+        //Modify Begin:2026-10-02 by Hui
+        DX12_CPU_RECORDING_SCOPE("descriptor_set.apply_bindings");
+        EmitDescriptorSetTelemetry(bindPoint, descriptorSet);
+        //Modify End
+    }
     constexpr size_t MaxRootParameters = 64u;
     std::bitset<MaxRootParameters> appliedRootParameters;
     for (const auto& [rootParameterIndex, boundResource] : descriptorSet.GetBoundResources())
     {
         (void)boundResource;
         Assert(rootParameterIndex < MaxRootParameters, "Descriptor root parameter exceeds D3D12 root signature limits.");
+        if (!resourceBindingsChanged)
+        {
+            const PipelineDescriptorRangeDesc* range =
+                descriptorSet.GetLayout().FindRangeByRootParameterIndex(rootParameterIndex);
+            if (range == nullptr || range->Kind != DescriptorBindingKind::ConstantBuffer)
+            {
+                continue;
+            }
+        }
         appliedRootParameters.set(rootParameterIndex);
         switch (bindPoint)
         {
@@ -419,7 +460,7 @@ void CommandContext::SetDescriptorSet(const PipelineBindPoint bindPoint, const P
     for (const PipelineDescriptorRangeDesc& range : descriptorSet.GetLayout().GetDesc().DescriptorRanges)
     {
         Assert(range.RootParameterIndex < MaxRootParameters, "Descriptor root parameter exceeds D3D12 root signature limits.");
-        if (range.BindingMode != PipelineDescriptorBindingMode::DescriptorTable ||
+        if (!resourceBindingsChanged || range.BindingMode != PipelineDescriptorBindingMode::DescriptorTable ||
             appliedRootParameters.test(range.RootParameterIndex))
         {
             continue;
@@ -715,13 +756,36 @@ void CommandContext::SetAccelerationStructure(const ComputeShader& shader, const
     shader.m_DescriptorSet->SetAccelerationStructure(name, accelerationStructure);
 }
 
+//Modify Begin:2026-10-01 by Hui
 void CommandContext::SetGraphicsRootSignature(const RootSignature& rootSignature) const
 {
+    ID3D12RootSignature* const nativeRootSignature = rootSignature.GetRootSignature().Get();
+    const bool rootSignatureChanged = m_GraphicsRootSignature != nativeRootSignature;
+    DX12_CPU_RECORDING_SCOPE(rootSignatureChanged
+        ? "command_context.graphics_root_signature_miss"
+        : "command_context.graphics_root_signature_hit");
+    if (rootSignatureChanged)
+    {
+        m_GraphicsRootSignature = nativeRootSignature;
+        m_DescriptorAllocator.ResetTransientBindings(PipelineBindPoint::Graphics);
+        InvalidateDescriptorSetCache(PipelineBindPoint::Graphics);
+    }
     m_CommandList.SetGraphicsRootSignature(rootSignature);
 }
 
 void CommandContext::SetComputeRootSignature(const RootSignature& rootSignature) const
 {
+    ID3D12RootSignature* const nativeRootSignature = rootSignature.GetRootSignature().Get();
+    const bool rootSignatureChanged = m_ComputeRootSignature != nativeRootSignature;
+    DX12_CPU_RECORDING_SCOPE(rootSignatureChanged
+        ? "command_context.compute_root_signature_miss"
+        : "command_context.compute_root_signature_hit");
+    if (rootSignatureChanged)
+    {
+        m_ComputeRootSignature = nativeRootSignature;
+        m_DescriptorAllocator.ResetTransientBindings(PipelineBindPoint::Compute);
+        InvalidateDescriptorSetCache(PipelineBindPoint::Compute);
+    }
     m_CommandList.SetComputeRootSignature(rootSignature);
 }
 
@@ -742,6 +806,7 @@ void CommandContext::SetRayTracingPipelineState(
     m_CommandList.SetRaytracingPipelineState(stateObject);
     m_CommandList.SetComputeRootSignature(globalRootSignature);
 }
+//Modify End
 
 void CommandContext::StageDefaultDescriptorTable(
     const PipelineBindPoint bindPoint,
@@ -761,6 +826,9 @@ bool CommandContext::TryApplyDescriptorTableBinding(
     const PipelineBoundResource& boundResource,
     const UINT rootParameterIndex) const
 {
+    //Modify Begin:2026-10-02 by Hui
+    DX12_CPU_RECORDING_SCOPE("descriptor_table.apply");
+    //Modify End
     const PipelineDescriptorTableAllocation* allocation = descriptorSet.FindDescriptorTableAllocation(rootParameterIndex);
     if (allocation == nullptr)
     {
@@ -797,6 +865,9 @@ void CommandContext::RecordResourceBindings(
     const PipelineBindPoint bindPoint, const PipelineDescriptorSet& descriptorSet, const UINT rootParameterIndex) const
 {
     DX12_CPU_RECORDING_SCOPE("access.bind");
+    //Modify Begin:2026-10-02 by Hui
+    DX12_CPU_RECORDING_SCOPE("descriptor_set.resource_attribution");
+    //Modify End
     const auto point = bindPoint == PipelineBindPoint::Graphics ?
         CommandList::BindingPoint::Graphics : CommandList::BindingPoint::Compute;
     m_CommandList.SetResourceBindings(point, rootParameterIndex, {});
@@ -850,7 +921,6 @@ void CommandContext::RecordResourceBindings(
 //Modify Begin:2026-09-29 by Hui
 void CommandContext::ApplyGraphicsBinding(const PipelineDescriptorSet& descriptorSet, const UINT rootParameterIndex) const
 {
-    RecordResourceBindings(PipelineBindPoint::Graphics, descriptorSet, rootParameterIndex);
     const PipelineLayout& layout = descriptorSet.GetLayout();
     const PipelineDescriptorRangeDesc* range = layout.FindRangeByRootParameterIndex(rootParameterIndex);
     Assert(range != nullptr, "Pipeline descriptor set binding was not found.");
@@ -863,6 +933,11 @@ void CommandContext::ApplyGraphicsBinding(const PipelineDescriptorSet& descripto
             StageDefaultDescriptorTable(PipelineBindPoint::Graphics, descriptorSet, rootParameterIndex);
         }
         return;
+    }
+
+    if (range->Kind != DescriptorBindingKind::ConstantBuffer)
+    {
+        RecordResourceBindings(PipelineBindPoint::Graphics, descriptorSet, rootParameterIndex);
     }
 
     if (range->Kind == DescriptorBindingKind::ConstantBuffer)
@@ -942,7 +1017,9 @@ void CommandContext::ApplyGraphicsBinding(const PipelineDescriptorSet& descripto
 //Modify Begin:2026-09-29 by Hui
 void CommandContext::ApplyComputeBinding(const PipelineDescriptorSet& descriptorSet, const UINT rootParameterIndex) const
 {
-    RecordResourceBindings(PipelineBindPoint::Compute, descriptorSet, rootParameterIndex);
+    //Modify Begin:2026-10-02 by Hui
+    DX12_CPU_RECORDING_SCOPE("descriptor_set.apply_compute_binding");
+    //Modify End
     const PipelineLayout& layout = descriptorSet.GetLayout();
     const PipelineDescriptorRangeDesc* range = layout.FindRangeByRootParameterIndex(rootParameterIndex);
     Assert(range != nullptr, "Pipeline descriptor set binding was not found.");
@@ -957,8 +1034,16 @@ void CommandContext::ApplyComputeBinding(const PipelineDescriptorSet& descriptor
         return;
     }
 
+    if (range->Kind != DescriptorBindingKind::ConstantBuffer)
+    {
+        RecordResourceBindings(PipelineBindPoint::Compute, descriptorSet, rootParameterIndex);
+    }
+
     if (range->Kind == DescriptorBindingKind::ConstantBuffer)
     {
+        //Modify Begin:2026-10-02 by Hui
+        DX12_CPU_RECORDING_SCOPE("descriptor_set.apply_constant_buffer");
+        //Modify End
         Assert(!boundResource->ConstantBufferData.empty(), "Pipeline constant buffer is not bound.");
         auto allocation = CommandListInternalAccess::AllocateTransientUpload(
             m_CommandList,
@@ -971,6 +1056,9 @@ void CommandContext::ApplyComputeBinding(const PipelineDescriptorSet& descriptor
 
     if (range->Kind == DescriptorBindingKind::AccelerationStructure)
     {
+        //Modify Begin:2026-10-02 by Hui
+        DX12_CPU_RECORDING_SCOPE("descriptor_set.apply_acceleration_structure");
+        //Modify End
         const RayTracingAccelerationStructure* accelerationStructure = boundResource->AccelerationStructure != nullptr ?
             boundResource->AccelerationStructure :
             descriptorSet.GetAccelerationStructure();
@@ -984,6 +1072,9 @@ void CommandContext::ApplyComputeBinding(const PipelineDescriptorSet& descriptor
     {
         if (range->BindingMode == PipelineDescriptorBindingMode::RootDescriptor)
         {
+            //Modify Begin:2026-10-02 by Hui
+            DX12_CPU_RECORDING_SCOPE("descriptor_set.apply_root_srv");
+            //Modify End
             Assert(boundResource->StructuredBufferResource != nullptr, "Pipeline root SRV structured buffer is not bound.");
             m_CommandList.SetComputeRootShaderResourceView(
                 rootParameterIndex,
@@ -1001,6 +1092,9 @@ void CommandContext::ApplyComputeBinding(const PipelineDescriptorSet& descriptor
             return;
         }
 
+        //Modify Begin:2026-10-02 by Hui
+        DX12_CPU_RECORDING_SCOPE("descriptor_set.apply_fallback_srv");
+        //Modify End
         const size_t shaderResourceCount = boundResource->ShaderResources.size();
         for (UINT i = 0; i < static_cast<UINT>(shaderResourceCount); ++i)
         {
@@ -1025,6 +1119,9 @@ void CommandContext::ApplyComputeBinding(const PipelineDescriptorSet& descriptor
 
     if (range->Kind == DescriptorBindingKind::UnorderedAccessView)
     {
+        //Modify Begin:2026-10-02 by Hui
+        DX12_CPU_RECORDING_SCOPE("descriptor_set.apply_uav");
+        //Modify End
         Assert(boundResource->UnorderedAccessView.has_value(), "Pipeline UAV resource is not bound.");
         const UnorderedAccessView& unorderedAccessView = *boundResource->UnorderedAccessView;
         Assert(unorderedAccessView.m_Resource != nullptr, "Pipeline UAV resource is not bound.");
@@ -1170,6 +1267,13 @@ void CommandContext::BindExternalComputePipeline(
 {
     m_BoundPipelineBindPoint = PipelineBindPoint::Compute;
     m_HasBoundPipeline = true;
+    const bool rootSignatureChanged = m_ComputeRootSignature != rootSignature;
+    if (rootSignatureChanged)
+    {
+        m_ComputeRootSignature = rootSignature;
+        m_DescriptorAllocator.ResetTransientBindings(PipelineBindPoint::Compute);
+        InvalidateDescriptorSetCache(PipelineBindPoint::Compute);
+    }
     m_CommandList.SetExternalComputePipeline(rootSignature, pipelineState);
 }
 

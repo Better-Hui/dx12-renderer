@@ -21,7 +21,7 @@ namespace RenderGraph
         static std::string NarrowPassName(const std::wstring& passName);
         void WritePassTimestamp(RenderPassQueue queue, CommandList& commandList, const std::wstring& passName) const;
         void WriteMarker(RenderPassQueue queue, CommandList& commandList, const std::string& markerName) const;
-        void ResolveQueueFrame(RenderPassQueue queue, CommandList& commandList) const;
+        void ResolveQueueFrame(RenderPassQueue queue, CommandList& commandList);
         void EndQueueFrame(RenderPassQueue queue, uint64_t fenceValue);
 
     private:
@@ -29,6 +29,7 @@ namespace RenderGraph
         {
             GpuTimestampProfiler* Profiler = nullptr;
             bool FrameActive = false;
+            bool FrameResolved = false;
         };
 
         QueueProfilerState& GetQueueState(RenderPassQueue queue);

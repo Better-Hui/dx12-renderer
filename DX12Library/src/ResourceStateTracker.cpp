@@ -241,6 +241,13 @@ bool ResourceStateTracker::HasPendingResourceBarriers() const noexcept
     return !m_PendingResourceBarriers.empty();
 }
 
+//Modify Begin:2026-10-02 by Hui
+bool ResourceStateTracker::HasPendingSubmissionWork() const noexcept
+{
+    return !m_PendingResourceBarriers.empty() || !m_PendingAliasingBarriers.empty();
+}
+//Modify End
+
 void ResourceStateTracker::CommitFinalResourceStates(
     ResourceStateRegistry::SubmissionScope& submissionScope)
 {

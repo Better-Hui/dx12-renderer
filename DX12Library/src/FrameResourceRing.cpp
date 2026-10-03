@@ -3,6 +3,9 @@
 #include "FrameResourceRing.h"
 
 #include "CommandQueue.h"
+//Modify Begin:2026-10-01 by Hui
+#include "PerformanceScope.h"
+//Modify End
 
 //Modify Begin:2026-07-29 by Hui
 void FrameResourceRing::Reset(const uint32_t slotCount)
@@ -60,16 +63,32 @@ uint64_t FrameResourceRing::WaitForSlot(CommandQueue& commandQueue, const uint32
     Slot& slot = m_Slots[slotIndex];
     if (slot.FenceValue != 0)
     {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            commandQueue.GetDiagnosticTelemetrySink(),
+            commandQueue.GetDiagnosticFrameIndex(),
+            "frame_resource.fence_wait",
+            "Direct",
+            0u,
+            "frame_resource");
         commandQueue.WaitForFenceValue(slot.FenceValue, "frame_resource");
     }
-    for (auto& retireAction : slot.RetireActions)
     {
-        if (retireAction)
+        DX12_CPU_PERFORMANCE_SCOPE(
+            commandQueue.GetDiagnosticTelemetrySink(),
+            commandQueue.GetDiagnosticFrameIndex(),
+            "frame_resource.retire_actions",
+            "Direct",
+            0u,
+            "frame_resource");
+        for (auto& retireAction : slot.RetireActions)
         {
-            retireAction();
+            if (retireAction)
+            {
+                retireAction();
+            }
         }
+        slot.RetireActions.clear();
     }
-    slot.RetireActions.clear();
     return slot.FrameNumber;
 }
 //Modify End

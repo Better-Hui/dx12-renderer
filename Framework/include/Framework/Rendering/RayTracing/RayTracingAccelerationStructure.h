@@ -1,5 +1,5 @@
 #pragma once
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-10-02 by Hui
 
 #include <DirectXMath.h>
 
@@ -17,6 +17,7 @@
 
 class CommandList;
 class D3D12DeviceContext;
+class DiagnosticTelemetrySink;
 class Mesh;
 class ResourceStateRegistration;
 
@@ -81,7 +82,10 @@ public:
 
     void Build(CommandList& commandList, RayTracingAccelerationStructureBuildSettings settings = {});
     void Build(CommandList& commandList, const std::vector<RayTracingMeshInstance>& instances);
-    void Update(CommandList& commandList);
+    void Update(
+        CommandList& commandList,
+        DiagnosticTelemetrySink* diagnostics = nullptr,
+        uint64_t frameIndex = 0u);
 
     bool IsBuilt() const;
     D3D12_GPU_VIRTUAL_ADDRESS GetGpuVirtualAddress() const;
@@ -135,13 +139,18 @@ private:
         const ManagedRayTracingResource& scratch);
 
     std::map<const Mesh*, uint32_t> BuildBottomLevelAccelerationStructures(CommandList& commandList);
-    void UpdateDirtyBottomLevelAccelerationStructures(CommandList& commandList);
+    void UpdateDirtyBottomLevelAccelerationStructures(
+        CommandList& commandList,
+        DiagnosticTelemetrySink* diagnostics,
+        uint64_t frameIndex);
     std::map<const Mesh*, uint32_t> CreateMeshToBlasIndex() const;
 
     void BuildTopLevelAccelerationStructure(
         CommandList& commandList,
         const std::map<const Mesh*, uint32_t>& meshToBlasIndex,
-        bool update);
+        bool update,
+        DiagnosticTelemetrySink* diagnostics,
+        uint64_t frameIndex);
     void RetireResourceState(
         CommandList& commandList,
         const Microsoft::WRL::ComPtr<ID3D12Resource>& resource);
@@ -149,10 +158,10 @@ private:
     RayTracingInstanceHandle m_NextInstanceHandle = 1;
     std::vector<RayTracingInstanceHandle> m_InstanceHandles;
     std::vector<RayTracingInstanceDesc> m_Instances;
+    std::vector<D3D12_RAYTRACING_INSTANCE_DESC> m_InstanceDescs;
     std::unordered_map<RayTracingInstanceHandle, uint32_t> m_InstanceIndices;
     std::vector<BottomLevelAccelerationStructure> m_BottomLevelAccelerationStructures;
     ManagedRayTracingResource m_TopLevelAccelerationStructure;
-    ManagedRayTracingResource m_InstanceDescUpload;
     std::vector<std::shared_ptr<Mesh>> m_Meshes;
     std::vector<RayTracingGeometryData> m_GeometryData;
     std::unordered_set<const Mesh*> m_DirtyBottomLevelMeshes;

@@ -20,6 +20,8 @@ bool GpuTimestampProfiler::Initialize(
 {
     Shutdown();
 
+    std::lock_guard<std::mutex> lock(m_Mutex);
+
     if (maxTimestampCount == 0)
     {
         return false;
@@ -64,6 +66,7 @@ bool GpuTimestampProfiler::Initialize(
 
 void GpuTimestampProfiler::Shutdown()
 {
+    std::lock_guard<std::mutex> lock(m_Mutex);
     m_FrameSlots.clear();
     m_MaxTimestampCount = 0;
     m_CurrentSlotIndex = 0;
@@ -77,7 +80,8 @@ void GpuTimestampProfiler::Shutdown()
 
 bool GpuTimestampProfiler::BeginFrame(const uint64_t frameNumber)
 {
-    if (!m_Initialized)
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    if (!m_Initialized || m_FrameActive)
     {
         return false;
     }
@@ -98,6 +102,8 @@ bool GpuTimestampProfiler::BeginFrame(const uint64_t frameNumber)
         slot.FrameNumber = frameNumber;
         slot.SubmittedFenceValue = 0;
         slot.PendingReadback = false;
+        slot.Resolved = false;
+        slot.Ended = false;
         m_CpuFrameStart = std::chrono::steady_clock::now();
         slot.CpuMilliseconds.clear();
         m_FrameActive = true;
@@ -110,6 +116,7 @@ bool GpuTimestampProfiler::BeginFrame(const uint64_t frameNumber)
 
 void GpuTimestampProfiler::WriteTimestamp(CommandList& commandList, const char* name)
 {
+    std::lock_guard<std::mutex> lock(m_Mutex);
     if (!m_Initialized || !m_FrameActive)
     {
         return;
@@ -130,14 +137,20 @@ void GpuTimestampProfiler::WriteTimestamp(CommandList& commandList, const char* 
 
 void GpuTimestampProfiler::ResolveFrame(CommandList& commandList)
 {
+    std::lock_guard<std::mutex> lock(m_Mutex);
     if (!m_Initialized || !m_FrameActive)
     {
         return;
     }
 
     FrameSlot& slot = GetCurrentSlot();
+    if (slot.Resolved)
+    {
+        return;
+    }
     if (slot.TimestampCount == 0)
     {
+        slot.Resolved = true;
         return;
     }
 
@@ -149,21 +162,30 @@ void GpuTimestampProfiler::ResolveFrame(CommandList& commandList)
         slot.ReadbackBuffer.Get(),
         0);
     slot.PendingReadback = true;
+    slot.Resolved = true;
 }
 
 void GpuTimestampProfiler::EndFrame(const uint64_t submittedFenceValue)
 {
+    std::lock_guard<std::mutex> lock(m_Mutex);
     if (!m_Initialized || !m_FrameActive)
     {
         return;
     }
 
     FrameSlot& slot = GetCurrentSlot();
+    if (slot.Ended)
+    {
+        return;
+    }
     slot.SubmittedFenceValue = submittedFenceValue;
+    slot.Ended = true;
+    m_FrameActive = false;
 }
 
 bool GpuTimestampProfiler::CollectCompletedFrame(CommandQueue& commandQueue, std::vector<GpuTimestampSample>& samples)
 {
+    std::lock_guard<std::mutex> lock(m_Mutex);
     samples.clear();
     if (!m_Initialized)
     {
@@ -211,6 +233,13 @@ bool GpuTimestampProfiler::CollectCompletedFrame(CommandQueue& commandQueue, std
         D3D12_RANGE writeRange = { 0, 0 };
         slot.ReadbackBuffer->Unmap(0, &writeRange);
         slot.PendingReadback = false;
+        slot.Resolved = false;
+        slot.Ended = false;
+        slot.Names.clear();
+        slot.CpuMilliseconds.clear();
+        slot.TimestampCount = 0;
+        slot.FrameNumber = 0;
+        slot.SubmittedFenceValue = 0;
         return !samples.empty();
     }
 
@@ -219,6 +248,7 @@ bool GpuTimestampProfiler::CollectCompletedFrame(CommandQueue& commandQueue, std
 
 uint32_t GpuTimestampProfiler::GetCurrentTimestampCount() const
 {
+    std::lock_guard<std::mutex> lock(m_Mutex);
     return m_Initialized && m_FrameActive ? GetCurrentSlot().TimestampCount : 0;
 }
 

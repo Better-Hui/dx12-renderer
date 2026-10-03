@@ -16,9 +16,14 @@ bool RenderGraph::RenderGraphProfiler::BeginQueueFrame(
     CommandList& commandList)
 {
     QueueProfilerState& state = GetQueueState(queue);
+    if (state.FrameActive)
+    {
+        return false;
+    }
     state.FrameActive = state.Profiler != nullptr &&
         state.Profiler->IsAvailable() &&
         state.Profiler->BeginFrame(frameIndex);
+    state.FrameResolved = false;
     if (state.FrameActive)
     {
         state.Profiler->WriteTimestamp(commandList, "RenderGraph.Begin");
@@ -53,16 +58,17 @@ void RenderGraph::RenderGraphProfiler::WriteMarker(
 
 void RenderGraph::RenderGraphProfiler::ResolveQueueFrame(
     const RenderPassQueue queue,
-    CommandList& commandList) const
+    CommandList& commandList)
 {
-    const QueueProfilerState& state = GetQueueState(queue);
-    if (!state.FrameActive)
+    QueueProfilerState& state = GetQueueState(queue);
+    if (!state.FrameActive || state.FrameResolved || state.Profiler == nullptr)
     {
         return;
     }
 
     state.Profiler->WriteTimestamp(commandList, "RenderGraph.End");
     state.Profiler->ResolveFrame(commandList);
+    state.FrameResolved = true;
 }
 
 void RenderGraph::RenderGraphProfiler::EndQueueFrame(
@@ -74,6 +80,7 @@ void RenderGraph::RenderGraphProfiler::EndQueueFrame(
     {
         state.Profiler->EndFrame(fenceValue);
         state.FrameActive = false;
+        state.FrameResolved = false;
     }
 }
 

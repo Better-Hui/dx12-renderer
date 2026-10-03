@@ -104,6 +104,13 @@ public:
         return m_d3d12Resource;
     }
 
+//Modify Begin:2026-10-02 by Hui
+    ID3D12Resource* GetD3D12ResourcePtr() const noexcept
+    {
+        return m_d3d12Resource.Get();
+    }
+//Modify End
+
     D3D12_RESOURCE_DESC GetD3D12ResourceDesc() const
     {
         D3D12_RESOURCE_DESC resDesc = {};

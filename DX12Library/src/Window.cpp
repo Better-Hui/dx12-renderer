@@ -107,8 +107,8 @@ Window::Window(
     RefreshHdr10OutputCapabilities();
 //Modify End
 //Modify Begin:2026-08-19 by Hui
-	FrameResources.Reset(BUFFER_COUNT);
-	FrameResources.SetCurrentIndex(CurrentBackBufferIndex);
+	FrameResources.Reset(FRAME_RESOURCE_COUNT);
+	FrameResources.SetCurrentIndex(CurrentFrameResourceIndex);
 //Modify End
 	UpdateRenderTargetViews();
 }
@@ -410,7 +410,6 @@ void Window::OnResize(ResizeEventArgs& e)
 		m_D3d12Context.DirectCommandQueue->Flush();
 		m_D3d12Context.ComputeCommandQueue->Flush();
 		m_D3d12Context.CopyCommandQueue->Flush();
-//Modify End
 
 		// Release all references to back buffer textures.
 //Modify Begin:2026-08-19 by Hui
@@ -432,8 +431,9 @@ void Window::OnResize(ResizeEventArgs& e)
 
 		CurrentBackBufferIndex = DxgiSwapChain->GetCurrentBackBufferIndex();
 //Modify Begin:2026-08-19 by Hui
-		FrameResources.Reset(BUFFER_COUNT);
-		FrameResources.SetCurrentIndex(CurrentBackBufferIndex);
+		CurrentFrameResourceIndex = 0;
+		FrameResources.Reset(FRAME_RESOURCE_COUNT);
+		FrameResources.SetCurrentIndex(CurrentFrameResourceIndex);
 //Modify End
 
 		UpdateRenderTargetViews();
@@ -466,8 +466,9 @@ void Window::RecreateSwapChain()
 //Modify Begin:2026-08-28 by Hui
     RefreshHdr10OutputCapabilities();
 //Modify End
-	FrameResources.Reset(BUFFER_COUNT);
-	FrameResources.SetCurrentIndex(CurrentBackBufferIndex);
+	CurrentFrameResourceIndex = 0;
+	FrameResources.Reset(FRAME_RESOURCE_COUNT);
+	FrameResources.SetCurrentIndex(CurrentFrameResourceIndex);
 	UpdateRenderTargetViews();
 }
 
@@ -684,20 +685,33 @@ UINT Window::Present(const Texture& texture)
 
 //Modify Begin:2026-08-19 by Hui
 	FrameResources.MarkSubmitted(
-		CurrentBackBufferIndex,
+		CurrentFrameResourceIndex,
 		commandQueue->Signal(),
 		m_D3d12Context.DeviceContext->GetDescriptorRetirementFrame());
 	CurrentBackBufferIndex = DxgiSwapChain->GetCurrentBackBufferIndex();
-	FrameResources.SetCurrentIndex(CurrentBackBufferIndex);
-	DX12_CPU_PERFORMANCE_SCOPE(
-		m_D3d12Context.DeviceContext->GetDiagnosticTelemetrySink(),
-		m_D3d12Context.DeviceContext->GetDescriptorRetirementFrame(),
-		"Window.FrameResourceWait",
-		"Direct",
-		0u,
-		"frame_resource");
-	const uint64_t reusableFrame = FrameResources.WaitForSlot(*commandQueue, CurrentBackBufferIndex);
+	CurrentFrameResourceIndex = (CurrentFrameResourceIndex + 1) % FRAME_RESOURCE_COUNT;
+	FrameResources.SetCurrentIndex(CurrentFrameResourceIndex);
+	uint64_t reusableFrame = 0;
+	{
+		DX12_CPU_PERFORMANCE_SCOPE(
+			m_D3d12Context.DeviceContext->GetDiagnosticTelemetrySink(),
+			m_D3d12Context.DeviceContext->GetDescriptorRetirementFrame(),
+			"Window.FrameResourceWait",
+			"Direct",
+			0u,
+			"frame_resource");
+		reusableFrame = FrameResources.WaitForSlot(*commandQueue, CurrentFrameResourceIndex);
+	}
+	{
+		DX12_CPU_PERFORMANCE_SCOPE(
+			m_D3d12Context.DeviceContext->GetDiagnosticTelemetrySink(),
+			m_D3d12Context.DeviceContext->GetDescriptorRetirementFrame(),
+			"Window.DescriptorRetirement",
+			"Direct",
+			0u,
+			"frame_resource");
 	m_D3d12Context.DeviceContext->ReleaseStaleDescriptors(reusableFrame);
+	}
 //Modify End
 
 	return CurrentBackBufferIndex;

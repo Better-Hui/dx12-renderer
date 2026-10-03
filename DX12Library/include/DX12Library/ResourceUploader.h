@@ -46,6 +46,13 @@ public:
         size_t elementCount,
         size_t elementSize,
         const void* data) const;
+    void CopyStructuredBufferRange(
+        CommandList& commandList,
+        StructuredBuffer& structuredBuffer,
+        size_t destinationElementOffset,
+        size_t elementCount,
+        size_t elementSize,
+        const void* data) const;
 
     template <typename T>
     void UploadVertexBuffer(

@@ -1,6 +1,9 @@
 //Modify Begin:2026-08-07 by Hui
 #include "RenderGraphTaskScheduler.h"
 
+#include <cstdlib>
+#include <limits>
+
 namespace RenderGraph
 {
     RenderGraphTaskScheduler::RenderGraphTaskScheduler(const uint32_t workerCount)
@@ -33,9 +36,31 @@ namespace RenderGraph
             return requestedWorkerCount;
         }
 
+        //Modify Begin:2026-10-02 by Hui
+        // Allow deployments to size the recording pool explicitly.  The
+        // environment override is useful for reproducing contention without
+        // rebuilding the renderer; zero keeps the hardware default below.
+        const char* configuredWorkerCount = std::getenv("RENDERGRAPH_PARALLEL_WORKERS");
+        if (configuredWorkerCount == nullptr)
+        {
+            configuredWorkerCount = std::getenv("RAYTRACING_DEMO_PARALLEL_WORKERS");
+        }
+        if (configuredWorkerCount != nullptr && configuredWorkerCount[0] != '\0')
+        {
+            char* parseEnd = nullptr;
+            const unsigned long parsedWorkerCount = std::strtoul(configuredWorkerCount, &parseEnd, 10);
+            if (parseEnd != configuredWorkerCount && *parseEnd == '\0' && parsedWorkerCount > 0ul)
+            {
+                return parsedWorkerCount > static_cast<unsigned long>((std::numeric_limits<uint32_t>::max)())
+                    ? (std::numeric_limits<uint32_t>::max)()
+                    : static_cast<uint32_t>(parsedWorkerCount);
+            }
+        }
+        //Modify End
+
         const uint32_t hardwareThreadCount = std::thread::hardware_concurrency();
         const uint32_t backgroundWorkerCount = hardwareThreadCount > 1u ? hardwareThreadCount - 1u : 1u;
-        return (std::min)(backgroundWorkerCount, 8u);
+        return backgroundWorkerCount;
     }
 
     void RenderGraphTaskScheduler::WorkerLoop(const std::stop_token stopToken)

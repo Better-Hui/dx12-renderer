@@ -132,7 +132,11 @@ namespace RenderGraph
         bool m_DebugSerializeAsyncCompute = false;
 //Modify End
 //Modify Begin:2026-08-07 by Hui
-        bool m_ParallelDirectCommandRecording = true;
+//Modify Begin:2026-10-02 by Hui
+        // Parallel pass recording remains opt-in until pass-owned descriptor
+        // state and planned resource barriers are isolated per command list.
+        bool m_ParallelDirectCommandRecording = false;
+//Modify End
 //Modify End
 
         std::vector<std::unique_ptr<RenderPass>> m_RenderPassesDescription;

@@ -1,4 +1,4 @@
-//Modify Begin:2026-09-29 by Hui
+//Modify Begin:2026-10-02 by Hui
 #pragma once
 
 #include "Helpers.h"
@@ -7,6 +7,7 @@
 
 #include <mutex>
 #include <memory>
+#include <span>
 #include <unordered_map>
 
 class ResourceStateRegistry;
@@ -77,6 +78,14 @@ public:
     };
 
     using ResourceStateMap = std::unordered_map<ID3D12Resource*, ResourceState>;
+
+    struct StateQuery
+    {
+        ID3D12Resource* Resource = nullptr;
+        UINT Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        D3D12_RESOURCE_STATES State = D3D12_RESOURCE_STATE_COMMON;
+        bool Known = false;
+    };
 
     class SubmissionScope final
     {
@@ -153,6 +162,23 @@ public:
         }
         state = iterator->second.GetSubresourceState(subresource);
         return true;
+    }
+
+    void TryGetResourceStates(const std::span<StateQuery> queries) const
+    {
+        std::lock_guard lock(m_Mutex);
+        for (StateQuery& query : queries)
+        {
+            Assert(query.Resource != nullptr, "Cannot query a null D3D12 resource state.");
+            query.Known = false;
+            const auto iterator = m_States.find(query.Resource);
+            if (iterator == m_States.end() || !iterator->second.HasKnownState(query.Subresource))
+            {
+                continue;
+            }
+            query.State = iterator->second.GetSubresourceState(query.Subresource);
+            query.Known = true;
+        }
     }
 
     /**

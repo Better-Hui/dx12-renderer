@@ -8,6 +8,8 @@
 #include <Framework/Scene/Scene.h>
 #include <Framework/Rendering/Lighting/SurfaceEmitter.h>
 
+#include <DX12Library/DiagnosticTelemetry.h>
+
 #include <DirectXMath.h>
 #include <d3d12.h>
 #include <wrl.h>
@@ -23,6 +25,7 @@
 class CommandList;
 class Camera;
 class D3D12DeviceContext;
+class DiagnosticTelemetrySink;
 class Resource;
 class VertexBuffer;
 class SceneLightManager;
@@ -61,8 +64,15 @@ public:
     bool RequiresDynamicRayTracingUpdatePass() const;
     const VertexBuffer& GetDynamicRayTracingVertexBuffer() const;
     const IndexBuffer& GetDynamicRayTracingIndexBuffer() const;
-    bool BeginDynamicRayTracingGeometryUpdate(CommandList& commandList, float timeSeconds);
-    bool FinishDynamicRayTracingUpdate(CommandList& commandList);
+    bool BeginDynamicRayTracingGeometryUpdate(
+        CommandList& commandList,
+        float timeSeconds,
+        DiagnosticTelemetrySink* diagnostics = nullptr,
+        uint64_t frameIndex = DiagnosticTelemetryEvent::NoFrame);
+    bool FinishDynamicRayTracingUpdate(
+        CommandList& commandList,
+        DiagnosticTelemetrySink* diagnostics = nullptr,
+        uint64_t frameIndex = DiagnosticTelemetryEvent::NoFrame);
     bool RefreshDynamicEmissiveMeshSurfaceEmitters(SceneLightManager& lights);
     bool HasActiveDynamicRayTracingEmitter() const { return m_DynamicRayTracingEmitterActive; }
     const RaytracingDemoDynamicRtasUpdateStatistics& GetDynamicRayTracingUpdateStatistics() const

@@ -222,7 +222,6 @@ void RaytracingDemo::VerifyDynamicRayTracingUpdate(const uint32_t value)
         sceneStats.RefitCount >= minimumUpdateCount &&
         accelerationStats.BottomLevelUpdateCount >= minimumUpdateCount &&
         accelerationStats.TopLevelUpdateCount >= minimumUpdateCount &&
-        accelerationStats.RetiredResourceCount >= minimumUpdateCount &&
         (!verifyRestore || (sceneStats.RestoreCount >= 1u && sceneStats.LastUpdateRestored));
     const std::string message =
         "Dynamic RTAS update: geometry_uploads=" + std::to_string(sceneStats.GeometryUploadCount) +

@@ -337,6 +337,28 @@ namespace DX12Diagnostics
 
 #else
 
+namespace DX12Diagnostics
+{
+    // Keep the explicit scope type available in non-profiling builds so
+    // callers can compile the same code with telemetry enabled or disabled.
+    class ScopedCpuPerformanceScope final
+    {
+    public:
+        ScopedCpuPerformanceScope(
+            DiagnosticTelemetrySink*,
+            const uint64_t,
+            const std::string_view,
+            const std::string_view,
+            const uint64_t = 0,
+            const std::string_view = "cpu") noexcept
+        {
+        }
+
+        ScopedCpuPerformanceScope(const ScopedCpuPerformanceScope&) = delete;
+        ScopedCpuPerformanceScope& operator=(const ScopedCpuPerformanceScope&) = delete;
+    };
+}
+
 #define DX12_CPU_PERFORMANCE_SCOPE(...) static_cast<void>(0)
 #define DX12_CPU_RECORDING_SCOPE(...) static_cast<void>(0)
 #define DX12_CPU_RECORDING_PASS(...) static_cast<void>(0)

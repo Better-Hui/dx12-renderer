@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-09-30 by Hui
+//Modify Begin:2026-10-02 by Hui
 
 #include "PerformanceScope.h"
 
@@ -8,6 +8,7 @@
 
 #include <chrono>
 #include <memory>
+#include <span>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -69,6 +70,13 @@ public:
         const Resource& resource,
         D3D12_RESOURCE_STATES state,
         UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
+    struct StableReadOnlyUse
+    {
+        const Resource* Resource = nullptr;
+        D3D12_RESOURCE_STATES State = D3D12_RESOURCE_STATE_COMMON;
+        UINT Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    };
+    void UseStableReadOnlyBatch(std::span<const StableReadOnlyUse> uses);
     void ReserveResourceUses(size_t resourceCount);
 
 private:
@@ -172,6 +180,9 @@ private:
     struct UavAccess { uint64_t Operation; bool Writes; };
     uint64_t m_OperationSerial = 0;
     std::unordered_map<ID3D12Resource*, UavAccess> m_UavAccesses;
+    // Resources proven stable read-only for this command-list recording can
+    // skip repeated attribution and local-state writes on later graph passes.
+    std::unordered_set<ResourceSubresourceKey, ResourceSubresourceKeyHash> m_StableReadResources;
     std::unordered_map<ResourceSubresourceKey, LocalResourceState, ResourceSubresourceKeyHash>
         m_LocalResourceStates;
     std::unordered_map<ID3D12Resource*, std::unordered_set<UINT>> m_ExactSubresourcesByResource;
@@ -182,6 +193,10 @@ private:
     std::chrono::steady_clock::duration m_TrackLifetimeDuration{};
     std::chrono::steady_clock::duration m_PrepareResourceDuration{};
     std::chrono::steady_clock::duration m_HeapPropertiesDuration{};
+    std::chrono::steady_clock::duration m_StableCacheLookupDuration{};
+    std::chrono::steady_clock::duration m_StableLocalStateDuration{};
+    std::chrono::steady_clock::duration m_StableRegistryLookupDuration{};
+    std::chrono::steady_clock::duration m_StableTransitionDuration{};
 };
 
 //Modify End

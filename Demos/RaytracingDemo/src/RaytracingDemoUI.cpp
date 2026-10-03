@@ -6,9 +6,23 @@
 #include <Framework/UI/NumericWidgets.h>
 
 #include <algorithm>
+#include <cstdlib>
+#include <string>
 
 namespace
 {
+//Modify Begin:2026-10-02 by Hui
+    bool IsProfileUiAutomationEnabled()
+    {
+        char* value = nullptr;
+        size_t valueLength = 0;
+        _dupenv_s(&value, &valueLength, "RAYTRACING_DEMO_AUTOTEST_PROFILE_UI");
+        const bool enabled = value != nullptr && std::string(value) == "1";
+        std::free(value);
+        return enabled;
+    }
+//Modify End
+
     struct DxrCompatibilityIssues
     {
         bool DirectLightingSkipped = false;
@@ -321,18 +335,25 @@ void RaytracingDemo::OnImGui()
                 copyQueueSamples.empty()
                     ? 0.0
                     : copyQueueSamples.back().MillisecondsFromFrameStart);
-            if (!directQueueSamples.empty() && ImGui::CollapsingHeader("GPU RG Timing: Direct"))
+            if (!directQueueSamples.empty())
             {
-                ImGui::Text("gpu/cpu delta: since previous marker, gpu/cpu total: since RG begin");
-                for (const GpuTimestampSample& sample : directQueueSamples)
+                if (IsProfileUiAutomationEnabled())
                 {
-                    ImGui::Text(
-                        "%s: gpu %.3f/%.3f ms, cpu %.3f/%.3f ms",
-                        sample.Name.c_str(),
-                        sample.MillisecondsFromPrevious,
-                        sample.MillisecondsFromFrameStart,
-                        sample.CpuMillisecondsFromPrevious,
-                        sample.CpuMillisecondsFromFrameStart);
+                    ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+                }
+                if (ImGui::CollapsingHeader("GPU RG Timing: Direct"))
+                {
+                    ImGui::Text("gpu/cpu delta: since previous marker, gpu/cpu total: since RG begin");
+                    for (const GpuTimestampSample& sample : directQueueSamples)
+                    {
+                        ImGui::Text(
+                            "%s: gpu %.3f/%.3f ms, cpu %.3f/%.3f ms",
+                            sample.Name.c_str(),
+                            sample.MillisecondsFromPrevious,
+                            sample.MillisecondsFromFrameStart,
+                            sample.CpuMillisecondsFromPrevious,
+                            sample.CpuMillisecondsFromFrameStart);
+                    }
                 }
             }
             if (!asyncComputeQueueSamples.empty() && ImGui::CollapsingHeader("GPU RG Timing: Async Compute"))

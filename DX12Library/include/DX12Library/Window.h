@@ -80,7 +80,10 @@ class Window : public std::enable_shared_from_this<Window>
 {
 public:
 	// Number of swapchain back buffers.
+//Modify Begin:2026-10-01 by Hui
 	static constexpr UINT BUFFER_COUNT = 3;
+	static constexpr UINT FRAME_RESOURCE_COUNT = 4;
+//Modify End
     static constexpr DXGI_FORMAT BUFFER_FORMAT = DXGI_FORMAT_R8G8B8A8_UNORM;
     static constexpr DXGI_FORMAT BUFFER_FORMAT_SRGB = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
 
@@ -276,6 +279,9 @@ private:
 	mutable RenderTarget MRenderTarget;
 
 	UINT CurrentBackBufferIndex;
+//Modify Begin:2026-10-01 by Hui
+	UINT CurrentFrameResourceIndex = 0;
+//Modify End
 
 	RECT WindowRect;
 	bool IsTearingSupported;

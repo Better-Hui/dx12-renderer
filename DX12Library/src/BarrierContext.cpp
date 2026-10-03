@@ -11,7 +11,7 @@
 
 #include <algorithm>
 
-//Modify Begin:2026-10-01 by Hui
+//Modify Begin:2026-10-02 by Hui
 BarrierContext::BarrierContext(CommandList& commandList)
     : m_CommandList(commandList)
 {
@@ -68,6 +68,8 @@ void BarrierContext::Use(
     const bool forceUavBarrier,
     const UINT subresource)
 {
+    m_StableReadResources.erase({ resource, subresource });
+    m_StableReadResources.erase({ resource, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES });
     if (forceUavBarrier)
         Uav(resource);
     const bool uavWrite = use == ResourceUse::Write || use == ResourceUse::ReadWrite;
@@ -82,8 +84,14 @@ void BarrierContext::UseAttributionOnly(
 {
     Assert(resource.IsValid(), "BarrierContext cannot attribute an invalid resource.");
     Assert(use == ResourceUse::Read, "Attribution-only resource uses must be read-only.");
-    CommandListInternalAccess::TrackResourceLifetime(m_CommandList, resource);
     ID3D12Resource* const nativeResource = resource.GetD3D12Resource().Get();
+    if (m_StableReadResources.contains({ nativeResource, subresource }) ||
+        (subresource != D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES &&
+            m_StableReadResources.contains({ nativeResource, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES })))
+    {
+        return;
+    }
+    CommandListInternalAccess::TrackResourceLifetime(m_CommandList, resource);
     if (const LocalResourceState* previous = FindLocalResourceState(nativeResource, subresource);
         previous != nullptr && previous->State == state && !previous->UavWrite)
     {
@@ -100,29 +108,163 @@ void BarrierContext::UseStableReadOnly(
     const D3D12_RESOURCE_STATES state,
     const UINT subresource)
 {
-    Assert(resource.IsValid(), "BarrierContext cannot use an invalid stable resource.");
-    CommandListInternalAccess::TrackResourceLifetime(m_CommandList, resource);
-    ID3D12Resource* const nativeResource = resource.GetD3D12Resource().Get();
-    if (const LocalResourceState* previous = FindLocalResourceState(nativeResource, subresource);
-        previous != nullptr && previous->State == state && !previous->UavWrite)
+    const StableReadOnlyUse use{ &resource, state, subresource };
+    UseStableReadOnlyBatch(std::span<const StableReadOnlyUse>(&use, 1u));
+}
+
+void BarrierContext::UseStableReadOnlyBatch(const std::span<const StableReadOnlyUse> uses)
+{
+    if (uses.empty())
     {
         return;
     }
-    D3D12_RESOURCE_STATES registeredState = D3D12_RESOURCE_STATE_COMMON;
-    if (CommandListInternalAccess::TryGetRegisteredResourceState(
-            m_CommandList,
-            nativeResource,
-            subresource,
-            registeredState) &&
-        registeredState == state)
+
+    struct PendingStableRead
     {
-        SetLocalResourceState(
-            nativeResource,
-            subresource,
-            { state, false });
+        const StableReadOnlyUse* Use = nullptr;
+        ResourceStateRegistry::StateQuery Query;
+    };
+    std::vector<PendingStableRead> pending;
+    pending.reserve(uses.size());
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+    const bool measureComponents = DX12Diagnostics::ActiveRecordingScope.Sink != nullptr;
+#endif
+    for (const StableReadOnlyUse& use : uses)
+    {
+        Assert(use.Resource != nullptr && use.Resource->IsValid(),
+            "BarrierContext cannot use an invalid stable resource.");
+        const Resource& resource = *use.Resource;
+        ID3D12Resource* const nativeResource = resource.GetD3D12ResourcePtr();
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+        const auto cacheStart = measureComponents ? std::chrono::steady_clock::now() :
+            std::chrono::steady_clock::time_point{};
+#endif
+        if (m_StableReadResources.contains({ nativeResource, use.Subresource }) ||
+            (use.Subresource != D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES &&
+                m_StableReadResources.contains({ nativeResource, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES })))
+        {
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+            if (measureComponents)
+            {
+                m_StableCacheLookupDuration += std::chrono::steady_clock::now() - cacheStart;
+            }
+#endif
+            continue;
+        }
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+        if (measureComponents)
+        {
+            m_StableCacheLookupDuration += std::chrono::steady_clock::now() - cacheStart;
+        }
+        const auto lifetimeStart = measureComponents ? std::chrono::steady_clock::now() :
+            std::chrono::steady_clock::time_point{};
+#endif
+        CommandListInternalAccess::TrackResourceLifetime(m_CommandList, resource);
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+        if (measureComponents)
+        {
+            m_TrackLifetimeDuration += std::chrono::steady_clock::now() - lifetimeStart;
+        }
+        const auto localStateStart = measureComponents ? std::chrono::steady_clock::now() :
+            std::chrono::steady_clock::time_point{};
+#endif
+        if (const LocalResourceState* previous = FindLocalResourceState(nativeResource, use.Subresource);
+            previous != nullptr && previous->State == use.State && !previous->UavWrite)
+        {
+            m_StableReadResources.insert({ nativeResource, use.Subresource });
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+            if (measureComponents)
+            {
+                m_StableLocalStateDuration += std::chrono::steady_clock::now() - localStateStart;
+            }
+#endif
+            continue;
+        }
+
+        D3D12_RESOURCE_STATES trackedState = D3D12_RESOURCE_STATE_COMMON;
+        if (CommandListInternalAccess::TryGetResourceState(
+                m_CommandList,
+                nativeResource,
+                use.Subresource,
+                trackedState))
+        {
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+            if (measureComponents)
+            {
+                m_StableLocalStateDuration += std::chrono::steady_clock::now() - localStateStart;
+            }
+#endif
+            if (trackedState == use.State)
+            {
+                SetLocalResourceState(nativeResource, use.Subresource, { use.State, false });
+                m_StableReadResources.insert({ nativeResource, use.Subresource });
+            }
+            else
+            {
+                Use(nativeResource, use.State, ResourceUse::Read, false, use.Subresource);
+                m_StableReadResources.insert({ nativeResource, use.Subresource });
+            }
+            continue;
+        }
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+        if (measureComponents)
+        {
+            m_StableLocalStateDuration += std::chrono::steady_clock::now() - localStateStart;
+        }
+#endif
+        pending.push_back({
+            &use,
+            { nativeResource, use.Subresource, D3D12_RESOURCE_STATE_COMMON, false }});
+    }
+
+    if (pending.empty())
+    {
         return;
     }
-    Use(nativeResource, state, ResourceUse::Read, false, subresource);
+
+    std::vector<ResourceStateRegistry::StateQuery> queries;
+    queries.reserve(pending.size());
+    for (const PendingStableRead& item : pending)
+    {
+        queries.push_back(item.Query);
+    }
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+    const auto registryStart = measureComponents ? std::chrono::steady_clock::now() :
+        std::chrono::steady_clock::time_point{};
+#endif
+    const auto registry = pending.front().Use->Resource->GetDeviceContext()->GetResourceStateRegistry();
+    registry->TryGetResourceStates(queries);
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+    if (measureComponents)
+    {
+        m_StableRegistryLookupDuration += std::chrono::steady_clock::now() - registryStart;
+    }
+#endif
+
+    for (size_t index = 0; index < pending.size(); ++index)
+    {
+        const StableReadOnlyUse& use = *pending[index].Use;
+        ID3D12Resource* const nativeResource = pending[index].Query.Resource;
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+        const auto transitionStart = measureComponents ? std::chrono::steady_clock::now() :
+            std::chrono::steady_clock::time_point{};
+#endif
+        if (queries[index].Known && queries[index].State == use.State)
+        {
+            SetLocalResourceState(nativeResource, use.Subresource, { use.State, false });
+        }
+        else
+        {
+            Use(nativeResource, use.State, ResourceUse::Read, false, use.Subresource);
+        }
+        m_StableReadResources.insert({ nativeResource, use.Subresource });
+#if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
+        if (measureComponents)
+        {
+            m_StableTransitionDuration += std::chrono::steady_clock::now() - transitionStart;
+        }
+#endif
+    }
 }
 
 void BarrierContext::PrepareResource(
@@ -331,10 +473,18 @@ void BarrierContext::Flush()
         DX12Diagnostics::RecordAccumulatedRecordingStage("barrier.track_lifetime", m_TrackLifetimeDuration);
         DX12Diagnostics::RecordAccumulatedRecordingStage("barrier.prepare_resource", m_PrepareResourceDuration);
         DX12Diagnostics::RecordAccumulatedRecordingStage("barrier.heap_properties", m_HeapPropertiesDuration);
+        DX12Diagnostics::RecordAccumulatedRecordingStage("barrier.stable_cache_lookup", m_StableCacheLookupDuration);
+        DX12Diagnostics::RecordAccumulatedRecordingStage("barrier.stable_local_state", m_StableLocalStateDuration);
+        DX12Diagnostics::RecordAccumulatedRecordingStage("barrier.stable_registry_lookup", m_StableRegistryLookupDuration);
+        DX12Diagnostics::RecordAccumulatedRecordingStage("barrier.stable_transition", m_StableTransitionDuration);
     }
     m_TrackLifetimeDuration = {};
     m_PrepareResourceDuration = {};
     m_HeapPropertiesDuration = {};
+    m_StableCacheLookupDuration = {};
+    m_StableLocalStateDuration = {};
+    m_StableRegistryLookupDuration = {};
+    m_StableTransitionDuration = {};
 #endif
 }
 
@@ -344,11 +494,16 @@ void BarrierContext::Reset()
     m_ExactSubresourcesByResource.clear();
     m_ExternalInitialStates.clear();
     m_UavAccesses.clear();
+    m_StableReadResources.clear();
     m_OperationSerial = 0;
 #if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
     m_TrackLifetimeDuration = {};
     m_PrepareResourceDuration = {};
     m_HeapPropertiesDuration = {};
+    m_StableCacheLookupDuration = {};
+    m_StableLocalStateDuration = {};
+    m_StableRegistryLookupDuration = {};
+    m_StableTransitionDuration = {};
 #endif
 }
 

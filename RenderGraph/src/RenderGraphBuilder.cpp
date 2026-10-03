@@ -292,9 +292,8 @@ namespace RenderGraph
     {
         Assert(!m_Built, "A render pass can only be built once.");
         Assert(!external || m_Queue == RenderPassQueue::Direct, "External render passes must use the direct queue.");
-        Assert(
-            !m_ParallelRecordingEligible || (!external && m_Queue == RenderPassQueue::Direct),
-            "Only direct non-external passes can record in parallel.");
+        Assert(!m_ParallelRecordingEligible || !external,
+            "External passes cannot record in parallel.");
     }
 
     RenderGraphBuilder::RenderGraphBuilder(const RenderGraphBuildOptions options)

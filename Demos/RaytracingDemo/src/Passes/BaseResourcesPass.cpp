@@ -3,6 +3,8 @@
 #include <RenderGraph/RaytracingDemoGraphResources.h>
 
 #include <DX12Library/CommandList.h>
+#include <DX12Library/PerformanceScope.h>
+#include <Framework/Diagnostics/DiagnosticsSession.h>
 #include <Framework/Geometry/Mesh.h>
 #include <Framework/Geometry/Model.h>
 #include <Framework/Rendering/Pipeline/CommandContext.h>
@@ -13,7 +15,7 @@
 
 using namespace DirectX;
 
-//Modify Begin:2026-08-25 by Hui
+//Modify Begin:2026-10-02 by Hui
 namespace
 {
     using DemoResourceIds = RaytracingDemoRenderGraph::ResourceIds;
@@ -157,8 +159,22 @@ namespace
         CommandList& commandList,
         const RenderGraph::RenderContext& context)
     {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            resources.Diagnostics,
+            context.GetMetadata().m_FrameIndex,
+            "BaseResources.LightsUpload",
+            "CPU",
+            0u,
+            "demo");
         if (resources.Lights.Upload(commandList, context.GetMetadata().m_FrameIndex))
         {
+            DX12_CPU_PERFORMANCE_SCOPE(
+                resources.Diagnostics,
+                context.GetMetadata().m_FrameIndex,
+                "BaseResources.BindRayTracingResources",
+                "CPU",
+                0u,
+                "demo");
             resources.Pipelines.BindRayTracingResources(
                 resources.Scene.GetRayTracingAccelerationStructure(),
                 resources.Scene,
@@ -196,17 +212,42 @@ namespace
         const auto& sceneObjects = resources.Scene.GetSceneObjects();
         const auto& sceneGeometries = resources.Scene.GetSceneGeometries();
         const auto& materials = resources.Scene.GetMaterials();
+        DX12_CPU_PERFORMANCE_SCOPE(
+            resources.Diagnostics,
+            config.FrameState->FrameIndex,
+            "BaseResources.Raster.ObjectSetupAndDraw",
+            "CPU",
+            0u,
+            "demo");
         for (const RaytracingDemoSceneObject& object : sceneObjects)
         {
             const RaytracingDemoMaterialData& material = materials[object.MaterialIndex];
             const RaytracingDemoSceneGeometry& geometry = sceneGeometries[object.GeometryIndex];
 
             RaytracingDemoModelConstants modelConstants = {};
-            modelConstants.Model = object.WorldMatrix;
-            modelConstants.ModelViewProjection = object.WorldMatrix * viewProjection;
-            modelConstants.InverseTransposeModel = XMMatrixTranspose(XMMatrixInverse(nullptr, object.WorldMatrix));
-            modelConstants.PreviousModelViewProjection = object.WorldMatrix * previousViewProjection;
-            commandContext.SetConstantBuffer(*resources.GBufferShader, "ModelCBuffer", modelConstants);
+            {
+                DX12_CPU_PERFORMANCE_SCOPE(
+                    resources.Diagnostics,
+                    config.FrameState->FrameIndex,
+                    "BaseResources.Raster.BuildModelConstants",
+                    "CPU",
+                    0u,
+                    "demo");
+                modelConstants.Model = object.WorldMatrix;
+                modelConstants.ModelViewProjection = object.WorldMatrix * viewProjection;
+                modelConstants.InverseTransposeModel = XMMatrixTranspose(XMMatrixInverse(nullptr, object.WorldMatrix));
+                modelConstants.PreviousModelViewProjection = object.WorldMatrix * previousViewProjection;
+            }
+            {
+                DX12_CPU_PERFORMANCE_SCOPE(
+                    resources.Diagnostics,
+                    config.FrameState->FrameIndex,
+                    "BaseResources.Raster.SetModelConstants",
+                    "CPU",
+                    0u,
+                    "demo");
+                commandContext.SetConstantBuffer(*resources.GBufferShader, "ModelCBuffer", modelConstants);
+            }
 
             RaytracingDemoGBufferMaterialConstants materialConstants = {};
             materialConstants.Diffuse = material.Diffuse;
@@ -227,11 +268,27 @@ namespace
             materialConstants.HasRoughnessMap = material.HasRoughnessMap;
             materialConstants.HasAmbientOcclusionMap = material.HasAmbientOcclusionMap;
             materialConstants.HasEmissionMap = material.HasEmissionMap;
-            commandContext.SetConstantBuffer(*resources.GBufferShader, "MaterialCBuffer", materialConstants);
+            {
+                DX12_CPU_PERFORMANCE_SCOPE(
+                    resources.Diagnostics,
+                    config.FrameState->FrameIndex,
+                    "BaseResources.Raster.SetMaterialConstants",
+                    "CPU",
+                    0u,
+                    "demo");
+                commandContext.SetConstantBuffer(*resources.GBufferShader, "MaterialCBuffer", materialConstants);
+            }
 
             commandContext.BindDescriptorSet(resources.GBufferShader->GetDescriptorSet());
             for (const auto& mesh : geometry.Model->GetMeshes())
             {
+                DX12_CPU_PERFORMANCE_SCOPE(
+                    resources.Diagnostics,
+                    config.FrameState->FrameIndex,
+                    "BaseResources.Raster.MeshBindDraw",
+                    "CPU",
+                    0u,
+                    "demo");
                 mesh->Bind(commandList);
                 commandContext.DrawIndexed(mesh->GetIndexCount());
             }
@@ -692,6 +749,13 @@ void RaytracingDemoPasses::Builder::AddBaseResourcesPass(
             {
                 return;
             }
+            DX12_CPU_PERFORMANCE_SCOPE(
+                resources.Diagnostics,
+                context.GetMetadata().m_FrameIndex,
+                "BaseResources.RecordRasterGBuffer",
+                "CPU",
+                0u,
+                "demo");
             RecordRasterGBuffer(resources, passData.Config, commandList);
         });
 

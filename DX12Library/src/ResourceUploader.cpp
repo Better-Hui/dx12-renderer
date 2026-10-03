@@ -95,6 +95,39 @@ void ResourceUploader::CopyStructuredBuffer(
     CommandListInternalAccess::TrackResourceLifetime(commandList, structuredBuffer);
 }
 
+void ResourceUploader::CopyStructuredBufferRange(
+    CommandList& commandList,
+    StructuredBuffer& structuredBuffer,
+    const size_t destinationElementOffset,
+    const size_t elementCount,
+    const size_t elementSize,
+    const void* data) const
+{
+    ValidateCommandList(commandList);
+    Assert(data != nullptr, "Structured buffer range copy data must not be null.");
+    const size_t bufferSize = elementCount * elementSize;
+    const size_t destinationOffset = destinationElementOffset * elementSize;
+    Assert(bufferSize > 0u, "Structured buffer range copy size must be non-zero.");
+    Assert(structuredBuffer.GetD3D12Resource() != nullptr, "Structured buffer range copy destination has not been created.");
+    Assert(
+        structuredBuffer.GetD3D12ResourceDesc().Width >= destinationOffset + bufferSize,
+        "Structured buffer range copy exceeds the existing GPU allocation.");
+
+    const UploadBuffer::Allocation uploadAllocation = CommandListInternalAccess::AllocateTransientUpload(
+        commandList,
+        bufferSize,
+        16u);
+    std::memcpy(uploadAllocation.Cpu, data, bufferSize);
+    commandList.CopyBufferRegion(
+        structuredBuffer,
+        destinationOffset,
+        uploadAllocation.Resource,
+        uploadAllocation.Offset,
+        bufferSize);
+    CommandListInternalAccess::TrackObjectLifetime(commandList, uploadAllocation.Resource);
+    CommandListInternalAccess::TrackResourceLifetime(commandList, structuredBuffer);
+}
+
 void ResourceUploader::UploadIndexBuffer(
     CommandList& commandList,
     IndexBuffer& indexBuffer,

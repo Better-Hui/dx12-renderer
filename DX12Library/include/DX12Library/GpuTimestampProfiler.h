@@ -8,6 +8,7 @@
 //Modify Begin:2026-07-30 by Hui
 #include <memory>
 //Modify End
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -59,6 +60,8 @@ private:
         uint64_t FrameNumber = 0;
         uint64_t SubmittedFenceValue = 0;
         bool PendingReadback = false;
+        bool Resolved = false;
+        bool Ended = false;
     };
 
     FrameSlot& GetCurrentSlot();
@@ -75,5 +78,11 @@ private:
     bool m_FrameActive = false;
     double m_LastFrameGpuMilliseconds = 0.0;
     uint64_t m_LastCollectedFrameNumber = 0;
+    //Modify Begin:2026-10-02 by Hui
+    // Parallel render-graph workers can emit pass timestamps into one queue
+    // profiler. Protect the slot metadata and query-index allocation so the
+    // diagnostic path cannot corrupt its vectors while recording commands.
+    mutable std::mutex m_Mutex;
+    //Modify End
 };
 //Modify End

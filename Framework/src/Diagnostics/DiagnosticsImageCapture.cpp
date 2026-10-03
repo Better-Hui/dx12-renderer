@@ -204,7 +204,7 @@ void FrameworkDiagnostics::DiagnosticsImageCapture::Drain()
     {
         const std::shared_ptr<CommandQueue> queue =
             m_DeviceContext.GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
-        queue->WaitForFenceValue(m_PendingReadback->FenceValue);
+        queue->WaitForFenceValue(m_PendingReadback->FenceValue, "diagnostics_readback");
         Poll();
     }
     ReapCompletedWrites(true);

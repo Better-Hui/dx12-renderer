@@ -67,6 +67,8 @@ public:
 	void SetFatalErrorHandler(CommandQueueFailureHandler handler);
 	void SetDiagnosticTelemetrySink(DiagnosticTelemetrySink* sink) noexcept;
 	void SetDiagnosticFrameIndex(uint64_t frameIndex) noexcept;
+	[[nodiscard]] DiagnosticTelemetrySink* GetDiagnosticTelemetrySink() const noexcept;
+	[[nodiscard]] uint64_t GetDiagnosticFrameIndex() const noexcept;
 	[[nodiscard]] D3D12_COMMAND_LIST_TYPE GetCommandListType() const noexcept { return m_CommandListType; }
 	//Modify End
 	virtual ~CommandQueue();

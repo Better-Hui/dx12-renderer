@@ -219,6 +219,20 @@ namespace RenderGraph
         return SubmitNonDirect(RenderPassQueue::Copy, commandList, waitForCompletion);
     }
 
+    uint64_t RenderGraphQueueScheduler::SubmitAsyncCompute(
+        std::vector<std::shared_ptr<CommandList>>& commandLists,
+        const bool waitForCompletion)
+    {
+        return SubmitNonDirect(RenderPassQueue::AsyncCompute, commandLists, waitForCompletion);
+    }
+
+    uint64_t RenderGraphQueueScheduler::SubmitCopy(
+        std::vector<std::shared_ptr<CommandList>>& commandLists,
+        const bool waitForCompletion)
+    {
+        return SubmitNonDirect(RenderPassQueue::Copy, commandLists, waitForCompletion);
+    }
+
     uint64_t RenderGraphQueueScheduler::SubmitNonDirect(
         const RenderPassQueue queue,
         std::shared_ptr<CommandList>& commandList,
@@ -251,7 +265,57 @@ namespace RenderGraph
 
         if (waitForCompletion)
         {
-            commandQueue.WaitForFenceValue(fenceValue);
+            commandQueue.WaitForFenceValue(fenceValue, "render_graph_submission");
+        }
+
+        if (queue == RenderPassQueue::AsyncCompute)
+        {
+            m_LastAsyncComputeFenceValue = fenceValue;
+        }
+        else
+        {
+            m_LastCopyFenceValue = fenceValue;
+        }
+        return fenceValue;
+    }
+
+    uint64_t RenderGraphQueueScheduler::SubmitNonDirect(
+        const RenderPassQueue queue,
+        std::vector<std::shared_ptr<CommandList>>& commandLists,
+        const bool waitForCompletion)
+    {
+        Assert(queue != RenderPassQueue::Direct, "SubmitNonDirect cannot submit a direct command list.");
+        if (commandLists.empty())
+        {
+            return 0u;
+        }
+        CommandQueue& commandQueue = GetCommandQueue(queue);
+        const uint64_t commandListCount = static_cast<uint64_t>(commandLists.size());
+        const uint64_t fenceValue = commandQueue.ExecuteCommandLists(commandLists);
+        QueueFence(m_FrameSubmissionFences, queue) = (std::max)(
+            QueueFence(m_FrameSubmissionFences, queue),
+            fenceValue);
+        m_FrameSynchronizationStats.RecordSubmission(queue);
+        commandLists.clear();
+
+        if (HasDiagnosticTelemetrySink())
+        {
+            EmitTelemetry({
+                .Category = "render_graph.queue.submission",
+                .Name = "submit",
+                .CorrelationId = MakeDiagnosticQueueFenceCorrelationId(GetQueueName(queue), fenceValue),
+                .Fields = {
+                    { "queue", std::string(GetQueueName(queue)) },
+                    { "fence", fenceValue },
+                    { "command_list_count", commandListCount },
+                    { "cpu_wait_for_completion", waitForCompletion },
+                },
+            });
+        }
+
+        if (waitForCompletion)
+        {
+            commandQueue.WaitForFenceValue(fenceValue, "render_graph_submission");
         }
 
         if (queue == RenderPassQueue::AsyncCompute)
@@ -513,7 +577,7 @@ namespace RenderGraph
 
     void RenderGraphQueueScheduler::ValidateDirectPassDependencies(
         const std::span<RenderPass* const> passes,
-        const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans,
+        const std::unordered_map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans,
         const RenderGraphQueueFenceValues& dependencies)
     {
         for (const RenderPass* pass : passes)
@@ -566,7 +630,7 @@ namespace RenderGraph
     void RenderGraphQueueScheduler::ValidateNonDirectBatchDependencies(
         const std::span<RenderPass* const> passes,
         const RenderPassQueue queue,
-        const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans,
+        const std::unordered_map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans,
         const RenderGraphQueueFenceValues& producerDependencies,
         const uint64_t directPreambleFence)
     {

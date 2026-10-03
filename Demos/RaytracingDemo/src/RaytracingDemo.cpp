@@ -2324,6 +2324,7 @@ void RaytracingDemo::InitializeDiagnostics()
         "RAYTRACING_DEMO_AUTOTEST_MAX_CASES",
         "RAYTRACING_DEMO_AUTOTEST_STEP_MS",
         "RAYTRACING_DEMO_AUTOTEST_TIMEOUT_SECONDS",
+        "RAYTRACING_DEMO_AUTOTEST_PROFILE_UI",
         "RAYTRACING_DEMO_SCENE",
         "RAYTRACING_DEMO_SHOWREEL",
         "RAYTRACING_DEMO_UNITY_SCENE",
@@ -2366,7 +2367,11 @@ void RaytracingDemo::InitializeDiagnostics()
             m_Diagnostics.AddMetadata(std::string("env.") + variableName, value);
         }
     }
-    GetApplication().SetDiagnosticTelemetrySink(&m_Diagnostics);
+//Modify Begin:2026-10-02 by Hui
+    // Keep the sink detached when diagnostics are disabled. Performance scopes
+    // use a non-null sink as their activation signal in Release builds.
+    GetApplication().SetDiagnosticTelemetrySink(m_Diagnostics.IsEnabled() ? &m_Diagnostics : nullptr);
+//Modify End
     m_Diagnostics.Record("application.lifecycle", "load_content_begin");
 }
 

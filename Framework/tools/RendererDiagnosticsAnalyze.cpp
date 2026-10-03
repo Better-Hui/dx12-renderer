@@ -154,8 +154,22 @@ namespace
             if (value.empty()) value = GetField(event, "gpu_delta_ms");
             const std::optional<double> milliseconds = ToDouble(value);
             if (!milliseconds.has_value()) continue;
-            timings[event.Category + "|" + event.Name + "|" + GetField(event, "queue")]
+//Modify Begin:2026-10-02 by Hui
+            // Keep queue fence waits separated by their caller context. A
+            // command-list retirement wait is a background recycling wait,
+            // while a frame-resource wait can block the recording thread.
+            std::string scope = event.Category + "|" + event.Name + "|" + GetField(event, "queue");
+            if (event.Name == "queue_fence_wait")
+            {
+                const std::string waitContext = GetField(event, "wait_context");
+                if (!waitContext.empty())
+                {
+                    scope += "|" + waitContext;
+                }
+            }
+            timings[scope]
                 .Samples.push_back(*milliseconds);
+//Modify End
         }
         return timings;
     }

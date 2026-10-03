@@ -380,9 +380,12 @@ bool SceneMeshletResources::UpdateSceneGeometryVertices(
     return m_Resources.UpdateGeometryVertices(geometryIndex, prototypeIndex, vertices);
 }
 
-void SceneMeshletResources::Upload(CommandList& commandList)
+void SceneMeshletResources::Upload(
+    CommandList& commandList,
+    DiagnosticTelemetrySink* diagnostics,
+    const uint64_t frameIndex)
 {
-    m_Resources.Upload(commandList);
+    m_Resources.Upload(commandList, diagnostics, frameIndex);
 }
 
 SceneRayTracingResources::SceneRayTracingResources(std::shared_ptr<D3D12DeviceContext> deviceContext)
@@ -486,9 +489,12 @@ bool SceneRayTracingResources::UpdateSceneObjectTransform(
     return !handles.empty();
 }
 
-void SceneRayTracingResources::RefitDirtyGeometry(CommandList& commandList)
+void SceneRayTracingResources::RefitDirtyGeometry(
+    CommandList& commandList,
+    DiagnosticTelemetrySink* diagnostics,
+    const uint64_t frameIndex)
 {
-    m_AccelerationStructure.Update(commandList);
+    m_AccelerationStructure.Update(commandList, diagnostics, frameIndex);
 }
 
 void SceneRayTracingResources::ForEachShaderResource(

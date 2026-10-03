@@ -193,7 +193,13 @@ ImGuiImpl::ImGuiImpl(FrameworkDeviceContext& deviceContext, CommandList& command
     ImGui_ImplDX12_InitInfo initInfo = {};
     initInfo.Device = pDevice.Get();
     initInfo.CommandQueue = commandQueue.Get();
-    initInfo.NumFramesInFlight = Window::BUFFER_COUNT;
+//Modify Begin:2026-10-02 by Hui
+    // ImGui upload buffers must follow the engine frame-resource ring. The
+    // swap-chain buffer count can differ from the number of frames protected
+    // by FrameResourceRing, so using BUFFER_COUNT here can reuse an upload
+    // buffer while the GPU still consumes it.
+    initInfo.NumFramesInFlight = Window::FRAME_RESOURCE_COUNT;
+//Modify End
 //Modify Begin:2026-08-28 by Hui
     initInfo.RTVFormat = window.GetBackBufferFormat();
 //Modify End

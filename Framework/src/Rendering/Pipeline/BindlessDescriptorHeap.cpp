@@ -5,6 +5,9 @@
 #include <DX12Library/Helpers.h>
 #include <DX12Library/Resource.h>
 #include <DX12Library/Texture.h>
+//Modify Begin:2026-10-02 by Hui
+#include <DX12Library/PerformanceScope.h>
+//Modify End
 #include <Framework/Rendering/Pipeline/PipelineDescriptorSet.h>
 
 #include <string>
@@ -51,17 +54,37 @@ void BindlessDescriptorHeap::BeginFrame(
     Assert(!m_FrameActive, "Bindless descriptor heap frame scope is already active.");
 
     uint32_t selectedPageIndex = InvalidPageIndex;
-    for (uint32_t pageIndex = 0u; pageIndex < m_Pages.size(); ++pageIndex)
     {
-        if (IsPageAvailableLocked(m_Pages[pageIndex], directCommandQueue, asyncComputeCommandQueue))
+        //Modify Begin:2026-10-02 by Hui
+        DX12_CPU_PERFORMANCE_SCOPE(
+            directCommandQueue.GetDiagnosticTelemetrySink(),
+            directCommandQueue.GetDiagnosticFrameIndex(),
+            "bindless.begin_frame.page_scan",
+            "Direct",
+            0,
+            "bindless");
+        //Modify End
+        for (uint32_t pageIndex = 0u; pageIndex < m_Pages.size(); ++pageIndex)
         {
-            selectedPageIndex = pageIndex;
-            break;
+            if (IsPageAvailableLocked(m_Pages[pageIndex], directCommandQueue, asyncComputeCommandQueue))
+            {
+                selectedPageIndex = pageIndex;
+                break;
+            }
         }
     }
 
     if (selectedPageIndex == InvalidPageIndex && m_Pages.size() < m_Desc.MaxFramePages)
     {
+        //Modify Begin:2026-10-02 by Hui
+        DX12_CPU_PERFORMANCE_SCOPE(
+            directCommandQueue.GetDiagnosticTelemetrySink(),
+            directCommandQueue.GetDiagnosticFrameIndex(),
+            "bindless.begin_frame.page_create",
+            "Direct",
+            0,
+            "bindless");
+        //Modify End
         DescriptorPage page;
         D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
         heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
@@ -76,26 +99,57 @@ void BindlessDescriptorHeap::BeginFrame(
 
     if (selectedPageIndex == InvalidPageIndex)
     {
+        //Modify Begin:2026-10-02 by Hui
+        DX12_CPU_PERFORMANCE_SCOPE(
+            directCommandQueue.GetDiagnosticTelemetrySink(),
+            directCommandQueue.GetDiagnosticFrameIndex(),
+            "bindless.begin_frame.page_wait",
+            "Direct",
+            0,
+            "bindless");
+        //Modify End
         DescriptorPage& page = m_Pages.front();
         if (page.DirectFenceValue != 0u)
         {
-            directCommandQueue.WaitForFenceValue(page.DirectFenceValue);
+            directCommandQueue.WaitForFenceValue(page.DirectFenceValue, "bindless_descriptor_retirement");
         }
         if (page.AsyncComputeFenceValue != 0u)
         {
-            asyncComputeCommandQueue.WaitForFenceValue(page.AsyncComputeFenceValue);
+            asyncComputeCommandQueue.WaitForFenceValue(page.AsyncComputeFenceValue, "bindless_descriptor_retirement");
         }
         selectedPageIndex = 0u;
     }
 
     m_CurrentPageIndex = selectedPageIndex;
     m_FrameActive = true;
-    InitializePageLocked(GetCurrentPageLocked());
-    for (uint32_t descriptorIndex = 0u; descriptorIndex < m_NextResourceDescriptorIndex; ++descriptorIndex)
     {
-        if (m_ResourceDescriptorRevisions[descriptorIndex] != 0u)
+        //Modify Begin:2026-10-02 by Hui
+        DX12_CPU_PERFORMANCE_SCOPE(
+            directCommandQueue.GetDiagnosticTelemetrySink(),
+            directCommandQueue.GetDiagnosticFrameIndex(),
+            "bindless.begin_frame.page_initialize",
+            "Direct",
+            0,
+            "bindless");
+        //Modify End
+        InitializePageLocked(GetCurrentPageLocked());
+    }
+    {
+        //Modify Begin:2026-10-02 by Hui
+        DX12_CPU_PERFORMANCE_SCOPE(
+            directCommandQueue.GetDiagnosticTelemetrySink(),
+            directCommandQueue.GetDiagnosticFrameIndex(),
+            "bindless.begin_frame.replicate_resources",
+            "Direct",
+            0,
+            "bindless");
+        //Modify End
+        for (uint32_t descriptorIndex = 0u; descriptorIndex < m_NextResourceDescriptorIndex; ++descriptorIndex)
         {
-            EnsureResourceDescriptorOnCurrentPageLocked(descriptorIndex);
+            if (m_ResourceDescriptorRevisions[descriptorIndex] != 0u)
+            {
+                EnsureResourceDescriptorOnCurrentPageLocked(descriptorIndex);
+            }
         }
     }
 }
@@ -191,6 +245,9 @@ void BindlessDescriptorHeap::UpdateShaderResourceViewLocked(
 D3D12_GPU_DESCRIPTOR_HANDLE BindlessDescriptorHeap::GetOrCreateDescriptorTable(
     const PipelineDescriptorTableAllocation& allocation)
 {
+    //Modify Begin:2026-10-02 by Hui
+    DX12_CPU_RECORDING_SCOPE("descriptor_table.bindless.lookup");
+    //Modify End
     std::lock_guard lock(m_Mutex);
     Assert(allocation.IsValid(), "Bindless descriptor table allocation is invalid.");
     DescriptorPage& page = GetCurrentPageLocked();
@@ -217,6 +274,9 @@ D3D12_GPU_DESCRIPTOR_HANDLE BindlessDescriptorHeap::GetOrCreateDescriptorTable(
     const auto pageRevision = page.DescriptorTableRevisions.find(cacheKey);
     if (pageRevision == page.DescriptorTableRevisions.end() || pageRevision->second != allocation.GetRevision())
     {
+        //Modify Begin:2026-10-02 by Hui
+        DX12_CPU_RECORDING_SCOPE("descriptor_table.bindless.copy");
+        //Modify End
         m_Device->CopyDescriptorsSimple(
             allocation.GetNumHandles(),
             GetPageResourceCpuHandle(page, cachedTable.DescriptorIndex),

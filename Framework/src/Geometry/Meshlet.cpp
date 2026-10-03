@@ -5,6 +5,7 @@
 //Modify Begin:2026-08-18 by Hui
 #include <DX12Library/CommandListInternalAccess.h>
 #include <DX12Library/ResourceUploader.h>
+#include <DX12Library/PerformanceScope.h>
 //Modify End
 
 #include <meshoptimizer.h>
@@ -229,6 +230,11 @@ void MeshletGeometrySet::Clear()
     m_DrawData.clear();
     m_CandidateCapacity = 0;
     m_GeometryDataDirty = true;
+    m_GeometryDataFullDirty = true;
+    m_DirtyVertexOffset = 0u;
+    m_DirtyVertexCount = 0u;
+    m_DirtyMeshletOffset = 0u;
+    m_DirtyMeshletCount = 0u;
     m_IndexDataDirty = true;
     m_InstanceDataDirty = true;
 }
@@ -276,6 +282,7 @@ std::pair<uint32_t, uint32_t> MeshletGeometrySet::AddGeometry(MeshletBuildResult
     });
 
     m_GeometryDataDirty = true;
+    m_GeometryDataFullDirty = true;
     m_IndexDataDirty = true;
     return { meshletOffset, static_cast<uint32_t>(buildResult.Meshlets.size()) };
 }
@@ -352,10 +359,38 @@ bool MeshletGeometrySet::UpdateGeometryVertices(
         RecalculateMeshletBounds(m_Meshlets[geometry->MeshletOffset + meshletIndex], m_Indices, m_Vertices);
     }
     m_GeometryDataDirty = true;
+    if (!m_GeometryDataFullDirty)
+    {
+        const auto mergeRange = [](uint32_t& offset, uint32_t& count, const uint32_t newOffset, const uint32_t newCount)
+        {
+            if (count == 0u)
+            {
+                offset = newOffset;
+                count = newCount;
+                return;
+            }
+            const uint32_t end = (std::max)(offset + count, newOffset + newCount);
+            offset = (std::min)(offset, newOffset);
+            count = end - offset;
+        };
+        mergeRange(
+            m_DirtyVertexOffset,
+            m_DirtyVertexCount,
+            geometry->VertexOffset,
+            static_cast<uint32_t>(geometry->CompactToSourceVertexIndices.size()));
+        mergeRange(
+            m_DirtyMeshletOffset,
+            m_DirtyMeshletCount,
+            geometry->MeshletOffset,
+            geometry->MeshletCount);
+    }
     return true;
 }
 
-void MeshletGeometrySet::Upload(CommandList& commandList)
+void MeshletGeometrySet::Upload(
+    CommandList& commandList,
+    DiagnosticTelemetrySink* diagnostics,
+    const uint64_t frameIndex)
 {
     if (m_Vertices.empty() || m_Indices.empty() || m_Meshlets.empty())
     {
@@ -368,30 +403,96 @@ void MeshletGeometrySet::Upload(CommandList& commandList)
         const bool vertexBufferCanCopy =
             m_VertexBuffer.GetD3D12Resource() != nullptr &&
             m_VertexBuffer.GetD3D12ResourceDesc().Width >= m_Vertices.size() * sizeof(VertexAttributes);
-        if (vertexBufferCanCopy)
+        const bool vertexRangeCanCopy =
+            vertexBufferCanCopy &&
+            !m_GeometryDataFullDirty &&
+            m_DirtyVertexCount > 0u;
         {
-            uploader.CopyStructuredBuffer(commandList, m_VertexBuffer, m_Vertices);
-        }
-        else
-        {
-            uploader.UploadStructuredBuffer(commandList, m_VertexBuffer, m_Vertices);
+            //Modify Begin:2026-10-02 by Hui
+            DX12_CPU_PERFORMANCE_SCOPE(
+                diagnostics,
+                frameIndex,
+                vertexRangeCanCopy
+                    ? "Meshlet.CopyVertexRange"
+                    : (vertexBufferCanCopy ? "Meshlet.CopyVertexBuffer" : "Meshlet.UploadVertexBuffer"),
+                "CPU",
+                0u,
+                "framework");
+            if (vertexRangeCanCopy)
+            {
+                uploader.CopyStructuredBufferRange(
+                    commandList,
+                    m_VertexBuffer,
+                    m_DirtyVertexOffset,
+                    m_DirtyVertexCount,
+                    sizeof(VertexAttributes),
+                    m_Vertices.data() + m_DirtyVertexOffset);
+            }
+            else if (vertexBufferCanCopy)
+            {
+                uploader.CopyStructuredBuffer(commandList, m_VertexBuffer, m_Vertices);
+            }
+            else
+            {
+                uploader.UploadStructuredBuffer(commandList, m_VertexBuffer, m_Vertices);
+            }
+            //Modify End
         }
         const bool meshletBufferCanCopy =
             m_MeshletBuffer.GetD3D12Resource() != nullptr &&
             m_MeshletBuffer.GetD3D12ResourceDesc().Width >= m_Meshlets.size() * sizeof(Meshlet);
-        if (meshletBufferCanCopy)
+        const bool meshletRangeCanCopy =
+            meshletBufferCanCopy &&
+            !m_GeometryDataFullDirty &&
+            m_DirtyMeshletCount > 0u;
         {
-            uploader.CopyStructuredBuffer(commandList, m_MeshletBuffer, m_Meshlets);
-        }
-        else
-        {
-            uploader.UploadStructuredBuffer(commandList, m_MeshletBuffer, m_Meshlets);
+            //Modify Begin:2026-10-02 by Hui
+            DX12_CPU_PERFORMANCE_SCOPE(
+                diagnostics,
+                frameIndex,
+                meshletRangeCanCopy
+                    ? "Meshlet.CopyMetadataRange"
+                    : (meshletBufferCanCopy ? "Meshlet.CopyMetadataBuffer" : "Meshlet.UploadMetadataBuffer"),
+                "CPU",
+                0u,
+                "framework");
+            if (meshletRangeCanCopy)
+            {
+                uploader.CopyStructuredBufferRange(
+                    commandList,
+                    m_MeshletBuffer,
+                    m_DirtyMeshletOffset,
+                    m_DirtyMeshletCount,
+                    sizeof(Meshlet),
+                    m_Meshlets.data() + m_DirtyMeshletOffset);
+            }
+            else if (meshletBufferCanCopy)
+            {
+                uploader.CopyStructuredBuffer(commandList, m_MeshletBuffer, m_Meshlets);
+            }
+            else
+            {
+                uploader.UploadStructuredBuffer(commandList, m_MeshletBuffer, m_Meshlets);
+            }
+            //Modify End
         }
         m_GeometryDataDirty = false;
+        m_GeometryDataFullDirty = false;
+        m_DirtyVertexOffset = 0u;
+        m_DirtyVertexCount = 0u;
+        m_DirtyMeshletOffset = 0u;
+        m_DirtyMeshletCount = 0u;
     }
 
     if (m_IndexDataDirty)
     {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics,
+            frameIndex,
+            "Meshlet.UploadIndexBuffer",
+            "CPU",
+            0u,
+            "framework");
         uploader.UploadByteAddressBuffer(
             commandList, m_IndexBuffer, m_Indices.size() * sizeof(uint16_t), m_Indices.data());
         m_IndexDataDirty = false;
@@ -402,7 +503,16 @@ void MeshletGeometrySet::Upload(CommandList& commandList)
         return;
     }
 
-    BuildDrawData();
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics,
+            frameIndex,
+            "Meshlet.BuildDrawData",
+            "CPU",
+            0u,
+            "framework");
+        BuildDrawData();
+    }
     if (m_DrawData.empty())
     {
         m_InstanceDataDirty = false;
@@ -821,13 +931,23 @@ void MeshletSceneResources::RemoveInstances(const std::span<const MeshletSceneIn
     m_DrawsDirty = true;
 }
 
-void MeshletSceneResources::Upload(CommandList& commandList)
+void MeshletSceneResources::Upload(
+    CommandList& commandList,
+    DiagnosticTelemetrySink* diagnostics,
+    const uint64_t frameIndex)
 {
     if (m_DrawsDirty)
     {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics,
+            frameIndex,
+            "Meshlet.RebuildDraws",
+            "CPU",
+            0u,
+            "framework");
         RebuildDraws();
     }
-    m_GeometrySet.Upload(commandList);
+    m_GeometrySet.Upload(commandList, diagnostics, frameIndex);
 }
 
 MeshletGpuResources MeshletSceneResources::GetGpuResources()

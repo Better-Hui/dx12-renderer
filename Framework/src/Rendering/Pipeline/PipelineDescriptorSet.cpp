@@ -83,6 +83,10 @@ void PipelineDescriptorSet::Reset(const PipelineLayout& layout)
     m_SamplerDescriptorOffset = 0;
     m_Allocation = {};
     m_AccelerationStructure = nullptr;
+    m_Revision = 1;
+    //Modify Begin:2026-10-02 by Hui
+    m_ResourceBindingRevision = 1;
+    //Modify End
 }
 
 bool PipelineDescriptorSet::HasBinding(std::string_view name) const
@@ -166,6 +170,13 @@ UINT PipelineDescriptorSet::SetShaderResourceView(
         }
     }
 
+    if (descriptorChanged)
+    {
+        ++m_Revision;
+        //Modify Begin:2026-10-02 by Hui
+        ++m_ResourceBindingRevision;
+        //Modify End
+    }
     return binding.RootParameterIndex;
 }
 
@@ -306,6 +317,13 @@ UINT PipelineDescriptorSet::SetShaderResourceViews(
         }
     }
 
+    if (descriptorChanged)
+    {
+        ++m_Revision;
+        //Modify Begin:2026-10-02 by Hui
+        ++m_ResourceBindingRevision;
+        //Modify End
+    }
     return binding.RootParameterIndex;
 }
 
@@ -341,6 +359,13 @@ UINT PipelineDescriptorSet::SetShaderResource(
                     D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
                 allocation->MarkDirty();
         }
+    }
+    if (descriptorChanged)
+    {
+        ++m_Revision;
+        //Modify Begin:2026-10-02 by Hui
+        ++m_ResourceBindingRevision;
+        //Modify End
     }
     return binding.RootParameterIndex;
 }
@@ -380,6 +405,13 @@ UINT PipelineDescriptorSet::SetShaderResource(
             allocation->MarkDirty();
         }
     }
+    if (descriptorChanged)
+    {
+        ++m_Revision;
+        //Modify Begin:2026-10-02 by Hui
+        ++m_ResourceBindingRevision;
+        //Modify End
+    }
     return binding.RootParameterIndex;
 }
 
@@ -415,6 +447,13 @@ UINT PipelineDescriptorSet::SetUnorderedAccessView(
                 D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
             allocation->MarkDirty();
         }
+    }
+    if (descriptorChanged)
+    {
+        ++m_Revision;
+        //Modify Begin:2026-10-02 by Hui
+        ++m_ResourceBindingRevision;
+        //Modify End
     }
     return binding.RootParameterIndex;
 }
@@ -452,6 +491,13 @@ UINT PipelineDescriptorSet::SetStructuredBuffer(
             allocation->MarkDirty();
         }
     }
+    if (descriptorChanged)
+    {
+        ++m_Revision;
+        //Modify Begin:2026-10-02 by Hui
+        ++m_ResourceBindingRevision;
+        //Modify End
+    }
     return binding.RootParameterIndex;
 }
 
@@ -461,8 +507,17 @@ UINT PipelineDescriptorSet::SetAccelerationStructure(
 {
     const DescriptorBindingInfo& binding = GetBinding(name, DescriptorBindingKind::AccelerationStructure);
     auto& boundResource = m_BoundResources[binding.RootParameterIndex];
+    const bool changed = boundResource.AccelerationStructure != &accelerationStructure ||
+        m_AccelerationStructure != &accelerationStructure;
     boundResource.AccelerationStructure = &accelerationStructure;
     m_AccelerationStructure = &accelerationStructure;
+    if (changed)
+    {
+        ++m_Revision;
+        //Modify Begin:2026-10-02 by Hui
+        ++m_ResourceBindingRevision;
+        //Modify End
+    }
     return binding.RootParameterIndex;
 }
 
@@ -475,16 +530,24 @@ UINT PipelineDescriptorSet::SetConstantBufferData(
 
     const DescriptorBindingInfo& binding = GetBinding(name, DescriptorBindingKind::ConstantBuffer);
     auto& constantBufferData = m_BoundResources[binding.RootParameterIndex].ConstantBufferData;
+    const bool changed = constantBufferData.size() != size ||
+        std::memcmp(constantBufferData.data(), data, size) != 0;
     constantBufferData.resize(size);
     std::memcpy(constantBufferData.data(), data, size);
+    if (changed)
+    {
+        ++m_Revision;
+    }
     return binding.RootParameterIndex;
 }
 
 void PipelineDescriptorSet::ClearShaderResourceViews(std::string_view name)
 {
     const DescriptorBindingInfo& binding = GetBinding(name, DescriptorBindingKind::ShaderResourceView);
-    m_BoundResources[binding.RootParameterIndex].ShaderResourceViews.clear();
-    m_BoundResources[binding.RootParameterIndex].ShaderResources.clear();
+    auto& boundResource = m_BoundResources[binding.RootParameterIndex];
+    const bool changed = !boundResource.ShaderResourceViews.empty() || !boundResource.ShaderResources.empty();
+    boundResource.ShaderResourceViews.clear();
+    boundResource.ShaderResources.clear();
     PipelineDescriptorTableAllocation* allocation = FindMutableDescriptorTableAllocation(binding.RootParameterIndex);
     const DescriptorAllocation* defaultDescriptors = GetLayout().FindDefaultDescriptorTable(binding.RootParameterIndex);
     if (allocation != nullptr && defaultDescriptors != nullptr)
@@ -507,6 +570,13 @@ void PipelineDescriptorSet::ClearShaderResourceViews(std::string_view name)
         }
         allocation->MarkDirty();
     }
+    if (changed)
+    {
+        ++m_Revision;
+        //Modify Begin:2026-10-02 by Hui
+        ++m_ResourceBindingRevision;
+        //Modify End
+    }
 }
 
 const PipelineLayout& PipelineDescriptorSet::GetLayout() const
@@ -520,6 +590,10 @@ void PipelineDescriptorSet::SetDescriptorTableAllocation(
     PipelineDescriptorTableAllocation allocation)
 {
     m_DescriptorTableAllocations.insert_or_assign(rootParameterIndex, std::move(allocation));
+    ++m_Revision;
+    //Modify Begin:2026-10-02 by Hui
+    ++m_ResourceBindingRevision;
+    //Modify End
 }
 
 const PipelineDescriptorTableAllocation* PipelineDescriptorSet::FindDescriptorTableAllocation(const UINT rootParameterIndex) const
@@ -552,6 +626,10 @@ void PipelineDescriptorSet::SetAllocationInfo(
     m_Allocation.HeapOffsets[static_cast<size_t>(PipelineDescriptorHeapType::Sampler)] = samplerDescriptorOffset;
     m_Allocation.DescriptorCounts[static_cast<size_t>(PipelineDescriptorHeapType::Resource)] = resourceDescriptorCount;
     m_Allocation.DescriptorCounts[static_cast<size_t>(PipelineDescriptorHeapType::Sampler)] = samplerDescriptorCount;
+    ++m_Revision;
+    //Modify Begin:2026-10-02 by Hui
+    ++m_ResourceBindingRevision;
+    //Modify End
 }
 
 const PipelineBoundResource* PipelineDescriptorSet::FindBoundResource(const UINT rootParameterIndex) const

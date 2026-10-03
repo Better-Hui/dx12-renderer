@@ -342,8 +342,7 @@ namespace
 
     bool CanRecordInParallel(const RenderPass& renderPass)
     {
-        return renderPass.GetQueue() == RenderPassQueue::Direct &&
-            !renderPass.IsExternal() &&
+        return !renderPass.IsExternal() &&
             renderPass.IsParallelRecordingEligible();
     }
 
@@ -419,7 +418,7 @@ namespace
     bool CanAppendNonDirectPass(
         const RenderGraphRecordingBatch& batch,
         const RenderPass& pass,
-        const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans)
+        const std::unordered_map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans)
     {
         if (batch.Passes.empty() ||
             batch.Queue == RenderPassQueue::Direct ||
@@ -592,6 +591,9 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
             }
         }
     }
+
+    compiledGraph.m_RenderTargets.reserve(compiledGraph.m_RenderPasses.size());
+    compiledGraph.m_ResourceStatePlans.reserve(compiledGraph.m_RenderPasses.size());
 
     m_ResourcePool->Clear(resourceRetirements);
     for (const TextureDescription& texture : textures)
@@ -766,6 +768,7 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
             directOnly &= hasResolvedResource;
             resourceStatePlan.ExternalResourceTransitions.push_back({
                 &access,
+                access.StaticResource != nullptr ? &resolvedResource : nullptr,
                 access.StateAfter,
                 access.Mode == ExternalResourceAccessMode::Write
                     ? ResourceUse::Write
@@ -957,17 +960,34 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
         {
             return;
         }
-        recordingBatch.RecordInParallel =
-            recordingBatch.Queue == RenderPassQueue::Direct &&
-            recordingBatch.Passes.size() > 1u;
+        //Modify Begin:2026-10-02 by Hui
+        // A single eligible pass still belongs to the recording task queue.
+        // Batching controls submission order; it must not decide whether the
+        // pass is recorded by a worker.
+        recordingBatch.RecordInParallel = std::ranges::all_of(
+                recordingBatch.Passes,
+                [](const RenderPass* pass)
+                {
+                    return pass != nullptr &&
+                        !pass->IsExternal() &&
+                        pass->IsParallelRecordingEligible();
+                });
+        //Modify End
         compiledGraph.m_RecordingBatches.push_back(std::move(recordingBatch));
         recordingBatch = {};
     };
 
     for (RenderPass* renderPass : compiledGraph.m_RenderPasses)
     {
-        if (CanRecordInParallel(*renderPass))
+        if (renderPass->GetQueue() == RenderPassQueue::Direct)
         {
+            if (!CanRecordInParallel(*renderPass))
+            {
+                flushRecordingBatch();
+                compiledGraph.m_RecordingBatches.push_back({ { renderPass }, RenderPassQueue::Direct, false });
+                continue;
+            }
+
             if (!recordingBatch.Passes.empty() && recordingBatch.Queue != RenderPassQueue::Direct)
             {
                 flushRecordingBatch();
@@ -977,22 +997,18 @@ RenderGraph::CompiledRenderGraph RenderGraph::RenderGraphCompiler::Compile(
             continue;
         }
 
-        if (renderPass->GetQueue() != RenderPassQueue::Direct)
+        if (!CanAppendNonDirectPass(
+            recordingBatch,
+            *renderPass,
+            compiledGraph.m_ResourceStatePlans) ||
+            (!recordingBatch.Passes.empty() &&
+                recordingBatch.Passes.front()->IsParallelRecordingEligible() !=
+                    renderPass->IsParallelRecordingEligible()))
         {
-            if (!CanAppendNonDirectPass(
-                recordingBatch,
-                *renderPass,
-                compiledGraph.m_ResourceStatePlans))
-            {
-                flushRecordingBatch();
-                recordingBatch.Queue = renderPass->GetQueue();
-            }
-            recordingBatch.Passes.push_back(renderPass);
-            continue;
+            flushRecordingBatch();
+            recordingBatch.Queue = renderPass->GetQueue();
         }
-
-        flushRecordingBatch();
-        compiledGraph.m_RecordingBatches.push_back({ { renderPass }, RenderPassQueue::Direct, false });
+        recordingBatch.Passes.push_back(renderPass);
     }
     flushRecordingBatch();
 

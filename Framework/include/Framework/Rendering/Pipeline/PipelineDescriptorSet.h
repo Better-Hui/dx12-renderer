@@ -118,6 +118,10 @@ public:
     uint32_t GetResourceDescriptorOffset() const { return m_ResourceDescriptorOffset; }
     uint32_t GetSamplerDescriptorOffset() const { return m_SamplerDescriptorOffset; }
     const PipelineDescriptorSetAllocation& GetAllocation() const { return m_Allocation; }
+    uint64_t GetRevision() const { return m_Revision; }
+    //Modify Begin:2026-10-02 by Hui
+    uint64_t GetResourceBindingRevision() const { return m_ResourceBindingRevision; }
+    //Modify End
     const PipelineBoundResource* FindBoundResource(UINT rootParameterIndex) const;
     const PipelineBoundResource& GetBoundResource(UINT rootParameterIndex) const;
     const std::map<UINT, PipelineBoundResource>& GetBoundResources() const { return m_BoundResources; }
@@ -135,6 +139,10 @@ private:
     uint32_t m_SamplerDescriptorOffset = 0;
     PipelineDescriptorSetAllocation m_Allocation = {};
     const RayTracingAccelerationStructure* m_AccelerationStructure = nullptr;
+    uint64_t m_Revision = 1;
+    //Modify Begin:2026-10-02 by Hui
+    uint64_t m_ResourceBindingRevision = 1;
+    //Modify End
 };
 
 //Modify End

@@ -73,7 +73,7 @@ CommandList::CommandList(
 }
 //Modify End
 
-//Modify Begin:2026-09-29 by Hui
+//Modify Begin:2026-10-02 by Hui
 CommandList::CommandList(
     const D3D12_COMMAND_LIST_TYPE type,
     std::shared_ptr<D3D12DeviceContext> deviceContext,
@@ -130,9 +130,19 @@ BarrierContext& CommandList::GetBarrierContext() const
 void CommandList::TrackAccess(const ResourceAccess& access)
 {
     Assert(access.NativeResource != nullptr, "A resource binding requires a native resource.");
-    TrackObject(access.NativeResource);
-    if (access.Registration != nullptr)
-        m_TrackedResourceStateRegistrations.push_back(access.Registration);
+//Modify Begin:2026-10-02 by Hui
+    // Descriptor bindings can reference the same resource many times in one
+    // pass. Deduplicate lifetime ownership at the native identity boundary so
+    // every binding does not append another shared state registration.
+    if (m_TrackedResourceIdentities.insert(access.NativeResource.Get()).second)
+    {
+        TrackObject(access.NativeResource);
+        if (access.Registration != nullptr)
+        {
+            m_TrackedResourceStateRegistrations.push_back(access.Registration);
+        }
+    }
+//Modify End
     for (const auto& dependency : access.Dependencies) TrackAccess(dependency);
 }
 
@@ -172,7 +182,7 @@ void CommandList::PrepareBoundResources(const BindingPoint point,
 {
     DX12_CPU_RECORDING_SCOPE("access.prepare");
     struct AccessState { D3D12_RESOURCE_STATES State; bool UavWrite; };
-    std::map<ID3D12Resource*, std::map<UINT, AccessState>> resources;
+    std::unordered_map<ID3D12Resource*, std::unordered_map<UINT, AccessState>> resources;
     const auto merge = [](AccessState& target, const AccessState incoming)
     {
         if (target.State != incoming.State)
@@ -203,6 +213,7 @@ void CommandList::PrepareBoundResources(const BindingPoint point,
                 addSubresource(access.FirstSubresource + i);
     };
     const auto& bindings = point == BindingPoint::Graphics ? m_GraphicsResourceBindings : m_ComputeResourceBindings;
+    resources.reserve(bindings.size() + m_RenderTargetResourceBindings.size() + extraAccesses.size());
     for (const auto& [key, access] : bindings) add(access);
     if (point == BindingPoint::Graphics)
     {
@@ -1124,6 +1135,25 @@ bool CommandList::Close(
 }
 //Modify End
 
+//Modify Begin:2026-10-02 by Hui
+bool CommandList::HasPendingSubmissionWork() const noexcept
+{
+    return m_PResourceStateTracker->HasPendingSubmissionWork();
+}
+
+bool CommandList::CloseForSubmission(ResourceStateRegistry::SubmissionScope& submissionScope)
+{
+    Assert(!m_ExternalCommandList, "External command lists cannot be closed by DX12Renderer.");
+    Assert(
+        !m_PResourceStateTracker->HasPendingSubmissionWork(),
+        "A command list with pending submission work requires a pending barrier command list.");
+    FlushResourceBarriers();
+    m_D3d12CommandList->Close();
+    m_PResourceStateTracker->CommitFinalResourceStates(submissionScope);
+    return false;
+}
+//Modify End
+
 void CommandList::Close()
 {
     Assert(!m_ExternalCommandList, "External command lists cannot be closed by DX12Renderer.");
@@ -1193,12 +1223,12 @@ void CommandList::TrackObject(const ComPtr<ID3D12Object>& object)
 void CommandList::TrackResource(const Resource& res)
 {
 //Modify Begin:2026-09-30 by Hui
-    const Microsoft::WRL::ComPtr<ID3D12Resource> nativeResource = res.GetD3D12Resource();
-    if (!m_TrackedResourceIdentities.insert(nativeResource.Get()).second)
+    ID3D12Resource* const nativeResource = res.GetD3D12ResourcePtr();
+    if (!m_TrackedResourceIdentities.insert(nativeResource).second)
     {
         return;
     }
-    TrackObject(nativeResource);
+    TrackObject(res.GetD3D12Resource());
     m_TrackedResourceStateRegistrations.push_back(res.GetStateRegistration());
 //Modify End
 }
@@ -1211,6 +1241,55 @@ void CommandList::ReleaseTrackedObjects()
 //Modify End
     m_TrackedObjects.clear();
 }
+
+//Modify Begin:2026-10-02 by Hui
+bool CommandList::HasTransientUavBuffer(
+    const uint64_t key,
+    const uint64_t sizeInBytes) const
+{
+    const auto iterator = m_TransientUavBuffers.find(key);
+    return iterator != m_TransientUavBuffers.end() &&
+        iterator->second.Resource != nullptr &&
+        iterator->second.Capacity >= sizeInBytes;
+}
+
+CommandList::TransientUavBuffer& CommandList::GetOrCreateTransientUavBuffer(
+    const uint64_t key,
+    const uint64_t sizeInBytes,
+    const wchar_t* name)
+{
+    Assert(sizeInBytes > 0, "Transient UAV buffer size must be non-zero.");
+    auto& buffer = m_TransientUavBuffers[key];
+    if (buffer.Resource != nullptr && buffer.Capacity >= sizeInBytes)
+    {
+        return buffer;
+    }
+
+    const auto heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+    const auto resourceDesc = CD3DX12_RESOURCE_DESC::Buffer(
+        sizeInBytes,
+        D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+    Microsoft::WRL::ComPtr<ID3D12Resource> resource;
+    ThrowIfFailed(m_Device->CreateCommittedResource(
+        &heapProperties,
+        D3D12_HEAP_FLAG_NONE,
+        &resourceDesc,
+        D3D12_RESOURCE_STATE_COMMON,
+        nullptr,
+        IID_PPV_ARGS(&resource)));
+    if (name != nullptr)
+    {
+        resource->SetName(name);
+    }
+
+    buffer.Resource = std::move(resource);
+    buffer.StateRegistration = m_ResourceStateRegistry->AcquireResource(
+        buffer.Resource.Get(),
+        D3D12_RESOURCE_STATE_COMMON);
+    buffer.Capacity = sizeInBytes;
+    return buffer;
+}
+//Modify End
 
 void CommandList::SetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE heapType, ID3D12DescriptorHeap* heap)
 {

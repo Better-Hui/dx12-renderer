@@ -11,6 +11,7 @@
 #include <Framework/Geometry/Model.h>
 #include <Framework/Geometry/ModelLoader.h>
 #include <Framework/Rendering/RayTracing/RayTracingAccelerationStructure.h>
+#include <DX12Library/PerformanceScope.h>
 
 #include <algorithm>
 #include <cctype>
@@ -940,7 +941,9 @@ const IndexBuffer& RaytracingDemoSceneResources::GetDynamicRayTracingIndexBuffer
 
 bool RaytracingDemoSceneResources::BeginDynamicRayTracingGeometryUpdate(
     CommandList& commandList,
-    const float timeSeconds)
+    const float timeSeconds,
+    DiagnosticTelemetrySink* diagnostics,
+    const uint64_t frameIndex)
 {
     if (!RequiresDynamicRayTracingUpdatePass())
     {
@@ -949,47 +952,85 @@ bool RaytracingDemoSceneResources::BeginDynamicRayTracingGeometryUpdate(
 
     Assert(!m_DynamicRayTracingUpdatePending, "Dynamic ray tracing update cannot begin twice in one frame.");
     const bool restoring = !m_DynamicRayTracingUpdatesEnabled;
-    m_DynamicRayTracingVertices = m_DynamicRayTracingBaseVertices;
+
     XMMATRIX worldMatrix = m_DynamicRayTracingBaseWorldMatrix;
-    if (!restoring)
     {
-        const float phase = timeSeconds * 3.0f;
-        worldMatrix = XMMatrixTranslation(
-            std::sin(phase) * 0.15f,
-            0.0f,
-            std::cos(phase * 0.7f) * 0.15f) *
-            m_DynamicRayTracingBaseWorldMatrix;
-        for (size_t vertexIndex = 0; vertexIndex < m_DynamicRayTracingVertices.size(); ++vertexIndex)
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics,
+            frameIndex,
+            "DynamicRTAS.PrepareVertices",
+            "CPU",
+            0u,
+            "demo");
+        m_DynamicRayTracingVertices = m_DynamicRayTracingBaseVertices;
+        if (!restoring)
         {
-            VertexAttributes& vertex = m_DynamicRayTracingVertices[vertexIndex];
-            vertex.Position.y += std::sin(
-                phase + static_cast<float>(vertexIndex % 29u) * 0.37f) * 0.015f;
+            const float phase = timeSeconds * 3.0f;
+            worldMatrix = XMMatrixTranslation(
+                std::sin(phase) * 0.15f,
+                0.0f,
+                std::cos(phase * 0.7f) * 0.15f) *
+                m_DynamicRayTracingBaseWorldMatrix;
+            for (size_t vertexIndex = 0; vertexIndex < m_DynamicRayTracingVertices.size(); ++vertexIndex)
+            {
+                VertexAttributes& vertex = m_DynamicRayTracingVertices[vertexIndex];
+                vertex.Position.y += std::sin(
+                    phase + static_cast<float>(vertexIndex % 29u) * 0.37f) * 0.015f;
+            }
         }
     }
 
-    Assert(
-        m_GeometryResources.UpdateObjectWorldMatrix(m_DynamicRayTracingObjectIndex, worldMatrix),
-        "Dynamic ray tracing object index is invalid.");
-    Assert(
-        m_RayTracingResources.UpdateSceneObjectTransform(m_DynamicRayTracingObjectIndex, worldMatrix),
-        "Dynamic ray tracing acceleration-structure instance update failed.");
-    Assert(
-        m_MeshletResources.UpdateSceneObjectTransform(m_DynamicRayTracingObjectIndex, worldMatrix),
-        "Dynamic meshlet scene instance update failed.");
-    Assert(
-        m_GeometryResources.UpdateGeometryPrototypeVertices(
-            m_DynamicRayTracingGeometryIndex,
-            m_DynamicRayTracingPrototypeIndex,
-            m_DynamicRayTracingVertices),
-        "Dynamic ray tracing mesh prototype update failed.");
-    Assert(
-        m_MeshletResources.UpdateSceneGeometryVertices(
-            m_DynamicRayTracingGeometryIndex,
-            m_DynamicRayTracingPrototypeIndex,
-            m_DynamicRayTracingVertices),
-        "Dynamic meshlet geometry update failed.");
-    m_DynamicRayTracingMesh->CopyVertexAttributes(commandList, m_DynamicRayTracingVertices);
-    m_MeshletResources.Upload(commandList);
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics,
+            frameIndex,
+            "DynamicRTAS.UpdateSceneMetadata",
+            "CPU",
+            0u,
+            "demo");
+        Assert(
+            m_GeometryResources.UpdateObjectWorldMatrix(m_DynamicRayTracingObjectIndex, worldMatrix),
+            "Dynamic ray tracing object index is invalid.");
+        Assert(
+            m_RayTracingResources.UpdateSceneObjectTransform(m_DynamicRayTracingObjectIndex, worldMatrix),
+            "Dynamic ray tracing acceleration-structure instance update failed.");
+        Assert(
+            m_MeshletResources.UpdateSceneObjectTransform(m_DynamicRayTracingObjectIndex, worldMatrix),
+            "Dynamic meshlet scene instance update failed.");
+        Assert(
+            m_GeometryResources.UpdateGeometryPrototypeVertices(
+                m_DynamicRayTracingGeometryIndex,
+                m_DynamicRayTracingPrototypeIndex,
+                m_DynamicRayTracingVertices),
+            "Dynamic ray tracing mesh prototype update failed.");
+        Assert(
+            m_MeshletResources.UpdateSceneGeometryVertices(
+                m_DynamicRayTracingGeometryIndex,
+                m_DynamicRayTracingPrototypeIndex,
+                m_DynamicRayTracingVertices),
+            "Dynamic meshlet geometry update failed.");
+    }
+
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics,
+            frameIndex,
+            "DynamicRTAS.UploadVertexAttributes",
+            "CPU",
+            0u,
+            "demo");
+        m_DynamicRayTracingMesh->CopyVertexAttributes(commandList, m_DynamicRayTracingVertices);
+    }
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics,
+            frameIndex,
+            "DynamicRTAS.UploadMeshletGeometry",
+            "CPU",
+            0u,
+            "demo");
+        m_MeshletResources.Upload(commandList, diagnostics, frameIndex);
+    }
     m_DynamicRayTracingUpdatePending = true;
     m_DynamicRayTracingUpdateStatistics.LastUpdateRestored = restoring;
     ++m_DynamicRayTracingUpdateStatistics.GeometryUploadCount;
@@ -998,16 +1039,37 @@ bool RaytracingDemoSceneResources::BeginDynamicRayTracingGeometryUpdate(
     return true;
 }
 
-bool RaytracingDemoSceneResources::FinishDynamicRayTracingUpdate(CommandList& commandList)
+bool RaytracingDemoSceneResources::FinishDynamicRayTracingUpdate(
+    CommandList& commandList,
+    DiagnosticTelemetrySink* diagnostics,
+    const uint64_t frameIndex)
 {
     if (!m_DynamicRayTracingUpdatePending)
     {
         return false;
     }
 
-    m_RayTracingResources.GetAccelerationStructure().MarkBottomLevelGeometryDirty(
-        std::span<const std::shared_ptr<Mesh>>(&m_DynamicRayTracingMesh, 1u));
-    m_RayTracingResources.RefitDirtyGeometry(commandList);
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics,
+            frameIndex,
+            "DynamicRTAS.MarkGeometryDirty",
+            "CPU",
+            0u,
+            "demo");
+        m_RayTracingResources.GetAccelerationStructure().MarkBottomLevelGeometryDirty(
+            std::span<const std::shared_ptr<Mesh>>(&m_DynamicRayTracingMesh, 1u));
+    }
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics,
+            frameIndex,
+            "DynamicRTAS.RefitAccelerationStructure",
+            "CPU",
+            0u,
+            "demo");
+        m_RayTracingResources.RefitDirtyGeometry(commandList, diagnostics, frameIndex);
+    }
     m_DynamicRayTracingUpdatePending = false;
     ++m_DynamicRayTracingUpdateStatistics.RefitCount;
     if (m_DynamicRayTracingUpdateStatistics.LastUpdateRestored)

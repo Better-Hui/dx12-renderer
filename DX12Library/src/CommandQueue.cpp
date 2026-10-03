@@ -117,6 +117,18 @@ void CommandQueue::SetDiagnosticFrameIndex(const uint64_t frameIndex) noexcept
 	m_DiagnosticFrameIndex.store(frameIndex, std::memory_order_release);
 }
 
+//Modify Begin:2026-10-01 by Hui
+DiagnosticTelemetrySink* CommandQueue::GetDiagnosticTelemetrySink() const noexcept
+{
+	return m_DiagnosticTelemetrySink.load(std::memory_order_acquire);
+}
+
+uint64_t CommandQueue::GetDiagnosticFrameIndex() const noexcept
+{
+	return m_DiagnosticFrameIndex.load(std::memory_order_acquire);
+}
+//Modify End
+
 void CommandQueue::EmitTelemetry(DiagnosticTelemetryEvent event) const noexcept
 {
 	if (DiagnosticTelemetrySink* sink = m_DiagnosticTelemetrySink.load(std::memory_order_acquire))
@@ -454,40 +466,57 @@ uint64_t CommandQueue::ExecuteCommandLists(const std::vector<std::shared_ptr<Com
 	d3d12CommandLists.reserve(commandLists.size() * 2); // 2x since each command list will have a pending command list.
 
 	uint64_t pendingBarrierCommandListCount = 0;
+	uint64_t pendingBarrierCommandListElidedCount = 0;
 	for (auto commandList : commandLists)
 	{
 		std::shared_ptr<CommandList> pendingCommandList;
-		{
-			DX12_CPU_PERFORMANCE_SCOPE(
-				m_DiagnosticTelemetrySink.load(std::memory_order_acquire),
-				m_DiagnosticFrameIndex.load(std::memory_order_acquire),
-				"CommandQueue.GetPendingCommandList",
-				GetQueueTypeName(m_CommandListType),
-				0u,
-				"command_queue_close");
-			pendingCommandList = GetCommandList();
-		}
 		bool hasPendingBarriers = false;
+		if (commandList->HasPendingSubmissionWork())
+		{
+			{
+				DX12_CPU_PERFORMANCE_SCOPE(
+					m_DiagnosticTelemetrySink.load(std::memory_order_acquire),
+					m_DiagnosticFrameIndex.load(std::memory_order_acquire),
+					"CommandQueue.GetPendingCommandList",
+					GetQueueTypeName(m_CommandListType),
+					0u,
+					"command_queue_close");
+				pendingCommandList = GetCommandList();
+			}
+			{
+				DX12_CPU_PERFORMANCE_SCOPE(
+					m_DiagnosticTelemetrySink.load(std::memory_order_acquire),
+					m_DiagnosticFrameIndex.load(std::memory_order_acquire),
+					"CommandQueue.CloseLogical",
+					GetQueueTypeName(m_CommandListType),
+					0u,
+					"command_queue_close");
+				hasPendingBarriers = commandList->Close(*pendingCommandList, submissionScope);
+			}
+			DX12_CPU_PERFORMANCE_SCOPE(
+				m_DiagnosticTelemetrySink.load(std::memory_order_acquire),
+				m_DiagnosticFrameIndex.load(std::memory_order_acquire),
+				"CommandQueue.PendingClose",
+				GetQueueTypeName(m_CommandListType),
+				0u,
+				"command_queue_close");
+			pendingCommandList->Close();
+		}
+		else
 		{
 			DX12_CPU_PERFORMANCE_SCOPE(
 				m_DiagnosticTelemetrySink.load(std::memory_order_acquire),
 				m_DiagnosticFrameIndex.load(std::memory_order_acquire),
-				"CommandQueue.CloseLogical",
+				"CommandQueue.CloseLogicalNoPending",
 				GetQueueTypeName(m_CommandListType),
 				0u,
 				"command_queue_close");
-			hasPendingBarriers = commandList->Close(*pendingCommandList, submissionScope);
+			commandList->CloseForSubmission(submissionScope);
+			++pendingBarrierCommandListElidedCount;
 		}
-		DX12_CPU_PERFORMANCE_SCOPE(
-			m_DiagnosticTelemetrySink.load(std::memory_order_acquire),
-			m_DiagnosticFrameIndex.load(std::memory_order_acquire),
-			"CommandQueue.PendingClose",
-			GetQueueTypeName(m_CommandListType),
-			0u,
-			"command_queue_close");
-		pendingCommandList->Close();
 		if (!commandList->TransitionLifecycle(CommandListLifecycle::Recording, CommandListLifecycle::Submitted) ||
-			!pendingCommandList->TransitionLifecycle(CommandListLifecycle::Recording, CommandListLifecycle::Submitted))
+			(pendingCommandList != nullptr &&
+				!pendingCommandList->TransitionLifecycle(CommandListLifecycle::Recording, CommandListLifecycle::Submitted)))
 		{
 			throw std::logic_error("Command-list lifecycle changed while closing a queue submission.");
 		}
@@ -500,7 +529,10 @@ uint64_t CommandQueue::ExecuteCommandLists(const std::vector<std::shared_ptr<Com
 		}
 		d3d12CommandLists.push_back(commandList->GetGraphicsCommandList().Get());
 
-		toBeQueued.push_back(pendingCommandList);
+		if (pendingCommandList != nullptr)
+		{
+			toBeQueued.push_back(pendingCommandList);
+		}
 		toBeQueued.push_back(commandList);
 	}
 
@@ -540,6 +572,7 @@ uint64_t CommandQueue::ExecuteCommandLists(const std::vector<std::shared_ptr<Com
 			{ "logical_command_list_count", static_cast<uint64_t>(commandLists.size()) },
 			{ "native_command_list_count", static_cast<uint64_t>(numCommandLists) },
 			{ "pending_barrier_command_list_count", pendingBarrierCommandListCount },
+			{ "pending_barrier_command_list_elided_count", pendingBarrierCommandListElidedCount },
 		},
 		});
 		for (const std::shared_ptr<CommandList>& commandList : toBeQueued)

@@ -153,6 +153,7 @@ struct MeshletGpuResources
 };
 
 class CommandList;
+class DiagnosticTelemetrySink;
 
 class MeshletGeometrySet
 {
@@ -169,7 +170,10 @@ public:
         uint32_t meshletOffset,
         uint32_t meshletCount,
         std::span<const VertexAttributes> sourceVertices);
-    void Upload(CommandList& commandList);
+    void Upload(
+        CommandList& commandList,
+        DiagnosticTelemetrySink* diagnostics = nullptr,
+        uint64_t frameIndex = 0u);
 
     MeshletGpuResources GetGpuResources();
 
@@ -206,6 +210,11 @@ private:
     std::vector<MeshletDrawData> m_DrawData;
     uint32_t m_CandidateCapacity = 0;
     bool m_GeometryDataDirty = true;
+    bool m_GeometryDataFullDirty = true;
+    uint32_t m_DirtyVertexOffset = 0;
+    uint32_t m_DirtyVertexCount = 0;
+    uint32_t m_DirtyMeshletOffset = 0;
+    uint32_t m_DirtyMeshletCount = 0;
     bool m_IndexDataDirty = true;
     bool m_InstanceDataDirty = true;
 };
@@ -246,7 +255,10 @@ public:
         std::span<const VertexAttributes> sourceVertices);
     bool RemoveInstance(MeshletSceneInstanceHandle handle);
     void RemoveInstances(std::span<const MeshletSceneInstanceHandle> handles);
-    void Upload(CommandList& commandList);
+    void Upload(
+        CommandList& commandList,
+        DiagnosticTelemetrySink* diagnostics = nullptr,
+        uint64_t frameIndex = 0u);
 
     MeshletGpuResources GetGpuResources();
     const MeshletSceneUpdateStatistics& GetUpdateStatistics() const { return m_UpdateStatistics; }

@@ -117,5 +117,30 @@ public:
     {
         commandList.RetireResource(resource);
     }
+
+    struct TransientUavBuffer
+    {
+        Microsoft::WRL::ComPtr<ID3D12Resource> Resource;
+        std::shared_ptr<ResourceStateRegistration> StateRegistration;
+        uint64_t Capacity = 0;
+    };
+
+    static TransientUavBuffer GetOrCreateTransientUavBuffer(
+        CommandList& commandList,
+        uint64_t key,
+        uint64_t sizeInBytes,
+        const wchar_t* name)
+    {
+        const auto& buffer = commandList.GetOrCreateTransientUavBuffer(key, sizeInBytes, name);
+        return { buffer.Resource, buffer.StateRegistration, buffer.Capacity };
+    }
+
+    static bool HasTransientUavBuffer(
+        const CommandList& commandList,
+        uint64_t key,
+        uint64_t sizeInBytes)
+    {
+        return commandList.HasTransientUavBuffer(key, sizeInBytes);
+    }
 };
 //Modify End

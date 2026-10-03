@@ -412,7 +412,7 @@ void RenderGraph::RenderGraphRoot::ReadbackTexture(
     const uint64_t fenceValue = m_QueueScheduler.SubmitDirect(commandList);
     if (waitForCompletion)
     {
-        m_DirectCommandQueue->WaitForFenceValue(fenceValue);
+        m_DirectCommandQueue->WaitForFenceValue(fenceValue, "render_graph_readback");
     }
 }
 //Modify End

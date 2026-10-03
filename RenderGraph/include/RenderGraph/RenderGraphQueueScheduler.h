@@ -67,6 +67,12 @@ namespace RenderGraph
         uint64_t SubmitDirect(std::vector<std::shared_ptr<CommandList>>& commandLists);
         uint64_t SubmitAsyncCompute(std::shared_ptr<CommandList>& commandList, bool waitForCompletion);
         uint64_t SubmitCopy(std::shared_ptr<CommandList>& commandList, bool waitForCompletion);
+        uint64_t SubmitAsyncCompute(
+            std::vector<std::shared_ptr<CommandList>>& commandLists,
+            bool waitForCompletion);
+        uint64_t SubmitCopy(
+            std::vector<std::shared_ptr<CommandList>>& commandLists,
+            bool waitForCompletion);
 
         RenderGraphQueueFenceValues GetCrossQueueProducerFences(
             const RenderPass& pass,
@@ -81,12 +87,12 @@ namespace RenderGraph
             bool trackExternalResources = true);
         void ValidateDirectPassDependencies(
             std::span<RenderPass* const> passes,
-            const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans,
+            const std::unordered_map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans,
             const RenderGraphQueueFenceValues& dependencies);
         void ValidateNonDirectBatchDependencies(
             std::span<RenderPass* const> passes,
             RenderPassQueue queue,
-            const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans,
+            const std::unordered_map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans,
             const RenderGraphQueueFenceValues& producerDependencies,
             uint64_t directPreambleFence);
         void RecordAliasingBarrier(const PassAliasingTransition& transition);
@@ -134,6 +140,10 @@ namespace RenderGraph
         uint64_t SubmitNonDirect(
             RenderPassQueue queue,
             std::shared_ptr<CommandList>& commandList,
+            bool waitForCompletion);
+        uint64_t SubmitNonDirect(
+            RenderPassQueue queue,
+            std::vector<std::shared_ptr<CommandList>>& commandLists,
             bool waitForCompletion);
         void FinalizeDirectSubmission(uint64_t fenceValue);
         void TrackExternalResourceAccess(

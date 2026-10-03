@@ -253,6 +253,9 @@ private:
         UINT offset,
         UINT numDescriptors,
         D3D12_CPU_DESCRIPTOR_HANDLE baseDescriptor) const;
+    //Modify Begin:2026-10-02 by Hui
+    void InvalidateDescriptorSetCache(PipelineBindPoint bindPoint) const;
+    //Modify End
     void SetDescriptorPool(const PipelineDescriptorPool& descriptorPool) const;
 
     CommandList& m_CommandList;
@@ -260,6 +263,15 @@ private:
     mutable CommandContextDescriptorAllocator m_DescriptorAllocator;
     mutable const PipelineDescriptorPool* m_DescriptorPool = nullptr;
     mutable std::array<const PipelineDescriptorSet*, MaxDescriptorSetSlots> m_DescriptorSets = {};
+    mutable std::array<uint64_t, MaxDescriptorSetSlots> m_DescriptorSetRevisions = {};
+    //Modify Begin:2026-10-02 by Hui
+    mutable std::array<uint64_t, MaxDescriptorSetSlots> m_DescriptorSetResourceBindingRevisions = {};
+    //Modify End
+    mutable std::array<PipelineBindPoint, MaxDescriptorSetSlots> m_DescriptorSetBindPoints = {};
+    //Modify Begin:2026-10-02 by Hui
+    mutable ID3D12RootSignature* m_GraphicsRootSignature = nullptr;
+    mutable ID3D12RootSignature* m_ComputeRootSignature = nullptr;
+    //Modify End
     mutable const RayTracingShader* m_BoundRayTracingShader = nullptr;
     mutable PipelineBindPoint m_BoundPipelineBindPoint = PipelineBindPoint::Graphics;
     mutable bool m_HasBoundPipeline = false;

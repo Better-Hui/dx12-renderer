@@ -34,7 +34,9 @@ public:
     void Upload(CommandList& commandList, const Resource& destination, const void* pData, uint64_t sizeInBytes, uint64_t alignment, uint64_t destinationOffset = 0U);
 
 private:
-    static constexpr auto BUFFER_COUNT = Window::BUFFER_COUNT;
+//Modify Begin:2026-10-01 by Hui
+    static constexpr auto BUFFER_COUNT = Window::FRAME_RESOURCE_COUNT;
+//Modify End
     static constexpr uint64_t CAPACITY_ALIGNMENT = 102400;
 
 
@@ -66,7 +68,5 @@ private:
 
     FrameworkDeviceContext& m_DeviceContext;
     uint64_t m_FrameIndex = 0;
-    //Modify End
     BufferInfo m_BufferInfos[BUFFER_COUNT];
 };
-//Modify End

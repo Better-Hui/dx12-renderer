@@ -18,7 +18,10 @@ struct PipelineDescriptorTableAllocation;
 struct BindlessDescriptorHeapDesc
 {
     uint32_t ResourceDescriptorCapacity = 65536;
-    uint32_t MaxFramePages = 3;
+    //Modify Begin:2026-10-02 by Hui
+    // Six pages keep descriptor-page reuse ahead of the normal GPU frame queue.
+    uint32_t MaxFramePages = 6;
+    //Modify End
 };
 
 class BindlessDescriptorHeap final

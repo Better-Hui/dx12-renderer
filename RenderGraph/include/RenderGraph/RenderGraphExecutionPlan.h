@@ -6,8 +6,8 @@
 #include <DX12Library/BarrierContext.h>
 
 #include <cstdint>
-#include <map>
 #include <optional>
+#include <unordered_map>
 #include <vector>
 
 #include "RenderTargetInfo.h"
@@ -32,6 +32,11 @@ namespace RenderGraph
     struct PassExternalResourceTransition
     {
         const ExternalResourceAccess* Access = nullptr;
+//Modify Begin:2026-10-02 by Hui
+        // Static accesses point directly at their compiled leaf resource so
+        // execution does not call Resolve() for every pass and frame.
+        const Resource* ResolvedResource = nullptr;
+//Modify End
         D3D12_RESOURCE_STATES StateAfter = D3D12_RESOURCE_STATE_COMMON;
         ResourceUse Use = ResourceUse::Read;
         bool InsertUavBarrier = false;
@@ -108,8 +113,8 @@ namespace RenderGraph
     public:
         const std::vector<RenderPass*>& GetRenderPasses() const { return m_RenderPasses; }
         const std::vector<RenderGraphRecordingBatch>& GetRecordingBatches() const { return m_RecordingBatches; }
-        const std::map<const RenderPass*, RenderTargetInfo>& GetRenderTargets() const { return m_RenderTargets; }
-        const std::map<const RenderPass*, PassResourceStatePlan>& GetResourceStatePlans() const { return m_ResourceStatePlans; }
+        const std::unordered_map<const RenderPass*, RenderTargetInfo>& GetRenderTargets() const { return m_RenderTargets; }
+        const std::unordered_map<const RenderPass*, PassResourceStatePlan>& GetResourceStatePlans() const { return m_ResourceStatePlans; }
         const RenderGraphCrossQueuePlanValidation& GetCrossQueuePlanValidation() const { return m_CrossQueuePlanValidation; }
 
     private:
@@ -117,8 +122,8 @@ namespace RenderGraph
 
         std::vector<RenderPass*> m_RenderPasses;
         std::vector<RenderGraphRecordingBatch> m_RecordingBatches;
-        std::map<const RenderPass*, RenderTargetInfo> m_RenderTargets;
-        std::map<const RenderPass*, PassResourceStatePlan> m_ResourceStatePlans;
+        std::unordered_map<const RenderPass*, RenderTargetInfo> m_RenderTargets;
+        std::unordered_map<const RenderPass*, PassResourceStatePlan> m_ResourceStatePlans;
         RenderGraphCrossQueuePlanValidation m_CrossQueuePlanValidation;
     };
 }

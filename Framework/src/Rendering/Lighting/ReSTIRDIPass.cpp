@@ -4,6 +4,7 @@
 #include <DX12Library/CommandList.h>
 #include <DX12Library/ByteAddressBuffer.h>
 #include <DX12Library/Helpers.h>
+#include <DX12Library/PerformanceScope.h>
 #include <DX12Library/StructuredBuffer.h>
 #include <DX12Library/Texture.h>
 #include <Framework/Core/FrameworkDeviceContext.h>
@@ -291,6 +292,9 @@ protected:
     void ExecuteImpl(const RenderGraph::RenderContext& context, RenderGraph::RenderPassContext& passContext) override
     {
         CommandList& commandList = passContext.GetCommandList();
+        const auto deviceContext = commandList.GetDeviceContext();
+        DiagnosticTelemetrySink* diagnostics = deviceContext->GetDiagnosticTelemetrySink();
+        const uint64_t frameIndex = context.GetMetadata().m_FrameIndex;
         if (m_Kind == Kind::OutputClear)
         {
             const UINT clearValues[4] = {};
@@ -299,13 +303,20 @@ protected:
             return;
         }
 
-        ReSTIRDIExecutionInputs inputs = m_Inputs->ResolveCachedFrameInputs(context);
+        ReSTIRDIExecutionInputs inputs;
+        {
+            DX12_CPU_PERFORMANCE_SCOPE(
+                diagnostics, frameIndex, "ReSTIR DI.ResolveCachedFrameInputs", "Direct", 0u, "restir_stage");
+            inputs = m_Inputs->ResolveCachedFrameInputs(context);
+        }
         ReSTIRDIPass::PipelineSet& pipelines = m_Pass.GetPipelines(
             inputs.FrameState.UseSoftShadowVariant,
             inputs.FrameState.EnvironmentProjectionVariant);
         CommandContext commandContext(commandList, passContext.GetBarrierContext());
         if (inputs.PrepareCommandContext)
         {
+            DX12_CPU_PERFORMANCE_SCOPE(
+                diagnostics, frameIndex, "ReSTIR DI.PrepareCommandContext", "Direct", 0u, "restir_stage");
             inputs.PrepareCommandContext(commandContext);
         }
         if (m_Kind == Kind::Initial)
@@ -705,23 +716,45 @@ void ReSTIRDIPass::ExecuteInitialSampling(
     const ReSTIRDIExecutionInputs& inputs,
     PipelineSet& pipelines)
 {
+    DiagnosticTelemetrySink* diagnostics = commandContext.GetCommandList().GetDeviceContext()->GetDiagnosticTelemetrySink();
+    const uint64_t frameIndex = inputs.FrameState.FrameIndex;
     ComputeShader& shader = GetStageShader(
         pipelines,
         ReSTIRDIStage::RIS,
         inputs.FrameState.Constants,
         inputs.FrameState.ShadingModel,
         inputs.CompactedDispatch.IsValid());
-    inputs.BindSceneInputs(commandContext, shader);
-    BindActivePixelList(commandContext, shader, inputs.CompactedDispatch);
-    if (shader.HasConstantBuffer("ReSTIRDIConstants"))
     {
-        commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics, frameIndex, "ReSTIR DI.RIS.BindSceneInputs", "Direct", 0u, "restir_stage");
+        inputs.BindSceneInputs(commandContext, shader);
     }
-    commandContext.SetUnorderedAccessView(shader, "ReSTIRDIRISReservoir", UnorderedAccessView(m_Resources->InitialReservoir));
-    commandContext.SetUnorderedAccessView(shader, "ReSTIRDIRISReservoirState", UnorderedAccessView(m_Resources->InitialReservoirState));
-    commandContext.BindPipeline(shader);
-    commandContext.BindDescriptorSet(shader.GetDescriptorSet());
-    DispatchReSTIRStage(commandContext, inputs.FrameState, inputs.CompactedDispatch);
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics, frameIndex, "ReSTIR DI.RIS.UpdateDescriptors", "Direct", 0u, "restir_stage");
+        BindActivePixelList(commandContext, shader, inputs.CompactedDispatch);
+        if (shader.HasConstantBuffer("ReSTIRDIConstants"))
+        {
+            commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
+        }
+        commandContext.SetUnorderedAccessView(shader, "ReSTIRDIRISReservoir", UnorderedAccessView(m_Resources->InitialReservoir));
+        commandContext.SetUnorderedAccessView(shader, "ReSTIRDIRISReservoirState", UnorderedAccessView(m_Resources->InitialReservoirState));
+    }
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics, frameIndex, "ReSTIR DI.RIS.BindPipeline", "Direct", 0u, "restir_stage");
+        commandContext.BindPipeline(shader);
+    }
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics, frameIndex, "ReSTIR DI.RIS.BindDescriptorSet", "Direct", 0u, "restir_stage");
+        commandContext.BindDescriptorSet(shader.GetDescriptorSet());
+    }
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics, frameIndex, "ReSTIR DI.RIS.Dispatch", "Direct", 0u, "restir_stage");
+        DispatchReSTIRStage(commandContext, inputs.FrameState, inputs.CompactedDispatch);
+    }
 }
 
 void ReSTIRDIPass::ExecuteTemporalResampling(
@@ -729,6 +762,8 @@ void ReSTIRDIPass::ExecuteTemporalResampling(
     const ReSTIRDIExecutionInputs& inputs,
     PipelineSet& pipelines)
 {
+    DiagnosticTelemetrySink* diagnostics = commandContext.GetCommandList().GetDeviceContext()->GetDiagnosticTelemetrySink();
+    const uint64_t frameIndex = inputs.FrameState.FrameIndex;
     ComputeShader& shader = GetStageShader(
         pipelines,
         ReSTIRDIStage::Temporal,
@@ -736,29 +771,49 @@ void ReSTIRDIPass::ExecuteTemporalResampling(
         inputs.FrameState.ShadingModel,
         inputs.CompactedDispatch.IsValid());
     const bool writeReservoirA = (inputs.FrameState.FrameIndex & 1u) == 0u;
-    inputs.BindSceneInputs(commandContext, shader);
-    BindActivePixelList(commandContext, shader, inputs.CompactedDispatch);
-    if (shader.HasConstantBuffer("ReSTIRDIConstants"))
     {
-        commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics, frameIndex, "ReSTIR DI.Temporal.BindSceneInputs", "Direct", 0u, "restir_stage");
+        inputs.BindSceneInputs(commandContext, shader);
     }
-    commandContext.SetShaderResourceView(shader, "ReSTIRDIRISReservoir", ShaderResourceView(m_Resources->InitialReservoir));
-    commandContext.SetShaderResourceView(shader, "ReSTIRDIRISReservoirState", ShaderResourceView(m_Resources->InitialReservoirState));
-    if (shader.HasShaderResourceView("MotionVectorTexture"))
     {
-        commandContext.SetShaderResourceView(shader, "MotionVectorTexture", ShaderResourceView(inputs.MotionVector));
-        commandContext.SetShaderResourceView(shader, "ReSTIRDIHistoryReservoir", ShaderResourceView(writeReservoirA ? m_Resources->ReservoirB : m_Resources->ReservoirA));
-        commandContext.SetShaderResourceView(shader, "ReSTIRDIHistoryReservoirState", ShaderResourceView(writeReservoirA ? m_Resources->ReservoirBState : m_Resources->ReservoirAState));
-        commandContext.SetShaderResourceView(shader, "ReSTIRDIHistoryPosition", ShaderResourceView(writeReservoirA ? m_Resources->HistoryPositionB : m_Resources->HistoryPositionA));
-        commandContext.SetShaderResourceView(shader, "ReSTIRDIHistoryNormalRoughness", ShaderResourceView(writeReservoirA ? m_Resources->HistoryNormalRoughnessB : m_Resources->HistoryNormalRoughnessA));
-        commandContext.SetShaderResourceView(shader, "ReSTIRDIHistoryDiffuseMetallic", ShaderResourceView(writeReservoirA ? m_Resources->HistoryDiffuseMetallicB : m_Resources->HistoryDiffuseMetallicA));
-        commandContext.SetShaderResourceView(shader, "ReSTIRDIHistorySpecularOcclusion", ShaderResourceView(writeReservoirA ? m_Resources->HistorySpecularOcclusionB : m_Resources->HistorySpecularOcclusionA));
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics, frameIndex, "ReSTIR DI.Temporal.UpdateDescriptors", "Direct", 0u, "restir_stage");
+        BindActivePixelList(commandContext, shader, inputs.CompactedDispatch);
+        if (shader.HasConstantBuffer("ReSTIRDIConstants"))
+        {
+            commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
+        }
+        commandContext.SetShaderResourceView(shader, "ReSTIRDIRISReservoir", ShaderResourceView(m_Resources->InitialReservoir));
+        commandContext.SetShaderResourceView(shader, "ReSTIRDIRISReservoirState", ShaderResourceView(m_Resources->InitialReservoirState));
+        if (shader.HasShaderResourceView("MotionVectorTexture"))
+        {
+            commandContext.SetShaderResourceView(shader, "MotionVectorTexture", ShaderResourceView(inputs.MotionVector));
+            commandContext.SetShaderResourceView(shader, "ReSTIRDIHistoryReservoir", ShaderResourceView(writeReservoirA ? m_Resources->ReservoirB : m_Resources->ReservoirA));
+            commandContext.SetShaderResourceView(shader, "ReSTIRDIHistoryReservoirState", ShaderResourceView(writeReservoirA ? m_Resources->ReservoirBState : m_Resources->ReservoirAState));
+            commandContext.SetShaderResourceView(shader, "ReSTIRDIHistoryPosition", ShaderResourceView(writeReservoirA ? m_Resources->HistoryPositionB : m_Resources->HistoryPositionA));
+            commandContext.SetShaderResourceView(shader, "ReSTIRDIHistoryNormalRoughness", ShaderResourceView(writeReservoirA ? m_Resources->HistoryNormalRoughnessB : m_Resources->HistoryNormalRoughnessA));
+            commandContext.SetShaderResourceView(shader, "ReSTIRDIHistoryDiffuseMetallic", ShaderResourceView(writeReservoirA ? m_Resources->HistoryDiffuseMetallicB : m_Resources->HistoryDiffuseMetallicA));
+            commandContext.SetShaderResourceView(shader, "ReSTIRDIHistorySpecularOcclusion", ShaderResourceView(writeReservoirA ? m_Resources->HistorySpecularOcclusionB : m_Resources->HistorySpecularOcclusionA));
+        }
+        commandContext.SetUnorderedAccessView(shader, "ReSTIRDITemporalReservoir", UnorderedAccessView(m_Resources->TemporalReservoir));
+        commandContext.SetUnorderedAccessView(shader, "ReSTIRDITemporalReservoirState", UnorderedAccessView(m_Resources->TemporalReservoirState));
     }
-    commandContext.SetUnorderedAccessView(shader, "ReSTIRDITemporalReservoir", UnorderedAccessView(m_Resources->TemporalReservoir));
-    commandContext.SetUnorderedAccessView(shader, "ReSTIRDITemporalReservoirState", UnorderedAccessView(m_Resources->TemporalReservoirState));
-    commandContext.BindPipeline(shader);
-    commandContext.BindDescriptorSet(shader.GetDescriptorSet());
-    DispatchReSTIRStage(commandContext, inputs.FrameState, inputs.CompactedDispatch);
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics, frameIndex, "ReSTIR DI.Temporal.BindPipeline", "Direct", 0u, "restir_stage");
+        commandContext.BindPipeline(shader);
+    }
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics, frameIndex, "ReSTIR DI.Temporal.BindDescriptorSet", "Direct", 0u, "restir_stage");
+        commandContext.BindDescriptorSet(shader.GetDescriptorSet());
+    }
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics, frameIndex, "ReSTIR DI.Temporal.Dispatch", "Direct", 0u, "restir_stage");
+        DispatchReSTIRStage(commandContext, inputs.FrameState, inputs.CompactedDispatch);
+    }
 }
 
 void ReSTIRDIPass::ExecuteBoilingFilter(
@@ -766,21 +821,39 @@ void ReSTIRDIPass::ExecuteBoilingFilter(
     const ReSTIRDIExecutionInputs& inputs,
     PipelineSet& pipelines)
 {
+    DiagnosticTelemetrySink* diagnostics = commandContext.GetCommandList().GetDeviceContext()->GetDiagnosticTelemetrySink();
+    const uint64_t frameIndex = inputs.FrameState.FrameIndex;
     ComputeShader& shader = GetStageShader(
         pipelines,
         ReSTIRDIStage::BoilingFilter,
         inputs.FrameState.Constants,
         inputs.FrameState.ShadingModel,
         false);
-    commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
-    commandContext.SetUnorderedAccessView(shader, "ReSTIRDIBoilingReservoir", UnorderedAccessView(m_Resources->TemporalReservoir));
-    commandContext.SetUnorderedAccessView(shader, "ReSTIRDIBoilingReservoirState", UnorderedAccessView(m_Resources->TemporalReservoirState));
-    commandContext.BindPipeline(shader);
-    commandContext.BindDescriptorSet(shader.GetDescriptorSet());
-    commandContext.Dispatch(
-        Math::DivideByMultiple(inputs.FrameState.Width, 8u),
-        Math::DivideByMultiple(inputs.FrameState.Height, 8u),
-        1u);
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics, frameIndex, "ReSTIR DI.BoilingFilter.UpdateDescriptors", "Direct", 0u, "restir_stage");
+        commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
+        commandContext.SetUnorderedAccessView(shader, "ReSTIRDIBoilingReservoir", UnorderedAccessView(m_Resources->TemporalReservoir));
+        commandContext.SetUnorderedAccessView(shader, "ReSTIRDIBoilingReservoirState", UnorderedAccessView(m_Resources->TemporalReservoirState));
+    }
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics, frameIndex, "ReSTIR DI.BoilingFilter.BindPipeline", "Direct", 0u, "restir_stage");
+        commandContext.BindPipeline(shader);
+    }
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics, frameIndex, "ReSTIR DI.BoilingFilter.BindDescriptorSet", "Direct", 0u, "restir_stage");
+        commandContext.BindDescriptorSet(shader.GetDescriptorSet());
+    }
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics, frameIndex, "ReSTIR DI.BoilingFilter.Dispatch", "Direct", 0u, "restir_stage");
+        commandContext.Dispatch(
+            Math::DivideByMultiple(inputs.FrameState.Width, 8u),
+            Math::DivideByMultiple(inputs.FrameState.Height, 8u),
+            1u);
+    }
 }
 
 void ReSTIRDIPass::ExecuteSpatialResampling(
@@ -790,25 +863,47 @@ void ReSTIRDIPass::ExecuteSpatialResampling(
     const std::shared_ptr<Texture>& inputReservoir,
     const std::shared_ptr<Texture>& inputReservoirState)
 {
+    DiagnosticTelemetrySink* diagnostics = commandContext.GetCommandList().GetDeviceContext()->GetDiagnosticTelemetrySink();
+    const uint64_t frameIndex = inputs.FrameState.FrameIndex;
     ComputeShader& shader = GetStageShader(
         pipelines,
         ReSTIRDIStage::Spatial,
         inputs.FrameState.Constants,
         inputs.FrameState.ShadingModel,
         inputs.CompactedDispatch.IsValid());
-    inputs.BindSceneInputs(commandContext, shader);
-    BindActivePixelList(commandContext, shader, inputs.CompactedDispatch);
-    if (shader.HasConstantBuffer("ReSTIRDIConstants"))
     {
-        commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics, frameIndex, "ReSTIR DI.Spatial.BindSceneInputs", "Direct", 0u, "restir_stage");
+        inputs.BindSceneInputs(commandContext, shader);
     }
-    commandContext.SetShaderResourceView(shader, "ReSTIRDITemporalReservoir", ShaderResourceView(inputReservoir));
-    commandContext.SetShaderResourceView(shader, "ReSTIRDITemporalReservoirState", ShaderResourceView(inputReservoirState));
-    commandContext.SetUnorderedAccessView(shader, "ReSTIRDISpatialReservoir", UnorderedAccessView(m_Resources->SpatialReservoir));
-    commandContext.SetUnorderedAccessView(shader, "ReSTIRDISpatialReservoirState", UnorderedAccessView(m_Resources->SpatialReservoirState));
-    commandContext.BindPipeline(shader);
-    commandContext.BindDescriptorSet(shader.GetDescriptorSet());
-    DispatchReSTIRStage(commandContext, inputs.FrameState, inputs.CompactedDispatch);
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics, frameIndex, "ReSTIR DI.Spatial.UpdateDescriptors", "Direct", 0u, "restir_stage");
+        BindActivePixelList(commandContext, shader, inputs.CompactedDispatch);
+        if (shader.HasConstantBuffer("ReSTIRDIConstants"))
+        {
+            commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
+        }
+        commandContext.SetShaderResourceView(shader, "ReSTIRDITemporalReservoir", ShaderResourceView(inputReservoir));
+        commandContext.SetShaderResourceView(shader, "ReSTIRDITemporalReservoirState", ShaderResourceView(inputReservoirState));
+        commandContext.SetUnorderedAccessView(shader, "ReSTIRDISpatialReservoir", UnorderedAccessView(m_Resources->SpatialReservoir));
+        commandContext.SetUnorderedAccessView(shader, "ReSTIRDISpatialReservoirState", UnorderedAccessView(m_Resources->SpatialReservoirState));
+    }
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics, frameIndex, "ReSTIR DI.Spatial.BindPipeline", "Direct", 0u, "restir_stage");
+        commandContext.BindPipeline(shader);
+    }
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics, frameIndex, "ReSTIR DI.Spatial.BindDescriptorSet", "Direct", 0u, "restir_stage");
+        commandContext.BindDescriptorSet(shader.GetDescriptorSet());
+    }
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics, frameIndex, "ReSTIR DI.Spatial.Dispatch", "Direct", 0u, "restir_stage");
+        DispatchReSTIRStage(commandContext, inputs.FrameState, inputs.CompactedDispatch);
+    }
 }
 
 void ReSTIRDIPass::ExecuteFinalShading(
@@ -818,6 +913,8 @@ void ReSTIRDIPass::ExecuteFinalShading(
     const std::shared_ptr<Texture>& finalReservoir,
     const std::shared_ptr<Texture>& finalReservoirState)
 {
+    DiagnosticTelemetrySink* diagnostics = commandContext.GetCommandList().GetDeviceContext()->GetDiagnosticTelemetrySink();
+    const uint64_t frameIndex = inputs.FrameState.FrameIndex;
     ComputeShader& shader = GetStageShader(
         pipelines,
         ReSTIRDIStage::Shade,
@@ -825,24 +922,44 @@ void ReSTIRDIPass::ExecuteFinalShading(
         inputs.FrameState.ShadingModel,
         inputs.CompactedDispatch.IsValid());
     const bool writeReservoirA = (inputs.FrameState.FrameIndex & 1u) == 0u;
-    inputs.BindSceneInputs(commandContext, shader);
-    BindActivePixelList(commandContext, shader, inputs.CompactedDispatch);
-    if (shader.HasConstantBuffer("ReSTIRDIConstants"))
     {
-        commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics, frameIndex, "ReSTIR DI.Shade.BindSceneInputs", "Direct", 0u, "restir_stage");
+        inputs.BindSceneInputs(commandContext, shader);
     }
-    commandContext.SetShaderResourceView(shader, "ReSTIRDIFinalReservoir", ShaderResourceView(finalReservoir));
-    commandContext.SetShaderResourceView(shader, "ReSTIRDIFinalReservoirState", ShaderResourceView(finalReservoirState));
-    commandContext.SetUnorderedAccessView(shader, "DirectLighting", UnorderedAccessView(inputs.DirectLighting));
-    commandContext.SetUnorderedAccessView(shader, "ReSTIRDICurrentReservoir", UnorderedAccessView(writeReservoirA ? m_Resources->ReservoirA : m_Resources->ReservoirB));
-    commandContext.SetUnorderedAccessView(shader, "ReSTIRDICurrentReservoirState", UnorderedAccessView(writeReservoirA ? m_Resources->ReservoirAState : m_Resources->ReservoirBState));
-    commandContext.SetUnorderedAccessView(shader, "ReSTIRDICurrentPosition", UnorderedAccessView(writeReservoirA ? m_Resources->HistoryPositionA : m_Resources->HistoryPositionB));
-    commandContext.SetUnorderedAccessView(shader, "ReSTIRDICurrentNormalRoughness", UnorderedAccessView(writeReservoirA ? m_Resources->HistoryNormalRoughnessA : m_Resources->HistoryNormalRoughnessB));
-    commandContext.SetUnorderedAccessView(shader, "ReSTIRDICurrentDiffuseMetallic", UnorderedAccessView(writeReservoirA ? m_Resources->HistoryDiffuseMetallicA : m_Resources->HistoryDiffuseMetallicB));
-    commandContext.SetUnorderedAccessView(shader, "ReSTIRDICurrentSpecularOcclusion", UnorderedAccessView(writeReservoirA ? m_Resources->HistorySpecularOcclusionA : m_Resources->HistorySpecularOcclusionB));
-    commandContext.BindPipeline(shader);
-    commandContext.BindDescriptorSet(shader.GetDescriptorSet());
-    DispatchReSTIRStage(commandContext, inputs.FrameState, inputs.CompactedDispatch);
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics, frameIndex, "ReSTIR DI.Shade.UpdateDescriptors", "Direct", 0u, "restir_stage");
+        BindActivePixelList(commandContext, shader, inputs.CompactedDispatch);
+        if (shader.HasConstantBuffer("ReSTIRDIConstants"))
+        {
+            commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
+        }
+        commandContext.SetShaderResourceView(shader, "ReSTIRDIFinalReservoir", ShaderResourceView(finalReservoir));
+        commandContext.SetShaderResourceView(shader, "ReSTIRDIFinalReservoirState", ShaderResourceView(finalReservoirState));
+        commandContext.SetUnorderedAccessView(shader, "DirectLighting", UnorderedAccessView(inputs.DirectLighting));
+        commandContext.SetUnorderedAccessView(shader, "ReSTIRDICurrentReservoir", UnorderedAccessView(writeReservoirA ? m_Resources->ReservoirA : m_Resources->ReservoirB));
+        commandContext.SetUnorderedAccessView(shader, "ReSTIRDICurrentReservoirState", UnorderedAccessView(writeReservoirA ? m_Resources->ReservoirAState : m_Resources->ReservoirBState));
+        commandContext.SetUnorderedAccessView(shader, "ReSTIRDICurrentPosition", UnorderedAccessView(writeReservoirA ? m_Resources->HistoryPositionA : m_Resources->HistoryPositionB));
+        commandContext.SetUnorderedAccessView(shader, "ReSTIRDICurrentNormalRoughness", UnorderedAccessView(writeReservoirA ? m_Resources->HistoryNormalRoughnessA : m_Resources->HistoryNormalRoughnessB));
+        commandContext.SetUnorderedAccessView(shader, "ReSTIRDICurrentDiffuseMetallic", UnorderedAccessView(writeReservoirA ? m_Resources->HistoryDiffuseMetallicA : m_Resources->HistoryDiffuseMetallicB));
+        commandContext.SetUnorderedAccessView(shader, "ReSTIRDICurrentSpecularOcclusion", UnorderedAccessView(writeReservoirA ? m_Resources->HistorySpecularOcclusionA : m_Resources->HistorySpecularOcclusionB));
+    }
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics, frameIndex, "ReSTIR DI.Shade.BindPipeline", "Direct", 0u, "restir_stage");
+        commandContext.BindPipeline(shader);
+    }
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics, frameIndex, "ReSTIR DI.Shade.BindDescriptorSet", "Direct", 0u, "restir_stage");
+        commandContext.BindDescriptorSet(shader.GetDescriptorSet());
+    }
+    {
+        DX12_CPU_PERFORMANCE_SCOPE(
+            diagnostics, frameIndex, "ReSTIR DI.Shade.Dispatch", "Direct", 0u, "restir_stage");
+        DispatchReSTIRStage(commandContext, inputs.FrameState, inputs.CompactedDispatch);
+    }
 }
 
 size_t ReSTIRDIPass::GetPipelineVariantIndex(

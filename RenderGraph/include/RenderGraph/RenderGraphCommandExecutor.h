@@ -9,9 +9,10 @@
 
 #include <DX12Library/DiagnosticRenderScope.h>
 
-#include <map>
 #include <memory>
+#include <future>
 #include <span>
+#include <unordered_map>
 #include <vector>
 
 class CommandList;
@@ -42,45 +43,67 @@ namespace RenderGraph
             const RenderMetadata& renderMetadata,
             const CompiledRenderGraph& compiledGraph,
             bool debugSerializeAsyncCompute,
-            bool enableParallelDirectRecording);
+            bool enableParallelRecording);
         void SetDiagnosticTelemetrySink(DiagnosticTelemetrySink* sink) noexcept;
 
     private:
+        //Modify Begin:2026-10-02 by Hui
+        struct PendingParallelBatch
+        {
+            const RenderGraphRecordingBatch* Batch = nullptr;
+            const RenderPass* LastQueuePass = nullptr;
+            std::shared_ptr<CommandList> ProfilerCommandList;
+            std::vector<std::future<std::shared_ptr<CommandList>>> RecordingTasks;
+        };
+
+        PendingParallelBatch EnqueueParallelBatch(
+            const RenderGraphRecordingBatch& batch,
+            const RenderMetadata& renderMetadata,
+            const RenderPass* lastQueuePass,
+            const std::unordered_map<const RenderPass*, RenderTargetInfo>& renderTargets,
+            const std::unordered_map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
+        void ExecutePendingParallelBatch(
+            PendingParallelBatch& pendingBatch,
+            const RenderMetadata& renderMetadata,
+            bool debugSerializeAsyncCompute,
+            std::shared_ptr<CommandList>& directCommandList,
+            const std::unordered_map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
+        std::shared_ptr<CommandList> RecordParallelPass(
+            RenderPass& renderPass,
+            const RenderMetadata& renderMetadata,
+            const std::unordered_map<const RenderPass*, RenderTargetInfo>& renderTargets,
+            const std::unordered_map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
+        //Modify End
         void RecordPassBoundaryBarriers(
             RenderPassContext& passContext,
             const RenderPass& renderPass,
             RenderContext& context,
-            const std::map<const RenderPass*, RenderTargetInfo>& renderTargets,
-            const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
-        void ExecuteParallelDirectBatch(
-            const RenderGraphRecordingBatch& batch,
-            const RenderMetadata& renderMetadata,
-            std::shared_ptr<CommandList>& directCommandList,
-            const std::map<const RenderPass*, RenderTargetInfo>& renderTargets,
-            const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
+            uint64_t frameIndex,
+            const std::unordered_map<const RenderPass*, RenderTargetInfo>& renderTargets,
+            const std::unordered_map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
         void PrepareDirectQueueDependencies(
             std::span<RenderPass* const> passes,
             std::shared_ptr<CommandList>& directCommandList,
-            const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
+            const std::unordered_map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
         void ExecuteNonDirectBatch(
             const RenderGraphRecordingBatch& batch,
             const RenderMetadata& renderMetadata,
             const RenderPass* lastQueuePass,
             bool debugSerializeAsyncCompute,
             std::shared_ptr<CommandList>& directCommandList,
-            const std::map<const RenderPass*, RenderTargetInfo>& renderTargets,
-            const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
+            const std::unordered_map<const RenderPass*, RenderTargetInfo>& renderTargets,
+            const std::unordered_map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
         void PrepareNonDirectBatchDependencies(
             const RenderGraphRecordingBatch& batch,
             std::shared_ptr<CommandList>& directCommandList,
-            const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
+            const std::unordered_map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
         void ApplyDirectQueuePreamble(
             const RenderPass& pass,
             CommandList& commandList,
-            const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
+            const std::unordered_map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
         void RecordLocalAliasingBarriers(
             const RenderPass& pass,
-            const std::map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
+            const std::unordered_map<const RenderPass*, PassResourceStatePlan>& resourceStatePlans);
         CommandQueue& GetCommandQueue(RenderPassQueue queue) const;
         static void ApplyExternalResourceTransitions(
             RenderPassContext& passContext,

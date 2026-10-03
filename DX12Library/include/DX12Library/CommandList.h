@@ -47,6 +47,7 @@
 #include <map>
 #include <span>
 #include <unordered_set>
+#include <unordered_map>
 //Modify End
 
 #include "ClearValue.h"
@@ -120,6 +121,7 @@ public:
     }
 
     bool IsExternalCommandList() const noexcept { return m_ExternalCommandList; }
+    bool HasPendingSubmissionWork() const noexcept;
 
 //Modify Begin:2026-09-29 by Hui
     BarrierContext* SetActiveBarrierContext(BarrierContext* context) noexcept;
@@ -576,6 +578,7 @@ public:
     bool Close(
         CommandList& pendingCommandList,
         ResourceStateRegistry::SubmissionScope& submissionScope);
+    bool CloseForSubmission(ResourceStateRegistry::SubmissionScope& submissionScope);
 //Modify End
     // Just close the command list. This is useful for pending command lists.
     void Close();
@@ -634,6 +637,16 @@ private:
     void ReserveResourceTracking(size_t resourceCount);
     void RetireResourceState(Microsoft::WRL::ComPtr<ID3D12Resource> resource);
     void RetireResource(Resource& resource);
+    struct TransientUavBuffer
+    {
+        Microsoft::WRL::ComPtr<ID3D12Resource> Resource;
+        std::shared_ptr<ResourceStateRegistration> StateRegistration;
+        uint64_t Capacity = 0;
+    };
+    TransientUavBuffer& GetOrCreateTransientUavBuffer(
+        uint64_t key,
+        uint64_t sizeInBytes,
+        const wchar_t* name);
     void CommitStagedDescriptors();
 //Modify End
 //Modify Begin:2026-08-25 by Hui
@@ -724,6 +737,11 @@ private:
 //Modify End
 //Modify Begin:2026-08-12 by Hui
     std::vector<std::shared_ptr<ResourceStateRegistration>> m_TrackedResourceStateRegistrations;
+//Modify End
+
+//Modify Begin:2026-10-02 by Hui
+    bool HasTransientUavBuffer(uint64_t key, uint64_t sizeInBytes) const;
+    std::unordered_map<uint64_t, TransientUavBuffer> m_TransientUavBuffers;
 //Modify End
 
     RenderTargetState m_LastRenderTargetState;

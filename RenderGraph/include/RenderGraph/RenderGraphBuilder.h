@@ -102,7 +102,11 @@ namespace RenderGraph
         std::vector<Output> m_Outputs;
         std::vector<PendingExternalAccess> m_ExternalAccesses;
         RenderPassQueue m_Queue = RenderPassQueue::Direct;
+        //Modify Begin:2026-10-02 by Hui
+        // Pass recording is opt-in because command contexts may mutate
+        // shader-owned descriptor sets during Execute().
         bool m_ParallelRecordingEligible = false;
+        //Modify End
         bool m_Built = false;
     };
 
