@@ -11,6 +11,33 @@
 
 #include <algorithm>
 
+namespace
+{
+    constexpr D3D12_RESOURCE_STATES WriteResourceStates =
+        D3D12_RESOURCE_STATE_RENDER_TARGET |
+        D3D12_RESOURCE_STATE_UNORDERED_ACCESS |
+        D3D12_RESOURCE_STATE_DEPTH_WRITE |
+        D3D12_RESOURCE_STATE_COPY_DEST |
+        D3D12_RESOURCE_STATE_RESOLVE_DEST;
+
+    bool IsReadStateCompatible(
+        const D3D12_RESOURCE_STATES currentState,
+        const D3D12_RESOURCE_STATES requestedState,
+        const bool requestedUavWrite = false) noexcept
+    {
+        if (requestedUavWrite || (currentState & WriteResourceStates) != 0u)
+        {
+            return currentState == requestedState;
+        }
+
+        // D3D12 read states are composable. A resource already in
+        // GENERIC_READ or ALL_SHADER_RESOURCE is valid for a narrower shader
+        // read, so retaining the wider tracked state avoids a redundant
+        // transition while keeping later write transitions exact.
+        return (currentState & requestedState) == requestedState;
+    }
+}
+
 //Modify Begin:2026-10-02 by Hui
 BarrierContext::BarrierContext(CommandList& commandList)
     : m_CommandList(commandList)
@@ -93,7 +120,9 @@ void BarrierContext::UseAttributionOnly(
     }
     CommandListInternalAccess::TrackResourceLifetime(m_CommandList, resource);
     if (const LocalResourceState* previous = FindLocalResourceState(nativeResource, subresource);
-        previous != nullptr && previous->State == state && !previous->UavWrite)
+        previous != nullptr &&
+        !previous->UavWrite &&
+        IsReadStateCompatible(previous->State, state))
     {
         return;
     }
@@ -169,7 +198,9 @@ void BarrierContext::UseStableReadOnlyBatch(const std::span<const StableReadOnly
             std::chrono::steady_clock::time_point{};
 #endif
         if (const LocalResourceState* previous = FindLocalResourceState(nativeResource, use.Subresource);
-            previous != nullptr && previous->State == use.State && !previous->UavWrite)
+            previous != nullptr &&
+            !previous->UavWrite &&
+            IsReadStateCompatible(previous->State, use.State))
         {
             m_StableReadResources.insert({ nativeResource, use.Subresource });
 #if DX12_RENDERER_DEBUG_PERFORMANCE_SCOPES
@@ -194,9 +225,9 @@ void BarrierContext::UseStableReadOnlyBatch(const std::span<const StableReadOnly
                 m_StableLocalStateDuration += std::chrono::steady_clock::now() - localStateStart;
             }
 #endif
-            if (trackedState == use.State)
+            if (IsReadStateCompatible(trackedState, use.State))
             {
-                SetLocalResourceState(nativeResource, use.Subresource, { use.State, false });
+                SetLocalResourceState(nativeResource, use.Subresource, { trackedState, false });
                 m_StableReadResources.insert({ nativeResource, use.Subresource });
             }
             else
@@ -301,8 +332,8 @@ void BarrierContext::PrepareResource(
 
     const LocalResourceState* previousState = FindLocalResourceState(resource, subresource);
     if (previousState != nullptr &&
-        previousState->State == stateAfter &&
-        previousState->UavWrite == uavWrite)
+        previousState->UavWrite == uavWrite &&
+        IsReadStateCompatible(previousState->State, stateAfter, uavWrite))
     {
         return;
     }
