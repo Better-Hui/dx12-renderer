@@ -106,6 +106,9 @@ namespace
             {
                 if (shaderResource.has_value())
                 {
+                    FrameworkDiagnostics::RegisterAutomaticRenderGraphResourceAccess(
+                        shaderResource->ResourceIdentity,
+                        DX12Diagnostics::DiagnosticResourceAccess::Read);
                     FrameworkDiagnostics::ValidateActiveRenderGraphResourceAccess(
                         deviceContext,
                         shaderResource->ResourceIdentity,
@@ -114,6 +117,9 @@ namespace
                         rootParameterIndex);
                 }
             }
+            FrameworkDiagnostics::RegisterAutomaticRenderGraphResourceAccess(
+                boundResource.UnorderedAccessViewResourceIdentity,
+                DX12Diagnostics::DiagnosticResourceAccess::Write);
             FrameworkDiagnostics::ValidateActiveRenderGraphResourceAccess(
                 deviceContext,
                 boundResource.UnorderedAccessViewResourceIdentity,
@@ -597,6 +603,25 @@ void CommandContext::BindBindlessDescriptorHeap(
         D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
         bindlessDescriptorHeap.GetResourceDescriptorHeap());
     m_DescriptorAllocator.SetBindlessDescriptorHeap(&bindlessDescriptorHeap);
+    //Modify Begin:2026-10-03 by Hui
+    // A command context prepares a heap once. ReSTIR stages share the same
+    // context, so descriptor binding does not rescan the scene per dispatch.
+    if (m_PreparedBindlessDescriptorHeap != &bindlessDescriptorHeap)
+    {
+        DX12_CPU_RECORDING_SCOPE("bindless.prepare");
+        bindlessDescriptorHeap.PrepareShaderRead(m_CommandList);
+        if (DX12Diagnostics::DiagnosticRenderPassScope::GetCurrent() != nullptr)
+        {
+            for (const Resource* resource : bindlessDescriptorHeap.GetResources())
+            {
+                FrameworkDiagnostics::RegisterAutomaticRenderGraphResourceAccess(
+                    resource->GetD3D12ResourcePtr(),
+                    DX12Diagnostics::DiagnosticResourceAccess::Read);
+            }
+        }
+        m_PreparedBindlessDescriptorHeap = &bindlessDescriptorHeap;
+    }
+    //Modify End
 }
 
 void CommandContext::BindDescriptorSet(const PipelineDescriptorSetBindDesc& descriptorSetDesc) const
@@ -910,9 +935,12 @@ void CommandContext::RecordResourceBindings(
         const auto* accelerationStructure = bound->AccelerationStructure != nullptr ?
             bound->AccelerationStructure : descriptorSet.GetAccelerationStructure();
         Assert(accelerationStructure != nullptr && accelerationStructure->IsBuilt(), "RTAS is not built.");
+//Modify Begin:2026-10-03 by Hui
         m_CommandList.SetResourceBinding(point, rootParameterIndex, 0,
-            { Microsoft::WRL::ComPtr<ID3D12Resource>(accelerationStructure->GetResource()), {},
+            { Microsoft::WRL::ComPtr<ID3D12Resource>(accelerationStructure->GetResource()),
+              accelerationStructure->GetStateRegistration(),
               D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE });
+//Modify End
     }
 }
 

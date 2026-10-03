@@ -11,6 +11,10 @@ class FrameworkDeviceContext;
 
 namespace FrameworkDiagnostics
 {
+    void RegisterAutomaticRenderGraphResourceAccess(
+        ID3D12Resource* resourceIdentity,
+        DX12Diagnostics::DiagnosticResourceAccess access);
+
     void ValidateActiveRenderGraphResourceAccess(
         FrameworkDeviceContext& deviceContext,
         ID3D12Resource* resourceIdentity,

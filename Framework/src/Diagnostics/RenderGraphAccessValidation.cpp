@@ -28,7 +28,7 @@ void FrameworkDiagnostics::ValidateActiveRenderGraphResourceAccess(
 
     const DX12Diagnostics::DiagnosticResourceAccessValidation validation =
         scope->ValidateAccess(resourceIdentity, access);
-    if (validation.Declared && validation.AccessAllowed)
+    if (validation.AccessAllowed)
     {
         return;
     }
@@ -60,5 +60,17 @@ void FrameworkDiagnostics::ValidateActiveRenderGraphResourceAccess(
         .CorrelationId = scopeDesc.CorrelationId,
         .Fields = std::move(fields),
     });
+}
+
+void FrameworkDiagnostics::RegisterAutomaticRenderGraphResourceAccess(
+    ID3D12Resource* resourceIdentity,
+    const DX12Diagnostics::DiagnosticResourceAccess access)
+{
+    DX12Diagnostics::DiagnosticRenderPassScope* scope =
+        DX12Diagnostics::DiagnosticRenderPassScope::GetCurrent();
+    if (scope != nullptr)
+    {
+        scope->RegisterAutomaticAccess(resourceIdentity, access);
+    }
 }
 //Modify End

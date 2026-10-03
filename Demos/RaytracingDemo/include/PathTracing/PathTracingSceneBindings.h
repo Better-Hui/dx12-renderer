@@ -14,22 +14,11 @@ class StructuredBuffer;
 
 namespace RenderGraph
 {
-    class RenderGraphPassBuilder;
-}
-
-namespace RenderGraph
-{
     class FrameContext;
 }
 
 struct RaytracingDemoPassBindings
 {
-//Modify Begin:2026-08-13 by Hui
-    static void DeclareRayTracingExternalResourceAccesses(
-        RenderGraph::RenderGraphPassBuilder& passBuilder,
-        const RaytracingDemoPassResources& resources,
-        D3D12_RESOURCE_STATES stateAfter);
-//Modify End
     static RaytracingDemoCameraConstants BuildPassCameraConstants(
         const RaytracingDemoPassResources& resources,
         const RaytracingDemoPassConfig& config,

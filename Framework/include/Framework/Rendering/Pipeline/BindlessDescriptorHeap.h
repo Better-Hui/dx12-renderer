@@ -8,6 +8,7 @@
 #include <limits>
 #include <map>
 #include <mutex>
+#include <span>
 #include <vector>
 
 class CommandList;
@@ -34,6 +35,12 @@ public:
     void EndFrame(uint64_t directFenceValue, uint64_t asyncComputeFenceValue);
     uint32_t AddShaderResourceView(const Resource& resource, const D3D12_SHADER_RESOURCE_VIEW_DESC* srvDesc = nullptr);
     void UpdateShaderResourceView(uint32_t descriptorIndex, const Resource& resource, const D3D12_SHADER_RESOURCE_VIEW_DESC* srvDesc = nullptr);
+    //Modify Begin:2026-10-03 by Hui
+    // Bindless resources are owned by this heap. The command context uses this
+    // batch to establish shader-read state without making passes enumerate the scene.
+    void PrepareShaderRead(CommandList& commandList) const;
+    const std::vector<const Resource*>& GetResources() const noexcept { return m_Resources; }
+    //Modify End
     D3D12_GPU_DESCRIPTOR_HANDLE GetOrCreateDescriptorTable(const PipelineDescriptorTableAllocation& allocation);
 
     ID3D12DescriptorHeap* GetResourceDescriptorHeap();
@@ -85,6 +92,7 @@ private:
         ID3D12Resource* NativeResource = nullptr;
     };
     std::map<const Resource*, CachedShaderResourceDescriptor> m_DefaultShaderResourceDescriptors;
+    std::vector<const Resource*> m_Resources;
     std::map<uint64_t, CachedDescriptorTable> m_CachedDescriptorTables;
     std::vector<uint64_t> m_ResourceDescriptorRevisions;
     std::vector<DescriptorPage> m_Pages;

@@ -163,8 +163,6 @@ public:
         CommandList& commandList,
         DiagnosticTelemetrySink* diagnostics = nullptr,
         uint64_t frameIndex = 0u);
-    void ForEachShaderResource(const std::function<void(const Resource&)>& action) const;
-
     const StructuredBuffer& GetGeometryBuffer() const { return m_GeometryBuffer; }
     const RayTracingAccelerationStructure& GetAccelerationStructure() const { return m_AccelerationStructure; }
     RayTracingAccelerationStructure& GetAccelerationStructure() { return m_AccelerationStructure; }

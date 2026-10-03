@@ -414,10 +414,6 @@ void RaytracingDemoPasses::Builder::AddDirectLightingPass(
             readGBuffer(DemoResourceIds::DepthBuffer);
             passBuilder.WriteUav(DemoResourceIds::DirectLighting);
             passBuilder.WriteToken(DemoResourceIds::DirectLightingFinishedToken);
-            RaytracingDemoPassBindings::DeclareRayTracingExternalResourceAccesses(
-                passBuilder,
-                resources,
-                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
             passBuilder.SetParallelRecordingEligible(backend == PathTracingBackend::InlineRayQuery);
         },
         [](const PathTracingLightingPassData& passData, const RenderContext& context, RenderGraph::RenderPassContext& passContext)
@@ -564,10 +560,6 @@ void RaytracingDemoPasses::Builder::AddIndirectLightingPass(
             passBuilder.WriteToken(DemoResourceIds::IndirectLightingFinishedToken);
             passBuilder.SetParallelRecordingEligible(
                 !useAsyncCompute && backend == PathTracingBackend::InlineRayQuery);
-            RaytracingDemoPassBindings::DeclareRayTracingExternalResourceAccesses(
-                passBuilder,
-                resources,
-                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     };
     const auto executePass = [](
         const PathTracingLightingPassData& passData,

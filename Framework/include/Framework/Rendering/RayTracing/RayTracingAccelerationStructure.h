@@ -91,6 +91,10 @@ public:
     D3D12_GPU_VIRTUAL_ADDRESS GetGpuVirtualAddress() const;
     /** Underlying TLAS resource used by state-aware descriptor binding. */
     ID3D12Resource* GetResource() const;
+//Modify Begin:2026-10-03 by Hui
+    /** State registration for the TLAS resource used by automatic barriers. */
+    const std::shared_ptr<ResourceStateRegistration>& GetStateRegistration() const;
+//Modify End
     const std::vector<std::shared_ptr<Mesh>>& GetMeshes() const;
     const std::vector<RayTracingGeometryData>& GetGeometryData() const;
     const std::vector<RayTracingInstanceDesc>& GetInstances() const;

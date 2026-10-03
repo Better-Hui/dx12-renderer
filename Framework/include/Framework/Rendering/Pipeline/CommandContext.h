@@ -273,6 +273,9 @@ private:
     mutable ID3D12RootSignature* m_ComputeRootSignature = nullptr;
     //Modify End
     mutable const RayTracingShader* m_BoundRayTracingShader = nullptr;
+    //Modify Begin:2026-10-03 by Hui
+    mutable const BindlessDescriptorHeap* m_PreparedBindlessDescriptorHeap = nullptr;
+    //Modify End
     mutable PipelineBindPoint m_BoundPipelineBindPoint = PipelineBindPoint::Graphics;
     mutable bool m_HasBoundPipeline = false;
 };

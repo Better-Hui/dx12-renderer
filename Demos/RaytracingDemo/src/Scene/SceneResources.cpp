@@ -207,18 +207,6 @@ void RaytracingDemoSceneResources::ForEachGBufferShaderResource(
     m_TextureMaterialResources.ForEachShaderResource(action);
 }
 
-void RaytracingDemoSceneResources::ForEachRayTracingShaderResource(
-    const std::function<void(const Resource&)>& action) const
-{
-    m_TextureMaterialResources.ForEachShaderResource(action);
-    m_RayTracingResources.ForEachShaderResource(action);
-    if (m_BlueNoiseResources.IsLoaded())
-    {
-        action(*m_BlueNoiseResources.GetScalarTexture());
-        action(*m_BlueNoiseResources.GetVec2Texture());
-    }
-}
-
 SurfaceEmitterSceneData RaytracingDemoSceneResources::CollectEmissiveMeshSurfaceEmitters() const
 {
     constexpr float emissionThreshold = 1.0e-4f;

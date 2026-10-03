@@ -13,7 +13,6 @@
 #include <Framework/Rendering/RayTracing/RayTracingShader.h>
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <Framework/Rendering/Texture/UnorderedAccessView.h>
-#include <RenderGraph/RenderGraphBuilder.h>
 //Modify Begin:2026-08-19 by Hui
 #include <Scene/SceneLightManager.h>
 //Modify End
@@ -84,23 +83,6 @@ void RaytracingDemoPassBindings::BindBlueNoiseInputs(
     }
 }
 
-void RaytracingDemoPassBindings::DeclareRayTracingExternalResourceAccesses(
-    RenderGraph::RenderGraphPassBuilder& passBuilder,
-    const RaytracingDemoPassResources& resources,
-    const D3D12_RESOURCE_STATES stateAfter)
-{
-    const auto declareAccess = [&passBuilder, stateAfter](const Resource& resource)
-    {
-        passBuilder.ReadExternal(resource, stateAfter);
-    };
-    resources.Scene.ForEachRayTracingShaderResource(declareAccess);
-    resources.Lights.ForEachShaderResource(declareAccess);
-    if (resources.SkyboxTexture != nullptr)
-    {
-        passBuilder.ReadExternal(*resources.SkyboxTexture, stateAfter);
-    }
-}
-
 void RaytracingDemoPassBindings::BindInlinePathTracingInputs(
     const RaytracingDemoPassResources& resources,
     CommandContext& commandContext,
@@ -160,11 +142,10 @@ void RaytracingDemoPassBindings::BindInlinePathTracingInputs(
     {
         commandContext.SetShaderResource(shader, "Geometries", 0u, resources.Scene.GetGeometryBuffer());
     }
-    if (shader.HasShaderResourceView("BindlessTextures"))
-    {
-        const std::vector<ShaderResourceView>& sceneTextures = resources.Scene.GetTextureShaderResourceViews();
-        commandContext.SetShaderResourceViews(shader, "BindlessTextures", sceneTextures);
-    }
+//Modify Begin:2026-10-03 by Hui
+    // Inline shaders index the scene-owned ResourceDescriptorHeap directly.
+    // Do not materialize the whole scene texture array into every pass set.
+//Modify End
     BindBlueNoiseInputs(resources, commandContext, shader);
     resources.Lights.BindComputeResources(commandContext, shader);
 }

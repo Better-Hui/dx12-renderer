@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -81,6 +82,20 @@ namespace DX12Diagnostics
             return Current();
         }
 
+        void RegisterAutomaticAccess(
+            ID3D12Resource* resourceIdentity,
+            const DiagnosticResourceAccess access) noexcept
+        {
+            if (resourceIdentity == nullptr || access == DiagnosticResourceAccess::None)
+            {
+                return;
+            }
+            m_AutomaticResources[resourceIdentity] =
+                m_AutomaticResources.contains(resourceIdentity)
+                ? m_AutomaticResources[resourceIdentity] | access
+                : access;
+        }
+
         [[nodiscard]] DiagnosticResourceAccessValidation ValidateAccess(
             ID3D12Resource* resourceIdentity,
             DiagnosticResourceAccess access) noexcept
@@ -98,6 +113,24 @@ namespace DX12Diagnostics
                     .AccessAllowed = HasDiagnosticResourceAccess(declared.Access, access),
                     .LogicalResourceId = declared.LogicalResourceId,
                     .LogicalResourceName = declared.LogicalResourceName,
+                };
+                if (validation.AccessAllowed)
+                {
+                    ++m_MatchedAccessCount;
+                }
+                else
+                {
+                    ++m_InvalidAccessCount;
+                }
+                return validation;
+            }
+
+            const auto automatic = m_AutomaticResources.find(resourceIdentity);
+            if (automatic != m_AutomaticResources.end())
+            {
+                const DiagnosticResourceAccessValidation validation = {
+                    .Declared = false,
+                    .AccessAllowed = HasDiagnosticResourceAccess(automatic->second, access),
                 };
                 if (validation.AccessAllowed)
                 {
@@ -128,6 +161,7 @@ namespace DX12Diagnostics
 
         DiagnosticRenderPassScopeDesc m_Desc;
         DiagnosticRenderPassScope* m_Previous = nullptr;
+        std::unordered_map<ID3D12Resource*, DiagnosticResourceAccess> m_AutomaticResources;
         uint64_t m_ObservedAccessCount = 0;
         uint64_t m_MatchedAccessCount = 0;
         uint64_t m_InvalidAccessCount = 0;

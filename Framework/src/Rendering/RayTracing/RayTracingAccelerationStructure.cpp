@@ -260,6 +260,13 @@ ID3D12Resource* RayTracingAccelerationStructure::GetResource() const
     return m_TopLevelAccelerationStructure.Resource.Get();
 }
 
+//Modify Begin:2026-10-03 by Hui
+const std::shared_ptr<ResourceStateRegistration>& RayTracingAccelerationStructure::GetStateRegistration() const
+{
+    return m_TopLevelAccelerationStructure.StateRegistration;
+}
+//Modify End
+
 const std::vector<std::shared_ptr<Mesh>>& RayTracingAccelerationStructure::GetMeshes() const
 {
     return m_Meshes;

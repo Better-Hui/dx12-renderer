@@ -99,7 +99,6 @@ public:
     const StructuredBuffer& GetMaterialBuffer() const { return m_TextureMaterialResources.GetMaterialBuffer(); }
     const StructuredBuffer& GetGeometryBuffer() const { return m_RayTracingResources.GetGeometryBuffer(); }
     void ForEachGBufferShaderResource(const std::function<void(const Resource&)>& action) const;
-    void ForEachRayTracingShaderResource(const std::function<void(const Resource&)>& action) const;
     BindlessDescriptorHeap& GetBindlessDescriptorHeap() { return m_TextureMaterialResources.GetBindlessDescriptorHeap(); }
     const BindlessDescriptorHeap& GetBindlessDescriptorHeap() const { return m_TextureMaterialResources.GetBindlessDescriptorHeap(); }
     MeshletGpuResources GetMeshletGpuResources() { return m_MeshletResources.GetGpuResources(); }

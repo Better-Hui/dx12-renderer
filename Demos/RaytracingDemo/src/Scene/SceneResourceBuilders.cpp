@@ -497,17 +497,6 @@ void SceneRayTracingResources::RefitDirtyGeometry(
     m_AccelerationStructure.Update(commandList, diagnostics, frameIndex);
 }
 
-void SceneRayTracingResources::ForEachShaderResource(
-    const std::function<void(const Resource&)>& action) const
-{
-    action(m_GeometryBuffer);
-    for (const std::shared_ptr<Mesh>& mesh : m_AccelerationStructure.GetMeshes())
-    {
-        action(mesh->GetVertexBuffer());
-        action(mesh->GetIndexBuffer());
-    }
-}
-
 void SceneRayTracingResources::AddObjectInstances(
     const std::vector<RaytracingDemoSceneGeometry>& geometries,
     const RaytracingDemoSceneObject& object,

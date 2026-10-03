@@ -60,10 +60,6 @@ void RaytracingDemoPasses::Builder::AddReSTIRGIPass(
             passBuilder.ReadBuffer(DemoResourceIds::ActiveRayPixelIndices);
             passBuilder.ReadBuffer(DemoResourceIds::ActiveRayPixelCount);
         }
-        RaytracingDemoPassBindings::DeclareRayTracingExternalResourceAccesses(
-            passBuilder,
-            resources,
-            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     };
     graphInputs.ResolveFrameInputs = [resources, config, useCompactedDispatch](const RenderContext& context)
     {
