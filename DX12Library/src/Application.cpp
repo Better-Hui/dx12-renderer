@@ -36,13 +36,13 @@ uint64_t Application::s_FrameCount = 0;
 
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
 
-//Modify Begin:2026-07-21 by Hui
+//Modify Begin:2026-10-05 by Hui
 #if defined(DX12_RENDERER_ENABLE_D3D12_AGILITY) && DX12_RENDERER_ENABLE_D3D12_AGILITY
 #if !defined(DX12_RENDERER_AGILITY_SDK_VERSION)
 #error "DX12_RENDERER_AGILITY_SDK_VERSION must match the distributed Agility SDK."
 #endif
-static_assert(D3D12_SDK_VERSION == DX12_RENDERER_AGILITY_SDK_VERSION,
-    "The Agility SDK headers and distributed runtime must use the same SDK version.");
+static_assert(D3D12_PREVIEW_SDK_VERSION == DX12_RENDERER_AGILITY_SDK_VERSION,
+    "The Agility Preview SDK headers and distributed runtime must use the same preview version.");
 extern "C"
 {
     __declspec(dllexport) extern const UINT D3D12SDKVersion = DX12_RENDERER_AGILITY_SDK_VERSION;
@@ -220,14 +220,14 @@ void Application::Initialize(
             Quit(failure.ExitCode);
         });
     const auto device = m_RenderContext.GetDevice();
-    D3D12_FEATURE_DATA_SHADER_MODEL shaderModel = { D3D_SHADER_MODEL_6_8 };
+    D3D12_FEATURE_DATA_SHADER_MODEL shaderModel = { D3D_SHADER_MODEL_6_10 };
     ThrowIfFailed(device->CheckFeatureSupport(
         D3D12_FEATURE_SHADER_MODEL,
         &shaderModel,
         sizeof(shaderModel)));
-    if (shaderModel.HighestShaderModel < D3D_SHADER_MODEL_6_8)
+    if (shaderModel.HighestShaderModel < D3D_SHADER_MODEL_6_10)
     {
-        throw std::runtime_error("DX12 renderer requires Shader Model 6.8 support from the active D3D12 driver.");
+        throw std::runtime_error("DX12 renderer requires Shader Model 6.10 support from the active D3D12 driver.");
     }
 //Modify End
 
