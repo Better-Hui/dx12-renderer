@@ -146,12 +146,17 @@ The dump includes `CameraPose` with the normalized runtime forward vector, so im
 | Platform | Windows 10/11, x64. This is a Windows/D3D12 project. |
 | Toolchain | Visual Studio 2022 with the MSVC C++ desktop toolchain and a Windows SDK. |
 | CMake | CMake 3.22 or newer; the current NRI/NRD source builds require this baseline. |
-| GPU/driver | A D3D12 GPU/driver that reports **Shader Model 6.8**. DXR, mesh shaders, and CUDA paths need the relevant hardware/driver support. |
+| GPU/driver | A D3D12 GPU/driver that reports **Shader Model 6.10** through the preview runtime. DXR, mesh shaders, Linear Algebra, and CUDA paths need their respective feature support. |
+| Windows Developer Mode | **Required** for Agility SDK **1.721.3-preview**. Enable Developer Mode in Windows Settings before launching the renderer. |
 | CUDA | CUDA Toolkit **12.8** is currently required because `Framework` and `RaytracingDemo` build CUDA interop/Bloom. |
 
-### Shader Model 6.8 baseline
+### Shader Model 6.10 preview baseline
 
-The project compiles raster, compute, task/mesh, and DXR libraries with DXC at Shader Model 6.8 (`vs/ps/cs/as/ms/lib_6_8`). It ships the DirectX Agility SDK **1.619.5** runtime in `D3D12/` and its C++ headers in `External/AgilitySDK/include/`; CMake verifies the redistributable, and startup rejects drivers that do not report Shader Model 6.8.
+The project compiles raster, compute, task/mesh, and DXR libraries with DXC at Shader Model 6.10 (`vs/ps/cs/as/ms/lib_6_10`). It ships the DirectX Agility SDK **1.721.3-preview** runtime in `D3D12/` and matching C++ headers in `External/AgilitySDK/include/`. Executables export `D3D12SDKVersion = 721` and `D3D12SDKPath = ".\\D3D12\\"`; the compile-time check uses `D3D12_PREVIEW_SDK_VERSION`, not the stable `D3D12_SDK_VERSION` macro. Startup rejects drivers that do not report Shader Model 6.10.
+
+**Enable Windows Developer Mode before running this preview runtime.** Open Windows Settings and search for “Developer Mode” (Windows 11: System → For developers, or Privacy & security → For developers on earlier builds; Windows 10: Update & Security → For developers). Without it, preview runtime initialization can fail with `D3D12_ERROR_INVALID_REDIST`. Restart the renderer after enabling it. Developer Mode allows the preview runtime to load; it does not guarantee SM6.10 or Linear Algebra support from the GPU/driver. Query the actual device's shader model, Linear Algebra tier, and desired matrix operation/type support before using neural inference.
+
+The SDK is sourced from the official [Microsoft.Direct3D.D3D12 1.721.3-preview NuGet package](https://www.nuget.org/packages/Microsoft.Direct3D.D3D12/1.721.3-preview). The checked-in DXC reports **1.10.2605.24**. Changing this standalone renderer's SDK does not change Unity's shader compiler or Unity's selected runtime.
 
 ### vcpkg packages
 
@@ -165,7 +170,7 @@ Set `VCPKG_ROOT` before configuring, or pass `CMAKE_TOOLCHAIN_FILE` explicitly.
 
 | Component | Location / provisioning | Role |
 | --- | --- | --- |
-| DirectX Agility SDK 1.619.5 | `D3D12/`, `External/AgilitySDK/include/` | Runtime redistributable and matching C++ headers for the SM6.8 baseline. |
+| DirectX Agility SDK 1.721.3-preview | `D3D12/`, `External/AgilitySDK/include/` | Runtime redistributable and matching C++ headers for the SM6.10 preview baseline; Windows Developer Mode is required. |
 | DirectX Shader Compiler | `DXC/dxc.exe` when present; otherwise a Windows SDK `dxc.exe` | Compiles ray-tracing, task, mesh, compute, and other sample shaders. |
 | WinPixEventRuntime | `WinPixEventRuntime/` | PIX CPU/GPU event markers. |
 | Dear ImGui | Git submodule at `External/ImGui/`, pinned to `v1.91.9` | Runtime debug UI. Framework compiles the official sources directly and keeps repository-specific numeric widget behavior in `Framework/UI/NumericWidgets`. |

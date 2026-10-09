@@ -135,12 +135,18 @@ UnitySceneDump <scene.unity|scene.json|scene.fbx|scene.xml> [--allow-missing-cam
 - Windows 10/11，x64。
 - Visual Studio 2022，以及 MSVC C++ desktop toolchain 和 Windows SDK。
 - CMake 3.22 或更新版本；当前 NRI/NRD 源码构建以此为最低版本。
-- 支持 **Shader Model 6.8** 的 D3D12 GPU 与驱动。DXR、mesh shader 和 CUDA 路径还取决于各自的硬件和驱动能力。
+- 支持 **Shader Model 6.10 Preview** 的 D3D12 GPU 与驱动。DXR、mesh shader 和 CUDA 路径还取决于各自的硬件和驱动能力。
 - **CUDA Toolkit 12.8**。当前 CMake 配置阶段会构建 CUDA interop/Bloom，因此即使运行时关闭 Bloom，配置时仍需要 CUDA。
 
-### Shader Model 6.8 基线
+### Shader Model 6.10 Preview 基线
 
-项目中的 raster、compute、task/mesh 和 DXR library shader 均由 DXC 按 Shader Model 6.8 编译，即 `vs/ps/cs/as/ms/lib_6_8`。仓库在 `D3D12/` 随附 DirectX Agility SDK **1.619.5** 运行时，在 `External/AgilitySDK/include/` 随附匹配的 C++ 头文件；CMake 会检查这套 redist，启动时还会拒绝不支持 Shader Model 6.8 的驱动。
+项目中的 raster、compute、task/mesh 和 DXR library shader 均由 DXC 按 Shader Model 6.10 Preview 编译，即 `vs/ps/cs/as/ms/lib_6_10`。仓库在 `D3D12/` 随附 DirectX Agility SDK **1.721.3-preview** 运行时，在 `External/AgilitySDK/include/` 随附匹配的 C++ 头文件；CMake 会检查这套 redist，启动时还会拒绝不支持 Shader Model 6.10 Preview 的驱动。
+
+**运行 Preview SDK 前必须开启 Windows 开发者模式。** 在 Windows 设置中搜索“开发者模式”并启用（Windows 11 通常位于“系统 → 开发者选项”，较早版本位于“隐私和安全性 → 开发者选项”；Windows 10 位于“更新和安全 → 开发者选项”）。未启用时，Preview runtime 初始化可能失败并返回 `D3D12_ERROR_INVALID_REDIST`。开启后重新启动渲染器。
+
+本项目使用官方 [Microsoft.Direct3D.D3D12 1.721.3-preview NuGet 包](https://www.nuget.org/packages/Microsoft.Direct3D.D3D12/1.721.3-preview)的 x64 runtime 和匹配头文件，导出 `D3D12SDKVersion = 721`、`D3D12SDKPath = ".\D3D12\"`，使用 `D3D12_PREVIEW_SDK_VERSION` 检查版本一致性；该包的稳定版宏 `D3D12_SDK_VERSION = 620` 不用于选择 Preview runtime。仓库 DXC 版本为 **1.10.2605.24**。
+
+开发者模式只允许加载 Preview runtime，不保证 GPU/驱动一定支持 SM6.10 或 Linear Algebra。神经推理还需要查询实际 device 的 Shader Model、Linear Algebra tier 和所需矩阵操作/数据类型支持。修改本项目的 SDK 不会自动修改 Unity 的 runtime 或 shader 编译器。
 
 ### vcpkg 包
 
@@ -156,7 +162,7 @@ vcpkg install --triplet x64-windows assimp directxtex directxmesh meshoptimizer
 
 | 组件 | 位置 / 获取方式 | 用途 |
 | --- | --- | --- |
-| DirectX Agility SDK 1.619.5 | `D3D12/`、`External/AgilitySDK/include/` | SM6.8 基线所需的运行时 redist 和匹配的 C++ 头文件。 |
+| DirectX Agility SDK 1.721.3-preview | `D3D12/`、`External/AgilitySDK/include/` | SM6.10 Preview 基线所需的运行时 redist 和匹配的 C++ 头文件。 |
 | DirectX Shader Compiler | 优先 `DXC/dxc.exe`，否则使用 Windows SDK 的 `dxc.exe` | 编译 ray tracing、task、mesh、compute 等 shader。 |
 | WinPixEventRuntime | `WinPixEventRuntime/` | 向 PIX 写入 CPU/GPU event marker。 |
 | Dear ImGui | `External/ImGui/` Git submodule，固定为 `v1.91.9` | 运行时调试 UI；Framework 直接编译官方源码，项目特有的数值控件行为位于 `Framework/UI/NumericWidgets`。 |

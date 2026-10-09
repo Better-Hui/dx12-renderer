@@ -36,7 +36,7 @@ uint64_t Application::s_FrameCount = 0;
 
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
 
-//Modify Begin:2026-10-05 by Hui
+//Modify Begin:2026-10-06 by Hui
 #if defined(DX12_RENDERER_ENABLE_D3D12_AGILITY) && DX12_RENDERER_ENABLE_D3D12_AGILITY
 #if !defined(DX12_RENDERER_AGILITY_SDK_VERSION)
 #error "DX12_RENDERER_AGILITY_SDK_VERSION must match the distributed Agility SDK."
