@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-10-13 by Hui
 #include "ReSTIRDISceneContract.hlsli"
 #include "ReSTIRDI/ReSTIRDI.hlsli"
 #include "ReSTIRDI/ReSTIRDIConstants.hlsli"
@@ -89,6 +89,10 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
             {
                 uint rngState = ReSTIRDI_InitializeRandomState(pixel, ReSTIRDI_ScreenWidth, ReSTIRDI_FrameIndex, 0x0f16c4a3u);
                 float2 motion = MotionVectorTexture.Load(int3(pixel, 0)) * float2(ReSTIRDI_ScreenWidth, ReSTIRDI_ScreenHeight);
+#if !RESTIR_DI_USE_TEMPORAL_PERMUTATION_SAMPLING
+                // Match RTXDI's stochastic reprojection to reduce correlated history reuse during magnification.
+                motion.xy += float2(ReSTIRDI_Random01(rngState), ReSTIRDI_Random01(rngState)) - 0.5f;
+#endif
                 const int2 reprojectedPixel = int2(round(float2(pixel) + motion));
                 const float receiverDepth = ReSTIRDI_LinearDepth(surface.PositionWs);
                 ReSTIRDIReservoir history = ReSTIRDIEmptyReservoir();

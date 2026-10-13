@@ -1,6 +1,6 @@
 #include <Passes/RaytracingDemoPasses.h>
 
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-10-13 by Hui
 #include <PathTracing/PathTracingSceneBindings.h>
 #include <RenderGraph/RaytracingDemoGraphResources.h>
 
@@ -34,7 +34,6 @@ void RaytracingDemoPasses::Builder::AddReSTIRDIPass(
     graphInputs.Height = config.FrameState->Height;
     graphInputs.UseCompactedDispatch = useCompactedDispatch;
     graphInputs.EnableTemporalResampling = settings.EnableTemporalResampling;
-    graphInputs.EnableBoilingFilter = settings.EnableBoilingFilter;
     graphInputs.EnableSpatialResampling = settings.EnableSpatialResampling;
     graphInputs.GetFrameIndex = [frameState = config.FrameState]()
     {

@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-10-13 by Hui
 #include <Framework/Rendering/Lighting/ReSTIRDI.h>
 
 #include <algorithm>
@@ -13,7 +13,6 @@ void ReSTIRDI::SetSettings(const ReSTIRDISettings& settings)
     m_Settings = settings;
     m_Settings.CandidateCount = std::clamp(m_Settings.CandidateCount, 1u, 32u);
     m_Settings.TemporalMaxHistoryLength = std::clamp(m_Settings.TemporalMaxHistoryLength, 1u, 16383u);
-    m_Settings.BoilingFilterStrength = std::clamp(m_Settings.BoilingFilterStrength, 0.01f, 1.0f);
     m_Settings.SpatialNeighborCount = std::clamp(m_Settings.SpatialNeighborCount, 1u, 32u);
     m_Settings.SpatialDisocclusionBoostSampleCount = std::clamp(m_Settings.SpatialDisocclusionBoostSampleCount, 1u, 32u);
     m_Settings.SpatialTargetHistoryLength = std::clamp(m_Settings.SpatialTargetHistoryLength, 0u, 16383u);
@@ -45,7 +44,6 @@ ReSTIRDIFrameConstants ReSTIRDI::GetFrameConstants(const bool historyValid) cons
         m_Settings.EnableTemporalVisibilityShortcut ? 1u : 0u,
         m_Settings.EnableTemporalPermutationSampling ? 1u : 0u,
         m_Settings.EnableTemporalMaterialSimilarityTest ? 1u : 0u,
-        m_Settings.EnableBoilingFilter ? 1u : 0u,
 
         m_Settings.TemporalMaxHistoryLength,
         m_Settings.EnableSpatialResampling ? 1u : 0u,
@@ -60,7 +58,6 @@ ReSTIRDIFrameConstants ReSTIRDI::GetFrameConstants(const bool historyValid) cons
         m_Settings.DiscardInvisibleFinalSamples ? 1u : 0u,
         m_Settings.FinalVisibilityMaxAge,
 
-        m_Settings.BoilingFilterStrength,
         m_Settings.TemporalNormalSimilarityThreshold,
         m_Settings.TemporalDepthSimilarityThreshold,
         m_Settings.TemporalMaterialSimilarityThreshold,

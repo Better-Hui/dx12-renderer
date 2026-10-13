@@ -1,7 +1,7 @@
 #ifndef FRAMEWORK_RESTIR_DI_CONSTANTS_HLSLI
 #define FRAMEWORK_RESTIR_DI_CONSTANTS_HLSLI
 
-//Modify Begin:2026-08-11 by Hui
+//Modify Begin:2026-10-13 by Hui
 #ifndef RESTIR_DI_USE_INITIAL_VISIBILITY
 #define RESTIR_DI_USE_INITIAL_VISIBILITY 0
 #endif
@@ -24,10 +24,6 @@
 
 #ifndef RESTIR_DI_TEMPORAL_IGNORE_GEOMETRY
 #define RESTIR_DI_TEMPORAL_IGNORE_GEOMETRY 0
-#endif
-
-#ifndef RESTIR_DI_USE_TEMPORAL_BOILING_FILTER
-#define RESTIR_DI_USE_TEMPORAL_BOILING_FILTER 0
 #endif
 
 #ifndef RESTIR_DI_USE_SPATIAL_REUSE
@@ -74,7 +70,7 @@
 #endif
 //Modify End
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-10-13 by Hui
 cbuffer ReSTIRDIConstants : register(b1)
 {
     uint ReSTIRDI_CandidateCount;
@@ -86,7 +82,6 @@ cbuffer ReSTIRDIConstants : register(b1)
     uint ReSTIRDI_TemporalVisibilityShortcutEnabled;
     uint ReSTIRDI_TemporalPermutationSamplingEnabled;
     uint ReSTIRDI_TemporalMaterialSimilarityTestEnabled;
-    uint ReSTIRDI_BoilingFilterEnabled;
 
     uint ReSTIRDI_TemporalMaxHistoryLength;
     uint ReSTIRDI_SpatialResamplingEnabled;
@@ -101,7 +96,6 @@ cbuffer ReSTIRDIConstants : register(b1)
     uint ReSTIRDI_FinalVisibilityDiscardInvisibleSamples;
     uint ReSTIRDI_FinalVisibilityMaxAge;
 
-    float ReSTIRDI_BoilingFilterStrength;
     float ReSTIRDI_TemporalNormalSimilarityThreshold;
     float ReSTIRDI_TemporalDepthSimilarityThreshold;
     float ReSTIRDI_TemporalMaterialSimilarityThreshold;

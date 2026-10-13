@@ -180,7 +180,7 @@ LowPolyStreet 额外使用 `←`/`→` 以 `1°` 为步长调节 `2°-30°` 的�
 - 可选 NRD/SVGF、TAA、skybox、Framework Raster Bloom、CUDA Bloom、Native DLSS SR/DLAA、HDR10/PQ 呈现，以及实验性 Streamline RR/FG 围绕核心光照输出组合。
 - 普通 accumulation 参与 RenderGraph topology/shader permutation。无降噪和 OIDN 在 `Lighting Composite` 累积原始 HDR；NRD/SVGF 组合则在 denoiser composite 后执行 `Post-Denoise Accumulation`，避免 denoiser 随后覆盖累积结果。相机或渲染输入变化仍将 sample count 清零。
 
-ReSTIR DI 由 Demo 调用 Framework 的 `ReSTIRDIPass::AddPasses`。Framework 分别注册 `Initial Sampling`、`Temporal Resampling`、`Boiling Filter`、`Spatial Resampling` 和 `Shade`，用 token 与 imported reservoir/history 连接。Demo 只提供 logical scene input 和运行时 resolver，不再调度内部阶段或编码 barrier。Temporal reproject/permutation search 按 RTXDI 的法线与线性视深 compatibility test 工作；可选的 `TemporalMaterialSimilarityTest` 才会额外比较漫反射、镜面、粗糙度、金属度和 AO。
+ReSTIR DI 由 Demo 调用 Framework 的 `ReSTIRDIPass::AddPasses`。Framework 分别注册 `Initial Sampling`、`Temporal Resampling`、`Spatial Resampling` 和 `Shade`，用 token 与 imported reservoir/history 连接。Demo 只提供 logical scene input 和运行时 resolver，不再调度内部阶段或编码 barrier。Temporal reproject/permutation search 按 RTXDI 的法线与线性视深 compatibility test 工作；可选的 `TemporalMaterialSimilarityTest` 才会额外比较漫反射、镜面、粗糙度、金属度和 AO。
 
 ReSTIR GI 通过 `ReSTIRGIPass::AddPasses` 分别注册 `Initial Sampling`、`Temporal Resampling`、`Spatial Resampling` 和 `Shade`。imported ping-pong history 根据运行时 frame index 解析，不需要保存 Builder。Demo adapter 提供 GBuffer、TLAS、bindless scene data、直接光采样、自发光和环境光契约；该路径当前只支持 Inline Ray Query。
 

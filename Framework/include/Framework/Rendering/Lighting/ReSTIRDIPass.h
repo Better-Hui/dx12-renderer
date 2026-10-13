@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-10-04 by Hui
+//Modify Begin:2026-10-13 by Hui
 #include <Framework/Rendering/Lighting/ActivePixelList.h>
 #include <Framework/Rendering/Lighting/ReSTIRDI.h>
 #include <Framework/Rendering/Lighting/MaterialShadingModel.h>
@@ -67,7 +67,6 @@ struct ReSTIRDIGraphInputs
     uint32_t Height = 1u;
     bool UseCompactedDispatch = false;
     bool EnableTemporalResampling = false;
-    bool EnableBoilingFilter = false;
     bool EnableSpatialResampling = false;
     std::function<uint32_t()> GetFrameIndex;
     std::function<void(RenderGraph::RenderGraphPassBuilder&)> DeclareSharedResources;
@@ -121,7 +120,6 @@ private:
     {
         RIS,
         Temporal,
-        BoilingFilter,
         Spatial,
         Shade,
     };
@@ -153,7 +151,6 @@ private:
     void EnsureResources(uint32_t width, uint32_t height);
     void ExecuteInitialSampling(CommandContext& commandContext, const ReSTIRDIExecutionInputs& inputs, PipelineSet& pipelines);
     void ExecuteTemporalResampling(CommandContext& commandContext, const ReSTIRDIExecutionInputs& inputs, PipelineSet& pipelines);
-    void ExecuteBoilingFilter(CommandContext& commandContext, const ReSTIRDIExecutionInputs& inputs, PipelineSet& pipelines);
     void ExecuteSpatialResampling(
         CommandContext& commandContext,
         const ReSTIRDIExecutionInputs& inputs,

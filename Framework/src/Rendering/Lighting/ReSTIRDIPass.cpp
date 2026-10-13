@@ -1,6 +1,6 @@
 #include <Framework/Rendering/Lighting/ReSTIRDIPass.h>
 
-//Modify Begin:2026-10-04 by Hui
+//Modify Begin:2026-10-13 by Hui
 #include <DX12Library/CommandList.h>
 #include <DX12Library/ByteAddressBuffer.h>
 #include <DX12Library/Helpers.h>
@@ -29,7 +29,6 @@ struct ReSTIRDIPass::PipelineSet
     uint32_t EnvironmentProjectionVariant = 0u;
     std::unordered_map<uint32_t, std::unique_ptr<ComputeShader>> RISVariants;
     std::unordered_map<uint32_t, std::unique_ptr<ComputeShader>> TemporalVariants;
-    std::unordered_map<uint32_t, std::unique_ptr<ComputeShader>> BoilingFilterVariants;
     std::unordered_map<uint32_t, std::unique_ptr<ComputeShader>> SpatialVariants;
     std::unordered_map<uint32_t, std::unique_ptr<ComputeShader>> ShadeVariants;
 };
@@ -61,8 +60,6 @@ namespace
     constexpr DXGI_FORMAT RESERVOIR_FORMAT = DXGI_FORMAT_R32G32B32A32_UINT;
     constexpr DXGI_FORMAT HISTORY_POSITION_FORMAT = DXGI_FORMAT_R32G32B32A32_FLOAT;
     constexpr DXGI_FORMAT HISTORY_SHADING_FORMAT = DXGI_FORMAT_R16G16B16A16_FLOAT;
-    const std::wstring ReSTIRDIBoilingFilterShaderSource =
-        L"Framework/shaders/ReSTIRDI/ReSTIRDI.Boiling.cs.hlsl";
 
     void BindActivePixelList(
         CommandContext& commandContext,
@@ -126,7 +123,6 @@ public:
         OutputClear,
         Initial,
         Temporal,
-        BoilingFilter,
         Spatial,
         Shade,
     };
@@ -199,12 +195,9 @@ public:
             return;
         }
 
-        if (m_Kind != Kind::BoilingFilter)
-        {
-            RenderGraph::RenderGraphPassBuilder sharedResourceBuilder(RenderGraph::RenderPassQueue::Direct);
-            DeclareReSTIRDISharedResources(sharedResourceBuilder, *m_Inputs);
-            sharedResourceBuilder.ApplyTo(*this);
-        }
+        RenderGraph::RenderGraphPassBuilder sharedResourceBuilder(RenderGraph::RenderPassQueue::Direct);
+        DeclareReSTIRDISharedResources(sharedResourceBuilder, *m_Inputs);
+        sharedResourceBuilder.ApplyTo(*this);
 
         if (m_Kind == Kind::Initial)
         {
@@ -238,15 +231,6 @@ public:
             AddImportedResourceAccess(m_HistoryReadSpecularOcclusion, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, RenderGraph::ExternalResourceAccessMode::Read, false);
             AddImportedResourceAccess(m_TemporalReservoir, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, RenderGraph::ExternalResourceAccessMode::Write, false);
             AddImportedResourceAccess(m_TemporalReservoirState, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, RenderGraph::ExternalResourceAccessMode::Write, false);
-        }
-        else if (m_Kind == Kind::BoilingFilter)
-        {
-            RegisterInput({ m_TokenBefore, RenderGraph::InputType::Token });
-            RegisterOutput({ m_TemporalReservoir.GetId(), RenderGraph::OutputType::ExternalAccess });
-            RegisterOutput({ m_TemporalReservoirState.GetId(), RenderGraph::OutputType::ExternalAccess });
-            RegisterOutput({ m_TokenAfter, RenderGraph::OutputType::Token });
-            AddImportedResourceAccess(m_TemporalReservoir, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, RenderGraph::ExternalResourceAccessMode::Write, true);
-            AddImportedResourceAccess(m_TemporalReservoirState, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, RenderGraph::ExternalResourceAccessMode::Write, true);
         }
         else if (m_Kind == Kind::Spatial)
         {
@@ -330,14 +314,6 @@ protected:
         {
             m_Pass.ExecuteTemporalResampling(commandContext, inputs, pipelines);
         }
-        else if (m_Kind == Kind::BoilingFilter)
-        {
-            if (inputs.FrameState.Constants.TemporalResamplingEnabled != 0u &&
-                inputs.FrameState.Constants.BoilingFilterEnabled != 0u)
-            {
-                m_Pass.ExecuteBoilingFilter(commandContext, inputs, pipelines);
-            }
-        }
         else if (m_Kind == Kind::Spatial)
         {
             const bool useTemporal = m_Inputs->EnableTemporalResampling;
@@ -415,10 +391,6 @@ void ReSTIRDIPass::EnsurePipelines(
     PipelineSet& pipelines = GetPipelines(useSoftShadowVariant, environmentProjectionVariant);
     GetStageShader(pipelines, ReSTIRDIStage::RIS, constants, shadingModel, useCompactedDispatch);
     GetStageShader(pipelines, ReSTIRDIStage::Temporal, constants, shadingModel, useCompactedDispatch);
-    if (constants.TemporalResamplingEnabled != 0u && constants.BoilingFilterEnabled != 0u)
-    {
-        GetStageShader(pipelines, ReSTIRDIStage::BoilingFilter, constants, shadingModel, false);
-    }
     GetStageShader(pipelines, ReSTIRDIStage::Spatial, constants, shadingModel, useCompactedDispatch);
     GetStageShader(pipelines, ReSTIRDIStage::Shade, constants, shadingModel, useCompactedDispatch);
 }
@@ -557,7 +529,6 @@ void ReSTIRDIPass::AddPasses(
 
     const RenderGraph::ResourceId initialFinished = builder.CreateToken(L"Framework.ReSTIRDI.InitialFinished");
     const RenderGraph::ResourceId temporalFinished = builder.CreateToken(L"Framework.ReSTIRDI.TemporalFinished");
-    const RenderGraph::ResourceId boilingFinished = builder.CreateToken(L"Framework.ReSTIRDI.BoilingFinished");
     const RenderGraph::ResourceId spatialFinished = builder.CreateToken(L"Framework.ReSTIRDI.SpatialFinished");
 
     if (graphInputs->UseCompactedDispatch)
@@ -608,21 +579,6 @@ void ReSTIRDIPass::AddPasses(
         previousToken = temporalFinished;
         finalReservoir = temporalReservoir;
         finalReservoirState = temporalReservoirState;
-
-        if (graphInputs->EnableBoilingFilter)
-        {
-            ReSTIRDIGraphPass::Desc desc;
-            desc.PassKind = ReSTIRDIGraphPass::Kind::BoilingFilter;
-            desc.Pass = this;
-            desc.Inputs = graphInputs;
-            desc.PassName = L"ReSTIR DI Boiling Filter";
-            desc.TokenBefore = previousToken;
-            desc.TokenAfter = boilingFinished;
-            desc.TemporalReservoir = temporalReservoir;
-            desc.TemporalReservoirState = temporalReservoirState;
-            builder.AddPass(std::make_unique<ReSTIRDIGraphPass>(std::move(desc)));
-            previousToken = boilingFinished;
-        }
     }
 
     if (graphInputs->EnableSpatialResampling)
@@ -819,46 +775,6 @@ void ReSTIRDIPass::ExecuteTemporalResampling(
     }
 }
 
-void ReSTIRDIPass::ExecuteBoilingFilter(
-    CommandContext& commandContext,
-    const ReSTIRDIExecutionInputs& inputs,
-    PipelineSet& pipelines)
-{
-    DiagnosticTelemetrySink* diagnostics = commandContext.GetCommandList().GetDeviceContext()->GetDiagnosticTelemetrySink();
-    const uint64_t frameIndex = inputs.FrameState.FrameIndex;
-    ComputeShader& shader = GetStageShader(
-        pipelines,
-        ReSTIRDIStage::BoilingFilter,
-        inputs.FrameState.Constants,
-        inputs.FrameState.ShadingModel,
-        false);
-    {
-        DX12_CPU_PERFORMANCE_SCOPE(
-            diagnostics, frameIndex, "ReSTIR DI.BoilingFilter.UpdateDescriptors", "Direct", 0u, "restir_stage");
-        commandContext.SetConstantBuffer(shader, "ReSTIRDIConstants", sizeof(inputs.FrameState.Constants), &inputs.FrameState.Constants);
-        commandContext.SetUnorderedAccessView(shader, "ReSTIRDIBoilingReservoir", UnorderedAccessView(m_Resources->TemporalReservoir));
-        commandContext.SetUnorderedAccessView(shader, "ReSTIRDIBoilingReservoirState", UnorderedAccessView(m_Resources->TemporalReservoirState));
-    }
-    {
-        DX12_CPU_PERFORMANCE_SCOPE(
-            diagnostics, frameIndex, "ReSTIR DI.BoilingFilter.BindPipeline", "Direct", 0u, "restir_stage");
-        commandContext.BindPipeline(shader);
-    }
-    {
-        DX12_CPU_PERFORMANCE_SCOPE(
-            diagnostics, frameIndex, "ReSTIR DI.BoilingFilter.BindDescriptorSet", "Direct", 0u, "restir_stage");
-        commandContext.BindDescriptorSet(shader.GetDescriptorSet());
-    }
-    {
-        DX12_CPU_PERFORMANCE_SCOPE(
-            diagnostics, frameIndex, "ReSTIR DI.BoilingFilter.Dispatch", "Direct", 0u, "restir_stage");
-        commandContext.Dispatch(
-            Math::DivideByMultiple(inputs.FrameState.Width, 8u),
-            Math::DivideByMultiple(inputs.FrameState.Height, 8u),
-            1u);
-    }
-}
-
 void ReSTIRDIPass::ExecuteSpatialResampling(
     CommandContext& commandContext,
     const ReSTIRDIExecutionInputs& inputs,
@@ -981,11 +897,6 @@ uint32_t ReSTIRDIPass::GetStageVariantKey(
     const MaterialShadingModel shadingModel,
     const bool useCompactedDispatch)
 {
-    if (stage == ReSTIRDIStage::BoilingFilter)
-    {
-        return 0u;
-    }
-
     uint32_t featureKey = 0u;
     switch (stage)
     {
@@ -1004,9 +915,6 @@ uint32_t ReSTIRDIPass::GetStageVariantKey(
             ((constants.TemporalVisibilityShortcutEnabled != 0u ? 1u : 0u) << 3u) |
             ((constants.TemporalPermutationSamplingEnabled != 0u ? 1u : 0u) << 4u) |
             ((constants.TemporalIgnoreGeometryEnabled != 0u ? 1u : 0u) << 5u);
-        break;
-
-    case ReSTIRDIStage::BoilingFilter:
         break;
 
     case ReSTIRDIStage::Spatial:
@@ -1042,11 +950,6 @@ std::vector<ShaderVariantDefine> ReSTIRDIPass::GetStageVariantDefines(
     const MaterialShadingModel shadingModel,
     const bool useCompactedDispatch)
 {
-    if (stage == ReSTIRDIStage::BoilingFilter)
-    {
-        return {};
-    }
-
     const auto booleanDefine = [](const char* name, const bool value)
     {
         return ShaderVariantDefine { name, value ? "1" : "0" };
@@ -1069,9 +972,6 @@ std::vector<ShaderVariantDefine> ReSTIRDIPass::GetStageVariantDefines(
             booleanDefine("RESTIR_DI_USE_TEMPORAL_PERMUTATION_SAMPLING", constants.TemporalPermutationSamplingEnabled != 0u),
             booleanDefine("RESTIR_DI_TEMPORAL_IGNORE_GEOMETRY", constants.TemporalIgnoreGeometryEnabled != 0u),
         };
-        break;
-
-    case ReSTIRDIStage::BoilingFilter:
         break;
 
     case ReSTIRDIStage::Spatial:
@@ -1140,11 +1040,6 @@ ComputeShader& ReSTIRDIPass::GetStageShader(
         stagePipelines = &pipelines.TemporalVariants;
         compiledFileName = L"ReSTIRDI.Temporal.cs.cso";
         sourceFileName = &m_ShaderSources.Temporal;
-        break;
-    case ReSTIRDIStage::BoilingFilter:
-        stagePipelines = &pipelines.BoilingFilterVariants;
-        compiledFileName = L"Framework.ReSTIRDI.Boiling.cs.cso";
-        sourceFileName = &ReSTIRDIBoilingFilterShaderSource;
         break;
     case ReSTIRDIStage::Spatial:
         stagePipelines = &pipelines.SpatialVariants;

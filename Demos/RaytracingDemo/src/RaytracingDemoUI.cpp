@@ -1,4 +1,4 @@
-//Modify Begin:2026-09-10 by Hui
+//Modify Begin:2026-10-13 by Hui
 #include <RaytracingDemo.h>
 
 #include <DX12Library/Window.h>
@@ -452,15 +452,6 @@ void RaytracingDemo::OnImGui()
                         &restirSettings.TemporalMaterialSimilarityThreshold,
                         0.0f,
                         2.0f);
-                }
-                settingsChanged |= ImGui::Checkbox("Enable Boiling Filter", &restirSettings.EnableBoilingFilter);
-                if (restirSettings.EnableBoilingFilter)
-                {
-                    settingsChanged |= FrameworkImGui::SliderFloat(
-                        "Boiling Filter Strength",
-                        &restirSettings.BoilingFilterStrength,
-                        0.01f,
-                        1.0f);
                 }
             }
 

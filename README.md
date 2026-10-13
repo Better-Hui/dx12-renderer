@@ -21,7 +21,7 @@ The upstream renderer remains the foundation. This fork adds framework and sampl
 | Ray tracing | Runtime-selectable inline ray-query and shader-table DXR paths sharing the same scene/resource model; shader-table DXR does not execute ReSTIR DI/GI stages that currently exist only for Inline. |
 | Compacted dispatch | Depth-filtered active-pixel list with atomic append; Inline compute uses `ceil(activeCount / 64)` thread groups, while compacted DXR uses `Width = activeCount`. |
 | Material shading | Framework-owned metallic/roughness GGX PBR evaluation, with an experimental `Stylized Comic` PBR-NPR variant selected by the sample UI. |
-| ReSTIR DI | Inline ray-query direct-lighting sample with RIS, temporal/boiling/spatial resampling, stage-specific visibility and bias-correction settings, and final shading. |
+| ReSTIR DI | Inline ray-query direct-lighting sample with RIS, temporal/spatial resampling, stage-specific visibility and bias-correction settings, and final shading. |
 | ReSTIR GI | Inline ray-query one-bounce indirect-lighting sample with initial BSDF sampling, temporal reuse, spatial reuse, Jacobian correction, and final visibility/shading. |
 | Meshlets | Meshlet generation/GPU resources, task-shader and compute-indirect GBuffer backends, plus declared dynamic transform/geometry synchronization. |
 | Post process and interop | Framework-owned NRD/SVGF/TAA and raster-Bloom RenderGraph subgraphs, plus CUDA Bloom using D3D12 shared resources with external fence/semaphore synchronization. |
@@ -152,7 +152,9 @@ The dump includes `CameraPose` with the normalized runtime forward vector, so im
 
 ### Shader Model 6.10 preview baseline
 
-The project compiles raster, compute, task/mesh, and DXR libraries with DXC at Shader Model 6.10 (`vs/ps/cs/as/ms/lib_6_10`). It ships the DirectX Agility SDK **1.721.3-preview** runtime in `D3D12/` and matching C++ headers in `External/AgilitySDK/include/`. Executables export `D3D12SDKVersion = 721` and `D3D12SDKPath = ".\\D3D12\\"`; the compile-time check uses `D3D12_PREVIEW_SDK_VERSION`, not the stable `D3D12_SDK_VERSION` macro. Startup rejects drivers that do not report Shader Model 6.10.
+By default, the project compiles raster, compute, task/mesh, and DXR libraries with DXC at Shader Model 6.10 (`vs/ps/cs/as/ms/lib_6_10`). It ships the DirectX Agility SDK **1.721.3-preview** runtime in `D3D12/` and matching C++ headers in `External/AgilitySDK/include/`. Executables export `D3D12SDKVersion = 721` and `D3D12SDKPath = ".\\D3D12\\"`; the compile-time check uses `D3D12_PREVIEW_SDK_VERSION`, not the stable `D3D12_SDK_VERSION` macro. Startup checks the shader model selected for the build.
+
+For drivers without SM6.10 support, configure with `-DDX12_RENDERER_SHADER_MODEL_VERSION=6.8`. This selects SM6.8 for build-time compilation, runtime shader variants, and the startup capability check. Recompile all shader outputs when changing this setting; the current incremental shader script checks entry-file timestamps only. The preview runtime and its Developer Mode requirement still apply.
 
 **Enable Windows Developer Mode before running this preview runtime.** Open Windows Settings and search for “Developer Mode” (Windows 11: System → For developers, or Privacy & security → For developers on earlier builds; Windows 10: Update & Security → For developers). Without it, preview runtime initialization can fail with `D3D12_ERROR_INVALID_REDIST`. Restart the renderer after enabling it. Developer Mode allows the preview runtime to load; it does not guarantee SM6.10 or Linear Algebra support from the GPU/driver. Query the actual device's shader model, Linear Algebra tier, and desired matrix operation/type support before using neural inference.
 

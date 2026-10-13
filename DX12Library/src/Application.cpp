@@ -171,7 +171,7 @@ void Application::Initialize(
 //Modify End
 #endif
 
-//Modify Begin:2026-08-18 by Hui
+//Modify Begin:2026-10-13 by Hui
     if (useExternalDevice)
     {
         ComPtr<ID3D12Device2> device;
@@ -220,14 +220,16 @@ void Application::Initialize(
             Quit(failure.ExitCode);
         });
     const auto device = m_RenderContext.GetDevice();
-    D3D12_FEATURE_DATA_SHADER_MODEL shaderModel = { D3D_SHADER_MODEL_6_10 };
+    D3D12_FEATURE_DATA_SHADER_MODEL shaderModel = { DX12_RENDERER_REQUIRED_SHADER_MODEL };
     ThrowIfFailed(device->CheckFeatureSupport(
         D3D12_FEATURE_SHADER_MODEL,
         &shaderModel,
         sizeof(shaderModel)));
-    if (shaderModel.HighestShaderModel < D3D_SHADER_MODEL_6_10)
+    if (shaderModel.HighestShaderModel < DX12_RENDERER_REQUIRED_SHADER_MODEL)
     {
-        throw std::runtime_error("DX12 renderer requires Shader Model 6.10 support from the active D3D12 driver.");
+        throw std::runtime_error(
+            "DX12 renderer requires Shader Model " DX12_RENDERER_REQUIRED_SHADER_MODEL_NAME
+            " support from the active D3D12 driver.");
     }
 //Modify End
 

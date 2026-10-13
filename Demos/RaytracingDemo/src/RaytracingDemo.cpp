@@ -499,7 +499,7 @@ namespace
 
 }
 
-//Modify Begin:2026-08-28 by Hui
+//Modify Begin:2026-10-13 by Hui
 RaytracingDemo::RaytracingDemo(
     Application& application,
     const std::wstring& name,
@@ -642,14 +642,8 @@ RaytracingDemo::RaytracingDemo(
         "RAYTRACING_DEMO_RESTIRDI_SPATIAL",
         restirDISettings.EnableSpatialResampling);
     restirDISettingsOverridden |= TryGetEnvironmentBoolean(
-        "RAYTRACING_DEMO_RESTIRDI_BOILING",
-        restirDISettings.EnableBoilingFilter);
-    restirDISettingsOverridden |= TryGetEnvironmentBoolean(
         "RAYTRACING_DEMO_RESTIRDI_TEMPORAL_IGNORE_GEOMETRY",
         restirDISettings.EnableTemporalIgnoreGeometry);
-    restirDISettingsOverridden |= TryGetEnvironmentFloat(
-        "RAYTRACING_DEMO_RESTIRDI_BOILING_STRENGTH",
-        restirDISettings.BoilingFilterStrength);
     if (restirDISettingsOverridden)
     {
         m_DirectLightingReSTIRDI.SetSettings(restirDISettings);
@@ -1382,22 +1376,16 @@ void RaytracingDemo::LoadStartupConfiguration()
     {
         restirDISettings.TemporalMaxHistoryLength = static_cast<uint32_t>(std::clamp(intValue, 1, 64));
     }
+//Modify Begin:2026-10-13 by Hui
     if (configuration.TryGetFloat("ReSTIRDI", "TemporalMaterialSimilarityThreshold", floatValue))
     {
         restirDISettings.TemporalMaterialSimilarityThreshold = floatValue;
-    }
-    if (configuration.TryGetBoolean("ReSTIRDI", "BoilingFilter", boolValue))
-    {
-        restirDISettings.EnableBoilingFilter = boolValue;
-    }
-    if (configuration.TryGetFloat("ReSTIRDI", "BoilingFilterStrength", floatValue))
-    {
-        restirDISettings.BoilingFilterStrength = std::max(0.0f, floatValue);
     }
     if (configuration.TryGetBoolean("ReSTIRDI", "SpatialResampling", boolValue))
     {
         restirDISettings.EnableSpatialResampling = boolValue;
     }
+//Modify End
     if (configurationVersion < 2)
     {
         // Version 1 deployments copied a stale runtime template with spatial
@@ -1861,7 +1849,7 @@ void RaytracingDemo::ApplyStartupLightConfiguration()
     }
 }
 
-//Modify Begin:2026-09-11 by Hui
+//Modify Begin:2026-10-13 by Hui
 void RaytracingDemo::SaveRuntimeConfiguration()
 {
     const auto lightingTechniqueName = [](const RaytracingDemoLightingTechnique technique)
@@ -2042,8 +2030,6 @@ void RaytracingDemo::SaveRuntimeConfiguration()
            << "TemporalMaterialSimilarityTest = " << restirDI.EnableTemporalMaterialSimilarityTest << '\n'
            << "TemporalIgnoreGeometry = " << restirDI.EnableTemporalIgnoreGeometry << '\n'
            << "TemporalMaterialSimilarityThreshold = " << restirDI.TemporalMaterialSimilarityThreshold << '\n'
-           << "BoilingFilter = " << restirDI.EnableBoilingFilter << '\n'
-           << "BoilingFilterStrength = " << restirDI.BoilingFilterStrength << '\n'
            << "SpatialResampling = " << restirDI.EnableSpatialResampling << '\n'
            << "SpatialBiasCorrection = " << spatialBiasName(restirDI.SpatialBiasCorrection) << '\n'
            << "SpatialNeighborCount = " << restirDI.SpatialNeighborCount << '\n'
@@ -2298,10 +2284,10 @@ void RaytracingDemo::InitializeDiagnostics()
     m_Diagnostics.AddMetadata("initial_height", std::to_string(m_Height));
     m_Diagnostics.AddMetadata("executable_path", GetExecutablePath());
     m_Diagnostics.AddMetadata("command_line", GetCommandLineA() != nullptr ? GetCommandLineA() : "");
+//Modify Begin:2026-10-13 by Hui
     const ReSTIRDISettings& restirDISettings = m_DirectLightingReSTIRDI.GetSettings();
-    m_Diagnostics.AddMetadata("restirdi.boiling_filter_enabled", restirDISettings.EnableBoilingFilter ? "true" : "false");
     m_Diagnostics.AddMetadata("restirdi.temporal_ignore_geometry", restirDISettings.EnableTemporalIgnoreGeometry ? "true" : "false");
-    m_Diagnostics.AddMetadata("restirdi.boiling_filter_strength", std::to_string(restirDISettings.BoilingFilterStrength));
+//Modify End
 //Modify Begin:2026-08-28 by Hui
     const Hdr10OutputCapabilities& hdr10Capabilities = PWindow->GetHdr10OutputCapabilities();
     m_Diagnostics.AddMetadata("presentation.hdr10_active", m_Hdr10OutputEnabled ? "true" : "false");
@@ -2317,7 +2303,7 @@ void RaytracingDemo::InitializeDiagnostics()
             { "peak_nits", static_cast<double>(m_Hdr10PeakNits) },
         });
 //Modify End
-//Modify Begin:2026-09-10 by Hui
+//Modify Begin:2026-10-13 by Hui
     constexpr const char* reproductionEnvironment[] = {
         "RAYTRACING_DEMO_AUTOTEST",
         "RAYTRACING_DEMO_AUTOTEST_START_CASE",
@@ -2353,8 +2339,6 @@ void RaytracingDemo::InitializeDiagnostics()
         "RAYTRACING_DEMO_MESHLET_BACKEND",
         "RAYTRACING_DEMO_RESTIRDI_TEMPORAL",
         "RAYTRACING_DEMO_RESTIRDI_SPATIAL",
-        "RAYTRACING_DEMO_RESTIRDI_BOILING",
-        "RAYTRACING_DEMO_RESTIRDI_BOILING_STRENGTH",
         "RAYTRACING_DEMO_RESTIRDI_TEMPORAL_IGNORE_GEOMETRY",
         "RAYTRACING_DEMO_SCENE_BEHAVIOR",
     };
@@ -2674,6 +2658,7 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
     case RuntimeAutomationAction::MaterialShading:
         SetMaterialShadingModel(static_cast<MaterialShadingModel>(value));
         break;
+//Modify Begin:2026-10-13 by Hui
     case RuntimeAutomationAction::ReSTIRDIConfig:
     {
         m_PathTracingBackend = PathTracingBackend::InlineRayQuery;
@@ -2685,7 +2670,6 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
         settings.EnableTemporalResampling = (value & (1u << 1u)) != 0u;
         settings.EnableTemporalVisibilityShortcut = (value & (1u << 2u)) != 0u;
         settings.EnableTemporalPermutationSampling = (value & (1u << 3u)) != 0u;
-        settings.EnableBoilingFilter = (value & (1u << 4u)) != 0u;
         settings.EnableSpatialResampling = (value & (1u << 5u)) != 0u;
         settings.EnableSpatialMaterialSimilarityTest = (value & (1u << 6u)) != 0u;
         settings.EnableFinalVisibility = (value & (1u << 7u)) != 0u;
@@ -2700,6 +2684,7 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
             RenderPipelineUpdate::RebuildPipelinesAndRebindResources);
         break;
     }
+//Modify End
 //Modify Begin:2026-09-28 by Hui
     case RuntimeAutomationAction::CaptureScreenshot:
         if (value > static_cast<uint32_t>(RaytracingDemoAutomation::ScreenshotCapture::ReSTIRDIAndGI))

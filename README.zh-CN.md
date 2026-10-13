@@ -21,7 +21,7 @@
 - **光线追踪与降噪**：同一场景可在 inline ray query 和 shader-table DXR 之间切换，并可使用 NRD 或 SVGF；Compacted Indirect 会先生成有效像素列表，再驱动后续光追/ReSTIR 阶段。
 - **材质着色模型**：默认 GGX 金属度/粗糙度 PBR 评估已归入 Framework；sample UI 可选择实验性的 `Stylized Comic` 风格化 PBR-NPR 变体。
 - **Meshlet 实验路径**：包含 Meshlet 构建、GPU 资源、task shader / compute-indirect 两种 GBuffer 后端，以及通过图声明的动态 transform/geometry 同步。
-- **ReSTIR DI 直接光**：提供 RIS、时域/Boiling/空域复用、各阶段的可见性与 bias correction 配置，以及最终着色。
+- **ReSTIR DI 直接光**：提供 RIS、时域/空域复用、各阶段的可见性与 bias correction 配置，以及最终着色。
 - **ReSTIR GI 间接光**：基于 Inline Ray Query，提供初始 BSDF 采样、时域复用、空域复用、Jacobian correction 和最终可见性/着色。
 - **Bloom**：Raster 版本由 Framework 注册为 RenderGraph 子图；CUDA 版本继续演示 D3D12 shared resource、shared fence 与 CUDA external semaphore 的互操作流程。
 - **实验性帧特性**：接入 Native NGX DLSS SR/DLAA，以及 Framework 管理的 Streamline Ray Reconstruction 和 Frame Generation。DX12Library 只暴露通用的设备创建前/后 runtime 生命周期；queue 与 swap chain 仍走普通 D3D12/DXGI 创建路径，由链接的 Streamline interposer 完成拦截。这些路径尚未完成可交付验证。
@@ -140,7 +140,9 @@ UnitySceneDump <scene.unity|scene.json|scene.fbx|scene.xml> [--allow-missing-cam
 
 ### Shader Model 6.10 Preview 基线
 
-项目中的 raster、compute、task/mesh 和 DXR library shader 均由 DXC 按 Shader Model 6.10 Preview 编译，即 `vs/ps/cs/as/ms/lib_6_10`。仓库在 `D3D12/` 随附 DirectX Agility SDK **1.721.3-preview** 运行时，在 `External/AgilitySDK/include/` 随附匹配的 C++ 头文件；CMake 会检查这套 redist，启动时还会拒绝不支持 Shader Model 6.10 Preview 的驱动。
+项目默认将 raster、compute、task/mesh 和 DXR library shader 由 DXC 按 Shader Model 6.10 Preview 编译，即 `vs/ps/cs/as/ms/lib_6_10`。仓库在 `D3D12/` 随附 DirectX Agility SDK **1.721.3-preview** 运行时，在 `External/AgilitySDK/include/` 随附匹配的 C++ 头文件；CMake 会检查这套 redist，启动时检查当前构建选择的 Shader Model。
+
+驱动不支持 SM6.10 时，可在 CMake 配置时传入 `-DDX12_RENDERER_SHADER_MODEL_VERSION=6.8`。该配置同时选择构建时 shader、运行时 shader variant 和启动能力检查的 SM6.8 基线。切换配置后需要重新编译所有 shader 输出，当前增量 shader 脚本仅检查入口文件时间戳。Preview runtime 与开发者模式要求仍然适用。
 
 **运行 Preview SDK 前必须开启 Windows 开发者模式。** 在 Windows 设置中搜索“开发者模式”并启用（Windows 11 通常位于“系统 → 开发者选项”，较早版本位于“隐私和安全性 → 开发者选项”；Windows 10 位于“更新和安全 → 开发者选项”）。未启用时，Preview runtime 初始化可能失败并返回 `D3D12_ERROR_INVALID_REDIST`。开启后重新启动渲染器。
 

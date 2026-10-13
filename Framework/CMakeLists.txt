@@ -55,7 +55,6 @@ set(SHADER_FILES_COMPUTE
 set(FRAMEWORK_RESTIR_DI_SHADER_FILES
         "shaders/ReSTIRDI/ReSTIRDI.RIS.cs.hlsl"
         "shaders/ReSTIRDI/ReSTIRDI.Temporal.cs.hlsl"
-        "shaders/ReSTIRDI/ReSTIRDI.Boiling.cs.hlsl"
         "shaders/ReSTIRDI/ReSTIRDI.Spatial.cs.hlsl"
         "shaders/ReSTIRDI/ReSTIRDI.Shade.cs.hlsl"
         )

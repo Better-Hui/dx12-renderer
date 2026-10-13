@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-//Modify Begin:2026-07-30 by Hui
+//Modify Begin:2026-10-13 by Hui
 enum class ReSTIRDITemporalBiasCorrectionMode : uint32_t
 {
     Off = 0,
@@ -35,9 +35,6 @@ struct ReSTIRDISettings
     float TemporalDepthSimilarityThreshold = 0.1f;
     float TemporalMaterialSimilarityThreshold = 0.05f;
 
-    bool EnableBoilingFilter = true;
-    float BoilingFilterStrength = 0.2f;
-
     bool EnableSpatialResampling = true;
     ReSTIRDISpatialBiasCorrectionMode SpatialBiasCorrection = ReSTIRDISpatialBiasCorrectionMode::Basic;
     uint32_t SpatialNeighborCount = 1;
@@ -67,7 +64,6 @@ struct ReSTIRDIFrameConstants
     uint32_t TemporalVisibilityShortcutEnabled = 0;
     uint32_t TemporalPermutationSamplingEnabled = 0;
     uint32_t TemporalMaterialSimilarityTestEnabled = 0;
-    uint32_t BoilingFilterEnabled = 0;
 
     uint32_t TemporalMaxHistoryLength = 1;
     uint32_t SpatialResamplingEnabled = 0;
@@ -83,7 +79,6 @@ struct ReSTIRDIFrameConstants
     uint32_t FinalVisibilityDiscardInvisibleSamples = 0;
     uint32_t FinalVisibilityMaxAge = 0;
 
-    float BoilingFilterStrength = 0.2f;
     float TemporalNormalSimilarityThreshold = 0.5f;
     float TemporalDepthSimilarityThreshold = 0.1f;
     float TemporalMaterialSimilarityThreshold = 0.05f;

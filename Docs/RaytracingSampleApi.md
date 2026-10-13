@@ -57,7 +57,6 @@ When the Direct Lighting UI selects ReSTIR DI on the inline ray-query backend, F
 Base Resources
 -> ReSTIR DI Initial Sampling
 -> ReSTIR DI Temporal Resampling
--> ReSTIR DI Boiling Filter
 -> ReSTIR DI Spatial Resampling
 -> ReSTIR DI Shade
 -> Lighting Composite
@@ -83,8 +82,7 @@ Bloom Prefilter
 `ReSTIRDISettings` currently exposes:
 
 - RIS candidate count and optional initial visibility (disabled by default; enabling it can discard an occluded selected candidate before temporal/spatial reuse instead of replacing it).
-- Temporal reuse, `Off` / `Basic` / `RayTraced` temporal bias correction, a 20-frame default history-length clamp, reprojection similarity tests, and permutation sampling.
-- Boiling filtering within the temporal shader, after temporal resampling and before spatial resampling. It preserves the selected sample and caps only an outlier reservoir weight; clearing the reservoir was found to erase all direct lighting on glossy/metal surfaces and make them appear diffuse.
+- Temporal reuse, `Off` / `Basic` / `RayTraced` temporal bias correction, a 20-frame default history-length clamp, reprojection similarity tests, and permutation sampling. When permutation sampling is disabled, stochastic subpixel reprojection follows RTXDI's random motion offset before rounding to the history pixel.
 - Spatial reuse, `Off` / `Basic` / `Pairwise` / `RayTraced` spatial bias correction, neighbor/radius settings, disocclusion boosting, and normal/depth/material similarity tests.
 - Final visibility, optional final-visibility reuse, and reuse age/distance limits.
 
