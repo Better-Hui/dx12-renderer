@@ -1,4 +1,4 @@
-//Modify Begin:2026-09-30 by Hui
+//Modify Begin:2026-10-14 by Hui
 #include <Automation/RuntimeAutomationController.h>
 
 #include <Framework/Diagnostics/DiagnosticsSession.h>
@@ -124,6 +124,10 @@ void DemoAutomation::RuntimeAutomationController::Initialize(
     else if (mode == "svgf")
     {
         steps = testSuites.SVGF;
+    }
+    else if (mode == "pt-gi")
+    {
+        steps = testSuites.PathTracingGI;
     }
     else if (mode == "raster-gbuffer-motion")
     {

@@ -132,7 +132,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     const float3 emission = GBufferTextures[GBuffer_EmissionMetallic].Load(int3(pixel, 0)).rgb;
     sampleColor += emission;
 //Modify End
-//Modify Begin:2026-08-06 by Hui
+//Modify Begin:2026-10-14 by Hui
 #if RAYTRACING_DEMO_COMPOSITE_DIRECT_LIGHTING
         const float4 directLightingSample = DirectLightingTexture.Load(int3(pixel, 0));
         directLighting = directLightingSample.rgb;
@@ -158,7 +158,9 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     const float3 nrdDemodulation = GetNRDDiffuseDemodulation(pixel);
         NRDNoisyRadiance[pixel] = PackNRDDiffuseRadianceHitDistance(sampleColor / nrdDemodulation, hitDistance, viewZ, roughness);
 #elif RAYTRACING_DEMO_COMPOSITE_DENOISER_MODE == 2
-        NoisyRadiance[pixel] = float4(SanitizeNRDRadiance(sampleColor), hitDistance);
+        // SVGF removes emission before filtering and restores it afterward.
+        // Clamping the combined signal first would destroy that identity.
+        NoisyRadiance[pixel] = float4(all(isfinite(sampleColor)) ? max(sampleColor, 0.0f) : 0.0f, hitDistance);
 #endif
 
 #if !RAYTRACING_DEMO_COMPOSITE_ACCUMULATION

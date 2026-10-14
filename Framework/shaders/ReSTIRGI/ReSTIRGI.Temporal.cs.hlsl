@@ -3,7 +3,7 @@
 #include "ReSTIRGI/ReSTIRGIConstants.hlsli"
 #include <Common/ActivePixelList.hlsli>
 
-//Modify Begin:2026-08-19 by Hui
+//Modify Begin:2026-10-14 by Hui
 Texture2D<uint4> ReSTIRGIInitialCreation : register(t12, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
 Texture2D<uint4> ReSTIRGIInitialHit : register(t13, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
 Texture2D<uint4> ReSTIRGIInitialLight : register(t14, COMMON_ROOT_SIGNATURE_PIPELINE_SPACE);
@@ -65,7 +65,9 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
 #if RESTIR_GI_USE_TEMPORAL_REUSE
         if (ReSTIRGI_HistoryValid != 0u)
         {
-            const float2 motion = ReSTIRGI_LoadMotionVector(pixel) * float2(ReSTIRGI_Width, ReSTIRGI_Height);
+            float2 motion = ReSTIRGI_LoadMotionVector(pixel) * float2(ReSTIRGI_Width, ReSTIRGI_Height);
+            // Stochastic rounding avoids coherent history duplication during camera motion.
+            motion += ReSTIRGI_SampleNoise(pixel, ReSTIRGI_FrameIndex, 0x6d2b79f5u) - 0.5f;
             const int2 reprojectedPixel = int2(round(float2(pixel) + motion));
             if (all(reprojectedPixel >= 0) &&
                 reprojectedPixel.x < int(ReSTIRGI_Width) &&

@@ -503,7 +503,7 @@ void RaytracingDemoPasses::Builder::AddDirectLightingPass(
 }
 //Modify End
 
-//Modify Begin:2026-08-24 by Hui
+//Modify Begin:2026-10-14 by Hui
 void RaytracingDemoPasses::Builder::AddIndirectLightingPass(
     RenderGraph::RenderGraphBuilder& renderGraphBuilder,
     const RaytracingDemoPassResources& resources,
@@ -528,6 +528,26 @@ void RaytracingDemoPasses::Builder::AddIndirectLightingPass(
             passData.Config = config;
             passData.Backend = backend;
             passData.DispatchMode = dispatchMode;
+            // Declare scene inputs so the direct-queue preamble handles any
+            // graphics-only before-state before async ray queries execute.
+            const auto readSceneResource = [&passBuilder](const Resource& resource)
+            {
+                passBuilder.ReadExternal(resource, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            };
+            resources.Scene.ForEachGBufferShaderResource(readSceneResource);
+            readSceneResource(resources.Scene.GetGeometryBuffer());
+            resources.Lights.ForEachShaderResource(readSceneResource);
+            if (resources.SkyboxTexture != nullptr)
+                readSceneResource(*resources.SkyboxTexture);
+            if (resources.Scene.GetBlueNoiseScalarTexture() != nullptr)
+                readSceneResource(*resources.Scene.GetBlueNoiseScalarTexture());
+            if (resources.Scene.GetBlueNoiseVec2Texture() != nullptr)
+                readSceneResource(*resources.Scene.GetBlueNoiseVec2Texture());
+            for (const auto& mesh : resources.Scene.GetRayTracingAccelerationStructure().GetMeshes())
+            {
+                readSceneResource(mesh->GetVertexBuffer());
+                readSceneResource(mesh->GetIndexBuffer());
+            }
             passBuilder.ReadToken(DemoResourceIds::BaseResourcesFinishedToken);
             if (dispatchMode == PathTracingDispatchMode::CompactedIndirect)
             {

@@ -64,6 +64,9 @@ namespace RaytracingDemoAutomation
         ReSTIRDI,
         ReSTIRGI,
         ReSTIRDIAndGI,
+        SVGFNoisy,
+        SVGFFiltered,
+        SVGFMotion,
     };
 
     struct MatrixCase

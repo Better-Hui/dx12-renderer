@@ -1,6 +1,6 @@
 #pragma once
 
-//Modify Begin:2026-09-30 by Hui
+//Modify Begin:2026-10-14 by Hui
 #include <Framework/Diagnostics/AutomationRunner.h>
 
 #include <cstddef>
@@ -31,6 +31,7 @@ namespace DemoAutomation
         std::vector<Step> DynamicScene;
         std::vector<Step> OIDN;
         std::vector<Step> SVGF;
+        std::vector<Step> PathTracingGI;
         std::vector<Step> RasterGBufferMotion;
         std::vector<Step> Matrix;
         std::vector<Step> ReSTIRGIProfile;

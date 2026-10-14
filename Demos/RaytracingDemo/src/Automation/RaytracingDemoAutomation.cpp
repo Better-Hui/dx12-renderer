@@ -1,4 +1,4 @@
-//Modify Begin:2026-09-30 by Hui
+//Modify Begin:2026-10-14 by Hui
 #include <Automation/RaytracingDemoAutomation.h>
 
 #include <utility>
@@ -393,18 +393,42 @@ DemoAutomation::TestSuites RaytracingDemoAutomation::CreateTestSuites()
         makeStep(Action::VerifyOIDNResult, 0u, "oidn-rebuild-result-verify"),
         makeStep(Action::Denoiser, static_cast<uint32_t>(DenoiserController::Algorithm::NRD), "denoiser=nrd"),
     };
+    testSuites.PathTracingGI = {
+        makeStep(Action::AsyncCompute, 1u, "pt-gi-async=1"),
+        makeStep(Action::IndirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::PathTracing), "pt-gi-switch=pathtracing"),
+        makeStep(Action::Wait, 0u, "pt-gi-async-warmup"),
+        makeStep(Action::Denoiser, static_cast<uint32_t>(DenoiserController::Algorithm::SVGF), "pt-gi-denoiser=svgf"),
+        makeStep(Action::Wait, 0u, "pt-gi-svgf-warmup"),
+        makeStep(Action::IndirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::None), "pt-gi-switch=none"),
+        makeStep(Action::IndirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::PathTracing), "pt-gi-switch=pathtracing-again"),
+        makeStep(Action::Wait, 0u, "pt-gi-rebuild-warmup"),
+        makeStep(Action::AsyncCompute, 0u, "pt-gi-async=0"),
+        makeStep(Action::Wait, 0u, "pt-gi-direct-queue-warmup"),
+        makeStep(Action::AsyncCompute, 1u, "pt-gi-async=1-again"),
+        makeStep(Action::Denoiser, static_cast<uint32_t>(DenoiserController::Algorithm::Off), "pt-gi-denoiser=off"),
+        makeStep(Action::Wait, 0u, "pt-gi-final-warmup"),
+    };
     testSuites.SVGF = {
+        makeStep(Action::Denoiser, static_cast<uint32_t>(DenoiserController::Algorithm::SVGF), "denoiser=svgf-initial"),
+        makeStep(Action::Wait, 0u, "svgf-initial-graph-rebuild"),
+        makeStep(Action::Denoiser, static_cast<uint32_t>(DenoiserController::Algorithm::Off), "denoiser=off-initial"),
+        makeStep(Action::Wait, 0u, "svgf-noisy-warmup"),
+        makeStep(Action::CaptureScreenshot, static_cast<uint32_t>(ScreenshotCapture::SVGFNoisy), "svgf-capture=noisy"),
         makeStep(Action::PathTracingBackend, static_cast<uint32_t>(PathTracingBackend::InlineRayQuery), "svgf-backend=inline"),
         makeStep(Action::DirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::PathTracing), "svgf-direct=pathtracing"),
         makeStep(Action::IndirectLighting, static_cast<uint32_t>(RaytracingDemoLightingTechnique::None), "svgf-indirect=none"),
         makeStep(Action::MaxBounces, 1u, "svgf-bounces=1"),
-        makeStep(Action::Denoiser, static_cast<uint32_t>(DenoiserController::Algorithm::SVGF), "denoiser=svgf"),
+        makeStep(Action::Denoiser, static_cast<uint32_t>(DenoiserController::Algorithm::SVGF), "denoiser=svgf-test"),
         makeStep(Action::SVGFAtrousIterations, 1u, "svgf-atrous=1"),
         makeStep(Action::Wait, 0u, "svgf-atrous=1-warmup"),
         makeStep(Action::SVGFAtrousIterations, 2u, "svgf-atrous=2"),
         makeStep(Action::Wait, 0u, "svgf-atrous=2-warmup"),
         makeStep(Action::SVGFAtrousIterations, 4u, "svgf-atrous=4"),
         makeStep(Action::Wait, 0u, "svgf-atrous=4-warmup"),
+        makeStep(Action::CaptureScreenshot, static_cast<uint32_t>(ScreenshotCapture::SVGFFiltered), "svgf-capture=filtered"),
+        makeStep(Action::GBufferCameraMotion, 1u, "svgf-camera-motion"),
+        makeStep(Action::Wait, 0u, "svgf-motion-warmup"),
+        makeStep(Action::CaptureScreenshot, static_cast<uint32_t>(ScreenshotCapture::SVGFMotion), "svgf-capture=motion"),
         makeStep(Action::SVGFAtrousIterations, 8u, "svgf-atrous=8"),
         makeStep(Action::Wait, 0u, "svgf-atrous=8-warmup"),
         makeStep(Action::Denoiser, static_cast<uint32_t>(DenoiserController::Algorithm::Off), "denoiser=off"),

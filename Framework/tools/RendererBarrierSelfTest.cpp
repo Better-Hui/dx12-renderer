@@ -1,4 +1,4 @@
-//Modify Begin:2026-09-29 by Hui
+//Modify Begin:2026-10-14 by Hui
 #include "RendererDiagnosticsCommands.h"
 #include <DX12Library/Helpers.h>
 #include <DX12Library/CommandList.h>
@@ -414,6 +414,8 @@ int RendererDiagnosticsTool::BarrierSelfTestCommand()
         resources.NoisyRadiance = texture(DXGI_FORMAT_R32G32B32A32_FLOAT);
         resources.GBufferNormal = texture(DXGI_FORMAT_R32G32B32A32_FLOAT);
         resources.GBufferPosition = texture(DXGI_FORMAT_R32G32B32A32_FLOAT);
+        resources.GBufferAlbedoOcclusion = texture(DXGI_FORMAT_R32G32B32A32_FLOAT);
+        resources.GBufferEmissionMetallic = texture(DXGI_FORMAT_R32G32B32A32_FLOAT);
         resources.MotionVector = texture(DXGI_FORMAT_R32G32_FLOAT);
         resources.Depth = RenderTexture::Create2D(
             framework,
@@ -428,14 +430,18 @@ int RendererDiagnosticsTool::BarrierSelfTestCommand()
         resources.HistoryMomentsRead = texture(DXGI_FORMAT_R32G32_FLOAT);
         resources.HistoryMomentsWrite = texture(DXGI_FORMAT_R32G32_FLOAT);
         resources.TemporalColor = texture(DXGI_FORMAT_R32G32B32A32_FLOAT);
-        resources.TemporalMoments = texture(DXGI_FORMAT_R32G32_FLOAT);
-        resources.Variance = texture(DXGI_FORMAT_R32_FLOAT);
+        resources.Illumination = texture(DXGI_FORMAT_R32G32B32A32_FLOAT);
+        resources.HistorySurfaceRead = texture(DXGI_FORMAT_R32G32B32A32_FLOAT);
+        resources.HistorySurfaceWrite = texture(DXGI_FORMAT_R32G32B32A32_FLOAT);
+        resources.HistoryLengthRead = texture(DXGI_FORMAT_R16_FLOAT);
+        resources.HistoryLengthWrite = texture(DXGI_FORMAT_R16_FLOAT);
         resources.Ping = texture(DXGI_FORMAT_R32G32B32A32_FLOAT);
         resources.Pong = texture(DXGI_FORMAT_R32G32B32A32_FLOAT);
         const std::shared_ptr<Texture> textures[]{ resources.NoisyRadiance, resources.GBufferNormal, resources.GBufferPosition,
             resources.MotionVector, resources.Depth, resources.Output, resources.HistoryColorRead, resources.HistoryColorWrite,
-            resources.HistoryMomentsRead, resources.HistoryMomentsWrite, resources.TemporalColor, resources.TemporalMoments,
-            resources.Variance, resources.Ping, resources.Pong };
+            resources.HistoryMomentsRead, resources.HistoryMomentsWrite, resources.TemporalColor, resources.Illumination,
+            resources.HistorySurfaceRead, resources.HistorySurfaceWrite, resources.HistoryLengthRead, resources.HistoryLengthWrite,
+            resources.GBufferAlbedoOcclusion, resources.GBufferEmissionMetallic, resources.Ping, resources.Pong };
         const auto initColor = Compile("RWTexture2D<float4> Output:register(u0); [numthreads(8,8,1)] void main(uint3 i:SV_DispatchThreadID) { Output[i.xy]=float4(1,2,3,1); }");
         const ShaderBlob colorBlob(initColor->GetBufferPointer(), initColor->GetBufferSize());
         ComputeShader colorShader(framework, colorBlob, ComputePipelineDescBuilder::ReflectedDefault(colorBlob).Build());
@@ -446,6 +452,16 @@ int RendererDiagnosticsTool::BarrierSelfTestCommand()
                 setupContext.ClearUnorderedAccessUint(*item, zeros);
         setupContext.SetUnorderedAccessView(colorShader, "Output", UnorderedAccessView(resources.NoisyRadiance));
         setupContext.BindPipeline(colorShader);
+        setupContext.BindDescriptorSet(colorShader.GetDescriptorSet());
+        setupContext.Dispatch(1);
+        // A visible plane with finite view Z and a nonzero encoded normal.
+        setupContext.SetUnorderedAccessView(colorShader, "Output", UnorderedAccessView(resources.GBufferPosition));
+        setupContext.BindDescriptorSet(colorShader.GetDescriptorSet());
+        setupContext.Dispatch(1);
+        setupContext.SetUnorderedAccessView(colorShader, "Output", UnorderedAccessView(resources.GBufferNormal));
+        setupContext.BindDescriptorSet(colorShader.GetDescriptorSet());
+        setupContext.Dispatch(1);
+        setupContext.SetUnorderedAccessView(colorShader, "Output", UnorderedAccessView(resources.GBufferAlbedoOcclusion));
         setupContext.BindDescriptorSet(colorShader.GetDescriptorSet());
         setupContext.Dispatch(1);
         setupContext.UseResource(*resources.Depth, D3D12_RESOURCE_STATE_DEPTH_WRITE, ResourceUse::Write);
@@ -476,6 +492,8 @@ int RendererDiagnosticsTool::BarrierSelfTestCommand()
         svgf.Record(context, resources);
         std::swap(resources.HistoryColorRead, resources.HistoryColorWrite);
         std::swap(resources.HistoryMomentsRead, resources.HistoryMomentsWrite);
+        std::swap(resources.HistorySurfaceRead, resources.HistorySurfaceWrite);
+        std::swap(resources.HistoryLengthRead, resources.HistoryLengthWrite);
         resources.HistoryValid = true;
         svgf.Record(context, resources);
         external.End();
@@ -509,6 +527,111 @@ int RendererDiagnosticsTool::BarrierSelfTestCommand()
         const D3D12_RANGE written{ 0, 0 };
         textureReadback->Unmap(0, &written);
         Expect(valid, "Graphless SVGF did not preserve constant radiance across ping-pong iterations.");
+
+        // Test temporal behavior independently of spatial noise and presentation.
+        const auto initializeSignal = Compile(
+            "cbuffer Constants:register(b0){float4 Value; uint Checker; uint3 Padding;}"
+            "RWTexture2D<float4> Output:register(u0);"
+            "[numthreads(8,8,1)] void main(uint3 i:SV_DispatchThreadID){"
+            "float sign=((i.x+i.y)&1)?1:-1;"
+            "Output[i.xy]=Value+float4(sign.xxx*0.5*Checker,0);}");
+        const ShaderBlob signalBlob(initializeSignal->GetBufferPointer(), initializeSignal->GetBufferSize());
+        ComputeShader signalShader(framework, signalBlob, ComputePipelineDescBuilder::ReflectedDefault(signalBlob).Build());
+        struct SignalConstants { DirectX::XMFLOAT4 Value; UINT Checker = 0; UINT Padding[3]{}; };
+        const auto setSignal = [&](CommandContext& ctx, const std::shared_ptr<Texture>& target,
+            DirectX::XMFLOAT4 value, UINT checker = 0u)
+        {
+            SignalConstants constants{ value, checker };
+            ctx.SetConstantBuffer(signalShader, "Constants", constants);
+            ctx.SetUnorderedAccessView(signalShader, "Output", UnorderedAccessView(target));
+            ctx.BindPipeline(signalShader);
+            ctx.BindDescriptorSet(signalShader.GetDescriptorSet());
+            ctx.Dispatch(1);
+        };
+        const auto rotateHistory = [&]()
+        {
+            std::swap(resources.HistoryColorRead, resources.HistoryColorWrite);
+            std::swap(resources.HistoryMomentsRead, resources.HistoryMomentsWrite);
+            std::swap(resources.HistorySurfaceRead, resources.HistorySurfaceWrite);
+            std::swap(resources.HistoryLengthRead, resources.HistoryLengthWrite);
+        };
+        const auto readColor = [&](const std::shared_ptr<Texture>& target)
+        {
+            auto list = queue->GetCommandList();
+            CommandContext ctx(*list);
+            ctx.UseResource(*target, D3D12_RESOURCE_STATE_COPY_SOURCE, ResourceUse::Read);
+            ctx.FlushBarriers();
+            const CD3DX12_TEXTURE_COPY_LOCATION location(target->GetD3D12Resource().Get(), 0);
+            list->GetGraphicsCommandList()->CopyTextureRegion(&dst, 0, 0, 0, &location, nullptr);
+            queue->WaitForFenceValue(queue->ExecuteCommandList(list));
+            unsigned char* mapped = nullptr;
+            ThrowIfFailed(textureReadback->Map(0, &range, reinterpret_cast<void**>(&mapped)));
+            std::array<DirectX::XMFLOAT4, 64> result;
+            for (UINT y = 0; y < 8; ++y)
+                std::memcpy(result.data() + y * 8, mapped + y * footprint.Footprint.RowPitch, 8 * sizeof(DirectX::XMFLOAT4));
+            textureReadback->Unmap(0, &written);
+            return result;
+        };
+        const auto expectConstant = [&](DirectX::XMFLOAT3 expected, const char* failure)
+        {
+            for (const auto& p : readColor(resources.Output))
+                Expect(std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z) &&
+                    std::abs(p.x - expected.x) < 0.01f && std::abs(p.y - expected.y) < 0.01f &&
+                    std::abs(p.z - expected.z) < 0.01f && std::abs(p.w - 1.0f) < 0.01f, failure);
+        };
+        // Restart at one sample, then move the camera forward while changing
+        // the signal. The second sample must get weight 1/2, not user alpha.
+        resources.HistoryValid = false;
+        auto first = queue->GetCommandList();
+        CommandContext firstContext(*first);
+        svgf.Record(firstContext, resources);
+        queue->WaitForFenceValue(queue->ExecuteCommandList(first));
+        rotateHistory();
+        resources.HistoryValid = true;
+        resources.PreviousWorldToView = DirectX::XMMatrixIdentity();
+        resources.WorldToView = DirectX::XMMatrixTranslation(0.0f, 0.0f, -1.0f);
+        auto second = queue->GetCommandList();
+        CommandContext secondContext(*second);
+        setSignal(secondContext, resources.NoisyRadiance, { 3.0f, 4.0f, 5.0f, 1.0f });
+        svgf.Record(secondContext, resources);
+        queue->WaitForFenceValue(queue->ExecuteCommandList(second));
+        expectConstant({ 2.0f, 3.0f, 4.0f }, "SVGF short-history weighting or camera-motion depth reprojection failed.");
+
+        // The newly visible plane must reject the old plane's illumination.
+        rotateHistory();
+        resources.PreviousWorldToView = resources.WorldToView;
+        auto disocclusion = queue->GetCommandList();
+        CommandContext disocclusionContext(*disocclusion);
+        setSignal(disocclusionContext, resources.GBufferPosition, { 1.0f, 2.0f, 30.0f, 1.0f });
+        svgf.Record(disocclusionContext, resources);
+        queue->WaitForFenceValue(queue->ExecuteCommandList(disocclusion));
+        expectConstant({ 3.0f, 4.0f, 5.0f }, "SVGF disocclusion did not reject incompatible history.");
+
+        // Emission is restored from the current material, never accumulated.
+        resources.HistoryValid = false;
+        auto emission = queue->GetCommandList();
+        CommandContext emissionContext(*emission);
+        setSignal(emissionContext, resources.GBufferEmissionMetallic, { 0.25f, 0.5f, 0.75f, 0.0f });
+        setSignal(emissionContext, resources.GBufferAlbedoOcclusion, { 0.5f, 0.25f, 0.1f, 1.0f });
+        svgf.Record(emissionContext, resources);
+        queue->WaitForFenceValue(queue->ExecuteCommandList(emission));
+        expectConstant({ 3.0f, 4.0f, 5.0f }, "SVGF demodulation/emission composition changed constant radiance.");
+
+        // A first-frame checkerboard needs positive spatial variance and must
+        // be attenuated even though its temporal variance is exactly zero.
+        auto checker = queue->GetCommandList();
+        CommandContext checkerContext(*checker);
+        setSignal(checkerContext, resources.GBufferEmissionMetallic, { 0.0f, 0.0f, 0.0f, 0.0f });
+        setSignal(checkerContext, resources.GBufferAlbedoOcclusion, { 1.0f, 1.0f, 1.0f, 1.0f });
+        setSignal(checkerContext, resources.NoisyRadiance, { 1.0f, 2.0f, 3.0f, 1.0f }, 1u);
+        svgf.Record(checkerContext, resources);
+        queue->WaitForFenceValue(queue->ExecuteCommandList(checker));
+        for (const auto& p : readColor(resources.HistoryColorWrite))
+            Expect(std::isfinite(p.w) && p.w > 0.0f && p.w < 0.25f,
+                "SVGF cold-start spatial variance or squared-weight propagation failed.");
+        for (const auto& p : readColor(resources.Output))
+            Expect(std::isfinite(p.x) && std::abs(p.x - 1.0f) < 0.25f,
+                "SVGF cold-start filtering did not attenuate checkerboard noise.");
     }
     queue->Flush();
     UINT64 errors = 0;
@@ -526,7 +649,7 @@ int RendererDiagnosticsTool::BarrierSelfTestCommand()
         }
     }
     Expect(errors == 0, "D3D12 validation reported resource-state errors.");
-    std::cout << "{\"barrier_selftest\":\"pass\",\"adapter\":\"WARP\",\"gpu_validation\":true,\"cases\":10,\"iterations\":8,\"svgf_frames\":2,\"debug_errors\":0}\n";
+    std::cout << "{\"barrier_selftest\":\"pass\",\"adapter\":\"WARP\",\"gpu_validation\":true,\"cases\":10,\"iterations\":8,\"svgf_frames\":7,\"svgf_temporal_and_variance\":\"pass\",\"debug_errors\":0}\n";
     return 0;
 }
 //Modify End

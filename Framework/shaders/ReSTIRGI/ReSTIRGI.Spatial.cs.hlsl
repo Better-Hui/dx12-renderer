@@ -1,4 +1,4 @@
-//Modify Begin:2026-09-23 by Hui
+//Modify Begin:2026-10-14 by Hui
 #include "ReSTIRGI/ReSTIRGISceneContract.hlsli"
 #include "ReSTIRGI/ReSTIRGI.hlsli"
 #include "ReSTIRGI/ReSTIRGIConstants.hlsli"
@@ -33,11 +33,38 @@ bool ReSTIRGIIsSpatiallyCompatible(
         abs(dot(positionDelta, receiver.NormalWs)) <= ReSTIRGI_SpatialPositionSimilarityThreshold;
 }
 
-float2 ReSTIRGIGetSpatialOffset(const uint offsetIndex)
+uint ReSTIRGISpatialHash(uint value)
+{
+    value ^= value >> 16u;
+    value *= 0x7feb352du;
+    value ^= value >> 15u;
+    value *= 0x846ca68bu;
+    value ^= value >> 16u;
+    return value;
+}
+
+float2 ReSTIRGIGetSpatialRotation(const uint2 pixel, const uint frameIndex)
+{
+    // Use full coordinates and frame index to break the STBN tile/slice period
+    // in the spatial-to-temporal feedback loop. Integration samples retain STBN.
+    const uint seed = ReSTIRGISpatialHash(pixel.x ^ ReSTIRGISpatialHash(
+        pixel.y ^ ReSTIRGISpatialHash(frameIndex ^ 0xa511e9b3u)));
+    const float angle = float(seed >> 8u) * (6.28318530718f / 16777216.0f);
+    float sine;
+    float cosine;
+    sincos(angle, sine, cosine);
+    return float2(cosine, sine);
+}
+
+float2 ReSTIRGIGetSpatialOffset(const uint offsetIndex, const float2 rotation)
 {
     const float2 offset = ReSTIRGISpatialOffsets[offsetIndex & 15u];
     const float offsetLengthSquared = dot(offset, offset);
-    return offsetLengthSquared > 1.0f ? offset * rsqrt(offsetLengthSquared) : offset;
+    const float2 diskOffset = offsetLengthSquared > 1.0f
+        ? offset * rsqrt(offsetLengthSquared) : offset;
+    return float2(
+        rotation.x * diskOffset.x - rotation.y * diskOffset.y,
+        rotation.y * diskOffset.x + rotation.x * diskOffset.y);
 }
 
 [numthreads(
@@ -105,10 +132,12 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
             pixel,
             ReSTIRGI_FrameIndex,
             0x739c52d1u).x * 16.0f);
+        // Reuse this rotation in bias correction to evaluate the same neighbors.
+        const float2 spatialRotation = ReSTIRGIGetSpatialRotation(pixel, ReSTIRGI_FrameIndex);
         [loop]
         for (uint sampleIndex = 0u; sampleIndex < ReSTIRGI_SpatialNeighborCount; ++sampleIndex)
         {
-            const float2 offset = ReSTIRGIGetSpatialOffset(offsetStart + sampleIndex);
+            const float2 offset = ReSTIRGIGetSpatialOffset(offsetStart + sampleIndex, spatialRotation);
             const int2 neighborPixel = clamp(
                 int2(pixel) + int2(round(offset * ReSTIRGI_SpatialSamplingRadius)),
                 int2(0, 0),
@@ -182,7 +211,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
                     continue;
                 }
 
-                const float2 offset = ReSTIRGIGetSpatialOffset(offsetStart + sampleIndex);
+                const float2 offset = ReSTIRGIGetSpatialOffset(offsetStart + sampleIndex, spatialRotation);
                 const int2 neighborPixel = clamp(
                     int2(pixel) + int2(round(offset * ReSTIRGI_SpatialSamplingRadius)),
                     int2(0, 0),

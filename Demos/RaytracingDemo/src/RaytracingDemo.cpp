@@ -412,7 +412,7 @@ namespace
     };
 //Modify End
 
-//Modify Begin:2026-09-23 by Hui
+//Modify Begin:2026-10-14 by Hui
     std::filesystem::path GetScenePath()
     {
         char* scenePath = nullptr;
@@ -444,12 +444,17 @@ namespace
         }
         std::free(scenePath);
 
-        constexpr const char* DefaultSceneRelativePath =
-            "Assets/Scenes/Sponza.unity";
+        constexpr const char* DefaultSceneRelativeDirectory =
+            "Assets/Scenes/LowPolyStreet";
+        constexpr const char* DefaultSceneFileName =
+            "LowPolyStreet.fbx";
         std::filesystem::path searchDirectory = std::filesystem::current_path();
         while (!searchDirectory.empty())
         {
-            const std::filesystem::path defaultScene = searchDirectory / DefaultSceneRelativePath;
+            const std::filesystem::path defaultSceneDirectory =
+                searchDirectory / DefaultSceneRelativeDirectory;
+            const std::filesystem::path defaultScene =
+                defaultSceneDirectory / DefaultSceneFileName;
             if (std::filesystem::exists(defaultScene))
             {
                 return defaultScene;
@@ -463,7 +468,7 @@ namespace
             searchDirectory = parentDirectory;
         }
 
-        throw std::runtime_error("Default Sponza scene file does not exist. Set RAYTRACING_DEMO_SCENE to a .json, .unity, .fbx, or Mitsuba .xml file.");
+        throw std::runtime_error("Default LowPolyStreet scene file does not exist. Set RAYTRACING_DEMO_SCENE to a .json, .unity, .fbx, or Mitsuba .xml file.");
     }
 //Modify End
 
@@ -1247,7 +1252,7 @@ void RaytracingDemo::LoadStartupConfiguration()
     {
         m_Denoisers.SetOIDNStaticSpp(static_cast<uint32_t>(std::max(intValue, 1)));
     }
-//Modify Begin:2026-09-11 by Hui
+//Modify Begin:2026-10-14 by Hui
     NRD::Settings nrdSettings = m_Denoisers.GetNRDSettings();
     if (configuration.TryGetString("NRD", "Mode", stringValue))
     {
@@ -1305,6 +1310,8 @@ void RaytracingDemo::LoadStartupConfiguration()
     {
         svgfSettings.AtrousIterations = static_cast<uint32_t>(std::clamp(intValue, 1, 8));
     }
+    if (configuration.TryGetInt("SVGF", "FeedbackTap", intValue))
+        svgfSettings.FeedbackTap = std::clamp(intValue, -1, 7);
     if (configuration.TryGetFloat("SVGF", "TemporalAlpha", floatValue)) svgfSettings.TemporalAlpha = floatValue;
     if (configuration.TryGetFloat("SVGF", "MomentsAlpha", floatValue)) svgfSettings.MomentsAlpha = floatValue;
     if (configuration.TryGetFloat("SVGF", "PhiColor", floatValue)) svgfSettings.PhiColor = floatValue;
@@ -1849,7 +1856,7 @@ void RaytracingDemo::ApplyStartupLightConfiguration()
     }
 }
 
-//Modify Begin:2026-10-13 by Hui
+//Modify Begin:2026-10-14 by Hui
 void RaytracingDemo::SaveRuntimeConfiguration()
 {
     const auto lightingTechniqueName = [](const RaytracingDemoLightingTechnique technique)
@@ -1998,6 +2005,7 @@ void RaytracingDemo::SaveRuntimeConfiguration()
     const SVGF::Settings svgf = m_Denoisers.GetSVGFSettings();
     stream << "[SVGF]\n"
            << "AtrousIterations = " << svgf.AtrousIterations << '\n'
+           << "FeedbackTap = " << svgf.FeedbackTap << '\n'
            << "TemporalAlpha = " << svgf.TemporalAlpha << '\n'
            << "MomentsAlpha = " << svgf.MomentsAlpha << '\n'
            << "PhiColor = " << svgf.PhiColor << '\n'
@@ -2687,7 +2695,7 @@ void RaytracingDemo::ApplyRuntimeAutomationAction(const uint32_t actionValue, co
 //Modify End
 //Modify Begin:2026-09-28 by Hui
     case RuntimeAutomationAction::CaptureScreenshot:
-        if (value > static_cast<uint32_t>(RaytracingDemoAutomation::ScreenshotCapture::ReSTIRDIAndGI))
+        if (value > static_cast<uint32_t>(RaytracingDemoAutomation::ScreenshotCapture::SVGFMotion))
         {
             throw std::out_of_range("Runtime automation screenshot capture index is out of range.");
         }
@@ -2719,8 +2727,9 @@ void RaytracingDemo::CapturePendingAutomationScreenshot()
     }
 
     const uint32_t captureIndex = m_PendingAutomationScreenshot.value();
-    constexpr std::array<const char*, 5u> captureNames = {
+    constexpr std::array<const char*, 8u> captureNames = {
         "pt-direct", "pt-indirect", "restir-di", "restir-gi", "restir-di-gi",
+        "svgf-noisy", "svgf-filtered", "svgf-motion",
     };
     RenderGraph::RenderGraphRoot& renderGraph = m_RenderPipeline.GetRenderGraph();
     const std::shared_ptr<Texture>& presentationTexture =
@@ -2742,7 +2751,7 @@ bool RaytracingDemo::AdvanceStartupLoad()
 try
 //Modify End
 {
-//Modify Begin:2026-08-23 by Hui
+//Modify Begin:2026-10-14 by Hui
     if (m_StartupLoadStage == StartupLoadStage::Bootstrap)
     {
         InitializeDiagnostics();
@@ -2753,9 +2762,7 @@ try
         const auto commandList = commandQueue->GetCommandList();
         m_ImGui = std::make_unique<ImGuiImpl>(m_FrameworkDeviceContext, *commandList, *PWindow);
         m_LightBillboardMesh = Mesh::CreateVerticalQuad(*commandList);
-//Modify Begin:2026-08-26 by Hui
         m_SpotLightGizmoMesh = Mesh::CreateCone(*commandList, 1.0f, 1.0f, 32);
-//Modify End
         m_DisplayBlitMesh = Mesh::CreateBlitTriangle(*commandList);
         commandQueue->ExecuteCommandList(commandList);
 

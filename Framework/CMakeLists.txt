@@ -47,6 +47,8 @@ set(SHADER_FILES_COMPUTE
         "shaders/SVGF/SVGFAtrous_CS.hlsl"
         "shaders/SVGF/SVGFComposite_CS.hlsl"
         "shaders/SVGF/SVGFTemporal_CS.hlsl"
+        "shaders/SVGF/SVGFPrepare_CS.hlsl"
+        "shaders/SVGF/SVGFFilterMoments_CS.hlsl"
         "shaders/OIDN/OIDNComposite_CS.hlsl"
         )
 

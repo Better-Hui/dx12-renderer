@@ -1,4 +1,4 @@
-//Modify Begin:2026-08-25 by Hui
+//Modify Begin:2026-10-14 by Hui
 #include <Denoising/DenoiserController.h>
 
 #include <DX12Library/Helpers.h>
@@ -326,7 +326,15 @@ bool DenoiserController::DrawImGui()
             svgfSettings.AtrousIterations = static_cast<uint32_t>(atrousIterations);
             svgfChanged = true;
         }
-        svgfChanged |= FrameworkImGui::SliderFloat("SVGF Temporal Alpha", &svgfSettings.TemporalAlpha, 0.001f, 1.0f, "%.3f");
+        int feedbackTap = svgfSettings.FeedbackTap;
+        if (FrameworkImGui::SliderInt("SVGF Feedback Tap", &feedbackTap, -1, atrousIterations - 1))
+        {
+            svgfSettings.FeedbackTap = feedbackTap;
+            svgfChanged = true;
+        }
+        svgfChanged |= FrameworkImGui::SliderFloat("SVGF Min Current Weight", &svgfSettings.TemporalAlpha, 0.001f, 1.0f, "%.3f");
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Current weight = max(alpha, 1 / history length). Invalid history uses 1. Feedback tap is zero-based; -1 uses temporal color.");
         svgfChanged |= FrameworkImGui::SliderFloat("SVGF Moments Alpha", &svgfSettings.MomentsAlpha, 0.001f, 1.0f, "%.3f");
         svgfChanged |= FrameworkImGui::SliderFloat("SVGF Phi Color", &svgfSettings.PhiColor, 0.1f, 32.0f, "%.2f");
         svgfChanged |= FrameworkImGui::SliderFloat("SVGF Phi Normal", &svgfSettings.PhiNormal, 1.0f, 256.0f, "%.1f");

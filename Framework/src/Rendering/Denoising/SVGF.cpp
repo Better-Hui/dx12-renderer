@@ -1,9 +1,6 @@
-//Modify Begin:2026-09-29 by Hui
+//Modify Begin:2026-10-14 by Hui
 #include <Framework/Rendering/Denoising/SVGF.h>
-
-#include <DX12Library/CommandList.h>
 #include <DX12Library/Helpers.h>
-#include <DX12Library/Resource.h>
 #include <DX12Library/Texture.h>
 #include <Framework/Core/FrameworkDeviceContext.h>
 #include <Framework/Rendering/Pipeline/CommandContext.h>
@@ -12,152 +9,54 @@
 #include <Framework/Rendering/Texture/RenderTexture.h>
 #include <Framework/Rendering/Texture/ShaderResourceView.h>
 #include <Framework/Rendering/Texture/UnorderedAccessView.h>
+#include <Framework/SVGFPrepare_CS.h>
+#include <Framework/SVGFTemporal_CS.h>
+#include <Framework/SVGFFilterMoments_CS.h>
 #include <Framework/SVGFAtrous_CS.h>
 #include <Framework/SVGFComposite_CS.h>
-#include <Framework/SVGFTemporal_CS.h>
 #include <RenderGraph/RenderContext.h>
 #include <RenderGraph/RenderGraphBuilder.h>
 
 #include <algorithm>
+#include <array>
 #include <utility>
 #include <unordered_set>
 
 namespace
 {
-    constexpr FLOAT SvgfClearColor[] = { 0.0f, 0.0f, 0.0f, 0.0f };
-    constexpr bool SvgfScratchUsesDedicatedResources = true;
-
-    std::unique_ptr<ComputeShader> CreateReflectedComputeShader(
-        FrameworkDeviceContext& deviceContext,
-        const void* shaderBytecode,
-        const size_t shaderBytecodeSize)
+    std::unique_ptr<ComputeShader> CreateShader(FrameworkDeviceContext& context, const void* data, size_t size)
     {
-        const ShaderBlob shader(shaderBytecode, shaderBytecodeSize);
-        return std::make_unique<ComputeShader>(
-            deviceContext,
-            shader,
-            ComputePipelineDescBuilder::ReflectedDefault(shader).Build());
+        const ShaderBlob blob(data, size);
+        return std::make_unique<ComputeShader>(context, blob, ComputePipelineDescBuilder::ReflectedDefault(blob).Build());
     }
 
-}
+    enum class SVGFStage { Prepare, Temporal, Moments, Atrous, Feedback, Composite };
 
-class SVGFGraphPass final : public RenderGraph::RenderPass
-{
-public:
-    struct Desc
+    struct SVGFPassData
     {
         std::shared_ptr<const SVGF::GraphInputs> Inputs;
-        const wchar_t* PassName = L"SVGF";
-        RenderGraph::ResourceId TemporalColor = 0;
-        RenderGraph::ResourceId TemporalMoments = 0;
-        RenderGraph::ResourceId Variance = 0;
-        RenderGraph::ResourceId Ping = 0;
-        RenderGraph::ResourceId Pong = 0;
-        RenderGraph::ImportedResourceHandle HistoryColorRead;
-        RenderGraph::ImportedResourceHandle HistoryColorWrite;
-        RenderGraph::ImportedResourceHandle HistoryMomentsRead;
-        RenderGraph::ImportedResourceHandle HistoryMomentsWrite;
+        std::array<RenderGraph::ResourceId, 4> Scratch{};
+        std::array<RenderGraph::ImportedResourceHandle, 4> ReadHistory, WriteHistory;
+        SVGFStage Stage = SVGFStage::Prepare;
+        uint32_t StepSize = 1;
+        int32_t FeedbackIndex = -1;
+        RenderGraph::ResourceId FilterInput = 0, FilterOutput = 0;
     };
 
-    SVGFGraphPass(SVGF& feature, Desc desc)
-        : m_Feature(feature)
-        , m_Inputs(std::move(desc.Inputs))
-        , m_TemporalColor(desc.TemporalColor)
-        , m_TemporalMoments(desc.TemporalMoments)
-        , m_Variance(desc.Variance)
-        , m_Ping(desc.Ping)
-        , m_Pong(desc.Pong)
+    void Dispatch(CommandContext& context, ComputeShader& shader, uint32_t width, uint32_t height)
     {
-        SetPassName(desc.PassName);
-        RegisterInput({ m_Inputs->InputToken, RenderGraph::InputType::Token });
-        RegisterInput({ m_Inputs->NoisyRadiance, RenderGraph::InputType::NonPixelShaderResource });
-        RegisterInput({ m_Inputs->GBufferNormal, RenderGraph::InputType::NonPixelShaderResource });
-        RegisterInput({ m_Inputs->GBufferPosition, RenderGraph::InputType::NonPixelShaderResource });
-        RegisterInput({ m_Inputs->MotionVector, RenderGraph::InputType::NonPixelShaderResource });
-        RegisterInput({ m_Inputs->Depth, RenderGraph::InputType::NonPixelShaderResource });
-        RegisterInput({ desc.HistoryColorRead.GetId(), RenderGraph::InputType::ExternalAccess });
-        RegisterInput({ desc.HistoryMomentsRead.GetId(), RenderGraph::InputType::ExternalAccess });
-        RegisterInput({ m_TemporalColor, RenderGraph::InputType::UnorderedAccess });
-        RegisterInput({ m_TemporalMoments, RenderGraph::InputType::UnorderedAccess });
-        RegisterInput({ m_Variance, RenderGraph::InputType::UnorderedAccess });
-        RegisterInput({ m_Ping, RenderGraph::InputType::UnorderedAccess });
-        RegisterInput({ m_Pong, RenderGraph::InputType::UnorderedAccess });
-        RegisterOutput({ m_TemporalColor, RenderGraph::OutputType::UnorderedAccess });
-        RegisterOutput({ m_TemporalMoments, RenderGraph::OutputType::UnorderedAccess });
-        RegisterOutput({ m_Variance, RenderGraph::OutputType::UnorderedAccess });
-        RegisterOutput({ m_Ping, RenderGraph::OutputType::UnorderedAccess });
-        RegisterOutput({ m_Pong, RenderGraph::OutputType::UnorderedAccess });
-        RegisterOutput({ m_Inputs->Output, RenderGraph::OutputType::UnorderedAccess });
-        RegisterOutput({ desc.HistoryColorWrite.GetId(), RenderGraph::OutputType::ExternalAccess });
-        RegisterOutput({ desc.HistoryMomentsWrite.GetId(), RenderGraph::OutputType::ExternalAccess });
-        RegisterOutput({ m_Inputs->OutputToken, RenderGraph::OutputType::Token });
-        AddImportedResourceAccess(desc.HistoryColorRead,
-            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-            RenderGraph::ExternalResourceAccessMode::Read, false);
-        AddImportedResourceAccess(desc.HistoryMomentsRead,
-            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-            RenderGraph::ExternalResourceAccessMode::Read, false);
-        AddImportedResourceAccess(desc.HistoryColorWrite,
-            D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-            RenderGraph::ExternalResourceAccessMode::Write, false);
-        AddImportedResourceAccess(desc.HistoryMomentsWrite,
-            D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-            RenderGraph::ExternalResourceAccessMode::Write, false);
+        context.BindPipeline(shader);
+        context.BindDescriptorSet(shader.GetDescriptorSet());
+        context.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
     }
-
-protected:
-    void InitImpl(CommandList&) override {}
-
-    void ExecuteImpl(const RenderGraph::RenderContext& context, RenderGraph::RenderPassContext& passContext) override
-    {
-        const uint32_t readIndex = static_cast<uint32_t>(m_Inputs->ResolveFrameIndex() & 1ull);
-        const uint32_t writeIndex = 1u - readIndex;
-        SVGF::RecordingResources resources{
-            .NoisyRadiance = context.GetTexture(m_Inputs->NoisyRadiance),
-            .GBufferNormal = context.GetTexture(m_Inputs->GBufferNormal),
-            .GBufferPosition = context.GetTexture(m_Inputs->GBufferPosition),
-            .MotionVector = context.GetTexture(m_Inputs->MotionVector),
-            .Depth = context.GetTexture(m_Inputs->Depth),
-            .Output = context.GetTexture(m_Inputs->Output),
-            .HistoryColorRead = m_Feature.m_HistoryColor[readIndex],
-            .HistoryMomentsRead = m_Feature.m_HistoryMoments[readIndex],
-            .HistoryColorWrite = m_Feature.m_HistoryColor[writeIndex],
-            .HistoryMomentsWrite = m_Feature.m_HistoryMoments[writeIndex],
-            .TemporalColor = context.GetTexture(m_TemporalColor),
-            .TemporalMoments = context.GetTexture(m_TemporalMoments),
-            .Variance = context.GetTexture(m_Variance),
-            .Ping = context.GetTexture(m_Ping),
-            .Pong = context.GetTexture(m_Pong),
-            .HistoryValid = m_Feature.m_HistoryValid,
-        };
-        CommandContext commandContext(passContext.GetCommandList(), passContext.GetBarrierContext());
-        m_Feature.Record(commandContext, resources);
-        m_Feature.m_HistoryValid = true;
-    }
-
-private:
-    SVGF& m_Feature;
-    std::shared_ptr<const SVGF::GraphInputs> m_Inputs;
-    RenderGraph::ResourceId m_TemporalColor = 0;
-    RenderGraph::ResourceId m_TemporalMoments = 0;
-    RenderGraph::ResourceId m_Variance = 0;
-    RenderGraph::ResourceId m_Ping = 0;
-    RenderGraph::ResourceId m_Pong = 0;
-};
+}
 
 SVGF::SVGF(FrameworkDeviceContext& deviceContext)
-    : m_TemporalShader(CreateReflectedComputeShader(
-        deviceContext,
-        ShaderBytecode_SVGFTemporal_CS,
-        sizeof ShaderBytecode_SVGFTemporal_CS))
-    , m_AtrousShader(CreateReflectedComputeShader(
-        deviceContext,
-        ShaderBytecode_SVGFAtrous_CS,
-        sizeof ShaderBytecode_SVGFAtrous_CS))
-    , m_CompositeShader(CreateReflectedComputeShader(
-        deviceContext,
-        ShaderBytecode_SVGFComposite_CS,
-        sizeof ShaderBytecode_SVGFComposite_CS))
+    : m_PrepareShader(CreateShader(deviceContext, ShaderBytecode_SVGFPrepare_CS, sizeof ShaderBytecode_SVGFPrepare_CS))
+    , m_TemporalShader(CreateShader(deviceContext, ShaderBytecode_SVGFTemporal_CS, sizeof ShaderBytecode_SVGFTemporal_CS))
+    , m_FilterMomentsShader(CreateShader(deviceContext, ShaderBytecode_SVGFFilterMoments_CS, sizeof ShaderBytecode_SVGFFilterMoments_CS))
+    , m_AtrousShader(CreateShader(deviceContext, ShaderBytecode_SVGFAtrous_CS, sizeof ShaderBytecode_SVGFAtrous_CS))
+    , m_CompositeShader(CreateShader(deviceContext, ShaderBytecode_SVGFComposite_CS, sizeof ShaderBytecode_SVGFComposite_CS))
     , m_DeviceContext(deviceContext)
 {
 }
@@ -169,131 +68,226 @@ void SVGF::ResetHistory()
     m_HistoryValid = false;
 }
 
-bool SVGF::EnsureCreated(const uint32_t width, const uint32_t height)
+bool SVGF::EnsureCreated(uint32_t width, uint32_t height)
 {
-    if (m_Width == width && m_Height == height && m_HistoryColor[0] != nullptr)
-    {
-        return true;
-    }
-
+    if (m_Width == width && m_Height == height && m_HistoryColor[0]) return true;
     Assert(width > 0u && height > 0u, "SVGF history dimensions are invalid.");
     m_Width = width;
     m_Height = height;
-    m_HistoryColor[0] = RenderTexture::CreateUav2D(
-        m_DeviceContext, DXGI_FORMAT_R16G16B16A16_FLOAT, width, height, L"SVGF History Color 0");
-    m_HistoryColor[1] = RenderTexture::CreateUav2D(
-        m_DeviceContext, DXGI_FORMAT_R16G16B16A16_FLOAT, width, height, L"SVGF History Color 1");
-    m_HistoryMoments[0] = RenderTexture::CreateUav2D(
-        m_DeviceContext, DXGI_FORMAT_R16G16_FLOAT, width, height, L"SVGF History Moments 0");
-    m_HistoryMoments[1] = RenderTexture::CreateUav2D(
-        m_DeviceContext, DXGI_FORMAT_R16G16_FLOAT, width, height, L"SVGF History Moments 1");
+    for (uint32_t i = 0; i < 2; ++i)
+    {
+        const auto create = [&](DXGI_FORMAT format, const wchar_t* suffix)
+        {
+            const std::wstring name = std::wstring(L"SVGF History ") + suffix + L" " + std::to_wstring(i);
+            return RenderTexture::CreateUav2D(m_DeviceContext, format, width, height, name.c_str());
+        };
+        // Squared HDR luminance requires full precision, especially after demodulation.
+        m_HistoryColor[i] = create(DXGI_FORMAT_R32G32B32A32_FLOAT, L"Color");
+        m_HistoryMoments[i] = create(DXGI_FORMAT_R32G32_FLOAT, L"Moments");
+        m_HistorySurface[i] = create(DXGI_FORMAT_R32G32B32A32_FLOAT, L"Surface");
+        m_HistoryLength[i] = create(DXGI_FORMAT_R16_FLOAT, L"Length");
+    }
     ResetHistory();
     return true;
 }
 
 void SVGF::AddPasses(RenderGraph::RenderGraphBuilder& builder, GraphInputs inputs)
 {
-    Assert(m_Enabled, "SVGF graph passes require the feature to be enabled.");
-    Assert(
-        inputs.NoisyRadiance != 0u &&
-        inputs.GBufferNormal != 0u &&
-        inputs.GBufferPosition != 0u &&
-        inputs.MotionVector != 0u &&
-        inputs.Depth != 0u &&
-        inputs.Output != 0u,
+    Assert(m_Enabled, "SVGF graph registration requires the feature to be enabled.");
+    Assert(inputs.NoisyRadiance && inputs.GBufferNormal && inputs.GBufferPosition &&
+        inputs.GBufferAlbedoOcclusion && inputs.GBufferEmissionMetallic && inputs.MotionVector &&
+        inputs.Depth && inputs.Output && inputs.InputToken && inputs.OutputToken,
         "SVGF graph resources are invalid.");
-    Assert(inputs.InputToken != 0u && inputs.OutputToken != 0u, "SVGF graph tokens are invalid.");
-    Assert(inputs.Width > 0u && inputs.Height > 0u, "SVGF graph dimensions are invalid.");
-    Assert(
-        static_cast<bool>(inputs.WidthExpression) && static_cast<bool>(inputs.HeightExpression),
-        "SVGF graph dimension expressions are invalid.");
-    Assert(static_cast<bool>(inputs.ResolveFrameIndex), "SVGF requires a frame-index resolver.");
-    Assert(!inputs.DiagnosticNamePrefix.empty(), "SVGF requires a diagnostic-name prefix.");
-
+    Assert(inputs.WidthExpression && inputs.HeightExpression && inputs.ResolveFrameIndex &&
+        inputs.ResolveWorldToView && !inputs.DiagnosticNamePrefix.empty(), "SVGF graph callbacks are invalid.");
     EnsureCreated(inputs.Width, inputs.Height);
-    const auto sharedInputs = std::make_shared<const GraphInputs>(std::move(inputs));
-    const auto frameParity = sharedInputs->ResolveFrameIndex;
-    const auto importHistory = [&builder, this, frameParity, &sharedInputs](
-        const wchar_t* suffix,
-        std::shared_ptr<Texture> (SVGF::*history)[2],
-        const bool writeHistory)
+    SVGFPassData data;
+    data.Inputs = std::make_shared<const GraphInputs>(std::move(inputs));
+    const auto frameParity = data.Inputs->ResolveFrameIndex;
+    using HistoryArray = std::shared_ptr<Texture> (SVGF::*)[2];
+    const std::array<HistoryArray, 4> histories{
+        &SVGF::m_HistoryColor, &SVGF::m_HistoryMoments, &SVGF::m_HistorySurface, &SVGF::m_HistoryLength };
+    const wchar_t* historyNames[]{ L"HistoryColor", L"HistoryMoments", L"HistorySurface", L"HistoryLength" };
+    for (size_t i = 0; i < histories.size(); ++i)
     {
-        const std::wstring name = sharedInputs->DiagnosticNamePrefix + L"." + suffix;
-        return builder.ImportResource(
-            name.c_str(),
-            [this, history, frameParity, writeHistory]() -> const Resource&
+        const auto history = histories[i];
+        for (uint32_t write = 0; write < 2; ++write)
+        {
+            const std::wstring name = data.Inputs->DiagnosticNamePrefix + L"." + historyNames[i] +
+                (write ? L".Write" : L".Read");
+            auto handle = builder.ImportResource(name.c_str(), [this, frameParity, history, write]() -> const Resource&
             {
                 const uint32_t readIndex = static_cast<uint32_t>(frameParity() & 1ull);
-                const uint32_t index = writeHistory ? 1u - readIndex : readIndex;
-                return *(*this.*history)[index];
+                return *(*this.*history)[write ? 1u - readIndex : readIndex];
             });
-    };
-
-    const RenderGraph::ImportedResourceHandle historyColorRead =
-        importHistory(L"HistoryColor.Read", &SVGF::m_HistoryColor, false);
-    const RenderGraph::ImportedResourceHandle historyColorWrite =
-        importHistory(L"HistoryColor.Write", &SVGF::m_HistoryColor, true);
-    const RenderGraph::ImportedResourceHandle historyMomentsRead =
-        importHistory(L"HistoryMoments.Read", &SVGF::m_HistoryMoments, false);
-    const RenderGraph::ImportedResourceHandle historyMomentsWrite =
-        importHistory(L"HistoryMoments.Write", &SVGF::m_HistoryMoments, true);
-
-    const auto createScratchTexture = [&builder, &sharedInputs](
-        const std::wstring& suffix,
-        const DXGI_FORMAT format,
-        const bool dedicatedResource)
+            (write ? data.WriteHistory : data.ReadHistory)[i] = std::move(handle);
+        }
+    }
+    const wchar_t* scratchNames[]{ L"Illumination", L"TemporalColor", L"Ping", L"Pong" };
+    constexpr FLOAT clear[]{ 0.0f, 0.0f, 0.0f, 0.0f };
+    for (size_t i = 0; i < data.Scratch.size(); ++i)
     {
-        const std::wstring name = sharedInputs->DiagnosticNamePrefix + L"." + suffix;
-        return builder.CreateTexture(
-            name.c_str(),
-            sharedInputs->WidthExpression,
-            sharedInputs->HeightExpression,
-            format,
-            SvgfClearColor,
-            RenderGraph::ResourceInitAction::Discard,
-            D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
-            D3D12_HEAP_FLAG_NONE,
-            dedicatedResource);
+        const std::wstring name = data.Inputs->DiagnosticNamePrefix + L"." + scratchNames[i];
+        data.Scratch[i] = builder.CreateTexture(name.c_str(), data.Inputs->WidthExpression,
+            data.Inputs->HeightExpression, DXGI_FORMAT_R32G32B32A32_FLOAT, clear,
+            RenderGraph::ResourceInitAction::Discard, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+            D3D12_HEAP_FLAG_NONE, true);
+    }
+    RenderGraph::ResourceId previousToken = data.Inputs->InputToken;
+    const auto addStage = [&](const wchar_t* name, SVGFStage stage,
+        RenderGraph::ResourceId filterInput = 0, RenderGraph::ResourceId filterOutput = 0,
+        uint32_t stepSize = 1, int32_t feedbackIndex = -1)
+    {
+        const std::wstring tokenName = data.Inputs->DiagnosticNamePrefix + L"." + name +
+            L".Finished" + std::to_wstring(stepSize);
+        const auto outputToken = stage == SVGFStage::Composite ? data.Inputs->OutputToken : builder.CreateToken(tokenName.c_str());
+        SVGFPassData stageData = data;
+        stageData.Stage = stage;
+        stageData.FilterInput = filterInput;
+        stageData.FilterOutput = filterOutput;
+        stageData.StepSize = stepSize;
+        stageData.FeedbackIndex = feedbackIndex;
+        builder.AddPass<SVGFPassData>(name,
+            [stageData, inputToken = previousToken, outputToken](RenderGraph::RenderGraphPassBuilder& pass,
+                SVGFPassData& passData)
+            {
+                passData = stageData;
+                const auto& d = stageData;
+                const auto& in = *d.Inputs;
+                pass.ReadToken(inputToken);
+                pass.WriteToken(outputToken);
+                const auto readSurface = [&]()
+                {
+                    pass.ReadImported(d.WriteHistory[2], D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+                };
+                switch (d.Stage)
+                {
+                case SVGFStage::Prepare:
+                    for (const auto id : { in.NoisyRadiance, in.GBufferNormal, in.GBufferPosition,
+                        in.GBufferAlbedoOcclusion, in.GBufferEmissionMetallic, in.Depth }) pass.ReadBuffer(id);
+                    pass.WriteUav(d.Scratch[0]);
+                    pass.WriteImported(d.WriteHistory[2], D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                    break;
+                case SVGFStage::Temporal:
+                    pass.ReadBuffer(d.Scratch[0]);
+                    pass.ReadBuffer(in.GBufferPosition);
+                    pass.ReadBuffer(in.MotionVector);
+                    readSurface();
+                    for (const auto& handle : d.ReadHistory)
+                        pass.ReadImported(handle, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+                    pass.WriteUav(d.Scratch[1]);
+                    pass.WriteImported(d.WriteHistory[1], D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                    pass.WriteImported(d.WriteHistory[3], D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                    break;
+                case SVGFStage::Moments:
+                    pass.ReadImported(d.WriteHistory[1], D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+                    pass.ReadImported(d.WriteHistory[3], D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+                    [[fallthrough]];
+                case SVGFStage::Atrous:
+                    readSurface();
+                    pass.ReadBuffer(d.FilterInput);
+                    pass.WriteUav(d.FilterOutput);
+                    break;
+                case SVGFStage::Feedback:
+                    pass.ReadCopySource(d.FilterInput);
+                    pass.WriteImported(d.WriteHistory[0], D3D12_RESOURCE_STATE_COPY_DEST);
+                    break;
+                case SVGFStage::Composite:
+                    pass.ReadBuffer(d.FilterInput);
+                    pass.ReadBuffer(in.Depth);
+                    pass.ReadBuffer(in.GBufferAlbedoOcclusion);
+                    pass.ReadBuffer(in.GBufferEmissionMetallic);
+                    pass.WriteUav(in.Output);
+                    break;
+                }
+            },
+            [this](const SVGFPassData& data, const RenderGraph::RenderContext& context,
+                RenderGraph::RenderPassContext& passContext)
+            {
+                const auto& input = *data.Inputs;
+                const uint32_t readIndex = static_cast<uint32_t>(input.ResolveFrameIndex() & 1ull);
+                const uint32_t writeIndex = 1u - readIndex;
+                RecordingResources resources;
+                resources.NoisyRadiance = context.GetTexture(input.NoisyRadiance);
+                resources.GBufferNormal = context.GetTexture(input.GBufferNormal);
+                resources.GBufferPosition = context.GetTexture(input.GBufferPosition);
+                resources.GBufferAlbedoOcclusion = context.GetTexture(input.GBufferAlbedoOcclusion);
+                resources.GBufferEmissionMetallic = context.GetTexture(input.GBufferEmissionMetallic);
+                resources.MotionVector = context.GetTexture(input.MotionVector);
+                resources.Depth = context.GetTexture(input.Depth);
+                resources.Output = context.GetTexture(input.Output);
+                resources.HistoryColorRead = m_HistoryColor[readIndex];
+                resources.HistoryMomentsRead = m_HistoryMoments[readIndex];
+                resources.HistorySurfaceRead = m_HistorySurface[readIndex];
+                resources.HistoryLengthRead = m_HistoryLength[readIndex];
+                resources.HistoryColorWrite = m_HistoryColor[writeIndex];
+                resources.HistoryMomentsWrite = m_HistoryMoments[writeIndex];
+                resources.HistorySurfaceWrite = m_HistorySurface[writeIndex];
+                resources.HistoryLengthWrite = m_HistoryLength[writeIndex];
+                resources.Illumination = context.GetTexture(data.Scratch[0]);
+                resources.TemporalColor = context.GetTexture(data.Scratch[1]);
+                resources.Ping = context.GetTexture(data.Scratch[2]);
+                resources.Pong = context.GetTexture(data.Scratch[3]);
+                resources.WorldToView = input.ResolveWorldToView();
+                resources.PreviousWorldToView = m_HistoryValid ? m_PreviousView : resources.WorldToView;
+                resources.HistoryValid = m_HistoryValid;
+                CommandContext commandContext(passContext.GetCommandList(), passContext.GetBarrierContext());
+                const uint32_t width = input.Width, height = input.Height;
+                switch (data.Stage)
+                {
+                case SVGFStage::Prepare: RecordPrepare(commandContext, resources, width, height); break;
+                case SVGFStage::Temporal: RecordTemporal(commandContext, resources, width, height); break;
+                case SVGFStage::Moments:
+                case SVGFStage::Atrous:
+                    RecordFilter(commandContext, resources, context.GetTexture(data.FilterInput),
+                        context.GetTexture(data.FilterOutput), width, height, data.StepSize, data.Stage == SVGFStage::Moments);
+                    break;
+                case SVGFStage::Feedback:
+                {
+                    const int32_t feedback = std::clamp(m_Settings.FeedbackTap, -1,
+                        static_cast<int32_t>(std::clamp(m_Settings.AtrousIterations, 1u, 8u)) - 1);
+                    if (feedback == data.FeedbackIndex)
+                        commandContext.CopyResource(*resources.HistoryColorWrite, *context.GetTexture(data.FilterInput));
+                    break;
+                }
+                case SVGFStage::Composite:
+                    RecordComposite(commandContext, resources, context.GetTexture(data.FilterInput), width, height);
+                    m_PreviousView = resources.WorldToView;
+                    m_HistoryValid = true;
+                    break;
+                }
+            });
+        previousToken = outputToken;
     };
-
-    const RenderGraph::ResourceId temporalColor = createScratchTexture(
-        L"TemporalColor", DXGI_FORMAT_R16G16B16A16_FLOAT, SvgfScratchUsesDedicatedResources);
-    const RenderGraph::ResourceId temporalMoments = createScratchTexture(
-        L"TemporalMoments", DXGI_FORMAT_R16G16_FLOAT, true);
-    const RenderGraph::ResourceId variance = createScratchTexture(
-        L"Variance", DXGI_FORMAT_R16_FLOAT, true);
-    const RenderGraph::ResourceId ping = createScratchTexture(
-        L"Ping", DXGI_FORMAT_R16G16B16A16_FLOAT, true);
-    const RenderGraph::ResourceId pong = createScratchTexture(
-        L"Pong", DXGI_FORMAT_R16G16B16A16_FLOAT, true);
-    builder.AddPass(std::make_unique<SVGFGraphPass>(
-        *this,
-        SVGFGraphPass::Desc{
-            .Inputs = sharedInputs,
-            .PassName = L"SVGF",
-            .TemporalColor = temporalColor,
-            .TemporalMoments = temporalMoments,
-            .Variance = variance,
-            .Ping = ping,
-            .Pong = pong,
-            .HistoryColorRead = historyColorRead,
-            .HistoryColorWrite = historyColorWrite,
-            .HistoryMomentsRead = historyMomentsRead,
-            .HistoryMomentsWrite = historyMomentsWrite,
-        }));
+    addStage(L"SVGF Prepare", SVGFStage::Prepare);
+    addStage(L"SVGF Temporal", SVGFStage::Temporal);
+    // Feedback passes stay in the graph so the selected tap can change at runtime.
+    addStage(L"SVGF Feedback Temporal", SVGFStage::Feedback, data.Scratch[1]);
+    addStage(L"SVGF Filter Moments", SVGFStage::Moments, data.Scratch[1], data.Scratch[2]);
+    auto filtered = data.Scratch[2];
+    const uint32_t iterations = std::clamp(m_Settings.AtrousIterations, 1u, 8u);
+    for (uint32_t i = 0; i < iterations; ++i)
+    {
+        const auto output = data.Scratch[(i & 1u) == 0u ? 3u : 2u];
+        const std::wstring name = L"SVGF A-Trous " + std::to_wstring(i);
+        addStage(name.c_str(), SVGFStage::Atrous, filtered, output, 1u << i);
+        filtered = output;
+        const std::wstring feedbackName = L"SVGF Feedback " + std::to_wstring(i);
+        addStage(feedbackName.c_str(), SVGFStage::Feedback, filtered, 0, 1u, static_cast<int32_t>(i));
+    }
+    addStage(L"SVGF Composite", SVGFStage::Composite, filtered);
 }
 
-void SVGF::Record(CommandContext& context, const RecordingResources& resources)
+void SVGF::Record(CommandContext& context, const RecordingResources& r)
 {
     if (!m_Enabled) return;
-    const std::shared_ptr<Texture> textures[]{
-        resources.NoisyRadiance, resources.GBufferNormal, resources.GBufferPosition, resources.MotionVector, resources.Depth,
-        resources.HistoryColorRead, resources.HistoryMomentsRead, resources.Output,
-        resources.HistoryColorWrite, resources.HistoryMomentsWrite, resources.TemporalColor,
-        resources.TemporalMoments, resources.Variance, resources.Ping, resources.Pong
-    };
-    Assert(resources.NoisyRadiance && resources.NoisyRadiance->IsValid(), "SVGF requires noisy radiance.");
-    const auto extent = resources.NoisyRadiance->GetD3D12Resource()->GetDesc();
+    const std::shared_ptr<Texture> textures[]{ r.NoisyRadiance, r.GBufferNormal, r.GBufferPosition,
+        r.GBufferAlbedoOcclusion, r.GBufferEmissionMetallic, r.MotionVector, r.Depth,
+        r.Output, r.HistoryColorRead, r.HistoryMomentsRead, r.HistorySurfaceRead, r.HistoryLengthRead,
+        r.HistoryColorWrite, r.HistoryMomentsWrite, r.HistorySurfaceWrite, r.HistoryLengthWrite,
+        r.Illumination, r.TemporalColor, r.Ping, r.Pong };
+    Assert(r.NoisyRadiance && r.NoisyRadiance->IsValid(), "SVGF requires noisy radiance.");
+    const auto extent = r.NoisyRadiance->GetD3D12Resource()->GetDesc();
     std::unordered_set<ID3D12Resource*> identities;
     for (size_t i = 0; i < std::size(textures); ++i)
     {
@@ -303,128 +297,120 @@ void SVGF::Record(CommandContext& context, const RecordingResources& resources)
         Assert(desc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE2D && desc.MipLevels == 1 &&
             desc.DepthOrArraySize == 1 && desc.SampleDesc.Count == 1 &&
             desc.Width == extent.Width && desc.Height == extent.Height,
-            "SVGF recording requires equally sized single-mip, single-sample 2D textures.");
-        Assert(identities.insert(texture->GetD3D12Resource().Get()).second,
-            "SVGF inputs, histories, and scratch textures must not alias each other.");
-        Assert(i < 7 || texture->SupportsUnorderedAccess(), "SVGF outputs require UAV usage.");
+            "SVGF requires equally sized single-mip, single-sample 2D textures.");
+        Assert(identities.insert(texture->GetD3D12Resource().Get()).second, "SVGF recording textures must not alias.");
+        Assert(i < 7 || texture->SupportsUnorderedAccess(), "SVGF recording histories and outputs require UAV usage.");
     }
-    const auto width = static_cast<uint32_t>(extent.Width);
-    const auto height = extent.Height;
-    RecordTemporal(context, resources.NoisyRadiance, resources.GBufferNormal, resources.GBufferPosition,
-        resources.MotionVector, resources.Depth, resources.HistoryColorRead, resources.HistoryMomentsRead,
-        resources.TemporalColor, resources.TemporalMoments, resources.Variance,
-        resources.HistoryColorWrite, resources.HistoryMomentsWrite, width, height, resources.HistoryValid);
-    auto filtered = resources.TemporalColor;
+    const uint32_t width = static_cast<uint32_t>(extent.Width), height = extent.Height;
+    RecordPrepare(context, r, width, height);
+    RecordTemporal(context, r, width, height);
+    RecordFilter(context, r, r.TemporalColor, r.Ping, width, height, 1u, true);
+    auto filtered = r.Ping;
     const uint32_t iterations = std::clamp(m_Settings.AtrousIterations, 1u, 8u);
-    for (uint32_t iteration = 0; iteration < iterations; ++iteration)
+    const int32_t feedback = std::clamp(m_Settings.FeedbackTap, -1, static_cast<int32_t>(iterations) - 1);
+    const auto saveHistory = [&](const std::shared_ptr<Texture>& source)
     {
-        const uint32_t step = 1u << iteration;
-        RecordAtrous(context, filtered, resources.Ping, resources.Variance, resources.GBufferNormal,
-            resources.GBufferPosition, resources.Depth, width, height, step, 0u);
-        RecordAtrous(context, resources.Ping, resources.Pong, resources.Variance, resources.GBufferNormal,
-            resources.GBufferPosition, resources.Depth, width, height, step, 1u);
-        filtered = resources.Pong;
+        context.UseResource(*source, D3D12_RESOURCE_STATE_COPY_SOURCE, ResourceUse::Read);
+        context.UseResource(*r.HistoryColorWrite, D3D12_RESOURCE_STATE_COPY_DEST, ResourceUse::Write);
+        context.FlushBarriers();
+        context.CopyResource(*r.HistoryColorWrite, *source);
+        context.UseResource(*source, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, ResourceUse::Read);
+        context.UseResource(*r.HistoryColorWrite, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, ResourceUse::Write);
+        context.FlushBarriers();
+    };
+    if (feedback < 0) saveHistory(r.TemporalColor);
+    for (uint32_t i = 0; i < iterations; ++i)
+    {
+        const auto output = (i & 1u) == 0u ? r.Pong : r.Ping;
+        RecordFilter(context, r, filtered, output, width, height, 1u << i, false);
+        filtered = output;
+        // Feed back an early wavelet level rather than the most blurred level.
+        if (static_cast<int32_t>(i) == feedback) saveHistory(filtered);
     }
-    RecordComposite(context, filtered, resources.Depth, resources.Output, width, height);
+    RecordComposite(context, r, filtered, width, height);
 }
 
-void SVGF::RecordTemporal(
-    CommandContext& commandContext,
-    const std::shared_ptr<Texture>& noisyRadiance,
-    const std::shared_ptr<Texture>& gBufferNormal,
-    const std::shared_ptr<Texture>& gBufferPosition,
-    const std::shared_ptr<Texture>& motionVector,
-    const std::shared_ptr<Texture>& depthTexture,
-    const std::shared_ptr<Texture>& historyColor,
-    const std::shared_ptr<Texture>& historyMoments,
-    const std::shared_ptr<Texture>& temporalColor,
-    const std::shared_ptr<Texture>& temporalMoments,
-    const std::shared_ptr<Texture>& variance,
-    const std::shared_ptr<Texture>& outputHistoryColor,
-    const std::shared_ptr<Texture>& outputHistoryMoments,
-    const uint32_t width,
-    const uint32_t height,
-    const bool historyValid)
+void SVGF::RecordPrepare(CommandContext& context, const RecordingResources& r, uint32_t width, uint32_t height)
 {
-    TemporalConstants constants = {};
+    PrepareConstants constants;
+    constants.WorldToView = r.WorldToView;
     constants.Width = width;
     constants.Height = height;
-    constants.ResetHistory = historyValid ? 0u : 1u;
-    constants.TemporalAlpha = std::clamp(m_Settings.TemporalAlpha, 0.001f, 1.0f);
-    constants.MomentsAlpha = std::clamp(m_Settings.MomentsAlpha, 0.001f, 1.0f);
-    constants.PhiNormal = m_Settings.PhiNormal;
-    constants.PhiDepth = m_Settings.PhiDepth;
-
-    commandContext.SetConstantBuffer(*m_TemporalShader, "SVGFTemporalConstants", constants);
-    commandContext.SetTexture(*m_TemporalShader, "NoisyRadiance", ShaderResourceView(noisyRadiance));
-    commandContext.SetTexture(*m_TemporalShader, "GBufferNormal", ShaderResourceView(gBufferNormal));
-    commandContext.SetTexture(*m_TemporalShader, "GBufferPosition", ShaderResourceView(gBufferPosition));
-    commandContext.SetTexture(*m_TemporalShader, "DepthTexture", ShaderResourceView::DepthAsFloat(depthTexture));
-    commandContext.SetTexture(*m_TemporalShader, "MotionVector", ShaderResourceView(motionVector));
-    commandContext.SetTexture(*m_TemporalShader, "HistoryColor", ShaderResourceView(historyColor));
-    commandContext.SetTexture(*m_TemporalShader, "HistoryMoments", ShaderResourceView(historyMoments));
-    commandContext.SetUnorderedAccessView(*m_TemporalShader, "TemporalColor", UnorderedAccessView(temporalColor));
-    commandContext.SetUnorderedAccessView(*m_TemporalShader, "TemporalMoments", UnorderedAccessView(temporalMoments));
-    commandContext.SetUnorderedAccessView(*m_TemporalShader, "Variance", UnorderedAccessView(variance));
-    commandContext.SetUnorderedAccessView(*m_TemporalShader, "OutHistoryColor", UnorderedAccessView(outputHistoryColor));
-    commandContext.SetUnorderedAccessView(*m_TemporalShader, "OutHistoryMoments", UnorderedAccessView(outputHistoryMoments));
-    commandContext.BindPipeline(*m_TemporalShader);
-    commandContext.BindDescriptorSet(m_TemporalShader->GetDescriptorSet());
-    commandContext.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
+    auto& shader = *m_PrepareShader;
+    context.SetConstantBuffer(shader, "SVGFPrepareConstants", constants);
+    context.SetTexture(shader, "NoisyRadiance", ShaderResourceView(r.NoisyRadiance));
+    context.SetTexture(shader, "GBufferNormal", ShaderResourceView(r.GBufferNormal));
+    context.SetTexture(shader, "GBufferPosition", ShaderResourceView(r.GBufferPosition));
+    context.SetTexture(shader, "DepthTexture", ShaderResourceView::DepthAsFloat(r.Depth));
+    context.SetTexture(shader, "GBufferAlbedoOcclusion", ShaderResourceView(r.GBufferAlbedoOcclusion));
+    context.SetTexture(shader, "GBufferEmissionMetallic", ShaderResourceView(r.GBufferEmissionMetallic));
+    context.SetUnorderedAccessView(shader, "Illumination", UnorderedAccessView(r.Illumination));
+    context.SetUnorderedAccessView(shader, "CurrentSurface", UnorderedAccessView(r.HistorySurfaceWrite));
+    Dispatch(context, shader, width, height);
 }
 
-void SVGF::RecordAtrous(
-    CommandContext& commandContext,
-    const std::shared_ptr<Texture>& input,
-    const std::shared_ptr<Texture>& output,
-    const std::shared_ptr<Texture>& variance,
-    const std::shared_ptr<Texture>& gBufferNormal,
-    const std::shared_ptr<Texture>& gBufferPosition,
-    const std::shared_ptr<Texture>& depthTexture,
-    const uint32_t width,
-    const uint32_t height,
-    const uint32_t stepSize,
-    const uint32_t direction)
+void SVGF::RecordTemporal(CommandContext& context, const RecordingResources& r, uint32_t width, uint32_t height)
 {
-    AtrousConstants constants = {};
+    TemporalConstants constants;
+    constants.PreviousWorldToView = r.PreviousWorldToView;
+    constants.Width = width;
+    constants.Height = height;
+    constants.ResetHistory = r.HistoryValid ? 0u : 1u;
+    constants.TemporalAlpha = std::clamp(m_Settings.TemporalAlpha, 0.001f, 1.0f);
+    constants.MomentsAlpha = std::clamp(m_Settings.MomentsAlpha, 0.001f, 1.0f);
+    auto& shader = *m_TemporalShader;
+    context.SetConstantBuffer(shader, "SVGFTemporalConstants", constants);
+    context.SetTexture(shader, "Illumination", ShaderResourceView(r.Illumination));
+    context.SetTexture(shader, "CurrentSurface", ShaderResourceView(r.HistorySurfaceWrite));
+    context.SetTexture(shader, "GBufferPosition", ShaderResourceView(r.GBufferPosition));
+    context.SetTexture(shader, "MotionVector", ShaderResourceView(r.MotionVector));
+    context.SetTexture(shader, "HistoryColor", ShaderResourceView(r.HistoryColorRead));
+    context.SetTexture(shader, "HistoryMoments", ShaderResourceView(r.HistoryMomentsRead));
+    context.SetTexture(shader, "HistorySurface", ShaderResourceView(r.HistorySurfaceRead));
+    context.SetTexture(shader, "HistoryLength", ShaderResourceView(r.HistoryLengthRead));
+    context.SetUnorderedAccessView(shader, "TemporalColor", UnorderedAccessView(r.TemporalColor));
+    context.SetUnorderedAccessView(shader, "OutHistoryMoments", UnorderedAccessView(r.HistoryMomentsWrite));
+    context.SetUnorderedAccessView(shader, "OutHistoryLength", UnorderedAccessView(r.HistoryLengthWrite));
+    Dispatch(context, shader, width, height);
+}
+
+void SVGF::RecordFilter(CommandContext& context, const RecordingResources& r,
+    const std::shared_ptr<Texture>& input, const std::shared_ptr<Texture>& output,
+    uint32_t width, uint32_t height, uint32_t stepSize, bool filterMoments)
+{
+    FilterConstants constants;
     constants.Width = width;
     constants.Height = height;
     constants.StepSize = stepSize;
-    constants.Direction = direction;
-    constants.PhiColor = m_Settings.PhiColor;
-    constants.PhiNormal = m_Settings.PhiNormal;
-    constants.PhiDepth = m_Settings.PhiDepth;
-
-    commandContext.SetConstantBuffer(*m_AtrousShader, "SVGFAtrousConstants", constants);
-    commandContext.SetTexture(*m_AtrousShader, "InputColor", ShaderResourceView(input));
-    commandContext.SetTexture(*m_AtrousShader, "Variance", ShaderResourceView(variance));
-    commandContext.SetTexture(*m_AtrousShader, "GBufferNormal", ShaderResourceView(gBufferNormal));
-    commandContext.SetTexture(*m_AtrousShader, "GBufferPosition", ShaderResourceView(gBufferPosition));
-    commandContext.SetTexture(*m_AtrousShader, "DepthTexture", ShaderResourceView::DepthAsFloat(depthTexture));
-    commandContext.SetUnorderedAccessView(*m_AtrousShader, "OutputColor", UnorderedAccessView(output));
-    commandContext.BindPipeline(*m_AtrousShader);
-    commandContext.BindDescriptorSet(m_AtrousShader->GetDescriptorSet());
-    commandContext.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
+    constants.PhiColor = std::max(m_Settings.PhiColor, 0.001f);
+    constants.PhiNormal = std::max(m_Settings.PhiNormal, 0.001f);
+    constants.PhiDepth = std::max(m_Settings.PhiDepth, 0.001f);
+    auto& shader = filterMoments ? *m_FilterMomentsShader : *m_AtrousShader;
+    context.SetConstantBuffer(shader, "SVGFFilterConstants", constants);
+    context.SetTexture(shader, "InputColor", ShaderResourceView(input));
+    context.SetTexture(shader, "CurrentSurface", ShaderResourceView(r.HistorySurfaceWrite));
+    if (filterMoments)
+    {
+        context.SetTexture(shader, "Moments", ShaderResourceView(r.HistoryMomentsWrite));
+        context.SetTexture(shader, "HistoryLength", ShaderResourceView(r.HistoryLengthWrite));
+    }
+    context.SetUnorderedAccessView(shader, "OutputColor", UnorderedAccessView(output));
+    Dispatch(context, shader, width, height);
 }
 
-void SVGF::RecordComposite(
-    CommandContext& commandContext,
-    const std::shared_ptr<Texture>& input,
-    const std::shared_ptr<Texture>& depthTexture,
-    const std::shared_ptr<Texture>& output,
-    const uint32_t width,
-    const uint32_t height)
+void SVGF::RecordComposite(CommandContext& context, const RecordingResources& r,
+    const std::shared_ptr<Texture>& input, uint32_t width, uint32_t height)
 {
-    CompositeConstants constants = {};
+    CompositeConstants constants;
     constants.Width = width;
     constants.Height = height;
-
-    commandContext.SetConstantBuffer(*m_CompositeShader, "SVGFCompositeConstants", constants);
-    commandContext.SetTexture(*m_CompositeShader, "FilteredColor", ShaderResourceView(input));
-    commandContext.SetTexture(*m_CompositeShader, "DepthTexture", ShaderResourceView::DepthAsFloat(depthTexture));
-    commandContext.SetUnorderedAccessView(*m_CompositeShader, "Output", UnorderedAccessView(output));
-    commandContext.BindPipeline(*m_CompositeShader);
-    commandContext.BindDescriptorSet(m_CompositeShader->GetDescriptorSet());
-    commandContext.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
+    auto& shader = *m_CompositeShader;
+    context.SetConstantBuffer(shader, "SVGFCompositeConstants", constants);
+    context.SetTexture(shader, "FilteredColor", ShaderResourceView(input));
+    context.SetTexture(shader, "DepthTexture", ShaderResourceView::DepthAsFloat(r.Depth));
+    context.SetTexture(shader, "GBufferAlbedoOcclusion", ShaderResourceView(r.GBufferAlbedoOcclusion));
+    context.SetTexture(shader, "GBufferEmissionMetallic", ShaderResourceView(r.GBufferEmissionMetallic));
+    context.SetUnorderedAccessView(shader, "Output", UnorderedAccessView(r.Output));
+    Dispatch(context, shader, width, height);
 }
 //Modify End

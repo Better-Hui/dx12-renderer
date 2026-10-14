@@ -5,7 +5,7 @@
 
 #include <utility>
 
-//Modify Begin:2026-08-25 by Hui
+//Modify Begin:2026-10-14 by Hui
 void RaytracingDemoPasses::Builder::AddDenoisePass(
     RenderGraph::RenderGraphBuilder& renderGraphBuilder,
     const RaytracingDemoPassResources& resources,
@@ -66,6 +66,8 @@ void RaytracingDemoPasses::Builder::AddDenoisePass(
 
     SVGF::GraphInputs inputs = {};
     inputs.NoisyRadiance = DemoResourceIds::NoisyRadiance;
+    inputs.GBufferAlbedoOcclusion = DemoResourceIds::GBufferAlbedoOcclusion;
+    inputs.GBufferEmissionMetallic = DemoResourceIds::GBufferEmissionMetallic;
     inputs.GBufferNormal = DemoResourceIds::GBufferNormal;
     inputs.GBufferPosition = DemoResourceIds::GBufferPosition;
     inputs.MotionVector = DemoResourceIds::MotionVector;
@@ -82,6 +84,7 @@ void RaytracingDemoPasses::Builder::AddDenoisePass(
         return static_cast<uint64_t>(frameState->FrameIndex);
     };
     inputs.DiagnosticNamePrefix = L"RaytracingDemo.SVGF";
+    inputs.ResolveWorldToView = [frameState = config.FrameState]() { return frameState->View; };
     resources.Denoisers.AddSVGFPasses(renderGraphBuilder, std::move(inputs));
 }
 //Modify End

@@ -1,4 +1,4 @@
-//Modify Begin:2026-07-28 by Hui
+//Modify Begin:2026-10-14 by Hui
 #include <ShaderLibrary/Common/RootSignature.hlsli>
 #include "SVGFCommon.hlsli"
 
@@ -12,6 +12,8 @@ cbuffer SVGFCompositeConstants : register(b0)
 
 Texture2D<float4> FilteredColor : register(t0);
 Texture2D<float> DepthTexture : register(t1);
+Texture2D<float4> GBufferAlbedoOcclusion : register(t2);
+Texture2D<float4> GBufferEmissionMetallic : register(t3);
 RWTexture2D<float4> Output : register(u0);
 
 [numthreads(8, 8, 1)]
@@ -28,7 +30,10 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
-    const float3 color = max(FilteredColor.Load(int3(pixel, 0)).rgb, 0.0f);
+    const float4 material = GBufferEmissionMetallic.Load(int3(pixel, 0));
+    const float3 factor = SVGFDemodulation(GBufferAlbedoOcclusion.Load(int3(pixel, 0)), material);
+    const float3 color = SVGFSanitize(FilteredColor.Load(int3(pixel, 0)).rgb) * factor
+        + SVGFSanitize(material.rgb);
     Output[pixel] = float4(color, 1.0f);
 }
 //Modify End
